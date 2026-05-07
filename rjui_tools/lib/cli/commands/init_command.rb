@@ -247,6 +247,21 @@ module RjuiTools
               getString(key) {
                 return this.currentLanguage[key] || key;
               }
+
+              // SSR-safe lookup pinned to the default language. Use this from
+              // ViewModel constructors / onAppear / any code path that runs
+              // during SSR or before hydration; getString(key) reads
+              // currentLanguage which may diverge between server and client
+              // when the user has a persisted locale, causing hydration
+              // mismatches. Re-seed with getString from a post-mount hook
+              // (e.g. useEffect) once the client has hydrated.
+              getDefaultString(key) {
+                const defaultLang = '#{default_language}';
+                if (!this._cache[defaultLang]) {
+                  this._cache[defaultLang] = createCamelCaseProxy(strings[defaultLang]);
+                }
+                return this._cache[defaultLang][key] || key;
+              }
             }
 
             export const StringManager = new StringManagerClass();
@@ -359,6 +374,21 @@ module RjuiTools
 
               getString(key: string): string {
                 return this.currentLanguage[key] || key;
+              }
+
+              // SSR-safe lookup pinned to the default language. Use this from
+              // ViewModel constructors / onAppear / any code path that runs
+              // during SSR or before hydration; getString(key) reads
+              // currentLanguage which may diverge between server and client
+              // when the user has a persisted locale, causing hydration
+              // mismatches. Re-seed with getString from a post-mount hook
+              // (e.g. useEffect) once the client has hydrated.
+              getDefaultString(key: string): string {
+                const defaultLang = '#{default_language}';
+                if (!this._cache[defaultLang]) {
+                  this._cache[defaultLang] = createCamelCaseProxy(strings[defaultLang]);
+                }
+                return this._cache[defaultLang][key] || key;
               }
             }
 

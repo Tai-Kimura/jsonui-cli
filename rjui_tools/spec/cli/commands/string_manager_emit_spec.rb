@@ -43,6 +43,16 @@ RSpec.describe 'StringManager emit' do
         expect(out).not_to include('useSyncExternalStore(subscribeLanguage, getLanguageSnapshot, getLanguageSnapshot)')
       end
     end
+
+    it 'exposes getDefaultString(key) as an SSR-safe lookup for VM seed code' do
+      [true, false].each do |is_ts|
+        out = content_for(is_ts: is_ts)
+        expect(out).to include('getDefaultString(key')
+        expect(out).to include("const defaultLang = 'en';")
+        expect(out).to include("this._cache[defaultLang] = createCamelCaseProxy(strings[defaultLang]);")
+        expect(out).to include('return this._cache[defaultLang][key] || key;')
+      end
+    end
   end
 
   describe RjuiTools::CLI::Commands::InitCommand do
@@ -70,6 +80,17 @@ RSpec.describe 'StringManager emit' do
       ].each do |out|
         expect(out).to include('function getServerSnapshot')
         expect(out).to include('useSyncExternalStore(subscribeLanguage, getLanguageSnapshot, getServerSnapshot)')
+      end
+    end
+
+    it 'init stub exposes getDefaultString(key) for SSR-safe VM seed code' do
+      strings_json = JSON.pretty_generate({ 'en' => {} })
+      [
+        instance.send(:string_manager_typescript_stub, strings_json, 'en', '// H', '// F'),
+        instance.send(:string_manager_javascript_stub, strings_json, 'en', '// H', '// F'),
+      ].each do |out|
+        expect(out).to include('getDefaultString(key')
+        expect(out).to include("const defaultLang = 'en';")
       end
     end
   end
