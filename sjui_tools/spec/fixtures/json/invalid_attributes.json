@@ -1,0 +1,8 @@
+{
+  "type": "Label",
+  "text": "Test",
+  "fontSize": "not a number",
+  "unknownAttribute": "value",
+  "textAlign": "invalid_alignment",
+  "alpha": 1.5
+}

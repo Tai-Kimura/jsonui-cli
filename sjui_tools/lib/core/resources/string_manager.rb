@@ -1,0 +1,664 @@
+# frozen_string_literal: true
+
+require 'json'
+require 'fileutils'
+require 'pathname'
+require 'set'
+require_relative '../config_manager'
+require_relative '../project_finder'
+require_relative '../logger'
+
+module SjuiTools
+  module Core
+    module Resources
+      class StringManager
+        def initialize
+          @config = Core::ConfigManager.load_config
+          @source_path = Core::ProjectFinder.get_full_source_path || Dir.pwd
+          @layouts_dir = File.join(@source_path, @config['layouts_directory'] || 'Layouts')
+          @resources_dir = File.join(@layouts_dir, 'Resources')
+          @tmp_dir = File.join(@source_path, '.sjui_tmp')
+          @extracted_strings_file = File.join(@tmp_dir, 'extracted_strings.json')
+          @strings_cache = {}
+        end
+        
+        # Process all JSON files and extract strings
+        def process_json_files(json_files)
+          ensure_tmp_directory
+
+          # Load existing extracted strings from tmp
+          extracted_data = load_extracted_strings
+
+          json_files.each do |json_file|
+            begin
+              file_name = File.basename(json_file, '.json')
+              json_content = File.read(json_file)
+              json_data = JSON.parse(json_content)
+
+              # Skip partial files (they are included in other views)
+              next if json_data['partial'] == true
+
+              # Extract strings from this file
+              file_strings = extract_strings_from_json(json_data, file_name)
+
+              # Merge with existing data (Kotlin-style: strings only, no not_defined)
+              extracted_data['strings'][file_name] ||= {}
+              extracted_data['strings'][file_name].merge!(file_strings)
+
+              # Save to tmp file after each file processing
+              save_extracted_strings(extracted_data)
+            rescue JSON::ParserError => e
+              Core::Logger.warn "Failed to parse #{json_file}: #{e.message}"
+            rescue => e
+              Core::Logger.warn "Error processing #{json_file}: #{e.message}"
+            end
+          end
+
+          extracted_data
+        end
+        
+        # Cache .strings files
+        def cache_strings_files(string_files)
+          @strings_cache = {}
+          
+          string_files.each do |file_path|
+            full_path = File.join(@source_path, file_path)
+            if File.exist?(full_path)
+              Core::Logger.info "Caching strings file: #{file_path}"
+              cache_strings_file(full_path)
+            else
+              Core::Logger.warn "Strings file not found: #{full_path}"
+            end
+          end
+          
+          Core::Logger.info "Cached #{@strings_cache.keys.length} string keys"
+        end
+
+        # Check if a string key is registered in the strings cache
+        def string_registered?(key)
+          @strings_cache&.key?(key) || false
+        end
+
+        # Get the strings cache (for external access)
+        def strings_cache
+          @strings_cache || {}
+        end
+
+        # Get the StringManager function call for a key (e.g., "logout_text" -> "StringManager.logoutText()")
+        def string_manager_call(key)
+          func_name = snake_to_camel(key)
+          "StringManager.#{func_name}()"
+        end
+
+        # Write strings.json (Kotlin-style: no NOT_IMPLEMENTED_YET, just key-value pairs)
+        def write_strings_json
+          extracted_data = load_extracted_strings
+          strings_file_path = File.join(@resources_dir, 'strings.json')
+
+          # Load existing strings.json to preserve existing values
+          existing_strings = {}
+          if File.exist?(strings_file_path)
+            begin
+              existing_strings = JSON.parse(File.read(strings_file_path))
+            rescue JSON::ParserError
+              existing_strings = {}
+            end
+          end
+
+          # Merge extracted strings with existing strings (matching Kotlin behavior)
+          # Don't overwrite Hash values (multi-language) with extracted String values
+          # Don't overwrite any existing key (preserve manual edits)
+          total_new_strings = 0
+          extracted_data['strings'].each do |file_name, file_strings|
+            existing_strings[file_name] ||= {}
+            file_strings.each do |key, value|
+              unless existing_strings[file_name].key?(key)
+                existing_strings[file_name][key] = value
+                total_new_strings += 1
+              end
+            end
+          end
+
+          # Ensure Resources directory exists
+          FileUtils.mkdir_p(@resources_dir) unless Dir.exist?(@resources_dir)
+
+          # Write merged strings.json
+          File.write(strings_file_path, JSON.pretty_generate(existing_strings))
+          Core::Logger.success "Written strings.json with #{total_new_strings} new strings to Resources"
+
+          # Clean up tmp file
+          cleanup_tmp_files
+        end
+        
+        # Get summary of extracted strings
+        def get_extraction_summary
+          extracted_data = load_extracted_strings
+          total_strings = extracted_data['strings'].values.sum { |h| h.is_a?(Hash) ? h.size : 0 }
+          {
+            'files_count' => extracted_data['strings'].keys.length,
+            'total_strings' => total_strings
+          }
+        end
+        
+        # Generate StringManager.swift file
+        def generate_swift_file
+          strings_json_path = File.join(@resources_dir, 'strings.json')
+
+          unless File.exist?(strings_json_path)
+            Core::Logger.warn "strings.json not found at #{strings_json_path}"
+            return
+          end
+
+          # Load strings.json
+          strings_data = JSON.parse(File.read(strings_json_path))
+
+          # Generate Swift code
+          swift_content = generate_swift_content(strings_data)
+          
+          # Write to StringManager.swift
+          resource_manager_dir = @config['resource_manager_directory'] || 'ResourceManager'
+          resource_manager_path = File.join(@source_path, resource_manager_dir)
+          
+          # Create ResourceManager directory if it doesn't exist
+          FileUtils.mkdir_p(resource_manager_path) unless Dir.exist?(resource_manager_path)
+          
+          string_manager_path = File.join(resource_manager_path, 'StringManager.swift')
+          
+          File.write(string_manager_path, swift_content)
+          Core::Logger.success "Generated StringManager.swift"
+        end
+        
+        # Apply extracted strings to .strings files
+        def apply_to_strings_files
+          strings_json_path = File.join(@resources_dir, 'strings.json')
+          
+          unless File.exist?(strings_json_path)
+            Core::Logger.warn "strings.json not found at #{strings_json_path}"
+            return
+          end
+          
+          # Load strings.json
+          strings_data = JSON.parse(File.read(strings_json_path))
+          
+          # Get configured .strings files
+          string_files = @config['string_files'] || []
+          
+          if string_files.empty?
+            Core::Logger.info "No .strings files configured"
+            return
+          end
+          
+          # Process each .strings file
+          string_files.each do |file_path|
+            full_path = File.join(@source_path, file_path)
+            if File.exist?(full_path)
+              Core::Logger.info "Updating strings file: #{file_path}"
+              update_strings_file(full_path, strings_data)
+            else
+              Core::Logger.warn "Strings file not found: #{full_path}"
+            end
+          end
+          
+          Core::Logger.success "Applied strings to .strings files"
+        end
+        
+        # Main processing method called from ResourcesManager
+        def process_strings(processed_files, processed_count, skipped_count, config)
+          Core::Logger.info "Processing strings extraction..."
+
+          # Cache .strings files if configured
+          string_files = config['string_files'] || []
+          if string_files.any?
+            cache_strings_files(string_files)
+          end
+
+          # Process all changed files
+          if processed_files.any?
+            process_json_files(processed_files)
+          end
+
+          # Write strings.json with extracted strings
+          if processed_count > 0 || skipped_count == 0
+            write_strings_json
+            # NOTE: We don't modify the original JSON files anymore
+            # The resource resolution happens during code generation (matching Kotlin behavior)
+          end
+
+          # Always generate StringManager.swift file if resource_manager_directory is configured
+          generate_swift_file if config['resource_manager_directory']
+
+          # Get summary for logging
+          summary = get_extraction_summary
+          Core::Logger.info "Processed #{processed_count} files, skipped #{skipped_count} unchanged files"
+          Core::Logger.info "Extracted #{summary['total_strings']} strings from #{summary['files_count']} files"
+        end
+        
+        private
+        
+        def ensure_tmp_directory
+          FileUtils.mkdir_p(@tmp_dir) unless Dir.exist?(@tmp_dir)
+        end
+        
+        def load_extracted_strings
+          if File.exist?(@extracted_strings_file)
+            begin
+              JSON.parse(File.read(@extracted_strings_file))
+            rescue JSON::ParserError
+              { 'strings' => {} }
+            end
+          else
+            { 'strings' => {} }
+          end
+        end
+        
+        def save_extracted_strings(data)
+          File.write(@extracted_strings_file, JSON.pretty_generate(data))
+        end
+        
+        def cleanup_tmp_files
+          FileUtils.rm_f(@extracted_strings_file) if File.exist?(@extracted_strings_file)
+        end
+        
+        def extract_strings_from_json(json_data, file_name)
+          @current_file_strings = {}
+
+          extract_strings_recursive(json_data, file_name)
+
+          @current_file_strings
+        end
+
+        def extract_strings_recursive(data, file_name = nil)
+          return unless data.is_a?(Hash)
+
+          # Check string properties (matching Kotlin implementation)
+          %w[text hint placeholder label prompt].each do |prop|
+            if data[prop].is_a?(String) && !data[prop].empty?
+              value = data[prop]
+              # Skip binding expressions
+              next if value.start_with?('@{') || value.start_with?('${')
+
+              # Skip if it's already a snake_case key (already converted)
+              # This matches Kotlin behavior - don't re-extract existing keys
+              next if value.match?(/^[a-z]+(_[a-z0-9]+)*$/)
+
+              # Normal extraction for new strings
+              extract_and_store_string(value, file_name)
+            end
+          end
+
+          # Check for partial_attributes array
+          if data['partial_attributes'].is_a?(Array)
+            data['partial_attributes'].each do |attr|
+              if attr.is_a?(Hash)
+                # Handle both { 'range' => { 'text' => '...' } } and { 'range' => '...' }
+                range = attr['range']
+                if range.is_a?(Hash) && range['text'].is_a?(String)
+                  extract_and_store_string(range['text'], file_name)
+                elsif range.is_a?(String) && !range.empty?
+                  extract_and_store_string(range, file_name)
+                end
+              end
+            end
+          end
+
+          # Recursively process children and other nested structures
+          data.each do |key, value|
+            if value.is_a?(Hash)
+              extract_strings_recursive(value, file_name)
+            elsif value.is_a?(Array)
+              value.each do |item|
+                if item.is_a?(Hash)
+                  extract_strings_recursive(item, file_name)
+                elsif item.is_a?(String) && %w[items segments].include?(key)
+                  extract_and_store_string(item, file_name) if should_extract_string?(item)
+                end
+              end
+            end
+          end
+        end
+
+        # Check if a string should be extracted (matching Kotlin implementation)
+        def should_extract_string?(value)
+          # Skip data binding expressions
+          return false if value.start_with?('@{') || value.start_with?('${')
+
+          # Skip if it's already a snake_case key (already converted)
+          # This prevents re-extracting strings that have been replaced with keys
+          # Also matches trailing underscore variants (e.g., "key_name_")
+          return false if value.match?(/^[a-z][a-z0-9]*(_[a-z0-9]+)*_?$/)
+
+          # Extract if it's a regular text string longer than 2 characters
+          # and contains alphabetic characters or Japanese characters (hiragana, katakana, kanji)
+          value.length > 2 && value.match?(/[a-zA-Z\p{Hiragana}\p{Katakana}\p{Han}]/)
+        end
+
+        # Extract and store string (matching Kotlin implementation)
+        def extract_and_store_string(value, file_name = nil)
+          return unless should_extract_string?(value)
+
+          # Generate a snake_case key from the text
+          key = generate_string_key(value)
+          @current_file_strings[key] = value
+        end
+
+        # Generate a key from text
+        # For ASCII text: convert to snake_case (matching Kotlin implementation)
+        # For Japanese/non-ASCII text: use the original text as key
+        def generate_string_key(text)
+          # Check if text contains Japanese characters (hiragana, katakana, kanji)
+          if text.match?(/[\p{Hiragana}\p{Katakana}\p{Han}]/)
+            # Use the original text as key for Japanese strings
+            # Just trim whitespace
+            text.strip
+          else
+            # Convert to snake_case for ASCII text
+            base_key = text
+              .downcase
+              .gsub(/[^a-z0-9\s_]/, '') # Remove special characters (keep underscores)
+              .gsub(/\s+/, '_')         # Replace spaces with underscores
+              .gsub(/^_+|_+$/, '')      # Remove leading/trailing underscores
+              .gsub(/__+/, '_')         # Replace multiple underscores with single
+
+            # Limit length
+            base_key = base_key[0..30] if base_key.length > 30
+
+            # Handle duplicates (append _2, _3, etc.)
+            final_key = base_key
+            counter = 2
+            while @current_file_strings.key?(final_key) && @current_file_strings[final_key] != text
+              final_key = "#{base_key}_#{counter}"
+              counter += 1
+            end
+
+            final_key
+          end
+        end
+        
+        def cache_strings_file(file_path)
+          @strings_cache ||= {}
+          in_auto_generated_section = false
+
+          File.open(file_path, 'r:UTF-8') do |file|
+            file.each_line do |line|
+              # Check for auto-generated section marker
+              if line.include?('/* Auto-generated strings')
+                in_auto_generated_section = true
+                next
+              end
+
+              # Skip keys in auto-generated section
+              next if in_auto_generated_section
+
+              # Parse .strings format: "key" = "value";
+              if match = line.match(/^\s*"([^"]+)"\s*=\s*"([^"]*)"\s*;/)
+                key = match[1]
+                value = match[2]
+                @strings_cache[key] = value
+              end
+            end
+          end
+        rescue => e
+          Core::Logger.warn "Failed to parse strings file #{file_path}: #{e.message}"
+        end
+
+        def escape_json_string(str)
+          str.gsub('"', '\\"').gsub("\n", '\\n').gsub("\r", '\\r').gsub("\t", '\\t')
+        end
+
+        # Convert Android format specifiers to iOS format
+        # %s -> %@, %1$s -> %1$@ (positional string)
+        def convert_android_to_ios_format(str)
+          str.gsub(/%(\d+\$)?s/) { |match|
+            pos = $1 # e.g., "1$" or nil
+            pos ? "%#{pos}@" : "%@"
+          }
+        end
+        
+        def generate_swift_content(strings_data)
+          content = []
+          content << "// StringManager.swift"
+          content << "// Auto-generated file - DO NOT EDIT"
+          content << "// Generated at: #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}"
+          content << ""
+          content << "import Foundation"
+          content << "import SwiftJsonUI"
+          content << ""
+          content << "public struct StringManager {"
+          content << "    private init() {}"
+          content << ""
+
+          # Generate static functions from .strings file cache (non-auto-generated keys)
+          if @strings_cache && !@strings_cache.empty?
+            content << "    // MARK: - Localizable.strings keys"
+            content << ""
+
+            @strings_cache.keys.sort.each do |key|
+              # Convert key to function name (e.g., "submit_button" -> "submitButton")
+              func_name = snake_to_camel(key)
+
+              content << "    public static func #{func_name}() -> String {"
+              content << "        return \"#{key}\".localized()"
+              content << "    }"
+              content << ""
+            end
+          end
+
+          # Generate nested structs for each file (from strings.json)
+          # Track generated struct names to avoid duplicates
+          generated_structs = Set.new
+
+          strings_data.each do |file_name, strings|
+            next unless strings.is_a?(Hash)
+
+            # Skip partial files (file names starting with underscore are legacy partials)
+            next if file_name.start_with?('_')
+
+            # Convert file name to struct name (e.g., "home_view" -> "HomeView")
+            struct_name = file_name.split('_').map(&:capitalize).join
+
+            # Skip if this struct name was already generated (prevents duplicates)
+            next if generated_structs.include?(struct_name)
+            generated_structs.add(struct_name)
+
+            content << "    public struct #{struct_name} {"
+            content << "        private init() {}"
+            content << ""
+
+            # Generate static functions for each string key
+            # Track function names to avoid duplicates (e.g., "key_" and "key" both -> "key")
+            generated_func_names = Set.new
+            strings.each do |key, _value|
+              # Convert key to function name (e.g., "submit_button" -> "submitButton")
+              func_name = snake_to_camel(key)
+              next if generated_func_names.include?(func_name)
+              generated_func_names.add(func_name)
+              full_key = "#{file_name}_#{key}"
+
+              content << "        public static func #{func_name}("
+              content << "            tableName: String? = nil,"
+              content << "            bundle: Bundle? = nil,"
+              content << "            value: String? = nil,"
+              content << "            comment: String = \"\""
+              content << "        ) -> String {"
+              content << "            return \"#{full_key}\".localized("
+              content << "                tableName: tableName,"
+              content << "                bundle: bundle,"
+              content << "                value: value,"
+              content << "                comment: comment"
+              content << "            )"
+              content << "        }"
+              content << ""
+            end
+
+            content << "    }"
+            content << ""
+          end
+
+          content << "}"
+          content << ""
+          content << "// Note: String.localized() extension is provided by SwiftJsonUI library"
+
+          content.join("\n")
+        end
+        
+        def snake_to_camel(snake_str)
+          # Strip trailing underscores to avoid duplicate function names
+          # e.g., "key_name_" and "key_name" both become "keyName"
+          cleaned = snake_str.gsub(/^_+|_+$/, '')
+          return snake_str if cleaned.empty?
+
+          # Convert snake_case to camelCase
+          components = cleaned.split('_')
+          
+          # If the entire string is just a number, prepend "value"
+          if components.length == 1 && components[0].match?(/^\d+$/)
+            return "value" + components[0].capitalize
+          end
+          
+          # If last component is just a number, combine it with the previous component
+          if components.length > 1 && components.last.match?(/^\d+$/)
+            # e.g., ["transfer", "caution", "1"] -> ["transfer", "caution1"]
+            components[-2] = components[-2] + components[-1].capitalize
+            components.pop
+          end
+          
+          return snake_str if components.empty?
+          components[0] + (components[1..-1] || []).map(&:capitalize).join
+        end
+        
+        def escape_swift_string(str)
+          # Escape special characters for Swift string literals
+          str.gsub('\\', '\\\\')     # Backslash must be first
+             .gsub('"', '\\"')       # Double quotes
+             .gsub("\n", '\\n')      # Newlines
+             .gsub("\r", '\\r')      # Carriage returns
+             .gsub("\t", '\\t')      # Tabs
+        end
+
+        def update_strings_file(file_path, strings_data)
+          # Detect language from file path (e.g., "ja.lproj" -> "ja", "en.lproj" or "Base.lproj" -> "en")
+          lang_code = if file_path =~ /(\w+)\.lproj/
+                        lang = $1
+                        (lang == 'Base' || lang == 'en') ? 'en' : lang
+                      else
+                        'en'
+                      end
+
+          # Build the set of valid keys from strings_data
+          valid_keys = {}
+          strings_by_file = {}
+          strings_data.each do |file_name, keys|
+            next unless keys.is_a?(Hash)
+            file_strings = []
+            keys.each do |key, value|
+              full_key = "#{file_name}_#{key}"
+              # Resolve multi-language Hash values
+              resolved = if value.is_a?(Hash)
+                           value[lang_code] || value['en'] || value.values.first || ''
+                         else
+                           value.to_s
+                         end
+              # Convert Android format specifiers to iOS format
+              resolved = convert_android_to_ios_format(resolved)
+              valid_keys[full_key] = { value: resolved, file_name: file_name }
+              file_strings << { key: full_key, value: resolved }
+            end
+            strings_by_file[file_name] = file_strings if file_strings.any?
+          end
+
+          # Read existing file and split into manual section and auto-generated keys
+          manual_section = ""
+          auto_generated_keys = {}  # key => value (preserves translated values)
+          if File.exist?(file_path)
+            content = File.read(file_path, encoding: 'UTF-8')
+            # Detect the start of auto-generated section (warning comment or marker)
+            warning_marker = '/* ======'
+            auto_marker = '/* Auto-generated strings'
+            warning_pos = content.index(warning_marker)
+            strings_pos = content.index(auto_marker)
+            marker_pos = [warning_pos, strings_pos].compact.min
+
+            if marker_pos
+              # Everything before the first auto-generated marker is the manual section
+              manual_section = content[0...marker_pos].rstrip
+              auto_section = content[marker_pos..]
+
+              # Parse all keys from the auto-generated section
+              auto_section.each_line do |line|
+                if match = line.match(/^\s*"([^"]+)"\s*=\s*"([^"]*)"\s*;/)
+                  key = match[1]
+                  value = match[2]
+                  # Keep the first occurrence (preserves manual translations)
+                  auto_generated_keys[key] = value unless auto_generated_keys.key?(key)
+                end
+              end
+            else
+              # No auto-generated section yet
+              manual_section = content.rstrip
+            end
+          end
+
+          # Build the new auto-generated section:
+          # - Only include keys that exist in valid_keys (removes obsolete keys)
+          # - Preserve existing translated values
+          # - Add new keys with default values
+          new_count = 0
+          removed_count = 0
+
+          # Count removed keys
+          auto_generated_keys.each_key do |key|
+            removed_count += 1 unless valid_keys.key?(key)
+          end
+
+          # Build output grouped by file
+          output_by_file = {}
+          strings_by_file.each do |file_name, file_strings|
+            entries = []
+            file_strings.each do |string_data|
+              key = string_data[:key]
+              new_value = escape_json_string(string_data[:value])
+              unless auto_generated_keys.key?(key) && auto_generated_keys[key] == new_value
+                new_count += 1 unless auto_generated_keys.key?(key)
+              end
+              entries << { key: key, value: new_value }
+            end
+            output_by_file[file_name] = entries if entries.any?
+          end
+
+          # Log changes
+          if new_count > 0 || removed_count > 0
+            parts = []
+            parts << "added #{new_count}" if new_count > 0
+            parts << "removed #{removed_count}" if removed_count > 0
+            Core::Logger.info "#{parts.join(', ')} strings in #{File.basename(file_path)}"
+          else
+            Core::Logger.info "No string changes in #{File.basename(file_path)}"
+          end
+
+          # Write the file: manual section + single auto-generated block
+          File.open(file_path, 'w:UTF-8') do |file|
+            file.write(manual_section) unless manual_section.empty?
+            file.write("\n") unless manual_section.empty?
+
+            if output_by_file.any?
+              file.write("\n/* ======================================================================\n")
+              file.write("   WARNING: The section below is auto-generated by 'sjui build'.\n")
+              file.write("   Do NOT add or remove keys manually - they will be overwritten.\n")
+              file.write("   You may only edit the VALUES for localization (e.g., translate to Japanese).\n")
+              file.write("   ====================================================================== */\n")
+              file.write("\n/* Auto-generated strings */\n")
+
+              output_by_file.each_with_index do |(file_name, entries), index|
+                file.write("\n") if index > 0
+                file.write("/* #{file_name}.json */\n")
+                entries.each do |entry|
+                  file.write("\"#{entry[:key]}\" = \"#{entry[:value]}\";\n")
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end

@@ -1,0 +1,670 @@
+# frozen_string_literal: true
+
+require_relative '../helpers/modifier_builder'
+require_relative '../helpers/visibility_helper'
+require_relative '../helpers/resource_resolver'
+require_relative '../helpers/font_spec_helper'
+
+module KjuiTools
+  module Compose
+    module Components
+      # Text Component Generator
+      #
+      # NOTE: Label is the primary component name in JsonUI.
+      # Text is supported as an alias for backward compatibility.
+      # Both "type": "Label" and "type": "Text" work identically.
+      #
+      class TextComponent
+        @counter = 0
+        class << self
+          attr_accessor :counter
+        end
+
+        # Returns a fresh `resolved_text<N>` local name for the FontSpec block.
+        def self.next_resolved_var
+          @counter += 1
+          "resolved_text#{@counter}"
+        end
+
+        def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+          # Check if component should be skipped entirely (static gone/hidden)
+          return "" if Helpers::VisibilityHelper.should_skip_render?(json_data)
+
+          # Check if we need to use PartialAttributesText for partial attributes
+          if json_data['partialAttributes'] && json_data['partialAttributes'].any?
+            return generate_with_partial_attributes_component(json_data, depth, required_imports, parent_type)
+          end
+
+          # Check if we need to use PartialAttributesText for linkable attribute
+          if json_data['linkable']
+            return generate_with_partial_attributes_for_linkable(json_data, depth, required_imports, parent_type)
+          end
+
+          text = Helpers::ResourceResolver.process_text(json_data['text'] || '', required_imports)
+
+          # Build FontSpec args once. We always emit the resolve block for Text-type
+          # components so the app's fontProvider is honoured even when the JSON
+          # didn't specify any font attribute (matches the SwiftUI parity goal).
+          font_args = Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports)
+          var_name = next_resolved_var
+
+          component_code = ""
+          component_code += Helpers::FontSpecHelper.emit_resolve_block(var_name, font_args, depth, required_imports)
+          component_code += "\n"
+
+          component_code += indent("Text(", depth)
+          component_code += "\n" + indent("text = #{text},", depth + 1)
+
+          # Font color (official attribute)
+          if json_data['fontColor']
+            color_value = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
+            component_code += "\n" + indent("color = #{color_value},", depth + 1) if color_value
+          end
+
+          # ResolvedFont fields routed to Text(...) parameters
+          required_imports&.add(:font_style)
+          required_imports&.add(:text_unit)
+          component_code += "\n" + indent("fontFamily = #{var_name}.family,", depth + 1)
+          component_code += "\n" + indent("fontWeight = #{var_name}.weight,", depth + 1)
+          component_code += "\n" + indent("fontSize = #{var_name}.size ?: TextUnit.Unspecified,", depth + 1)
+          component_code += "\n" + indent("fontStyle = #{var_name}.style ?: FontStyle.Normal,", depth + 1)
+
+          # Text decoration (underline, strikethrough)
+          text_decorations = []
+          if json_data['underline']
+            required_imports&.add(:text_decoration)
+            text_decorations << "TextDecoration.Underline"
+          end
+
+          if json_data['strikethrough']
+            required_imports&.add(:text_decoration)
+            text_decorations << "TextDecoration.LineThrough"
+          end
+
+          if text_decorations.any?
+            if text_decorations.length > 1
+              component_code += "\n" + indent("textDecoration = TextDecoration.combine(listOf(#{text_decorations.join(', ')})),", depth + 1)
+            else
+              component_code += "\n" + indent("textDecoration = #{text_decorations.first},", depth + 1)
+            end
+          end
+
+          # Text shadow and line height
+          style_parts = []
+
+          if json_data['textShadow']
+            required_imports&.add(:shadow_style)
+            style_parts << "shadow = Shadow(color = Color.Black, offset = Offset(2f, 2f), blurRadius = 4f)"
+          end
+
+          if json_data['lineHeightMultiple']
+            required_imports&.add(:text_style)
+            # Line height multiplier - apply to font size
+            line_height = json_data['fontSize'] ? json_data['fontSize'].to_f * json_data['lineHeightMultiple'].to_f : 14.0 * json_data['lineHeightMultiple'].to_f
+            style_parts << "lineHeight = #{line_height}.sp"
+          elsif json_data['lineSpacing']
+            required_imports&.add(:text_style)
+            # Line spacing - add to base font size
+            base_size = json_data['fontSize'] ? json_data['fontSize'].to_f : 14.0
+            line_height = base_size + json_data['lineSpacing'].to_f
+            style_parts << "lineHeight = #{line_height}.sp"
+          elsif json_data['fontSize']
+            # Default lineHeight to match iOS compact line spacing (fontSize * 1.3)
+            required_imports&.add(:text_style)
+            line_height = (json_data['fontSize'].to_f * 1.3).round(1)
+            style_parts << "lineHeight = #{line_height}.sp"
+          end
+
+          if style_parts.any?
+            required_imports&.add(:text_style)
+            component_code += "\n" + indent("style = TextStyle(#{style_parts.join(', ')}),", depth + 1)
+          end
+
+          # Build modifiers
+          modifiers = []
+
+          # Add testTag and contentDescription for UI testing
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+
+          # Get visibility info (but don't add to modifiers, will be handled by wrapper)
+          visibility_result = Helpers::ModifierBuilder.build_visibility(json_data, required_imports)
+          modifiers.concat(visibility_result[:modifiers]) if visibility_result[:modifiers].any?
+
+          modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
+
+          # Add weight modifier if in Row or Column
+          if parent_type == 'Row' || parent_type == 'Column'
+            modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
+          end
+
+          # 1. Margins first (outer spacing) - must be before size for outer margin behavior
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+
+          # 2. Size
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+
+          # 3. Shadow before background
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+
+          # 4. Background (clip + background)
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+
+          # 5. Handle edgeInset/padding for internal spacing
+          # In Compose, padding AFTER background = internal padding (inside the background)
+          if json_data['edgeInset']
+            insets = json_data['edgeInset']
+            if insets.is_a?(Array) && insets.length == 4
+              modifiers << ".padding(top = #{insets[0]}.dp, end = #{insets[1]}.dp, bottom = #{insets[2]}.dp, start = #{insets[3]}.dp)"
+            elsif insets.is_a?(Numeric)
+              modifiers << ".padding(#{insets}.dp)"
+            end
+          end
+          # padding/paddings for Label = internal padding (after background)
+          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+
+          # Format modifiers
+          if modifiers.any?
+            component_code += Helpers::ModifierBuilder.format(modifiers, depth)
+          else
+            component_code += "\n" + indent("modifier = Modifier", depth + 1)
+          end
+
+          # Text alignment
+          if json_data['textAlign']
+            required_imports&.add(:text_align)
+            case json_data['textAlign'].downcase
+            when 'center'
+              component_code += ",\n" + indent("textAlign = TextAlign.Center", depth + 1)
+            when 'right'
+              component_code += ",\n" + indent("textAlign = TextAlign.End", depth + 1)
+            when 'left'
+              component_code += ",\n" + indent("textAlign = TextAlign.Start", depth + 1)
+            end
+          elsif json_data['centerHorizontal']
+            required_imports&.add(:text_align)
+            component_code += ",\n" + indent("textAlign = TextAlign.Center", depth + 1)
+          end
+
+          # Lines (maxLines)
+          if json_data['lines']
+            if json_data['lines'] == 0
+              component_code += ",\n" + indent("maxLines = Int.MAX_VALUE", depth + 1)
+            else
+              component_code += ",\n" + indent("maxLines = #{json_data['lines']}", depth + 1)
+              required_imports&.add(:text_overflow)
+              component_code += ",\n" + indent("overflow = TextOverflow.Ellipsis", depth + 1)
+            end
+          end
+
+          # Auto shrink text using TextAutoSize
+          if json_data['autoShrink']
+            font_size = json_data['fontSize'] || 14
+            min_font_size = (font_size.to_f * 0.5).round(1)
+            required_imports&.add(:text_auto_size)
+            required_imports&.add(:text_overflow)
+            component_code += ",\n" + indent("autoSize = TextAutoSize.StepBased(minFontSize = #{min_font_size}.sp)", depth + 1)
+            component_code += ",\n" + indent("maxLines = 1", depth + 1)
+            component_code += ",\n" + indent("overflow = TextOverflow.Ellipsis", depth + 1)
+          end
+
+          # Minimum scale factor (auto-shrink text) using TextAutoSize
+          if json_data['minimumScaleFactor']
+            font_size = json_data['fontSize'] || 14
+            min_font_size = (font_size.to_f * json_data['minimumScaleFactor'].to_f).round(1)
+            required_imports&.add(:text_auto_size)
+            component_code += ",\n" + indent("autoSize = TextAutoSize.StepBased(minFontSize = #{min_font_size}.sp)", depth + 1)
+            component_code += ",\n" + indent("maxLines = 1", depth + 1)
+            required_imports&.add(:text_overflow)
+            component_code += ",\n" + indent("overflow = TextOverflow.Ellipsis", depth + 1)
+          end
+
+          # Line break mode (overflow)
+          if json_data['lineBreakMode']
+            required_imports&.add(:text_overflow)
+            case json_data['lineBreakMode'].downcase
+            when 'clip'
+              component_code += ",\n" + indent("overflow = TextOverflow.Clip", depth + 1)
+            when 'tail', 'word'
+              component_code += ",\n" + indent("overflow = TextOverflow.Ellipsis", depth + 1)
+            end
+          end
+
+          # highlightColor - color when pressed/selected
+          if json_data['highlightColor']
+            highlight_color = Helpers::ResourceResolver.process_color(json_data['highlightColor'], required_imports)
+            component_code += ",\n" + indent("// highlightColor: #{highlight_color} - Use InteractionSource for pressed state styling", depth + 1)
+          end
+
+          component_code += "\n" + indent(")", depth)
+
+          # Wrap with VisibilityWrapper if needed
+          Helpers::VisibilityHelper.wrap_with_visibility(json_data, component_code, depth, required_imports)
+        end
+
+        private
+
+        def self.generate_with_partial_attributes_for_linkable(json_data, depth, required_imports, parent_type)
+          required_imports&.add(:partial_attributes_text)
+
+          text = json_data['text'] || ''
+
+          # Build FontSpec resolve block before the component so its fields can be
+          # consumed by the TextStyle( ... ) below.
+          font_args = Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports)
+          var_name = next_resolved_var
+          code = Helpers::FontSpecHelper.emit_resolve_block(var_name, font_args, depth, required_imports)
+          code += "\n"
+
+          code += indent("PartialAttributesText(", depth)
+          code += "\n" + indent("text = \"#{escape_string(text)}\",", depth + 1)
+          code += "\n" + indent("linkable = true,", depth + 1)
+
+          # Build style
+          style_parts = []
+
+          if json_data['fontColor']
+            color_value = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
+            style_parts << "color = #{color_value}" if color_value
+          end
+
+          # Always pass through resolved font fields (centralised mapping).
+          required_imports&.add(:font_style)
+          required_imports&.add(:text_unit)
+          style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(var_name, required_imports))
+
+          if json_data['textAlign']
+            required_imports&.add(:text_align)
+            case json_data['textAlign'].downcase
+            when 'center'
+              style_parts << "textAlign = TextAlign.Center"
+            when 'right'
+              style_parts << "textAlign = TextAlign.End"
+            when 'left'
+              style_parts << "textAlign = TextAlign.Start"
+            end
+          end
+
+          if style_parts.any?
+            required_imports&.add(:text_style)
+            code += "\n" + indent("style = TextStyle(#{style_parts.join(', ')}),", depth + 1)
+          end
+
+          # Build modifiers
+          modifiers = []
+          modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+
+          # Handle edgeInset for text-specific padding
+          if json_data['edgeInset']
+            insets = json_data['edgeInset']
+            if insets.is_a?(Array) && insets.length == 4
+              modifiers << ".padding(top = #{insets[0]}.dp, end = #{insets[1]}.dp, bottom = #{insets[2]}.dp, start = #{insets[3]}.dp)"
+            elsif insets.is_a?(Numeric)
+              modifiers << ".padding(#{insets}.dp)"
+            end
+          else
+            modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          end
+
+          if modifiers.any?
+            code += Helpers::ModifierBuilder.format(modifiers, depth)
+          else
+            code += "\n" + indent("modifier = Modifier", depth + 1)
+          end
+
+          code += "\n" + indent(")", depth)
+
+          # Wrap with VisibilityWrapper if needed
+          Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, required_imports)
+        end
+
+        def self.generate_with_partial_attributes_component(json_data, depth, required_imports, parent_type)
+          required_imports&.add(:partial_attributes_text)
+
+          text = json_data['text'] || ''
+          partial_attrs = json_data['partialAttributes']
+
+          # Process main text through resource resolver for stringResource() support
+          processed_text = Helpers::ResourceResolver.process_text(text, required_imports)
+
+          # Build FontSpec resolve block first so the inline style block can consume it.
+          font_args = Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports)
+          var_name = next_resolved_var
+          code = Helpers::FontSpecHelper.emit_resolve_block(var_name, font_args, depth, required_imports)
+          code += "\n"
+
+          code += indent("PartialAttributesText(", depth)
+          code += "\n" + indent("text = #{processed_text},", depth + 1)
+
+          # Build partial attributes list
+          code += "\n" + indent("partialAttributes = listOf(", depth + 1)
+
+          partial_attrs.each_with_index do |attr, index|
+            code += "\n" + indent("PartialAttribute.fromJsonRange(", depth + 2)
+
+            # Handle range - convert numeric array to text pattern for localization support
+            range = attr['range']
+            if range.is_a?(Array) && range.length == 2 && range.all? { |r| r.is_a?(Integer) }
+              # Extract substring from text using numeric range, then use as text pattern
+              range_text = text[range[0]...range[1]]
+              if range_text && !range_text.empty?
+                processed_range = Helpers::ResourceResolver.process_text(range_text, required_imports)
+                code += "\n" + indent("range = #{processed_range},", depth + 3)
+              else
+                code += "\n" + indent("range = listOf(#{range.join(', ')}),", depth + 3)
+              end
+            elsif range.is_a?(String)
+              processed_range = Helpers::ResourceResolver.process_text(range, required_imports)
+              code += "\n" + indent("range = #{processed_range},", depth + 3)
+            end
+
+            code += "\n" + indent("text = #{processed_text},", depth + 3)
+
+            # Add optional attributes
+            if attr['fontColor']
+              fc = attr['fontColor']
+              if fc.is_a?(String) && fc.match?(/^@\{.+\}$/)
+                variable = fc[2..-2]
+                code += "\n" + indent("fontColor = data.#{variable},", depth + 3)
+              else
+                code += "\n" + indent("fontColor = \"#{fc}\",", depth + 3)
+              end
+            end
+            if attr['fontSize']
+              code += "\n" + indent("fontSize = #{attr['fontSize']},", depth + 3)
+            end
+            # Handle font/fontWeight - support both "font" and "fontWeight" keys
+            font_weight = attr['fontWeight'] || attr['font']
+            if font_weight
+              code += "\n" + indent("fontWeight = \"#{font_weight}\",", depth + 3)
+            end
+            if attr['background']
+              code += "\n" + indent("background = \"#{attr['background']}\",", depth + 3)
+            end
+            if attr['underline']
+              code += "\n" + indent("underline = #{attr['underline']},", depth + 3)
+            end
+            if attr['strikethrough']
+              code += "\n" + indent("strikethrough = #{attr['strikethrough']},", depth + 3)
+            end
+            # Handle click events for partial attributes
+            # onclick (lowercase) -> selector format (string only)
+            # onClick (camelCase) -> binding format only (@{functionName})
+            if attr['onclick']
+              handler_call = Helpers::ModifierBuilder.get_event_handler_call(attr['onclick'], is_camel_case: false)
+              code += "\n" + indent("onClick = { #{handler_call} }", depth + 3)
+            elsif attr['onClick']
+              handler_call = Helpers::ModifierBuilder.get_event_handler_call(attr['onClick'], is_camel_case: true)
+              code += "\n" + indent("onClick = { #{handler_call} }", depth + 3)
+            else
+              code += "\n" + indent("onClick = null", depth + 3)
+            end
+
+            code += "\n" + indent(")!!", depth + 2) # !! because fromJsonRange returns nullable
+            code += "," if index < partial_attrs.length - 1
+          end
+
+          code += "\n" + indent("),", depth + 1)
+
+          # Build modifiers
+          modifiers = []
+          modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+
+          if modifiers.any?
+            code += Helpers::ModifierBuilder.format(modifiers, depth)
+          else
+            code += "\n" + indent("modifier = Modifier", depth + 1)
+          end
+
+          # Add style — always include resolved font fragments so the Configuration
+          # provider is honoured even without explicit JSON font attrs.
+          style_parts = []
+          if json_data['fontColor']
+            color_value = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
+            style_parts << "color = #{color_value}" if color_value
+          end
+
+          required_imports&.add(:font_style)
+          required_imports&.add(:text_unit)
+          style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(var_name, required_imports))
+
+          if json_data['textAlign']
+            required_imports&.add(:text_align)
+            case json_data['textAlign'].downcase
+            when 'center'
+              style_parts << "textAlign = TextAlign.Center"
+            when 'right'
+              style_parts << "textAlign = TextAlign.End"
+            when 'left'
+              style_parts << "textAlign = TextAlign.Start"
+            end
+          end
+
+          if style_parts.any?
+            required_imports&.add(:text_style)
+            code += ",\n" + indent("style = TextStyle(#{style_parts.join(', ')})", depth + 1)
+          end
+
+          code += "\n" + indent(")", depth)
+
+          # Wrap with VisibilityWrapper if needed
+          Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, required_imports)
+        end
+
+        # Legacy AnnotatedString path retained for backward compat with any
+        # caller that explicitly drives this helper. The two helpers above are
+        # the ones routed from `.generate`.
+        def self.generate_with_partial_attributes(json_data, depth, required_imports, parent_type)
+          required_imports&.add(:annotated_string)
+          required_imports&.add(:clickable_text)
+          required_imports&.add(:remember_state)
+
+          text = json_data['text'] || ''
+          partial_attrs = json_data['partialAttributes']
+
+          # Build AnnotatedString as a variable first
+          code = indent("val annotatedText = buildAnnotatedString {", depth)
+          code += "\n" + indent("append(\"#{escape_string(text)}\")", depth + 1)
+
+          # Apply partial attributes
+          partial_attrs.each do |attr|
+            range = attr['range']
+            next unless range && range.is_a?(Array) && range.length == 2
+
+            start_idx = range[0]
+            end_idx = range[1]
+
+            # Build SpanStyle for this range
+            span_styles = []
+
+            if attr['fontColor']
+              color_resolved = Helpers::ResourceResolver.process_color(attr['fontColor'], required_imports)
+              span_styles << "color = #{color_resolved}"
+            end
+
+            if attr['fontSize']
+              span_styles << "fontSize = #{attr['fontSize']}.sp"
+            end
+
+            if attr['fontWeight']
+              required_imports&.add(:font_weight)
+              span_styles << "fontWeight = #{Helpers::FontSpecHelper.weight_literal_for(attr['fontWeight'])}"
+            end
+
+            if attr['background']
+              background_resolved = Helpers::ResourceResolver.process_color(attr['background'], required_imports)
+              span_styles << "background = #{background_resolved}"
+            end
+
+            if attr['underline']
+              required_imports&.add(:text_decoration)
+              span_styles << "textDecoration = TextDecoration.Underline"
+            end
+
+            if attr['strikethrough']
+              required_imports&.add(:text_decoration)
+              span_styles << "textDecoration = TextDecoration.LineThrough"
+            end
+
+            if span_styles.any?
+              code += "\n" + indent("addStyle(", depth + 1)
+              code += "\n" + indent("style = SpanStyle(#{span_styles.join(', ')}),", depth + 2)
+              code += "\n" + indent("start = #{start_idx},", depth + 2)
+              code += "\n" + indent("end = #{end_idx}", depth + 2)
+              code += "\n" + indent(")", depth + 1)
+            end
+
+            # Add clickable annotation if onclick/onClick is specified
+            click_handler = attr['onclick'] || attr['onClick']
+            if click_handler
+              # Extract method name from binding format if needed
+              method_name = if click_handler.match?(/^@\{(.+)\}$/)
+                click_handler.match(/^@\{(.+)\}$/)[1]
+              else
+                click_handler.gsub(':', '')
+              end
+              code += "\n" + indent("addStringAnnotation(", depth + 1)
+              code += "\n" + indent("tag = \"CLICKABLE\",", depth + 2)
+              code += "\n" + indent("annotation = \"#{method_name}\",", depth + 2)
+              code += "\n" + indent("start = #{start_idx},", depth + 2)
+              code += "\n" + indent("end = #{end_idx}", depth + 2)
+              code += "\n" + indent(")", depth + 1)
+            end
+          end
+
+          code += "\n" + indent("}", depth)
+          code += "\n"
+
+          # Now use ClickableText with the annotatedString
+          code += indent("ClickableText(", depth)
+          code += "\n" + indent("text = annotatedText,", depth + 1)
+
+          # Add onClick handler for clickable ranges
+          if partial_attrs.any? { |attr| attr['onclick'] }
+            code += "\n" + indent("onClick = { offset ->", depth + 1)
+            code += "\n" + indent("annotatedText.getStringAnnotations(\"CLICKABLE\", offset, offset)", depth + 2)
+            code += "\n" + indent(".firstOrNull()?.let { annotation ->", depth + 3)
+            code += "\n" + indent("viewModel.handlePartialClick(annotation.item)", depth + 4)
+            code += "\n" + indent("}", depth + 3)
+            code += "\n" + indent("},", depth + 1)
+          else
+            code += "\n" + indent("onClick = { },", depth + 1)
+          end
+
+          # Add style (fontSize, color, etc. for the whole text)
+          style_code = build_text_style(json_data, depth + 1, required_imports)
+          if style_code
+            code += style_code
+          end
+
+          # Build modifiers
+          modifiers = []
+          modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+
+          if modifiers.any?
+            code += Helpers::ModifierBuilder.format(modifiers, depth)
+          else
+            code += "\n" + indent("modifier = Modifier", depth + 1)
+          end
+
+          code += "\n" + indent(")", depth)
+
+          # Wrap with VisibilityWrapper if needed
+          Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, required_imports)
+        end
+
+        # Build a TextStyle(...) literal for callers (e.g. ClickableText) that
+        # need a TextStyle expression rather than separate Text(...) args.
+        # Routes font fields through Configuration.Font.resolve(FontSpec(...)).
+        def self.build_text_style(json_data, depth, required_imports)
+          style_parts = []
+
+          if json_data['fontColor']
+            color_value = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
+            style_parts << "color = #{color_value}" if color_value
+          end
+
+          if json_data['fontSize'] || json_data['font'] || json_data['fontWeight'] || json_data['fontFamily']
+            font_args = Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports)
+            var_name = next_resolved_var
+            # Inline the resolve into the caller code by emitting a `.also { ... }`-style
+            # expression isn't possible in TextStyle args; instead, callers that consume
+            # this method should emit the resolve block themselves. To keep
+            # backward-compat we emit a flat TextStyle(...) without resolved font here.
+            # Concrete callers (PartialAttributesText, ClickableText) construct their
+            # own resolve block.
+            style_parts << "fontSize = #{json_data['fontSize']}.sp" if json_data['fontSize']
+            if json_data['fontFamily']
+              required_imports&.add(:font_family)
+              style_parts << "fontFamily = FontFamily(Font(R.font.#{json_data['fontFamily'].to_s.gsub('-', '_').gsub(' ', '_').downcase}))"
+            end
+            font_value = json_data['font'] || json_data['fontWeight']
+            if font_value && Helpers::FontSpecHelper.weight_name?(font_value)
+              required_imports&.add(:font_weight)
+              style_parts << "fontWeight = #{Helpers::FontSpecHelper.weight_literal_for(font_value)}"
+            elsif font_value && !json_data['fontFamily']
+              # `font` holds a custom family name when not a weight.
+              required_imports&.add(:font_family)
+              style_parts << "fontFamily = FontFamily(Font(R.font.#{font_value.to_s.gsub('-', '_').downcase}))"
+            end
+          end
+
+          if json_data['textAlign']
+            required_imports&.add(:text_align)
+            case json_data['textAlign'].downcase
+            when 'center'
+              style_parts << "textAlign = TextAlign.Center"
+            when 'right'
+              style_parts << "textAlign = TextAlign.End"
+            when 'left'
+              style_parts << "textAlign = TextAlign.Start"
+            end
+          end
+
+          if style_parts.any?
+            required_imports&.add(:text_style)
+            return ",\n" + indent("style = TextStyle(#{style_parts.join(', ')})", depth)
+          end
+
+          nil
+        end
+
+        def self.escape_string(text)
+          text.gsub('\\', '\\\\\\\\')
+              .gsub('"', '\\"')
+              .gsub("\n", '\\n')
+              .gsub("\r", '\\r')
+              .gsub("\t", '\\t')
+        end
+
+        def self.quote(text)
+          # Escape special characters properly
+          escaped = text.gsub('\\', '\\\\\\\\')  # Escape backslashes first
+                       .gsub('"', '\\"')           # Escape quotes
+                       .gsub("\n", '\\n')           # Escape newlines
+                       .gsub("\r", '\\r')           # Escape carriage returns
+                       .gsub("\t", '\\t')           # Escape tabs
+          "\"#{escaped}\""
+        end
+
+        def self.indent(text, level)
+          return text if level == 0
+          spaces = '    ' * level
+          text.split("\n").map { |line|
+            line.empty? ? line : spaces + line
+          }.join("\n")
+        end
+      end
+    end
+  end
+end

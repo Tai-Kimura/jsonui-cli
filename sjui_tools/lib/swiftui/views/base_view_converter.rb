@@ -1,0 +1,675 @@
+# frozen_string_literal: true
+
+require_relative 'template_helper'
+require_relative 'alignment_helper'
+require_relative 'frame_helper'
+require_relative 'color_helper'
+require_relative 'spacing_helper'
+require_relative 'modifier_helper'
+require_relative 'modifier_bag'
+require_relative '../binding/binding_handler_registry'
+require_relative '../../core/attribute_validator'
+require_relative '../helpers/string_manager_helper'
+
+module SjuiTools
+  module SwiftUI
+    module Views
+      class BaseViewConverter
+        include SjuiTools::SwiftUI::Helpers::StringManagerHelper
+        include TemplateHelper
+        include AlignmentHelper
+        include FrameHelper
+        include ColorHelper
+        include SpacingHelper
+        include ModifierHelper
+
+        # Class-level validator instance (shared across all converters)
+        @@validator = nil
+        @@validation_enabled = true
+
+        # Enable or disable validation
+        def self.validation_enabled=(enabled)
+          @@validation_enabled = enabled
+        end
+
+        def self.validation_enabled?
+          @@validation_enabled
+        end
+
+        attr_reader :state_variables, :modifier_bag
+
+        def initialize(component, indent_level = 0, action_manager = nil, binding_registry = nil)
+          @component = component
+          @indent_level = indent_level
+          @action_manager = action_manager
+          @generated_code = []
+          @state_variables = []
+          @binding_registry = binding_registry || SjuiTools::SwiftUI::Binding::BindingHandlerRegistry.new
+          @binding_handler = @binding_registry.get_handler(@component['type'] || 'View')
+          @modifier_bag = ModifierBag.new
+
+          # Note: Validation is now done in json_to_swiftui_converter.rb's validate_json_tree
+          # which properly passes parent_orientation to handle weight validation correctly
+
+          # includeとvariables処理
+          handle_include_and_variables
+        end
+
+        def convert
+          raise NotImplementedError, "Subclasses must implement convert method"
+        end
+
+        def add_line(line)
+          @generated_code << ("    " * @indent_level + line)
+        end
+
+        def add_modifier_line(modifier)
+          add_line "    #{modifier}"
+        end
+
+        protected
+
+        # Get value with binding support
+        def get_binding_value(key, default = nil)
+          value = @component[key]
+          @binding_handler.get_value(value, default)
+        end
+
+        # Check if a value is a binding expression
+        def is_binding?(value)
+          @binding_handler.is_binding?(value)
+        end
+
+        # Extract property name from binding expression
+        # "@{propertyName}" -> "propertyName"
+        # "@{!propertyName}" -> "propertyName" (negation prefix stripped)
+        def extract_binding_property(value)
+          return nil unless value.is_a?(String)
+          if value =~ /^@\{!?(.+)\}$/
+            $1
+          else
+            value
+          end
+        end
+
+        # Check if a binding expression is negated
+        # "@{!propertyName}" -> true
+        # "@{propertyName}" -> false
+        def is_negated_binding?(value)
+          return false unless value.is_a?(String)
+          value =~ /^@\{!.+\}$/
+        end
+
+        # Build data access expression from binding value
+        # "@{propertyName}" -> "data.propertyName"
+        # "@{!propertyName}" -> "!data.propertyName"
+        def binding_data_expr(value)
+          prop = extract_binding_property(value)
+          if is_negated_binding?(value)
+            "!data.#{prop}"
+          else
+            "data.#{prop}"
+          end
+        end
+
+        # Apply binding modifiers into the modifier bag
+        def apply_binding_modifiers
+          skip = []
+          # Skip keys already handled by converter (registered in bag)
+          skip << 'background' if @modifier_bag.key?(:background)
+          modifiers = @binding_handler.process_bindings(@component, skip_keys: skip)
+          modifiers.each do |modifier|
+            next unless modifier
+            # Categorize binding modifier into the correct bag key
+            bag_key = categorize_binding_modifier(modifier)
+            if bag_key
+              @modifier_bag.register(bag_key, modifier)
+            else
+              # Unknown modifier - append as component_specific
+              @modifier_bag.append(:component_specific, modifier)
+            end
+          end
+        end
+
+        def handle_include_and_variables
+          # include処理は専用のIncludeConverterで処理するため、
+          # ここではメタデータのみを記録
+          if @component['include']
+            # includeがある場合は、IncludeConverterが処理することを示すコメントを追加
+            add_line "// Component will be replaced by IncludeConverter"
+            add_line "// include: #{@component['include']}"
+
+            if @component['shared_data']
+              add_line "// shared_data: #{@component['shared_data'].to_json}"
+            end
+
+            if @component['data']
+              add_line "// data: #{@component['data'].to_json}"
+            end
+
+            if @component['variables']
+              add_line "// variables: #{@component['variables'].to_json}"
+            end
+          end
+        end
+
+        def indent(&block)
+          @indent_level += 1
+          yield
+          @indent_level -= 1
+        end
+
+        def generated_code
+          # Emit all modifiers from the bag in correct order
+          @modifier_bag.emit_all(self)
+
+          # accessibilityIdentifier for UI testing - auto-added for all components with id
+          # ID prefixes from includes are already applied during JSON processing
+          if @component['id'] && !@accessibility_identifier_added
+            add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}\")"
+            @accessibility_identifier_added = true
+          end
+          @generated_code.join("\n")
+        end
+
+        # 共通のモディファイア適用メソッド
+        def apply_modifiers(skip_padding: false, skip_insets: false)
+          # アライメント処理を先に適用
+          apply_center_alignment
+          apply_edge_alignment
+
+          # パディング（内側のスペース）を先に適用
+          apply_padding unless skip_padding
+
+          # サイズ制約とサイズをパディングの後に適用
+          apply_frame_constraints
+          apply_frame_size
+
+          # insetsとinsetHorizontalの処理（Collectionではspacerで処理するためスキップ可能）
+          apply_insets unless skip_insets
+
+          # 背景色（Rectangleの場合はfillで設定済みなのでスキップ）
+          # enabled状態に応じて背景色を変更
+          if @component['enabled'] == false && @component['disabledBackground']
+            # 無効状態の背景色
+            color = get_swiftui_color(@component['disabledBackground'])
+            @modifier_bag.register(:background, ".background(#{color})")
+          elsif @component['background'] && !@modifier_bag.key?(:background)
+            bg_value = @component['background']
+            if bg_value.is_a?(String) && bg_value.start_with?('@{')
+              # Binding background - resolve here at the correct position (before margins)
+              prop = bg_value[2..-2] # Remove @{ and }
+              @modifier_bag.register(:background, ".background(SwiftJsonUIConfiguration.shared.getColor(for: data.#{prop}) ?? Color.clear)")
+            else
+              processed_bg = process_template_value(bg_value)
+              if processed_bg.is_a?(Hash) && processed_bg[:template_var]
+                @modifier_bag.register(:background, ".background(#{get_swiftui_color(bg_value)})")
+              else
+                color = get_swiftui_color(bg_value)
+                @modifier_bag.register(:background, ".background(#{color})")
+              end
+            end
+          end
+
+          # コーナー半径（背景の直後に適用）
+          if @component['cornerRadius']
+            @modifier_bag.register(:corner_radius, ".cornerRadius(#{@component['cornerRadius'].to_i})")
+          end
+
+          # ボーダー（cornerRadiusの直後、marginsの前に適用）
+          # Dynamic mode: CommonModifiers.swift line 59
+          if @component['borderWidth'] && @component['borderColor']
+            border_color_value = @component['borderColor']
+            # Skip if borderColor is a binding - handled by view_binding_handler
+            unless border_color_value.is_a?(String) && border_color_value.start_with?('@{')
+              color = get_swiftui_color(border_color_value)
+              border_code = build_border_overlay(color, (@component['cornerRadius'] || 0).to_i, @component['borderWidth'].to_i)
+              @modifier_bag.register(:border, border_code)
+            end
+          end
+
+          # マージン（外側のスペース - SwiftUIではpaddingで実装）
+          apply_margins
+
+          # 透明度 (alphaとopacityの両方をサポート)
+          alpha_value = @component['alpha'] || @component['opacity']
+          if alpha_value
+            if is_binding?(alpha_value)
+              @modifier_bag.register(:opacity, ".opacity(#{binding_data_expr(alpha_value)})")
+            else
+              @modifier_bag.register(:opacity, ".opacity(#{alpha_value})")
+            end
+          end
+
+          # visibility属性はVisibilityWrapperで処理するので、ここでは何もしない
+          # The actual wrapping happens in the parent view converter
+
+          # 影
+          if @component['shadow']
+            shadow_code = build_shadow_modifier(@component['shadow'])
+            @modifier_bag.register(:shadow, shadow_code) if shadow_code
+          end
+
+          # クリップ
+          if @component['clipToBounds']
+            @modifier_bag.register(:clip_to_bounds, ".clipped()")
+          end
+
+          # オフセット（offsetX, offsetY）
+          if @component['offsetX'] || @component['offsetY']
+            offset_x = @component['offsetX'] || 0
+            offset_y = @component['offsetY'] || 0
+            @modifier_bag.register(:offset, ".offset(x: #{offset_x}, y: #{offset_y})")
+          end
+
+          # 表示/非表示
+          hidden_value = @component['hidden']
+          if hidden_value == true
+            @modifier_bag.register(:hidden, ".hidden()")
+          elsif is_binding?(hidden_value)
+            # Binding: "@{isErrorHidden}" -> .opacity(data.isErrorHidden ? 0 : 1)
+            # Binding: "@{!isVisible}" -> .opacity(!data.isVisible ? 0 : 1)
+            @modifier_bag.register(:hidden, ".opacity(#{binding_data_expr(hidden_value)} ? 0 : 1)")
+          end
+
+          # safeAreaInsetPositions
+          apply_safe_area_insets_to_bag
+
+          # disabled状態の処理
+          if @component['enabled'] == false
+            @modifier_bag.register(:disabled, ".disabled(true)")
+          end
+
+          # tagプロパティの適用（TabViewなどで使用）
+          if @component['tag']
+            @modifier_bag.register(:tag, ".tag(#{@component['tag']})")
+          end
+
+          # classNameプロパティ（SwiftUIではスタイル識別子として記録）
+          if @component['className']
+            add_line "// className: #{@component['className']}"
+          end
+
+          # touchDisabledState（タッチ無効化状態）
+          if @component['touchDisabledState']
+            @modifier_bag.register(:allows_hit_testing, ".allowsHitTesting(false)")
+            add_line "// touchDisabledState applied"
+          end
+
+          # userInteractionEnabled（タッチ有効/無効）
+          if @component['userInteractionEnabled'] == false
+            @modifier_bag.register(:allows_hit_testing, ".allowsHitTesting(false)")
+          end
+
+          # tintColor（アクセントカラー）
+          if @component['tintColor']
+            tint_color = @component['tintColor']
+            if is_binding?(tint_color)
+              @modifier_bag.register(:tint_color, ".tint(#{binding_data_expr(tint_color)})")
+            else
+              color = get_swiftui_color(tint_color)
+              @modifier_bag.register(:tint_color, ".tint(#{color})")
+            end
+          end
+
+          # バインディング関連プロパティ（コメントとして記録）
+          if @component['bindingScript']
+            add_line "// bindingScript: #{@component['bindingScript']}"
+          end
+          if @component['binding_group']
+            add_line "// binding_group: #{@component['binding_group']}"
+          end
+          if @component['binding_id']
+            add_line "// binding_id: #{@component['binding_id']}"
+          end
+          if @component['shared_data']
+            add_line "// shared_data: #{@component['shared_data']}"
+          end
+
+          # indexBelow（Z軸順序の指定）
+          if @component['indexBelow']
+            # indexBelowは指定した他のビューの下に配置することを意味する可能性
+            # SwiftUIではzIndexを使用して相対的な前後関係を制御
+            add_line "// indexBelow: #{@component['indexBelow']} - Place below specified view"
+            # 数値の場合はzIndexとして使用、文字列の場合は他のビューIDを参照
+            if @component['indexBelow'].to_s =~ /^\d+$/
+              @modifier_bag.append(:z_index, ".zIndex(-#{@component['indexBelow'].to_i})")
+            else
+              add_line "// Reference to view ID: #{@component['indexBelow']}"
+              @modifier_bag.append(:z_index, ".zIndex(-1)")  # デフォルトで背面に配置
+            end
+          end
+
+          # クリックイベント
+          # SwiftUI uses onClick only (onclick is UIKit only)
+          # onClick (camelCase) -> binding format only (@{functionName})
+          # ただし、Buttonの場合は既にactionで処理しているのでスキップ
+          unless @component['type'] == 'Button'
+            # enabled=falseの場合はクリックイベントを追加しない
+            unless @component['enabled'] == false
+              if @component['onClick']
+                on_click_lines = build_on_click_lines(@component['onClick'])
+                @modifier_bag.register(:on_click, on_click_lines)
+              end
+            end
+          end
+
+          # Lifecycle events (SwiftUI only)
+          apply_lifecycle_events_to_bag
+
+          # confirmationDialog (iOS 15+)
+          apply_confirmation_dialog_to_bag
+        end
+
+        # Apply confirmationDialog modifier (iOS 15+) into the bag
+        def apply_confirmation_dialog_to_bag
+          dialog = @component['confirmationDialog']
+          return unless dialog.is_a?(Hash)
+
+          is_presented = dialog['isPresented']
+          return unless is_presented
+
+          # Extract binding property name for isPresented
+          is_presented_var = extract_binding_property(is_presented)
+          return unless is_presented_var
+
+          # Get title (can be string or binding)
+          title_value = dialog['title'] || ''
+          if is_binding?(title_value)
+            title_var = extract_binding_property(title_value)
+            title_expr = "data.#{title_var}"
+          else
+            title_expr = get_text_with_string_manager("\"#{title_value}\"")
+          end
+
+          # Get titleVisibility (automatic, visible, hidden)
+          title_visibility = dialog['titleVisibility'] || 'automatic'
+          title_visibility_expr = case title_visibility
+          when 'visible'
+            '.visible'
+          when 'hidden'
+            '.hidden'
+          else
+            '.automatic'
+          end
+
+          # Check for layout or actions (one of them is required)
+          layout_config = dialog['layout']
+          actions = dialog['actions']
+
+          # Return if neither layout nor actions is specified
+          return unless layout_config || actions
+
+          # Get message (optional, can be string or binding)
+          message_value = dialog['message']
+          has_message = !message_value.nil? && !message_value.to_s.empty?
+
+          # Build the full confirmation dialog code as multi-line string
+          lines = []
+          lines << ".confirmationDialog("
+          lines << "    #{title_expr},"
+          lines << "    isPresented: $data.#{is_presented_var},"
+          lines << "    titleVisibility: #{title_visibility_expr}"
+          if has_message
+            lines << ") {"
+          else
+            lines << ", actions: {"
+          end
+
+          # Generate actions content based on layout or actions binding
+          if layout_config.is_a?(Hash)
+            layout_name = layout_config['name']&.sub(/\.json$/, '')
+            layout_data = layout_config['data']
+
+            if layout_name && layout_data
+              view_name = to_pascal_case(layout_name) + "View"
+              data_var = extract_binding_property(layout_data)
+              lines << "    #{view_name}(data: data.#{data_var})"
+            end
+          elsif actions
+            actions_var = extract_binding_property(actions)
+            lines << "    if let actionsView = data.#{actions_var}?() {"
+            lines << "        actionsView"
+            lines << "    }"
+          end
+
+          if has_message
+            if is_binding?(message_value)
+              message_var = extract_binding_property(message_value)
+              message_expr = "data.#{message_var}"
+            else
+              message_expr = get_text_with_string_manager("\"#{message_value}\"")
+            end
+            lines << "} message: {"
+            lines << "    Text(#{message_expr})"
+            lines << "}"
+          else
+            lines << "})"
+          end
+
+          @modifier_bag.register(:confirmation_dialog, lines)
+        end
+
+        # Legacy method - kept for backward compatibility with converters that call it directly
+        def apply_confirmation_dialog
+          apply_confirmation_dialog_to_bag
+        end
+
+        # Convert snake_case or kebab-case to PascalCase
+        def to_pascal_case(str)
+          str.split(/[-_]/).map(&:capitalize).join
+        end
+
+        # Apply lifecycle event modifiers into the bag
+        def apply_lifecycle_events_to_bag
+          if @component['onAppear']
+            handler = @component['onAppear']
+            lines = build_lifecycle_handler_lines('.onAppear', handler)
+            @modifier_bag.register(:on_appear, lines)
+          end
+
+          if @component['onDisappear']
+            handler = @component['onDisappear']
+            lines = build_lifecycle_handler_lines('.onDisappear', handler)
+            @modifier_bag.register(:on_disappear, lines)
+          end
+        end
+
+        # Legacy method - kept for backward compatibility
+        def apply_lifecycle_events
+          apply_lifecycle_events_to_bag
+        end
+
+        # ヘルパーメソッド
+
+        # Convert event handler to method call
+        # SwiftUI uses onClick only (binding format: @{functionName})
+        # If handler ends with ':', pass self as parameter
+        def get_event_handler_call(handler)
+          if is_binding?(handler)
+            method_name = extract_binding_property(handler)
+            if method_name.end_with?(':')
+              "data.#{method_name.chomp(':')}?(self)"
+            else
+              "data.#{method_name}?()"
+            end
+          else
+            # Direct function name (non-binding)
+            if handler.end_with?(':')
+              "data.#{handler.chomp(':')}?(self)"
+            else
+              "data.#{handler}?()"
+            end
+          end
+        end
+
+        # Get event handler invocation based on handler type definition
+        # Checks data_definitions to determine if handler takes (viewId, value) or no arguments
+        # @param handler [String] The handler binding expression (e.g., "@{onValueChange}")
+        # @param view_id [String] The view ID to pass as first argument
+        # @param value_expr [String, nil] The value expression to pass as second argument (nil for click events)
+        # @return [String] The Swift code to invoke the handler
+        def get_event_handler_invocation(handler, view_id, value_expr = nil)
+          method_name = extract_binding_property(handler) || handler
+          data_def = ColorHelper.data_definitions[method_name]
+
+          if data_def && data_def['class']
+            class_type = data_def['class'].to_s
+            # Check for Event type or (String, Type) pattern
+            # SwiftUI uses Void instead of Unit
+            if class_type.include?('Event') || class_type.match?(/\(\s*\(?\s*String\s*[,)]/)
+              if value_expr.nil?
+                "data.#{method_name}?(\"#{view_id}\")"
+              else
+                "data.#{method_name}?(\"#{view_id}\", #{value_expr})"
+              end
+            elsif value_expr && class_type.match?(/\(\s*\(?\s*(Int|Bool|Boolean|Float|Double|Number|String)\s*\)?\s*\)\s*->/)
+              # Handler takes a single typed argument (e.g., (Int) -> Void)
+              "data.#{method_name}?(#{value_expr})"
+            elsif class_type.match?(/\(\s*\)\s*->/)
+              # () -> Void type - no arguments
+              "data.#{method_name}?()"
+            else
+              # Default to no arguments
+              "data.#{method_name}?()"
+            end
+          else
+            # No type definition found - default to no arguments
+            "data.#{method_name}?()"
+          end
+        end
+
+        private
+
+        # Categorize a binding modifier string into the correct bag key
+        def categorize_binding_modifier(modifier)
+          case modifier
+          when /^\.background\(/
+            :background
+          when /^\.cornerRadius\(/
+            :corner_radius
+          when /^\.overlay\(/
+            :border
+          when /^\.foregroundColor\(/
+            :foreground_color
+          when /^\.opacity\(/
+            :opacity
+          when /^\.disabled\(/
+            :disabled
+          when /^\.frame\(/
+            :frame_size
+          when /^\.clipped\(/
+            :clip_to_bounds
+          when /^\.allowsHitTesting\(/
+            :allows_hit_testing
+          when /^\.tint\(/
+            :tint_color
+          when /^\.padding\(\.top/
+            :padding
+          when /^\.padding\(\.bottom/
+            :padding
+          when /^\.padding\(\.leading/
+            :padding
+          when /^\.padding\(\.trailing/
+            :padding
+          when /^\.padding\(/
+            :padding
+          when /^\.font\(/
+            :component_specific
+          when /^\.fontWeight\(/
+            :component_specific
+          else
+            nil
+          end
+        end
+
+        # Build border overlay code as a single multi-line string
+        def build_border_overlay(color, corner_radius, border_width)
+          indent_str = "    " * (@indent_level + 1)
+          sub_indent = "    " * (@indent_level + 2)
+          [
+            ".overlay(",
+            "#{indent_str}RoundedRectangle(cornerRadius: #{corner_radius})",
+            "#{sub_indent}.stroke(#{color}, lineWidth: #{border_width})",
+            "#{indent_str[0...-4]})"
+          ].join("\n")
+        end
+
+        # Build shadow modifier code
+        def build_shadow_modifier(shadow)
+          if shadow.is_a?(Hash)
+            radius = shadow['radius'] || 5
+            x = shadow['offsetX'] || 0
+            y = shadow['offsetY'] || 0
+            color_hex = shadow['color']
+            opacity = shadow['opacity']
+
+            if color_hex
+              color = get_swiftui_color(color_hex)
+              if opacity
+                ".shadow(color: (#{color}).opacity(#{opacity}), radius: #{radius}, x: #{x}, y: #{y})"
+              else
+                ".shadow(color: #{color}, radius: #{radius}, x: #{x}, y: #{y})"
+              end
+            else
+              ".shadow(radius: #{radius}, x: #{x}, y: #{y})"
+            end
+          else
+            ".shadow(radius: 5)"
+          end
+        end
+
+        # Build onClick lines as array of code strings
+        def build_on_click_lines(handler)
+          handler_call = get_event_handler_call(handler)
+          indent_str = "    " * (@indent_level + 1)
+          [
+            ".contentShape(Rectangle())",
+            ".onTapGesture {\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}"
+          ]
+        end
+
+        # Build lifecycle handler lines
+        def build_lifecycle_handler_lines(modifier_name, handler)
+          indent_str = "    " * (@indent_level + 1)
+          if handler.include?(':')
+            method_name = handler.gsub(':', '')
+            body = "data.#{method_name}?(self)"
+          else
+            body = "data.#{handler}?()"
+          end
+          ["#{modifier_name} {\n#{indent_str}#{body}\n#{indent_str[0...-4]}}"]
+        end
+
+        # Apply safe area insets into the bag
+        def apply_safe_area_insets_to_bag
+          positions = @component['safeAreaInsetPositions']
+          return unless positions
+
+          if positions.is_a?(Array)
+            edges = []
+            edges << '.top' if positions.include?('top')
+            edges << '.bottom' if positions.include?('bottom')
+            edges << '.leading' if positions.include?('leading') || positions.include?('left')
+            edges << '.trailing' if positions.include?('trailing') || positions.include?('right')
+
+            if edges.any?
+              @modifier_bag.append(:safe_area_insets, ".ignoresSafeArea(.all, edges: [#{edges.join(', ')}])")
+            end
+          elsif positions == 'all'
+            @modifier_bag.append(:safe_area_insets, ".ignoresSafeArea()")
+          elsif positions == 'none'
+            # デフォルトでセーフエリアを尊重
+          else
+            add_line "// safeAreaInsetPositions: #{positions}"
+          end
+        end
+
+        # Legacy method kept for backward compatibility
+        def apply_safe_area_insets
+          apply_safe_area_insets_to_bag
+        end
+      end
+    end
+  end
+end

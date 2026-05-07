@@ -1,0 +1,7 @@
+{
+  "type": "Label",
+  "text": "Hello World",
+  "fontSize": 16,
+  "fontColor": "#333333",
+  "textAlign": "center"
+}

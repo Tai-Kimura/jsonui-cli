@@ -1,0 +1,13 @@
+{
+  "type": "View",
+  "orientation": "vertical",
+  "unknownAttribute": "value",
+  "alpha": 1.5,
+  "child": [
+    {
+      "type": "Text",
+      "text": "Test",
+      "anotherUnknown": 123
+    }
+  ]
+}

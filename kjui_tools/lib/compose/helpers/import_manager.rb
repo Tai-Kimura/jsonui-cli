@@ -1,0 +1,186 @@
+# frozen_string_literal: true
+
+module KjuiTools
+  module Compose
+    module Helpers
+      class ImportManager
+        def self.get_imports_map(package_name = nil)
+          # Use provided package name or default to sample app
+          pkg_name = package_name || 'com.example.kotlinjsonui.sample'
+
+          {
+            lazy_column: "import androidx.compose.foundation.lazy.LazyColumn",
+            lazy_row: "import androidx.compose.foundation.lazy.LazyRow",
+            background: "import androidx.compose.foundation.background",
+            border: "import androidx.compose.foundation.border",
+            shape: ["import androidx.compose.foundation.shape.RoundedCornerShape",
+                    "import androidx.compose.ui.draw.clip",
+                    "import androidx.compose.ui.draw.clipToBounds"],
+            text_align: "import androidx.compose.ui.text.style.TextAlign",
+            text_overflow: "import androidx.compose.ui.text.style.TextOverflow",
+            text_auto_size: "import androidx.compose.foundation.text.TextAutoSize",
+            text_style: "import androidx.compose.ui.text.TextStyle",
+            font_weight: "import androidx.compose.ui.text.font.FontWeight",
+            font_family: ["import androidx.compose.ui.text.font.Font",
+                          "import androidx.compose.ui.text.font.FontFamily"],
+            font_style: "import androidx.compose.ui.text.font.FontStyle",
+            font_spec: ["import com.kotlinjsonui.core.FontSpec",
+                        "import com.kotlinjsonui.core.ResolvedFont"],
+            text_unit: "import androidx.compose.ui.unit.TextUnit",
+            visual_transformation: "import androidx.compose.ui.text.input.PasswordVisualTransformation",
+            secure_text_field: ["import androidx.compose.material3.SecureTextField",
+                                "import androidx.compose.foundation.text.input.rememberTextFieldState"],
+            text_field_state: ["import androidx.compose.foundation.text.input.rememberTextFieldState",
+                               "import androidx.compose.foundation.text.input.TextFieldState"],
+            shadow: "import androidx.compose.ui.draw.shadow",
+            drop_shadow: ["import androidx.compose.ui.draw.dropShadow",
+                          "import androidx.compose.ui.graphics.shadow.Shadow"],
+            compose_key: "import androidx.compose.runtime.key",
+            arrangement: "import androidx.compose.foundation.layout.Arrangement",
+            keyboard_type: ["import androidx.compose.foundation.text.KeyboardOptions",
+                            "import androidx.compose.ui.text.input.KeyboardType"],
+            ime_action: "import androidx.compose.ui.text.input.ImeAction",
+            ime_padding: "import androidx.compose.foundation.layout.imePadding",
+            button_colors: "import androidx.compose.material3.ButtonDefaults",
+            button_padding: "import androidx.compose.foundation.layout.PaddingValues",
+            padding_values: "import androidx.compose.foundation.layout.PaddingValues",
+            text_decoration: "import androidx.compose.ui.text.style.TextDecoration",
+            shadow_style: ["import androidx.compose.ui.text.TextStyle",
+                           "import androidx.compose.ui.graphics.Shadow",
+                           "import androidx.compose.ui.geometry.Offset"],
+            switch_colors: "import androidx.compose.material3.SwitchDefaults",
+            slider_colors: "import androidx.compose.material3.SliderDefaults",
+            checkbox_colors: "import androidx.compose.material3.CheckboxDefaults",
+            dropdown_menu: ["import androidx.compose.material3.DropdownMenu",
+                            "import androidx.compose.material3.DropdownMenuItem",
+                            "import androidx.compose.ui.res.painterResource",
+                            "import androidx.compose.foundation.clickable"],
+            outlined_text_field: "import androidx.compose.material3.OutlinedTextField",
+            icons: ["import androidx.compose.ui.res.painterResource"],
+            icon_button: "import androidx.compose.material3.IconButton",
+            clickable: "import androidx.compose.foundation.clickable",
+            radio_colors: "import androidx.compose.material3.RadioButtonDefaults",
+            tab_row: ["import androidx.compose.material3.TabRow",
+                      "import androidx.compose.material3.Tab"],
+            async_image: "import coil3.compose.AsyncImage",
+            content_scale: "import androidx.compose.ui.layout.ContentScale",
+            lazy_grid: ["import androidx.compose.foundation.lazy.grid.LazyVerticalGrid",
+                        "import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid",
+                        "import androidx.compose.foundation.lazy.grid.GridCells",
+                        "import androidx.compose.ui.Alignment"],
+            lazy_grid_state: "import androidx.compose.foundation.lazy.grid.rememberLazyGridState",
+            horizontal_pager: ["import androidx.compose.foundation.pager.HorizontalPager",
+                               "import androidx.compose.foundation.pager.rememberPagerState"],
+            snapshot_flow: "import androidx.compose.runtime.snapshotFlow",
+            color_manager: "import com.kotlinjsonui.generated.ColorManager",
+            grid_item_span: "import androidx.compose.foundation.lazy.grid.GridItemSpan",
+            webview: ["import android.webkit.WebView",
+                      "import android.webkit.WebViewClient",
+                      "import android.webkit.WebChromeClient",
+                      "import androidx.compose.ui.viewinterop.AndroidView"],
+            constraint_layout: ["import androidx.constraintlayout.compose.ConstraintLayout",
+                                "import androidx.constraintlayout.compose.Dimension"],
+            remember_state: ["import androidx.compose.runtime.remember",
+                             "import androidx.compose.runtime.mutableStateOf",
+                             "import androidx.compose.runtime.getValue",
+                             "import androidx.compose.runtime.setValue"],
+            remember: "import androidx.compose.runtime.remember",
+            LaunchedEffect: "import androidx.compose.runtime.LaunchedEffect",
+            launched_effect: "import androidx.compose.runtime.LaunchedEffect",
+            disposable_effect: "import androidx.compose.runtime.DisposableEffect",
+            bias_alignment: "import androidx.compose.ui.BiasAlignment",
+            circle_shape: "import androidx.compose.foundation.shape.CircleShape",
+            alpha: "import androidx.compose.ui.draw.alpha",
+            semantics: "import androidx.compose.ui.semantics.semantics",
+            test_tag: "import androidx.compose.ui.platform.testTag",
+            test_tags_as_resource_id: "import androidx.compose.ui.semantics.testTagsAsResourceId",
+            image: "import androidx.compose.foundation.Image",
+            painter_class: ["import androidx.compose.ui.graphics.painter.Painter",
+                            "import androidx.compose.ui.geometry.Size",
+                            "import androidx.compose.ui.graphics.drawscope.DrawScope"],
+            local_context: "import androidx.compose.ui.platform.LocalContext",
+            painter_resource: "import androidx.compose.ui.res.painterResource",
+            string_resource: "import androidx.compose.ui.res.stringResource",
+            color_resource: "import androidx.compose.ui.res.colorResource",
+            r_class: "import #{pkg_name}.R",
+            to_argb: "import androidx.compose.ui.graphics.toArgb",
+            gradient: "import androidx.compose.ui.graphics.Brush",
+            blur: "import androidx.compose.ui.draw.blur",
+            navigation: ["import androidx.navigation.NavController",
+                         "import androidx.navigation.compose.NavHost",
+                         "import androidx.navigation.compose.composable",
+                         "import androidx.navigation.compose.rememberNavController"],
+            selectbox_component: "import com.kotlinjsonui.components.SelectBox",
+            date_selectbox_component: "import com.kotlinjsonui.components.DateSelectBox",
+            simple_date_selectbox_component: "import com.kotlinjsonui.components.SimpleDateSelectBox",
+            visibility_wrapper: "import com.kotlinjsonui.components.VisibilityWrapper",
+            custom_textfield: ["import com.kotlinjsonui.components.CustomTextField",
+                               "import com.kotlinjsonui.components.CustomTextFieldWithMargins"],
+            annotated_string: ["import androidx.compose.ui.text.AnnotatedString",
+                               "import androidx.compose.ui.text.buildAnnotatedString",
+                               "import androidx.compose.ui.text.SpanStyle",
+                               "import androidx.compose.ui.text.withStyle"],
+            clickable_text: "import androidx.compose.foundation.text.ClickableText",
+            partial_attributes_text: ["import com.kotlinjsonui.components.PartialAttributesText",
+                                      "import com.kotlinjsonui.components.PartialAttribute"],
+            segment: "import com.kotlinjsonui.components.Segment",
+            dynamic_mode_manager: "import com.kotlinjsonui.core.DynamicModeManager",
+            configuration: "import com.kotlinjsonui.core.Configuration",
+            safe_dynamic_view: "import com.kotlinjsonui.components.SafeDynamicView",
+            circular_progress_indicator: "import androidx.compose.material3.CircularProgressIndicator",
+            wrapContentSize: "import androidx.compose.foundation.layout.wrapContentSize",
+            box: "import androidx.compose.foundation.layout.Box",
+            DynamicView: "import com.kotlinjsonui.dynamic.DynamicView",
+            JsonObject: "import com.google.gson.JsonObject",
+            JsonParser: "import com.google.gson.JsonParser",
+            dashed_border: ["import com.kotlinjsonui.dynamic.helpers.dashedBorder",
+                            "import com.kotlinjsonui.dynamic.helpers.dottedBorder"],
+            border_stroke: "import androidx.compose.foundation.BorderStroke",
+            intrinsic_size: "import androidx.compose.foundation.layout.IntrinsicSize",
+            collection_stack: ["import com.kotlinjsonui.components.CollectionStack",
+                               "import com.kotlinjsonui.components.CollectionStackMode",
+                               "import com.kotlinjsonui.components.CollectionStackAxis"],
+            safe_area_config: ["import com.kotlinjsonui.dynamic.LocalSafeAreaConfig",
+                               "import com.kotlinjsonui.dynamic.SafeAreaConfig"],
+            composition_local_provider: "import androidx.compose.runtime.CompositionLocalProvider",
+            window_size_class: ["import androidx.compose.material3.windowsizeclass.WindowSizeClass",
+                                "import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass"],
+            local_configuration: ["import android.content.res.Configuration",
+                                  "import androidx.compose.ui.platform.LocalConfiguration"]
+          }
+        end
+
+        def self.update_imports(content, required_imports)
+          imports_map = get_imports_map
+
+          required_imports.each do |import_key|
+            import_lines = imports_map[import_key]
+            next unless import_lines
+
+            if import_lines.is_a?(Array)
+              import_lines.each do |import_line|
+                unless content.include?(import_line)
+                  # Add import after the last import statement
+                  if content =~ /^(import .+\n)+/m
+                    last_import_end = $~.end(0)
+                    content.insert(last_import_end, "#{import_line}\n")
+                  end
+                end
+              end
+            else
+              unless content.include?(import_lines)
+                # Add import after the last import statement
+                if content =~ /^(import .+\n)+/m
+                  last_import_end = $~.end(0)
+                  content.insert(last_import_end, "#{import_lines}\n")
+                end
+              end
+            end
+          end
+
+          content
+        end
+      end
+    end
+  end
+end

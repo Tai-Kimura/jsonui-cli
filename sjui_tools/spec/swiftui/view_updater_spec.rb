@@ -1,0 +1,234 @@
+# frozen_string_literal: true
+
+require 'swiftui/view_updater'
+require 'json'
+require 'fileutils'
+
+RSpec.describe SjuiTools::SwiftUI::ViewUpdater do
+  let(:updater) { described_class.new }
+  let(:temp_dir) { File.join(Dir.tmpdir, 'view_updater_test') }
+
+  before do
+    FileUtils.mkdir_p(temp_dir)
+  end
+
+  after do
+    FileUtils.rm_rf(temp_dir)
+  end
+
+  describe '#update_generated_body' do
+    let(:swift_file_path) { File.join(temp_dir, 'TestGeneratedView.swift') }
+
+    context 'when file does not exist' do
+      it 'returns false' do
+        result = updater.update_generated_body('/nonexistent/path.swift', 'code')
+        expect(result).to be false
+      end
+    end
+
+    context 'when file exists' do
+      before do
+        content = <<~SWIFT
+          import SwiftUI
+
+          struct TestGeneratedView: View {
+              @Binding var data: TestData
+
+              var body: some View {
+                  Text("Old content")
+              }
+          }
+        SWIFT
+        File.write(swift_file_path, content)
+      end
+
+      it 'updates file content' do
+        result = updater.update_generated_body(swift_file_path, 'Text("New content")')
+        expect(result).to be true
+      end
+
+      it 'writes new body code' do
+        updater.update_generated_body(swift_file_path, 'VStack { Text("Updated") }')
+        content = File.read(swift_file_path)
+
+        expect(content).to include('VStack { Text("Updated") }')
+      end
+
+      it 'includes DynamicView support' do
+        updater.update_generated_body(swift_file_path, 'Text("Test")')
+        content = File.read(swift_file_path)
+
+        expect(content).to include('ViewSwitcher.isDynamicMode')
+        expect(content).to include('DynamicView')
+      end
+
+      it 'preserves Data name' do
+        updater.update_generated_body(swift_file_path, 'Text("Test")')
+        content = File.read(swift_file_path)
+
+        expect(content).to include('TestData')
+      end
+    end
+
+    context 'when struct not found' do
+      let(:invalid_swift_file) { File.join(temp_dir, 'Invalid.swift') }
+
+      before do
+        File.write(invalid_swift_file, 'let x = 1')
+      end
+
+      it 'returns false' do
+        result = updater.update_generated_body(invalid_swift_file, 'code')
+        expect(result).to be false
+      end
+    end
+  end
+
+  describe 'private #generate_swiftui_code' do
+    context 'with View type' do
+      it 'generates VStack for vertical orientation' do
+        json = { 'type' => 'View', 'orientation' => 'vertical' }
+        result = updater.send(:generate_swiftui_code, json)
+
+        expect(result).to include('VStack')
+      end
+
+      it 'generates HStack for horizontal orientation' do
+        json = { 'type' => 'View', 'orientation' => 'horizontal' }
+        result = updater.send(:generate_swiftui_code, json)
+
+        expect(result).to include('HStack')
+      end
+
+      it 'defaults to VStack' do
+        json = { 'type' => 'View' }
+        result = updater.send(:generate_swiftui_code, json)
+
+        expect(result).to include('VStack')
+      end
+    end
+
+    context 'with Label type' do
+      it 'generates Text with static text' do
+        json = { 'type' => 'Label', 'text' => 'Hello World' }
+        result = updater.send(:generate_swiftui_code, json)
+
+        expect(result).to include('Text("Hello World")')
+      end
+
+      it 'generates Text with binding' do
+        json = { 'type' => 'Label', 'text' => '@{userName}' }
+        result = updater.send(:generate_swiftui_code, json)
+
+        expect(result).to include('Text(data.userName)')
+      end
+
+      it 'applies fontSize modifier' do
+        json = { 'type' => 'Label', 'text' => 'Hi', 'fontSize' => 18 }
+        result = updater.send(:generate_swiftui_code, json)
+
+        expect(result).to include('.font(.system(size: 18))')
+      end
+
+      it 'applies fontColor modifier' do
+        json = { 'type' => 'Label', 'text' => 'Hi', 'fontColor' => '#FF0000' }
+        result = updater.send(:generate_swiftui_code, json)
+
+        expect(result).to include('.foregroundColor(Color(hex: "#FF0000"))')
+      end
+
+      it 'applies topMargin modifier' do
+        json = { 'type' => 'Label', 'text' => 'Hi', 'topMargin' => 10 }
+        result = updater.send(:generate_swiftui_code, json)
+
+        expect(result).to include('.padding(.top, 10)')
+      end
+    end
+
+    context 'with Button type' do
+      it 'generates Button with text' do
+        json = { 'type' => 'Button', 'text' => 'Submit' }
+        result = updater.send(:generate_swiftui_code, json)
+
+        expect(result).to include('Button(action:')
+        expect(result).to include('Text("Submit")')
+      end
+
+      it 'uses onClick action' do
+        json = { 'type' => 'Button', 'text' => 'Go', 'onClick' => 'handleTap' }
+        result = updater.send(:generate_swiftui_code, json)
+
+        expect(result).to include('data.handleTap')
+      end
+
+      it 'applies topMargin modifier' do
+        json = { 'type' => 'Button', 'text' => 'Btn', 'topMargin' => 20 }
+        result = updater.send(:generate_swiftui_code, json)
+
+        expect(result).to include('.padding(.top, 20)')
+      end
+    end
+
+    context 'with nested children' do
+      it 'processes child array' do
+        json = {
+          'type' => 'View',
+          'child' => [
+            { 'type' => 'Label', 'text' => 'Child 1' },
+            { 'type' => 'Label', 'text' => 'Child 2' }
+          ]
+        }
+        result = updater.send(:generate_swiftui_code, json)
+
+        expect(result).to include('Text("Child 1")')
+        expect(result).to include('Text("Child 2")')
+      end
+
+      it 'skips data declarations' do
+        json = {
+          'type' => 'View',
+          'child' => [
+            { 'data' => { 'name' => 'test' } },
+            { 'type' => 'Label', 'text' => 'Visible' }
+          ]
+        }
+        result = updater.send(:generate_swiftui_code, json)
+
+        expect(result).to include('Text("Visible")')
+        expect(result).not_to include('test')
+      end
+    end
+
+    context 'with modifiers' do
+      it 'applies paddings' do
+        json = { 'type' => 'View', 'paddings' => true }
+        result = updater.send(:generate_swiftui_code, json)
+
+        expect(result).to include('.padding()')
+      end
+
+      it 'applies background' do
+        json = { 'type' => 'View', 'background' => '#FFFFFF' }
+        result = updater.send(:generate_swiftui_code, json)
+
+        expect(result).to include('.background(Color(hex: "#FFFFFF"))')
+      end
+    end
+  end
+
+  describe 'private #indent_body_code' do
+    it 'indents all lines' do
+      code = "Line1\nLine2\nLine3"
+      result = updater.send(:indent_body_code, code, "    ")
+
+      expect(result).to eq("    Line1\n    Line2\n    Line3")
+    end
+
+    it 'preserves empty lines' do
+      code = "Line1\n\nLine2"
+      result = updater.send(:indent_body_code, code, "  ")
+
+      expect(result).to eq("  Line1\n\n  Line2")
+    end
+  end
+end

@@ -1,0 +1,298 @@
+{
+  "types": {
+    "String": {
+      "swift": "String",
+      "kotlin": "String",
+      "typescript": "string"
+    },
+    "string": {
+      "swift": "String",
+      "kotlin": "String",
+      "typescript": "string"
+    },
+    "Int": {
+      "swift": "Int",
+      "kotlin": "Int",
+      "typescript": "number"
+    },
+    "int": {
+      "swift": "Int",
+      "kotlin": "Int",
+      "typescript": "number"
+    },
+    "Integer": {
+      "swift": "Int",
+      "kotlin": "Int",
+      "typescript": "number"
+    },
+    "integer": {
+      "swift": "Int",
+      "kotlin": "Int",
+      "typescript": "number"
+    },
+    "Float": {
+      "swift": "Float",
+      "kotlin": "Float",
+      "typescript": "number"
+    },
+    "float": {
+      "swift": "Float",
+      "kotlin": "Float",
+      "typescript": "number"
+    },
+    "Double": {
+      "swift": "Double",
+      "kotlin": "Double",
+      "typescript": "number"
+    },
+    "double": {
+      "swift": "Double",
+      "kotlin": "Double",
+      "typescript": "number"
+    },
+    "Number": {
+      "swift": "Double",
+      "kotlin": "Double",
+      "typescript": "number"
+    },
+    "number": {
+      "swift": "Double",
+      "kotlin": "Double",
+      "typescript": "number"
+    },
+    "Bool": {
+      "swift": "Bool",
+      "kotlin": "Boolean",
+      "typescript": "boolean"
+    },
+    "bool": {
+      "swift": "Bool",
+      "kotlin": "Boolean",
+      "typescript": "boolean"
+    },
+    "Boolean": {
+      "swift": "Bool",
+      "kotlin": "Boolean",
+      "typescript": "boolean"
+    },
+    "boolean": {
+      "swift": "Bool",
+      "kotlin": "Boolean",
+      "typescript": "boolean"
+    },
+    "CGFloat": {
+      "swift": "CGFloat",
+      "kotlin": "Float",
+      "typescript": "number"
+    },
+    "Void": {
+      "swift": "Void",
+      "kotlin": "Unit",
+      "typescript": "void"
+    },
+    "void": {
+      "swift": "Void",
+      "kotlin": "Unit",
+      "typescript": "void"
+    },
+    "Unit": {
+      "swift": "Void",
+      "kotlin": "Unit",
+      "typescript": "void"
+    },
+    "unit": {
+      "swift": "Void",
+      "kotlin": "Unit",
+      "typescript": "void"
+    },
+    "Color": {
+      "swift": { "swiftui": "Color", "uikit": "UIColor" },
+      "kotlin": { "compose": "Color", "xml": "Int" },
+      "typescript": "string"
+    },
+    "color": {
+      "swift": { "swiftui": "Color", "uikit": "UIColor" },
+      "kotlin": { "compose": "Color", "xml": "Int" },
+      "typescript": "string"
+    },
+    "Image": {
+      "swift": { "swiftui": "String", "uikit": "UIImage" },
+      "kotlin": { "compose": "Painter", "xml": "Drawable" },
+      "typescript": "string"
+    },
+    "image": {
+      "swift": { "swiftui": "String", "uikit": "UIImage" },
+      "kotlin": { "compose": "Painter", "xml": "Drawable" },
+      "typescript": "string"
+    },
+    "Visibility": {
+      "swift": { "swiftui": "Visibility", "uikit": "SJUIView.Visibility" },
+      "kotlin": { "compose": "Boolean", "xml": "Int" },
+      "typescript": "string"
+    },
+    "visibility": {
+      "swift": { "swiftui": "Visibility", "uikit": "SJUIView.Visibility" },
+      "kotlin": { "compose": "Boolean", "xml": "Int" },
+      "typescript": "string"
+    },
+    "EdgeInsets": {
+      "swift": "EdgeInsets",
+      "kotlin": "PaddingValues",
+      "typescript": "object"
+    },
+    "Dp": {
+      "swift": "CGFloat",
+      "kotlin": "Dp",
+      "typescript": "number"
+    },
+    "Alignment": {
+      "swift": "Alignment",
+      "kotlin": "Alignment",
+      "typescript": "string"
+    },
+    "CollectionDataSource": {
+      "swift": "CollectionDataSource",
+      "kotlin": "CollectionDataSource",
+      "typescript": "any[]"
+    },
+    "Array": {
+      "swift": "Array",
+      "kotlin": "List",
+      "typescript": "any[]"
+    },
+    "array": {
+      "swift": "Array",
+      "kotlin": "List",
+      "typescript": "any[]"
+    },
+    "Object": {
+      "swift": "[String: Any]",
+      "kotlin": "Map<String, Any>",
+      "typescript": "Record<string, any>"
+    },
+    "object": {
+      "swift": "[String: Any]",
+      "kotlin": "Map<String, Any>",
+      "typescript": "Record<string, any>"
+    },
+    "Hash": {
+      "swift": "[String: Any]",
+      "kotlin": "Map<String, Any>",
+      "typescript": "Record<string, any>"
+    },
+    "hash": {
+      "swift": "[String: Any]",
+      "kotlin": "Map<String, Any>",
+      "typescript": "Record<string, any>"
+    }
+  },
+  "events": {
+    "Button": {
+      "onClick": {
+        "swift": { "uikit": "UITapGestureRecognizer", "swiftui": ["String", "Void"] },
+        "kotlin": { "xml": "View", "compose": ["String", "Unit"] },
+        "typescript": "React.MouseEvent<HTMLButtonElement>"
+      }
+    },
+    "Switch": {
+      "onValueChange": {
+        "swift": { "uikit": "UISwitch", "swiftui": ["String", "Bool"] },
+        "kotlin": { "xml": "CompoundButton", "compose": ["String", "Boolean"] },
+        "typescript": "React.ChangeEvent<HTMLInputElement>"
+      }
+    },
+    "Toggle": {
+      "onValueChange": {
+        "swift": { "uikit": "UISwitch", "swiftui": ["String", "Bool"] },
+        "kotlin": { "xml": "CompoundButton", "compose": ["String", "Boolean"] },
+        "typescript": "React.ChangeEvent<HTMLInputElement>"
+      }
+    },
+    "Slider": {
+      "onValueChange": {
+        "swift": { "uikit": "UISlider", "swiftui": ["String", "Float"] },
+        "kotlin": { "xml": "SeekBar", "compose": ["String", "Float"] },
+        "typescript": "React.ChangeEvent<HTMLInputElement>"
+      }
+    },
+    "TextField": {
+      "onTextChange": {
+        "swift": { "uikit": "UITextField", "swiftui": ["String", "String"] },
+        "kotlin": { "xml": "EditText", "compose": ["String", "String"] },
+        "typescript": "React.ChangeEvent<HTMLInputElement>"
+      }
+    },
+    "TextView": {
+      "onTextChange": {
+        "swift": { "uikit": "UITextView", "swiftui": ["String", "String"] },
+        "kotlin": { "xml": "EditText", "compose": ["String", "String"] },
+        "typescript": "React.ChangeEvent<HTMLTextAreaElement>"
+      }
+    },
+    "SelectBox": {
+      "onValueChange": {
+        "swift": { "uikit": "UIPickerView", "swiftui": ["String", "String"] },
+        "kotlin": { "xml": "Spinner", "compose": ["String", "String"] },
+        "typescript": "React.ChangeEvent<HTMLSelectElement>"
+      }
+    },
+    "CheckBox": {
+      "onValueChange": {
+        "swift": { "uikit": "UIButton", "swiftui": ["String", "Bool"] },
+        "kotlin": { "xml": "CompoundButton", "compose": ["String", "Boolean"] },
+        "typescript": "React.ChangeEvent<HTMLInputElement>"
+      }
+    },
+    "Radio": {
+      "onValueChange": {
+        "swift": { "uikit": "UIButton", "swiftui": ["String", "String"] },
+        "kotlin": { "xml": "RadioButton", "compose": ["String", "String"] },
+        "typescript": "React.ChangeEvent<HTMLInputElement>"
+      }
+    },
+    "Segment": {
+      "onValueChange": {
+        "swift": { "uikit": "UISegmentedControl", "swiftui": ["String", "Int"] },
+        "kotlin": { "xml": "TabLayout", "compose": ["String", "Int"] },
+        "typescript": "React.MouseEvent<HTMLButtonElement>"
+      }
+    }
+  },
+  "defaults": {
+    "swift": {
+      "String": "\"\"",
+      "Int": "0",
+      "Bool": "false",
+      "Float": "0.0",
+      "Double": "0.0",
+      "CGFloat": "0.0",
+      "Color": ".clear",
+      "UIColor": ".clear",
+      "UIImage": "nil",
+      "EdgeInsets": "EdgeInsets()",
+      "Visibility": ".visible",
+      "SJUIView.Visibility": ".visible",
+      "CollectionDataSource": "CollectionDataSource()"
+    },
+    "kotlin": {
+      "String": "\"\"",
+      "Int": "0",
+      "Boolean": "false",
+      "Float": "0f",
+      "Double": "0.0",
+      "Color": "Color.Unspecified",
+      "Dp": "0.dp",
+      "Alignment": "Alignment.TopStart",
+      "Painter": "EmptyPainter()",
+      "Drawable": "null",
+      "CollectionDataSource": "CollectionDataSource()"
+    },
+    "typescript": {
+      "string": "\"\"",
+      "number": "0",
+      "boolean": "false",
+      "any[]": "[]",
+      "Record<string, any>": "{}"
+    }
+  }
+}

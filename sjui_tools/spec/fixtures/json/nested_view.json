@@ -1,0 +1,29 @@
+{
+  "type": "View",
+  "orientation": "vertical",
+  "paddings": [16, 16, 16, 16],
+  "background": "#FFFFFF",
+  "child": [
+    {
+      "type": "Label",
+      "text": "Title",
+      "fontSize": 20,
+      "font": "bold"
+    },
+    {
+      "type": "Label",
+      "text": "Subtitle",
+      "fontSize": 14,
+      "fontColor": "#666666",
+      "topMargin": 8
+    },
+    {
+      "type": "Button",
+      "text": "Click Me",
+      "topMargin": 16,
+      "background": "#007AFF",
+      "fontColor": "#FFFFFF",
+      "cornerRadius": 8
+    }
+  ]
+}

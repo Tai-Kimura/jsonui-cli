@@ -1,0 +1,227 @@
+# frozen_string_literal: true
+
+require_relative '../../core/responsive_resolver'
+
+module KjuiTools
+  module Compose
+    module Helpers
+      # Generates responsive Compose code for components with `responsive` blocks.
+      #
+      # For containers (components with children): generates a wrapper @Composable
+      # that takes `content: @Composable () -> Unit` and switches layout per branch.
+      #
+      # For leaf components (no children): generates a @Composable that renders
+      # the full view per branch.
+      class ResponsiveHelper
+        # Size class to Compose condition mapping
+        WIDTH_CONDITIONS = {
+          'compact'  => 'windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact',
+          'medium'   => 'windowSizeClass.widthSizeClass == WindowWidthSizeClass.Medium',
+          'regular'  => 'windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded'
+        }.freeze
+
+        LANDSCAPE_CONDITION = 'isLandscape'.freeze
+
+        # Check if a component has responsive overrides
+        def self.responsive?(component)
+          JsonUIShared::ResponsiveResolver.responsive?(component)
+        end
+
+        # Build the condition expression for a size class key.
+        # Returns a Kotlin boolean expression string, or nil for the default branch.
+        def self.build_condition(size_class)
+          return nil if size_class.nil?
+
+          parsed = JsonUIShared::ResponsiveResolver.parse_size_class(size_class)
+          conditions = []
+
+          if parsed[:width]
+            width_cond = WIDTH_CONDITIONS[parsed[:width]]
+            conditions << width_cond if width_cond
+          end
+
+          conditions << LANDSCAPE_CONDITION if parsed[:landscape]
+
+          return nil if conditions.empty?
+
+          conditions.join(' && ')
+        end
+
+        # Generate a responsive wrapper composable for a container component.
+        #
+        # @param function_name [String] Name for the generated @Composable function
+        # @param component [Hash] The JSON component with responsive block
+        # @param depth [Integer] Indentation depth for the function body
+        # @param required_imports [Set] Import set to populate
+        # @param component_generator [Proc] A proc that takes (attrs, depth, required_imports)
+        #   and returns the container opening code string (e.g., "Column(" with modifiers)
+        # @return [Hash] { function_code: String, call_code: String }
+        def self.generate_container_wrapper(function_name, component, depth, required_imports, &component_generator)
+          add_responsive_imports(required_imports)
+
+          branches = JsonUIShared::ResponsiveResolver.build_branches(component)
+
+          # Build the function
+          func_lines = []
+          func_lines << indent("@Composable", depth)
+          func_lines << indent("private fun #{function_name}(", depth)
+          func_lines << indent("    windowSizeClass: WindowSizeClass,", depth)
+          func_lines << indent("    content: @Composable () -> Unit", depth)
+          func_lines << indent(") {", depth)
+          func_lines << indent("    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE", depth)
+
+          # Build if/else chain
+          first = true
+          branches.each do |branch|
+            condition = build_condition(branch[:size_class])
+            attrs = branch[:attrs]
+
+            if condition
+              keyword = first ? 'if' : '} else if'
+              func_lines << indent("    #{keyword} (#{condition}) {", depth)
+              first = false
+            else
+              # Default branch
+              if first
+                # No conditional branches at all -- just emit the content directly
+                container_code = component_generator.call(attrs, depth + 1, required_imports)
+                func_lines << container_code
+                func_lines << indent("}", depth)
+                return {
+                  function_code: func_lines.join("\n"),
+                  call_code: nil
+                }
+              else
+                func_lines << indent("    } else {", depth)
+              end
+            end
+
+            # Generate container for this branch
+            container_code = component_generator.call(attrs, depth + 2, required_imports)
+            func_lines << container_code
+          end
+
+          func_lines << indent("    }", depth)
+          func_lines << indent("}", depth)
+
+          {
+            function_code: func_lines.join("\n"),
+            call_code: nil # call_code is built by caller
+          }
+        end
+
+        # Generate a responsive composable for a leaf component (no children).
+        #
+        # @param function_name [String] Name for the generated @Composable function
+        # @param component [Hash] The JSON component with responsive block
+        # @param depth [Integer] Indentation depth
+        # @param required_imports [Set] Import set to populate
+        # @param component_generator [Proc] A proc that takes (attrs, depth, required_imports)
+        #   and returns the full component code string
+        # @return [Hash] { function_code: String }
+        def self.generate_leaf_wrapper(function_name, component, depth, required_imports, &component_generator)
+          add_responsive_imports(required_imports)
+
+          branches = JsonUIShared::ResponsiveResolver.build_branches(component)
+
+          func_lines = []
+          func_lines << indent("@Composable", depth)
+          func_lines << indent("private fun #{function_name}(", depth)
+          func_lines << indent("    windowSizeClass: WindowSizeClass", depth)
+          func_lines << indent(") {", depth)
+          func_lines << indent("    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE", depth)
+
+          first = true
+          branches.each do |branch|
+            condition = build_condition(branch[:size_class])
+            attrs = branch[:attrs]
+
+            if condition
+              keyword = first ? 'if' : '} else if'
+              func_lines << indent("    #{keyword} (#{condition}) {", depth)
+              first = false
+            else
+              if first
+                # No conditional branches -- just emit directly
+                component_code = component_generator.call(attrs, depth + 1, required_imports)
+                func_lines << component_code
+                func_lines << indent("}", depth)
+                return { function_code: func_lines.join("\n") }
+              else
+                func_lines << indent("    } else {", depth)
+              end
+            end
+
+            component_code = component_generator.call(attrs, depth + 2, required_imports)
+            func_lines << component_code
+          end
+
+          func_lines << indent("    }", depth)
+          func_lines << indent("}", depth)
+
+          { function_code: func_lines.join("\n") }
+        end
+
+        # Build an if/else-if chain string from branches (inline, not as separate function).
+        # Returns the Kotlin code for the if/else chain.
+        #
+        # @param branches [Array<Hash>] From ResponsiveResolver.build_branches
+        # @param depth [Integer] Indentation depth
+        # @param required_imports [Set] Import set to populate
+        # @param block [Proc] Takes (attrs, depth, required_imports) and returns code string
+        # @return [String] The if/else chain
+        def self.build_if_else_chain(branches, depth, required_imports, &block)
+          add_responsive_imports(required_imports)
+
+          lines = []
+          lines << indent("val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE", depth)
+
+          first = true
+          branches.each do |branch|
+            condition = build_condition(branch[:size_class])
+            attrs = branch[:attrs]
+
+            if condition
+              keyword = first ? 'if' : '} else if'
+              lines << indent("#{keyword} (#{condition}) {", depth)
+              first = false
+            else
+              if first
+                # No conditional branches
+                code = block.call(attrs, depth, required_imports)
+                lines << code
+                return lines.join("\n")
+              else
+                lines << indent("} else {", depth)
+              end
+            end
+
+            code = block.call(attrs, depth + 1, required_imports)
+            lines << code
+          end
+
+          lines << indent("}", depth)
+          lines.join("\n")
+        end
+
+        # Add required imports for responsive code
+        def self.add_responsive_imports(required_imports)
+          return unless required_imports
+
+          required_imports.add(:window_size_class)
+          required_imports.add(:local_configuration)
+        end
+
+        # Helper: indent text
+        def self.indent(text, level)
+          return text if level == 0
+
+          spaces = '    ' * level
+          text.split("\n").map { |line|
+            line.empty? ? line : spaces + line
+          }.join("\n")
+        end
+      end
+    end
+  end
+end

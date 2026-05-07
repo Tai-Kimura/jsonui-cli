@@ -1,0 +1,287 @@
+# frozen_string_literal: true
+
+require 'fileutils'
+require_relative '../../core/logger'
+require_relative '../../core/config_manager'
+require_relative '../../core/project_finder'
+require_relative '../../core/generated_marker'
+
+module SjuiTools
+  module SwiftUI
+    module Generators
+      class SwiftComponentGenerator
+        def initialize(name, options = {})
+          @name = name
+          # Keep the original PascalCase name for Swift file
+          @component_name = name
+          @options = options
+          @logger = Core::Logger
+          @command = options[:command] || "sjui g converter #{name}"
+        end
+
+        def generate
+          create_swift_file
+        end
+
+        private
+
+        def create_swift_file
+          config = Core::ConfigManager.load_config
+          extension_dir = config['extension_directory'] || 'Extensions'
+
+          # Create full path for Swift file (use source_path like other generators)
+          Core::ProjectFinder.setup_paths unless Core::ProjectFinder.project_dir
+          source_path = Core::ProjectFinder.get_full_source_path || Dir.pwd
+          swift_dir = File.join(source_path, extension_dir)
+          FileUtils.mkdir_p(swift_dir)
+          
+          swift_file_path = File.join(swift_dir, "#{@component_name}.swift")
+          
+          if File.exist?(swift_file_path)
+            @logger.warn "Swift file already exists: #{swift_file_path}"
+            print "Overwrite? (y/n): "
+            response = gets.chomp.downcase
+            return unless response == 'y'
+          end
+          
+          File.write(swift_file_path, swift_template)
+          @logger.info "Created Swift file: #{swift_file_path}"
+        end
+
+        def swift_template
+          if @options[:is_container] != false
+            container_template
+          else
+            non_container_template
+          end
+        end
+
+        def container_template
+          marker_header = Core::GeneratedMarker.comment_header(
+            source: @component_name,
+            generator: @command
+          )
+          marker_footer = Core::GeneratedMarker.comment_footer
+
+          <<~SWIFT
+            #{marker_header}
+
+            import SwiftUI
+
+            struct #{@component_name}<Content: View>: View {
+            #{generate_swift_properties}
+            #{generate_container_init}
+
+                var body: some View {
+            #{generate_container_body}
+                }
+            }
+
+            #if DEBUG
+            struct #{@component_name}_Previews: PreviewProvider {
+                static var previews: some View {
+                    #{@component_name}(#{generate_swift_preview_params}) {
+                        Text("Preview Content")
+                    }
+                }
+            }
+            #endif
+
+            #{marker_footer}
+          SWIFT
+        end
+
+        def non_container_template
+          marker_header = Core::GeneratedMarker.comment_header(
+            source: @component_name,
+            generator: @command
+          )
+          marker_footer = Core::GeneratedMarker.comment_footer
+
+          <<~SWIFT
+            #{marker_header}
+
+            import SwiftUI
+
+            struct #{@component_name}: View {
+            #{generate_swift_properties}
+            #{generate_non_container_init}
+
+                var body: some View {
+            #{generate_non_container_body}
+                }
+            }
+
+            #if DEBUG
+            struct #{@component_name}_Previews: PreviewProvider {
+                static var previews: some View {
+                    #{@component_name}(#{generate_swift_preview_params})
+                }
+            }
+            #endif
+
+            #{marker_footer}
+          SWIFT
+        end
+
+        def generate_swift_properties
+          lines = []
+          
+          if @options[:attributes] && !@options[:attributes].empty?
+            @options[:attributes].each do |key, type|
+              # Check if it's a binding property (starts with @)
+              if key.start_with?('@')
+                clean_key = key[1..-1]
+                swift_type = map_to_swift_type(type)
+                lines << "    @SwiftUI.Binding var #{clean_key}: #{swift_type}"
+              else
+                swift_type = map_to_swift_type(type)
+                lines << "    let #{key}: #{swift_type}"
+              end
+            end
+          end
+          
+          # Add content property for containers
+          if @options[:is_container] != false
+            if @options[:is_container] == true
+              lines << "    let content: Content"
+            else
+              lines << "    let content: Content?"
+            end
+          end
+          
+          return "" if lines.empty?
+          lines.join("\n")
+        end
+
+        def generate_container_init
+          if @options[:is_container] == true
+            "\n    init(#{generate_swift_init_params}@ViewBuilder content: () -> Content) {\n#{generate_swift_init_assignments}        self.content = content()\n    }"
+          else
+            "\n    init(#{generate_swift_init_params}@ViewBuilder content: () -> Content = { EmptyView() }) {\n#{generate_swift_init_assignments}        self.content = content()\n    }"
+          end
+        end
+
+        def generate_non_container_init
+          return "" if !@options[:attributes] || @options[:attributes].empty?
+          "\n    init(#{generate_swift_init_params.chomp(", ")}) {\n#{generate_swift_init_assignments.chomp("\n")}\n    }"
+        end
+
+        def generate_container_body
+          if @options[:is_container] == true
+            "        content"
+          else
+            "        Group {\n            if let content = content {\n                content\n            } else {\n                EmptyView()\n            }\n        }"
+          end
+        end
+
+        def generate_non_container_body
+          "        // TODO: Implement view body\n        EmptyView()"
+        end
+
+        def generate_swift_init_params
+          return "" if !@options[:attributes] || @options[:attributes].empty?
+          
+          @options[:attributes].map do |key, type|
+            if key.start_with?('@')
+              # Binding property
+              clean_key = key[1..-1]
+              swift_type = map_to_swift_type(type)
+              "#{clean_key}: SwiftUI.Binding<#{swift_type}>, "
+            else
+              swift_type = map_to_swift_type(type)
+              # Add default value for optional model types
+              if swift_type.end_with?('?')
+                "#{key}: #{swift_type} = nil, "
+              else
+                "#{key}: #{swift_type}, "
+              end
+            end
+          end.join("")
+        end
+
+        def generate_swift_init_assignments
+          return "" if !@options[:attributes] || @options[:attributes].empty?
+          
+          @options[:attributes].map do |key, _|
+            if key.start_with?('@')
+              clean_key = key[1..-1]
+              "        self._#{clean_key} = #{clean_key}\n"
+            else
+              "        self.#{key} = #{key}\n"
+            end
+          end.join("")
+        end
+
+        def generate_swift_preview_params
+          return "" if !@options[:attributes] || @options[:attributes].empty?
+          
+          @options[:attributes].map do |key, type|
+            if key.start_with?('@')
+              clean_key = key[1..-1]
+              default_value = get_swift_default_value(type)
+              "#{clean_key}: .constant(#{default_value})"
+            else
+              default_value = get_swift_default_value(type)
+              "#{key}: #{default_value}"
+            end
+          end.join(", ")
+        end
+
+        def map_to_swift_type(type)
+          # Check if type ends with !! (force non-optional)
+          force_non_optional = type.end_with?('!!')
+          clean_type = force_non_optional ? type[0..-3] : type
+          
+          swift_type = case clean_type.downcase
+          when 'string'
+            'String'
+          when 'int', 'integer'
+            'Int'
+          when 'double', 'float'
+            'Double'
+          when 'bool', 'boolean'
+            'Bool'
+          when 'color'
+            'Color'
+          when 'edgeinsets'
+            'EdgeInsets'
+          else
+            # Model types are optional by default
+            return force_non_optional ? clean_type : "#{clean_type}?"
+          end
+          
+          # Basic types remain non-optional by default
+          swift_type
+        end
+
+        def get_swift_default_value(type)
+          # Remove !! suffix if present
+          clean_type = type.end_with?('!!') ? type[0..-3] : type
+          
+          case clean_type.downcase
+          when 'string'
+            '"Sample Text"'
+          when 'int', 'integer'
+            '0'
+          when 'double', 'float'
+            '0.0'
+          when 'bool', 'boolean'
+            'true'
+          when 'color'
+            '.blue'
+          when 'edgeinsets'
+            'EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)'
+          else
+            # For model types, use .mock for non-optional or nil for optional
+            type.end_with?('!!') ? "#{clean_type}.mock" : "nil"
+          end
+        end
+
+        def to_camel_case(str)
+          str.split('_').map(&:capitalize).join
+        end
+      end
+    end
+  end
+end
