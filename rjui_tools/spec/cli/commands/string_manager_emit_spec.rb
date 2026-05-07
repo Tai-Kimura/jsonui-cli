@@ -33,6 +33,16 @@ RSpec.describe 'StringManager emit' do
       expect(out).not_to include('private _currentLanguage')
       expect(out).to include('class StringManagerClass {')
     end
+
+    it 'wires useSyncExternalStore with a stable default-language server snapshot to avoid hydration mismatch' do
+      [true, false].each do |is_ts|
+        out = content_for(is_ts: is_ts)
+        expect(out).to include('function getServerSnapshot')
+        expect(out).to include("createCamelCaseProxy(strings['en'])")
+        expect(out).to include('useSyncExternalStore(subscribeLanguage, getLanguageSnapshot, getServerSnapshot)')
+        expect(out).not_to include('useSyncExternalStore(subscribeLanguage, getLanguageSnapshot, getLanguageSnapshot)')
+      end
+    end
   end
 
   describe RjuiTools::CLI::Commands::InitCommand do
@@ -50,6 +60,17 @@ RSpec.describe 'StringManager emit' do
       out = instance.send(:string_manager_javascript_stub, strings_json, 'en', '// H', '// F')
       expect(out).to include('const strings = ')
       expect(out).not_to include(': StringsRoot')
+    end
+
+    it 'init stub also wires getServerSnapshot to default language' do
+      strings_json = JSON.pretty_generate({ 'en' => {} })
+      [
+        instance.send(:string_manager_typescript_stub, strings_json, 'en', '// H', '// F'),
+        instance.send(:string_manager_javascript_stub, strings_json, 'en', '// H', '// F'),
+      ].each do |out|
+        expect(out).to include('function getServerSnapshot')
+        expect(out).to include('useSyncExternalStore(subscribeLanguage, getLanguageSnapshot, getServerSnapshot)')
+      end
     end
   end
 
