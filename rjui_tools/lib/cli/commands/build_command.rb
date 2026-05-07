@@ -592,8 +592,21 @@ module RjuiTools
               return StringManager.currentLanguage;
             }
 
+            // SSR + client first render must agree, otherwise React reports a
+            // hydration mismatch when the persisted locale differs from the
+            // default. Keep the server snapshot fixed to the default-language
+            // proxy; the post-hydration subscribe pass swaps in the real
+            // persisted locale via getLanguageSnapshot.
+            let _serverSnapshot = null;
+            function getServerSnapshot() {
+              if (!_serverSnapshot) {
+                _serverSnapshot = createCamelCaseProxy(strings['#{default_language}']);
+              }
+              return _serverSnapshot;
+            }
+
             export function useStringManager() {
-              return useSyncExternalStore(subscribeLanguage, getLanguageSnapshot, getLanguageSnapshot);
+              return useSyncExternalStore(subscribeLanguage, getLanguageSnapshot, getServerSnapshot);
             }
 
             #{marker_footer}
@@ -693,8 +706,21 @@ module RjuiTools
               return StringManager.currentLanguage;
             }
 
+            // SSR + client first render must agree, otherwise React reports a
+            // hydration mismatch when the persisted locale differs from the
+            // default. Keep the server snapshot fixed to the default-language
+            // proxy; the post-hydration subscribe pass swaps in the real
+            // persisted locale via getLanguageSnapshot.
+            let _serverSnapshot: StringMap | null = null;
+            function getServerSnapshot(): StringMap {
+              if (!_serverSnapshot) {
+                _serverSnapshot = createCamelCaseProxy(strings['#{default_language}']);
+              }
+              return _serverSnapshot;
+            }
+
             export function useStringManager(): StringMap {
-              return useSyncExternalStore(subscribeLanguage, getLanguageSnapshot, getLanguageSnapshot);
+              return useSyncExternalStore(subscribeLanguage, getLanguageSnapshot, getServerSnapshot);
             }
 
             #{marker_footer}
