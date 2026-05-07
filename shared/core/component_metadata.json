@@ -1,0 +1,727 @@
+{
+  "_description": "Per-component presentation metadata consumed by jsonui-mcp-server. Augments attribute_definitions.json (which defines the raw attribute schema, including binding_direction per attribute) with human descriptions, aliases, platform availability, platform-specific implementation notes, and agent-facing rules. Edit this file to change what `lookup_component` / `search_components` / `lookup_attribute` return from the MCP.",
+  "_schema": {
+    "description": "string",
+    "aliases": "string[]",
+    "platforms": {
+      "swift_generated": "boolean",
+      "swift_dynamic": "boolean",
+      "kotlin_generated": "boolean",
+      "kotlin_dynamic": "boolean",
+      "react": "boolean"
+    },
+    "platformSpecific": "Record<platform, Record<key, note>>",
+    "rules": "string[] — agent-facing prose rules"
+  },
+  "Label": {
+    "description": "Text display component",
+    "aliases": [
+      "Text"
+    ],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "Text",
+        "partialAttributes": "Supports styled text ranges via partialAttributes array",
+        "alignment": ".leading alignment added to frame for textAlign to work"
+      },
+      "kotlin": {
+        "composable": "Text",
+        "partialAttributes": "AnnotatedString with SpanStyle for styled ranges"
+      },
+      "react": {
+        "element": "<span>",
+        "lineClamping": "lines:1 -> truncate, lines:2+ -> line-clamp-N"
+      }
+    },
+    "rules": [
+      "text attribute supports interpolation with @{binding} syntax",
+      "partialAttributes allows styling ranges within text",
+      "linkable enables auto-detection of URLs",
+      "Frame alignment must be .leading for textAlign to work correctly (Swift)"
+    ]
+  },
+  "TextField": {
+    "description": "Text input field",
+    "aliases": [
+      "EditText",
+      "Input"
+    ],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "TextField / SecureField (when input='password')",
+        "focusManagement": "@FocusState variable generated, nextFocusId for chain",
+        "caretColor": "tintColor or caretAttributes.color"
+      },
+      "kotlin": {
+        "composable": "OutlinedTextField / BasicTextField",
+        "focusManagement": "FocusManager.requestFocus(nextFocusId)",
+        "inputType": "KeyboardOptions based on contentType/input"
+      },
+      "react": {
+        "element": "<input type=\"...\"/>",
+        "autoHandler": "text binding auto-generates onPropChange handler",
+        "inputMapping": "email->email, password->password, number->number, phone->tel"
+      }
+    },
+    "rules": [
+      "input='password' switches to SecureField in SwiftUI",
+      "fieldId + nextFocusId creates focus chain across fields",
+      "text binding MUST be two-way ($data. in Swift)",
+      "React auto-generates onXxxChange from text binding"
+    ]
+  },
+  "Button": {
+    "description": "Tappable button component",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "StateAwareButtonView (not plain Button+Text)",
+        "asyncSupport": "isAsync flag for async operations with loading state"
+      },
+      "kotlin": {
+        "composable": "Button with Text content",
+        "asyncSupport": "isAsync with CoroutineScope(Dispatchers.Main)"
+      },
+      "react": {
+        "element": "<button> or <Link><button> (Next.js navigation)",
+        "stateStyles": "hover/active/disabled via Tailwind prefixes"
+      }
+    },
+    "rules": [
+      "Uses StateAwareButtonView in Swift (not plain Text+Button)",
+      "Width/height are passed to view for background fill",
+      "onclick (lowercase) = selector format, onClick (camelCase) = binding format",
+      "Supports async operations with loading state and spinner"
+    ]
+  },
+  "Image": {
+    "description": "Local image component",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "Image (with .resizable().aspectRatio())",
+        "priority": "srcName > src > defaultImage",
+        "circleImage": "type='CircleImage' adds .clipShape(Circle())"
+      },
+      "kotlin": {
+        "composable": "Image with painterResource",
+        "contentScale": "ContentScale.Fit/Crop/FillBounds"
+      },
+      "react": {
+        "element": "<img/>",
+        "objectFit": "aspectfit->contain, aspectfill->cover, scaletofill->fill"
+      }
+    },
+    "rules": [
+      ".resizable() must come first, then .aspectRatio (Swift)",
+      "CircleImage type adds circular clipping",
+      "contentMode maps differently per platform"
+    ]
+  },
+  "NetworkImage": {
+    "description": "Remote/network image component",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "AsyncImage or custom NetworkImageView",
+        "defaultContentMode": ".center for matchParent"
+      },
+      "kotlin": {
+        "composable": "AsyncImage (Coil)"
+      },
+      "react": {
+        "element": "<img/> with src binding"
+      }
+    },
+    "rules": [
+      "Default contentMode is .center for matchParent (Swift)",
+      "Supports placeholder/error images via defaultImage"
+    ]
+  },
+  "View": {
+    "description": "Container view (HStack/VStack/ZStack)",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "HStack/VStack/ZStack based on orientation",
+        "weightedChildren": "Special body splitting for weighted layouts",
+        "relativePositioning": "ZStack with alignment for relative layouts"
+      },
+      "kotlin": {
+        "composable": "Row/Column/Box based on orientation",
+        "relativePositioning": "ConstraintLayout if children have alignXyzOfView"
+      },
+      "react": {
+        "element": "<div> with flex classes",
+        "orientation": "horizontal->flex-row, vertical->flex-col, none->relative"
+      }
+    },
+    "rules": [
+      "orientation determines layout: horizontal->HStack/Row, vertical->VStack/Column, none->ZStack/Box",
+      "Children with alignXyzOfView trigger relative/constraint layout",
+      "bottomToTop/rightToLeft reverses child order",
+      "distribution: fillEqually/fill/equalSpacing affects child arrangement"
+    ]
+  },
+  "ScrollView": {
+    "description": "Scrollable container",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "ScrollView(.horizontal/.vertical)"
+      },
+      "kotlin": {
+        "composable": "LazyColumn/LazyRow or verticalScroll/horizontalScroll"
+      },
+      "react": {
+        "element": "<div> with overflow-auto/scroll"
+      }
+    },
+    "rules": [
+      "orientation determines scroll direction",
+      "showsIndicator controls scrollbar visibility"
+    ]
+  },
+  "Collection": {
+    "description": "List/grid collection with data binding",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "LazyVStack/LazyHStack for performance",
+        "sections": "Section-based with headers/footers",
+        "flowLayout": "Flow layout support"
+      },
+      "kotlin": {
+        "composable": "LazyColumn/LazyRow/LazyVerticalGrid",
+        "sections": "Section-based with column count per section"
+      },
+      "react": {
+        "element": "map() with component references",
+        "cellFormat": "sections[].cell or cellClasses for component routing"
+      }
+    },
+    "rules": [
+      "items binding connects to data source array",
+      "Sections support different cell types per section",
+      "cellIdProperty extracts unique keys from item data",
+      "scrollTo binding enables programmatic scrolling",
+      "lazy (default true) controls virtualization: true uses LazyVStack/LazyColumn/LazyVerticalGrid with internal scroll; false renders eagerly in a plain VStack/Column with NO scroll container (use when nested in an already-scrollable parent). Sticky headers and paging require lazy: true."
+    ]
+  },
+  "Switch": {
+    "description": "Toggle switch (iOS style)",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "Toggle with switch style"
+      },
+      "kotlin": {
+        "composable": "Switch"
+      },
+      "react": {
+        "element": "Hidden checkbox + styled span (iOS-style toggle)"
+      }
+    },
+    "rules": [
+      "State binding priority: isOn > value > checked > bind",
+      "Two-way binding updates via $data. (Swift) or updateData (Kotlin)",
+      "onValueChange/onToggle for state change callback"
+    ]
+  },
+  "Toggle": {
+    "description": "Toggle control (checkbox style)",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "Toggle"
+      },
+      "kotlin": {
+        "composable": "Checkbox or Switch"
+      },
+      "react": {
+        "element": "<input type=\"checkbox\">"
+      }
+    },
+    "rules": [
+      "Similar to Switch but may render differently per platform",
+      "State binding priority: isOn > value > checked > bind"
+    ]
+  },
+  "CheckBox": {
+    "description": "Checkbox input",
+    "aliases": [
+      "Check",
+      "Checkbox"
+    ],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "Toggle with checkbox style"
+      },
+      "kotlin": {
+        "composable": "Checkbox or IconToggleButton (custom icons)"
+      },
+      "react": {
+        "element": "<input type=\"checkbox\">"
+      }
+    },
+    "rules": [
+      "Kotlin supports custom icon/selectedIcon via IconToggleButton",
+      "checked is primary binding attribute"
+    ]
+  },
+  "Radio": {
+    "description": "Radio button group",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "Custom radio button implementation"
+      },
+      "kotlin": {
+        "composable": "RadioButton in Row/Column"
+      },
+      "react": {
+        "element": "<input type=\"radio\">"
+      }
+    },
+    "rules": [
+      "selectedIndex tracks currently selected option"
+    ]
+  },
+  "SelectBox": {
+    "description": "Dropdown/picker selection",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "Picker"
+      },
+      "kotlin": {
+        "composable": "ExposedDropdownMenuBox"
+      },
+      "react": {
+        "element": "<select>"
+      }
+    },
+    "rules": [
+      "selectedIndex tracks currently selected option"
+    ]
+  },
+  "Segment": {
+    "description": "Segmented control",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "Picker with segmented style"
+      },
+      "kotlin": {
+        "composable": "TabRow or custom segment"
+      },
+      "react": {
+        "element": "Button group with useState for selectedIndex"
+      }
+    },
+    "rules": [
+      "Without binding, React auto-generates useState for selectedIndex",
+      "selectedIndex tracks active segment"
+    ]
+  },
+  "Slider": {
+    "description": "Slider/range input",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "Slider"
+      },
+      "kotlin": {
+        "composable": "Slider with step calculation"
+      },
+      "react": {
+        "element": "<input type=\"range\">"
+      }
+    },
+    "rules": [
+      "value/bind is two-way binding",
+      "minimumValue/maximumValue define range (default 0-100)",
+      "step defines discrete steps"
+    ]
+  },
+  "Progress": {
+    "description": "Progress bar/indicator",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "ProgressView"
+      },
+      "kotlin": {
+        "composable": "LinearProgressIndicator / CircularProgressIndicator"
+      },
+      "react": {
+        "element": "<progress> or <div> with width percentage"
+      }
+    },
+    "rules": [
+      "value represents progress (0.0 to 1.0)"
+    ]
+  },
+  "Indicator": {
+    "description": "Activity indicator / loading spinner",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "ProgressView (indeterminate)"
+      },
+      "kotlin": {
+        "composable": "CircularProgressIndicator"
+      },
+      "react": {
+        "element": "Animated spinner div"
+      }
+    },
+    "rules": []
+  },
+  "CircleView": {
+    "description": "Circular shape view",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "Circle()"
+      },
+      "kotlin": {
+        "composable": "Box with CircleShape clip"
+      },
+      "react": {
+        "element": "<div> with rounded-full"
+      }
+    },
+    "rules": []
+  },
+  "GradientView": {
+    "description": "Gradient background view",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "LinearGradient / RadialGradient"
+      },
+      "kotlin": {
+        "composable": "Brush.linearGradient / radialGradient"
+      },
+      "react": {
+        "element": "<div> with background: linear-gradient(...)"
+      }
+    },
+    "rules": [
+      "colors array defines gradient stops"
+    ]
+  },
+  "Blur": {
+    "description": "Blur effect view",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": false,
+      "kotlin_dynamic": false,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": ".blur() modifier or UIVisualEffectView"
+      },
+      "react": {
+        "element": "<div> with backdrop-blur class"
+      }
+    },
+    "rules": []
+  },
+  "IconLabel": {
+    "description": "Icon with label combination",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "Label with systemImage"
+      },
+      "kotlin": {
+        "composable": "Row with Icon + Text"
+      },
+      "react": {
+        "element": "<span> with icon + text"
+      }
+    },
+    "rules": []
+  },
+  "Web": {
+    "description": "Web view / embedded browser",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "WKWebView wrapper"
+      },
+      "kotlin": {
+        "composable": "AndroidView with WebView"
+      },
+      "react": {
+        "element": "<iframe>"
+      }
+    },
+    "rules": [
+      "url attribute specifies the web page to load"
+    ]
+  },
+  "SafeAreaView": {
+    "description": "Safe area respecting container",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": false
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "Respects safeAreaInsets"
+      },
+      "kotlin": {
+        "composable": "Respects WindowInsets"
+      }
+    },
+    "rules": [
+      "Ensures content doesn't overlap with system UI"
+    ]
+  },
+  "TabView": {
+    "description": "Tab-based navigation container",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "TabView with tag-based selection"
+      },
+      "kotlin": {
+        "composable": "Scaffold with BottomNavigation"
+      },
+      "react": {
+        "element": "Tab buttons + conditional content rendering"
+      }
+    },
+    "rules": [
+      "Each tab child uses tag for identification"
+    ]
+  },
+  "TextView": {
+    "description": "Multi-line text input",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "TextEditor"
+      },
+      "kotlin": {
+        "composable": "OutlinedTextField with multiline"
+      },
+      "react": {
+        "element": "<textarea>"
+      }
+    },
+    "rules": [
+      "text binding is two-way",
+      "Multi-line input (unlike TextField which is single-line by default)"
+    ]
+  },
+  "EditText": {
+    "description": "Text input (Android naming convention)",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": false,
+      "swift_dynamic": false,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": false
+    },
+    "platformSpecific": {
+      "kotlin": {
+        "composable": "OutlinedTextField"
+      }
+    },
+    "rules": [
+      "Android-specific alias for TextField functionality"
+    ]
+  },
+  "Input": {
+    "description": "Generic input (React naming convention)",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": false,
+      "swift_dynamic": false,
+      "kotlin_generated": false,
+      "kotlin_dynamic": false,
+      "react": true
+    },
+    "platformSpecific": {
+      "react": {
+        "element": "<input>"
+      }
+    },
+    "rules": [
+      "React-specific input component"
+    ]
+  }
+}

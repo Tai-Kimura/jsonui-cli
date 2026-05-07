@@ -1,0 +1,123 @@
+# frozen_string_literal: true
+
+require_relative '../helpers/modifier_builder'
+require_relative '../helpers/resource_resolver'
+
+module KjuiTools
+  module Compose
+    module Components
+      class NetworkImageComponent
+        def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+          required_imports&.add(:async_image)
+
+          # NetworkImage uses 'source' or 'url' for image URL
+          url = process_data_binding(json_data['source'] || json_data['url'] || json_data['src'] || '')
+          # Support both 'hint' (primary) and 'placeholder' (alias)
+          placeholder = json_data['hint'] || json_data['placeholder']
+          content_description = json_data['contentDescription'] || 'Image'
+
+          code = indent("AsyncImage(", depth)
+          code += "\n" + indent("model = #{url},", depth + 1)
+          code += "\n" + indent("contentDescription = \"#{content_description}\",", depth + 1)
+
+          # Content scale (case-insensitive check)
+          if json_data['contentMode']
+            required_imports&.add(:content_scale)
+            scale = case json_data['contentMode'].to_s.downcase
+            when 'aspectfit'
+              'ContentScale.Fit'
+            when 'aspectfill'
+              'ContentScale.Crop'
+            when 'fill', 'scaletofill'
+              'ContentScale.FillBounds'
+            when 'center'
+              'ContentScale.None'
+            else
+              'ContentScale.Fit'
+            end
+            code += "\n" + indent("contentScale = #{scale},", depth + 1)
+          end
+
+          # Placeholder
+          if placeholder
+            required_imports&.add(:painter_resource)
+            required_imports&.add(:r_class)
+            code += "\n" + indent("placeholder = painterResource(R.drawable.#{placeholder.gsub('.png', '').gsub('.jpg', '')}),", depth + 1)
+          end
+
+          # Build modifiers
+          # Compose Modifier order (top to bottom = outer to inner):
+          # 1. margins (outer spacing)
+          # 2. size
+          # 3. clip/background
+          # 4. padding (inner spacing)
+          modifiers = []
+
+          # Add testTag and contentDescription for UI testing
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+
+          # Margins first (outer spacing, before size)
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+
+          # Size
+          if json_data['size']
+            modifiers << ".size(#{json_data['size']}.dp)"
+          else
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          end
+
+          # clip/background (after size, before padding)
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+
+          # Padding (inner spacing)
+          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+
+          modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
+          modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
+
+          code += Helpers::ModifierBuilder.format(modifiers, depth)
+
+          # Error/fallback handling - use errorImage if specified, otherwise use placeholder
+          error_image = json_data['errorImage'] || placeholder
+          if error_image
+            required_imports&.add(:painter_resource)
+            required_imports&.add(:r_class)
+            drawable_name = error_image.gsub('.png', '').gsub('.jpg', '')
+            code += ",\n" + indent("error = painterResource(R.drawable.#{drawable_name}),", depth + 1)
+            code += "\n" + indent("fallback = painterResource(R.drawable.#{drawable_name})", depth + 1)
+          end
+
+          code += "\n" + indent(")", depth)
+          code
+        end
+
+        private
+
+        def self.process_data_binding(text)
+          return quote(text) unless text.is_a?(String)
+
+          if text.match(/@\{([^}]+)\}/)
+            variable = $1
+            "data.#{variable}"
+          else
+            quote(text)
+          end
+        end
+
+        def self.quote(text)
+          "\"#{text.gsub('"', '\\"')}\""
+        end
+
+        def self.indent(text, level)
+          return text if level == 0
+          spaces = '    ' * level
+          text.split("\n").map { |line|
+            line.empty? ? line : spaces + line
+          }.join("\n")
+        end
+      end
+    end
+  end
+end

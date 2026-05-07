@@ -1,0 +1,16 @@
+{
+  "CodeBlock": {
+    "file": {
+      "type": ["string", "binding"],
+      "description": "File path to the code file to display"
+    },
+    "language": {
+      "type": ["string", "binding"],
+      "description": "Programming language for syntax highlighting"
+    },
+    "showPreview": {
+      "type": ["boolean", "binding"],
+      "description": "Whether to show preview of the code"
+    }
+  }
+}

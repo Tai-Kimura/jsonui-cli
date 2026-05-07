@@ -1,0 +1,440 @@
+# frozen_string_literal: true
+
+require 'swiftui/views/collection_converter'
+
+RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
+  before(:all) do
+    SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false
+  end
+
+  after(:all) do
+    SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true
+  end
+
+  describe '#extract_view_name' do
+    let(:converter) { described_class.new({ 'type' => 'Collection' }) }
+
+    it 'converts CollectionViewCell suffix to View' do
+      result = converter.send(:extract_view_name, 'MyItemCollectionViewCell')
+      expect(result).to eq('MyItemView')
+    end
+
+    it 'handles hash class info' do
+      result = converter.send(:extract_view_name, { 'className' => 'TestCollectionViewCell' })
+      expect(result).to eq('TestView')
+    end
+
+    it 'adds View suffix if missing' do
+      result = converter.send(:extract_view_name, 'MyComponent')
+      expect(result).to eq('MyComponentView')
+    end
+
+    it 'handles Cell suffix' do
+      result = converter.send(:extract_view_name, 'ItemCell')
+      expect(result).to eq('ItemCellView')
+    end
+
+    it 'handles lowercase cell suffix' do
+      result = converter.send(:extract_view_name, 'Itemcell')
+      expect(result).to eq('ItemCellView')
+    end
+
+    it 'returns nil for nil input' do
+      expect(converter.send(:extract_view_name, nil)).to be_nil
+    end
+
+    it 'keeps View suffix if already present' do
+      result = converter.send(:extract_view_name, 'MyView')
+      expect(result).to eq('MyView')
+    end
+  end
+
+  describe '#extract_property_name' do
+    let(:converter) { described_class.new({ 'type' => 'Collection' }) }
+
+    it 'extracts property name from binding expression' do
+      result = converter.send(:extract_property_name, '@{items}')
+      expect(result).to eq('items')
+    end
+
+    it 'returns nil for non-binding expression' do
+      result = converter.send(:extract_property_name, 'items')
+      expect(result).to be_nil
+    end
+
+    it 'returns nil for nil input' do
+      result = converter.send(:extract_property_name, nil)
+      expect(result).to be_nil
+    end
+  end
+
+  describe '#convert' do
+    context 'with single column collection' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'columns' => 1
+        }
+      end
+
+      it 'generates List' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('List {')
+        expect(code).to include('.listStyle(PlainListStyle())')
+      end
+    end
+
+    context 'with multi-column collection' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'columns' => 3
+        }
+      end
+
+      it 'generates ScrollView with LazyVGrid' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('ScrollView(.vertical')
+        expect(code).to include('LazyVGrid(columns:')
+        expect(code).to include('count: 3')
+      end
+    end
+
+    context 'with horizontal layout' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'layout' => 'horizontal',
+          'sections' => [
+            { 'cell' => 'ItemCell' }
+          ],
+          'items' => '@{items}'
+        }
+      end
+
+      it 'emits CollectionStackView with horizontal axis' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('CollectionStackView(')
+        expect(code).to include('axis: .horizontal')
+        # Outer ScrollView/HStack is no longer emitted by the generator;
+        # CollectionStackView wraps the cell content with the right shell.
+        expect(code).not_to include('ScrollView(.horizontal')
+      end
+    end
+
+    context 'with cell classes' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'columns' => 1,
+          'cellClasses' => ['ItemCollectionViewCell']
+        }
+      end
+
+      it 'uses cell class name' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('ItemView')
+      end
+    end
+
+    context 'with header and footer classes' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'columns' => 1,
+          'cellClasses' => ['ItemCell'],
+          'headerClasses' => ['HeaderCell'],
+          'footerClasses' => ['FooterCell']
+        }
+      end
+
+      it 'includes header and footer views' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('Section {')
+        expect(code).to include('HeaderCellView')
+      end
+    end
+
+    context 'with item spacing' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'columns' => 2,
+          'itemSpacing' => 15
+        }
+      end
+
+      it 'uses custom spacing' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('spacing: 15')
+      end
+    end
+
+    context 'with cell height' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'columns' => 2,
+          'cellHeight' => 100,
+          'items' => '@{data}',
+          'sections' => [{ 'cell' => 'Cell' }]
+        }
+      end
+
+      it 'sets frame height' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('.frame(height: 100)')
+      end
+    end
+
+    context 'with sections' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'columns' => 2,
+          'items' => '@{listData}',
+          'sections' => [
+            {
+              'header' => 'SectionHeaderCell',
+              'cell' => 'ItemCell',
+              'footer' => 'SectionFooterCell'
+            }
+          ]
+        }
+      end
+
+      it 'generates section structure' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('SectionHeaderCellView')
+        expect(code).to include('ItemCellView')
+        expect(code).to include('SectionFooterCellView')
+      end
+    end
+
+    context 'with setTargetAsDataSource' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'setTargetAsDataSource' => true
+        }
+      end
+
+      it 'adds comment for data source' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('// setTargetAsDataSource: true')
+      end
+    end
+
+    context 'with setTargetAsDelegate' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'setTargetAsDelegate' => true
+        }
+      end
+
+      it 'adds comment for delegate' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('// setTargetAsDelegate: true')
+      end
+    end
+
+    context 'with scroll indicator hidden' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'columns' => 2,
+          'showsVerticalScrollIndicator' => false
+        }
+      end
+
+      it 'hides scroll indicators' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('showsIndicators: false')
+      end
+    end
+
+    context 'with horizontal scroll indicator hidden' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'layout' => 'horizontal',
+          'showsHorizontalScrollIndicator' => false,
+          'sections' => [{ 'cell' => 'Cell' }],
+          'items' => '@{items}'
+        }
+      end
+
+      it 'hides horizontal scroll indicators' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('showsIndicators: false')
+      end
+    end
+
+    context 'with cell width in horizontal layout' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'layout' => 'horizontal',
+          'cellWidth' => 200,
+          'sections' => [{ 'cell' => 'Cell' }],
+          'items' => '@{items}'
+        }
+      end
+
+      it 'sets cell width' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('.frame(width: 200)')
+      end
+    end
+
+    context 'with section-specific columns' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'columns' => 2,
+          'items' => '@{data}',
+          'sections' => [
+            { 'cell' => 'Cell', 'columns' => 3 }
+          ]
+        }
+      end
+
+      it 'uses section columns' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('count: 3')
+      end
+    end
+  end
+
+  describe '#convert with lazy: "none"' do
+    context 'single-column vertical with sections' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'id' => 'chat',
+          'columns' => 1,
+          'lazy' => 'none',
+          'items' => '@{messages}',
+          'sections' => [{ 'cell' => 'MessageCell' }]
+        }
+      end
+
+      it 'omits ScrollView and LazyVStack, emits plain VStack' do
+        code = described_class.new(component).convert
+        expect(code).not_to include('ScrollView')
+        expect(code).not_to include('LazyVStack')
+        expect(code).to include('VStack(')
+      end
+    end
+
+    context 'horizontal with sections' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'id' => 'row',
+          'layout' => 'horizontal',
+          'lazy' => 'none',
+          'items' => '@{carousel}',
+          'sections' => [{ 'cell' => 'CarouselCell' }]
+        }
+      end
+
+      it 'omits ScrollView and LazyHStack, emits plain HStack' do
+        code = described_class.new(component).convert
+        expect(code).not_to include('ScrollView')
+        expect(code).not_to include('LazyHStack')
+        expect(code).to include('HStack(')
+      end
+    end
+
+    context 'multi-column grid' do
+      let(:component) do
+        {
+          'type' => 'Collection',
+          'id' => 'grid',
+          'columns' => 2,
+          'lazy' => 'none',
+          'items' => '@{tiles}',
+          'sections' => [{ 'cell' => 'TileCell' }]
+        }
+      end
+
+      it 'omits outer ScrollView while keeping LazyVGrid layout' do
+        code = described_class.new(component).convert
+        expect(code).not_to include('ScrollView')
+        expect(code).to include('LazyVGrid')
+      end
+    end
+  end
+
+  describe 'scrollEnabled emission' do
+    it 'emits scrollDisabled(true) when scrollEnabled is literal false' do
+      converter = described_class.new({
+        'type' => 'Collection',
+        'id' => 'list',
+        'scrollEnabled' => false,
+        'cellClasses' => ['ItemCell']
+      })
+      code = converter.convert
+      expect(code).to include('.scrollDisabled(true)')
+      expect(code).not_to include('.disabled(true)')
+    end
+
+    it 'emits scrollDisabled with negated binding when scrollEnabled is bound' do
+      converter = described_class.new({
+        'type' => 'Collection',
+        'id' => 'list',
+        'scrollEnabled' => '@{canScroll}',
+        'cellClasses' => ['ItemCell']
+      })
+      code = converter.convert
+      expect(code).to include('.scrollDisabled(!data.canScroll)')
+      expect(code).not_to include('.disabled(data.canScroll == false)')
+    end
+  end
+
+  describe '#to_camel_case' do
+    let(:converter) { described_class.new({ 'type' => 'Collection' }) }
+
+    it 'converts snake_case to camelCase' do
+      expect(converter.send(:to_camel_case, 'my_property')).to eq('myProperty')
+    end
+
+    it 'handles empty string' do
+      expect(converter.send(:to_camel_case, '')).to eq('')
+    end
+
+    it 'handles nil' do
+      expect(converter.send(:to_camel_case, nil)).to be_nil
+    end
+  end
+end
