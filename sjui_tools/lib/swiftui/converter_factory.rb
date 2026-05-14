@@ -25,6 +25,7 @@ require_relative 'views/toggle_converter'
 require_relative 'views/checkbox_converter'
 # include_converter is no longer used - includes are expanded inline by process_includes
 require_relative 'views/tab_view_converter'
+require_relative 'views/embed_converter'
 require_relative 'view_registry'
 
 module SjuiTools
@@ -197,6 +198,8 @@ module SjuiTools
           raise "Include type should have been expanded by process_includes. This is a bug."
         when 'TabView'
           Views::TabViewConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
+        when 'Embed'
+          Views::EmbedConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
         else
           # デフォルトコンバーター
           DefaultConverter.new(component, indent_level, action_manager, @binding_registry)

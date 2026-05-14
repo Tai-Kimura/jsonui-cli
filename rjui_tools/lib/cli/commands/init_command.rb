@@ -440,6 +440,14 @@ module RjuiTools
             Core::Logger.success("Created built-in component: #{network_image_path}")
           end
 
+          # Create EmbedContainer component (Embed view type runtime helper)
+          embed_container_path = File.join(extensions_dir, 'EmbedContainer.tsx')
+          unless File.exist?(embed_container_path)
+            template_path = File.join(File.dirname(__FILE__), '../../react/templates/EmbedContainer.tsx')
+            File.write(embed_container_path, File.read(template_path))
+            Core::Logger.success("Created built-in component: #{embed_container_path}")
+          end
+
           # Create Configuration template (FontSpec / Configuration.Font.fontProvider)
           # so generated components can `import { Configuration } from '@/lib/jsonui/Configuration'`.
           lib_dir = config['lib_directory'] || 'src/lib/jsonui'

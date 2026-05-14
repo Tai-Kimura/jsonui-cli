@@ -40,6 +40,7 @@ require_relative 'components/webview_component'
 require_relative 'components/gradientview_component'
 require_relative 'components/blurview_component'
 require_relative 'components/tabview_component'
+require_relative 'components/embed_component'
 require_relative 'generators/view_generator'
 
 module KjuiTools
@@ -243,6 +244,9 @@ module KjuiTools
         when 'TabView'
           result = Components::TabviewComponent.generate(json_data, depth, @required_imports, parent_type)
           handle_container_result(result, depth, parent_type)
+        when 'Embed'
+          result = Components::EmbedComponent.generate(json_data, depth, @required_imports, parent_type)
+          handle_container_result(result, depth, parent_type)
         when 'Spacer'
           "Spacer(modifier = Modifier.height(#{json_data['height'] || 8}.dp))"
         else
@@ -252,7 +256,7 @@ module KjuiTools
 
         # Wrap with VisibilityWrapper for all components
         # Container types already handle this in handle_container_result, so skip them
-        unless %w[View ScrollView Scroll GradientView BlurView TabView].include?(component_type)
+        unless %w[View ScrollView Scroll GradientView BlurView TabView Embed].include?(component_type)
           code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
         end
 

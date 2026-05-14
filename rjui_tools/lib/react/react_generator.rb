@@ -22,6 +22,7 @@ require_relative 'converters/indicator_converter'
 require_relative 'converters/select_box_converter'
 require_relative 'converters/include_converter'
 require_relative 'converters/tab_view_converter'
+require_relative 'converters/embed_converter'
 require_relative 'tailwind_mapper'
 require_relative 'responsive_helper'
 require_relative 'helpers/string_manager_helper'
@@ -64,7 +65,8 @@ module RjuiTools
         'Indicator' => Converters::IndicatorConverter,
         'SelectBox' => Converters::SelectBoxConverter,
         'Include' => Converters::IncludeConverter,
-        'TabView' => Converters::TabViewConverter
+        'TabView' => Converters::TabViewConverter,
+        'Embed' => Converters::EmbedConverter
       }.freeze
 
       def initialize(config)
@@ -483,6 +485,15 @@ module RjuiTools
           components[component_name] ||= subdir
         end
 
+        # Check for Embed (screen reference)
+        if json['type'] == 'Embed' && json['screen'].is_a?(String)
+          parts = json['screen'].split('/')
+          base_name = parts.last
+          component_name = to_pascal_case(base_name)
+          subdir = parts.length > 1 ? parts[0...-1].join('/') : nil
+          components[component_name] ||= subdir
+        end
+
         # Recurse into children (both 'child' and 'children' keys)
         (Array(json['child']) + Array(json['children'])).each do |child|
           extract_included_components(child, components) if child.is_a?(Hash)
@@ -507,6 +518,11 @@ module RjuiTools
         # Check for NetworkImage type (built-in but requires separate import)
         if type == 'NetworkImage'
           components << 'NetworkImage'
+        end
+
+        # Embed type uses EmbedContainer runtime helper (init-emitted into extensions)
+        if type == 'Embed'
+          components << 'EmbedContainer'
         end
 
         # Recurse into children (both 'child' and 'children' keys)
