@@ -74,7 +74,11 @@ module KjuiTools
         # generated composable class name (PascalCase + "View").
         # PascalCase input passes through for backward compat.
         def self.embedded_view_class(screen)
-          base = screen.include?('_') ? screen.split('_').map(&:capitalize).join : screen
+          base = if screen.include?('_')
+                   screen.split('_').map(&:capitalize).join
+                 else
+                   screen[0].to_s.upcase + screen[1..].to_s
+                 end
           "#{base}View"
         end
 
