@@ -42,6 +42,16 @@ module SjuiTools
           state_vars_block = state_variables.map { |sv| "    #{sv}" }.join("\n") + "\n"
         end
 
+        # If the generated body references viewModel.<method>(...), inject a
+        # @ObservedObject property declaration so it resolves. The only emitter
+        # of `viewModel.` is embed_converter's eventBridge; every other handler
+        # path goes through `data.<method>?(...)`. Mirrors KJUI's pattern of
+        # passing viewModel into the generated function (compose_builder.rb:737-747).
+        view_model_decl = ""
+        if new_body_code.include?('viewModel.')
+          view_model_decl = "    @ObservedObject var viewModel: #{view_name}ViewModel\n"
+        end
+
         # Check if body needs splitting
         line_count = new_body_code.count("\n") + 1
 
@@ -79,7 +89,7 @@ module SjuiTools
 
         struct #{generated_view_name}: View {
             @SwiftUI.Binding var data: #{data_name}
-        #{state_vars_block}
+        #{view_model_decl}#{state_vars_block}
             var body: some View {
         #if DEBUG
                 if ViewSwitcher.isDynamicMode {

@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative 'base_view_converter'
+require_relative 'responsive_helper'
+require_relative '../../core/responsive_resolver'
 
 # Generates SwiftUI code for the `Embed` view type. Embeds another screen as
 # a region of the parent layout; the embedded screen owns its own ViewModel.
@@ -20,7 +22,19 @@ module SjuiTools
           @view_registry = view_registry
         end
 
+        # Top-level entry: when a `responsive` block is present, regenerate the
+        # embed per size-class branch with the merged attrs. Mirrors the Collection
+        # converter pattern; per-branch attrs swap into @component before each
+        # convert_non_responsive call, and @modifier_bag is reset so apply_modifiers
+        # doesn't re-emit branch N-1's bag into branch N.
         def convert
+          if JsonUIShared::ResponsiveResolver.responsive?(@component)
+            return convert_responsive
+          end
+          convert_non_responsive
+        end
+
+        def convert_non_responsive
           screen = @component['screen']
           if screen.nil? || screen.empty?
             add_line '// Embed: missing required `screen` attribute'
@@ -71,6 +85,35 @@ module SjuiTools
           add_line '}'
 
           apply_modifiers
+          generated_code
+        end
+
+        def convert_responsive
+          branches = JsonUIShared::ResponsiveResolver.build_branches(@component)
+          saved_component = @component
+
+          branches.each_with_index do |branch, idx|
+            condition = branch[:size_class] ? Views::ResponsiveHelper.size_class_condition(branch[:size_class]) : nil
+
+            if idx == 0 && condition
+              add_line "if #{condition} {"
+            elsif condition
+              add_line "} else if #{condition} {"
+            elsif idx > 0
+              add_line "} else {"
+            end
+
+            branch_attrs = branch[:attrs].dup
+            branch_attrs.delete('responsive')
+            @component = branch_attrs
+            @modifier_bag = ModifierBag.new
+            @indent_level += 1
+            convert_non_responsive
+            @indent_level -= 1
+          end
+
+          add_line "}" if branches.size > 1
+          @component = saved_component
           generated_code
         end
 

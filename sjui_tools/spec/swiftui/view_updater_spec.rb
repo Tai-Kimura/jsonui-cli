@@ -70,6 +70,40 @@ RSpec.describe SjuiTools::SwiftUI::ViewUpdater do
       end
     end
 
+    context 'viewModel injection (regression: sjui-embed-event-bridge-references-undeclared-viewmodel)' do
+      before do
+        content = <<~SWIFT
+          import SwiftUI
+
+          struct TabletBarBrowserGeneratedView: View {
+              @Binding var data: TabletBarBrowserData
+
+              var body: some View {
+                  Text("Old content")
+              }
+          }
+        SWIFT
+        File.write(swift_file_path, content)
+      end
+
+      let(:swift_file_path) { File.join(temp_dir, 'TabletBarBrowserGeneratedView.swift') }
+
+      it 'declares @ObservedObject viewModel when body references viewModel.' do
+        updater.update_generated_body(
+          swift_file_path,
+          "EmbedContainer(...) { eventBridge: { event in viewModel.onBarSelected(payload) } }"
+        )
+        content = File.read(swift_file_path)
+        expect(content).to include('@ObservedObject var viewModel: TabletBarBrowserViewModel')
+      end
+
+      it 'omits viewModel declaration when body does not reference viewModel.' do
+        updater.update_generated_body(swift_file_path, 'Text("no embed events")')
+        content = File.read(swift_file_path)
+        expect(content).not_to include('@ObservedObject var viewModel:')
+      end
+    end
+
     context 'when struct not found' do
       let(:invalid_swift_file) { File.join(temp_dir, 'Invalid.swift') }
 

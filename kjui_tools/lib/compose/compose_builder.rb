@@ -174,6 +174,26 @@ module KjuiTools
       def generate_component(json_data, depth = 0, parent_type = nil)
         return "" unless json_data.is_a?(Hash)
 
+        # Skip data-spec / shared_data / variables entries that may appear
+        # inline in a `child:` array (no `type` key, no `include`). Without
+        # this, generate_component falls through to type=View → emits a
+        # spurious empty Box. Mirrors sjui's view_converter child filter.
+        if !json_data.key?('type') && !json_data.key?('include') &&
+           (json_data.key?('data') || json_data.key?('shared_data') || json_data.key?('variables'))
+          return ""
+        end
+
+        # Embed + responsive: inline the if/else chain at the call site
+        # instead of extracting to a private composable. Extraction would
+        # leak the parent scope's `data` / `viewModel` / `windowSizeClass`
+        # references out of the function signature, AND would inject the
+        # private function INSIDE the GENERATED_CODE_START..END marker pair
+        # (see update_generated_file responsive_functions append). Inline
+        # avoids both.
+        if json_data['type'] == 'Embed' && Helpers::ResponsiveHelper.responsive?(json_data)
+          return generate_embed_responsive_inline(json_data, depth, parent_type)
+        end
+
         # Check for responsive component — delegate to responsive generation
         if Helpers::ResponsiveHelper.responsive?(json_data)
           return generate_responsive_component(json_data, depth, parent_type)
@@ -261,6 +281,45 @@ module KjuiTools
         end
 
         code
+      end
+
+      # Embed + responsive: emit an inline if/else chain that calls
+      # EmbedComponent.generate per branch with merged attrs. No private
+      # composable is extracted, so data/viewModel references inside the
+      # EmbedContainer body resolve against the enclosing GeneratedView scope.
+      def generate_embed_responsive_inline(json_data, depth, parent_type)
+        branches = JsonUIShared::ResponsiveResolver.build_branches(json_data)
+
+        # Pull in the env vars the conditions read from.
+        @required_imports&.add(:window_size_class)
+        @required_imports&.add(:local_configuration)
+
+        lines = []
+        lines << indent("val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE", depth)
+
+        first = true
+        branches.each do |branch|
+          condition = Helpers::ResponsiveHelper.build_condition(branch[:size_class])
+          attrs = branch[:attrs].dup
+          attrs.delete('responsive')
+
+          if condition
+            keyword = first ? 'if' : '} else if'
+            lines << indent("#{keyword} (#{condition}) {", depth)
+            first = false
+          elsif first
+            # Only a default branch — no conditional at all.
+            lines << Components::EmbedComponent.generate(attrs, depth, @required_imports, parent_type)
+            return lines.join("\n")
+          else
+            lines << indent("} else {", depth)
+          end
+
+          lines << Components::EmbedComponent.generate(attrs, depth + 1, @required_imports, parent_type)
+        end
+
+        lines << indent("}", depth)
+        lines.join("\n")
       end
 
       # Generate code for a component that has a `responsive` block.
