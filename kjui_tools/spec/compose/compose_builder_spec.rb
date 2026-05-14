@@ -612,8 +612,23 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       it 'emits inline if/else (not a private composable)' do
         result = builder.send(:generate_component, embed_json, 0, nil)
         expect(result).to include('if (')
-        expect(result).to include('windowSizeClass.widthSizeClass')
         expect(result).not_to include('private fun Responsive')
+      end
+
+      it 'uses standalone LocalConfiguration condition (regression: jui-embed-responsive-block-codegen-broken)' do
+        # The inline path runs in the GeneratedView body where `windowSizeClass`
+        # is not declared. We must use LocalConfiguration directly instead.
+        result = builder.send(:generate_component, embed_json, 0, nil)
+        expect(result).to include('LocalConfiguration.current.screenWidthDp >= 840')
+        expect(result).not_to include('windowSizeClass.widthSizeClass')
+        expect(result).not_to include('WindowWidthSizeClass.Expanded')
+      end
+
+      it 'does not pull in the window_size_class import for the inline path' do
+        builder.send(:generate_component, embed_json, 0, nil)
+        imports = builder.instance_variable_get(:@required_imports)
+        expect(imports).not_to include(:window_size_class)
+        expect(imports).to include(:local_configuration)
       end
 
       it 'does not register a responsive helper function' do

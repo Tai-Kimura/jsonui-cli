@@ -92,6 +92,15 @@ module SjuiTools
           branches = JsonUIShared::ResponsiveResolver.build_branches(@component)
           saved_component = @component
 
+          # Wrap the if/else chain in `Group { }` so it works both at the top
+          # level AND inside an `AnyView(...)` expression position. SwiftUI's
+          # AnyView initializer takes a single View expression, so a bare
+          # if/else (which is `@ViewBuilder` content) doesn't parse there.
+          # `Group` is a transparent @ViewBuilder-aware container that
+          # legalizes the conditional in either context.
+          add_line "Group {"
+          @indent_level += 1
+
           branches.each_with_index do |branch, idx|
             condition = branch[:size_class] ? Views::ResponsiveHelper.size_class_condition(branch[:size_class]) : nil
 
@@ -113,7 +122,15 @@ module SjuiTools
           end
 
           add_line "}" if branches.size > 1
+          @indent_level -= 1
+          add_line "}"
           @component = saved_component
+          # generated_code (in BaseViewConverter) has the side effect of
+          # emitting whatever modifiers are still in @modifier_bag, which
+          # would re-emit the LAST branch's `.frame(width: ...)` OUTSIDE
+          # the Group's closing brace. Reset the bag here so the final
+          # generated_code call is a no-op for modifiers.
+          @modifier_bag = ModifierBag.new
           generated_code
         end
 

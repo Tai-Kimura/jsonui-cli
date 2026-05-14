@@ -287,19 +287,24 @@ module KjuiTools
       # EmbedComponent.generate per branch with merged attrs. No private
       # composable is extracted, so data/viewModel references inside the
       # EmbedContainer body resolve against the enclosing GeneratedView scope.
+      #
+      # Condition expressions are emitted in their *standalone* form (e.g.
+      # `LocalConfiguration.current.screenWidthDp >= 840`) rather than the
+      # `windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded`
+      # form used by the extracted private-composable path. The GeneratedView
+      # signature only carries `(data, viewModel, modifier)`, so it has no
+      # `windowSizeClass` variable in scope; using LocalConfiguration directly
+      # avoids needing to thread one in. Thresholds match Material3's
+      # WindowWidthSizeClass definitions: compact <600dp, medium 600..839dp,
+      # expanded >=840dp.
       def generate_embed_responsive_inline(json_data, depth, parent_type)
         branches = JsonUIShared::ResponsiveResolver.build_branches(json_data)
-
-        # Pull in the env vars the conditions read from.
-        @required_imports&.add(:window_size_class)
         @required_imports&.add(:local_configuration)
 
         lines = []
-        lines << indent("val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE", depth)
-
         first = true
         branches.each do |branch|
-          condition = Helpers::ResponsiveHelper.build_condition(branch[:size_class])
+          condition = build_embed_inline_condition(branch[:size_class])
           attrs = branch[:attrs].dup
           attrs.delete('responsive')
 
@@ -320,6 +325,28 @@ module KjuiTools
 
         lines << indent("}", depth)
         lines.join("\n")
+      end
+
+      INLINE_WIDTH_CONDITIONS = {
+        'compact' => 'LocalConfiguration.current.screenWidthDp < 600',
+        'medium'  => 'LocalConfiguration.current.screenWidthDp in 600..839',
+        'regular' => 'LocalConfiguration.current.screenWidthDp >= 840'
+      }.freeze
+      INLINE_LANDSCAPE_CONDITION = 'LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE'
+
+      # Build a standalone Kotlin boolean expression for a size class key,
+      # using only LocalConfiguration so the call site doesn't need to have
+      # a `windowSizeClass` variable in scope. Returns nil for the default
+      # (else) branch.
+      def build_embed_inline_condition(size_class)
+        return nil if size_class.nil?
+
+        parsed = JsonUIShared::ResponsiveResolver.parse_size_class(size_class)
+        conditions = []
+        conditions << INLINE_WIDTH_CONDITIONS[parsed[:width]] if INLINE_WIDTH_CONDITIONS.key?(parsed[:width])
+        conditions << INLINE_LANDSCAPE_CONDITION if parsed[:landscape]
+        return nil if conditions.empty?
+        conditions.join(' && ')
       end
 
       # Generate code for a component that has a `responsive` block.

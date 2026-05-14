@@ -396,6 +396,48 @@ RSpec.describe KjuiTools::Compose::DataModelUpdater do
         result = updater.send(:generate_data_content, 'Test', properties, [])
         expect(result).to include('import androidx.compose.ui.graphics.Color')
       end
+
+      context 'with custom domain types (regression: kjui-data-model-updater-skips-type-normalization v2)' do
+        before do
+          KjuiTools::Core::TypeConverter.clear_project_type_map_cache
+          KjuiTools::Core::TypeConverter.project_type_map = {
+            'types' => {
+              'ProductListing' => {
+                'android' => {
+                  'imports' => ['com.acme.mobile.model.domain.ProductListing']
+                }
+              }
+            }
+          }
+        end
+
+        after { KjuiTools::Core::TypeConverter.clear_project_type_map_cache }
+
+        it 'emits import for custom domain types declared in .jsonui-type-map.json' do
+          properties = [
+            { 'name' => 'bars', 'class' => 'List<ProductListing>', 'defaultValue' => 'listOf()' }
+          ]
+          result = updater.send(:generate_data_content, 'Test', properties, [])
+          expect(result).to include('import com.acme.mobile.model.domain.ProductListing')
+        end
+
+        it 'does not duplicate imports when multiple properties share a type' do
+          properties = [
+            { 'name' => 'bars', 'class' => 'List<ProductListing>', 'defaultValue' => 'listOf()' },
+            { 'name' => 'singleBar', 'class' => 'ProductListing?', 'defaultValue' => nil }
+          ]
+          result = updater.send(:generate_data_content, 'Test', properties, [])
+          expect(result.scan('import com.acme.mobile.model.domain.ProductListing').length).to eq(1)
+        end
+
+        it 'omits the import when no property references the custom type' do
+          properties = [
+            { 'name' => 'title', 'class' => 'String', 'defaultValue' => 'Hello' }
+          ]
+          result = updater.send(:generate_data_content, 'Test', properties, [])
+          expect(result).not_to include('com.acme.mobile.model.domain.ProductListing')
+        end
+      end
     end
 
     describe '#extract_event_bindings' do

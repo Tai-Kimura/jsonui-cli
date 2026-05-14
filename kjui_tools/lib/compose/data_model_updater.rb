@@ -376,6 +376,15 @@ module KjuiTools
           end
         end
 
+        # Pull in imports for custom domain types registered in the
+        # project's .jsonui-type-map.json. Without this, types like
+        # `List<ProductListing>` compile-fail because `ProductListing` is unresolved.
+        custom_imports = Core::TypeConverter.collect_imports_for_data_properties(data_properties)
+        custom_imports.each do |import_path|
+          line = "import #{import_path}\n"
+          content += line unless content.include?(line)
+        end
+
         content += "\ndata class #{view_name}Data(\n"
         
         if data_properties.empty?
