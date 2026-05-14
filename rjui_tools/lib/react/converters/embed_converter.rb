@@ -50,7 +50,8 @@ module RjuiTools
           if screen.include?('_')
             screen.split('_').map(&:capitalize).join
           else
-            screen
+            # PascalCase passthrough: capitalize first letter.
+            screen[0].to_s.upcase + screen[1..].to_s
           end
         end
 

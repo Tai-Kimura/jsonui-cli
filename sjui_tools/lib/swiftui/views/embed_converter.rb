@@ -81,11 +81,14 @@ module SjuiTools
         # maps to PascalCase + "View" (e.g. "order_detail" → "OrderDetailView").
         # PascalCase input is accepted (passes through) for backward compat.
         def embedded_view_name(screen)
-          if screen.include?('_')
-            screen.split('_').map(&:capitalize).join + 'View'
-          else
-            "#{screen}View"
-          end
+          base = if screen.include?('_')
+                   screen.split('_').map(&:capitalize).join
+                 else
+                   # PascalCase passthrough: ensure first letter is uppercase
+                   # so "counter" → "CounterView", "Counter" → "CounterView".
+                   screen[0].upcase + screen[1..].to_s
+                 end
+          "#{base}View"
         end
 
         # Render a single params value as Swift expression. Supports literals
