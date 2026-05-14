@@ -15,8 +15,19 @@ module KjuiTools
       # Cache for type_mapping.json data
       @type_mapping = nil
 
+      # Cache for the consumer project's .jsonui-type-map.json (separate from
+      # kjui_tools/lib/core/type_mapping.json). Holds custom domain type →
+      # Android imports mappings authored by the project.
+      @project_type_map = nil
+
+      # Kotlin primitive / built-in types that don't need imports.
+      PRIMITIVE_TYPES = %w[
+        String Int Long Float Double Boolean Any Unit Char Byte Short
+        Nothing Number List Map Set Array Pair Triple
+      ].freeze
+
       class << self
-        attr_accessor :colors_data, :colors_file_path, :type_mapping
+        attr_accessor :colors_data, :colors_file_path, :type_mapping, :project_type_map
 
         # Load type_mapping.json
         # @return [Hash] the type mapping data
@@ -83,6 +94,111 @@ module KjuiTools
         # Clear the type mapping cache (useful for testing)
         def clear_type_mapping_cache
           @type_mapping = nil
+        end
+
+        # Clear the project type-map cache (useful for testing)
+        def clear_project_type_map_cache
+          @project_type_map = nil
+        end
+
+        # Load the consumer project's .jsonui-type-map.json — the registry of
+        # custom domain types with their platform-specific class names and
+        # imports. Returns `{ 'types' => {} }` if absent.
+        def load_project_type_map
+          return @project_type_map unless @project_type_map.nil?
+
+          path = find_project_type_map
+          if path && File.exist?(path)
+            begin
+              @project_type_map = JSON.parse(File.read(path))
+            rescue JSON::ParserError => e
+              warn "[TypeConverter] Failed to parse .jsonui-type-map.json: #{e.message}"
+              @project_type_map = { 'types' => {} }
+            end
+          else
+            @project_type_map = { 'types' => {} }
+          end
+
+          @project_type_map
+        end
+
+        # Walk up from CWD looking for `.jsonui-type-map.json`. The file lives
+        # at the jui project root (alongside `jui.config.json`), which is one
+        # level above the Android subproject's CWD when `jui build` runs.
+        def find_project_type_map
+          current = Dir.pwd
+          4.times do
+            candidate = File.join(current, '.jsonui-type-map.json')
+            return candidate if File.exist?(candidate)
+            parent = File.dirname(current)
+            break if parent == current
+            current = parent
+          end
+          nil
+        end
+
+        # Given a Kotlin type expression (e.g. `List<ProductListing>`,
+        # `Map<String, ProductListing?>`, `ProductListing?`), look up Android imports
+        # for each non-primitive leaf type from the project type-map.
+        # @return [Array<String>] fully-qualified import paths (uniq)
+        def imports_for_type(kotlin_type)
+          return [] if kotlin_type.nil? || kotlin_type.to_s.empty?
+
+          mapping = load_project_type_map
+          leaves = extract_leaf_types(kotlin_type.to_s)
+          leaves.flat_map do |leaf|
+            type_info = mapping.dig('types', leaf, 'android', 'imports')
+            type_info.is_a?(Array) ? type_info : []
+          end.uniq
+        end
+
+        # Aggregate imports needed across a list of data properties.
+        # @param data_properties [Array<Hash>] each with a 'class' key
+        # @return [Array<String>] unique import paths
+        def collect_imports_for_data_properties(data_properties)
+          return [] unless data_properties.is_a?(Array)
+          data_properties.flat_map { |p| imports_for_type(p['class']) }.uniq
+        end
+
+        # Decompose a Kotlin type expression into its non-primitive leaf type
+        # names. Strips `?` nullability, unwraps `List<...>` / `Map<K,V>` /
+        # `Set<...>` / `Array<...>` / `Pair<...>` / `Triple<...>`.
+        def extract_leaf_types(type_str)
+          cleaned = type_str.strip
+          cleaned = cleaned[0...-1] if cleaned.end_with?('?')
+          cleaned = cleaned.strip
+
+          if (m = cleaned.match(/^(?:List|Map|Set|Array|MutableList|MutableMap|MutableSet|Pair|Triple)<(.+)>$/))
+            inner = m[1]
+            split_top_level_commas(inner).flat_map { |p| extract_leaf_types(p) }.uniq
+          else
+            PRIMITIVE_TYPES.include?(cleaned) ? [] : [cleaned]
+          end
+        end
+
+        # Split a Kotlin generic argument list on top-level commas (commas
+        # inside nested `<...>` are ignored).
+        def split_top_level_commas(str)
+          parts = []
+          buf = String.new
+          depth = 0
+          str.each_char do |c|
+            case c
+            when '<' then depth += 1; buf << c
+            when '>' then depth -= 1; buf << c
+            when ','
+              if depth == 0
+                parts << buf.strip
+                buf = String.new
+              else
+                buf << c
+              end
+            else
+              buf << c
+            end
+          end
+          parts << buf.strip unless buf.strip.empty?
+          parts
         end
 
         # Load colors.json from the specified path or auto-detect from project config
@@ -280,6 +396,15 @@ module KjuiTools
 
           # Check for Array(ElementType) syntax -> List<ElementType>
           if (match = base_type.match(/^Array\((.+)\)$/))
+            element_type = to_kotlin_type(match[1].strip, mode)
+            result = "List<#{element_type}>"
+            return is_optional ? "#{result}?" : result
+          end
+
+          # Check for Swift bracket syntax [ElementType] -> List<ElementType>.
+          # Recurses on the inner type so `[ProductListing?]`, `[[Inner]]` etc.
+          # are also normalized.
+          if (match = base_type.match(/^\[(.+)\]$/))
             element_type = to_kotlin_type(match[1].strip, mode)
             result = "List<#{element_type}>"
             return is_optional ? "#{result}?" : result

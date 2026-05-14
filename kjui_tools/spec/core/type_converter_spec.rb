@@ -79,6 +79,23 @@ RSpec.describe KjuiTools::Core::TypeConverter do
       end
     end
 
+    context 'with Swift bracket syntax (regression: kjui-data-model-updater-skips-type-normalization)' do
+      it 'converts [T] to List<T>' do
+        expect(described_class.to_kotlin_type('[String]')).to eq('List<String>')
+        expect(described_class.to_kotlin_type('[ProductListing]')).to eq('List<ProductListing>')
+      end
+
+      it 'preserves optionality across the bracket' do
+        expect(described_class.to_kotlin_type('[ProductListing]?')).to eq('List<ProductListing>?')
+      end
+
+      it 'recurses into the element type' do
+        expect(described_class.to_kotlin_type('[ProductListing?]')).to eq('List<ProductListing?>')
+        expect(described_class.to_kotlin_type('[Bool]')).to eq('List<Boolean>')
+        expect(described_class.to_kotlin_type('[[Inner]]')).to eq('List<List<Inner>>')
+      end
+    end
+
     context 'with Dictionary syntax' do
       it 'converts Dictionary(KeyType, ValueType) to Map<KeyType, ValueType>' do
         expect(described_class.to_kotlin_type('Dictionary(String, Any)')).to eq('Map<String, Any>')
@@ -492,6 +509,90 @@ RSpec.describe KjuiTools::Core::TypeConverter do
     it 'returns nil for unknown attribute' do
       result = described_class.get_event_type('Button', 'unknownEvent', 'compose')
       expect(result).to be_nil
+    end
+  end
+
+  describe '.imports_for_type and .collect_imports_for_data_properties (regression: kjui-data-model-updater-skips-type-normalization v2)' do
+    let(:fake_map) do
+      {
+        'types' => {
+          'ProductListing' => {
+            'class' => 'ProductListing',
+            'android' => {
+              'class' => 'ProductListing',
+              'imports' => ['com.acme.mobile.model.domain.ProductListing']
+            }
+          },
+          'ChipsContent' => {
+            'class' => 'ChipsContent',
+            'android' => {
+              'class' => 'ChipsContent',
+              'imports' => ['com.acme.mobile.model.response.chat.ChipsContent']
+            }
+          },
+          'PrimitiveStub' => {
+            'android' => { 'class' => 'PrimitiveStub' }
+            # no imports key
+          }
+        }
+      }
+    end
+
+    before do
+      described_class.clear_project_type_map_cache
+      described_class.project_type_map = fake_map
+    end
+
+    after { described_class.clear_project_type_map_cache }
+
+    it 'returns imports for a registered custom type' do
+      expect(described_class.imports_for_type('ProductListing'))
+        .to eq(['com.acme.mobile.model.domain.ProductListing'])
+    end
+
+    it 'unwraps List<T> to look up the element type' do
+      expect(described_class.imports_for_type('List<ProductListing>'))
+        .to eq(['com.acme.mobile.model.domain.ProductListing'])
+    end
+
+    it 'unwraps List<T?> and trailing nullability' do
+      expect(described_class.imports_for_type('List<ProductListing?>?'))
+        .to eq(['com.acme.mobile.model.domain.ProductListing'])
+    end
+
+    it 'unwraps Map<K, V> and skips primitives' do
+      expect(described_class.imports_for_type('Map<String, ProductListing>'))
+        .to eq(['com.acme.mobile.model.domain.ProductListing'])
+    end
+
+    it 'returns an empty array for primitives' do
+      expect(described_class.imports_for_type('String')).to eq([])
+      expect(described_class.imports_for_type('Int')).to eq([])
+      expect(described_class.imports_for_type('List<String>')).to eq([])
+    end
+
+    it 'returns an empty array for unknown types (no map entry)' do
+      expect(described_class.imports_for_type('UnknownType')).to eq([])
+    end
+
+    it 'returns an empty array when the map entry has no imports key' do
+      expect(described_class.imports_for_type('PrimitiveStub')).to eq([])
+    end
+
+    it 'collects unique imports across multiple data properties' do
+      props = [
+        { 'name' => 'bars', 'class' => 'List<ProductListing>' },
+        { 'name' => 'chips', 'class' => 'ChipsContent?' },
+        { 'name' => 'count', 'class' => 'Int' },
+        { 'name' => 'first', 'class' => 'ProductListing' } # dup of first import
+      ]
+      imports = described_class.collect_imports_for_data_properties(props)
+      expect(imports).to match_array(
+        [
+          'com.acme.mobile.model.domain.ProductListing',
+          'com.acme.mobile.model.response.chat.ChipsContent'
+        ]
+      )
     end
   end
 

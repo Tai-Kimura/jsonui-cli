@@ -463,6 +463,10 @@ module SjuiTools
 
           add_line "}" if branches.size > 1
           @component = saved_component
+          # See embed_converter#convert_responsive for the same fix rationale:
+          # generated_code emits the modifier_bag as a side effect, which would
+          # re-emit the LAST branch's modifiers outside the if/else block.
+          @modifier_bag = ModifierBag.new
           generated_code
         end
 

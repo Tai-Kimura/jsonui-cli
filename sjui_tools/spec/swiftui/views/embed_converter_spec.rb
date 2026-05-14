@@ -76,7 +76,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::EmbedConverter do
       end
     end
 
-    context 'responsive block (regression: sjui-embed-ignores-responsive-block-on-child)' do
+    context 'responsive block (regression: sjui-embed-ignores-responsive-block-on-child + jui-embed-responsive-block-codegen-broken)' do
       it 'wraps the EmbedContainer in if/else when responsive overrides width' do
         code = convert(
           'type' => 'Embed', 'id' => 'capturePane', 'screen' => 'photo_registration',
@@ -89,11 +89,26 @@ RSpec.describe SjuiTools::SwiftUI::Views::EmbedConverter do
         expect(code).to include('.frame(width: 420)')
       end
 
+      it 'wraps the if/else chain in Group { } so AnyView(...) embedding is valid' do
+        code = convert(
+          'type' => 'Embed', 'id' => 'capturePane', 'screen' => 'photo_registration',
+          'width' => 420,
+          'responsive' => { 'regular' => { 'width' => 360 } }
+        )
+        # First line should be `Group {` and the chain should sit inside it.
+        first_line = code.lines.first.strip
+        expect(first_line).to eq('Group {')
+        # Group must include both branches.
+        expect(code).to include('Group {')
+        expect(code.lines.last.strip).to eq('}')
+      end
+
       it 'leaves non-responsive Embeds untouched (regression)' do
         code = convert(
           'type' => 'Embed', 'id' => 'p', 'screen' => 'foo', 'width' => 360
         )
         expect(code).not_to include('horizontalSizeClass')
+        expect(code).not_to include('Group {')
         expect(code).to include('.frame(width: 360)')
       end
     end
