@@ -723,5 +723,35 @@
     "rules": [
       "React-specific input component"
     ]
+  },
+  "Embed": {
+    "description": "Embeds another screen as a region of this layout. The embedded screen owns its own ViewModel — independent from the parent VM.",
+    "aliases": [],
+    "platforms": {
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": true,
+      "kotlin_dynamic": true,
+      "react": true
+    },
+    "platformSpecific": {
+      "swift": {
+        "view": "EmbedContainer wrapping the embedded screen's generated View (static) or DynamicView(jsonName:data:) (dynamic). @StateObject identity gives natural VM isolation."
+      },
+      "kotlin": {
+        "composable": "EmbedContainer with per-slot ViewModelStoreOwner remembered against the layout id — required so that the same screen embedded twice gets two VM instances."
+      },
+      "react": {
+        "element": "<EmbedContainer> rendering the embedded screen component. Hook closure scoping gives natural VM isolation."
+      }
+    },
+    "rules": [
+      "id is required on the Layout JSON Embed node and must be unique across the parent layout. On Android it doubles as the ViewModelStoreOwner key (remember(id)) — without it, multi-embed of the same screen would share a VM.",
+      "screen value is the layout JSON filename (snake_case, no extension), e.g. 'order_detail'. Codegen converts to the View class name; dynamic mode loads the layout JSON as-is.",
+      "The embedded screen requires no spec changes — the parent declares the embed in structure.embeds[]; the embedded VM stays as-is. Optional applyInitParams(_:) on the embedded VM consumes params.",
+      "params keys are camelCase; values may be literals or @{varName} bindings against the parent VM. Bindings reactively propagate.",
+      "events keys follow on[A-Z]...; values must reference parent VM methods or eventHandlers. Embedded VMs emit via the lib-provided emit(name, payload) helper.",
+      "navigationMode v1 supports 'delegate' only (parent NavController/Router is shared). pop/dismiss/navigateBack are bounded at the embed and do not close it. 'isolated' is deferred to v1.5."
+    ]
   }
 }

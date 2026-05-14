@@ -445,6 +445,10 @@ class SpecValidator:
         if "tabView" in structure and structure["tabView"]:
             self._validate_tab_view(structure["tabView"], result)
 
+        # Validate embeds (cross-screen embedding — see specification-rules.md (5))
+        if "embeds" in structure and structure["embeds"]:
+            self._validate_embeds_section(structure["embeds"], result)
+
     def _collect_component_ids(
         self, comp: Any, component_ids: set, path: str, result: SpecValidationResult
     ) -> None:
@@ -714,6 +718,215 @@ class SpecValidator:
         for i, tab in enumerate(tabs):
             if not self._validate_required_fields(tab, ["title", "layoutFile"], f"structure.tabView.tabs[{i}]", result):
                 continue
+
+    # Cross-screen embedding (Embed view type)
+    # Spec form: structure.embeds[] = [{regionId, screen, params?, events?, navigationMode?}]
+    # Layout form (validated by jui build, not here): {type: "Embed", id, screen, ...}
+    # See specification-rules.md (5) and docs/plans/2026-05-11-embed-feature.md.
+
+    # v1 supports 'delegate' only. 'isolated' (private nav stack) is
+    # deferred to v1.5. Keep this tuple aligned with the navigationMode
+    # enum in shared/core/attribute_definitions.json :: Embed.
+    _EMBED_VALID_NAV_MODES = ("delegate",)
+
+    def _validate_embeds_section(self, embeds: Any, result: SpecValidationResult) -> None:
+        """Validate structure.embeds[] — local-only checks.
+
+        Does NOT read the embedded screen's spec. Type contracts beyond
+        key/binding existence are runtime responsibilities (v1 scope).
+        """
+        if not isinstance(embeds, list):
+            result.errors.append(SpecValidationMessage(
+                path="structure.embeds",
+                message=f"embeds must be array, got {type(embeds).__name__}",
+            ))
+            return
+        seen_region_ids: set[str] = set()
+        for i, embed in enumerate(embeds):
+            path = f"structure.embeds[{i}]"
+            if not isinstance(embed, dict):
+                result.errors.append(SpecValidationMessage(
+                    path=path,
+                    message=f"embed entry must be object, got {type(embed).__name__}",
+                ))
+                continue
+            rid = embed.get("regionId")
+            if isinstance(rid, str):
+                if rid in seen_region_ids:
+                    result.errors.append(SpecValidationMessage(
+                        path=f"{path}.regionId",
+                        message=f"Duplicate regionId: '{rid}'",
+                    ))
+                seen_region_ids.add(rid)
+            self._validate_embed(embed, path, result)
+
+    def _validate_embed(self, embed: dict, path: str, result: SpecValidationResult) -> None:
+        """Validate a single structure.embeds[] entry."""
+        # 0. regionId required + camelCase (matches Layout JSON Embed.id reference)
+        rid = embed.get("regionId")
+        if not rid:
+            result.errors.append(SpecValidationMessage(
+                path=f"{path}.regionId",
+                message="Embed requires 'regionId'",
+            ))
+        elif not isinstance(rid, str) or not re.match(r"^[a-z][a-zA-Z0-9]*$", rid):
+            result.errors.append(SpecValidationMessage(
+                path=f"{path}.regionId",
+                message=(
+                    f"regionId must be camelCase (matches the Layout JSON "
+                    f"Embed.id), got '{rid}'"
+                ),
+            ))
+
+        # 1. screen required + snake_case layout JSON filename (no extension)
+        screen = embed.get("screen")
+        if not screen:
+            result.errors.append(SpecValidationMessage(
+                path=f"{path}.screen",
+                message="Embed requires 'screen' attribute",
+            ))
+            return
+        if not isinstance(screen, str) or not re.match(r"^[a-z][a-z0-9_]*$", screen):
+            result.errors.append(SpecValidationMessage(
+                path=f"{path}.screen",
+                message=(
+                    f"Embed.screen must be snake_case layout filename "
+                    f"(no extension), got '{screen}'"
+                ),
+            ))
+
+        # 2. screen reference: best-effort layout JSON file lookup
+        if (
+            isinstance(screen, str)
+            and re.match(r"^[a-z][a-z0-9_]*$", screen)
+            and self._spec_file_path
+        ):
+            spec_dir = self._spec_file_path.parent
+            candidates = (
+                list(spec_dir.glob(f"../layouts/{screen}.json"))
+                + list(spec_dir.glob(f"../../layouts/{screen}.json"))
+                + list(spec_dir.glob(f"**/layouts/{screen}.json"))
+            )
+            if not candidates:
+                result.warnings.append(SpecValidationMessage(
+                    path=f"{path}.screen",
+                    message=(
+                        f"Layout JSON '{screen}.json' not found near "
+                        f"{spec_dir}. Make sure the embedded screen's "
+                        f"layout exists."
+                    ),
+                    level="warning",
+                ))
+
+        # 3. params: object & camelCase keys & binding resolves to parent VM var
+        params = embed.get("params")
+        if params is not None:
+            if not isinstance(params, dict):
+                result.errors.append(SpecValidationMessage(
+                    path=f"{path}.params",
+                    message=f"params must be object, got {type(params).__name__}",
+                ))
+            else:
+                vm_vars = self._collect_vm_var_names()
+                for k, v in params.items():
+                    if not re.match(r"^[a-z][a-zA-Z0-9]*$", k):
+                        result.errors.append(SpecValidationMessage(
+                            path=f"{path}.params.{k}",
+                            message=f"params key must be camelCase, got '{k}'",
+                        ))
+                    if isinstance(v, str):
+                        m = re.match(r"^@\{([a-zA-Z0-9_.]+)\}$", v)
+                        if m and vm_vars:
+                            head = m.group(1).split(".")[0]
+                            if head not in vm_vars:
+                                result.errors.append(SpecValidationMessage(
+                                    path=f"{path}.params.{k}",
+                                    message=(
+                                        f"binding '{v}' references unknown var "
+                                        f"'{head}'; not in dataFlow.viewModel.vars "
+                                        f"or stateManagement.uiVariables"
+                                    ),
+                                ))
+
+        # 4. navigationMode enum
+        nav_mode = embed.get("navigationMode", "delegate")
+        if nav_mode not in self._EMBED_VALID_NAV_MODES:
+            result.errors.append(SpecValidationMessage(
+                path=f"{path}.navigationMode",
+                message=(
+                    f"navigationMode must be one of "
+                    f"{self._EMBED_VALID_NAV_MODES}, got '{nav_mode}'"
+                ),
+            ))
+
+        # 5. events: object & on[A-Z]... keys & handler exists on parent VM
+        events = embed.get("events")
+        if events is not None:
+            if not isinstance(events, dict):
+                result.errors.append(SpecValidationMessage(
+                    path=f"{path}.events",
+                    message=f"events must be object, got {type(events).__name__}",
+                ))
+            else:
+                handlers = self._collect_vm_handler_names()
+                for k, v in events.items():
+                    if not re.match(r"^on[A-Z][a-zA-Z0-9]*$", k):
+                        result.errors.append(SpecValidationMessage(
+                            path=f"{path}.events.{k}",
+                            message=(
+                                f"event key must match ^on[A-Z][a-zA-Z0-9]*$, "
+                                f"got '{k}'"
+                            ),
+                        ))
+                    if isinstance(v, str) and handlers and v not in handlers:
+                        result.errors.append(SpecValidationMessage(
+                            path=f"{path}.events.{k}",
+                            message=(
+                                f"handler '{v}' not found in "
+                                f"dataFlow.viewModel.methods or "
+                                f"stateManagement.eventHandlers"
+                            ),
+                        ))
+
+    def _collect_vm_var_names(self) -> set[str]:
+        """Names available as @{binding} sources from the parent VM.
+
+        Returns empty set if the spec has no viewModel/uiVariables sections,
+        which signals callers to skip the existence check (we cannot prove
+        a binding is unresolvable without a contract).
+        """
+        if not isinstance(self._spec_data, dict):
+            return set()
+        names: set[str] = set()
+        view_model = (self._spec_data.get("dataFlow") or {}).get("viewModel") or {}
+        for var in view_model.get("vars", []) or []:
+            if isinstance(var, dict) and isinstance(var.get("name"), str):
+                names.add(var["name"])
+        state_mgmt = self._spec_data.get("stateManagement") or {}
+        for var in state_mgmt.get("uiVariables", []) or []:
+            if isinstance(var, dict) and isinstance(var.get("name"), str):
+                names.add(var["name"])
+        return names
+
+    def _collect_vm_handler_names(self) -> set[str]:
+        """Names available as event handler targets on the parent VM.
+
+        Returns empty set when neither section is present (skip check).
+        """
+        if not isinstance(self._spec_data, dict):
+            return set()
+        names: set[str] = set()
+        view_model = (self._spec_data.get("dataFlow") or {}).get("viewModel") or {}
+        for method in view_model.get("methods", []) or []:
+            if isinstance(method, str):
+                names.add(method)
+            elif isinstance(method, dict) and isinstance(method.get("name"), str):
+                names.add(method["name"])
+        state_mgmt = self._spec_data.get("stateManagement") or {}
+        for handler in state_mgmt.get("eventHandlers", []) or []:
+            if isinstance(handler, dict) and isinstance(handler.get("name"), str):
+                names.add(handler["name"])
+        return names
 
     def _validate_data_flow(self, data_flow: dict, result: SpecValidationResult):
         """Validate dataFlow section."""

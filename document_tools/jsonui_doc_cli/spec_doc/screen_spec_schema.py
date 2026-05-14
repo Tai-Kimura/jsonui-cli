@@ -124,9 +124,66 @@ SCREEN_SPEC_SCHEMA = {
                         {"type": "null"}
                     ]
                 },
+                "embeds": {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/embedEntry"},
+                    "description": (
+                        "Cross-screen embeds. Each entry hosts another "
+                        "screen as a region of this layout while keeping "
+                        "its own ViewModel. See specification-rules.md (5)."
+                    )
+                },
                 "notes": {
                     "type": "string",
                     "description": "Notes about the overall structure"
+                }
+            }
+        },
+        "embedEntry": {
+            "type": "object",
+            "required": ["regionId", "screen"],
+            "properties": {
+                "regionId": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-zA-Z0-9]*$",
+                    "description": (
+                        "camelCase id matching the corresponding Layout "
+                        "JSON Embed.id. Unique within the parent layout."
+                    )
+                },
+                "screen": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "description": (
+                        "snake_case layout JSON filename of the embedded "
+                        "screen (no extension)."
+                    )
+                },
+                "params": {
+                    "type": "object",
+                    "additionalProperties": True,
+                    "description": (
+                        "Init params for the embedded VM. Keys camelCase. "
+                        "Values may be literals or @{varName} bindings."
+                    )
+                },
+                "events": {
+                    "type": "object",
+                    "additionalProperties": {"type": "string"},
+                    "description": (
+                        "Map of on[A-Z]... event names to parent VM "
+                        "method or eventHandler names."
+                    )
+                },
+                "navigationMode": {
+                    "type": "string",
+                    "enum": ["delegate"],
+                    "default": "delegate",
+                    "description": (
+                        "v1 supports 'delegate' only — embedded screen "
+                        "shares the parent's NavController/Router. "
+                        "'isolated' is deferred to v1.5."
+                    )
                 }
             }
         },
