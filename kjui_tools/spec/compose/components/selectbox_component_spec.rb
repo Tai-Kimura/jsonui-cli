@@ -104,6 +104,31 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
         expect(result).to include('placeholder = "Choose one"')
       end
 
+      # Spec canonical `prompt` is the primary key, with hint/placeholder as
+      # aliases. The codegen must accept all three and prefer prompt when
+      # multiple are set.
+      it 'generates SelectBox with prompt (canonical primary key)' do
+        json_data = {
+          'type' => 'SelectBox',
+          'prompt' => 'Choose one'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('placeholder = "Choose one"')
+      end
+
+      it 'prefers prompt over hint and placeholder when multiple are present' do
+        json_data = {
+          'type' => 'SelectBox',
+          'prompt' => 'from prompt',
+          'hint' => 'from hint',
+          'placeholder' => 'from placeholder'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('placeholder = "from prompt"')
+        expect(result).not_to include('"from hint"')
+        expect(result).not_to include('"from placeholder"')
+      end
+
       it 'generates disabled SelectBox' do
         json_data = {
           'type' => 'SelectBox',

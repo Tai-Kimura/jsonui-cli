@@ -40,11 +40,34 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
       end
     end
 
-    context 'with placeholder/hint' do
-      it 'adds disabled placeholder option' do
+    context 'with placeholder/hint/prompt' do
+      it 'adds a selectable placeholder option (no disabled/hidden so picking clears value)' do
         converter = create_converter({ 'class' => 'SelectBox', 'items' => ['A', 'B'], 'placeholder' => 'Select one...' })
         result = converter.convert
-        expect(result).to include('<option value="" disabled hidden>Select one...</option>')
+        expect(result).to include('<option value="">Select one...</option>')
+        expect(result).not_to include('disabled hidden')
+      end
+
+      # Spec canonical `prompt` is the primary key, with hint/placeholder as
+      # aliases. Match the iOS / Android SelectBox surfaces.
+      it 'accepts prompt as the canonical primary key' do
+        converter = create_converter({ 'class' => 'SelectBox', 'items' => ['A', 'B'], 'prompt' => 'Pick a thing' })
+        result = converter.convert
+        expect(result).to include('<option value="">Pick a thing</option>')
+      end
+
+      it 'prefers prompt over hint and placeholder when multiple are present' do
+        converter = create_converter(
+          'class' => 'SelectBox',
+          'items' => ['A', 'B'],
+          'prompt' => 'from prompt',
+          'hint' => 'from hint',
+          'placeholder' => 'from placeholder'
+        )
+        result = converter.convert
+        expect(result).to include('<option value="">from prompt</option>')
+        expect(result).not_to include('from hint')
+        expect(result).not_to include('from placeholder')
       end
     end
 

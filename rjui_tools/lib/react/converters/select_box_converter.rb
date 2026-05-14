@@ -104,9 +104,12 @@ module RjuiTools
 
         def generate_dynamic_select(indent, id_attr, class_name, style_attr, testid_attr, tag_attr, value_attr, on_change, disabled_attr, items)
           items_prop = extract_binding_property(items)
-          hint = json['hint'] || json['placeholder']
+          hint = json['prompt'] || json['hint'] || json['placeholder']
           hint_text = resolve_hint_text(hint)
-          hint_option = hint ? "\n#{indent_str(indent + 2)}<option value=\"\" disabled hidden>#{hint_text}</option>" : ''
+          # Placeholder row is selectable (no `disabled hidden`) so picking
+          # it clears the value back to "" — the unselected state mirrors
+          # iOS / Android SelectBox behavior.
+          hint_option = hint ? "\n#{indent_str(indent + 2)}<option value=\"\">#{hint_text}</option>" : ''
           class_attr = build_select_class_attr(class_name)
 
           <<~JSX.chomp
@@ -129,10 +132,13 @@ module RjuiTools
             end
           end.join("\n")
 
-          hint = json['hint'] || json['placeholder']
+          hint = json['prompt'] || json['hint'] || json['placeholder']
           if hint
             hint_text = resolve_hint_text(hint)
-            options_jsx = "#{indent_str(indent + 2)}<option value=\"\" disabled hidden>#{hint_text}</option>\n#{options_jsx}"
+            # Placeholder row is selectable (no `disabled hidden`) so picking
+            # it clears the value back to "" — the unselected state mirrors
+            # iOS / Android SelectBox behavior.
+            options_jsx = "#{indent_str(indent + 2)}<option value=\"\">#{hint_text}</option>\n#{options_jsx}"
           end
 
           class_attr = build_select_class_attr(class_name)

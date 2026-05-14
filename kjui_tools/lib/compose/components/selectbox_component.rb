@@ -161,12 +161,13 @@ module KjuiTools
             end
           end
           
-          # Add placeholder/hint if specified
-          if json_data['hint']
-            resolved = Helpers::ResourceResolver.process_text(json_data['hint'], required_imports)
-            code += "\n" + indent("placeholder = #{resolved},", depth + 1)
-          elsif json_data['placeholder']
-            resolved = Helpers::ResourceResolver.process_text(json_data['placeholder'], required_imports)
+          # Add placeholder text — spec canonical `prompt` (primary) plus the
+          # `hint` / `placeholder` aliases. Routed through process_text so a
+          # snake_case key like "select_box_prompt" resolves to
+          # stringResource(R.string.select_box_prompt) for proper localization.
+          prompt_value = json_data['prompt'] || json_data['hint'] || json_data['placeholder']
+          if prompt_value
+            resolved = Helpers::ResourceResolver.process_text(prompt_value, required_imports)
             code += "\n" + indent("placeholder = #{resolved},", depth + 1)
           end
           
