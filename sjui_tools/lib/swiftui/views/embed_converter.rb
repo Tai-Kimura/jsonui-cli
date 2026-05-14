@@ -29,12 +29,40 @@ module SjuiTools
 
           embed_id = @component['id'] || 'embed'
           navigation_mode = @component['navigationMode'] || 'delegate'
+          params = @component['params'] || {}
+          events = @component['events'] || {}
 
           add_line 'EmbedContainer('
           indent do
             add_line "embedId: \"#{embed_id}\","
             add_line "screen: \"#{screen}\","
-            add_line "navigationMode: .#{navigation_mode}"
+            unless params.empty?
+              add_line 'params: ['
+              indent do
+                params.each_with_index do |(key, value), idx|
+                  expr = render_param_value(value)
+                  comma = idx == params.size - 1 ? '' : ','
+                  add_line "\"#{key}\": #{expr}#{comma}"
+                end
+              end
+              add_line '],'
+            end
+            if events.empty?
+              add_line "navigationMode: .#{navigation_mode}"
+            else
+              add_line "navigationMode: .#{navigation_mode},"
+              add_line 'eventBridge: { event in'
+              indent do
+                add_line 'if case .named(let name, let payload) = event {'
+                indent do
+                  events.each do |event_name, handler|
+                    add_line "if name == \"#{event_name}\" { viewModel.#{handler}(payload) }"
+                  end
+                end
+                add_line '}'
+              end
+              add_line '}'
+            end
           end
           add_line ') {'
           indent do
@@ -49,12 +77,31 @@ module SjuiTools
         private
 
         # Convert screen name to its generated View type name.
-        # Accepts both PascalCase ("OrderDetail") and snake_case ("order_detail").
+        # `screen` is the layout JSON filename (snake_case per spec); codegen
+        # maps to PascalCase + "View" (e.g. "order_detail" → "OrderDetailView").
+        # PascalCase input is accepted (passes through) for backward compat.
         def embedded_view_name(screen)
           if screen.include?('_')
             screen.split('_').map(&:capitalize).join + 'View'
           else
             "#{screen}View"
+          end
+        end
+
+        # Render a single params value as Swift expression. Supports literals
+        # (string/number/bool) and @{binding} → `data.{prop}`.
+        def render_param_value(value)
+          if value.is_a?(String) && is_binding?(value)
+            "data.#{extract_binding_property(value)}"
+          elsif value.is_a?(String)
+            "\"#{value}\""
+          elsif value == true || value == false
+            value.to_s
+          elsif value.is_a?(Numeric)
+            value.to_s
+          else
+            # Fallback — emit as Any literal
+            value.inspect
           end
         end
       end

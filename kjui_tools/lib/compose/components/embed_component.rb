@@ -21,6 +21,8 @@ module KjuiTools
           embed_id = json_data['id'] || 'embed'
           navigation_mode = json_data['navigationMode'] || 'delegate'
           nav_mode_kotlin = navigation_mode == 'isolated' ? 'EmbedNavigationMode.Isolated' : 'EmbedNavigationMode.Delegate'
+          params = json_data['params'] || {}
+          events = json_data['events'] || {}
 
           # Imports needed in the generated parent screen file.
           required_imports&.add(:embed_container)
@@ -29,11 +31,34 @@ module KjuiTools
           # compose_builder's import resolver maps "tabview:Name" → import path.
           # We reuse the same convention so the Embed reference is wired through.
           required_imports&.add("tabview:#{embedded_view_class(screen)}")
+          required_imports&.add(:embedded_event) unless events.empty?
 
           code  = indent("// Embed: #{screen}", depth)
           code += "\n" + indent('EmbedContainer(', depth)
           code += "\n" + indent("embedId = \"#{embed_id}\",", depth + 1)
-          code += "\n" + indent("navigationMode = #{nav_mode_kotlin}", depth + 1)
+          unless params.empty?
+            code += "\n" + indent('params = mapOf(', depth + 1)
+            params.each_with_index do |(key, value), idx|
+              expr = render_param_value(value)
+              comma = idx == params.size - 1 ? '' : ','
+              code += "\n" + indent("\"#{key}\" to #{expr}#{comma}", depth + 2)
+            end
+            code += "\n" + indent('),', depth + 1)
+          end
+          if events.empty?
+            code += "\n" + indent("navigationMode = #{nav_mode_kotlin}", depth + 1)
+          else
+            code += "\n" + indent("navigationMode = #{nav_mode_kotlin},", depth + 1)
+            code += "\n" + indent('eventBridge = { event ->', depth + 1)
+            code += "\n" + indent('if (event is EmbeddedEvent.Named) {', depth + 2)
+            code += "\n" + indent('when (event.name) {', depth + 3)
+            events.each do |event_name, handler|
+              code += "\n" + indent("\"#{event_name}\" -> viewModel.#{handler}(event.payload)", depth + 4)
+            end
+            code += "\n" + indent('}', depth + 3)
+            code += "\n" + indent('}', depth + 2)
+            code += "\n" + indent('}', depth + 1)
+          end
           code += "\n" + indent(') { embedScope ->', depth)
           code += "\n" + indent("#{embedded_view_class(screen)}(", depth + 1)
           code += "\n" + indent('viewModel = androidx.lifecycle.viewmodel.compose.viewModel(', depth + 2)
@@ -45,10 +70,30 @@ module KjuiTools
           code
         end
 
+        # Convert screen value (layout JSON filename, snake_case) to its
+        # generated composable class name (PascalCase + "View").
+        # PascalCase input passes through for backward compat.
         def self.embedded_view_class(screen)
-          # Accept both PascalCase ("OrderDetail") and snake_case ("order_detail").
           base = screen.include?('_') ? screen.split('_').map(&:capitalize).join : screen
           "#{base}View"
+        end
+
+        # Render a single params value as Kotlin expression. Supports literals
+        # and @{binding} → `data.{prop}`.
+        def self.render_param_value(value)
+          if value.is_a?(String) && value =~ /^@\{(.+)\}$/
+            "data.#{Regexp.last_match(1)}"
+          elsif value.is_a?(String)
+            "\"#{value}\""
+          elsif value == true || value == false
+            value.to_s
+          elsif value.is_a?(Integer)
+            value.to_s
+          elsif value.is_a?(Float)
+            "#{value}f"
+          else
+            value.inspect
+          end
         end
 
         def self.indent(text, level)

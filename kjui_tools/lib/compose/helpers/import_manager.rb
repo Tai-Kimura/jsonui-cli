@@ -144,6 +144,7 @@ module KjuiTools
                                "import com.kotlinjsonui.dynamic.SafeAreaConfig"],
             embed_container: ["import com.kotlinjsonui.dynamic.embed.EmbedContainer",
                               "import com.kotlinjsonui.dynamic.embed.EmbedNavigationMode"],
+            embedded_event: "import com.kotlinjsonui.dynamic.embed.EmbeddedEvent",
             viewmodel_compose: "import androidx.lifecycle.viewmodel.compose.viewModel",
             composition_local_provider: "import androidx.compose.runtime.CompositionLocalProvider",
             window_size_class: ["import androidx.compose.material3.windowsizeclass.WindowSizeClass",
