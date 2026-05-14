@@ -422,6 +422,47 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     end
   end
 
+  describe '#convert with responsive block (regression: sjui-responsive-collection-columns-not-applied)' do
+    it 'emits an if/else size class branch when responsive.regular.columns is set' do
+      component = {
+        'type' => 'Collection',
+        'id' => 'grid_collection',
+        'columns' => 2,
+        'responsive' => {
+          'regular' => { 'columns' => 5 }
+        }
+      }
+      code = described_class.new(component).convert
+      expect(code).to include('if horizontalSizeClass == .regular {')
+      expect(code).to include('} else {')
+    end
+
+    it 'uses the overridden column count in the regular branch' do
+      component = {
+        'type' => 'Collection',
+        'id' => 'grid_collection',
+        'columns' => 2,
+        'responsive' => {
+          'regular' => { 'columns' => 5 }
+        }
+      }
+      code = described_class.new(component).convert
+      expect(code).to include('count: 5')
+      expect(code).to include('count: 2')
+    end
+
+    it 'leaves non-responsive collections untouched (regression check)' do
+      component = {
+        'type' => 'Collection',
+        'id' => 'grid_collection',
+        'columns' => 3
+      }
+      code = described_class.new(component).convert
+      expect(code).not_to include('horizontalSizeClass')
+      expect(code).to include('count: 3')
+    end
+  end
+
   describe '#to_camel_case' do
     let(:converter) { described_class.new({ 'type' => 'Collection' }) }
 

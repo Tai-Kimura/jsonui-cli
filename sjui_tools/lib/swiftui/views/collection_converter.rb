@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 
 require_relative 'base_view_converter'
+require_relative 'responsive_helper'
+require_relative '../../core/responsive_resolver'
 
 module SjuiTools
   module SwiftUI
@@ -11,7 +13,19 @@ module SjuiTools
           @data_properties = data_properties || []
         end
 
+        # Top-level entry: when a `responsive` block is present, regenerate the
+        # collection per size-class branch with the merged attrs. Collection is
+        # not a generic container (no children closure), so view_converter's
+        # responsive wrapper can't host it — we have to handle it locally.
         def convert
+          if JsonUIShared::ResponsiveResolver.responsive?(@component)
+            return convert_responsive
+          end
+
+          convert_non_responsive
+        end
+
+        def convert_non_responsive
           id = @component['id'] || 'collection'
           columns = @component['columns'] || 1
           # Support both 'layout' and 'orientation' attributes for horizontal/vertical
@@ -413,7 +427,45 @@ module SjuiTools
 
           generated_code
         end
-        
+
+        # Wrap convert_non_responsive in a size-class if/else, regenerating the
+        # full collection per branch with merged attrs. Mirrors the kjui pattern
+        # (compose_builder dispatches per-branch with `generate_non_responsive_component`).
+        # Output is inline (not a separate function) because Collection's
+        # generated code is self-contained per branch.
+        #
+        # `@modifier_bag` is reset per branch because `apply_modifiers` at the
+        # end of `convert_non_responsive` calls `emit_all` against it. Without
+        # a reset, branch N would re-emit modifiers accumulated by branch N-1.
+        def convert_responsive
+          branches = JsonUIShared::ResponsiveResolver.build_branches(@component)
+          saved_component = @component
+
+          branches.each_with_index do |branch, idx|
+            condition = branch[:size_class] ? Views::ResponsiveHelper.size_class_condition(branch[:size_class]) : nil
+
+            if idx == 0 && condition
+              add_line "if #{condition} {"
+            elsif condition
+              add_line "} else if #{condition} {"
+            elsif idx > 0
+              add_line "} else {"
+            end
+
+            branch_attrs = branch[:attrs].dup
+            branch_attrs.delete('responsive')
+            @component = branch_attrs
+            @modifier_bag = ModifierBag.new
+            @indent_level += 1
+            convert_non_responsive
+            @indent_level -= 1
+          end
+
+          add_line "}" if branches.size > 1
+          @component = saved_component
+          generated_code
+        end
+
         private
 
         # Non-lazy path: no ScrollView, no Lazy* containers. The Collection is

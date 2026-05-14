@@ -224,6 +224,81 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
     end
   end
 
+  describe '.build_responsive_modifiers (regression: sjui-responsive-maxwidth-centerhorizontal-not-applied)' do
+    it 'emits .frame(maxWidth:) when attrs has maxWidth' do
+      modifiers = described_class.build_responsive_modifiers({ 'maxWidth' => 480 }, nil)
+      expect(modifiers).to eq(['.frame(maxWidth: 480)'])
+    end
+
+    it 'emits .frame(maxWidth: .infinity, alignment: .center) for centerHorizontal alone' do
+      modifiers = described_class.build_responsive_modifiers({ 'centerHorizontal' => true }, nil)
+      expect(modifiers).to eq(['.frame(maxWidth: .infinity, alignment: .center)'])
+    end
+
+    it 'composes maxWidth and centerHorizontal into a single .frame' do
+      modifiers = described_class.build_responsive_modifiers(
+        { 'maxWidth' => 480, 'centerHorizontal' => true }, nil
+      )
+      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .center)'])
+    end
+
+    it 'emits maxHeight and minWidth/minHeight when present' do
+      modifiers = described_class.build_responsive_modifiers(
+        { 'minWidth' => 100, 'maxWidth' => 400, 'minHeight' => 50, 'maxHeight' => 200 }, nil
+      )
+      expect(modifiers).to eq(
+        ['.frame(minWidth: 100, maxWidth: 400, minHeight: 50, maxHeight: 200)']
+      )
+    end
+
+    it 'expands centerInParent into both axes' do
+      modifiers = described_class.build_responsive_modifiers({ 'centerInParent' => true }, nil)
+      expect(modifiers).to eq(
+        ['.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)']
+      )
+    end
+
+    it 'returns an empty array when no recognized keys are present' do
+      modifiers = described_class.build_responsive_modifiers(
+        { 'orientation' => 'horizontal', 'spacing' => 24 }, nil
+      )
+      expect(modifiers).to eq([])
+    end
+  end
+
+  describe '.generate_container_function (regression: maxWidth/centerHorizontal in responsive override)' do
+    let(:component_with_size_override) do
+      {
+        'type' => 'View',
+        'orientation' => 'vertical',
+        'spacing' => 0,
+        'responsive' => {
+          'regular' => { 'maxWidth' => 480, 'centerHorizontal' => true }
+        }
+      }
+    end
+
+    let(:converter_for_override) do
+      SjuiTools::SwiftUI::Views::ViewConverter.new(component_with_size_override, 0)
+    end
+
+    it 'emits .frame(maxWidth: 480, alignment: .center) in the regular branch' do
+      code = described_class.generate_container_function(
+        'responsive0', component_with_size_override, converter_for_override
+      )
+      expect(code).to include('.frame(maxWidth: 480, alignment: .center)')
+    end
+
+    it 'does not emit the frame modifier in the default branch (no override)' do
+      code = described_class.generate_container_function(
+        'responsive0', component_with_size_override, converter_for_override
+      )
+      # The default branch's VStack does not have an override of maxWidth/centerHorizontal,
+      # so build_responsive_modifiers returns [] for it. There should be exactly one .frame line.
+      expect(code.scan('.frame(maxWidth:').length).to eq(1)
+    end
+  end
+
   describe 'responsive? instance method (via include)' do
     let(:converter_class) do
       Class.new do

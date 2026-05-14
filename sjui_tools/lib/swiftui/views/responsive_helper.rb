@@ -186,14 +186,71 @@ module SjuiTools
         end
 
         # Build modifiers that vary across responsive branches.
-        # Currently returns an empty array — modifiers like padding, background, etc.
-        # that change per branch are included in the container itself.
-        # This hook exists for future extension.
+        #
+        # Container size + center-alignment overrides (`maxWidth`, `maxHeight`,
+        # `minWidth`, `minHeight`, `centerHorizontal`, `centerVertical`,
+        # `centerInParent`) are emitted here as a single combined `.frame(...)`
+        # so multiple calls don't stack incorrectly. The outer
+        # `apply_non_responsive_modifiers` path strips overridden keys, so any
+        # frame modifier for these keys MUST be (re-)emitted per branch — both
+        # for the overridden branch and the default branch — otherwise nothing
+        # is applied.
+        #
+        # Out of scope (handled v2):
+        #   width/height structural overrides, padding/margin/background.
+        #
         # @param attrs [Hash] merged attributes for a branch
-        # @param converter [BaseViewConverter] for helper access
+        # @param converter [BaseViewConverter] for helper access (currently unused)
         # @return [Array<String>] modifier lines
         def self.build_responsive_modifiers(attrs, _converter)
-          []
+          frame_args = []
+
+          max_width = attrs['maxWidth']
+          max_height = attrs['maxHeight']
+          min_width = attrs['minWidth']
+          min_height = attrs['minHeight']
+          center_h = attrs['centerHorizontal'] == true
+          center_v = attrs['centerVertical'] == true
+          center_p = attrs['centerInParent'] == true
+
+          # centerInParent expands into both axes.
+          center_h ||= center_p
+          center_v ||= center_p
+
+          # If center is requested without an explicit max on that axis, fall
+          # back to .infinity so the parent gives us room to center within.
+          if center_h && max_width.nil?
+            max_width = '.infinity'
+          end
+          if center_v && max_height.nil?
+            max_height = '.infinity'
+          end
+
+          frame_args << "minWidth: #{format_dimension(min_width)}" unless min_width.nil?
+          frame_args << "maxWidth: #{format_dimension(max_width)}" unless max_width.nil?
+          frame_args << "minHeight: #{format_dimension(min_height)}" unless min_height.nil?
+          frame_args << "maxHeight: #{format_dimension(max_height)}" unless max_height.nil?
+
+          # Any center request → `.center`. SwiftUI's frame alignment only
+          # matters along the constrained axis, so a uniform `.center` is the
+          # least surprising choice for the centerHorizontal-only case (which
+          # the bug report explicitly expects).
+          frame_args << 'alignment: .center' if center_h || center_v
+
+          modifiers = []
+          modifiers << ".frame(#{frame_args.join(', ')})" unless frame_args.empty?
+          modifiers
+        end
+
+        # Render a dimension literal. Numeric stays numeric; `.infinity` stays
+        # as-is; everything else is passed through (caller is expected to have
+        # validated upstream).
+        def self.format_dimension(value)
+          case value
+          when Numeric then value.to_s
+          when '.infinity' then '.infinity'
+          else value.to_s
+          end
         end
 
         # Resolve VStack alignment from gravity string
