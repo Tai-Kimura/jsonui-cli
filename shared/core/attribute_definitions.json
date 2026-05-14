@@ -4403,5 +4403,32 @@
         "onPageChanged"
       ]
     }
+  },
+  "Embed": {
+    "_comment": "Embeds another screen as a region of this layout. The embedded screen owns its own ViewModel (independent from the parent VM). Use for tablet master/detail or dashboard panels. See jsonui-cli/docs/plans/2026-05-11-embed-feature.md.",
+    "screen": {
+      "type": "string",
+      "required": true,
+      "description": "Layout JSON filename of the screen to embed (snake_case, no extension, relative to layout root). Codegen converts to PascalCase for the generated View class name; dynamic mode loads the layout JSON as-is."
+    },
+    "params": {
+      "type": [
+        "object",
+        "binding"
+      ],
+      "description": "Init params handed to the embedded screen's ViewModel (flat dict, no nesting in v1). Keys must be camelCase. Values may be literals or @{varName} bindings against the parent VM. VMs that implement applyInitParams(_:) receive these; others ignore them."
+    },
+    "navigationMode": {
+      "type": "string",
+      "enum": [
+        "delegate"
+      ],
+      "default": "delegate",
+      "description": "v1 supports 'delegate' only: embedded screen shares the parent's NavController/Router. push() bubbles to the parent; pop/dismiss/navigateBack are bounded at the embed (do not close the embed itself). 'isolated' (private nav stack) is deferred to v1.5."
+    },
+    "events": {
+      "type": "object",
+      "description": "Map of embedded-screen event names → parent VM handler names. Event keys must follow on[A-Z]... pattern. Handler values must reference existing entries in the parent VM's dataFlow.viewModel.methods or stateManagement.eventHandlers. Embedded VMs emit events via the lib-provided emit(name, payload) helper (no spec declaration required)."
+    }
   }
 }
