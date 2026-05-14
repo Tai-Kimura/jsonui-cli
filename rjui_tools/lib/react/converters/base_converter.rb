@@ -548,7 +548,8 @@ module RjuiTools
             'Blur' => BlurConverter,
             'CircleView' => CircleViewConverter,
             'Web' => WebConverter,
-            'TabView' => TabViewConverter
+            'TabView' => TabViewConverter,
+            'Embed' => EmbedConverter
           }[type] || ViewConverter
         end
 
