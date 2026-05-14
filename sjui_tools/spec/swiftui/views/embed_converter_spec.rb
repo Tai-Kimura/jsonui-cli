@@ -76,6 +76,28 @@ RSpec.describe SjuiTools::SwiftUI::Views::EmbedConverter do
       end
     end
 
+    context 'responsive block (regression: sjui-embed-ignores-responsive-block-on-child)' do
+      it 'wraps the EmbedContainer in if/else when responsive overrides width' do
+        code = convert(
+          'type' => 'Embed', 'id' => 'capturePane', 'screen' => 'photo_registration',
+          'width' => 420,
+          'responsive' => { 'regular' => { 'width' => 360 } }
+        )
+        expect(code).to include('if horizontalSizeClass == .regular {')
+        expect(code).to include('} else {')
+        expect(code).to include('.frame(width: 360)')
+        expect(code).to include('.frame(width: 420)')
+      end
+
+      it 'leaves non-responsive Embeds untouched (regression)' do
+        code = convert(
+          'type' => 'Embed', 'id' => 'p', 'screen' => 'foo', 'width' => 360
+        )
+        expect(code).not_to include('horizontalSizeClass')
+        expect(code).to include('.frame(width: 360)')
+      end
+    end
+
     context 'events wiring (P2)' do
       it 'emits an eventBridge dispatching to viewModel handlers by event name' do
         code = convert(

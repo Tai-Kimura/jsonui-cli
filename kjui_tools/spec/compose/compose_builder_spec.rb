@@ -553,6 +553,81 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       end
     end
 
+    describe 'data-only child filtering (regression: kjui-embed-with-responsive-codegen-malformed issue 5)' do
+      before do
+        builder.instance_variable_set(:@required_imports, Set.new)
+        builder.instance_variable_set(:@included_views, Set.new)
+        builder.instance_variable_set(:@cell_views, Set.new)
+        builder.instance_variable_set(:@custom_components, Set.new)
+      end
+
+      it 'returns empty string for data-only entries (no type, has data)' do
+        result = builder.send(:generate_component, { 'data' => [{ 'name' => 'foo' }] })
+        expect(result).to eq('')
+      end
+
+      it 'returns empty string for shared_data entries (no type)' do
+        result = builder.send(:generate_component, { 'shared_data' => [] })
+        expect(result).to eq('')
+      end
+
+      it 'returns empty string for variables entries (no type)' do
+        result = builder.send(:generate_component, { 'variables' => [] })
+        expect(result).to eq('')
+      end
+
+      it 'does not emit Box for plain data spec child' do
+        result = builder.send(:generate_component, { 'data' => [{ 'name' => 'captureFlow' }] })
+        expect(result).not_to include('Box')
+      end
+
+      it 'still generates components when type is present' do
+        result = builder.send(:generate_component, { 'type' => 'Text', 'text' => 'OK' })
+        expect(result).to include('Text(')
+      end
+    end
+
+    describe 'Embed responsive inline (regression: kjui-embed-with-responsive-codegen-malformed issues 1+2+4)' do
+      before do
+        builder.instance_variable_set(:@required_imports, Set.new)
+        builder.instance_variable_set(:@included_views, Set.new)
+        builder.instance_variable_set(:@cell_views, Set.new)
+        builder.instance_variable_set(:@custom_components, Set.new)
+        builder.instance_variable_set(:@responsive_functions, [])
+      end
+
+      let(:embed_json) do
+        {
+          'type' => 'Embed',
+          'id' => 'capturePane',
+          'screen' => 'photo_registration',
+          'width' => 420,
+          'responsive' => {
+            'regular' => { 'width' => 360 },
+            'regular-landscape' => { 'width' => 420 }
+          }
+        }
+      end
+
+      it 'emits inline if/else (not a private composable)' do
+        result = builder.send(:generate_component, embed_json, 0, nil)
+        expect(result).to include('if (')
+        expect(result).to include('windowSizeClass.widthSizeClass')
+        expect(result).not_to include('private fun Responsive')
+      end
+
+      it 'does not register a responsive helper function' do
+        builder.send(:generate_component, embed_json, 0, nil)
+        responsive_funcs = builder.instance_variable_get(:@responsive_functions)
+        expect(responsive_funcs).to be_empty
+      end
+
+      it 'inlines an EmbedContainer per branch' do
+        result = builder.send(:generate_component, embed_json, 0, nil)
+        expect(result.scan('EmbedContainer(').length).to be >= 2
+      end
+    end
+
     describe '#handle_container_result' do
       before do
         builder.instance_variable_set(:@required_imports, Set.new)

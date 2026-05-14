@@ -123,6 +123,28 @@ RSpec.describe KjuiTools::Compose::Components::EmbedComponent do
       end
     end
 
+    context 'import key convention (regression: kjui-embed-with-responsive-codegen-malformed issue 3)' do
+      it 'registers tabview: import key without View suffix (resolver appends it)' do
+        described_class.generate(
+          { 'type' => 'Embed', 'id' => 'p', 'screen' => 'home' },
+          0,
+          required_imports
+        )
+        expect(required_imports).to include('tabview:Home')
+        expect(required_imports).not_to include('tabview:HomeView')
+      end
+
+      it 'registers PascalCase snake_case screen without View suffix' do
+        described_class.generate(
+          { 'type' => 'Embed', 'id' => 'p', 'screen' => 'photo_registration' },
+          0,
+          required_imports
+        )
+        expect(required_imports).to include('tabview:PhotoRegistration')
+        expect(required_imports).not_to include('tabview:PhotoRegistrationView')
+      end
+    end
+
     context 'navigationMode' do
       it 'emits Delegate by default (v1)' do
         result = described_class.generate(

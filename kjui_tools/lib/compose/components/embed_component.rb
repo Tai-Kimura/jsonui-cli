@@ -28,9 +28,12 @@ module KjuiTools
           required_imports&.add(:embed_container)
           required_imports&.add(:viewmodel_compose)
           # The embedded screen's composable lives alongside other view files;
-          # compose_builder's import resolver maps "tabview:Name" → import path.
-          # We reuse the same convention so the Embed reference is wired through.
-          required_imports&.add("tabview:#{embedded_view_class(screen)}")
+          # compose_builder's import resolver maps "tabview:Name" → import path
+          # and APPENDS "View" itself (compose_builder.rb:1092). So we must
+          # register the PascalCase name WITHOUT the "View" suffix — same
+          # convention as TabView (`tabview_component.rb:25-26`). Registering
+          # "HomeView" here would round-trip to "HomeViewView".
+          required_imports&.add("tabview:#{embedded_screen_pascal(screen)}")
           required_imports&.add(:embedded_event) unless events.empty?
 
           code  = indent("// Embed: #{screen}", depth)
@@ -74,12 +77,17 @@ module KjuiTools
         # generated composable class name (PascalCase + "View").
         # PascalCase input passes through for backward compat.
         def self.embedded_view_class(screen)
-          base = if screen.include?('_')
-                   screen.split('_').map(&:capitalize).join
-                 else
-                   screen[0].to_s.upcase + screen[1..].to_s
-                 end
-          "#{base}View"
+          "#{embedded_screen_pascal(screen)}View"
+        end
+
+        # Just the PascalCase form of the screen name, without the "View" suffix.
+        # Used for import registration (compose_builder appends "View" itself).
+        def self.embedded_screen_pascal(screen)
+          if screen.include?('_')
+            screen.split('_').map(&:capitalize).join
+          else
+            screen[0].to_s.upcase + screen[1..].to_s
+          end
         end
 
         # Render a single params value as Kotlin expression. Supports literals
