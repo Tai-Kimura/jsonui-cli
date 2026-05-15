@@ -142,9 +142,15 @@ module KjuiTools
                                "import com.kotlinjsonui.components.CollectionStackAxis"],
             safe_area_config: ["import com.kotlinjsonui.dynamic.LocalSafeAreaConfig",
                                "import com.kotlinjsonui.dynamic.SafeAreaConfig"],
-            embed_container: ["import com.kotlinjsonui.dynamic.embed.EmbedContainer",
-                              "import com.kotlinjsonui.dynamic.embed.EmbedNavigationMode"],
-            embedded_event: "import com.kotlinjsonui.dynamic.embed.EmbeddedEvent",
+            # EmbedContainer + friends live in the MAIN library module (not
+            # `library-dynamic`). Static codegen emits `EmbedContainer(...)`
+            # into every consumer GeneratedView, which has to compile in
+            # release builds where the dynamic artifact isn't on the
+            # classpath. KotlinJsonUI >= 2.8.2 ships these at
+            # com.kotlinjsonui.embed.*.
+            embed_container: ["import com.kotlinjsonui.embed.EmbedContainer",
+                              "import com.kotlinjsonui.embed.EmbedNavigationMode"],
+            embedded_event: "import com.kotlinjsonui.embed.EmbeddedEvent",
             viewmodel_compose: "import androidx.lifecycle.viewmodel.compose.viewModel",
             composition_local_provider: "import androidx.compose.runtime.CompositionLocalProvider",
             window_size_class: ["import androidx.compose.material3.windowsizeclass.WindowSizeClass",
