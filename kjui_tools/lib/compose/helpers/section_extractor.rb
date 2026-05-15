@@ -47,10 +47,12 @@ module KjuiTools
 
         LAZY_DSL_KEYWORDS = %w[item items itemsIndexed stickyHeader stickyHeaders].freeze
 
-        # Modifier prefixes that need a parent scope receiver to compile.
+        # Modifier substrings that need a parent scope receiver to compile.
         # `.weight(` requires RowScope/ColumnScope; `.align(` requires the
         # corresponding scope; `.fillParentMaxSize(` / `.animateItemPlacement(`
-        # require LazyItemScope.
+        # / `.animateItem(` (Compose 1.7+) require LazyItemScope. We match
+        # these as substrings anywhere in the chunk body — see `cannot_lift?`
+        # for the rationale.
         SCOPE_BOUND_MODIFIER_PREFIXES = %w[
           .weight(
           .align(
@@ -61,6 +63,7 @@ module KjuiTools
           .fillParentMaxWidth(
           .fillParentMaxHeight(
           .animateItemPlacement(
+          .animateItem(
         ].freeze
 
         # Returns [new_body, [function_string, ...]]. When the body is shorter
@@ -333,20 +336,24 @@ module KjuiTools
             first_word = stripped.match(/^(\w+)/)&.[](1)
             return true if first_word && LAZY_DSL_KEYWORDS.include?(first_word)
 
-            # Inspect modifier-chain lines that precede the lambda body
-            # (i.e. before the brace depth becomes positive). A `.weight(`
-            # or `.align(` here means the chunk needs the parent's scope.
-            depth = 0
-            lines.each do |line|
-              s = line.strip
-              next if s.empty?
-
-              if depth.zero? && SCOPE_BOUND_MODIFIER_PREFIXES.any? { |m| s.start_with?(m) }
-                return true
-              end
-
-              depth += s.count('{') - s.count('}')
-            end
+            # Scope-bound modifier anywhere in the chunk — including:
+            #   (a) inline named-arg form on the opener line, e.g.
+            #       `VisibilityWrapper(modifier = Modifier.weight(1f), ...)`
+            #   (b) multi-step chains where the scope-bound call sits past
+            #       the first step, e.g.
+            #       `Box(modifier = Modifier.testTag(...).align(...).widthIn(...))`
+            #   (c) multi-line chains where the call lives on its own line.
+            # A previous version of this guard only inspected the opening
+            # modifier-chain lines that preceded the lambda body and matched
+            # by line-start, which missed (a) and (b). Lifting either form
+            # to a file-scope @Composable strips the parent's
+            # RowScope/ColumnScope/BoxScope/LazyItemScope receiver and the
+            # call no longer resolves.
+            # Substring match is safe: a false positive (e.g. `.weight(`
+            # inside a string literal — never actually emitted by our
+            # codegen) only suppresses extraction, never produces wrong
+            # code. Descendants are still reached via recursion.
+            return true if SCOPE_BOUND_MODIFIER_PREFIXES.any? { |m| code.include?(m) }
 
             false
           end
