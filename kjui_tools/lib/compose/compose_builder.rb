@@ -16,6 +16,7 @@ require_relative 'helpers/modifier_builder'
 require_relative 'helpers/resource_resolver'
 require_relative 'helpers/visibility_helper'
 require_relative 'helpers/responsive_helper'
+require_relative 'helpers/section_extractor'
 require_relative 'components/text_component'
 require_relative 'components/button_component'
 require_relative 'components/textfield_component'
@@ -845,6 +846,19 @@ module KjuiTools
           # Generate both static and dynamic versions
           static_content = generate_component(json_data, 1)
           dynamic_content = generate_dynamic_view_content(layout_name, json_data, 1)
+
+          # Lift oversized container children into file-scope @Composable
+          # private fun SectionN(data, viewModel) helpers so no single
+          # lambda crosses the JVM 65,536 byte / method bytecode limit.
+          # Mirrors sjui's view_updater section extraction. Helpers join
+          # the same RESPONSIVE_HELPERS marker block below.
+          static_content, section_functions = Helpers::SectionExtractor.extract(
+            static_content,
+            view_name: view_name,
+            data_type: "#{view_name}Data",
+            viewmodel_type: "#{view_name}ViewModel"
+          )
+          @responsive_functions.concat(section_functions) if section_functions.any?
 
           # Create content that switches based on DynamicModeManager
           composable_content = generate_mode_aware_content(layout_name, static_content, dynamic_content, 1)
