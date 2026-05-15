@@ -236,11 +236,16 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
       expect(fns.size).to be >= 4
     end
 
-    it 'refuses to split a container whose body declares a sibling `val` (textfield state pattern)' do
-      # `val textFieldState_x = rememberTextFieldState(...)` is consumed by
-      # the immediately-following `CustomTextField(state = textFieldState_x,
-      # ...)` call. Lifting either sibling would either lose the declaration
-      # or strand it. Skip the parent container entirely.
+    # Regression: kjui-section-extractor-val-var-guard-blocks-text-resolve-pattern.
+    # The previous guard (`children_have_val_var_sibling?`) refused to split
+    # any parent that had a `val foo = ...` child, on the assumption that
+    # such a binding might be consumed by a sibling that the extractor would
+    # otherwise strand. Now `merge_val_chunks` runs first: each val is fused
+    # with the latest subsequent sibling that references its name, so the
+    # fused chunk travels as a single liftable unit. For the TextField state
+    # pattern, this means val + LaunchedEffect + CustomTextField merge into
+    # one Section that self-contains the binding.
+    it 'fuses `val textFieldState_x = ...` with every subsequent referencing sibling so the merged chunk lifts as a single section' do
       body = <<~KOTLIN
         Column(modifier = Modifier.fillMaxSize()) {
             val textFieldState_one = rememberTextFieldState(initialText = "hello")
@@ -255,8 +260,82 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
         }
       KOTLIN
       new_body, fns = described_class.extract(body, **opts, line_threshold: 3)
-      expect(fns).to be_empty
-      expect(new_body).to eq(body)
+      expect(fns).not_to be_empty
+      # One Section function must own the entire textFieldState_one cluster:
+      # the val declaration plus both consumers.
+      merged = fns.find { |f| f.include?('val textFieldState_one') }
+      expect(merged).not_to be_nil
+      expect(merged).to include('LaunchedEffect(textFieldState_one.text)')
+      expect(merged).to include('CustomTextField(')
+      expect(merged).to include('state = textFieldState_one')
+      # No val/var leaks back to the parent body — every binding sits inside
+      # its Section function.
+      expect(new_body).not_to include('val textFieldState_one')
+    end
+
+    # Regression: kjui-section-extractor-val-var-guard-blocks-text-resolve-pattern.
+    # The mypage Text emit pattern: each Text node generates a
+    # `val resolved_textNNN = Configuration.Font.resolve(FontSpec(...))`
+    # immediately followed by the Text consumer that reads four fields off
+    # the binding. The bug report shows 308 such pairs in MypageGeneratedView;
+    # the old val guard refused to split any wrapper Column containing this
+    # pattern, leaving ~800 lines per section copy inline.
+    it 'fuses `val resolved_textNNN = Configuration.Font.resolve(...)` with the immediately-following Text consumer' do
+      body = <<~KOTLIN
+        Column(modifier = Modifier.testTag("hero_section")) {
+            Box(modifier = Modifier.testTag("avatar")) {
+                AsyncImage(model = data.userAvatarUrl)
+            }
+            val resolved_text348 = Configuration.Font.resolve(FontSpec(
+                family = null,
+                weight = FontWeight.Bold,
+                size = 23.sp,
+                italic = false
+            ))
+            Text(
+                text = "${data.userDisplayName}",
+                fontFamily = resolved_text348.family,
+                fontWeight = resolved_text348.weight,
+                fontSize = resolved_text348.size ?: TextUnit.Unspecified
+            )
+            val resolved_text349 = Configuration.Font.resolve(FontSpec(
+                family = null,
+                weight = null,
+                size = 15.sp,
+                italic = false
+            ))
+            Text(
+                text = "${data.userHandle}",
+                fontFamily = resolved_text349.family,
+                fontWeight = resolved_text349.weight,
+                fontSize = resolved_text349.size ?: TextUnit.Unspecified
+            )
+        }
+      KOTLIN
+
+      new_body, fns = described_class.extract(body, **opts, line_threshold: 10)
+
+      # 3 children of the wrapper Column lift cleanly: the Box, plus two
+      # (val + Text) merged pairs.
+      expect(fns.size).to eq(3)
+
+      # Each resolved_textNNN binding ends up in the SAME Section function
+      # as its Text consumer.
+      pair348 = fns.find { |f| f.include?('val resolved_text348') }
+      expect(pair348).not_to be_nil
+      expect(pair348).to include('"${data.userDisplayName}"')
+      expect(pair348).to include('fontFamily = resolved_text348.family')
+
+      pair349 = fns.find { |f| f.include?('val resolved_text349') }
+      expect(pair349).not_to be_nil
+      expect(pair349).to include('"${data.userHandle}"')
+      expect(pair349).to include('fontFamily = resolved_text349.family')
+
+      # No val survives in the parent body.
+      expect(new_body).not_to include('val resolved_text348')
+      expect(new_body).not_to include('val resolved_text349')
+      # Three Section calls inside the wrapper Column.
+      expect(new_body.scan(/Section\d+(?:_\d+)*\(data, viewModel\)/).size).to eq(3)
     end
 
     # Regression: kjui-section-extractor-responsive-else-branch-not-lifted.

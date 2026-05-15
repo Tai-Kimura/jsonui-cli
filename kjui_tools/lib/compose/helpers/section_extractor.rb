@@ -193,7 +193,23 @@ module KjuiTools
 
               children = find_children_inside(lines, container[:open_idx], container[:depth])
               next unless children && children.size > 1
-              next if children_have_val_var_sibling?(lines, children)
+              # Pre-merge `val foo = ...` children with subsequent siblings
+              # that reference `foo`, so the binding travels with its
+              # consumers into any extracted section. kjui codegen emits this
+              # pattern in two forms:
+              #   - `val resolved_textNNN = Configuration.Font.resolve(...)`
+              #     immediately followed by one Text consumer
+              #   - `val textFieldState_x = rememberTextFieldState(...)`
+              #     followed by one or more LaunchedEffect / CustomTextField
+              #     siblings that reference the state
+              # The earlier guard (refuse to split any parent whose children
+              # include a `val`) was overly broad: in mypage's wrapper
+              # Column, 30+ `val resolved_textNNN` siblings blocked the
+              # entire section from ever splitting, leaving 800+ lines
+              # inline per copy × 4 responsive combinations and re-tripping
+              # `Method too large`.
+              children = merge_val_chunks(lines, children)
+              next unless children.size > 1
               # A container whose children are ALL already-lifted
               # `SectionN(data, viewModel)` calls offers no lift potential.
               # Without this skip, such a container can tie on `total_lines`
@@ -312,6 +328,47 @@ module KjuiTools
           # If any child block starts with `val` / `var`, lifting siblings
           # could either lose the binding or strand it. Refuse to split the
           # whole parent container in that case.
+          def merge_val_chunks(lines, children)
+            return children if children.empty?
+
+            result = []
+            i = 0
+            while i < children.size
+              child = children[i]
+              name = val_name_of(lines, child)
+              if name && i + 1 < children.size
+                # Find the LAST subsequent sibling that references this
+                # binding. We merge val + every sibling up to and including
+                # that one — `\b#{name}\b` substring scan over each sibling's
+                # full body picks up nested references (e.g. a binding used
+                # inside a Composable lambda or modifier closure).
+                last_ref = i
+                ((i + 1)...children.size).each do |j|
+                  body = lines[children[j][:start]..children[j][:end_idx]].join("\n")
+                  last_ref = j if body =~ /\b#{Regexp.escape(name)}\b/
+                end
+                if last_ref > i
+                  result << { start: child[:start], end_idx: children[last_ref][:end_idx] }
+                  i = last_ref + 1
+                  next
+                end
+              end
+              result << child
+              i += 1
+            end
+            result
+          end
+
+          def val_name_of(lines, child)
+            (child[:start]..child[:end_idx]).each do |i|
+              s = lines[i].strip
+              next if s.empty?
+              m = s.match(/^(?:val|var)\s+(\w+)\b/)
+              return m && m[1]
+            end
+            nil
+          end
+
           def all_children_already_lifted?(lines, children)
             children.all? do |child|
               first_line = nil
@@ -322,19 +379,6 @@ module KjuiTools
                 break
               end
               !first_line.nil? && first_line =~ /\ASection\d+(?:_\d+)*\(data, viewModel\)\z/
-            end
-          end
-
-          def children_have_val_var_sibling?(lines, children)
-            children.any? do |child|
-              first_line = nil
-              (child[:start]..child[:end_idx]).each do |i|
-                content = lines[i].strip
-                next if content.empty?
-                first_line = content
-                break
-              end
-              !first_line.nil? && first_line =~ /^(val|var)\s+\w+\b/
             end
           end
 
@@ -349,12 +393,20 @@ module KjuiTools
             return false unless first
 
             stripped = first.strip
-            return true if stripped =~ /^\b(val|var)\s+\w+\b/
 
             # Already-lifted `SectionN(data, viewModel)` calls — lifting them
             # again would cause an infinite outer-loop iteration in `process`
             # (each pass would wrap the previous lift in another section).
             return true if stripped =~ /\ASection\d+(?:_\d+)*\(data, viewModel\)\z/
+
+            # Note: a chunk whose first line is `val foo = ...` is no longer
+            # blanket-refused here. `find_splittable_children` runs
+            # `merge_val_chunks` first so any val with a referencing sibling
+            # is fused into a multi-line chunk whose body self-contains the
+            # binding and its consumers — safe to lift as one section. An
+            # orphan val (no referencing sibling) survives as a 1-line chunk;
+            # lifting it into its own section is harmless (it's dead code
+            # in that case anyway).
 
             first_word = stripped.match(/^(\w+)/)&.[](1)
             return true if first_word && LAZY_DSL_KEYWORDS.include?(first_word)
