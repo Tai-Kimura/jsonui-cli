@@ -2,6 +2,7 @@
 
 require 'swiftui/views/view_converter'
 require 'swiftui/view_registry'
+require 'swiftui/converter_factory'
 
 RSpec.describe SjuiTools::SwiftUI::Views::ViewConverter do
   before(:all) do
@@ -293,6 +294,62 @@ RSpec.describe SjuiTools::SwiftUI::Views::ViewConverter do
         code = converter.convert
 
         expect(code).to include('.allowsHitTesting(false)')
+      end
+    end
+
+    # Regression: sjui-weightedhstack-fixedsize-overflows-with-matchparent-height
+    # A horizontal View with `height: matchParent` plus weighted children should
+    # tell SwiftJsonUI's WeightedHStack to honor the parent's vertical
+    # proposal — otherwise the inner `.fixedSize(vertical: true)` collapses
+    # to the child's natural height (which is `.infinity` for Embeds with
+    # `.frame(maxHeight: .infinity)`) and the stack overflows the pane.
+    context 'with horizontal weighted children and height: matchParent' do
+      let(:binding_registry) { SjuiTools::SwiftUI::Binding::BindingHandlerRegistry.new }
+      let(:converter_factory) { SjuiTools::SwiftUI::ConverterFactory.new(binding_registry) }
+      let(:view_registry) { SjuiTools::SwiftUI::ViewRegistry.new }
+      let(:component) do
+        {
+          'type' => 'View',
+          'orientation' => 'horizontal',
+          'width' => 'matchParent',
+          'height' => 'matchParent',
+          'child' => [
+            { 'type' => 'View', 'width' => 375 },
+            { 'type' => 'View', 'weight' => 1 }
+          ]
+        }
+      end
+
+      it 'emits WeightedHStack with hasMatchParentCrossAxis: true' do
+        converter = described_class.new(component, 0, nil, converter_factory, view_registry, binding_registry)
+        code = converter.convert
+        expect(code).to include('WeightedHStack(')
+        expect(code).to include('hasMatchParentCrossAxis: true')
+      end
+    end
+
+    context 'with horizontal weighted children but no height: matchParent' do
+      let(:binding_registry) { SjuiTools::SwiftUI::Binding::BindingHandlerRegistry.new }
+      let(:converter_factory) { SjuiTools::SwiftUI::ConverterFactory.new(binding_registry) }
+      let(:view_registry) { SjuiTools::SwiftUI::ViewRegistry.new }
+      let(:component) do
+        {
+          'type' => 'View',
+          'orientation' => 'horizontal',
+          'width' => 'matchParent',
+          'height' => 200,
+          'child' => [
+            { 'type' => 'View', 'width' => 100 },
+            { 'type' => 'View', 'weight' => 1 }
+          ]
+        }
+      end
+
+      it 'omits hasMatchParentCrossAxis (default false)' do
+        converter = described_class.new(component, 0, nil, converter_factory, view_registry, binding_registry)
+        code = converter.convert
+        expect(code).to include('WeightedHStack(')
+        expect(code).not_to include('hasMatchParentCrossAxis')
       end
     end
   end

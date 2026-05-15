@@ -45,6 +45,18 @@ module SjuiTools
             if frame_params.any?
               if @component['type'] == 'Label' || @component['type'] == 'Text'
                 frame_params << "alignment: #{label_frame_alignment}"
+              elsif @component['centerInParent'] == true ||
+                    @component['centerHorizontal'] == true ||
+                    @component['centerVertical'] == true
+                # Match the responsive container path
+                # (ResponsiveHelper.build_responsive_modifiers): when a center
+                # flag is set, the inner constraint frame centers its content.
+                # Leaf-path converters (extension converters like MarkdownText
+                # generated via `jui generate converter`) reach this branch
+                # because they run apply_modifiers directly — without this
+                # alignment, the maxWidth constraint shrinks the view but
+                # leaves it leading-aligned in its frame.
+                frame_params << 'alignment: .center'
               end
               @modifier_bag.append(:frame_constraints, ".frame(#{frame_params.join(', ')})")
             end

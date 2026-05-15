@@ -299,6 +299,150 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
     end
   end
 
+  # Regression: sjui-view-responsive-maxwidth-border-overflow
+  # `width: matchParent` + responsive `maxWidth + centerHorizontal` used to
+  # land the `.frame(maxWidth: .infinity)` from apply_frame_size BETWEEN the
+  # inner maxWidth frame and the decorations (background/cornerRadius/
+  # overlay), so the border ended up painted full-width. Fix: strip width
+  # from the collect_modifiers_for input when the center flag overrides it,
+  # and emit a single outer `.frame(.infinity, .center)` after decorations.
+  describe '.generate_container_function (regression: maxWidth + matchParent border overflow)' do
+    let(:bordered_button_component) do
+      {
+        'type' => 'View',
+        'orientation' => 'vertical',
+        'spacing' => 0,
+        'width' => 'matchParent',
+        'height' => 44,
+        'background' => '#FFFFFF',
+        'borderWidth' => 1,
+        'borderColor' => '#CCCCCC',
+        'cornerRadius' => 10,
+        'responsive' => {
+          'regular' => { 'maxWidth' => 320, 'centerHorizontal' => true }
+        },
+        'child' => [{ 'type' => 'Label', 'text' => 'Hi' }]
+      }
+    end
+
+    let(:converter_for_bordered) do
+      SjuiTools::SwiftUI::Views::ViewConverter.new(bordered_button_component, 0)
+    end
+
+    it 'emits exactly one inner .frame(maxWidth: 320, alignment: .center)' do
+      code = described_class.generate_container_function(
+        'responsive0', bordered_button_component, converter_for_bordered
+      )
+      expect(code.scan('.frame(maxWidth: 320, alignment: .center)').length).to eq(1)
+    end
+
+    it 'emits the outer .frame(maxWidth: .infinity, alignment: .center) AFTER decorations' do
+      code = described_class.generate_container_function(
+        'responsive0', bordered_button_component, converter_for_bordered
+      )
+      # Decorations are present in the regular branch.
+      bg_idx = code.index('.background(')
+      corner_idx = code.index('.cornerRadius(')
+      overlay_idx = code.index('.overlay(')
+      outer_frame_idx = code.index('.frame(maxWidth: .infinity, alignment: .center)')
+      expect([bg_idx, corner_idx, overlay_idx, outer_frame_idx]).to all(be_truthy)
+      # Decoration emit positions must precede the outer .infinity frame in the regular branch.
+      regular_section = code[/horizontalSizeClass == \.regular.*?(?=\} else \{|\}\s*\}\s*\z)/m] || code
+      bg_in_regular = regular_section.index('.background(')
+      outer_in_regular = regular_section.index('.frame(maxWidth: .infinity, alignment: .center)')
+      expect(bg_in_regular).not_to be_nil
+      expect(outer_in_regular).not_to be_nil
+      expect(bg_in_regular).to be < outer_in_regular
+    end
+
+    it 'does not emit a stray .frame(maxWidth: .infinity) from matchParent inside the regular branch' do
+      code = described_class.generate_container_function(
+        'responsive0', bordered_button_component, converter_for_bordered
+      )
+      # Only one .frame(maxWidth: .infinity, ...) — the outer wrap. The
+      # apply_frame_size emit for `width: matchParent` is suppressed here.
+      regular_section = code[/horizontalSizeClass == \.regular.*?(?=\} else \{)/m]
+      expect(regular_section).not_to be_nil
+      expect(regular_section.scan(/\.frame\(maxWidth: \.infinity/).length).to eq(1)
+    end
+  end
+
+  # Regression: sjui-markdowntext-custom-converter-centerhorizontal-missing
+  # Leaf-path extension converters (jui generate converter <Name>) reach
+  # apply_modifiers directly. Without the alignment hook on a center flag,
+  # `maxWidth: N` shrinks the view but leaves it leading-aligned in its frame.
+  describe 'apply_frame_constraints alignment for centerHorizontal/Vertical (regression: markdowntext)' do
+    it 'adds alignment: .center for non-Label types when centerHorizontal is true' do
+      component = {
+        'type' => 'MarkdownText',
+        'centerHorizontal' => true,
+        'maxWidth' => 480
+      }
+      converter = SjuiTools::SwiftUI::Views::BaseViewConverter.new(component)
+      converter.send(:apply_modifiers)
+      lines = converter.instance_variable_get(:@modifier_bag).to_lines
+      expect(lines).to include('.frame(maxWidth: 480, alignment: .center)')
+    end
+
+    it 'adds alignment: .center for centerVertical' do
+      component = {
+        'type' => 'MarkdownText',
+        'centerVertical' => true,
+        'maxHeight' => 200
+      }
+      converter = SjuiTools::SwiftUI::Views::BaseViewConverter.new(component)
+      converter.send(:apply_modifiers)
+      lines = converter.instance_variable_get(:@modifier_bag).to_lines
+      expect(lines).to include('.frame(maxHeight: 200, alignment: .center)')
+    end
+
+    it 'adds alignment: .center for centerInParent' do
+      component = {
+        'type' => 'MarkdownText',
+        'centerInParent' => true,
+        'maxWidth' => 320,
+        'maxHeight' => 200
+      }
+      converter = SjuiTools::SwiftUI::Views::BaseViewConverter.new(component)
+      converter.send(:apply_modifiers)
+      lines = converter.instance_variable_get(:@modifier_bag).to_lines
+      expect(lines).to include('.frame(maxWidth: 320, maxHeight: 200, alignment: .center)')
+    end
+
+    it 'leaves Label types using label_frame_alignment (textAlign-aware)' do
+      component = {
+        'type' => 'Label',
+        'centerHorizontal' => true,
+        'maxWidth' => 480,
+        'textAlign' => 'center'
+      }
+      converter = SjuiTools::SwiftUI::Views::BaseViewConverter.new(component)
+      converter.send(:apply_modifiers)
+      lines = converter.instance_variable_get(:@modifier_bag).to_lines
+      # Label uses label_frame_alignment which returns .center for textAlign:center
+      expect(lines.any? { |l| l.start_with?('.frame(maxWidth: 480, alignment:') }).to be true
+    end
+  end
+
+  describe '.numeric_dimension?' do
+    it 'accepts Integer / Float' do
+      expect(described_class.numeric_dimension?(480)).to be true
+      expect(described_class.numeric_dimension?(320.5)).to be true
+    end
+
+    it 'accepts all-digit Strings' do
+      expect(described_class.numeric_dimension?('480')).to be true
+      expect(described_class.numeric_dimension?('320.5')).to be true
+    end
+
+    it 'rejects .infinity / matchParent / bindings / nil' do
+      expect(described_class.numeric_dimension?('.infinity')).to be false
+      expect(described_class.numeric_dimension?('matchParent')).to be false
+      expect(described_class.numeric_dimension?('@{maxW}')).to be false
+      expect(described_class.numeric_dimension?(nil)).to be false
+    end
+  end
+
   describe 'responsive? instance method (via include)' do
     let(:converter_class) do
       Class.new do
