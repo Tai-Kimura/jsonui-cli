@@ -148,6 +148,23 @@ RSpec.describe SjuiTools::SwiftUI::Generators::ConverterGenerator do
       expect(result).to include('def component_name')
       expect(result).to include('"MyButton"')
     end
+
+    # Regression: sjui-markdown-text-converter-ignores-responsive
+    # Generated extension converters must check for a `responsive` block
+    # at the top of `convert` and delegate to ResponsiveHelper.generate_leaf_function
+    # so size-class overrides (maxWidth / centerHorizontal / margin / etc.)
+    # take effect. The fix is in the SCAFFOLD template — existing converter
+    # files in consumer projects need to be regenerated to pick this up.
+    it 'emits a responsive leaf wrapper at the top of convert (regression: sjui-markdown-text-converter-ignores-responsive)' do
+      generator = described_class.new('MarkdownText')
+      result = generator.send(:converter_template)
+
+      expect(result).to include("require_relative '../responsive_helper'")
+      expect(result).to include('ResponsiveHelper.responsive?(@component)')
+      expect(result).to include('ResponsiveHelper.generate_leaf_function(')
+      expect(result).to include('@factory.next_responsive_name')
+      expect(result).to include('@factory.register_responsive_function(func_code)')
+    end
   end
 
   describe '#create_initial_mappings_file (private)' do

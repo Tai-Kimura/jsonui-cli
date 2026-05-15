@@ -280,6 +280,7 @@ module SjuiTools
             #{marker_header}
 
             require_relative '../base_view_converter'
+            require_relative '../responsive_helper'
 
             module SjuiTools
               module SwiftUI
@@ -293,6 +294,26 @@ module SjuiTools
                       end
 
                       def convert
+                        # Responsive override (regression: sjui-markdown-text-converter-ignores-responsive)
+                        # When this component has a `responsive` block, route through
+                        # ResponsiveHelper.generate_leaf_function so the size-class
+                        # branches (maxWidth / centerHorizontal / padding / margin /
+                        # background / cornerRadius / ...) take effect. Without this
+                        # the override silently drops, since BaseViewConverter#convert
+                        # does not check responsive — that's ViewConverter's role for
+                        # built-in `View` containers, and each extension converter has
+                        # to opt in on its own surface.
+                        if SjuiTools::SwiftUI::Views::ResponsiveHelper.responsive?(@component) && @factory
+                          func_name = @factory.next_responsive_name
+                          func_code = SjuiTools::SwiftUI::Views::ResponsiveHelper.generate_leaf_function(
+                            func_name, @component, @factory, @indent_level,
+                            @action_manager, @registry, @binding_registry
+                          )
+                          @factory.register_responsive_function(func_code)
+                          add_line "\#{func_name}()"
+                          return generated_code
+                        end
+
             #{generate_container_check}
 
                         # Collect parameters
