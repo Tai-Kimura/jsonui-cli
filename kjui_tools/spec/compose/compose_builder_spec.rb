@@ -152,6 +152,63 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         expect(content).not_to include('androidx.compose.material3.windowsizeclass')
       end
     end
+
+    # Regression: kjui-auto-extract-sections-like-sjui.
+    # End-to-end check that the section extractor runs as part of the build
+    # and parks helpers in the RESPONSIVE_HELPERS marker block. Large layouts
+    # are required to cross the line-threshold, so we fabricate one with many
+    # text children under a single root container.
+    context 'when JSON has enough top-level children to cross the section threshold' do
+      before do
+        # Each panel is a plain `View` (Column) wrapping a single Spacer.
+        # Spacer-only panels emit no `val resolved_text...` sibling — that
+        # would trip the val/var-sibling guard and block section extraction.
+        # 60 panels easily clear the 100-line threshold once the parent
+        # Column accumulates their bodies.
+        panel_count = 60
+        children = Array.new(panel_count) do |i|
+          {
+            'type' => 'View',
+            'id' => "panel_#{i}",
+            'orientation' => 'vertical',
+            'child' => [
+              { 'type' => 'Spacer', 'height' => 8 }
+            ]
+          }
+        end
+        layout = {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'child' => children
+        }
+        File.write(File.join(layouts_dir, 'big_view.json'), JSON.generate(layout))
+      end
+
+      it 'lifts oversized children into file-scope @Composable private fun Section* helpers' do
+        builder.build_file(File.join(layouts_dir, 'big_view.json'))
+        gen_path = File.join(
+          temp_dir,
+          'src/main/kotlin/com/example/app/views/big_view/BigViewGeneratedView.kt'
+        )
+        content = File.read(gen_path)
+
+        # Helpers block appears with at least one Section helper.
+        expect(content).to include('// >>> RESPONSIVE_HELPERS_START')
+        expect(content).to include('// >>> RESPONSIVE_HELPERS_END')
+        expect(content).to match(/@Composable\s+private fun Section\d+/)
+
+        # Section helpers carry the (data, viewModel) signature so the
+        # call sites in the parent body resolve. Generated views always
+        # carry these signatures; we check they appear at least twice (once
+        # for the GeneratedView entry-point, plus at least one Section).
+        expect(content.scan(/data:\s+BigViewData/).size).to be >= 2
+        expect(content.scan(/viewModel:\s+BigViewViewModel/).size).to be >= 2
+
+        # At least one section call appears inside the body marker block.
+        body_block = content[/\/\/ >>> GENERATED_CODE_START.*?\/\/ >>> GENERATED_CODE_END/m]
+        expect(body_block).to match(/Section\d+\(data, viewModel\)/)
+      end
+    end
   end
 
   describe 'private helper methods' do
