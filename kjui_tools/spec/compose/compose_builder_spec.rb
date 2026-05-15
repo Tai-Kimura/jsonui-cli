@@ -691,6 +691,66 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       end
     end
 
+    # Regression: kjui-collection-responsive-helper-data-viewmodel-scope-leak
+    # Collection bodies reference enclosing `data.<prop>` for the cell data
+    # source and a per-cell `viewModel(key = "..._${viewModel.hashCode()}")`
+    # invocation. Hoisting the body into a file-scope private composable
+    # leaves both unresolved. Collection + responsive must inline like Embed.
+    describe 'Collection responsive inline (regression: kjui-collection-responsive-helper-data-viewmodel-scope-leak)' do
+      before do
+        builder.instance_variable_set(:@required_imports, Set.new)
+        builder.instance_variable_set(:@included_views, Set.new)
+        builder.instance_variable_set(:@cell_views, Set.new)
+        builder.instance_variable_set(:@custom_components, Set.new)
+        builder.instance_variable_set(:@responsive_functions, [])
+        builder.instance_variable_set(:@responsive_counter, 0)
+      end
+
+      let(:collection_json) do
+        {
+          'type' => 'Collection',
+          'id' => 'items_grid',
+          'width' => 'matchParent',
+          'height' => 'matchParent',
+          'columns' => 2,
+          'responsive' => {
+            'regular' => { 'columns' => 5 }
+          },
+          'sections' => [
+            {
+              'cellsBinding' => '@{gridItems.sections[0].cells}',
+              'cell' => 'shop_item_list_item'
+            }
+          ]
+        }
+      end
+
+      it 'emits inline if/else for the Collection (not a private composable)' do
+        result = builder.send(:generate_component, collection_json, 0, nil)
+        expect(result).to include('if (LocalConfiguration.current.screenWidthDp >= 840)')
+        # No file-scope helper registered for the Collection.
+        funcs = builder.instance_variable_get(:@responsive_functions)
+        expect(funcs).to be_empty
+        # No `ResponsiveCollection<N>()` call either.
+        expect(result).not_to match(/ResponsiveCollection\d+\(\)/)
+      end
+
+      it 'pulls in local_configuration but not window_size_class' do
+        builder.send(:generate_component, collection_json, 0, nil)
+        imports = builder.instance_variable_get(:@required_imports)
+        expect(imports).to include(:local_configuration)
+        expect(imports).not_to include(:window_size_class)
+      end
+
+      it 'emits both branches with their respective column counts' do
+        result = builder.send(:generate_component, collection_json, 0, nil)
+        # regular branch: 5 columns
+        expect(result).to match(/GridCells\.Fixed\(5\)/)
+        # default branch: 2 columns
+        expect(result).to match(/GridCells\.Fixed\(2\)/)
+      end
+    end
+
     # Regression: kjui-view-responsive-block-codegen-broken
     # A non-Embed View node (Container, etc.) with a `responsive` block goes
     # through the extracted-private-composable path. That helper must:
