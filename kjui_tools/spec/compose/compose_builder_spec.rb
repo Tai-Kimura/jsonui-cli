@@ -757,6 +757,59 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       end
     end
 
+    # Regression: sjui-kjui-responsive-non-frame-attrs-dropped
+    # The bug reporter flagged this as iOS-confirmed and Android-suspect
+    # ("kjui は理論上は non-frame attrs を branch ごとに適用できるはず").
+    # kjui IS correct here because each branch re-runs
+    # Components::ContainerComponent.generate(attrs, ...) with the
+    # base-merged-with-override attrs, and ContainerComponent already
+    # delegates margin / padding / background / etc. to ModifierBuilder.
+    # These tests lock in that behavior.
+    describe 'View responsive non-frame attrs reach the branch (regression: sjui-kjui-responsive-non-frame-attrs-dropped)' do
+      before do
+        builder.instance_variable_set(:@required_imports, Set.new)
+        builder.instance_variable_set(:@included_views, Set.new)
+        builder.instance_variable_set(:@cell_views, Set.new)
+        builder.instance_variable_set(:@custom_components, Set.new)
+        builder.instance_variable_set(:@responsive_functions, [])
+        builder.instance_variable_set(:@responsive_counter, 0)
+      end
+
+      it 'override-only topMargin emits .padding(top = 80.dp) in the regular branch' do
+        json = {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'responsive' => {
+            'regular' => { 'topMargin' => 80 }
+          },
+          'child' => [{ 'type' => 'Text', 'text' => 'Hi' }]
+        }
+        builder.send(:generate_component, json, 0, nil)
+        helper = builder.instance_variable_get(:@responsive_functions).first
+        expect(helper).to include('80.dp')
+        # The regular branch is the only one with the override; default
+        # branch should NOT carry the 80 padding.
+        expect(helper.scan(/80\.dp/).length).to eq(1)
+      end
+
+      it 'base + override leftPadding emits 32 in regular branch and 16 in default' do
+        json = {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'leftPadding' => 16,
+          'responsive' => {
+            'regular' => { 'leftPadding' => 32 }
+          },
+          'child' => [{ 'type' => 'Text', 'text' => 'Hi' }]
+        }
+        builder.send(:generate_component, json, 0, nil)
+        helper = builder.instance_variable_get(:@responsive_functions).first
+        # Regular and default branches each emit their respective values.
+        expect(helper).to include('32.dp')
+        expect(helper).to include('16.dp')
+      end
+    end
+
     describe '#handle_container_result' do
       before do
         builder.instance_variable_set(:@required_imports, Set.new)
