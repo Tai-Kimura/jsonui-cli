@@ -163,6 +163,79 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
       expect(fns.size).to be >= 4
     end
 
+    # Regression: kjui-section-extractor-scope-bound-modifier-guard-incomplete.
+    # `VisibilityWrapper(modifier = Modifier.weight(1f), ...)` puts `.weight(`
+    # inline in a named-argument value on the OPENING line — not at the line
+    # start, and not on its own modifier-chain line. The earlier guard only
+    # matched line-start prefixes and missed this form, lifting the chunk
+    # into a file-scope @Composable where `weight` no longer resolves against
+    # any scope receiver. Symptom in the consumer: 50 of 51 compile errors
+    # of the form `Expression 'weight' of type 'Float' cannot be invoked`.
+    it 'does not lift a chunk whose opening line carries `.weight(` inside an inline `modifier =` named argument' do
+      body = <<~KOTLIN
+        Row(modifier = Modifier.fillMaxWidth().height(44.dp)) {
+            VisibilityWrapper(visibility = data.purchaseTabVisibility, modifier = Modifier.weight(1f)) {
+                Box(modifier = Modifier.fillMaxHeight()) {
+                    Text(text = data.purchaseTabLabel)
+                    Text(text = data.purchaseTabBadge)
+                    Image(painter = painterResource(R.drawable.tab_icon))
+                }
+            }
+            VisibilityWrapper(visibility = data.searchTabVisibility, modifier = Modifier.weight(1f)) {
+                Box(modifier = Modifier.fillMaxHeight()) {
+                    Text(text = data.searchTabLabel)
+                    Text(text = data.searchTabBadge)
+                    Image(painter = painterResource(R.drawable.tab_icon))
+                }
+            }
+        }
+      KOTLIN
+      new_body, fns = described_class.extract(body, **opts, line_threshold: 6)
+
+      # The `.weight(1f)` calls stay in the body — both VisibilityWrapper
+      # chunks are not lifted.
+      expect(new_body.scan('Modifier.weight(1f)').size).to eq(2)
+      # No lifted section function carries `.weight(` itself (would lose
+      # the scope receiver and fail to compile).
+      fns.each { |f| expect(f).not_to include('.weight(') }
+      # Descendants inside each VisibilityWrapper still get lifted via
+      # recursion (the inner Box children).
+      expect(fns.size).to be >= 4
+    end
+
+    # Same regression, second form: `.align(` appears mid-chain on a single
+    # `Modifier.testTag(...).semantics{...}.align(...).widthIn(...)` line.
+    # Match must be on the full chunk body, not a line-start anchor.
+    it 'does not lift a chunk whose opening modifier-chain has `.align(` past the first step' do
+      body = <<~KOTLIN
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.testTag("next_button_wrapper").semantics { testTagsAsResourceId = true }.align(Alignment.CenterHorizontally).widthIn(max = 720.dp).padding(bottom = 16.dp)) {
+                Row {
+                    Text(text = data.label)
+                    Text(text = data.helper)
+                    Text(text = data.caption)
+                    Text(text = data.footnote)
+                }
+            }
+            Box(modifier = Modifier.testTag("prev_button_wrapper").semantics { testTagsAsResourceId = true }.align(Alignment.CenterHorizontally).widthIn(max = 720.dp).padding(bottom = 16.dp)) {
+                Row {
+                    Text(text = data.label2)
+                    Text(text = data.helper2)
+                    Text(text = data.caption2)
+                    Text(text = data.footnote2)
+                }
+            }
+        }
+      KOTLIN
+      new_body, fns = described_class.extract(body, **opts, line_threshold: 6)
+
+      # The `.align(` calls stay in the body — both Box chunks are not lifted.
+      expect(new_body.scan('.align(Alignment.CenterHorizontally)').size).to eq(2)
+      fns.each { |f| expect(f).not_to include('.align(') }
+      # Recursion still reaches the inner Row → Text children.
+      expect(fns.size).to be >= 4
+    end
+
     it 'refuses to split a container whose body declares a sibling `val` (textfield state pattern)' do
       # `val textFieldState_x = rememberTextFieldState(...)` is consumed by
       # the immediately-following `CustomTextField(state = textFieldState_x,
