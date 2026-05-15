@@ -436,5 +436,98 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
         expect(result).to eq("    line1\n\n    line2")
       end
     end
+
+    # Regression: jui-collection-columns-data-binding-support.
+    # `columns: "@{prop}"` resolves at runtime against `data.prop` so a single
+    # Collection can change column count without re-layout. The grid path
+    # (LazyVerticalGrid / LazyHorizontalGrid) is forced regardless of the
+    # binding's runtime value, so a binding that resolves to 1 still uses the
+    # grid container — keeping layout structure stable.
+    describe 'columns binding support' do
+      it 'emits GridCells.Fixed(data.<prop>) for `columns: "@{prop}"`' do
+        json = {
+          'type' => 'Collection',
+          'id' => 'grid',
+          'columns' => '@{gridColumnCount}',
+          'child' => [
+            { 'type' => 'View', 'id' => 'item_cell' }
+          ]
+        }
+        result = described_class.generate(json, 0, Set.new, nil)
+        code = result.is_a?(Hash) ? result[:code] : result
+        expect(code).to include('LazyVerticalGrid(')
+        expect(code).to include('columns = GridCells.Fixed(data.gridColumnCount)')
+      end
+
+      it 'emits horizontal binding form into LazyHorizontalGrid.rows' do
+        json = {
+          'type' => 'Collection',
+          'id' => 'grid',
+          'orientation' => 'horizontal',
+          'columns' => '@{horizontalRowCount}',
+          'child' => [
+            { 'type' => 'View', 'id' => 'item_cell' }
+          ]
+        }
+        result = described_class.generate(json, 0, Set.new, nil)
+        code = result.is_a?(Hash) ? result[:code] : result
+        expect(code).to include('LazyHorizontalGrid(')
+        expect(code).to include('rows = GridCells.Fixed(data.horizontalRowCount)')
+      end
+
+      it 'keeps `GridCells.Fixed(N)` literal for non-binding integer columns' do
+        json = {
+          'type' => 'Collection',
+          'id' => 'grid',
+          'columns' => 5,
+          'child' => [
+            { 'type' => 'View', 'id' => 'item_cell' }
+          ]
+        }
+        result = described_class.generate(json, 0, Set.new, nil)
+        code = result.is_a?(Hash) ? result[:code] : result
+        expect(code).to include('columns = GridCells.Fixed(5)')
+      end
+
+      describe '.columns_emit_info' do
+        it 'returns the binding expression for `@{prop}` form' do
+          expect(described_class.columns_emit_info('columns' => '@{gridColumnCount}'))
+            .to eq(expr: 'data.gridColumnCount', literal: nil, is_binding: true)
+        end
+
+        it 'returns literal int + expression for a static count' do
+          expect(described_class.columns_emit_info('columns' => 5))
+            .to eq(expr: '5', literal: 5, is_binding: false)
+        end
+
+        it 'defaults missing `columns` to 1' do
+          expect(described_class.columns_emit_info({}))
+            .to eq(expr: '1', literal: 1, is_binding: false)
+        end
+      end
+
+      describe '.single_column_sections?' do
+        # Binding form takes the multi-column grid path regardless of the
+        # runtime value, so single-column CollectionStack fast-path is
+        # disabled even when every section declares `columns: 1` explicitly.
+        it 'returns false when top-level columns is a binding' do
+          sections = [
+            { 'cell' => 'CellView', 'columns' => 1 },
+            { 'cell' => 'CellView', 'columns' => 1 }
+          ]
+          json = { 'columns' => '@{gridColumnCount}' }
+          expect(described_class.single_column_sections?(sections, json)).to be false
+        end
+
+        it 'returns true when every section is literal single-column (existing behavior)' do
+          sections = [
+            { 'cell' => 'CellView', 'columns' => 1 },
+            { 'cell' => 'CellView' }  # inherits default 1
+          ]
+          json = { 'columns' => 1 }
+          expect(described_class.single_column_sections?(sections, json)).to be true
+        end
+      end
+    end
   end
 end

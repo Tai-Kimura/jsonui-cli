@@ -68,21 +68,32 @@ module KjuiTools
           header_class_name = header_classes.first if header_classes.any?
           footer_class_name = footer_classes.first if footer_classes.any?
           
-          # Calculate the grid columns based on sections or default
-          default_columns = json_data['columns'] || 1
-          
-          if sections.any?
-            # Collect all unique column counts from sections
+          # Resolve the grid column count. The top-level `columns` attribute
+          # accepts either a literal Int or a `@{prop}` binding (see
+          # attribute_definitions.json#columns). For a binding we forfeit
+          # any compile-time LCM with per-section overrides — the runtime
+          # column count is unknown — and the grid count is just the
+          # resolved binding expression. Per-section `columns` overrides
+          # still emit `GridItemSpan` spans against this grid below; that
+          # span math runs against the literal section value, so a section
+          # explicitly setting `columns: 1` inside a binding-driven grid
+          # still spans 1 cell wide regardless of total column count.
+          columns_info = columns_emit_info(json_data)
+          columns_expr = columns_info[:expr]
+          if columns_info[:is_binding]
+            # Sentinel: any value > 1 makes the downstream `columns > 1`
+            # checks emit the grid-mode cell modifiers (fillMaxWidth on
+            # cells). Compile-time LCM with section-level overrides is
+            # disabled because the runtime column count is unknown.
+            columns = 2
+          elsif sections.any?
+            default_columns = columns_info[:literal] || 1
             section_columns = sections.map { |s| s['columns'] || default_columns }.uniq
-            
-            # If sections have different column counts, use LCM
-            if section_columns.size > 1
-              columns = calculate_lcm(section_columns)
-            else
-              columns = section_columns.first
-            end
+            columns = section_columns.size > 1 ? calculate_lcm(section_columns) : section_columns.first
+            columns_expr = columns.to_s
           else
-            columns = default_columns
+            columns = columns_info[:literal] || 1
+            columns_expr = columns.to_s
           end
           
           # Determine grid type based on layout
@@ -90,10 +101,10 @@ module KjuiTools
           
           if direction == 'horizontal'
             code = indent("LazyHorizontalGrid(", depth)
-            code += "\n" + indent("rows = GridCells.Fixed(#{columns}),", depth + 1)
+            code += "\n" + indent("rows = GridCells.Fixed(#{columns_expr}),", depth + 1)
           else
             code = indent("LazyVerticalGrid(", depth)
-            code += "\n" + indent("columns = GridCells.Fixed(#{columns}),", depth + 1)
+            code += "\n" + indent("columns = GridCells.Fixed(#{columns_expr}),", depth + 1)
           end
 
           # Reverse layout
@@ -1003,9 +1014,33 @@ module KjuiTools
         # or section-skeletons-without-cells stay on the existing LazyVerticalGrid
         # emission so spec expectations and edge cases keep working.
         def self.single_column_sections?(sections, json_data)
+          # A `@{prop}` binding on the top-level `columns` attribute means
+          # the runtime column count is unknown at codegen time. Forfeit
+          # the single-column CollectionStack fast-path and always render
+          # the binding-driven grid (LazyVerticalGrid / LazyHorizontalGrid)
+          # so the layout stays consistent if the binding resolves to >1.
+          return false if columns_emit_info(json_data)[:is_binding]
           default_columns = json_data['columns'] || 1
           sections.all? do |s|
             (s['columns'] || default_columns) == 1 && s['cell']
+          end
+        end
+
+        # Resolve the top-level `columns` attribute into its Kotlin emit
+        # expression. A literal int returns `{ expr: "5", literal: 5,
+        # is_binding: false }`; a `@{prop}` binding returns
+        # `{ expr: "data.prop", literal: nil, is_binding: true }`. The
+        # caller interpolates `expr` into `GridCells.Fixed(...)` and uses
+        # `is_binding` to suppress compile-time fast-paths (single-column
+        # CollectionStack, per-section LCM) that require a known column
+        # count.
+        def self.columns_emit_info(json_data)
+          value = json_data['columns']
+          if value.is_a?(String) && value =~ /^@\{(.+)\}$/
+            { expr: "data.#{$1}", literal: nil, is_binding: true }
+          else
+            literal = (value || 1).to_i
+            { expr: literal.to_s, literal: literal, is_binding: false }
           end
         end
 

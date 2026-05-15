@@ -462,6 +462,41 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).to include('count: 3')
     end
 
+    # Regression: jui-collection-columns-data-binding-support.
+    # `columns: "@{prop}"` resolves at runtime to `data.prop`; the grid path
+    # (LazyVGrid / LazyHGrid) is forced regardless of the runtime value so
+    # the layout structure stays stable across runtime column changes.
+    it 'emits `count: data.<prop>` for `columns: "@{prop}"` and routes through the grid path' do
+      component = {
+        'type' => 'Collection',
+        'id' => 'grid_collection',
+        'columns' => '@{gridColumnCount}',
+        'cellClasses' => ['ItemCell']
+      }
+      code = described_class.new(component).convert
+      expect(code).to include('LazyVGrid(')
+      expect(code).to include('count: data.gridColumnCount')
+      # Binding must NEVER reach the single-column List/LazyVStack fast-path
+      # — that branch interpolates `columns == 1` and would emit the wrong
+      # container for a binding.
+      expect(code).not_to include('flat list')
+    end
+
+    it 'resolves `columns: "@{prop}"` inside `responsive.regular`' do
+      component = {
+        'type' => 'Collection',
+        'id' => 'grid_collection',
+        'columns' => 2,
+        'responsive' => {
+          'regular' => { 'columns' => '@{tabletGridColumnCount}' }
+        },
+        'cellClasses' => ['ItemCell']
+      }
+      code = described_class.new(component).convert
+      expect(code).to include('count: data.tabletGridColumnCount')
+      expect(code).to include('count: 2')
+    end
+
     # Regression: sjui-collection-responsive-block-missing-group-wrap.
     # Without `Group { }` the bare if/else lands directly inside the
     # parent AnyView(...) argument and Swift refuses to parse it.

@@ -165,5 +165,59 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
         expect(result).to include('overflow-y-auto')
       end
     end
+
+    # Regression: jui-collection-columns-data-binding-support.
+    # Tailwind's JIT can't see `grid-cols-${variable}` at build time, so a
+    # `@{prop}` binding cannot reach the class string. Emit the bare `grid`
+    # class and push `gridTemplateColumns: \`repeat(${data.prop}, minmax(0,
+    # 1fr))\`` into the inline style attribute instead. A literal int keeps
+    # the existing `grid-cols-N` shortcut.
+    context 'with `columns: "@{prop}"` data binding' do
+      it 'emits `grid` class but no `grid-cols-N` Tailwind class' do
+        converter = create_converter({
+          'class' => 'Collection',
+          'columns' => '@{gridColumnCount}',
+          'cellClasses' => ['ItemCell']
+        })
+        result = converter.convert
+        expect(result).to include('grid')
+        expect(result).not_to match(/grid-cols-\d+/)
+      end
+
+      it 'emits `gridTemplateColumns: `repeat(${data.<prop>}, minmax(0, 1fr))`` as inline style' do
+        converter = create_converter({
+          'class' => 'Collection',
+          'columns' => '@{gridColumnCount}',
+          'cellClasses' => ['ItemCell']
+        })
+        result = converter.convert
+        expect(result).to include('gridTemplateColumns: `repeat(${data.gridColumnCount}, minmax(0, 1fr))`')
+      end
+
+      it 'keeps the literal `grid-cols-N` class for static integer columns' do
+        converter = create_converter({
+          'class' => 'Collection',
+          'columns' => 5,
+          'cellClasses' => ['ItemCell']
+        })
+        result = converter.convert
+        expect(result).to include('grid-cols-5')
+        expect(result).not_to include('gridTemplateColumns')
+      end
+
+      it 'forces the grid path even when the binding could resolve to 1' do
+        # A literal `columns: 1` routes through the `flex flex-col` list
+        # path. A binding can't take that path because its runtime value
+        # might be >1; the grid layout structure must stay stable across
+        # runtime changes.
+        converter = create_converter({
+          'class' => 'Collection',
+          'columns' => '@{gridColumnCount}',
+          'cellClasses' => ['ItemCell']
+        })
+        result = converter.convert
+        expect(result).not_to include('flex flex-col')
+      end
+    end
   end
 end
