@@ -44,7 +44,7 @@ module KjuiTools
 
           # 3. Size (total element size)
           size_modifiers = Helpers::ModifierBuilder.build_size(json_data)
-          Helpers::ModifierBuilder.adjust_for_intrinsic_size!(size_modifiers, json_data, children, layout, required_imports)
+          Helpers::ModifierBuilder.adjust_for_intrinsic_size!(size_modifiers, json_data, children, layout, required_imports, parent_type)
           modifiers.concat(size_modifiers)
 
           # 4. Alpha/opacity - BEFORE background so alpha applies to background too

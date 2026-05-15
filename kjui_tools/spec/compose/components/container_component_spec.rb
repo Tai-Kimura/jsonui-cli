@@ -266,6 +266,125 @@ RSpec.describe KjuiTools::Compose::Components::ContainerComponent do
       result = described_class.generate(json_data, 0, required_imports)
       expect(result[:code]).to include('.height(IntrinsicSize.Min)')
     end
+
+    # Regression: kjui-intrinsicsize-min-cascades-to-lazy-descendant.
+    # `IntrinsicSize.Min` triggers `minIntrinsicWidth/Height` queries on
+    # descendants. SubcomposeLayout-based primitives (LazyColumn/LazyRow/
+    # LazyVerticalGrid/HorizontalPager/...) reject the query and crash at
+    # runtime.  When a SubcomposeLayout descendant is detected, the fix
+    # falls back to `fillMax<axis>()` instead.
+    it 'skips IntrinsicSize.Min on Column when a descendant Collection emits LazyVerticalGrid' do
+      json_data = {
+        'type' => 'View',
+        'orientation' => 'vertical',
+        'child' => [
+          { 'type' => 'View', 'width' => 'matchParent' },
+          { 'type' => 'Collection', 'orientation' => 'vertical' }
+        ]
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result[:code]).not_to include('IntrinsicSize')
+      expect(result[:code]).to include('.fillMaxWidth()')
+    end
+
+    it 'skips IntrinsicSize.Min on Column when a deeply nested ScrollView descendant emits LazyColumn' do
+      json_data = {
+        'type' => 'View',
+        'orientation' => 'vertical',
+        'child' => [
+          { 'type' => 'View', 'width' => 'matchParent' },
+          {
+            'type' => 'View',
+            'orientation' => 'vertical',
+            'child' => [
+              { 'type' => 'View',
+                'child' => [
+                  { 'type' => 'Scroll', 'orientation' => 'vertical' }
+                ] }
+            ]
+          }
+        ]
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result[:code]).not_to include('IntrinsicSize')
+      expect(result[:code]).to include('.fillMaxWidth()')
+    end
+
+    it 'skips IntrinsicSize.Min on Row when a descendant Table emits LazyColumn' do
+      json_data = {
+        'type' => 'View',
+        'orientation' => 'horizontal',
+        'height' => 'wrapContent',
+        'child' => [
+          { 'type' => 'View', 'height' => 'matchParent' },
+          { 'type' => 'Table' }
+        ]
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result[:code]).not_to include('IntrinsicSize')
+      expect(result[:code]).to include('.fillMaxHeight()')
+    end
+
+    it 'still injects IntrinsicSize.Min when a descendant Collection has lazy:none (non-Lazy fallback)' do
+      json_data = {
+        'type' => 'View',
+        'orientation' => 'vertical',
+        'child' => [
+          { 'type' => 'View', 'width' => 'matchParent' },
+          { 'type' => 'Collection', 'orientation' => 'vertical', 'lazy' => 'none' }
+        ]
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result[:code]).to include('.width(IntrinsicSize.Min)')
+    end
+
+    it 'still injects IntrinsicSize.Min when a descendant vertical Collection has wrapContent height (Column fallback)' do
+      json_data = {
+        'type' => 'View',
+        'orientation' => 'vertical',
+        'child' => [
+          { 'type' => 'View', 'width' => 'matchParent' },
+          { 'type' => 'Collection', 'orientation' => 'vertical', 'height' => 'wrapContent' }
+        ]
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result[:code]).to include('.width(IntrinsicSize.Min)')
+    end
+
+    # Regression: weighted child of Row should not need IntrinsicSize.Min on
+    # width — `.weight(1f)` already pins the width axis to the parent's
+    # allocated slot, so a matchParent direct child resolves correctly with
+    # `.fillMaxWidth()`.
+    it 'skips IntrinsicSize.Min on a weighted Column whose parent is a Row' do
+      json_data = {
+        'type' => 'View',
+        'orientation' => 'vertical',
+        'weight' => 1,
+        'child' => [
+          { 'type' => 'View', 'width' => 'matchParent' }
+        ]
+      }
+      result = described_class.generate(json_data, 0, required_imports, 'Row')
+      expect(result[:code]).not_to include('IntrinsicSize')
+      expect(result[:code]).to include('.weight(1f)')
+      expect(result[:code]).to include('.fillMaxWidth()')
+    end
+
+    it 'skips IntrinsicSize.Min on a weighted Row whose parent is a Column' do
+      json_data = {
+        'type' => 'View',
+        'orientation' => 'horizontal',
+        'weight' => 1,
+        'height' => 'wrapContent',
+        'child' => [
+          { 'type' => 'View', 'height' => 'matchParent' }
+        ]
+      }
+      result = described_class.generate(json_data, 0, required_imports, 'Column')
+      expect(result[:code]).not_to include('IntrinsicSize')
+      expect(result[:code]).to include('.weight(1f)')
+      expect(result[:code]).to include('.fillMaxHeight()')
+    end
   end
 
   describe '.has_relative_positioning?' do

@@ -111,7 +111,22 @@ module KjuiTools
         # via `Modifier.height(IntrinsicSize.Min)` (or `width(...)` for Column).
         # This mutates `size_modifiers` in place, replacing the wrap modifier
         # with the intrinsic one when needed.
-        def self.adjust_for_intrinsic_size!(size_modifiers, json_data, children, layout, required_imports = nil)
+        #
+        # Skip the intrinsic switch when either:
+        #   (a) the node is a weighted child of a Row/Column — the weight slot
+        #       provides a bounded constraint on the relevant axis, so the
+        #       matchParent child resolves through `.fillMaxWidth/Height()` on
+        #       its own. The intrinsic wrap is unnecessary AND, when a
+        #       SubcomposeLayout descendant exists, would crash anyway.
+        #   (b) any descendant emits a SubcomposeLayout (LazyColumn/LazyRow/
+        #       LazyVerticalGrid/LazyHorizontalGrid/HorizontalPager etc.).
+        #       `Modifier.width/height(IntrinsicSize.Min)` asks descendants for
+        #       `minIntrinsicWidth/Height`, and SubcomposeLayout throws on that
+        #       query. Falling back to `fillMax<axis>()` keeps the layout
+        #       intent (parent fills the parent's slot) without triggering the
+        #       intrinsic measurement cascade.
+        # Regression: kjui-intrinsicsize-min-cascades-to-lazy-descendant.
+        def self.adjust_for_intrinsic_size!(size_modifiers, json_data, children, layout, required_imports = nil, parent_type = nil)
           return size_modifiers unless layout == 'Row' || layout == 'Column'
           return size_modifiers unless children.is_a?(Array) && children.any?
 
@@ -122,6 +137,11 @@ module KjuiTools
             return size_modifiers if parent_h && parent_h != 'wrapContent'
             return size_modifiers unless children.any? { |c| child_dimension(c, 'height') == 'matchParent' }
 
+            if weighted_on_axis?(json_data, parent_type, :height) || subcompose_descendant?(children)
+              replace_or_append!(size_modifiers, '.wrapContentHeight()', '.fillMaxHeight()')
+              return size_modifiers
+            end
+
             required_imports&.add(:intrinsic_size)
             replace_or_append!(size_modifiers, '.wrapContentHeight()', '.height(IntrinsicSize.Min)')
           else
@@ -129,11 +149,57 @@ module KjuiTools
             return size_modifiers if parent_w && parent_w != 'wrapContent'
             return size_modifiers unless children.any? { |c| child_dimension(c, 'width') == 'matchParent' }
 
+            if weighted_on_axis?(json_data, parent_type, :width) || subcompose_descendant?(children)
+              replace_or_append!(size_modifiers, '.wrapContentWidth()', '.fillMaxWidth()')
+              return size_modifiers
+            end
+
             required_imports&.add(:intrinsic_size)
             replace_or_append!(size_modifiers, '.wrapContentWidth()', '.width(IntrinsicSize.Min)')
           end
 
           size_modifiers
+        end
+
+        # `weight: N` set with a parent that distributes on the matching axis
+        # (Row → width, Column → height) means the parent already pins this
+        # node's axis to its allocated slot — no intrinsic measurement needed.
+        def self.weighted_on_axis?(json_data, parent_type, axis)
+          return false unless json_data['weight'] && json_data['weight'].to_f > 0
+          (axis == :width && parent_type == 'Row') ||
+            (axis == :height && parent_type == 'Column')
+        end
+
+        # Recursively scan for components that emit SubcomposeLayout-based
+        # Compose primitives. Those reject `IntrinsicSize.Min` ancestor
+        # queries with `Asking for intrinsic measurements of SubcomposeLayout
+        # layouts is not supported`.
+        def self.subcompose_descendant?(nodes)
+          return false unless nodes.is_a?(Array)
+          nodes.any? { |n| subcompose_node?(n) }
+        end
+
+        def self.subcompose_node?(node)
+          return false unless node.is_a?(Hash)
+
+          case node['type']
+          when 'Scroll', 'Table'
+            # ScrollView always emits LazyRow/LazyColumn; Table emits
+            # LazyColumn unconditionally.
+            return true
+          when 'Collection'
+            # Collection emits a non-Lazy fallback when `lazy: "none"` or when
+            # vertical + `height: wrapContent`. Flow layout uses FlowRow
+            # (non-Lazy). Paging horizontal uses HorizontalPager which IS
+            # SubcomposeLayout-based. Everything else is Lazy.
+            layout = node['layout'] || node['orientation'] || 'vertical'
+            return false if layout == 'flow'
+            return false if node['lazy'] == 'none'
+            return false if layout != 'horizontal' && node['height'] == 'wrapContent'
+            return true
+          end
+
+          subcompose_descendant?(node['child'])
         end
 
         def self.child_dimension(child, axis)
