@@ -326,6 +326,25 @@ RSpec.describe SjuiTools::SwiftUI::Views::ViewConverter do
         expect(code).to include('WeightedHStack(')
         expect(code).to include('hasMatchParentCrossAxis: true')
       end
+
+      # Regression: sjui-weightedhstack-hasmatchparentcrossaxis-arg-order
+      # SwiftJsonUI's WeightedHStack init declares args as:
+      #   alignment, spacing, children, hasMatchParentCrossAxis
+      # Swift requires named args in declaration order. Emitting
+      # `hasMatchParentCrossAxis` BEFORE `children` triggers
+      # `Argument 'children' must precede argument 'hasMatchParentCrossAxis'`.
+      it 'puts hasMatchParentCrossAxis after children (Swift arg-order rule)' do
+        converter = described_class.new(component, 0, nil, converter_factory, view_registry, binding_registry)
+        code = converter.convert
+        # The opening line carries `children: [` but NOT
+        # `hasMatchParentCrossAxis` — the flag goes on the closing line.
+        opening = code.lines.find { |l| l.include?('WeightedHStack(') }
+        expect(opening).not_to be_nil
+        expect(opening).to include('children: [')
+        expect(opening).not_to include('hasMatchParentCrossAxis')
+        # The closing emits the flag AFTER the children array literal.
+        expect(code).to include('], hasMatchParentCrossAxis: true)')
+      end
     end
 
     context 'with horizontal weighted children but no height: matchParent' do
