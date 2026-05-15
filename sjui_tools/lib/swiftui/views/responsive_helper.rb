@@ -315,35 +315,38 @@ module SjuiTools
           max_height = attrs['maxHeight']
           min_width = attrs['minWidth']
           min_height = attrs['minHeight']
-          h_active = horizontal_alignment_flag?(attrs)
-          v_active = vertical_alignment_flag?(attrs)
 
-          # When an alignment is requested without an explicit max on that
-          # axis, fall back to `.infinity` so the parent gives us room to
-          # anchor within. (Without space, alignment is a no-op.)
-          if h_active && max_width.nil?
-            max_width = '.infinity'
-          end
-          if v_active && max_height.nil?
-            max_height = '.infinity'
-          end
+          # `.infinity` fallback fires for `centerHorizontal/Vertical/
+          # InParent` only — those flags mean "the View itself centers in
+          # its parent", which needs room along that axis to be meaningful.
+          # `alignLeft/Right/Top/Bottom` are outer-anchor hints that the
+          # outer `.frame(.infinity, alignment: ...)` wrap handles when
+          # combined with `matchParent` + numeric max. Without matchParent,
+          # an `alignLeft` alone has no actionable codegen position — it's
+          # the parent's container alignment that controls leaf placement.
+          center_h_alone = (attrs['centerHorizontal'] == true || attrs['centerInParent'] == true)
+          center_v_alone = (attrs['centerVertical'] == true || attrs['centerInParent'] == true)
+          max_width = '.infinity' if center_h_alone && max_width.nil?
+          max_height = '.infinity' if center_v_alone && max_height.nil?
 
           frame_args << "minWidth: #{format_dimension(min_width)}" unless min_width.nil?
           frame_args << "maxWidth: #{format_dimension(max_width)}" unless max_width.nil?
           frame_args << "minHeight: #{format_dimension(min_height)}" unless min_height.nil?
           frame_args << "maxHeight: #{format_dimension(max_height)}" unless max_height.nil?
 
-          # Resolve the SwiftUI Alignment literal from the active alignment
-          # attrs. `centerHorizontal` / `centerInParent` → `.center`,
-          # `alignLeft` → `.leading`, `alignRight` → `.trailing`, etc. The
-          # 2-axis form (`.bottomTrailing`) is used when both axes specify
-          # a non-center anchor.
-          alignment = frame_alignment_for(attrs)
+          # No dimension constraints means there's nothing for an alignment
+          # to anchor against — skip the frame entirely. (alignLeft alone
+          # without maxWidth / matchParent reaches this path.)
+          return [] if frame_args.empty?
+
+          # Inner frame alignment is `gravity`-driven (content alignment
+          # within this frame), NOT responsive `align*` / `center*` flags.
+          # The responsive flags drive the outer wrap appended by
+          # generate_container_function / generate_leaf_function.
+          alignment = inner_frame_alignment(attrs)
           frame_args << "alignment: #{alignment}" if alignment
 
-          modifiers = []
-          modifiers << ".frame(#{frame_args.join(', ')})" unless frame_args.empty?
-          modifiers
+          [".frame(#{frame_args.join(', ')})"]
         end
 
         # True when the value is a finite numeric dimension (Number or
@@ -377,9 +380,9 @@ module SjuiTools
             attrs['alignBottom'] == true
         end
 
-        # Resolve the SwiftUI Alignment literal for a `.frame(...)` call
-        # from canonical alignment attrs (`centerHorizontal` /
-        # `centerVertical` / `centerInParent` / `alignLeft` / `alignRight`
+        # Resolve the SwiftUI Alignment literal for the OUTER `.frame(...)`
+        # wrap from canonical responsive alignment attrs (`centerHorizontal`
+        # / `centerVertical` / `centerInParent` / `alignLeft` / `alignRight`
         # / `alignTop` / `alignBottom`). Returns nil when no flag is set —
         # caller should then either omit the `alignment:` arg or fall back
         # to a default.
@@ -387,6 +390,15 @@ module SjuiTools
         # `alignLeft + alignRight` and `alignTop + alignBottom` collapse to
         # `center` on that axis (matches the Android ConstraintLayout-style
         # "stretched between two anchors → center" intent).
+        #
+        # *Outer* role: this alignment positions the constrained-and-
+        # decorated inner block within its parent. For *inner* content
+        # alignment (where children sit inside this frame) use
+        # `inner_frame_alignment` instead — that helper looks at `gravity`,
+        # not the responsive `align*` flags, because the canonical doc
+        # describes `alignLeft` as "Align to parent left" (outer) and
+        # `gravity` as "Content gravity/alignment" (inner). See bug:
+        # sjui-kjui-responsive-align-cascades-to-inner-ignoring-gravity.
         def self.frame_alignment_for(attrs)
           h = horizontal_axis_alignment(attrs)
           v = vertical_axis_alignment(attrs)
@@ -433,6 +445,84 @@ module SjuiTools
           return 'bottom' if bottom
 
           nil
+        end
+
+        # Resolve the SwiftUI Alignment literal for the INNER content-sizing
+        # `.frame(...)` call. Driven by `gravity` (content alignment), NOT
+        # by the responsive `align*` / `center*` flags — those are for the
+        # outer wrap (`frame_alignment_for`).
+        #
+        # Returns:
+        #   - gravity-derived alignment when `gravity` is set (so e.g.
+        #     `gravity: "center"` → `.center`, `gravity: "left"` →
+        #     `.leading`).
+        #   - `.center` as a default when no `gravity` is set but at least
+        #     one responsive alignment flag is set — preserves the existing
+        #     contract for `centerHorizontal: true` + `maxWidth: N` which
+        #     emitted `alignment: .center` explicitly.
+        #   - nil when neither `gravity` nor any responsive flag is set —
+        #     caller should omit the `alignment:` arg, letting SwiftUI's
+        #     implicit `.center` default apply.
+        #
+        # Regression: sjui-kjui-responsive-align-cascades-to-inner-ignoring-
+        # gravity — without this split, `alignLeft: true` + `gravity:
+        # "center"` was emitting `alignment: .leading` on the inner frame
+        # and pinning the wrap-content child to the left edge of the
+        # bordered area instead of centering it.
+        def self.inner_frame_alignment(attrs)
+          gravity_align = alignment_from_gravity(attrs['gravity'])
+          return gravity_align if gravity_align
+          return '.center' if horizontal_alignment_flag?(attrs) || vertical_alignment_flag?(attrs)
+
+          nil
+        end
+
+        # @param gravity [String, Array, nil] raw gravity value from JSON
+        # @return [String, nil] SwiftUI Alignment literal, or nil if no
+        #   recognizable gravity tokens are present
+        def self.alignment_from_gravity(gravity)
+          return nil if gravity.nil?
+
+          gravities = if gravity.is_a?(Array)
+                        gravity.map { |g| g.to_s.strip }
+                      else
+                        gravity.to_s.split('|').map(&:strip)
+                      end
+          return nil if gravities.empty?
+
+          h = nil
+          v = nil
+          gravities.each do |g|
+            case g
+            when 'left', 'start' then h = 'leading'
+            when 'right', 'end' then h = 'trailing'
+            when 'centerHorizontal', 'center_horizontal' then h = 'center'
+            when 'top' then v = 'top'
+            when 'bottom' then v = 'bottom'
+            when 'centerVertical', 'center_vertical' then v = 'center'
+            when 'center'
+              h = 'center'
+              v = 'center'
+            end
+          end
+
+          return nil if h.nil? && v.nil?
+
+          # Default the unspecified axis to center (no-op along that axis).
+          h ||= 'center'
+          v ||= 'center'
+
+          case [v, h]
+          when %w[top leading] then '.topLeading'
+          when %w[top center] then '.top'
+          when %w[top trailing] then '.topTrailing'
+          when %w[center leading] then '.leading'
+          when %w[center center] then '.center'
+          when %w[center trailing] then '.trailing'
+          when %w[bottom leading] then '.bottomLeading'
+          when %w[bottom center] then '.bottom'
+          when %w[bottom trailing] then '.bottomTrailing'
+          end
         end
 
         # Render a dimension literal. Numeric stays numeric; `.infinity` stays
