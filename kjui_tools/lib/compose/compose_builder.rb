@@ -378,12 +378,22 @@ module KjuiTools
         children = json_data['child'] || []
         children = [children] unless children.is_a?(Array)
 
-        # Build the wrapper function that switches container per branch
+        # Build the wrapper function that switches container per branch.
+        # The wrapper lives at file scope (between RESPONSIVE_HELPERS_*
+        # markers), so the branch container sits in a non-Row/Column/Box
+        # parent — `Modifier.align(...)` would be unresolved. We pass
+        # 'ScopeFree' so build_alignment emits scope-independent
+        # `wrapContentWidth/Height` for the responsive container itself.
+        # The caller's actual `parent_type` only matters for the children
+        # inside the trailing `content { ... }` lambda, which are rendered
+        # at the call site (not inside this helper) and pick up the
+        # caller's scope naturally via generate_component below.
         result = Helpers::ResponsiveHelper.generate_container_wrapper(
           func_name, json_data, 0, @required_imports
         ) do |attrs, branch_depth, imports|
-          # Generate the container opening code for this branch's attributes
-          branch_result = Components::ContainerComponent.generate(attrs, branch_depth, imports, parent_type)
+          # Generate the container opening code for this branch's attributes.
+          # parent_type override: 'ScopeFree' (see comment above).
+          branch_result = Components::ContainerComponent.generate(attrs, branch_depth, imports, 'ScopeFree')
           if branch_result.is_a?(Hash)
             # Container opening + "content()" call + closing
             code = branch_result[:code]
@@ -418,13 +428,16 @@ module KjuiTools
         call_code
       end
 
-      # Generate responsive leaf: extracts function, returns call
+      # Generate responsive leaf: extracts function, returns call.
+      # parent_type override: 'ScopeFree' for the same reason as
+      # generate_responsive_container — the leaf renders inside the
+      # file-scope helper, so `Modifier.align(...)` would not resolve.
       def generate_responsive_leaf(json_data, depth, parent_type, func_name)
         result = Helpers::ResponsiveHelper.generate_leaf_wrapper(
           func_name, json_data, 0, @required_imports
         ) do |attrs, branch_depth, imports|
           # Generate the full component for this branch
-          generate_non_responsive_component(attrs, branch_depth, parent_type)
+          generate_non_responsive_component(attrs, branch_depth, 'ScopeFree')
         end
 
         @responsive_functions << result[:function_code]
