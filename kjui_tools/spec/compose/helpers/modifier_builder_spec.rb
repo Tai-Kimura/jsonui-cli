@@ -112,6 +112,43 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
       expect(result).to include('.widthIn(min = 50.dp, max = 200.dp)')
     end
 
+    # Regression: kjui-responsive-widthin-after-fillmaxwidth-no-op.
+    # `.fillMaxWidth()` pins min = max = parent's maxWidth. A trailing
+    # `.widthIn(max = N.dp)` then can't narrow maxWidth because minWidth
+    # is already pinned to parent's width — the constraint clamps back to
+    # 940dp on a tablet chat pane and the bordered button overflows.
+    # Order must be: widthIn (cap) FIRST, then fillMaxWidth (fill within
+    # the cap). Same applies to heightIn / fillMaxHeight.
+    it 'emits widthIn(max=...) before fillMaxWidth when both width:matchParent and maxWidth are present' do
+      json_data = { 'width' => 'matchParent', 'maxWidth' => 320 }
+      result = described_class.build_size(json_data)
+      width_in_idx = result.index('.widthIn(max = 320.dp)')
+      fill_idx = result.index('.fillMaxWidth()')
+      expect(width_in_idx).not_to be_nil
+      expect(fill_idx).not_to be_nil
+      expect(width_in_idx).to be < fill_idx
+    end
+
+    it 'emits combined widthIn(min,max) before fillMaxWidth' do
+      json_data = { 'width' => 'matchParent', 'minWidth' => 100, 'maxWidth' => 320 }
+      result = described_class.build_size(json_data)
+      width_in_idx = result.index('.widthIn(min = 100.dp, max = 320.dp)')
+      fill_idx = result.index('.fillMaxWidth()')
+      expect(width_in_idx).not_to be_nil
+      expect(fill_idx).not_to be_nil
+      expect(width_in_idx).to be < fill_idx
+    end
+
+    it 'emits heightIn(max=...) before fillMaxHeight when both height:matchParent and maxHeight are present' do
+      json_data = { 'height' => 'matchParent', 'maxHeight' => 240 }
+      result = described_class.build_size(json_data)
+      height_in_idx = result.index('.heightIn(max = 240.dp)')
+      fill_idx = result.index('.fillMaxHeight()')
+      expect(height_in_idx).not_to be_nil
+      expect(fill_idx).not_to be_nil
+      expect(height_in_idx).to be < fill_idx
+    end
+
     it 'builds aspect ratio' do
       json_data = { 'aspectWidth' => 16, 'aspectHeight' => 9 }
       result = described_class.build_size(json_data)

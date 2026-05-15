@@ -180,6 +180,22 @@ module KjuiTools
             return modifiers
           end
 
+          # Min/Max constraints must be emitted BEFORE the fill/wrap
+          # structural modifiers. Compose modifier semantics chain
+          # constraints outside-in: an outer `.fillMaxWidth()` locks
+          # min == max == parent's maxWidth, and a later `.widthIn(max =
+          # N.dp)` can no longer narrow it because minWidth is already
+          # pinned to parent's maxWidth. Putting widthIn first caps the
+          # maxWidth bound, then fillMaxWidth fills WITHIN that cap.
+          # Regression: kjui-responsive-widthin-after-fillmaxwidth-no-op.
+          if json_data['minWidth'] && json_data['maxWidth']
+            modifiers << ".widthIn(min = #{json_data['minWidth']}.dp, max = #{json_data['maxWidth']}.dp)"
+          elsif json_data['minWidth']
+            modifiers << ".widthIn(min = #{json_data['minWidth']}.dp)"
+          elsif json_data['maxWidth']
+            modifiers << ".widthIn(max = #{json_data['maxWidth']}.dp)"
+          end
+
           # Width - skip if weight is present and width is 0
           if json_data['width'] == 'matchParent'
             modifiers << ".fillMaxWidth()"
@@ -189,6 +205,47 @@ module KjuiTools
             modifiers << ".width(#{process_dimension(json_data['width'])})"
           end
 
+          # Same outside-in argument applies to height: heightIn must be
+          # before fillMaxHeight / height.
+          # Label/Text with minHeight + center/bottom gravity needs a
+          # defaultMinSize + wrapContentHeight pair (preserves alignment).
+          label_min_height_special =
+            (json_data['type'] == 'Label' || json_data['type'] == 'Text') &&
+            json_data['minHeight'] && json_data['gravity']
+          if label_min_height_special
+            gravity_parts = if json_data['gravity'].is_a?(Array)
+                              json_data['gravity'].map { |g| g.to_s.strip.downcase }
+                            else
+                              json_data['gravity'].to_s.split('|').map { |g| g.strip.downcase }
+                            end
+            wants_vertical_align =
+              gravity_parts.include?('center') ||
+              gravity_parts.include?('centervertical') ||
+              gravity_parts.include?('center_vertical') ||
+              gravity_parts.include?('bottom')
+          else
+            wants_vertical_align = false
+          end
+
+          if wants_vertical_align
+            modifiers << ".defaultMinSize(minHeight = #{json_data['minHeight']}.dp)"
+            if gravity_parts.include?('bottom')
+              modifiers << ".wrapContentHeight(align = Alignment.Bottom)"
+            else
+              modifiers << ".wrapContentHeight(align = Alignment.CenterVertically)"
+            end
+            # `maxHeight` (if any) is still applied below as a normal heightIn.
+            if json_data['maxHeight']
+              modifiers << ".heightIn(max = #{json_data['maxHeight']}.dp)"
+            end
+          elsif json_data['minHeight'] && json_data['maxHeight']
+            modifiers << ".heightIn(min = #{json_data['minHeight']}.dp, max = #{json_data['maxHeight']}.dp)"
+          elsif json_data['minHeight']
+            modifiers << ".heightIn(min = #{json_data['minHeight']}.dp)"
+          elsif json_data['maxHeight']
+            modifiers << ".heightIn(max = #{json_data['maxHeight']}.dp)"
+          end
+
           # Height - skip if heightWeight is present and height is 0
           if json_data['height'] == 'matchParent'
             modifiers << ".fillMaxHeight()"
@@ -196,53 +253,6 @@ module KjuiTools
             modifiers << ".wrapContentHeight()"
           elsif json_data['height'] && !(json_data['heightWeight'] && json_data['height'] == 0)
             modifiers << ".height(#{process_dimension(json_data['height'])})"
-          end
-          
-          # Min/Max constraints
-          if json_data['minWidth']
-            modifiers << ".widthIn(min = #{json_data['minWidth']}.dp)"
-          end
-          
-          if json_data['maxWidth']
-            modifiers << ".widthIn(max = #{json_data['maxWidth']}.dp)"
-          end
-          
-          if json_data['minHeight']
-            # Use defaultMinSize + wrapContentHeight for minHeight with gravity alignment
-            # defaultMinSize sets minimum without overriding wrapContentHeight alignment
-            if (json_data['type'] == 'Label' || json_data['type'] == 'Text') && json_data['gravity']
-              gravity_parts = if json_data['gravity'].is_a?(Array)
-                                json_data['gravity'].map { |g| g.to_s.strip.downcase }
-                              else
-                                json_data['gravity'].to_s.split('|').map { |g| g.strip.downcase }
-                              end
-              if gravity_parts.include?('center') || gravity_parts.include?('centervertical') || gravity_parts.include?('center_vertical')
-                modifiers << ".defaultMinSize(minHeight = #{json_data['minHeight']}.dp)"
-                modifiers << ".wrapContentHeight(align = Alignment.CenterVertically)"
-              elsif gravity_parts.include?('bottom')
-                modifiers << ".defaultMinSize(minHeight = #{json_data['minHeight']}.dp)"
-                modifiers << ".wrapContentHeight(align = Alignment.Bottom)"
-              else
-                modifiers << ".heightIn(min = #{json_data['minHeight']}.dp)"
-              end
-            else
-              modifiers << ".heightIn(min = #{json_data['minHeight']}.dp)"
-            end
-          end
-          
-          if json_data['maxHeight']
-            modifiers << ".heightIn(max = #{json_data['maxHeight']}.dp)"
-          end
-          
-          # Combined min/max if both specified
-          if json_data['minWidth'] && json_data['maxWidth']
-            modifiers = modifiers.reject { |m| m.include?('.widthIn') }
-            modifiers << ".widthIn(min = #{json_data['minWidth']}.dp, max = #{json_data['maxWidth']}.dp)"
-          end
-          
-          if json_data['minHeight'] && json_data['maxHeight']
-            modifiers = modifiers.reject { |m| m.include?('.heightIn') }
-            modifiers << ".heightIn(min = #{json_data['minHeight']}.dp, max = #{json_data['maxHeight']}.dp)"
           end
           
           # Aspect ratio
