@@ -539,6 +539,79 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
       expect(new_body).not_to include('pagerState')
     end
 
+    # Regression: kjui-section-extractor-lift-into-lazygridscope.
+    # kjui codegen emits `// Section N: <id> (M columns)` header comments
+    # as direct children of `LazyVerticalGrid { ... }` (and other Lazy*Scope
+    # containers). Before this fix, a comment-only chunk passed every
+    # cannot_lift? guard and got promoted into an effectively-empty
+    # `@Composable private fun SectionN(data, viewModel) {}`. The call
+    # site `SectionN(data, viewModel)` then sat inside LazyGridScope —
+    # `@LazyScopeMarker` forbids direct @Composable invocations there,
+    # producing `@Composable invocations can only happen from the context
+    # of a @Composable function`. Two errors across shop_items_list and
+    # favorite_list.
+    it 'refuses to lift a comment-only chunk inside a LazyVerticalGrid LazyGridScope body' do
+      body = <<~KOTLIN
+        Column(modifier = Modifier.fillMaxSize()) {
+            Text(text = data.title)
+            if (LocalConfiguration.current.screenWidthDp >= 840) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(5),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Section 1: shop_items_list/shop_item_list_item (5 columns)
+                    data.gridItems?.sections?.getOrNull(0)?.let { section ->
+                        section.cells?.let { cellData ->
+                            items(cellData.data.size, key = { idx -> idx.toString() }) { cellIndex ->
+                                LaunchedEffect(Unit) { data.onItemAppear?.invoke(cellIndex) }
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    Text(text = data.label)
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                Text(text = data.fallback)
+            }
+            Text(text = data.footer)
+        }
+      KOTLIN
+
+      new_body, fns = described_class.extract(
+        body,
+        view_name: 'ItemsList',
+        data_type: 'ItemsListData',
+        viewmodel_type: 'ItemsListViewModel',
+        line_threshold: 10
+      )
+
+      # The comment header stays inline inside LazyVerticalGrid's body —
+      # no Section function is generated to wrap it.
+      expect(new_body).to include('// Section 1: shop_items_list/shop_item_list_item (5 columns)')
+
+      # No lifted function carries just a comment line as its body.
+      fns.each do |f|
+        body_lines = f.lines[5..-2] || []  # rough body slice (skip signature)
+        body_text = body_lines.map(&:strip).reject(&:empty?).join("\n")
+        expect(body_text).not_to match(/\A\/\/[^\n]*\z/m)
+      end
+
+      # Specifically, no `SectionN(data, viewModel)` call appears on the
+      # line immediately after the LazyVerticalGrid opener — the kjui
+      # codegen emits exactly one comment line first; the next non-empty
+      # line must be the original `data.gridItems?.sections?...` block,
+      # never a Section call.
+      lines = new_body.lines.map(&:chomp)
+      grid_open = lines.find_index { |l| l.include?('LazyVerticalGrid(') }
+      expect(grid_open).not_to be_nil
+      # Find the first non-empty line inside the grid body (after `) {`)
+      body_start = lines.each_with_index.find { |l, i| i > grid_open && l.strip.end_with?('{') }&.last
+      expect(body_start).not_to be_nil
+      first_inside = lines[(body_start + 1)..].find { |l| !l.strip.empty? }
+      expect(first_inside).not_to match(/Section\d+(?:_\d+)*\(data, viewModel\)/)
+    end
+
     it 'lifts inside both branches of a responsive if/else so the duplication shrinks to single-line calls' do
       # The if/else duplicates the body across size-class branches. After
       # extraction, each branch references the same SectionN helpers, so

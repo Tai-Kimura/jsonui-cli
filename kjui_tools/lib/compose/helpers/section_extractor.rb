@@ -343,6 +343,16 @@ module KjuiTools
           # If any child block starts with `val` / `var`, lifting siblings
           # could either lose the binding or strand it. Refuse to split the
           # whole parent container in that case.
+          def comment_only_chunk?(lines)
+            lines.all? do |line|
+              s = line.strip
+              s.empty? ||
+                s.start_with?('//') ||
+                s.start_with?('/*') ||
+                s.start_with?('*')
+            end
+          end
+
           def references_outer_scope_local?(code)
             declared_inside = code.scan(/\b(?:val|var)\s+(\w+)\b/).flatten.to_set
             code.scan(OUTER_SCOPE_LOCAL_PATTERN).flatten.uniq.any? do |id|
@@ -445,6 +455,20 @@ module KjuiTools
             return false unless first
 
             stripped = first.strip
+
+            # Comment-only chunks (single-line `//` rows, multi-line `/* ... */`
+            # blocks, or interleaved blank lines) carry no @Composable
+            # content. Lifting one emits an effectively empty
+            # `@Composable private fun SectionN(data, viewModel) {}` and
+            # replaces the original location with a `SectionN(data,
+            # viewModel)` call. When that location sits inside a Lazy*Scope
+            # (`LazyColumn`, `LazyVerticalGrid`, ...) the call becomes
+            # `@Composable invocations can only happen from the context of
+            # a @Composable function` because `@LazyScopeMarker` forbids
+            # direct @Composable calls — only the lazy DSL functions
+            # (`item`/`items`/`itemsIndexed`/`stickyHeader`) are allowed.
+            # Anywhere else the lift is useless. Refuse in both cases.
+            return true if comment_only_chunk?(lines)
 
             # Already-lifted `SectionN(data, viewModel)` calls — lifting them
             # again would cause an infinite outer-loop iteration in `process`
