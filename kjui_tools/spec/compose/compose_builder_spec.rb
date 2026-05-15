@@ -99,11 +99,13 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       end
     end
 
-    # Regression: kjui-view-responsive-block-codegen-broken — issues 4 & 5
-    # The Responsive helper composable must land at file scope (after the
-    # parent GeneratedView fun's closing brace), not inside it. As a local
-    # function it can't carry `private` (compile error 4) and any
-    # @Composable inside a non-@Composable scope blows up (compile error 5).
+    # Regression: kjui-view-responsive-helper-data-closure-scope-leak +
+    # kjui-responsive-helper-wraps-with-box-loses-row-column-scope.
+    # View+responsive must inline the if/else at the call site (like Embed
+    # and Collection). Extracting to a file-scope `private fun Responsive...`
+    # strips both the enclosing `data` / `viewModel` closure refs and the
+    # parent RowScope/ColumnScope, so any child `Modifier.weight(...)` or
+    # modifier closure (`onClick = data.onX`) becomes unresolved.
     context 'when JSON has a non-Embed responsive View' do
       before do
         File.write(File.join(layouts_dir, 'responsive_view.json'), <<~JSON)
@@ -111,7 +113,8 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
             "type": "View",
             "orientation": "vertical",
             "responsive": {
-              "regular": { "centerHorizontal": true, "maxWidth": 720 }
+              "regular": { "centerHorizontal": true, "maxWidth": 720 },
+              "regular-landscape": { "maxWidth": 960 }
             },
             "child": [
               { "type": "Text", "text": "Hello" }
@@ -120,7 +123,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         JSON
       end
 
-      it 'emits the Responsive helper at file scope, after the parent fun closes' do
+      it 'inlines the if/else at the call site and emits no file-scope helper' do
         builder.build_file(File.join(layouts_dir, 'responsive_view.json'))
         gen_path = File.join(
           temp_dir,
@@ -128,17 +131,20 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         )
         content = File.read(gen_path)
 
-        helpers_marker_pos = content.index('// >>> RESPONSIVE_HELPERS_START')
-        end_marker_pos = content.index('// >>> GENERATED_CODE_END')
-        expect(helpers_marker_pos).not_to be_nil
-        expect(end_marker_pos).not_to be_nil
-        expect(helpers_marker_pos).to be > end_marker_pos
+        # No private fun helper, no RESPONSIVE_HELPERS marker block.
+        expect(content).not_to include('// >>> RESPONSIVE_HELPERS_START')
+        expect(content).not_to match(/private fun Responsive\w+\(/)
 
-        # The helper itself must NOT carry windowSizeClass anywhere.
+        # Inline if/else lands inside the static-mode branch.
+        expect(content).to include('LocalConfiguration.current.screenWidthDp >= 840')
+
+        # No windowSizeClass plumbing anywhere — the inline path doesn't
+        # need a `windowSizeClass: WindowSizeClass` parameter.
         expect(content).not_to include('windowSizeClass: WindowSizeClass')
         expect(content).not_to include('windowSizeClass = windowSizeClass')
 
-        # No ambiguous Configuration import — only the full-qualified usage.
+        # The landscape branch references the full-qualified Configuration
+        # constant directly (no `import android.content.res.Configuration`).
         expect(content).not_to include("\nimport android.content.res.Configuration\n")
         expect(content).to include('android.content.res.Configuration.ORIENTATION_LANDSCAPE')
 
@@ -751,13 +757,13 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       end
     end
 
-    # Regression: kjui-view-responsive-block-codegen-broken
-    # A non-Embed View node (Container, etc.) with a `responsive` block goes
-    # through the extracted-private-composable path. That helper must:
-    #   (a) NOT take a `windowSizeClass: WindowSizeClass` parameter, and
-    #   (b) be called with no `windowSizeClass = ...` argument from the
-    #       enclosing GeneratedView, since GeneratedView doesn't have one.
-    describe 'View responsive helper extraction (regression: kjui-view-responsive-block-codegen-broken)' do
+    # Regression: kjui-view-responsive-helper-data-closure-scope-leak +
+    # kjui-responsive-helper-wraps-with-box-loses-row-column-scope.
+    # The extracted-private-composable path leaked the enclosing
+    # GeneratedView scope: modifier closures referencing `data.<prop>` and
+    # child `Modifier.weight(...)` calls both broke. The fix is to inline
+    # the if/else chain at the call site (same shape as Embed / Collection).
+    describe 'View responsive inline (regression: kjui-view-responsive-helper-data-closure-scope-leak + kjui-responsive-helper-wraps-with-box-loses-row-column-scope)' do
       before do
         builder.instance_variable_set(:@required_imports, Set.new)
         builder.instance_variable_set(:@included_views, Set.new)
@@ -778,42 +784,95 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         }
       end
 
-      it 'call site has no windowSizeClass argument' do
+      it 'emits inline if/else (not a private composable)' do
         call_code = builder.send(:generate_component, view_json, 0, nil)
+        expect(call_code).to include('if (LocalConfiguration.current.screenWidthDp >= 840)')
+        expect(call_code).not_to match(/Responsive\w+\s*\{/)
         expect(call_code).not_to include('windowSizeClass = windowSizeClass')
-        expect(call_code).to match(/Responsive\w+\s*\{/)
       end
 
-      it 'helper function signature drops windowSizeClass parameter' do
+      it 'does not register a file-scope helper function' do
         builder.send(:generate_component, view_json, 0, nil)
         funcs = builder.instance_variable_get(:@responsive_functions)
-        expect(funcs).not_to be_empty
-        expect(funcs.first).not_to include('windowSizeClass: WindowSizeClass')
-        expect(funcs.first).to include('content: @Composable () -> Unit')
+        expect(funcs).to be_empty
       end
 
-      it 'helper uses LocalConfiguration.current.screenWidthDp not WindowWidthSizeClass' do
-        builder.send(:generate_component, view_json, 0, nil)
-        funcs = builder.instance_variable_get(:@responsive_functions)
-        expect(funcs.first).to include('LocalConfiguration.current.screenWidthDp')
-        expect(funcs.first).not_to include('WindowWidthSizeClass')
+      it 'uses LocalConfiguration.current.screenWidthDp not WindowWidthSizeClass' do
+        call_code = builder.send(:generate_component, view_json, 0, nil)
+        expect(call_code).to include('LocalConfiguration.current.screenWidthDp')
+        expect(call_code).not_to include('WindowWidthSizeClass')
       end
 
-      it 'does not pull in the window_size_class import' do
+      it 'pulls in local_configuration but not window_size_class' do
         builder.send(:generate_component, view_json, 0, nil)
         imports = builder.instance_variable_get(:@required_imports)
         expect(imports).not_to include(:window_size_class)
         expect(imports).to include(:local_configuration)
       end
 
-      it 'fully qualifies android.content.res.Configuration in the isLandscape val' do
+      it 'fully qualifies android.content.res.Configuration when a landscape branch is present' do
         # Regression: bare `Configuration.ORIENTATION_LANDSCAPE` would clash
         # with kjui's `com.kotlinjsonui.core.Configuration` whenever a
         # component on the same screen also needs the kjui Configuration
         # class (e.g. Button / TextField / font helper).
-        builder.send(:generate_component, view_json, 0, nil)
+        landscape_json = {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'responsive' => {
+            'regular' => { 'maxWidth' => 720 },
+            'regular-landscape' => { 'maxWidth' => 960 }
+          },
+          'child' => [{ 'type' => 'Text', 'text' => 'Hello' }]
+        }
+        call_code = builder.send(:generate_component, landscape_json, 0, nil)
+        expect(call_code).to include('android.content.res.Configuration.ORIENTATION_LANDSCAPE')
+      end
+
+      it 'preserves the caller parent scope so child Modifier.weight resolves' do
+        # The original bug: the extracted helper wrapped children in a Box,
+        # so a child weight(1f) lost its ColumnScope receiver. Inline
+        # rendering puts the branch container directly in the caller's
+        # ColumnScope, preserving weight resolution.
+        weight_json = {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'responsive' => {
+            'regular' => { 'maxWidth' => 640, 'centerHorizontal' => true }
+          },
+          'child' => [
+            { 'type' => 'View', 'orientation' => 'horizontal', 'weight' => 1,
+              'child' => [{ 'type' => 'Text', 'text' => 'A' }] }
+          ]
+        }
+        call_code = builder.send(:generate_component, weight_json, 0, 'Column')
+        # Each branch emits a Column (the responsive View itself is
+        # vertical) and the child renders inside that Column scope so its
+        # own modifiers see ColumnScope. No `private fun` wrapper.
+        expect(call_code).to include('Column(')
+        expect(call_code).not_to match(/private fun Responsive/)
+      end
+
+      it 'modifier closures keep their data/viewModel references at the call site' do
+        # The original bug: extracting the helper to file scope dropped
+        # `data` / `viewModel` from the body's scope, so onClick / alpha
+        # bindings emitted unresolved references. Inline preserves them.
+        closure_json = {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'onclick' => '@{onProductCardTap}',
+          'responsive' => {
+            'regular' => { 'maxWidth' => 480, 'centerHorizontal' => true }
+          },
+          'child' => [{ 'type' => 'Text', 'text' => 'Card' }]
+        }
+        call_code = builder.send(:generate_component, closure_json, 0, 'Column')
+        # The `data.onProductCardTap?.invoke()` (or similar) lives directly
+        # inside the inline if/else, where `data` is the GeneratedView's
+        # parameter and resolves correctly.
+        expect(call_code).to include('data.onProductCardTap')
+        # No helper extraction.
         funcs = builder.instance_variable_get(:@responsive_functions)
-        expect(funcs.first).to include('android.content.res.Configuration.ORIENTATION_LANDSCAPE')
+        expect(funcs).to be_empty
       end
     end
 
@@ -844,12 +903,11 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
           },
           'child' => [{ 'type' => 'Text', 'text' => 'Hi' }]
         }
-        builder.send(:generate_component, json, 0, nil)
-        helper = builder.instance_variable_get(:@responsive_functions).first
-        expect(helper).to include('80.dp')
+        result = builder.send(:generate_component, json, 0, nil)
+        expect(result).to include('80.dp')
         # The regular branch is the only one with the override; default
         # branch should NOT carry the 80 padding.
-        expect(helper.scan(/80\.dp/).length).to eq(1)
+        expect(result.scan(/80\.dp/).length).to eq(1)
       end
 
       it 'base + override leftPadding emits 32 in regular branch and 16 in default' do
@@ -862,23 +920,21 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
           },
           'child' => [{ 'type' => 'Text', 'text' => 'Hi' }]
         }
-        builder.send(:generate_component, json, 0, nil)
-        helper = builder.instance_variable_get(:@responsive_functions).first
+        result = builder.send(:generate_component, json, 0, nil)
         # Regular and default branches each emit their respective values.
-        expect(helper).to include('32.dp')
-        expect(helper).to include('16.dp')
+        expect(result).to include('32.dp')
+        expect(result).to include('16.dp')
       end
     end
 
-    # Regression: kjui-responsive-helper-align-scope-leak
-    # The file-scope helper composable (introduced by
-    # `kjui-view-responsive-helper-placement`) puts the inner Column at a
-    # parent-less position. `Modifier.align(...)` is a Scope-bound
-    # extension (RowScope / ColumnScope / BoxScope) and won't resolve
-    # there. The fix: when emitting the helper's inner container, route
-    # alignment through `Modifier.wrapContentWidth/Height(Alignment.*)`,
-    # which are scope-independent.
-    describe 'responsive helper emits scope-free alignment (regression: kjui-responsive-helper-align-scope-leak)' do
+    # Regression: kjui-responsive-helper-align-scope-leak (now obsolete
+    # under the inline path, but the tests stay as a lock — alignment for
+    # a responsive View must reach the call site in a form that resolves
+    # against the caller's actual scope receiver). Because inline emits
+    # the branch container *inside* the caller's RowScope / ColumnScope /
+    # BoxScope, `Modifier.align(...)` is valid again — no need for the
+    # ScopeFree `wrapContentWidth/Height` workaround.
+    describe 'responsive inline emits scope-correct alignment (regression: kjui-responsive-helper-align-scope-leak)' do
       before do
         builder.instance_variable_set(:@required_imports, Set.new)
         builder.instance_variable_set(:@included_views, Set.new)
@@ -888,7 +944,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         builder.instance_variable_set(:@responsive_counter, 0)
       end
 
-      it 'centerHorizontal in responsive override emits wrapContentWidth (not .align)' do
+      it 'centerHorizontal in responsive override emits .align inside ColumnScope' do
         json = {
           'type' => 'View',
           'orientation' => 'vertical',
@@ -897,13 +953,15 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
           },
           'child' => [{ 'type' => 'Text', 'text' => 'Hello' }]
         }
-        builder.send(:generate_component, json, 0, 'Column')
-        helper = builder.instance_variable_get(:@responsive_functions).first
-        expect(helper).to include('wrapContentWidth(Alignment.CenterHorizontally)')
-        expect(helper).not_to include('.align(Alignment.CenterHorizontally)')
+        result = builder.send(:generate_component, json, 0, 'Column')
+        # Inside ColumnScope, `.align(Alignment.CenterHorizontally)` is a
+        # valid scope-bound extension — no need for `wrapContentWidth`.
+        expect(result).to include('.align(Alignment.CenterHorizontally)')
+        # No file-scope helper emitted.
+        expect(builder.instance_variable_get(:@responsive_functions)).to be_empty
       end
 
-      it 'centerVertical in responsive override emits wrapContentHeight (not .align)' do
+      it 'centerVertical in responsive override emits .align inside RowScope' do
         json = {
           'type' => 'View',
           'orientation' => 'horizontal',
@@ -912,13 +970,12 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
           },
           'child' => [{ 'type' => 'Text', 'text' => 'Hi' }]
         }
-        builder.send(:generate_component, json, 0, 'Row')
-        helper = builder.instance_variable_get(:@responsive_functions).first
-        expect(helper).to include('wrapContentHeight(Alignment.CenterVertically)')
-        expect(helper).not_to include('.align(Alignment.CenterVertically)')
+        result = builder.send(:generate_component, json, 0, 'Row')
+        expect(result).to include('.align(Alignment.CenterVertically)')
+        expect(builder.instance_variable_get(:@responsive_functions)).to be_empty
       end
 
-      it 'centerInParent emits both wrapContentWidth and wrapContentHeight' do
+      it 'centerInParent in responsive override emits .align(Alignment.Center) inside BoxScope' do
         json = {
           'type' => 'View',
           'orientation' => 'vertical',
@@ -927,11 +984,12 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
           },
           'child' => [{ 'type' => 'Text', 'text' => 'Hi' }]
         }
-        builder.send(:generate_component, json, 0, 'Box')
-        helper = builder.instance_variable_get(:@responsive_functions).first
-        expect(helper).to include('wrapContentWidth(Alignment.CenterHorizontally)')
-        expect(helper).to include('wrapContentHeight(Alignment.CenterVertically)')
-        expect(helper).not_to include('.align(Alignment.Center)')
+        result = builder.send(:generate_component, json, 0, 'Box')
+        # BoxScope honours `Modifier.align(Alignment.Center)` for full
+        # centering, which is what build_alignment emits when centerInParent
+        # is set without conflicting alignment hints.
+        expect(result).to include('.align(Alignment.Center)')
+        expect(builder.instance_variable_get(:@responsive_functions)).to be_empty
       end
     end
 
