@@ -265,62 +265,65 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
       expect(modifiers).to eq([])
     end
 
-    # Regression: sjui-kjui-responsive-align-left-right-not-honored.
-    # alignLeft / alignRight / alignTop / alignBottom must produce the
-    # same inner-frame anchor that centerHorizontal / centerVertical do.
-    it 'emits alignment: .leading for alignLeft + numeric maxWidth' do
+    # Regression: sjui-kjui-responsive-align-cascades-to-inner-ignoring-
+    # gravity. The inner frame's `alignment:` MUST be `gravity`-driven,
+    # NOT responsive `align*` flag-driven. The responsive flags get their
+    # effect from the outer wrap (`.frame(.infinity, alignment: ...)`).
+    it 'emits alignment: .center for alignLeft + numeric maxWidth (no gravity)' do
+      # Without `gravity`, alignLeft falls back to the default-center
+      # inner alignment. alignLeft itself is honored by the outer wrap
+      # (when matchParent + numeric maxWidth collide) — not here.
       modifiers = described_class.build_responsive_modifiers(
         { 'maxWidth' => 480, 'alignLeft' => true }, nil
       )
-      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .leading)'])
+      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .center)'])
     end
 
-    it 'emits alignment: .trailing for alignRight + numeric maxWidth' do
+    it 'emits alignment: .center for alignRight + numeric maxWidth (no gravity)' do
       modifiers = described_class.build_responsive_modifiers(
         { 'maxWidth' => 480, 'alignRight' => true }, nil
       )
-      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .trailing)'])
+      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .center)'])
     end
 
-    it 'emits alignment: .top for alignTop + numeric maxHeight' do
-      modifiers = described_class.build_responsive_modifiers(
-        { 'maxHeight' => 400, 'alignTop' => true }, nil
-      )
-      expect(modifiers).to eq(['.frame(maxHeight: 400, alignment: .top)'])
-    end
-
-    it 'emits alignment: .bottom for alignBottom + numeric maxHeight' do
-      modifiers = described_class.build_responsive_modifiers(
-        { 'maxHeight' => 400, 'alignBottom' => true }, nil
-      )
-      expect(modifiers).to eq(['.frame(maxHeight: 400, alignment: .bottom)'])
-    end
-
-    it 'expands alignLeft alone to .infinity on its axis (same as centerHorizontal alone)' do
+    it 'does not auto-fall back to .infinity for alignLeft alone (only center* does)' do
+      # alignLeft without explicit max means "outer anchor only". Without
+      # matchParent there is no outer wrap, so the responsive flag is
+      # effectively a no-op in this configuration. build_responsive_modifiers
+      # should NOT manufacture a `.frame(maxWidth: .infinity, ...)` for it.
       modifiers = described_class.build_responsive_modifiers({ 'alignLeft' => true }, nil)
-      expect(modifiers).to eq(['.frame(maxWidth: .infinity, alignment: .leading)'])
+      expect(modifiers).to eq([])
     end
 
-    it 'combines alignBottom + alignRight into .bottomTrailing' do
+    it 'gravity drives the inner frame alignment' do
+      # gravity: "center" → `.center` (matches the chat-button repro).
       modifiers = described_class.build_responsive_modifiers(
-        { 'maxWidth' => 480, 'maxHeight' => 400, 'alignBottom' => true, 'alignRight' => true }, nil
+        { 'maxWidth' => 320, 'alignLeft' => true, 'gravity' => 'center' }, nil
+      )
+      expect(modifiers).to eq(['.frame(maxWidth: 320, alignment: .center)'])
+    end
+
+    it 'gravity: "left" emits .leading inner alignment' do
+      modifiers = described_class.build_responsive_modifiers(
+        { 'maxWidth' => 320, 'centerHorizontal' => true, 'gravity' => 'left' }, nil
+      )
+      expect(modifiers).to eq(['.frame(maxWidth: 320, alignment: .leading)'])
+    end
+
+    it 'gravity: "bottom|right" emits .bottomTrailing inner alignment' do
+      modifiers = described_class.build_responsive_modifiers(
+        { 'maxWidth' => 320, 'maxHeight' => 200, 'alignLeft' => true, 'gravity' => 'bottom|right' },
+        nil
       )
       expect(modifiers).to eq(
-        ['.frame(maxWidth: 480, maxHeight: 400, alignment: .bottomTrailing)']
+        ['.frame(maxWidth: 320, maxHeight: 200, alignment: .bottomTrailing)']
       )
-    end
-
-    it 'collapses alignLeft + alignRight into .center along that axis' do
-      modifiers = described_class.build_responsive_modifiers(
-        { 'maxWidth' => 480, 'alignLeft' => true, 'alignRight' => true }, nil
-      )
-      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .center)'])
     end
   end
 
-  # Regression: sjui-kjui-responsive-align-left-right-not-honored.
-  # The frame_alignment_for helper is the canonical resolver for the
-  # SwiftUI Alignment literal from the canonical alignment attrs.
+  # `frame_alignment_for` is the OUTER-wrap resolver (responsive
+  # `align*` / `center*` flags). It is not used by the inner frame;
+  # see `inner_frame_alignment` below for that.
   describe '.frame_alignment_for' do
     it 'returns nil when no flag is set' do
       expect(described_class.frame_alignment_for({})).to be_nil
@@ -359,6 +362,47 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
 
     it 'returns .center for centerInParent (back-compat)' do
       expect(described_class.frame_alignment_for({ 'centerInParent' => true })).to eq('.center')
+    end
+  end
+
+  # Regression: sjui-kjui-responsive-align-cascades-to-inner-ignoring-
+  # gravity. inner_frame_alignment is `gravity`-driven and falls back to
+  # `.center` when no gravity is set but a responsive flag is present.
+  describe '.inner_frame_alignment' do
+    it 'returns nil when neither gravity nor a responsive flag is set' do
+      expect(described_class.inner_frame_alignment({})).to be_nil
+      expect(described_class.inner_frame_alignment({ 'maxWidth' => 480 })).to be_nil
+    end
+
+    it 'returns .center when a responsive flag is set but no gravity' do
+      expect(described_class.inner_frame_alignment({ 'alignLeft' => true })).to eq('.center')
+      expect(described_class.inner_frame_alignment({ 'centerHorizontal' => true })).to eq('.center')
+      expect(described_class.inner_frame_alignment({ 'alignBottom' => true })).to eq('.center')
+    end
+
+    it 'returns gravity-derived alignment when gravity is set' do
+      expect(described_class.inner_frame_alignment({ 'gravity' => 'center' })).to eq('.center')
+      expect(described_class.inner_frame_alignment({ 'gravity' => 'left' })).to eq('.leading')
+      expect(described_class.inner_frame_alignment({ 'gravity' => 'right' })).to eq('.trailing')
+      expect(described_class.inner_frame_alignment({ 'gravity' => 'top' })).to eq('.top')
+      expect(described_class.inner_frame_alignment({ 'gravity' => 'bottom' })).to eq('.bottom')
+    end
+
+    it 'parses pipe-separated compound gravity' do
+      expect(described_class.inner_frame_alignment({ 'gravity' => 'bottom|right' }))
+        .to eq('.bottomTrailing')
+      expect(described_class.inner_frame_alignment({ 'gravity' => 'top|left' }))
+        .to eq('.topLeading')
+    end
+
+    it 'gravity overrides responsive flag (chat button repro)' do
+      # `responsive.regular.alignLeft: true` + base `gravity: "center"` →
+      # inner alignment is `.center` from gravity, not `.leading` from
+      # the responsive flag. The outer wrap resolves to `.leading`.
+      result = described_class.inner_frame_alignment(
+        'alignLeft' => true, 'gravity' => 'center'
+      )
+      expect(result).to eq('.center')
     end
   end
 
@@ -463,42 +507,46 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
     end
   end
 
-  # Regression: sjui-kjui-responsive-align-left-right-not-honored.
-  # alignLeft replaces centerHorizontal in the same matchParent + maxWidth
-  # collision pattern, and the outer wrap must anchor at `.leading` (not
-  # `.center`).
-  describe '.generate_container_function (regression: alignLeft + matchParent + maxWidth)' do
-    let(:bordered_left_anchored) do
+  # Regression: sjui-kjui-responsive-align-cascades-to-inner-ignoring-
+  # gravity. alignLeft is OUTER-only — the inner frame's alignment comes
+  # from `gravity` (or `.center` default). chat-button repro:
+  # `gravity: "center"` + `responsive.regular.alignLeft: true` + maxWidth
+  # + matchParent → inner `.center`, outer `.leading`.
+  describe '.generate_container_function (regression: alignLeft outer-only, gravity drives inner)' do
+    let(:chat_button_component) do
       {
         'type' => 'View',
         'orientation' => 'vertical',
         'spacing' => 0,
         'width' => 'matchParent',
+        'height' => 44,
+        'gravity' => 'center',
         'background' => '#FFFFFF',
         'borderWidth' => 1,
         'borderColor' => '#CCCCCC',
         'cornerRadius' => 10,
         'responsive' => {
-          'regular' => { 'maxWidth' => 480, 'alignLeft' => true }
+          'regular' => { 'maxWidth' => 320, 'alignLeft' => true }
         },
         'child' => [{ 'type' => 'Label', 'text' => 'Hi' }]
       }
     end
 
-    let(:converter_for_left_anchored) do
-      SjuiTools::SwiftUI::Views::ViewConverter.new(bordered_left_anchored, 0)
+    let(:converter_for_chat_button) do
+      SjuiTools::SwiftUI::Views::ViewConverter.new(chat_button_component, 0)
     end
 
-    it 'emits inner .frame(maxWidth: 480, alignment: .leading)' do
+    it 'emits inner .frame(maxWidth: 320, alignment: .center) from gravity (not alignLeft)' do
       code = described_class.generate_container_function(
-        'responsive0', bordered_left_anchored, converter_for_left_anchored
+        'responsive0', chat_button_component, converter_for_chat_button
       )
-      expect(code).to include('.frame(maxWidth: 480, alignment: .leading)')
+      expect(code).to include('.frame(maxWidth: 320, alignment: .center)')
+      expect(code).not_to include('.frame(maxWidth: 320, alignment: .leading)')
     end
 
     it 'emits outer .frame(maxWidth: .infinity, alignment: .leading) after decorations' do
       code = described_class.generate_container_function(
-        'responsive0', bordered_left_anchored, converter_for_left_anchored
+        'responsive0', chat_button_component, converter_for_chat_button
       )
       expect(code).to include('.frame(maxWidth: .infinity, alignment: .leading)')
       regular_section = code[/horizontalSizeClass == \.regular.*?(?=\} else \{)/m]
@@ -567,11 +615,11 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
       expect(lines.any? { |l| l.start_with?('.frame(maxWidth: 480, alignment:') }).to be true
     end
 
-    # Regression: sjui-kjui-responsive-align-left-right-not-honored.
-    # The same non-Label alignment branch now extends to alignLeft /
-    # alignRight / alignTop / alignBottom (canonical attrs that
-    # `responsive` blocks should honor).
-    it 'adds alignment: .leading for non-Label types when alignLeft is true' do
+    # Regression: sjui-kjui-responsive-align-cascades-to-inner-ignoring-
+    # gravity. align* flags do NOT cascade to inner-frame alignment —
+    # that's `gravity`-driven. Without gravity, inner falls back to
+    # `.center` (matching the trio contract for centerHorizontal).
+    it 'adds alignment: .center for non-Label types when alignLeft alone (no gravity)' do
       component = {
         'type' => 'MarkdownText',
         'alignLeft' => true,
@@ -580,10 +628,10 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
       converter = SjuiTools::SwiftUI::Views::BaseViewConverter.new(component)
       converter.send(:apply_modifiers)
       lines = converter.instance_variable_get(:@modifier_bag).to_lines
-      expect(lines).to include('.frame(maxWidth: 480, alignment: .leading)')
+      expect(lines).to include('.frame(maxWidth: 480, alignment: .center)')
     end
 
-    it 'adds alignment: .trailing for non-Label types when alignRight is true' do
+    it 'adds alignment: .center for non-Label types when alignRight alone (no gravity)' do
       component = {
         'type' => 'MarkdownText',
         'alignRight' => true,
@@ -592,21 +640,34 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
       converter = SjuiTools::SwiftUI::Views::BaseViewConverter.new(component)
       converter.send(:apply_modifiers)
       lines = converter.instance_variable_get(:@modifier_bag).to_lines
-      expect(lines).to include('.frame(maxWidth: 480, alignment: .trailing)')
+      expect(lines).to include('.frame(maxWidth: 480, alignment: .center)')
     end
 
-    it 'adds alignment: .bottomTrailing for alignBottom + alignRight' do
+    it 'gravity drives inner alignment, NOT the responsive align* flag' do
+      # alignLeft (responsive) + gravity:center (inner) → inner `.center`.
       component = {
         'type' => 'MarkdownText',
-        'alignBottom' => true,
-        'alignRight' => true,
-        'maxWidth' => 480,
-        'maxHeight' => 200
+        'alignLeft' => true,
+        'gravity' => 'center',
+        'maxWidth' => 480
       }
       converter = SjuiTools::SwiftUI::Views::BaseViewConverter.new(component)
       converter.send(:apply_modifiers)
       lines = converter.instance_variable_get(:@modifier_bag).to_lines
-      expect(lines).to include('.frame(maxWidth: 480, maxHeight: 200, alignment: .bottomTrailing)')
+      expect(lines).to include('.frame(maxWidth: 480, alignment: .center)')
+    end
+
+    it 'gravity: "left" emits .leading even when centerHorizontal is set' do
+      component = {
+        'type' => 'MarkdownText',
+        'centerHorizontal' => true,
+        'gravity' => 'left',
+        'maxWidth' => 480
+      }
+      converter = SjuiTools::SwiftUI::Views::BaseViewConverter.new(component)
+      converter.send(:apply_modifiers)
+      lines = converter.instance_variable_get(:@modifier_bag).to_lines
+      expect(lines).to include('.frame(maxWidth: 480, alignment: .leading)')
     end
   end
 

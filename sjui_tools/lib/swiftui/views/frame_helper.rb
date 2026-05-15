@@ -48,22 +48,22 @@ module SjuiTools
               if @component['type'] == 'Label' || @component['type'] == 'Text'
                 frame_params << "alignment: #{label_frame_alignment}"
               else
-                # Match the responsive container path
-                # (ResponsiveHelper.build_responsive_modifiers): when any
-                # canonical alignment flag is set (center* or align*), the
-                # inner constraint frame anchors its content along that
-                # axis. Leaf-path converters (extension converters like
-                # MarkdownText generated via `jui generate converter`)
-                # reach this branch because they run apply_modifiers
-                # directly — without this alignment, the maxWidth
-                # constraint shrinks the view but leaves it leading-aligned
-                # in its frame.
+                # Non-Label inner frame alignment is `gravity`-driven, NOT
+                # responsive `align*` / `center*` flags. The responsive
+                # flags are outer-anchor hints; they're applied at the
+                # outer `.frame(.infinity, alignment: ...)` wrap emitted
+                # by responsive_helper. Cascading them onto the inner
+                # frame pins wrap-content children to the wrong edge
+                # (regression: sjui-kjui-responsive-align-cascades-to-
+                # inner-ignoring-gravity).
                 #
-                # alignLeft / alignRight / alignTop / alignBottom map to
-                # `.leading` / `.trailing` / `.top` / `.bottom`; the
-                # 2-axis form (`.bottomTrailing` etc.) is used when both
-                # axes specify a non-center anchor.
-                alignment = ResponsiveHelper.frame_alignment_for(@component)
+                # When `gravity` is set, derived alignment is used.
+                # Otherwise, if any responsive flag is set, fall back to
+                # `.center` so the trio contract (centerHorizontal +
+                # maxWidth: N → `.frame(maxWidth: N, alignment: .center)`)
+                # is preserved. If neither, the alignment is omitted and
+                # SwiftUI's implicit `.center` default takes over.
+                alignment = ResponsiveHelper.inner_frame_alignment(@component)
                 frame_params << "alignment: #{alignment}" if alignment
               end
               @modifier_bag.append(:frame_constraints, ".frame(#{frame_params.join(', ')})")
