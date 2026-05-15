@@ -441,6 +441,15 @@ module SjuiTools
           branches = JsonUIShared::ResponsiveResolver.build_branches(@component)
           saved_component = @component
 
+          # Wrap the if/else chain in `Group { }` so it parses inside an
+          # `AnyView(...)` argument position. AnyView takes a single View
+          # expression and a bare `if/else` is @ViewBuilder content, not an
+          # expression. Group is a transparent @ViewBuilder container that
+          # legalizes the conditional in either nesting context. Mirrors
+          # embed_converter#convert_responsive.
+          add_line "Group {"
+          @indent_level += 1
+
           branches.each_with_index do |branch, idx|
             condition = branch[:size_class] ? Views::ResponsiveHelper.size_class_condition(branch[:size_class]) : nil
 
@@ -462,10 +471,13 @@ module SjuiTools
           end
 
           add_line "}" if branches.size > 1
+          @indent_level -= 1
+          add_line "}"
           @component = saved_component
           # See embed_converter#convert_responsive for the same fix rationale:
           # generated_code emits the modifier_bag as a side effect, which would
-          # re-emit the LAST branch's modifiers outside the if/else block.
+          # re-emit the LAST branch's modifiers outside the Group's closing
+          # brace. Reset so the final generated_code call is a no-op.
           @modifier_bag = ModifierBag.new
           generated_code
         end
