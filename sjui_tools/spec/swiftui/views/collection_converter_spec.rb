@@ -461,6 +461,27 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).not_to include('horizontalSizeClass')
       expect(code).to include('count: 3')
     end
+
+    # Regression: sjui-collection-responsive-block-missing-group-wrap.
+    # Without `Group { }` the bare if/else lands directly inside the
+    # parent AnyView(...) argument and Swift refuses to parse it.
+    it 'wraps the if/else branches in Group { } so AnyView(...) accepts them' do
+      component = {
+        'type' => 'Collection',
+        'id' => 'grid_collection',
+        'columns' => 2,
+        'responsive' => {
+          'regular' => { 'columns' => 5 }
+        }
+      }
+      code = described_class.new(component).convert
+      expect(code).to include('Group {')
+      group_idx = code.index('Group {')
+      if_idx = code.index('if horizontalSizeClass == .regular {')
+      expect(group_idx).not_to be_nil
+      expect(if_idx).not_to be_nil
+      expect(group_idx).to be < if_idx
+    end
   end
 
   describe '#to_camel_case' do
