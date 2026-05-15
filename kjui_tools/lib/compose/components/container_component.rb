@@ -58,7 +58,15 @@ module KjuiTools
 
           # 7. Padding (inner spacing) - applied last
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
-          
+
+          # Reorder the alignment-anchor pattern so `.fillMax<Axis>()` sits
+          # BEFORE `.wrapContent<Axis>(Alignment.X)` when an `.<axis>In(max =
+          # N.dp)` is also present. Without this, a clamped + centered
+          # container ends up flush-left on Android while iOS renders it
+          # centered. See ModifierBuilder.reorder_alignment_anchor! for the
+          # constraint semantics.
+          Helpers::ModifierBuilder.reorder_alignment_anchor!(modifiers)
+
           code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
           
           # Add gravity settings

@@ -217,6 +217,56 @@ module KjuiTools
           end
         end
 
+        # When `wrapContent<Axis>(Alignment.X)` coexists with `.fillMax<Axis>()`
+        # and an `.<axis>In(max = N.dp)` bound (the
+        # `width: matchParent` + `maxWidth: N` + `centerHorizontal/alignLeft/
+        # alignRight: true` combo in spec), the Compose chain must be
+        # ordered:
+        #
+        #   .fillMax<Axis>()              # claim full parent <axis> for the frame
+        #   .wrapContent<Axis>(Alignment) # align the (clamped) child within full frame
+        #   .<axis>In(max = N.dp)         # clamp the child to N
+        #
+        # The natural build_alignment-first / build_size-second emit produces
+        # `wrapContent<Axis>(...) → <axis>In → fillMax<Axis>()` instead. With
+        # that order, `wrapContent<Axis>` runs against the child's own
+        # (clamped) bounds — there is no surrounding full-parent frame for
+        # the alignment to offset against — so a maxWidth-clamped child
+        # sits at the left edge of the parent instead of centered. Mirrors
+        # the SwiftUI side which uses `.frame(maxWidth: N, alignment:
+        # .center)` as a single API and is unaffected.
+        #
+        # Regression: kjui-responsive-centerhorizontal-modifier-order-not-centered.
+        def self.reorder_alignment_anchor!(modifiers)
+          reorder_axis!(modifiers, 'Width', 'width')
+          reorder_axis!(modifiers, 'Height', 'height')
+          modifiers
+        end
+
+        def self.reorder_axis!(modifiers, pascal_axis, lower_axis)
+          fill = ".fillMax#{pascal_axis}()"
+          fill_idx = modifiers.index(fill)
+          return unless fill_idx
+
+          wrap_prefix = ".wrapContent#{pascal_axis}(Alignment."
+          wrap_idx = modifiers.index { |m| m.is_a?(String) && m.start_with?(wrap_prefix) }
+          return unless wrap_idx
+
+          # Only reorder when the bound is also present — that's the trigger
+          # for the misalignment. If `.<axis>In(...)` isn't there, the
+          # current order is fine.
+          in_prefix = ".#{lower_axis}In("
+          has_in = modifiers.any? { |m| m.is_a?(String) && m.start_with?(in_prefix) }
+          return unless has_in
+
+          # Already in correct order (fill < wrap).
+          return if fill_idx < wrap_idx
+
+          modifiers.delete_at(fill_idx)
+          wrap_idx = modifiers.index { |m| m.is_a?(String) && m.start_with?(wrap_prefix) }
+          modifiers.insert(wrap_idx, fill)
+        end
+
         def self.build_size(json_data)
           modifiers = []
 

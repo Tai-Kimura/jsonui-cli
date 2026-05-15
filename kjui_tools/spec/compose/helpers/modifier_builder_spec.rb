@@ -532,4 +532,118 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
       end
     end
   end
+
+  # Regression: kjui-responsive-centerhorizontal-modifier-order-not-centered.
+  # When `width: matchParent` (→ `.fillMaxWidth()`), `maxWidth: N` (→
+  # `.widthIn(max = N.dp)`), and an alignment anchor like `centerHorizontal:
+  # true` (→ `.wrapContentWidth(Alignment.CenterHorizontally)` via the
+  # ScopeFree branch of build_alignment) all coexist, the chain must end up
+  # as `.fillMax<Axis>() → .wrapContent<Axis>(Alignment.X) → .<axis>In(...)`.
+  # The default concat order produces `wrapContent → axisIn → fillMax`,
+  # which leaves the maxWidth-clamped child flush-left on Android because
+  # `wrapContentWidth` aligns within the child's own (clamped) bounds, not
+  # the parent's full width.
+  describe '.reorder_alignment_anchor!' do
+    it 'moves fillMaxWidth before wrapContentWidth(CenterHorizontally) when widthIn is also present' do
+      modifiers = [
+        '.testTag("mypage_content_container")',
+        '.semantics { testTagsAsResourceId = true }',
+        '.wrapContentWidth(Alignment.CenterHorizontally)',
+        '.widthIn(max = 960.dp)',
+        '.fillMaxWidth()',
+        '.wrapContentHeight()',
+        '.padding(bottom = 40.dp)'
+      ]
+      described_class.reorder_alignment_anchor!(modifiers)
+
+      fill_idx = modifiers.index('.fillMaxWidth()')
+      wrap_idx = modifiers.index('.wrapContentWidth(Alignment.CenterHorizontally)')
+      in_idx = modifiers.index('.widthIn(max = 960.dp)')
+
+      expect(fill_idx).to be < wrap_idx
+      expect(wrap_idx).to be < in_idx
+    end
+
+    it 'reorders the same pattern with Alignment.Start (alignLeft + maxWidth)' do
+      modifiers = [
+        '.wrapContentWidth(Alignment.Start)',
+        '.widthIn(max = 480.dp)',
+        '.fillMaxWidth()'
+      ]
+      described_class.reorder_alignment_anchor!(modifiers)
+      expect(modifiers).to eq([
+        '.fillMaxWidth()',
+        '.wrapContentWidth(Alignment.Start)',
+        '.widthIn(max = 480.dp)'
+      ])
+    end
+
+    it 'reorders the same pattern with Alignment.End (alignRight + maxWidth)' do
+      modifiers = [
+        '.wrapContentWidth(Alignment.End)',
+        '.widthIn(max = 480.dp)',
+        '.fillMaxWidth()'
+      ]
+      described_class.reorder_alignment_anchor!(modifiers)
+      expect(modifiers).to eq([
+        '.fillMaxWidth()',
+        '.wrapContentWidth(Alignment.End)',
+        '.widthIn(max = 480.dp)'
+      ])
+    end
+
+    it 'applies symmetrically on the height axis when heightIn coexists with wrapContentHeight(Alignment.X)' do
+      modifiers = [
+        '.wrapContentHeight(Alignment.Bottom)',
+        '.heightIn(max = 400.dp)',
+        '.fillMaxHeight()'
+      ]
+      described_class.reorder_alignment_anchor!(modifiers)
+      expect(modifiers).to eq([
+        '.fillMaxHeight()',
+        '.wrapContentHeight(Alignment.Bottom)',
+        '.heightIn(max = 400.dp)'
+      ])
+    end
+
+    it 'leaves the chain alone when widthIn is absent (no maxWidth cap, no misalignment risk)' do
+      modifiers = [
+        '.wrapContentWidth(Alignment.CenterHorizontally)',
+        '.fillMaxWidth()'
+      ]
+      described_class.reorder_alignment_anchor!(modifiers)
+      expect(modifiers).to eq([
+        '.wrapContentWidth(Alignment.CenterHorizontally)',
+        '.fillMaxWidth()'
+      ])
+    end
+
+    it 'leaves the chain alone when wrapContent<Axis> has no Alignment argument (plain wrapContent)' do
+      modifiers = [
+        '.wrapContentWidth()',
+        '.widthIn(max = 960.dp)',
+        '.fillMaxWidth()'
+      ]
+      described_class.reorder_alignment_anchor!(modifiers)
+      expect(modifiers).to eq([
+        '.wrapContentWidth()',
+        '.widthIn(max = 960.dp)',
+        '.fillMaxWidth()'
+      ])
+    end
+
+    it 'is a no-op when the chain is already in the correct order' do
+      modifiers = [
+        '.fillMaxWidth()',
+        '.wrapContentWidth(Alignment.CenterHorizontally)',
+        '.widthIn(max = 960.dp)'
+      ]
+      described_class.reorder_alignment_anchor!(modifiers)
+      expect(modifiers).to eq([
+        '.fillMaxWidth()',
+        '.wrapContentWidth(Alignment.CenterHorizontally)',
+        '.widthIn(max = 960.dp)'
+      ])
+    end
+  end
 end
