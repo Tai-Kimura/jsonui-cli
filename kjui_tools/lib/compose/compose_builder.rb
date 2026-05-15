@@ -404,95 +404,68 @@ module KjuiTools
       end
 
       # Generate code for a component that has a `responsive` block.
-      # Produces:
-      #   - A private @Composable function (accumulated in @responsive_functions)
-      #   - An inline call to that function at the current depth
+      #
+      # Emits an inline `if/else` chain at the call site instead of
+      # extracting a file-scope `private fun Responsive<T><N>(...)`. Two
+      # bugs make extraction structurally wrong:
+      #
+      # 1. Scope leak in the helper body. The extracted helper sits at file
+      #    scope, so its body has no surrounding `data` / `viewModel` from
+      #    the enclosing GeneratedView. Any modifier that closes over those
+      #    parameters (`onClick = data.onX`, `alpha = data.x.toFloat()`,
+      #    `visibility = data.flag`) emits an unresolved reference. Bug
+      #    report: `kjui-view-responsive-helper-data-closure-scope-leak`.
+      #
+      # 2. Scope leak at the call site. The helper wrapped children in a
+      #    `Box(...) { content() }` regardless of the original orientation,
+      #    so a child `Modifier.weight(1f)` whose parent was a
+      #    `SafeAreaView vertical → Column` got reparented to BoxScope and
+      #    failed to resolve. The `weight` identifier fell back to
+      #    module-level lookup and matched an unrelated `Float`, producing
+      #    the confusing `Expression 'weight' of type 'Float' cannot be
+      #    invoked as a function` error. Bug report:
+      #    `kjui-responsive-helper-wraps-with-box-loses-row-column-scope`.
+      #
+      # Inlining at the call site fixes both: the branch container sits
+      # directly in the caller's RowScope / ColumnScope / BoxScope, and
+      # references inside the modifier chain resolve against the
+      # GeneratedView's `data` / `viewModel` parameters. This mirrors the
+      # existing Embed / Collection inline paths above.
       def generate_responsive_component(json_data, depth, parent_type)
-        component_type = json_data['type'] || 'View'
-        has_children = has_component_children?(json_data)
-
-        # Generate a unique function name
         @responsive_counter += 1
-        func_name = "Responsive#{component_type.gsub(/[^A-Za-z0-9]/, '')}#{@responsive_counter}"
-
-        if has_children
-          generate_responsive_container(json_data, depth, parent_type, func_name)
-        else
-          generate_responsive_leaf(json_data, depth, parent_type, func_name)
-        end
+        generate_view_responsive_inline(json_data, depth, parent_type)
       end
 
-      # Generate responsive container: extracts wrapper function, renders children inline
-      def generate_responsive_container(json_data, depth, parent_type, func_name)
-        children = json_data['child'] || []
-        children = [children] unless children.is_a?(Array)
+      # Emit an inline `if/else` chain that renders the View per branch
+      # with merged attrs. No file-scope helper is registered.
+      def generate_view_responsive_inline(json_data, depth, parent_type)
+        branches = JsonUIShared::ResponsiveResolver.build_branches(json_data)
+        @required_imports&.add(:local_configuration)
 
-        # Build the wrapper function that switches container per branch.
-        # The wrapper lives at file scope (between RESPONSIVE_HELPERS_*
-        # markers), so the branch container sits in a non-Row/Column/Box
-        # parent — `Modifier.align(...)` would be unresolved. We pass
-        # 'ScopeFree' so build_alignment emits scope-independent
-        # `wrapContentWidth/Height` for the responsive container itself.
-        # The caller's actual `parent_type` only matters for the children
-        # inside the trailing `content { ... }` lambda, which are rendered
-        # at the call site (not inside this helper) and pick up the
-        # caller's scope naturally via generate_component below.
-        result = Helpers::ResponsiveHelper.generate_container_wrapper(
-          func_name, json_data, 0, @required_imports
-        ) do |attrs, branch_depth, imports|
-          # Generate the container opening code for this branch's attributes.
-          # parent_type override: 'ScopeFree' (see comment above).
-          branch_result = Components::ContainerComponent.generate(attrs, branch_depth, imports, 'ScopeFree')
-          if branch_result.is_a?(Hash)
-            # Container opening + "content()" call + closing
-            code = branch_result[:code]
-            code += "\n" + indent("content()", branch_depth + 1)
-            code += branch_result[:closing] if branch_result[:closing]
-            code
+        lines = []
+        first = true
+        branches.each do |branch|
+          condition = build_embed_inline_condition(branch[:size_class])
+          attrs = branch[:attrs].dup
+          attrs.delete('responsive')
+
+          if condition
+            keyword = first ? 'if' : '} else if'
+            lines << indent("#{keyword} (#{condition}) {", depth)
+            first = false
+          elsif first
+            # Only a default branch — emit the body directly with no
+            # surrounding conditional.
+            return generate_non_responsive_component(attrs, depth, parent_type)
           else
-            branch_result
+            lines << indent("} else {", depth)
           end
+
+          lines << generate_non_responsive_component(attrs, depth + 1, parent_type)
         end
 
-        # Accumulate the function definition
-        @responsive_functions << result[:function_code]
-
-        # Generate the call site: wrapper function wrapping children. The
-        # helper has no parameters other than its `content` trailing lambda;
-        # the GeneratedView scope doesn't carry a `windowSizeClass` to pass.
-        call_code = indent("#{func_name} {", depth)
-
-        # Determine the layout type for children from the default branch
-        # Use vertical as a safe default for child layout context
-        default_attrs = json_data.dup
-        default_attrs.delete('responsive')
-        layout_type = determine_child_layout_type(default_attrs)
-
-        children.each do |child|
-          child_code = generate_component(child, depth + 1, layout_type)
-          call_code += "\n" + child_code unless child_code.empty?
-        end
-        call_code += "\n" + indent("}", depth)
-
-        call_code
-      end
-
-      # Generate responsive leaf: extracts function, returns call.
-      # parent_type override: 'ScopeFree' for the same reason as
-      # generate_responsive_container — the leaf renders inside the
-      # file-scope helper, so `Modifier.align(...)` would not resolve.
-      def generate_responsive_leaf(json_data, depth, parent_type, func_name)
-        result = Helpers::ResponsiveHelper.generate_leaf_wrapper(
-          func_name, json_data, 0, @required_imports
-        ) do |attrs, branch_depth, imports|
-          # Generate the full component for this branch
-          generate_non_responsive_component(attrs, branch_depth, 'ScopeFree')
-        end
-
-        @responsive_functions << result[:function_code]
-
-        # Return the call site — helper takes no parameters now.
-        indent("#{func_name}()", depth)
+        lines << indent("}", depth)
+        lines.join("\n")
       end
 
       # Generate a component without responsive handling (to avoid infinite recursion)
