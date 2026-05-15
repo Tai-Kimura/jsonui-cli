@@ -424,7 +424,31 @@ module KjuiTools
 
         def self.build_alignment(json_data, required_imports = nil, parent_type = nil)
           modifiers = []
-          
+
+          # Scope-free emit context (no surrounding RowScope/ColumnScope/BoxScope).
+          # Used by the file-scope responsive helper composables (see
+          # compose_builder#generate_responsive_container) — Modifier.align(...)
+          # is a *Scope-receiver-bound* extension, so it doesn't resolve here.
+          # Translate centering to scope-independent equivalents.
+          if parent_type == 'ScopeFree'
+            if json_data['centerInParent']
+              modifiers << ".wrapContentWidth(Alignment.CenterHorizontally)"
+              modifiers << ".wrapContentHeight(Alignment.CenterVertically)"
+            else
+              if json_data['centerHorizontal']
+                modifiers << ".wrapContentWidth(Alignment.CenterHorizontally)"
+              end
+              if json_data['centerVertical']
+                modifiers << ".wrapContentHeight(Alignment.CenterVertically)"
+              end
+            end
+            # alignLeft/Right/Top/Bottom in scope-free context have no
+            # universally correct translation (Modifier.absoluteOffset is too
+            # surprising). Emit nothing and let parent contentAlignment / the
+            # outer layout settle it.
+            return modifiers
+          end
+
           # For Row, only vertical alignment is allowed
           if parent_type == 'Row'
             if json_data['alignTop']

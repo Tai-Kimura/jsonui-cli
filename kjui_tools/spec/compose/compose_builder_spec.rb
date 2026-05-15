@@ -810,6 +810,103 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       end
     end
 
+    # Regression: kjui-responsive-helper-align-scope-leak
+    # The file-scope helper composable (introduced by
+    # `kjui-view-responsive-helper-placement`) puts the inner Column at a
+    # parent-less position. `Modifier.align(...)` is a Scope-bound
+    # extension (RowScope / ColumnScope / BoxScope) and won't resolve
+    # there. The fix: when emitting the helper's inner container, route
+    # alignment through `Modifier.wrapContentWidth/Height(Alignment.*)`,
+    # which are scope-independent.
+    describe 'responsive helper emits scope-free alignment (regression: kjui-responsive-helper-align-scope-leak)' do
+      before do
+        builder.instance_variable_set(:@required_imports, Set.new)
+        builder.instance_variable_set(:@included_views, Set.new)
+        builder.instance_variable_set(:@cell_views, Set.new)
+        builder.instance_variable_set(:@custom_components, Set.new)
+        builder.instance_variable_set(:@responsive_functions, [])
+        builder.instance_variable_set(:@responsive_counter, 0)
+      end
+
+      it 'centerHorizontal in responsive override emits wrapContentWidth (not .align)' do
+        json = {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'responsive' => {
+            'regular' => { 'maxWidth' => 720, 'centerHorizontal' => true }
+          },
+          'child' => [{ 'type' => 'Text', 'text' => 'Hello' }]
+        }
+        builder.send(:generate_component, json, 0, 'Column')
+        helper = builder.instance_variable_get(:@responsive_functions).first
+        expect(helper).to include('wrapContentWidth(Alignment.CenterHorizontally)')
+        expect(helper).not_to include('.align(Alignment.CenterHorizontally)')
+      end
+
+      it 'centerVertical in responsive override emits wrapContentHeight (not .align)' do
+        json = {
+          'type' => 'View',
+          'orientation' => 'horizontal',
+          'responsive' => {
+            'regular' => { 'maxHeight' => 480, 'centerVertical' => true }
+          },
+          'child' => [{ 'type' => 'Text', 'text' => 'Hi' }]
+        }
+        builder.send(:generate_component, json, 0, 'Row')
+        helper = builder.instance_variable_get(:@responsive_functions).first
+        expect(helper).to include('wrapContentHeight(Alignment.CenterVertically)')
+        expect(helper).not_to include('.align(Alignment.CenterVertically)')
+      end
+
+      it 'centerInParent emits both wrapContentWidth and wrapContentHeight' do
+        json = {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'responsive' => {
+            'regular' => { 'centerInParent' => true }
+          },
+          'child' => [{ 'type' => 'Text', 'text' => 'Hi' }]
+        }
+        builder.send(:generate_component, json, 0, 'Box')
+        helper = builder.instance_variable_get(:@responsive_functions).first
+        expect(helper).to include('wrapContentWidth(Alignment.CenterHorizontally)')
+        expect(helper).to include('wrapContentHeight(Alignment.CenterVertically)')
+        expect(helper).not_to include('.align(Alignment.Center)')
+      end
+    end
+
+    # Regression: same bug — verify build_alignment 'ScopeFree' branch.
+    describe 'ModifierBuilder.build_alignment(parent_type: ScopeFree)' do
+      it 'returns wrapContentWidth for centerHorizontal in ScopeFree' do
+        mods = KjuiTools::Compose::Helpers::ModifierBuilder.build_alignment(
+          { 'centerHorizontal' => true }, nil, 'ScopeFree'
+        )
+        expect(mods).to eq(['.wrapContentWidth(Alignment.CenterHorizontally)'])
+      end
+
+      it 'returns wrapContentHeight for centerVertical in ScopeFree' do
+        mods = KjuiTools::Compose::Helpers::ModifierBuilder.build_alignment(
+          { 'centerVertical' => true }, nil, 'ScopeFree'
+        )
+        expect(mods).to eq(['.wrapContentHeight(Alignment.CenterVertically)'])
+      end
+
+      it 'returns both for centerInParent in ScopeFree' do
+        mods = KjuiTools::Compose::Helpers::ModifierBuilder.build_alignment(
+          { 'centerInParent' => true }, nil, 'ScopeFree'
+        )
+        expect(mods).to include('.wrapContentWidth(Alignment.CenterHorizontally)')
+        expect(mods).to include('.wrapContentHeight(Alignment.CenterVertically)')
+      end
+
+      it 'emits nothing for alignLeft/Right/Top/Bottom in ScopeFree' do
+        mods = KjuiTools::Compose::Helpers::ModifierBuilder.build_alignment(
+          { 'alignLeft' => true, 'alignTop' => true }, nil, 'ScopeFree'
+        )
+        expect(mods).to be_empty
+      end
+    end
+
     describe '#handle_container_result' do
       before do
         builder.instance_variable_set(:@required_imports, Set.new)
