@@ -194,6 +194,16 @@ module KjuiTools
               children = find_children_inside(lines, container[:open_idx], container[:depth])
               next unless children && children.size > 1
               next if children_have_val_var_sibling?(lines, children)
+              # A container whose children are ALL already-lifted
+              # `SectionN(data, viewModel)` calls offers no lift potential.
+              # Without this skip, such a container can tie on `total_lines`
+              # with deeper unlifted containers and, because we update only
+              # on strict-greater, hog the `best_result` slot indefinitely.
+              # The outer-loop iteration then sees no change (every child
+              # hits the already-lifted `cannot_lift?` guard) and exits
+              # before reaching genuinely-unlifted containers (e.g. the
+              # opposite branch of a `responsive` if/else).
+              next if all_children_already_lifted?(lines, children)
 
               total_lines = children.sum { |c| c[:end_idx] - c[:start] + 1 }
               if best_result.nil? || total_lines > best_result[:total_lines]
@@ -302,6 +312,19 @@ module KjuiTools
           # If any child block starts with `val` / `var`, lifting siblings
           # could either lose the binding or strand it. Refuse to split the
           # whole parent container in that case.
+          def all_children_already_lifted?(lines, children)
+            children.all? do |child|
+              first_line = nil
+              (child[:start]..child[:end_idx]).each do |i|
+                content = lines[i].strip
+                next if content.empty?
+                first_line = content
+                break
+              end
+              !first_line.nil? && first_line =~ /\ASection\d+(?:_\d+)*\(data, viewModel\)\z/
+            end
+          end
+
           def children_have_val_var_sibling?(lines, children)
             children.any? do |child|
               first_line = nil
