@@ -412,6 +412,64 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
       expect(new_body.scan(/testTag\("default_panel"\)/).size).to eq(2)
     end
 
+    # Regression: kjui-section-extractor-val-merge-breaks-collection-cell-scope.
+    # `items(N) { cellIndex -> ... }` introduces a lambda-scope parameter and
+    # the body typically references outer LazyListScope locals like
+    # `val cellData0 = section0?.cells` and items-scope locals like
+    # `val cellViewModel = viewModel(key = ...)`. After the val+consumer merge
+    # batch, the merged chunk and the BarInfoCellView consumer were getting
+    # lifted to file-scope `private fun SectionN(data, viewModel)` helpers
+    # where `cellIndex` / `cellData0` / `cellViewModel` no longer resolve
+    # — 100 compile errors across 4 Collection-using screens (bar_detail,
+    # chat, history_confirm, item_detail). The fix: a chunk
+    # that references any kjui Collection-emit local without declaring it
+    # itself cannot be lifted; the chunk stays inline inside its lambda.
+    it 'does not lift chunks that reference Collection cell-scope locals (cellIndex / cellData0 / cellViewModel)' do
+      body = <<~KOTLIN
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            val section0 = data.contentSections?.sections?.getOrNull(0)
+            val cellData0 = section0?.cells
+            if (section0 != null) {
+                if (cellData0 != null) {
+                    items(cellData0.data.size, key = { idx -> idx.toString() }) { cellIndex ->
+                        val currentCellData = cellData0.data[cellIndex]
+                        val cellId = (currentCellData["cellId"] as? String) ?: "$cellIndex"
+                        val cellViewModel: BarInfoCellViewModel = viewModel(key = "bar_detail/bar_info_cell_cell_0_${cellId}_${viewModel.hashCode()}")
+                        LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }
+                        BarInfoCellView(
+                            viewModel = cellViewModel,
+                            modifier = Modifier.testTag("content_list_item_$cellIndex").fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        }
+      KOTLIN
+
+      new_body, fns = described_class.extract(
+        body,
+        view_name: 'BarDetail',
+        data_type: 'BarDetailData',
+        viewmodel_type: 'BarDetailViewModel',
+        line_threshold: 10
+      )
+
+      # No section function is allowed to mention any cell-scope local that
+      # would be unresolved at file scope.
+      fns.each do |f|
+        expect(f).not_to include('cellIndex')
+        expect(f).not_to include('cellData0')
+        expect(f).not_to include('cellViewModel')
+        expect(f).not_to include('currentCellData')
+      end
+
+      # The items lambda body stays intact — every reference still lives
+      # inside its declaring scope.
+      expect(new_body).to include('items(cellData0.data.size')
+      expect(new_body).to include('val currentCellData = cellData0.data[cellIndex]')
+      expect(new_body).to include('BarInfoCellView(')
+    end
+
     it 'lifts inside both branches of a responsive if/else so the duplication shrinks to single-line calls' do
       # The if/else duplicates the body across size-class branches. After
       # extraction, each branch references the same SectionN helpers, so

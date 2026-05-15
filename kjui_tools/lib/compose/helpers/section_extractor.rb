@@ -47,6 +47,21 @@ module KjuiTools
 
         LAZY_DSL_KEYWORDS = %w[item items itemsIndexed stickyHeader stickyHeaders].freeze
 
+        # Identifier patterns that kjui's Collection / Lazy emit binds in the
+        # immediately-enclosing scope:
+        #   - `items(N, key = ...) { cellIndex -> ... }` — lambda parameter
+        #   - `itemsIndexed(...) { idx, item -> ... }` — lambda parameters
+        #   - `val cellData0 = section0?.cells` — outer LazyListScope local
+        #   - `val currentCellData = cellData0.data[cellIndex]` — items-lambda
+        #     scope local that references cellIndex
+        #   - `val cellViewModel = viewModel(key = "...")` — items-lambda local
+        #   - `val cellId = ...` — same scope
+        # Any chunk that references one of these names *without declaring it
+        # itself* is reaching across a lambda boundary that a file-scope
+        # `@Composable private fun SectionN(data, viewModel)` cannot bridge.
+        # Refuse the lift; recurse only.
+        OUTER_SCOPE_LOCAL_PATTERN = /\b(?:cell[A-Z]\w*|section\d+|currentCellData)\b/
+
         # Modifier substrings that need a parent scope receiver to compile.
         # `.weight(` requires RowScope/ColumnScope; `.align(` requires the
         # corresponding scope; `.fillParentMaxSize(` / `.animateItemPlacement(`
@@ -328,6 +343,13 @@ module KjuiTools
           # If any child block starts with `val` / `var`, lifting siblings
           # could either lose the binding or strand it. Refuse to split the
           # whole parent container in that case.
+          def references_outer_scope_local?(code)
+            declared_inside = code.scan(/\b(?:val|var)\s+(\w+)\b/).flatten.to_set
+            code.scan(OUTER_SCOPE_LOCAL_PATTERN).flatten.uniq.any? do |id|
+              !declared_inside.include?(id)
+            end
+          end
+
           def merge_val_chunks(lines, children)
             return children if children.empty?
 
@@ -410,6 +432,18 @@ module KjuiTools
 
             first_word = stripped.match(/^(\w+)/)&.[](1)
             return true if first_word && LAZY_DSL_KEYWORDS.include?(first_word)
+
+            # Collection / Lazy cell-scope locals leak through a file-scope
+            # lift. Detect names matching the kjui-emit patterns (cellIndex,
+            # cellData0, cellViewModel, cellId, currentCellData, section0,
+            # ...) — if any are referenced without being declared inside the
+            # chunk, the binding lives in an enclosing items / itemsIndexed
+            # / stickyHeader lambda that the lifted Section function cannot
+            # see. Recurse into the chunk instead. (False positive risk: a
+            # `section42` constant identifier in a string template, e.g.
+            # inside `"step_section3_button"`, would also match — but lift
+            # suppression is harmless, the chunk just stays inline.)
+            return true if references_outer_scope_local?(code)
 
             # Scope-bound modifier anywhere in the chunk — including:
             #   (a) inline named-arg form on the opener line, e.g.
