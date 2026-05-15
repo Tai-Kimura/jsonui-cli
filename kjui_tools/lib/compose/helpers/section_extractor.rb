@@ -350,35 +350,65 @@ module KjuiTools
             end
           end
 
+          # Walk children left-to-right. For each child, look back over the
+          # entire result so far and find the EARLIEST emitted chunk whose
+          # declared vals are referenced by this child. If found, absorb
+          # this child plus everything between (including unrelated chunks
+          # already in `result`) into a single merged chunk replacing the
+          # earlier ones.
+          #
+          # The single-forward-scan version this replaces missed any
+          # consumer that came after a non-val sibling: `val A; useA;
+          # Text(unrelated); useA` would yield `[merged(A+useA), Text,
+          # useA]`, stranding the second `useA` in a file-scope lift. The
+          # production trigger was `rememberPagerState` paired with multiple
+          # downstream consumers (initial LaunchedEffect, snapshot-flow
+          # LaunchedEffect, PageIndicator, HorizontalPager) spread across
+          # several siblings — only the first consumer was being captured.
+          #
+          # Lookback covers every result chunk's declared val names (vals
+          # declared at the chunk's sibling level — `scan_declared_vals`),
+          # so a chain of vals (`val pageCount; val pagerState =
+          # rememberPagerState(...){ pageCount }`) merges transitively.
+          # Contiguity-fill (absorbing intermediate result chunks) is a
+          # consequence of replacing `result[target..]` with one chunk
+          # spanning the original target chunk's start through the current
+          # child's end.
           def merge_val_chunks(lines, children)
             return children if children.empty?
 
             result = []
-            i = 0
-            while i < children.size
-              child = children[i]
-              name = val_name_of(lines, child)
-              if name && i + 1 < children.size
-                # Find the LAST subsequent sibling that references this
-                # binding. We merge val + every sibling up to and including
-                # that one — `\b#{name}\b` substring scan over each sibling's
-                # full body picks up nested references (e.g. a binding used
-                # inside a Composable lambda or modifier closure).
-                last_ref = i
-                ((i + 1)...children.size).each do |j|
-                  body = lines[children[j][:start]..children[j][:end_idx]].join("\n")
-                  last_ref = j if body =~ /\b#{Regexp.escape(name)}\b/
-                end
-                if last_ref > i
-                  result << { start: child[:start], end_idx: children[last_ref][:end_idx] }
-                  i = last_ref + 1
-                  next
+
+            children.each do |child|
+              body = lines[child[:start]..child[:end_idx]].join("\n")
+
+              merge_target = nil
+              result.each_with_index do |prev, idx|
+                prev_vars = scan_declared_vals(lines, prev)
+                next if prev_vars.empty?
+                if prev_vars.any? { |v| body =~ /\b#{Regexp.escape(v)}\b/ }
+                  merge_target = idx
+                  break
                 end
               end
-              result << child
-              i += 1
+
+              if merge_target
+                merged = {
+                  start: result[merge_target][:start],
+                  end_idx: child[:end_idx]
+                }
+                result = result[0...merge_target] + [merged]
+              else
+                result << child
+              end
             end
+
             result
+          end
+
+          def scan_declared_vals(lines, chunk)
+            body = lines[chunk[:start]..chunk[:end_idx]].join("\n")
+            body.scan(/\b(?:val|var)\s+(\w+)\b/).flatten
           end
 
           def val_name_of(lines, child)

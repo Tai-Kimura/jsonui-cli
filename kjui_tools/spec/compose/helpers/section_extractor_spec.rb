@@ -470,6 +470,75 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
       expect(new_body).to include('BarInfoCellView(')
     end
 
+    # Regression: kjui-section-extractor-free-var-heuristic-misses-pagerstate.
+    # `val pagerState = rememberPagerState(...)` is consumed by multiple
+    # subsequent siblings (initial LaunchedEffect, snapshotFlow
+    # LaunchedEffect, PageIndicator, HorizontalPager) that are *not
+    # themselves vals* and may be separated by unrelated children. The
+    # previous single-forward-scan merge only captured the chain up to the
+    # last sibling that declared a downstream val (here: the initial
+    # LaunchedEffect with `val target`), leaving the later pagerState
+    # consumers as standalone lift candidates. They'd be lifted into
+    # file-scope Section functions where `pagerState` no longer resolved,
+    # producing 35 errors across history_confirm and item_detail.
+    # The fix: scan all previously-emitted result chunks (not just adjacent),
+    # and absorb every child plus any intermediate chunks into the earliest
+    # chunk whose declared vals are referenced.
+    it 'pulls every pagerState consumer into the same Section as the `val pagerState = rememberPagerState(...)` declaration' do
+      body = <<~KOTLIN
+        Column(modifier = Modifier.fillMaxSize()) {
+            Text(text = data.title)
+            val pageCount = data.candidateItems?.sections?.firstOrNull()?.cells?.data?.size ?: 0
+            val pagerState = rememberPagerState(initialPage = data.currentPage) { pageCount }
+            LaunchedEffect(data.currentPage) {
+                val target = data.currentPage.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
+                if (pagerState.currentPage != target) pagerState.animateScrollToPage(target)
+            }
+            LaunchedEffect(pagerState) {
+                snapshotFlow { pagerState.currentPage }.collect { page ->
+                    viewModel.updateData(mapOf("currentPage" to page))
+                    data.onPageChanged?.invoke(page)
+                }
+            }
+            PageIndicator(
+                pagerState = pagerState,
+                modifier = Modifier.fillMaxWidth()
+            )
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                Text(text = "$page")
+            }
+            Text(text = data.footer)
+        }
+      KOTLIN
+
+      new_body, fns = described_class.extract(
+        body, **opts, line_threshold: 10
+      )
+
+      # All pagerState references end up inside the SAME Section function
+      # — the one that also carries `val pagerState = rememberPagerState`.
+      decl_fn = fns.find { |f| f.include?('val pagerState = rememberPagerState') }
+      expect(decl_fn).not_to be_nil
+      expect(decl_fn).to include('snapshotFlow { pagerState.currentPage }')
+      expect(decl_fn).to include('PageIndicator(')
+      expect(decl_fn).to include('pagerState = pagerState')
+      expect(decl_fn).to include('HorizontalPager(')
+      expect(decl_fn).to include('state = pagerState')
+
+      # No other Section function carries an unresolved `pagerState` reference.
+      fns.each do |f|
+        next if f.equal?(decl_fn)
+        expect(f).not_to include('pagerState')
+      end
+
+      # No `pagerState` token leaks into the parent body — every occurrence
+      # sits inside the merged Section function.
+      expect(new_body).not_to include('pagerState')
+    end
+
     it 'lifts inside both branches of a responsive if/else so the duplication shrinks to single-line calls' do
       # The if/else duplicates the body across size-class branches. After
       # extraction, each branch references the same SectionN helpers, so
