@@ -180,11 +180,14 @@ module SjuiTools
                 # natural height. When this View has `height: matchParent`,
                 # children may legitimately want the proposed pane height
                 # (Embeds with `.frame(maxHeight: .infinity)` overflow), so
-                # honor the parent proposal instead.
-                has_cross_match = @component['height'] == 'matchParent' ? ', hasMatchParentCrossAxis: true' : ''
-                add_line "WeightedHStack(alignment: #{alignment}, spacing: #{spacing_value}#{has_cross_match}, children: ["
+                # honor the parent proposal instead. The flag is the *last*
+                # named arg in SwiftJsonUI's init (after `children`), so we
+                # append it on the closing line, not the opening line.
+                @weighted_has_cross_match = @component['height'] == 'matchParent'
+                add_line "WeightedHStack(alignment: #{alignment}, spacing: #{spacing_value}, children: ["
               elsif orientation == 'vertical'
                 alignment = get_vstack_alignment
+                @weighted_has_cross_match = false
                 add_line "WeightedVStack(alignment: #{alignment}, spacing: #{spacing_value}, children: ["
               end
             elsif orientation == 'horizontal'
@@ -320,7 +323,14 @@ module SjuiTools
                     add_line ")#{index < children.size - 1 ? ',' : ''}"
                   end
                 end
-                add_line "])"  # WeightedStackの配列を閉じる
+                # Close the WeightedStack. `hasMatchParentCrossAxis` is
+                # appended here (after `children:`) to match the
+                # declaration order in SwiftJsonUI's WeightedHStack init.
+                if @weighted_has_cross_match
+                  add_line "], hasMatchParentCrossAxis: true)"
+                else
+                  add_line "])"
+                end
               else
                 # 通常のStack処理
                 distribution = @component['distribution']
