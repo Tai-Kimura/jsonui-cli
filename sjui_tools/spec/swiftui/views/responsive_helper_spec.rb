@@ -264,6 +264,102 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
       )
       expect(modifiers).to eq([])
     end
+
+    # Regression: sjui-kjui-responsive-align-left-right-not-honored.
+    # alignLeft / alignRight / alignTop / alignBottom must produce the
+    # same inner-frame anchor that centerHorizontal / centerVertical do.
+    it 'emits alignment: .leading for alignLeft + numeric maxWidth' do
+      modifiers = described_class.build_responsive_modifiers(
+        { 'maxWidth' => 480, 'alignLeft' => true }, nil
+      )
+      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .leading)'])
+    end
+
+    it 'emits alignment: .trailing for alignRight + numeric maxWidth' do
+      modifiers = described_class.build_responsive_modifiers(
+        { 'maxWidth' => 480, 'alignRight' => true }, nil
+      )
+      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .trailing)'])
+    end
+
+    it 'emits alignment: .top for alignTop + numeric maxHeight' do
+      modifiers = described_class.build_responsive_modifiers(
+        { 'maxHeight' => 400, 'alignTop' => true }, nil
+      )
+      expect(modifiers).to eq(['.frame(maxHeight: 400, alignment: .top)'])
+    end
+
+    it 'emits alignment: .bottom for alignBottom + numeric maxHeight' do
+      modifiers = described_class.build_responsive_modifiers(
+        { 'maxHeight' => 400, 'alignBottom' => true }, nil
+      )
+      expect(modifiers).to eq(['.frame(maxHeight: 400, alignment: .bottom)'])
+    end
+
+    it 'expands alignLeft alone to .infinity on its axis (same as centerHorizontal alone)' do
+      modifiers = described_class.build_responsive_modifiers({ 'alignLeft' => true }, nil)
+      expect(modifiers).to eq(['.frame(maxWidth: .infinity, alignment: .leading)'])
+    end
+
+    it 'combines alignBottom + alignRight into .bottomTrailing' do
+      modifiers = described_class.build_responsive_modifiers(
+        { 'maxWidth' => 480, 'maxHeight' => 400, 'alignBottom' => true, 'alignRight' => true }, nil
+      )
+      expect(modifiers).to eq(
+        ['.frame(maxWidth: 480, maxHeight: 400, alignment: .bottomTrailing)']
+      )
+    end
+
+    it 'collapses alignLeft + alignRight into .center along that axis' do
+      modifiers = described_class.build_responsive_modifiers(
+        { 'maxWidth' => 480, 'alignLeft' => true, 'alignRight' => true }, nil
+      )
+      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .center)'])
+    end
+  end
+
+  # Regression: sjui-kjui-responsive-align-left-right-not-honored.
+  # The frame_alignment_for helper is the canonical resolver for the
+  # SwiftUI Alignment literal from the canonical alignment attrs.
+  describe '.frame_alignment_for' do
+    it 'returns nil when no flag is set' do
+      expect(described_class.frame_alignment_for({})).to be_nil
+    end
+
+    it 'returns .leading for alignLeft alone' do
+      expect(described_class.frame_alignment_for({ 'alignLeft' => true })).to eq('.leading')
+    end
+
+    it 'returns .trailing for alignRight alone' do
+      expect(described_class.frame_alignment_for({ 'alignRight' => true })).to eq('.trailing')
+    end
+
+    it 'returns .top for alignTop alone' do
+      expect(described_class.frame_alignment_for({ 'alignTop' => true })).to eq('.top')
+    end
+
+    it 'returns .bottom for alignBottom alone' do
+      expect(described_class.frame_alignment_for({ 'alignBottom' => true })).to eq('.bottom')
+    end
+
+    it 'returns .topLeading for alignTop + alignLeft' do
+      expect(described_class.frame_alignment_for({ 'alignTop' => true, 'alignLeft' => true }))
+        .to eq('.topLeading')
+    end
+
+    it 'returns .bottomTrailing for alignBottom + alignRight' do
+      expect(described_class.frame_alignment_for({ 'alignBottom' => true, 'alignRight' => true }))
+        .to eq('.bottomTrailing')
+    end
+
+    it 'collapses alignLeft + alignRight to .center horizontally' do
+      expect(described_class.frame_alignment_for({ 'alignLeft' => true, 'alignRight' => true }))
+        .to eq('.center')
+    end
+
+    it 'returns .center for centerInParent (back-compat)' do
+      expect(described_class.frame_alignment_for({ 'centerInParent' => true })).to eq('.center')
+    end
   end
 
   describe '.generate_container_function (regression: maxWidth/centerHorizontal in responsive override)' do
@@ -367,6 +463,54 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
     end
   end
 
+  # Regression: sjui-kjui-responsive-align-left-right-not-honored.
+  # alignLeft replaces centerHorizontal in the same matchParent + maxWidth
+  # collision pattern, and the outer wrap must anchor at `.leading` (not
+  # `.center`).
+  describe '.generate_container_function (regression: alignLeft + matchParent + maxWidth)' do
+    let(:bordered_left_anchored) do
+      {
+        'type' => 'View',
+        'orientation' => 'vertical',
+        'spacing' => 0,
+        'width' => 'matchParent',
+        'background' => '#FFFFFF',
+        'borderWidth' => 1,
+        'borderColor' => '#CCCCCC',
+        'cornerRadius' => 10,
+        'responsive' => {
+          'regular' => { 'maxWidth' => 480, 'alignLeft' => true }
+        },
+        'child' => [{ 'type' => 'Label', 'text' => 'Hi' }]
+      }
+    end
+
+    let(:converter_for_left_anchored) do
+      SjuiTools::SwiftUI::Views::ViewConverter.new(bordered_left_anchored, 0)
+    end
+
+    it 'emits inner .frame(maxWidth: 480, alignment: .leading)' do
+      code = described_class.generate_container_function(
+        'responsive0', bordered_left_anchored, converter_for_left_anchored
+      )
+      expect(code).to include('.frame(maxWidth: 480, alignment: .leading)')
+    end
+
+    it 'emits outer .frame(maxWidth: .infinity, alignment: .leading) after decorations' do
+      code = described_class.generate_container_function(
+        'responsive0', bordered_left_anchored, converter_for_left_anchored
+      )
+      expect(code).to include('.frame(maxWidth: .infinity, alignment: .leading)')
+      regular_section = code[/horizontalSizeClass == \.regular.*?(?=\} else \{)/m]
+      expect(regular_section).not_to be_nil
+      bg_idx = regular_section.index('.background(')
+      outer_idx = regular_section.index('.frame(maxWidth: .infinity, alignment: .leading)')
+      expect(bg_idx).not_to be_nil
+      expect(outer_idx).not_to be_nil
+      expect(bg_idx).to be < outer_idx
+    end
+  end
+
   # Regression: sjui-markdowntext-custom-converter-centerhorizontal-missing
   # Leaf-path extension converters (jui generate converter <Name>) reach
   # apply_modifiers directly. Without the alignment hook on a center flag,
@@ -421,6 +565,48 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
       lines = converter.instance_variable_get(:@modifier_bag).to_lines
       # Label uses label_frame_alignment which returns .center for textAlign:center
       expect(lines.any? { |l| l.start_with?('.frame(maxWidth: 480, alignment:') }).to be true
+    end
+
+    # Regression: sjui-kjui-responsive-align-left-right-not-honored.
+    # The same non-Label alignment branch now extends to alignLeft /
+    # alignRight / alignTop / alignBottom (canonical attrs that
+    # `responsive` blocks should honor).
+    it 'adds alignment: .leading for non-Label types when alignLeft is true' do
+      component = {
+        'type' => 'MarkdownText',
+        'alignLeft' => true,
+        'maxWidth' => 480
+      }
+      converter = SjuiTools::SwiftUI::Views::BaseViewConverter.new(component)
+      converter.send(:apply_modifiers)
+      lines = converter.instance_variable_get(:@modifier_bag).to_lines
+      expect(lines).to include('.frame(maxWidth: 480, alignment: .leading)')
+    end
+
+    it 'adds alignment: .trailing for non-Label types when alignRight is true' do
+      component = {
+        'type' => 'MarkdownText',
+        'alignRight' => true,
+        'maxWidth' => 480
+      }
+      converter = SjuiTools::SwiftUI::Views::BaseViewConverter.new(component)
+      converter.send(:apply_modifiers)
+      lines = converter.instance_variable_get(:@modifier_bag).to_lines
+      expect(lines).to include('.frame(maxWidth: 480, alignment: .trailing)')
+    end
+
+    it 'adds alignment: .bottomTrailing for alignBottom + alignRight' do
+      component = {
+        'type' => 'MarkdownText',
+        'alignBottom' => true,
+        'alignRight' => true,
+        'maxWidth' => 480,
+        'maxHeight' => 200
+      }
+      converter = SjuiTools::SwiftUI::Views::BaseViewConverter.new(component)
+      converter.send(:apply_modifiers)
+      lines = converter.instance_variable_get(:@modifier_bag).to_lines
+      expect(lines).to include('.frame(maxWidth: 480, maxHeight: 200, alignment: .bottomTrailing)')
     end
   end
 

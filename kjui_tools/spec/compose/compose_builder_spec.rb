@@ -1063,11 +1063,58 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         expect(mods).to include('.wrapContentHeight(Alignment.CenterVertically)')
       end
 
-      it 'emits nothing for alignLeft/Right/Top/Bottom in ScopeFree' do
+      # Regression: sjui-kjui-responsive-align-left-right-not-honored.
+      # alignLeft / alignRight / alignTop / alignBottom now map to scope-
+      # independent `wrapContentWidth/Height(Alignment.Start/End/Top/Bottom)`
+      # in ScopeFree contexts (responsive emit inside a LazyItemScope, etc.).
+      it 'returns wrapContentWidth(Alignment.Start) for alignLeft in ScopeFree' do
         mods = KjuiTools::Compose::Helpers::ModifierBuilder.build_alignment(
-          { 'alignLeft' => true, 'alignTop' => true }, nil, 'ScopeFree'
+          { 'alignLeft' => true }, nil, 'ScopeFree'
         )
-        expect(mods).to be_empty
+        expect(mods).to eq(['.wrapContentWidth(Alignment.Start)'])
+      end
+
+      it 'returns wrapContentWidth(Alignment.End) for alignRight in ScopeFree' do
+        mods = KjuiTools::Compose::Helpers::ModifierBuilder.build_alignment(
+          { 'alignRight' => true }, nil, 'ScopeFree'
+        )
+        expect(mods).to eq(['.wrapContentWidth(Alignment.End)'])
+      end
+
+      it 'returns wrapContentHeight(Alignment.Top) for alignTop in ScopeFree' do
+        mods = KjuiTools::Compose::Helpers::ModifierBuilder.build_alignment(
+          { 'alignTop' => true }, nil, 'ScopeFree'
+        )
+        expect(mods).to eq(['.wrapContentHeight(Alignment.Top)'])
+      end
+
+      it 'returns wrapContentHeight(Alignment.Bottom) for alignBottom in ScopeFree' do
+        mods = KjuiTools::Compose::Helpers::ModifierBuilder.build_alignment(
+          { 'alignBottom' => true }, nil, 'ScopeFree'
+        )
+        expect(mods).to eq(['.wrapContentHeight(Alignment.Bottom)'])
+      end
+
+      it 'combines alignBottom + alignRight into two scope-free modifiers' do
+        mods = KjuiTools::Compose::Helpers::ModifierBuilder.build_alignment(
+          { 'alignBottom' => true, 'alignRight' => true }, nil, 'ScopeFree'
+        )
+        expect(mods).to include('.wrapContentWidth(Alignment.End)')
+        expect(mods).to include('.wrapContentHeight(Alignment.Bottom)')
+      end
+
+      it 'collapses alignLeft + alignRight to CenterHorizontally in ScopeFree' do
+        mods = KjuiTools::Compose::Helpers::ModifierBuilder.build_alignment(
+          { 'alignLeft' => true, 'alignRight' => true }, nil, 'ScopeFree'
+        )
+        expect(mods).to eq(['.wrapContentWidth(Alignment.CenterHorizontally)'])
+      end
+
+      it 'centerHorizontal beats alignLeft in ScopeFree' do
+        mods = KjuiTools::Compose::Helpers::ModifierBuilder.build_alignment(
+          { 'centerHorizontal' => true, 'alignLeft' => true }, nil, 'ScopeFree'
+        )
+        expect(mods).to eq(['.wrapContentWidth(Alignment.CenterHorizontally)'])
       end
     end
 
