@@ -1,3 +1,5 @@
+require_relative 'responsive_helper'
+
 module SjuiTools
   module SwiftUI
     module Views
@@ -45,18 +47,24 @@ module SjuiTools
             if frame_params.any?
               if @component['type'] == 'Label' || @component['type'] == 'Text'
                 frame_params << "alignment: #{label_frame_alignment}"
-              elsif @component['centerInParent'] == true ||
-                    @component['centerHorizontal'] == true ||
-                    @component['centerVertical'] == true
+              else
                 # Match the responsive container path
-                # (ResponsiveHelper.build_responsive_modifiers): when a center
-                # flag is set, the inner constraint frame centers its content.
-                # Leaf-path converters (extension converters like MarkdownText
-                # generated via `jui generate converter`) reach this branch
-                # because they run apply_modifiers directly — without this
-                # alignment, the maxWidth constraint shrinks the view but
-                # leaves it leading-aligned in its frame.
-                frame_params << 'alignment: .center'
+                # (ResponsiveHelper.build_responsive_modifiers): when any
+                # canonical alignment flag is set (center* or align*), the
+                # inner constraint frame anchors its content along that
+                # axis. Leaf-path converters (extension converters like
+                # MarkdownText generated via `jui generate converter`)
+                # reach this branch because they run apply_modifiers
+                # directly — without this alignment, the maxWidth
+                # constraint shrinks the view but leaves it leading-aligned
+                # in its frame.
+                #
+                # alignLeft / alignRight / alignTop / alignBottom map to
+                # `.leading` / `.trailing` / `.top` / `.bottom`; the
+                # 2-axis form (`.bottomTrailing` etc.) is used when both
+                # axes specify a non-center anchor.
+                alignment = ResponsiveHelper.frame_alignment_for(@component)
+                frame_params << "alignment: #{alignment}" if alignment
               end
               @modifier_bag.append(:frame_constraints, ".frame(#{frame_params.join(', ')})")
             end

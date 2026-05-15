@@ -435,17 +435,29 @@ module KjuiTools
               modifiers << ".wrapContentWidth(Alignment.CenterHorizontally)"
               modifiers << ".wrapContentHeight(Alignment.CenterVertically)"
             else
+              # Horizontal axis. centerHorizontal beats align-left/right; the
+              # align-both case (left AND right) collapses to center to match
+              # the SwiftUI side and the original Android XML semantics.
               if json_data['centerHorizontal']
                 modifiers << ".wrapContentWidth(Alignment.CenterHorizontally)"
+              elsif json_data['alignLeft'] && json_data['alignRight']
+                modifiers << ".wrapContentWidth(Alignment.CenterHorizontally)"
+              elsif json_data['alignLeft']
+                modifiers << ".wrapContentWidth(Alignment.Start)"
+              elsif json_data['alignRight']
+                modifiers << ".wrapContentWidth(Alignment.End)"
               end
+              # Vertical axis. Same precedence.
               if json_data['centerVertical']
                 modifiers << ".wrapContentHeight(Alignment.CenterVertically)"
+              elsif json_data['alignTop'] && json_data['alignBottom']
+                modifiers << ".wrapContentHeight(Alignment.CenterVertically)"
+              elsif json_data['alignTop']
+                modifiers << ".wrapContentHeight(Alignment.Top)"
+              elsif json_data['alignBottom']
+                modifiers << ".wrapContentHeight(Alignment.Bottom)"
               end
             end
-            # alignLeft/Right/Top/Bottom in scope-free context have no
-            # universally correct translation (Modifier.absoluteOffset is too
-            # surprising). Emit nothing and let parent contentAlignment / the
-            # outer layout settle it.
             return modifiers
           end
 

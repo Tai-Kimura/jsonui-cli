@@ -20,10 +20,13 @@ module SjuiTools
         # Keys that `build_responsive_modifiers` coalesces into a single
         # `.frame(...)` call. `collect_modifiers_for` is invoked with these
         # in `exclude_keys` so apply_modifiers' own frame_constraints emit
-        # doesn't duplicate the line.
+        # doesn't duplicate the line. `alignLeft` / `alignRight` /
+        # `alignTop` / `alignBottom` are canonical alignment attrs and
+        # participate in the same coalesced frame.
         FRAME_CENTER_KEYS = %w[
           minWidth maxWidth minHeight maxHeight
           centerHorizontal centerVertical centerInParent
+          alignLeft alignRight alignTop alignBottom
         ].freeze
 
         # Check if a component has responsive overrides
@@ -135,18 +138,24 @@ module SjuiTools
             modifiers = build_responsive_modifiers(attrs, converter)
             modifiers.each { |mod| lines << "#{indent}#{mod}" }
 
-            center_h_overrides_width =
-              (attrs['centerHorizontal'] == true || attrs['centerInParent'] == true) &&
+            # When `width: matchParent` collides with a numeric `maxWidth`
+            # AND any horizontal alignment flag is set, the matchParent emit
+            # from apply_frame_size would otherwise land BETWEEN the inner
+            # maxWidth frame and the decorations, causing background/border
+            # to paint on a full-width layer. Suppress matchParent here and
+            # re-introduce it as a final outer `.frame(.infinity)` wrap.
+            h_overrides_width =
+              horizontal_alignment_flag?(attrs) &&
               attrs['width'] == 'matchParent' &&
               numeric_dimension?(attrs['maxWidth'])
-            center_v_overrides_height =
-              (attrs['centerVertical'] == true || attrs['centerInParent'] == true) &&
+            v_overrides_height =
+              vertical_alignment_flag?(attrs) &&
               attrs['height'] == 'matchParent' &&
               numeric_dimension?(attrs['maxHeight'])
 
             extra_exclude = []
-            extra_exclude << 'width' if center_h_overrides_width
-            extra_exclude << 'height' if center_v_overrides_height
+            extra_exclude << 'width' if h_overrides_width
+            extra_exclude << 'height' if v_overrides_height
 
             if converter.respond_to?(:collect_modifiers_for)
               extra = converter.collect_modifiers_for(
@@ -155,11 +164,12 @@ module SjuiTools
               extra.each { |mod| lines << "#{indent}#{mod}" }
             end
 
-            if center_h_overrides_width || center_v_overrides_height
+            if h_overrides_width || v_overrides_height
               outer_args = []
-              outer_args << 'maxWidth: .infinity' if center_h_overrides_width
-              outer_args << 'maxHeight: .infinity' if center_v_overrides_height
-              outer_args << 'alignment: .center'
+              outer_args << 'maxWidth: .infinity' if h_overrides_width
+              outer_args << 'maxHeight: .infinity' if v_overrides_height
+              outer_alignment = frame_alignment_for(attrs) || '.center'
+              outer_args << "alignment: #{outer_alignment}"
               lines << "#{indent}.frame(#{outer_args.join(', ')})"
             end
           end
@@ -204,23 +214,23 @@ module SjuiTools
             branch_component = attrs.dup
             branch_component.delete('responsive')
 
-            # When the branch combines a center flag with a matchParent on the
-            # same axis AND a finite maxWidth/maxHeight, the inner-constraint
-            # frame supersedes matchParent. Strip the matchParent value so
-            # apply_frame_size doesn't emit a redundant `.frame(.infinity)`
-            # at the wrong position in the chain (between the maxWidth
-            # constraint and the decorations). Mirrors the same rule applied
-            # in generate_container_function.
-            center_h_overrides_width =
-              (branch_component['centerHorizontal'] == true || branch_component['centerInParent'] == true) &&
+            # When the branch combines an alignment flag with a matchParent
+            # on the same axis AND a finite maxWidth/maxHeight, the inner-
+            # constraint frame supersedes matchParent. Strip the matchParent
+            # value so apply_frame_size doesn't emit a redundant
+            # `.frame(.infinity)` at the wrong position in the chain
+            # (between the maxWidth constraint and the decorations). Mirrors
+            # the same rule applied in generate_container_function.
+            h_overrides_width =
+              horizontal_alignment_flag?(branch_component) &&
               branch_component['width'] == 'matchParent' &&
               numeric_dimension?(branch_component['maxWidth'])
-            center_v_overrides_height =
-              (branch_component['centerVertical'] == true || branch_component['centerInParent'] == true) &&
+            v_overrides_height =
+              vertical_alignment_flag?(branch_component) &&
               branch_component['height'] == 'matchParent' &&
               numeric_dimension?(branch_component['maxHeight'])
-            branch_component.delete('width') if center_h_overrides_width
-            branch_component.delete('height') if center_v_overrides_height
+            branch_component.delete('width') if h_overrides_width
+            branch_component.delete('height') if v_overrides_height
 
             converter = converter_factory.create_converter(branch_component, 3, action_manager, converter_factory, view_registry)
             if converter
@@ -231,23 +241,25 @@ module SjuiTools
                 lines << "#{branch_indent}#{bl}"
               end
 
-              # Outer `.frame(.infinity, alignment: .center)` so the
-              # constrained-and-decorated inner block centers in its parent.
-              # See regression: sjui-markdowntext-custom-converter-
-              # centerhorizontal-missing — without this, MarkdownText (or any
-              # leaf-path extension converter) keeps `maxWidth: N` but
-              # silently drops the centerHorizontal positioning.
-              needs_outer_center_h =
-                (attrs['centerHorizontal'] == true || attrs['centerInParent'] == true) &&
+              # Outer `.frame(.infinity, alignment: <resolved>)` so the
+              # constrained-and-decorated inner block anchors in its parent.
+              # Regressions covered:
+              # - sjui-markdowntext-custom-converter-centerhorizontal-missing
+              #   (centerHorizontal on a leaf converter)
+              # - sjui-kjui-responsive-align-left-right-not-honored
+              #   (alignLeft / alignRight / alignTop / alignBottom)
+              needs_outer_h =
+                horizontal_alignment_flag?(attrs) &&
                 numeric_dimension?(attrs['maxWidth'])
-              needs_outer_center_v =
-                (attrs['centerVertical'] == true || attrs['centerInParent'] == true) &&
+              needs_outer_v =
+                vertical_alignment_flag?(attrs) &&
                 numeric_dimension?(attrs['maxHeight'])
-              if needs_outer_center_h || needs_outer_center_v
+              if needs_outer_h || needs_outer_v
                 outer_args = []
-                outer_args << 'maxWidth: .infinity' if needs_outer_center_h
-                outer_args << 'maxHeight: .infinity' if needs_outer_center_v
-                outer_args << 'alignment: .center'
+                outer_args << 'maxWidth: .infinity' if needs_outer_h
+                outer_args << 'maxHeight: .infinity' if needs_outer_v
+                outer_alignment = frame_alignment_for(attrs) || '.center'
+                outer_args << "alignment: #{outer_alignment}"
                 outer_indent = condition || index > 0 ? "            " : "        "
                 lines << "#{outer_indent}.frame(#{outer_args.join(', ')})"
               end
@@ -303,20 +315,16 @@ module SjuiTools
           max_height = attrs['maxHeight']
           min_width = attrs['minWidth']
           min_height = attrs['minHeight']
-          center_h = attrs['centerHorizontal'] == true
-          center_v = attrs['centerVertical'] == true
-          center_p = attrs['centerInParent'] == true
+          h_active = horizontal_alignment_flag?(attrs)
+          v_active = vertical_alignment_flag?(attrs)
 
-          # centerInParent expands into both axes.
-          center_h ||= center_p
-          center_v ||= center_p
-
-          # If center is requested without an explicit max on that axis, fall
-          # back to .infinity so the parent gives us room to center within.
-          if center_h && max_width.nil?
+          # When an alignment is requested without an explicit max on that
+          # axis, fall back to `.infinity` so the parent gives us room to
+          # anchor within. (Without space, alignment is a no-op.)
+          if h_active && max_width.nil?
             max_width = '.infinity'
           end
-          if center_v && max_height.nil?
+          if v_active && max_height.nil?
             max_height = '.infinity'
           end
 
@@ -325,11 +333,13 @@ module SjuiTools
           frame_args << "minHeight: #{format_dimension(min_height)}" unless min_height.nil?
           frame_args << "maxHeight: #{format_dimension(max_height)}" unless max_height.nil?
 
-          # Any center request → `.center`. SwiftUI's frame alignment only
-          # matters along the constrained axis, so a uniform `.center` is the
-          # least surprising choice for the centerHorizontal-only case (which
-          # the bug report explicitly expects).
-          frame_args << 'alignment: .center' if center_h || center_v
+          # Resolve the SwiftUI Alignment literal from the active alignment
+          # attrs. `centerHorizontal` / `centerInParent` → `.center`,
+          # `alignLeft` → `.leading`, `alignRight` → `.trailing`, etc. The
+          # 2-axis form (`.bottomTrailing`) is used when both axes specify
+          # a non-center anchor.
+          alignment = frame_alignment_for(attrs)
+          frame_args << "alignment: #{alignment}" if alignment
 
           modifiers = []
           modifiers << ".frame(#{frame_args.join(', ')})" unless frame_args.empty?
@@ -347,6 +357,82 @@ module SjuiTools
           when String then value.match?(/\A\d+(\.\d+)?\z/)
           else false
           end
+        end
+
+        # Whether the attrs specify any horizontal positioning flag
+        # (centerHorizontal / centerInParent / alignLeft / alignRight).
+        def self.horizontal_alignment_flag?(attrs)
+          attrs['centerHorizontal'] == true ||
+            attrs['centerInParent'] == true ||
+            attrs['alignLeft'] == true ||
+            attrs['alignRight'] == true
+        end
+
+        # Whether the attrs specify any vertical positioning flag
+        # (centerVertical / centerInParent / alignTop / alignBottom).
+        def self.vertical_alignment_flag?(attrs)
+          attrs['centerVertical'] == true ||
+            attrs['centerInParent'] == true ||
+            attrs['alignTop'] == true ||
+            attrs['alignBottom'] == true
+        end
+
+        # Resolve the SwiftUI Alignment literal for a `.frame(...)` call
+        # from canonical alignment attrs (`centerHorizontal` /
+        # `centerVertical` / `centerInParent` / `alignLeft` / `alignRight`
+        # / `alignTop` / `alignBottom`). Returns nil when no flag is set —
+        # caller should then either omit the `alignment:` arg or fall back
+        # to a default.
+        #
+        # `alignLeft + alignRight` and `alignTop + alignBottom` collapse to
+        # `center` on that axis (matches the Android ConstraintLayout-style
+        # "stretched between two anchors → center" intent).
+        def self.frame_alignment_for(attrs)
+          h = horizontal_axis_alignment(attrs)
+          v = vertical_axis_alignment(attrs)
+          return nil if h.nil? && v.nil?
+
+          # Default unspecified axis to "center" — SwiftUI's Alignment is a
+          # 2-axis value, but along an unconstrained axis the alignment is
+          # a no-op so `.center` is harmless.
+          h ||= 'center'
+          v ||= 'center'
+
+          case [v, h]
+          when %w[top leading] then '.topLeading'
+          when %w[top center] then '.top'
+          when %w[top trailing] then '.topTrailing'
+          when %w[center leading] then '.leading'
+          when %w[center center] then '.center'
+          when %w[center trailing] then '.trailing'
+          when %w[bottom leading] then '.bottomLeading'
+          when %w[bottom center] then '.bottom'
+          when %w[bottom trailing] then '.bottomTrailing'
+          end
+        end
+
+        def self.horizontal_axis_alignment(attrs)
+          center = attrs['centerHorizontal'] == true || attrs['centerInParent'] == true
+          left = attrs['alignLeft'] == true
+          right = attrs['alignRight'] == true
+          return 'center' if center
+          return 'center' if left && right
+          return 'leading' if left
+          return 'trailing' if right
+
+          nil
+        end
+
+        def self.vertical_axis_alignment(attrs)
+          center = attrs['centerVertical'] == true || attrs['centerInParent'] == true
+          top = attrs['alignTop'] == true
+          bottom = attrs['alignBottom'] == true
+          return 'center' if center
+          return 'center' if top && bottom
+          return 'top' if top
+          return 'bottom' if bottom
+
+          nil
         end
 
         # Render a dimension literal. Numeric stays numeric; `.infinity` stays
