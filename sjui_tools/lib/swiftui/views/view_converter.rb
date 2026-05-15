@@ -412,36 +412,15 @@ module SjuiTools
 
           add_line "}"
 
-          # Apply common modifiers that are NOT part of the responsive branches
-          # (e.g., frame size, margins, etc. that stay the same across all branches)
-          apply_non_responsive_modifiers
-
-          # Apply binding modifiers
+          # All container modifiers (padding / margin / frame / background /
+          # cornerRadius / border / alpha / shadow / etc.) are emitted INSIDE
+          # the wrapper function per branch via
+          # ResponsiveHelper.generate_container_function +
+          # BaseViewConverter#collect_modifiers_for, so the call site adds
+          # only binding-driven modifiers that don't make sense per-branch.
           apply_binding_modifiers
 
           generated_code
-        end
-
-        # Apply modifiers that are not overridden by responsive branches.
-        # These are modifiers whose attribute keys do NOT appear in any responsive override.
-        def apply_non_responsive_modifiers
-          overridden = JsonUIShared::ResponsiveResolver.overridden_keys(@component)
-
-          # Build a component copy without responsive-overridden keys for modifier application
-          # We still apply all modifiers, but skip those that are handled per-branch
-          saved_component = @component
-
-          # Create a temporary component that only has non-overridden attributes
-          # The responsive wrapper function handles orientation/spacing per branch,
-          # so we skip those even if not in overridden_keys
-          always_skip = %w[orientation spacing responsive]
-
-          temp = @component.dup
-          (overridden.to_a + always_skip).each { |k| temp.delete(k) }
-          @component = temp
-
-          apply_modifiers
-          @component = saved_component
         end
       end
     end

@@ -155,6 +155,23 @@ module SjuiTools
           @bag.keys
         end
 
+        # Return the registered modifier strings flattened in MODIFIER_ORDER.
+        # Used by the responsive container path to materialize modifiers for
+        # branch-specific attrs without actually writing them to a converter.
+        def to_lines
+          lines = []
+          MODIFIER_ORDER.each do |key|
+            next unless @bag.key?(key)
+            value = @bag[key]
+            if value.is_a?(Array)
+              value.each { |line| lines << line if line && !line.to_s.empty? }
+            elsif value && !value.to_s.empty?
+              lines << value
+            end
+          end
+          lines
+        end
+
         # Clear all modifiers
         def clear
           @bag.clear

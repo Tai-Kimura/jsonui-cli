@@ -67,6 +67,43 @@ module SjuiTools
           add_line "    #{modifier}"
         end
 
+        # Compute the modifier lines apply_modifiers WOULD register for the
+        # supplied attributes, without mutating persistent converter state or
+        # writing anything to @generated_code. Used by the responsive
+        # container path so each branch can emit padding / margin /
+        # background / etc. derived from the branch-merged attrs.
+        #
+        # `exclude_keys` are stripped from the temp attrs before
+        # apply_modifiers runs — used to suppress duplicates with the
+        # frame/center handling that
+        # ResponsiveHelper.build_responsive_modifiers already emits.
+        def collect_modifiers_for(attrs, exclude_keys: [])
+          cleaned = (attrs || {}).dup
+          cleaned.delete('responsive')
+          exclude_keys.each { |k| cleaned.delete(k) }
+          # Stack-line concerns (orientation / spacing) are baked into
+          # build_container_line per branch; they're not modifiers.
+          cleaned.delete('orientation')
+          cleaned.delete('spacing')
+
+          saved_component = @component
+          saved_bag = @modifier_bag
+          saved_code = @generated_code
+
+          @component = cleaned
+          @modifier_bag = ModifierBag.new
+          @generated_code = []
+
+          begin
+            apply_modifiers
+            @modifier_bag.to_lines
+          ensure
+            @component = saved_component
+            @modifier_bag = saved_bag
+            @generated_code = saved_code
+          end
+        end
+
         protected
 
         # Get value with binding support

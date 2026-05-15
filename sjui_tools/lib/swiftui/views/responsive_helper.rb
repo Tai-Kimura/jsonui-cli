@@ -17,6 +17,15 @@ module SjuiTools
       # For leaf components (Label, Image, etc.): generates a function with the full
       # view per branch.
       module ResponsiveHelper
+        # Keys that `build_responsive_modifiers` coalesces into a single
+        # `.frame(...)` call. `collect_modifiers_for` is invoked with these
+        # in `exclude_keys` so apply_modifiers' own frame_constraints emit
+        # doesn't duplicate the line.
+        FRAME_CENTER_KEYS = %w[
+          minWidth maxWidth minHeight maxHeight
+          centerHorizontal centerVertical centerInParent
+        ].freeze
+
         # Check if a component has responsive overrides
         # @param component [Hash] the JSON component
         # @return [Boolean]
@@ -103,10 +112,21 @@ module SjuiTools
             lines << "#{indent}    content()"
             lines << "#{indent}}"
 
-            # Apply modifiers that change per branch
+            # Apply modifiers that change per branch. Two emit sources:
+            #   1. build_responsive_modifiers — single combined `.frame(...)`
+            #      for min/max width/height + center* (its own logic for
+            #      coalescing center + max into one .frame call).
+            #   2. collect_modifiers_for — runs apply_modifiers against the
+            #      branch-merged attrs and returns the full modifier set
+            #      (padding / margin / background / cornerRadius / border /
+            #      alpha / shadow / etc.). The frame/center keys are
+            #      excluded so we don't double-emit alongside source (1).
             modifiers = build_responsive_modifiers(attrs, converter)
-            modifiers.each do |mod|
-              lines << "#{indent}#{mod}"
+            modifiers.each { |mod| lines << "#{indent}#{mod}" }
+
+            if converter.respond_to?(:collect_modifiers_for)
+              extra = converter.collect_modifiers_for(attrs, exclude_keys: FRAME_CENTER_KEYS)
+              extra.each { |mod| lines << "#{indent}#{mod}" }
             end
           end
 
