@@ -671,6 +671,110 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
     end
   end
 
+  # Regression lock-in: sjui-kjui-responsive-honor-weight-and-width.
+  # `width: matchParent` / `height: matchParent` (and numeric values) in a
+  # responsive branch DO reach apply_frame_size via collect_modifiers_for,
+  # because the branch attrs are passed in directly and `width`/`height`
+  # are NOT in FRAME_CENTER_KEYS (the explicit exclude list). The bug
+  # filer assumed these were scope-outside; they aren't on iOS as long as
+  # the consumer uses `width: matchParent` (= `.frame(maxWidth: .infinity)`)
+  # rather than `weight`. Equal split across an HStack works because
+  # multiple `.frame(maxWidth: .infinity)` siblings distribute evenly.
+  #
+  # Out of scope (deferred): `weight: N` in responsive branches —
+  # WeightedHStack/WeightedVStack uses a tuple children API and can't be
+  # rendered via the generate_container_function content() ViewBuilder
+  # pattern without a substantial refactor. Documented as v3.
+  describe '.generate_container_function (regression: width/height responsive override reaches the branch)' do
+    let(:width_override_component) do
+      {
+        'type' => 'View',
+        'orientation' => 'vertical',
+        'spacing' => 0,
+        'responsive' => {
+          'regular' => { 'width' => 'matchParent' }
+        },
+        'child' => [{ 'type' => 'Label', 'text' => 'Hi' }]
+      }
+    end
+
+    let(:converter_for_width_override) do
+      SjuiTools::SwiftUI::Views::ViewConverter.new(width_override_component, 0)
+    end
+
+    it 'emits .frame(maxWidth: .infinity) in the regular branch when width: matchParent is set there' do
+      code = described_class.generate_container_function(
+        'responsive0', width_override_component, converter_for_width_override
+      )
+      # Branch-merged width: matchParent → size_to_swiftui → .infinity →
+      # apply_frame_size emits .frame(maxWidth: .infinity).
+      regular_section = code[/horizontalSizeClass == \.regular.*?(?=\} else \{)/m]
+      expect(regular_section).not_to be_nil
+      expect(regular_section).to include('.frame(maxWidth: .infinity')
+    end
+
+    it 'does not emit .frame(maxWidth: .infinity) in the default branch (no override)' do
+      code = described_class.generate_container_function(
+        'responsive0', width_override_component, converter_for_width_override
+      )
+      default_section = code[/\} else \{.*?(?=\s*\}\s*\}\s*\z)/m]
+      expect(default_section).not_to be_nil
+      expect(default_section).not_to include('.frame(maxWidth: .infinity')
+    end
+
+    let(:height_override_component) do
+      {
+        'type' => 'View',
+        'orientation' => 'horizontal',
+        'spacing' => 0,
+        'responsive' => {
+          'regular' => { 'height' => 'matchParent' }
+        },
+        'child' => [{ 'type' => 'Label', 'text' => 'Hi' }]
+      }
+    end
+
+    let(:converter_for_height_override) do
+      SjuiTools::SwiftUI::Views::ViewConverter.new(height_override_component, 0)
+    end
+
+    it 'emits .frame(maxHeight: .infinity) in the regular branch when height: matchParent is set there' do
+      code = described_class.generate_container_function(
+        'responsive0', height_override_component, converter_for_height_override
+      )
+      regular_section = code[/horizontalSizeClass == \.regular.*?(?=\} else \{)/m]
+      expect(regular_section).not_to be_nil
+      expect(regular_section).to include('maxHeight: .infinity')
+    end
+
+    let(:numeric_width_component) do
+      {
+        'type' => 'View',
+        'orientation' => 'vertical',
+        'spacing' => 0,
+        'width' => 'matchParent',
+        'responsive' => {
+          'regular' => { 'width' => 240 }
+        },
+        'child' => [{ 'type' => 'Label', 'text' => 'Hi' }]
+      }
+    end
+
+    let(:converter_for_numeric_width) do
+      SjuiTools::SwiftUI::Views::ViewConverter.new(numeric_width_component, 0)
+    end
+
+    it 'emits .frame(width: 240) in the regular branch and .frame(maxWidth: .infinity) in the default branch' do
+      code = described_class.generate_container_function(
+        'responsive0', numeric_width_component, converter_for_numeric_width
+      )
+      regular_section = code[/horizontalSizeClass == \.regular.*?(?=\} else \{)/m]
+      default_section = code[/\} else \{.*?(?=\s*\}\s*\}\s*\z)/m]
+      expect(regular_section).to include('.frame(width: 240)')
+      expect(default_section).to include('maxWidth: .infinity')
+    end
+  end
+
   describe '.numeric_dimension?' do
     it 'accepts Integer / Float' do
       expect(described_class.numeric_dimension?(480)).to be true

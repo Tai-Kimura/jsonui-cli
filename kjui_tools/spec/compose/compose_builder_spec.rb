@@ -927,6 +927,135 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       end
     end
 
+    # Regression lock-in: sjui-kjui-responsive-honor-weight-and-width.
+    # kjui inline path already merges `weight` / `width` / `height` from
+    # the responsive branch into `attrs` and re-runs
+    # ContainerComponent.generate with the merged set. build_size and
+    # build_weight then emit the right modifiers per branch. The bug
+    # filer's expectation ("scope outside") was incorrect for Android —
+    # only iOS sjui has structural limitations (WeightedHStack refactor
+    # needed). These tests prove Android honors the override and stop
+    # future regressions.
+    describe 'View responsive width/height/weight reach the branch (regression: sjui-kjui-responsive-honor-weight-and-width)' do
+      before do
+        builder.instance_variable_set(:@required_imports, Set.new)
+        builder.instance_variable_set(:@included_views, Set.new)
+        builder.instance_variable_set(:@cell_views, Set.new)
+        builder.instance_variable_set(:@custom_components, Set.new)
+        builder.instance_variable_set(:@responsive_functions, [])
+        builder.instance_variable_set(:@responsive_counter, 0)
+      end
+
+      it 'override-only weight emits .weight(1f) inside the regular branch when parent is Row' do
+        json = {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'width' => 'matchParent',
+          'responsive' => {
+            'regular' => { 'width' => 0, 'weight' => 1 }
+          },
+          'child' => [{ 'type' => 'Text', 'text' => 'A' }]
+        }
+        result = builder.send(:generate_component, json, 0, 'Row')
+        # Regular branch carries `.weight(1f)`; default branch keeps
+        # `.fillMaxWidth()` from base `width: matchParent`.
+        expect(result).to include('.weight(1f)')
+        expect(result).to include('.fillMaxWidth()')
+        # The regular branch's `width: 0` is suppressed (build_size skips
+        # numeric width when weight is set with width == 0). So no
+        # `.width(0.dp)` should appear.
+        expect(result).not_to include('.width(0.dp)')
+      end
+
+      it 'orientation switch with per-branch weight on children compiles to Row/Column with correct emit' do
+        # Full repro of the bug report's unify use case: vertical
+        # (compact) ↔ horizontal (regular) outer + child weights only
+        # active in regular.
+        json = {
+          'type' => 'View',
+          'id' => 'mypage_root',
+          'width' => 'matchParent',
+          'height' => 'matchParent',
+          'orientation' => 'vertical',
+          'responsive' => {
+            'regular' => { 'orientation' => 'horizontal' }
+          },
+          'child' => [
+            {
+              'type' => 'View',
+              'id' => 'left_panel',
+              'orientation' => 'vertical',
+              'width' => 'matchParent',
+              'responsive' => {
+                'regular' => { 'width' => 0, 'weight' => 1 }
+              },
+              'child' => [{ 'type' => 'Text', 'text' => 'L' }]
+            },
+            {
+              'type' => 'View',
+              'id' => 'right_panel',
+              'orientation' => 'vertical',
+              'width' => 'matchParent',
+              'responsive' => {
+                'regular' => { 'width' => 0, 'weight' => 1 }
+              },
+              'child' => [{ 'type' => 'Text', 'text' => 'R' }]
+            }
+          ]
+        }
+        result = builder.send(:generate_component, json, 0, nil)
+        # Outer responsive: Row in regular branch, Column in default.
+        expect(result).to include('Row(')
+        expect(result).to include('Column(')
+        # Each child has an inline responsive — its regular branch
+        # carries `.weight(1f)`, default branch keeps `.fillMaxWidth()`.
+        expect(result.scan('.weight(1f)').length).to be >= 2
+      end
+
+      it 'override-only height: matchParent emits .fillMaxHeight() in the regular branch' do
+        json = {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'height' => 'wrapContent',
+          'responsive' => {
+            'regular' => { 'height' => 'matchParent' }
+          },
+          'child' => [{ 'type' => 'Text', 'text' => 'A' }]
+        }
+        result = builder.send(:generate_component, json, 0, nil)
+        expect(result).to include('.fillMaxHeight()')
+      end
+
+      it 'override-only width: 240 emits .width(240.dp) in the regular branch' do
+        json = {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'width' => 'matchParent',
+          'responsive' => {
+            'regular' => { 'width' => 240 }
+          },
+          'child' => [{ 'type' => 'Text', 'text' => 'A' }]
+        }
+        result = builder.send(:generate_component, json, 0, nil)
+        expect(result).to include('.width(240.dp)')
+        expect(result).to include('.fillMaxWidth()') # default branch
+      end
+
+      it 'override-only gravity reaches the Column branch and emits horizontalAlignment' do
+        json = {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'responsive' => {
+            'regular' => { 'gravity' => 'centerHorizontal' }
+          },
+          'child' => [{ 'type' => 'Text', 'text' => 'A' }]
+        }
+        result = builder.send(:generate_component, json, 0, nil)
+        # gravity → Column's `horizontalAlignment` parameter.
+        expect(result).to include('horizontalAlignment = Alignment.CenterHorizontally')
+      end
+    end
+
     # Regression: kjui-responsive-helper-align-scope-leak (now obsolete
     # under the inline path, but the tests stay as a lock — alignment for
     # a responsive View must reach the call site in a form that resolves
