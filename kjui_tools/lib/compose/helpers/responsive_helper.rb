@@ -13,14 +13,26 @@ module KjuiTools
       # For leaf components (no children): generates a @Composable that renders
       # the full view per branch.
       class ResponsiveHelper
-        # Size class to Compose condition mapping
+        # Width thresholds match Material3's WindowWidthSizeClass boundaries
+        # (compact <600dp, medium 600..839dp, expanded >=840dp). Phrased as
+        # LocalConfiguration.current.screenWidthDp comparisons so the helper
+        # doesn't need a `windowSizeClass: WindowSizeClass` parameter — that
+        # parameter, when present, requires the call site to also have a
+        # `windowSizeClass` in scope, which generated screens don't.
         WIDTH_CONDITIONS = {
-          'compact'  => 'windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact',
-          'medium'   => 'windowSizeClass.widthSizeClass == WindowWidthSizeClass.Medium',
-          'regular'  => 'windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded'
+          'compact'  => 'LocalConfiguration.current.screenWidthDp < 600',
+          'medium'   => 'LocalConfiguration.current.screenWidthDp in 600..839',
+          'regular'  => 'LocalConfiguration.current.screenWidthDp >= 840'
         }.freeze
 
+        # Resolved against a local `isLandscape` val that each generator emits
+        # at the top of its function body. `Configuration` is full-qualified
+        # at the emit site to avoid clashing with kjui's core Configuration.
         LANDSCAPE_CONDITION = 'isLandscape'.freeze
+
+        ISLANDSCAPE_DECLARATION =
+          'val isLandscape = LocalConfiguration.current.orientation == ' \
+          'android.content.res.Configuration.ORIENTATION_LANDSCAPE'.freeze
 
         # Check if a component has responsive overrides
         def self.responsive?(component)
@@ -61,14 +73,16 @@ module KjuiTools
 
           branches = JsonUIShared::ResponsiveResolver.build_branches(component)
 
-          # Build the function
+          # Build the function. The helper is emitted at file scope (NOT as a
+          # nested local function), so `private` here is file-private and the
+          # body has no captured `data` / `viewModel` / `windowSizeClass` from
+          # any enclosing GeneratedView.
           func_lines = []
           func_lines << indent("@Composable", depth)
           func_lines << indent("private fun #{function_name}(", depth)
-          func_lines << indent("    windowSizeClass: WindowSizeClass,", depth)
           func_lines << indent("    content: @Composable () -> Unit", depth)
           func_lines << indent(") {", depth)
-          func_lines << indent("    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE", depth)
+          func_lines << indent("    #{ISLANDSCAPE_DECLARATION}", depth)
 
           # Build if/else chain
           first = true
@@ -126,10 +140,8 @@ module KjuiTools
 
           func_lines = []
           func_lines << indent("@Composable", depth)
-          func_lines << indent("private fun #{function_name}(", depth)
-          func_lines << indent("    windowSizeClass: WindowSizeClass", depth)
-          func_lines << indent(") {", depth)
-          func_lines << indent("    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE", depth)
+          func_lines << indent("private fun #{function_name}() {", depth)
+          func_lines << indent("    #{ISLANDSCAPE_DECLARATION}", depth)
 
           first = true
           branches.each do |branch|
@@ -174,7 +186,7 @@ module KjuiTools
           add_responsive_imports(required_imports)
 
           lines = []
-          lines << indent("val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE", depth)
+          lines << indent(ISLANDSCAPE_DECLARATION, depth)
 
           first = true
           branches.each do |branch|
@@ -204,11 +216,15 @@ module KjuiTools
           lines.join("\n")
         end
 
-        # Add required imports for responsive code
+        # Add required imports for responsive code. `:local_configuration`
+        # is the only entry needed now — width branches reference
+        # `LocalConfiguration.current.screenWidthDp` directly and the
+        # `isLandscape` val full-qualifies `android.content.res.Configuration`.
+        # The `:window_size_class` import (material3-window-size-class) is no
+        # longer pulled in; that artifact is no longer a required dep.
         def self.add_responsive_imports(required_imports)
           return unless required_imports
 
-          required_imports.add(:window_size_class)
           required_imports.add(:local_configuration)
         end
 

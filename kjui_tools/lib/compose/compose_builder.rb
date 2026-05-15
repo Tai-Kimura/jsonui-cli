@@ -332,7 +332,12 @@ module KjuiTools
         'medium'  => 'LocalConfiguration.current.screenWidthDp in 600..839',
         'regular' => 'LocalConfiguration.current.screenWidthDp >= 840'
       }.freeze
-      INLINE_LANDSCAPE_CONDITION = 'LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE'
+      # Full-qualify `android.content.res.Configuration` so the inline
+      # condition can sit at any call site without forcing an `import
+      # android.content.res.Configuration` line — that import would clash
+      # with kjui's `com.kotlinjsonui.core.Configuration` whenever a
+      # component (Button/TextField/font helper) needs both.
+      INLINE_LANDSCAPE_CONDITION = 'LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE'
 
       # Build a standalone Kotlin boolean expression for a size class key,
       # using only LocalConfiguration so the call site doesn't need to have
@@ -393,8 +398,10 @@ module KjuiTools
         # Accumulate the function definition
         @responsive_functions << result[:function_code]
 
-        # Generate the call site: wrapper function wrapping children
-        call_code = indent("#{func_name}(windowSizeClass = windowSizeClass) {", depth)
+        # Generate the call site: wrapper function wrapping children. The
+        # helper has no parameters other than its `content` trailing lambda;
+        # the GeneratedView scope doesn't carry a `windowSizeClass` to pass.
+        call_code = indent("#{func_name} {", depth)
 
         # Determine the layout type for children from the default branch
         # Use vertical as a safe default for child layout context
@@ -422,8 +429,8 @@ module KjuiTools
 
         @responsive_functions << result[:function_code]
 
-        # Return the call site
-        indent("#{func_name}(windowSizeClass = windowSizeClass)", depth)
+        # Return the call site — helper takes no parameters now.
+        indent("#{func_name}()", depth)
       end
 
       # Generate a component without responsive handling (to avoid infinite recursion)
@@ -807,18 +814,33 @@ module KjuiTools
           # Create content that switches based on DynamicModeManager
           composable_content = generate_mode_aware_content(layout_name, static_content, dynamic_content, 1)
 
-          # Append responsive helper functions if any were generated
-          if @responsive_functions && @responsive_functions.any?
-            composable_content += "\n"
-            @responsive_functions.each do |func_code|
-              composable_content += "\n#{func_code}\n"
-            end
-          end
-
           updated_content = existing_content.gsub(
             /\/\/ >>> GENERATED_CODE_START.*?\/\/ >>> GENERATED_CODE_END/m,
             "// >>> GENERATED_CODE_START\n#{composable_content}    // >>> GENERATED_CODE_END"
           )
+
+          # Responsive helper composables MUST sit at file scope, not inside
+          # the parent GeneratedView fun. Local @Composable functions can't
+          # carry the `private` modifier in Kotlin, and emitting them inside
+          # the parent leaks the parent scope (data / viewModel / etc.) which
+          # collides with the helper's own clean signature. We park them
+          # between a separate RESPONSIVE_HELPERS marker pair appended after
+          # the parent fun's closing brace; subsequent builds rewrite the
+          # block atomically.
+          helpers_marker_regex = /\n*\/\/ >>> RESPONSIVE_HELPERS_START.*?\/\/ >>> RESPONSIVE_HELPERS_END\n?/m
+          if @responsive_functions && @responsive_functions.any?
+            helpers_block = @responsive_functions.join("\n\n")
+            helpers_section = "\n\n// >>> RESPONSIVE_HELPERS_START\n#{helpers_block}\n// >>> RESPONSIVE_HELPERS_END\n"
+            if updated_content =~ helpers_marker_regex
+              updated_content = updated_content.sub(helpers_marker_regex, helpers_section)
+            else
+              updated_content = updated_content.rstrip + helpers_section
+            end
+          else
+            # No responsive helpers this build — drop any stale block left
+            # over from a previous build to keep the file deterministic.
+            updated_content = updated_content.sub(helpers_marker_regex, "\n")
+          end
 
           # Update function signature to include viewModel and modifier parameters
           # Match initial template (data only)

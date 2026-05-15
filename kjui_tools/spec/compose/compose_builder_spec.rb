@@ -98,6 +98,54 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         expect(File.exist?(viewmodel_file)).to be true
       end
     end
+
+    # Regression: kjui-view-responsive-block-codegen-broken — issues 4 & 5
+    # The Responsive helper composable must land at file scope (after the
+    # parent GeneratedView fun's closing brace), not inside it. As a local
+    # function it can't carry `private` (compile error 4) and any
+    # @Composable inside a non-@Composable scope blows up (compile error 5).
+    context 'when JSON has a non-Embed responsive View' do
+      before do
+        File.write(File.join(layouts_dir, 'responsive_view.json'), <<~JSON)
+          {
+            "type": "View",
+            "orientation": "vertical",
+            "responsive": {
+              "regular": { "centerHorizontal": true, "maxWidth": 720 }
+            },
+            "child": [
+              { "type": "Text", "text": "Hello" }
+            ]
+          }
+        JSON
+      end
+
+      it 'emits the Responsive helper at file scope, after the parent fun closes' do
+        builder.build_file(File.join(layouts_dir, 'responsive_view.json'))
+        gen_path = File.join(
+          temp_dir,
+          'src/main/kotlin/com/example/app/views/responsive_view/ResponsiveViewGeneratedView.kt'
+        )
+        content = File.read(gen_path)
+
+        helpers_marker_pos = content.index('// >>> RESPONSIVE_HELPERS_START')
+        end_marker_pos = content.index('// >>> GENERATED_CODE_END')
+        expect(helpers_marker_pos).not_to be_nil
+        expect(end_marker_pos).not_to be_nil
+        expect(helpers_marker_pos).to be > end_marker_pos
+
+        # The helper itself must NOT carry windowSizeClass anywhere.
+        expect(content).not_to include('windowSizeClass: WindowSizeClass')
+        expect(content).not_to include('windowSizeClass = windowSizeClass')
+
+        # No ambiguous Configuration import — only the full-qualified usage.
+        expect(content).not_to include("\nimport android.content.res.Configuration\n")
+        expect(content).to include('android.content.res.Configuration.ORIENTATION_LANDSCAPE')
+
+        # No leftover material3-window-size-class import either.
+        expect(content).not_to include('androidx.compose.material3.windowsizeclass')
+      end
+    end
   end
 
   describe 'private helper methods' do
@@ -640,6 +688,72 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       it 'inlines an EmbedContainer per branch' do
         result = builder.send(:generate_component, embed_json, 0, nil)
         expect(result.scan('EmbedContainer(').length).to be >= 2
+      end
+    end
+
+    # Regression: kjui-view-responsive-block-codegen-broken
+    # A non-Embed View node (Container, etc.) with a `responsive` block goes
+    # through the extracted-private-composable path. That helper must:
+    #   (a) NOT take a `windowSizeClass: WindowSizeClass` parameter, and
+    #   (b) be called with no `windowSizeClass = ...` argument from the
+    #       enclosing GeneratedView, since GeneratedView doesn't have one.
+    describe 'View responsive helper extraction (regression: kjui-view-responsive-block-codegen-broken)' do
+      before do
+        builder.instance_variable_set(:@required_imports, Set.new)
+        builder.instance_variable_set(:@included_views, Set.new)
+        builder.instance_variable_set(:@cell_views, Set.new)
+        builder.instance_variable_set(:@custom_components, Set.new)
+        builder.instance_variable_set(:@responsive_functions, [])
+        builder.instance_variable_set(:@responsive_counter, 0)
+      end
+
+      let(:view_json) do
+        {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'responsive' => {
+            'regular' => { 'centerHorizontal' => true, 'maxWidth' => 720 }
+          },
+          'child' => [{ 'type' => 'Text', 'text' => 'Hello' }]
+        }
+      end
+
+      it 'call site has no windowSizeClass argument' do
+        call_code = builder.send(:generate_component, view_json, 0, nil)
+        expect(call_code).not_to include('windowSizeClass = windowSizeClass')
+        expect(call_code).to match(/Responsive\w+\s*\{/)
+      end
+
+      it 'helper function signature drops windowSizeClass parameter' do
+        builder.send(:generate_component, view_json, 0, nil)
+        funcs = builder.instance_variable_get(:@responsive_functions)
+        expect(funcs).not_to be_empty
+        expect(funcs.first).not_to include('windowSizeClass: WindowSizeClass')
+        expect(funcs.first).to include('content: @Composable () -> Unit')
+      end
+
+      it 'helper uses LocalConfiguration.current.screenWidthDp not WindowWidthSizeClass' do
+        builder.send(:generate_component, view_json, 0, nil)
+        funcs = builder.instance_variable_get(:@responsive_functions)
+        expect(funcs.first).to include('LocalConfiguration.current.screenWidthDp')
+        expect(funcs.first).not_to include('WindowWidthSizeClass')
+      end
+
+      it 'does not pull in the window_size_class import' do
+        builder.send(:generate_component, view_json, 0, nil)
+        imports = builder.instance_variable_get(:@required_imports)
+        expect(imports).not_to include(:window_size_class)
+        expect(imports).to include(:local_configuration)
+      end
+
+      it 'fully qualifies android.content.res.Configuration in the isLandscape val' do
+        # Regression: bare `Configuration.ORIENTATION_LANDSCAPE` would clash
+        # with kjui's `com.kotlinjsonui.core.Configuration` whenever a
+        # component on the same screen also needs the kjui Configuration
+        # class (e.g. Button / TextField / font helper).
+        builder.send(:generate_component, view_json, 0, nil)
+        funcs = builder.instance_variable_get(:@responsive_functions)
+        expect(funcs.first).to include('android.content.res.Configuration.ORIENTATION_LANDSCAPE')
       end
     end
 

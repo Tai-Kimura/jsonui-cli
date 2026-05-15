@@ -149,8 +149,12 @@ module KjuiTools
             composition_local_provider: "import androidx.compose.runtime.CompositionLocalProvider",
             window_size_class: ["import androidx.compose.material3.windowsizeclass.WindowSizeClass",
                                 "import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass"],
-            local_configuration: ["import android.content.res.Configuration",
-                                  "import androidx.compose.ui.platform.LocalConfiguration"]
+            # `Configuration.ORIENTATION_LANDSCAPE` is referenced with the
+            # full `android.content.res.Configuration.ORIENTATION_LANDSCAPE`
+            # path at the call site so we don't pull `Configuration` into the
+            # unqualified namespace — that would clash with kjui's own
+            # `com.kotlinjsonui.core.Configuration` (`:configuration` key).
+            local_configuration: ["import androidx.compose.ui.platform.LocalConfiguration"]
           }
         end
 
