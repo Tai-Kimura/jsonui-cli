@@ -80,11 +80,23 @@ module KjuiTools
           children = json_data['child'] || []
           children = [children] unless children.is_a?(Array)
           
-          # Return structure for parent to process children
+          # Return structure for parent to process children.
+          #
+          # `layout_type: 'ScopeFree'` is important — children render inside
+          # the `item { ... }` lambda whose receiver is `LazyItemScope`, not
+          # ColumnScope/RowScope. Without this override, handle_container_result
+          # falls back to the outer parent_type (e.g. 'Column' when ScrollView
+          # is the child of a vertical SafeAreaView), and a child responsive
+          # View that emits `Modifier.align(Alignment.CenterHorizontally)` then
+          # tries to resolve `.align` against an implicit ColumnScope receiver
+          # that isn't actually present. SwiftUI-free centering modifiers
+          # (`wrapContentWidth/Height(Alignment.*)`) work in any scope, so the
+          # ScopeFree branch of build_alignment routes through those instead.
           {
             code: code,
             children: children,
             closing: "\n" + indent("}", depth + 1) + "\n" + indent("}", depth),
+            layout_type: 'ScopeFree',
             json_data: json_data
           }
         end

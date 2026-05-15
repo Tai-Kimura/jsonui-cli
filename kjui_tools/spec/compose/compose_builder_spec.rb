@@ -993,6 +993,52 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       end
     end
 
+    # Regression: kjui-responsive-inline-align-not-available-in-lazyitemscope
+    # ScrollView emits `LazyColumn { item { ... } }` and its children render
+    # inside the `item` lambda whose receiver is `LazyItemScope`. With the
+    # earlier inline-responsive fix, a responsive View child was inheriting
+    # the OUTER parent_type (e.g. 'Column' when SafeAreaView vertical wraps
+    # the ScrollView), and `Modifier.align(Alignment.CenterHorizontally)` was
+    # emitted inside the item lambda — unresolved against LazyItemScope.
+    #
+    # ScrollViewComponent now returns `layout_type: 'ScopeFree'`, so
+    # handle_container_result passes ScopeFree to children. That routes
+    # alignment through `wrapContentWidth/Height(...)`, which resolves in
+    # any scope including LazyItemScope.
+    describe 'responsive View inside ScrollView (regression: kjui-responsive-inline-align-not-available-in-lazyitemscope)' do
+      before do
+        builder.instance_variable_set(:@required_imports, Set.new)
+        builder.instance_variable_set(:@included_views, Set.new)
+        builder.instance_variable_set(:@cell_views, Set.new)
+        builder.instance_variable_set(:@custom_components, Set.new)
+        builder.instance_variable_set(:@responsive_functions, [])
+        builder.instance_variable_set(:@responsive_counter, 0)
+      end
+
+      it 'routes the inline branch through ScopeFree even when the outer wrapper is Column' do
+        json = {
+          'type' => 'ScrollView',
+          'child' => [{
+            'type' => 'View',
+            'orientation' => 'vertical',
+            'responsive' => {
+              'regular' => { 'maxWidth' => 960, 'centerHorizontal' => true }
+            },
+            'child' => [{ 'type' => 'Text', 'text' => 'Hi' }]
+          }]
+        }
+        # parent_type='Column' mimics a vertical SafeAreaView wrapping the
+        # ScrollView at screen root. The responsive child must NOT emit
+        # `Modifier.align(Alignment.CenterHorizontally)` because the actual
+        # receiver scope at the call site is LazyItemScope.
+        result = builder.send(:generate_component, json, 0, 'Column')
+        expect(result).to include('item {')
+        expect(result).not_to include('.align(Alignment.CenterHorizontally)')
+        # Scope-independent centering is still emitted.
+        expect(result).to include('.wrapContentWidth(Alignment.CenterHorizontally)')
+      end
+    end
+
     # Regression: same bug — verify build_alignment 'ScopeFree' branch.
     describe 'ModifierBuilder.build_alignment(parent_type: ScopeFree)' do
       it 'returns wrapContentWidth for centerHorizontal in ScopeFree' do
