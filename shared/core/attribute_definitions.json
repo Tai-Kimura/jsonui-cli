@@ -3509,9 +3509,9 @@
       "description": "Outer container shape for the Collection (single-column section path uses CollectionStackView/CollectionStack). Accepts: 'lazy' (default) -> ScrollView+LazyVStack/LazyHStack on iOS, LazyColumn/LazyRow on Android, with virtualized cell rendering. 'eager' -> ScrollView+VStack/HStack on iOS, Column(verticalScroll)/Row(horizontalScroll) on Android — no virtualization, smooth scrolling for heavy cells (markdown / images / attributed text) that suffer from LazyVStack re-evaluation. 'none' -> VStack/HStack only, no scroll container, parent must already be scrollable. Bindings (@{prop}) are resolved at runtime via the wrapper's mode parameter so toggles preserve view identity. Sticky headers and paging require 'lazy'."
     },
     "columns": {
-      "type": "number",
+      "type": ["number", "binding"],
       "min": 1,
-      "description": "Number of columns"
+      "description": "Number of columns. Literal int -> static GridCells.Fixed(N) / Array(repeating: ..., count: N). Binding @{prop} -> runtime-resolved data.prop; the Collection always renders on the multi-column grid path (LazyVerticalGrid / LazyHorizontalGrid on Android, LazyVGrid / LazyHGrid on iOS) even when the binding resolves to 1, so the grid layout stays stable across runtime column changes."
     },
     "columnSpacing": {
       "type": "number",

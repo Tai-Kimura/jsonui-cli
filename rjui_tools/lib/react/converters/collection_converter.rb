@@ -29,7 +29,16 @@ module RjuiTools
         def build_class_name
           classes = [super]
 
-          columns = json['columnCount'] || json['columns'] || 1
+          # Resolve the column count. A `@{prop}` binding can't be baked
+          # into a Tailwind `grid-cols-N` class — Tailwind's JIT only sees
+          # class names at build time. Emit the bare `grid` class and push
+          # a runtime `gridTemplateColumns: repeat(${data.prop}, minmax(0,
+          # 1fr))` into `@dynamic_styles` instead. A literal int keeps the
+          # existing `grid-cols-N` shortcut, which is one byte shorter
+          # than the inline-style equivalent.
+          raw_columns = json['columnCount'] || json['columns']
+          columns_binding = raw_columns.is_a?(String) && has_binding?(raw_columns)
+          columns = columns_binding ? nil : (raw_columns || 1)
           layout = json['orientation'] || json['layout'] || json['scrollDirection'] || 'vertical'
           is_horizontal = layout.to_s.downcase == 'horizontal'
           # lazy: "none" → drop overflow scroll classes; Collection is expected to
@@ -44,8 +53,11 @@ module RjuiTools
             # For horizontal: columnSpacing (or lineSpacing/itemSpacing) = gap between items
             spacing = json['columnSpacing'] || json['lineSpacing'] || json['itemSpacing'] || json['spacing']
             classes << "gap-[#{spacing}px]" if spacing
-          elsif columns == 1
-            # List style (single column)
+          elsif !columns_binding && columns == 1
+            # List style (single column). A binding-form `columns` can't
+            # reach this branch — the runtime count is unknown at codegen
+            # time so we always route through the grid path below to keep
+            # the layout structure stable across runtime column changes.
             classes << 'flex flex-col'
             classes << 'overflow-y-auto' if is_lazy && json['scrollEnabled'] != false
             # lineSpacing for vertical spacing between items
@@ -54,7 +66,16 @@ module RjuiTools
           else
             # Grid layout
             classes << 'grid'
-            classes << "grid-cols-#{columns}"
+            if columns_binding
+              # extract_binding_property already prepends `data.` (see
+              # base_converter#extract_binding_property), so just splice
+              # the returned expression into the template literal.
+              expr = extract_binding_property(raw_columns)
+              @dynamic_styles['gridTemplateColumns'] =
+                "`repeat(${#{expr}}, minmax(0, 1fr))`"
+            else
+              classes << "grid-cols-#{columns}"
+            end
             # lineSpacing for row gap, itemSpacing for column gap
             row_gap = json['lineSpacing']
             col_gap = json['itemSpacing'] || json['spacing']

@@ -25,9 +25,51 @@ module SjuiTools
           convert_non_responsive
         end
 
+        # Resolve the `columns` attribute into its Swift emit form. A literal
+        # int returns `{ expr: "5", literal: 5, is_binding: false }`; a
+        # `@{prop}` binding returns `{ expr: "data.prop", literal: nil,
+        # is_binding: true }`. The caller interpolates `expr` into
+        # `Array(repeating: ..., count: ...)` and uses `is_binding` to
+        # suppress compile-time fast-paths (single-column list, etc.) that
+        # require a known column count.
+        def columns_info
+          value = @component['columns']
+          if value.is_a?(String) && is_binding?(value)
+            { expr: "data.#{extract_binding_property(value)}", literal: nil, is_binding: true }
+          else
+            literal = (value || 1).to_i
+            { expr: literal.to_s, literal: literal, is_binding: false }
+          end
+        end
+
+        # True when the runtime column count is unknown or > 1. Used to gate
+        # the grid emit path; binding-form columns always take the grid path
+        # so a runtime resolution to 5/3 doesn't tear the layout structure.
+        def columns_is_multi?
+          info = columns_info
+          info[:is_binding] || (info[:literal] && info[:literal] > 1)
+        end
+
+        # Swift expression for the column count of one section. A literal
+        # `section['columns']` override emits as an Int literal. Absent or
+        # nil falls back to the parent Collection's `columns` expression
+        # (literal or `data.<prop>` binding).
+        def section_columns_expr(section)
+          if section['columns']
+            section['columns'].to_i.to_s
+          else
+            columns_info[:expr]
+          end
+        end
+
         def convert_non_responsive
           id = @component['id'] || 'collection'
-          columns = @component['columns'] || 1
+          info = columns_info
+          # Sentinel for downstream control flow: any value > 1 routes
+          # through the multi-column grid path. Compile-time LCM with
+          # per-section overrides is forfeited for bindings because the
+          # runtime column count is unknown.
+          columns = info[:literal] || 2
           # Support both 'layout' and 'orientation' attributes for horizontal/vertical
           layout = @component['layout'] || @component['orientation'] || 'vertical'
           is_horizontal = layout == 'horizontal'
@@ -292,7 +334,7 @@ module SjuiTools
                   footer_view_name = extract_view_name(section['footer']) if section['footer']
 
                   # Grid with cells - use section columns if specified, otherwise use component columns
-                  section_columns = section['columns'] || columns
+                  section_columns = section_columns_expr(section)
 
                   if property_name
                     # Section wrapper with let binding
@@ -392,7 +434,7 @@ module SjuiTools
                   add_modifier_line ".padding(.horizontal)"
                 end
                 
-                add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['itemSpacing'] || 10}), count: #{columns}), alignment: #{get_grid_alignment}, spacing: #{@component['itemSpacing'] || 10}) {"
+                add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['itemSpacing'] || 10}), count: #{columns_info[:expr]}), alignment: #{get_grid_alignment}, spacing: #{@component['itemSpacing'] || 10}) {"
                 indent do
                   generate_collection_content(cell_class_name, id)
                 end
@@ -603,9 +645,8 @@ module SjuiTools
         end
 
         def generate_non_lazy_grid(has_sections, cell_class_name, header_class_name, footer_class_name)
-          columns = @component['columns'] || 1
           spacing = @component['itemSpacing'] || 10
-          grid_cols = "Array(repeating: GridItem(.flexible(), spacing: #{spacing}), count: #{columns})"
+          grid_cols = "Array(repeating: GridItem(.flexible(), spacing: #{spacing}), count: #{columns_info[:expr]})"
 
           if has_sections
             property_name = extract_property_name(@component['items'])
@@ -617,7 +658,7 @@ module SjuiTools
                 header_view_name = extract_view_name(section['header']) if section['header']
                 cell_view_name = extract_view_name(section['cell']) if section['cell']
                 footer_view_name = extract_view_name(section['footer']) if section['footer']
-                section_columns = section['columns'] || columns
+                section_columns = section_columns_expr(section)
                 section_grid_cols = "Array(repeating: GridItem(.flexible(), spacing: #{spacing}), count: #{section_columns})"
 
                 if property_name
@@ -1290,8 +1331,13 @@ module SjuiTools
               header_view_name = extract_view_name(section['header']) if section['header']
               footer_view_name = extract_view_name(section['footer']) if section['footer']
 
-              # Generate section - use section-specific columns if specified
-              section_columns = section['columns'] || @component['columns'] || 1
+              # Generate section - use section-specific columns if specified.
+              # A binding-form top-level `columns` ALWAYS routes through the
+              # grid path here (`section_columns == 1` evaluates false on
+              # the sentinel 2) because the runtime column count is unknown.
+              # An explicit literal `section['columns'] = 1` still picks the
+              # list-style path.
+              section_columns = section['columns'] || columns_info[:literal] || (columns_info[:is_binding] ? 2 : 1)
               if section_columns == 1
                 # List-style section with header/footer
                 # Wrap in optional check
@@ -1370,7 +1416,7 @@ module SjuiTools
                           add_modifier_line ".frame(height: #{@component['cellHeight']})"
                         end
 
-                        if @component['columns'] && @component['columns'] > 1
+                        if columns_is_multi?
                           add_modifier_line ".frame(maxWidth: .infinity)"
                         end
 
@@ -1426,7 +1472,7 @@ module SjuiTools
                 end
 
                 # For grid layouts, ensure cells expand to fill width
-                if @component['columns'] && @component['columns'] > 1
+                if columns_is_multi?
                   add_modifier_line ".frame(maxWidth: .infinity)"
                 end
               end
@@ -1482,7 +1528,7 @@ module SjuiTools
                 add_modifier_line ".frame(height: #{@component['cellHeight']})"
               end
 
-              if @component['columns'] && @component['columns'] > 1
+              if columns_is_multi?
                 add_modifier_line ".frame(maxWidth: .infinity)"
               end
 
