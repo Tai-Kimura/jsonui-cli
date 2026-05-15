@@ -259,6 +259,80 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
       expect(new_body).to eq(body)
     end
 
+    # Regression: kjui-section-extractor-responsive-else-branch-not-lifted.
+    # When the outer responsive `if/else` already has the regular branch's
+    # children lifted (so its container holds only `SectionN(data, viewModel)`
+    # calls) and the else branch is still inline, find_splittable_children
+    # would tie on `total_lines` (the lifted Section calls are 1 line each,
+    # but so are any single-leaf chunks) and keep picking the already-lifted
+    # container on every iteration, never reaching the else branch. The
+    # `all_children_already_lifted?` skip lets the search move past the
+    # exhausted regular branch and process the inline else branch.
+    it 'lifts inside the outer else-branch when the outer if-branch is already fully lifted' do
+      # Outer responsive: if (regular) Row else Column. Each branch contains
+      # the SAME panel-responsive sub-tree (nested if/else with .weight on
+      # the regular sub-branch). Without the skip, only the outer if-branch
+      # gets its sub-branches lifted; the outer else-branch stays inline.
+      panel_responsive = <<~K.chomp
+        if (cond2) {
+            Column(
+                modifier = Modifier
+                    .testTag("regular_panel")
+                    .weight(1f)
+            ) {
+                Column(modifier = Modifier.testTag("hero")) {
+                    Text(text = data.a)
+                    Text(text = data.b)
+                }
+                Column(modifier = Modifier.testTag("taste")) {
+                    Text(text = data.c)
+                    Text(text = data.d)
+                }
+            }
+        } else {
+            Column(modifier = Modifier.testTag("default_panel")) {
+                Column(modifier = Modifier.testTag("hero")) {
+                    Text(text = data.a)
+                    Text(text = data.b)
+                }
+                Column(modifier = Modifier.testTag("taste")) {
+                    Text(text = data.c)
+                    Text(text = data.d)
+                }
+            }
+        }
+      K
+      indented = panel_responsive.lines.map { |l| "            #{l}" }.join
+      body = <<~KOTLIN
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (cond) {
+                Row(modifier = Modifier.fillMaxWidth()) {
+        #{indented}
+                }
+            } else {
+                Column(modifier = Modifier.fillMaxWidth()) {
+        #{indented}
+                }
+            }
+        }
+      KOTLIN
+      new_body, fns = described_class.extract(body, **opts, line_threshold: 10)
+
+      # All 4 (hero + taste) × (outer-if/regular, outer-if/default, outer-else/regular,
+      # outer-else/default) combinations get lifted.
+      expect(fns.size).to be >= 8
+      # No `Column(modifier = Modifier.testTag("hero")) {` or `taste` chunks
+      # remain inline — every occurrence must have been replaced.
+      expect(new_body.scan(/testTag\("hero"\)/).size).to eq(0)
+      expect(new_body.scan(/testTag\("taste"\)/).size).to eq(0)
+      # The panel-wrapper testTags stay (they hold `.weight(` or are siblings
+      # of weighted ones, so they cannot be lifted). Two copies of each
+      # because the outer if/else duplicates the whole panel-responsive
+      # sub-tree.
+      expect(new_body.scan(/testTag\("regular_panel"\)/).size).to eq(2)
+      expect(new_body.scan(/testTag\("default_panel"\)/).size).to eq(2)
+    end
+
     it 'lifts inside both branches of a responsive if/else so the duplication shrinks to single-line calls' do
       # The if/else duplicates the body across size-class branches. After
       # extraction, each branch references the same SectionN helpers, so
