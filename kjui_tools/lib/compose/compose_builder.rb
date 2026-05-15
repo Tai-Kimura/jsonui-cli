@@ -194,6 +194,17 @@ module KjuiTools
           return generate_embed_responsive_inline(json_data, depth, parent_type)
         end
 
+        # Collection + responsive: same inline treatment as Embed. The
+        # Collection body emits cell bindings like `data.<prop>.sections...`
+        # and per-cell `viewModel(key = "..._${viewModel.hashCode()}")` —
+        # both of these resolve against the enclosing GeneratedView's
+        # `data` / `viewModel` parameters. A file-scope private helper has
+        # neither in scope, so we inline the if/else at the call site.
+        # Mirrors sjui's collection_converter.rb Group { if/else } shape.
+        if json_data['type'] == 'Collection' && Helpers::ResponsiveHelper.responsive?(json_data)
+          return generate_collection_responsive_inline(json_data, depth, parent_type)
+        end
+
         # Check for responsive component — delegate to responsive generation
         if Helpers::ResponsiveHelper.responsive?(json_data)
           return generate_responsive_component(json_data, depth, parent_type)
@@ -321,6 +332,44 @@ module KjuiTools
           end
 
           lines << Components::EmbedComponent.generate(attrs, depth + 1, @required_imports, parent_type)
+        end
+
+        lines << indent("}", depth)
+        lines.join("\n")
+      end
+
+      # Collection + responsive: emit an inline if/else chain that calls
+      # CollectionComponent.generate per branch with the merged attrs. No
+      # private composable is extracted — the cell body resolves
+      # `data.<prop>...` and the per-cell `viewModel(...)` call against the
+      # enclosing GeneratedView scope. File-scope helper extraction would
+      # break both. Width conditions share the embed-inline table
+      # (INLINE_WIDTH_CONDITIONS / INLINE_LANDSCAPE_CONDITION) so the
+      # generated condition shape is identical across Collection / Embed.
+      def generate_collection_responsive_inline(json_data, depth, parent_type)
+        branches = JsonUIShared::ResponsiveResolver.build_branches(json_data)
+        @required_imports&.add(:local_configuration)
+
+        lines = []
+        first = true
+        branches.each do |branch|
+          condition = build_embed_inline_condition(branch[:size_class])
+          attrs = branch[:attrs].dup
+          attrs.delete('responsive')
+
+          if condition
+            keyword = first ? 'if' : '} else if'
+            lines << indent("#{keyword} (#{condition}) {", depth)
+            first = false
+          elsif first
+            # Only a default branch — no conditional at all.
+            lines << Components::CollectionComponent.generate(attrs, depth, @required_imports, parent_type)
+            return lines.join("\n")
+          else
+            lines << indent("} else {", depth)
+          end
+
+          lines << Components::CollectionComponent.generate(attrs, depth + 1, @required_imports, parent_type)
         end
 
         lines << indent("}", depth)
