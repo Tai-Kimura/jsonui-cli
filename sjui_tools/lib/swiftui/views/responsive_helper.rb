@@ -112,21 +112,55 @@ module SjuiTools
             lines << "#{indent}    content()"
             lines << "#{indent}}"
 
-            # Apply modifiers that change per branch. Two emit sources:
+            # Apply modifiers that change per branch. Three emit phases:
             #   1. build_responsive_modifiers — single combined `.frame(...)`
             #      for min/max width/height + center* (its own logic for
-            #      coalescing center + max into one .frame call).
+            #      coalescing center + max into one .frame call). Inner.
             #   2. collect_modifiers_for — runs apply_modifiers against the
             #      branch-merged attrs and returns the full modifier set
             #      (padding / margin / background / cornerRadius / border /
-            #      alpha / shadow / etc.). The frame/center keys are
-            #      excluded so we don't double-emit alongside source (1).
+            #      alpha / shadow / etc.). FRAME_CENTER_KEYS are excluded so
+            #      we don't double-emit alongside (1).
+            #   3. Optional outer `.frame(.infinity, alignment: .center)` —
+            #      only when both a numeric center-on-axis AND a matchParent
+            #      width/height collide in the same branch. The inner frame
+            #      from (1) constrains to N, decorations from (2) paint on
+            #      that constrained layer, and this outer frame expands to
+            #      parent width so the constrained-and-decorated block is
+            #      centered in the parent. Without this split, the bare
+            #      `width: matchParent → .infinity` emit from apply_frame_size
+            #      lands BETWEEN the inner frame and the decorations,
+            #      causing background/border to paint on a full-width layer
+            #      (regression: sjui-view-responsive-maxwidth-border-overflow).
             modifiers = build_responsive_modifiers(attrs, converter)
             modifiers.each { |mod| lines << "#{indent}#{mod}" }
 
+            center_h_overrides_width =
+              (attrs['centerHorizontal'] == true || attrs['centerInParent'] == true) &&
+              attrs['width'] == 'matchParent' &&
+              numeric_dimension?(attrs['maxWidth'])
+            center_v_overrides_height =
+              (attrs['centerVertical'] == true || attrs['centerInParent'] == true) &&
+              attrs['height'] == 'matchParent' &&
+              numeric_dimension?(attrs['maxHeight'])
+
+            extra_exclude = []
+            extra_exclude << 'width' if center_h_overrides_width
+            extra_exclude << 'height' if center_v_overrides_height
+
             if converter.respond_to?(:collect_modifiers_for)
-              extra = converter.collect_modifiers_for(attrs, exclude_keys: FRAME_CENTER_KEYS)
+              extra = converter.collect_modifiers_for(
+                attrs, exclude_keys: FRAME_CENTER_KEYS + extra_exclude
+              )
               extra.each { |mod| lines << "#{indent}#{mod}" }
+            end
+
+            if center_h_overrides_width || center_v_overrides_height
+              outer_args = []
+              outer_args << 'maxWidth: .infinity' if center_h_overrides_width
+              outer_args << 'maxHeight: .infinity' if center_v_overrides_height
+              outer_args << 'alignment: .center'
+              lines << "#{indent}.frame(#{outer_args.join(', ')})"
             end
           end
 
@@ -169,6 +203,25 @@ module SjuiTools
             # Create a converter for this branch's attributes and generate the view
             branch_component = attrs.dup
             branch_component.delete('responsive')
+
+            # When the branch combines a center flag with a matchParent on the
+            # same axis AND a finite maxWidth/maxHeight, the inner-constraint
+            # frame supersedes matchParent. Strip the matchParent value so
+            # apply_frame_size doesn't emit a redundant `.frame(.infinity)`
+            # at the wrong position in the chain (between the maxWidth
+            # constraint and the decorations). Mirrors the same rule applied
+            # in generate_container_function.
+            center_h_overrides_width =
+              (branch_component['centerHorizontal'] == true || branch_component['centerInParent'] == true) &&
+              branch_component['width'] == 'matchParent' &&
+              numeric_dimension?(branch_component['maxWidth'])
+            center_v_overrides_height =
+              (branch_component['centerVertical'] == true || branch_component['centerInParent'] == true) &&
+              branch_component['height'] == 'matchParent' &&
+              numeric_dimension?(branch_component['maxHeight'])
+            branch_component.delete('width') if center_h_overrides_width
+            branch_component.delete('height') if center_v_overrides_height
+
             converter = converter_factory.create_converter(branch_component, 3, action_manager, converter_factory, view_registry)
             if converter
               branch_code = converter.convert
@@ -176,6 +229,27 @@ module SjuiTools
               branch_indent = condition || index > 0 ? "    " : ""
               branch_lines.each do |bl|
                 lines << "#{branch_indent}#{bl}"
+              end
+
+              # Outer `.frame(.infinity, alignment: .center)` so the
+              # constrained-and-decorated inner block centers in its parent.
+              # See regression: sjui-markdowntext-custom-converter-
+              # centerhorizontal-missing — without this, MarkdownText (or any
+              # leaf-path extension converter) keeps `maxWidth: N` but
+              # silently drops the centerHorizontal positioning.
+              needs_outer_center_h =
+                (attrs['centerHorizontal'] == true || attrs['centerInParent'] == true) &&
+                numeric_dimension?(attrs['maxWidth'])
+              needs_outer_center_v =
+                (attrs['centerVertical'] == true || attrs['centerInParent'] == true) &&
+                numeric_dimension?(attrs['maxHeight'])
+              if needs_outer_center_h || needs_outer_center_v
+                outer_args = []
+                outer_args << 'maxWidth: .infinity' if needs_outer_center_h
+                outer_args << 'maxHeight: .infinity' if needs_outer_center_v
+                outer_args << 'alignment: .center'
+                outer_indent = condition || index > 0 ? "            " : "        "
+                lines << "#{outer_indent}.frame(#{outer_args.join(', ')})"
               end
             end
           end
@@ -260,6 +334,19 @@ module SjuiTools
           modifiers = []
           modifiers << ".frame(#{frame_args.join(', ')})" unless frame_args.empty?
           modifiers
+        end
+
+        # True when the value is a finite numeric dimension (Number or
+        # all-digit String). `.infinity` / `matchParent` / bindings return
+        # false. Used to decide whether a `maxWidth` / `maxHeight` override
+        # forms a real constraint that justifies the inner+outer two-frame
+        # responsive layout.
+        def self.numeric_dimension?(value)
+          case value
+          when Numeric then true
+          when String then value.match?(/\A\d+(\.\d+)?\z/)
+          else false
+          end
         end
 
         # Render a dimension literal. Numeric stays numeric; `.infinity` stays

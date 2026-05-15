@@ -174,7 +174,15 @@ module SjuiTools
 
               if orientation == 'horizontal'
                 alignment = get_hstack_alignment
-                add_line "WeightedHStack(alignment: #{alignment}, spacing: #{spacing_value}, children: ["
+                # `hasMatchParentCrossAxis` toggles the inner
+                # `.fixedSize(vertical: ...)` in SwiftJsonUI's WeightedHStack.
+                # Default false → vertical fixedSize → HStack takes children's
+                # natural height. When this View has `height: matchParent`,
+                # children may legitimately want the proposed pane height
+                # (Embeds with `.frame(maxHeight: .infinity)` overflow), so
+                # honor the parent proposal instead.
+                has_cross_match = @component['height'] == 'matchParent' ? ', hasMatchParentCrossAxis: true' : ''
+                add_line "WeightedHStack(alignment: #{alignment}, spacing: #{spacing_value}#{has_cross_match}, children: ["
               elsif orientation == 'vertical'
                 alignment = get_vstack_alignment
                 add_line "WeightedVStack(alignment: #{alignment}, spacing: #{spacing_value}, children: ["
