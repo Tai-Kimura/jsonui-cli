@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../helpers/modifier_builder'
+
 # Generates Compose code for the `Embed` view type. Embeds another screen as
 # a region of the parent layout; the embedded screen owns its own ViewModel.
 #
@@ -43,6 +45,20 @@ module KjuiTools
 
           code  = indent("// Embed: #{screen}", depth)
           code += "\n" + indent('EmbedContainer(', depth)
+
+          # Build a modifier chain for the EmbedContainer call so authoring-
+          # time attributes (weight, width/height, margins, paddings) actually
+          # take effect on Android. Prior to this, those attrs were silently
+          # dropped — `Row { Embed(weight=1) Embed(weight=1) }` rendered as a
+          # full-width first pane with the second pane sized to 0px. Library
+          # support (KotlinJsonUI >= 2.8.4) wraps the embedded content in a
+          # Box(modifier=modifier) so scope-bound modifiers like RowScope.weight
+          # reach a Layout node.
+          modifier_str = build_embed_modifier(json_data, depth, required_imports, parent_type)
+          unless modifier_str.empty?
+            code += modifier_str + ','
+          end
+
           code += "\n" + indent("embedId = \"#{embed_id}\",", depth + 1)
           unless params.empty?
             code += "\n" + indent('params = mapOf(', depth + 1)
@@ -76,6 +92,26 @@ module KjuiTools
           code += "\n" + indent(')', depth + 1)
           code += "\n" + indent('}', depth)
           code
+        end
+
+        # Build the modifier chain for the EmbedContainer call site. Mirrors
+        # the order used by ContainerComponent so behavior is consistent with
+        # `View` / other containers: testTag → margins → weight (if Row/Column
+        # parent) → size → padding. The full set is intentionally narrower
+        # than ContainerComponent — Embed does not need alignment, alpha,
+        # background, clickable, or the size-intrinsic adjustment (the embed
+        # content composable owns those concerns internally).
+        def self.build_embed_modifier(json_data, depth, required_imports, parent_type)
+          modifiers = []
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          if parent_type == 'Row' || parent_type == 'Column'
+            modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
+          end
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          return '' if modifiers.empty?
+          Helpers::ModifierBuilder.format(modifiers, depth)
         end
 
         # Convert screen value (layout JSON filename, snake_case) to its
