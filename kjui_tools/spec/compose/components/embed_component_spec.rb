@@ -177,6 +177,110 @@ RSpec.describe KjuiTools::Compose::Components::EmbedComponent do
       end
     end
 
+    # Regression: kjui-embed-modifier-attributes-not-emitted.
+    # Authoring-time attrs (weight, width/height, margins, paddings) were
+    # silently dropped — `Row { Embed(weight=1) Embed(weight=1) }` rendered
+    # as a full-width first pane with the second pane sized to 0px on
+    # Android. The fix emits `modifier = Modifier.<chain>` as a leading
+    # named arg to EmbedContainer. Library support added in KotlinJsonUI
+    # 2.8.4 (EmbedContainer now wraps content in Box(modifier=modifier)
+    # so scope-bound modifiers like RowScope.weight reach a Layout node).
+    context 'modifier emit (regression: kjui-embed-modifier-attributes-not-emitted)' do
+      it 'emits weight when parent_type is Row' do
+        result = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'detailPane', 'screen' => 'item_detail', 'weight' => 1 },
+          0,
+          required_imports,
+          'Row'
+        )
+        expect(result).to include('modifier = Modifier')
+        expect(result).to include('.weight(1f)')
+      end
+
+      it 'emits weight when parent_type is Column' do
+        result = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'p', 'screen' => 'foo', 'weight' => 2 },
+          0,
+          required_imports,
+          'Column'
+        )
+        expect(result).to include('.weight(2f)')
+      end
+
+      it 'omits weight when parent_type is neither Row nor Column' do
+        # weight only makes sense for Row/Column. Box-parent or root usage
+        # should silently skip the weight emit (RowScope.weight is a scope-
+        # bound extension and wouldn\'t resolve outside its scope anyway).
+        result = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'p', 'screen' => 'foo', 'weight' => 1 },
+          0,
+          required_imports,
+          'Box'
+        )
+        expect(result).not_to include('.weight(')
+      end
+
+      it 'emits width/height when set to literal Int or matchParent' do
+        result = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'p', 'screen' => 'bar_list', 'width' => 360, 'height' => 'matchParent' },
+          0,
+          required_imports,
+          'Row'
+        )
+        expect(result).to include('.width(360.dp)')
+        expect(result).to include('.fillMaxHeight()')
+      end
+
+      it 'emits margins from topMargin and paddings' do
+        result = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'p', 'screen' => 'foo', 'topMargin' => 16, 'paddings' => [8, 12, 8, 12] },
+          0,
+          required_imports
+        )
+        # topMargin lives in the margin-as-outer-padding emit; the
+        # inner-padding emit handles `paddings`. Both should be present.
+        expect(result).to include('.padding(top = 16.dp)')
+        expect(result).to include('.padding(top = 8.dp, end = 12.dp, bottom = 8.dp, start = 12.dp)')
+      end
+
+      it 'emits no modifier arg when no relevant attrs are present' do
+        # Backward compat: a bare Embed with just id+screen must emit the
+        # same shape as before this fix (no `modifier = Modifier` arg).
+        result = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'p', 'screen' => 'foo' },
+          0,
+          Set.new,
+          nil
+        )
+        # id triggers testTag — that\'s independent of this regression and
+        # the test above ('requests embed_container and hilt_viewmodel imports')
+        # already confirms imports. Here we just check there\'s no
+        # `weight` / `width` / `height` / `padding` modifier when none are set.
+        expect(result).not_to include('.weight(')
+        expect(result).not_to include('.width(')
+        expect(result).not_to include('.fillMaxWidth(')
+        expect(result).not_to include('.fillMaxHeight(')
+        expect(result).not_to include('.padding(')
+      end
+
+      it 'places modifier as the first named arg (before embedId)' do
+        result = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'p', 'screen' => 'foo', 'weight' => 1 },
+          0,
+          required_imports,
+          'Row'
+        )
+        # The modifier block must appear before `embedId = ...` so the
+        # comma-handling in format() works: format() emits no leading or
+        # trailing comma, and we suffix a `,` ourselves; embedId follows.
+        modifier_idx = result.index('modifier = Modifier')
+        embed_id_idx = result.index('embedId = "p"')
+        expect(modifier_idx).not_to be_nil
+        expect(embed_id_idx).not_to be_nil
+        expect(modifier_idx).to be < embed_id_idx
+      end
+    end
+
     context 'navigationMode' do
       it 'emits Delegate by default (v1)' do
         result = described_class.generate(
