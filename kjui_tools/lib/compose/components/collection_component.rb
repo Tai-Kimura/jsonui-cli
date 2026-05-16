@@ -1070,8 +1070,14 @@ module KjuiTools
           mode_expr = collection_stack_mode_expr(json_data)
 
           # Spacing
+          # `lineSpacing` historically named the inter-line gap; with a
+          # horizontal single-column CollectionStack, the inter-cell gap IS
+          # the inter-line gap (one cell per line), so authoring `lineSpacing`
+          # for a horizontal Collection should still set the spacing. The
+          # LazyHorizontalGrid path (line ~150) already accepts `lineSpacing`
+          # as the horizontal-spacing source; CollectionStack must match.
           spacing_value = if is_horizontal
-                           json_data['itemSpacing'] || json_data['columnSpacing'] || json_data['spacing']
+                           json_data['itemSpacing'] || json_data['columnSpacing'] || json_data['lineSpacing'] || json_data['spacing']
                          else
                            json_data['lineSpacing'] || json_data['itemSpacing'] || json_data['spacing']
                          end

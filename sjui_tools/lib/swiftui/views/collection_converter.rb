@@ -1626,7 +1626,12 @@ module SjuiTools
             alignment_param = "horizontalAlignment: #{get_vstack_alignment_from_gravity(@component['gravity'])}"
           else
             shows_indicators = @component['showsHorizontalScrollIndicator'] != false
-            line_spacing = @component['itemSpacing'] || @component['columnSpacing'] || 10
+            # `lineSpacing` historically named the inter-line gap; with a
+            # horizontal single-column CollectionStackView, the inter-cell gap
+            # IS the inter-line gap (one cell per line), so authoring
+            # `lineSpacing` for a horizontal Collection should still set the
+            # spacing. kjui's CollectionStack matches this fallback order.
+            line_spacing = @component['itemSpacing'] || @component['columnSpacing'] || @component['lineSpacing'] || 10
             alignment_param = "verticalAlignment: #{get_hstack_alignment_from_gravity(@component['gravity'])}"
           end
 

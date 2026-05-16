@@ -126,6 +126,33 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         # CollectionStackView wraps the cell content with the right shell.
         expect(code).not_to include('ScrollView(.horizontal')
       end
+
+      # Regression: kjui-collection-stack-horizontal-line-spacing.
+      # A horizontal CollectionStackView lays out one cell per line, so
+      # `lineSpacing` (the inter-line gap) IS the inter-cell gap. Previously
+      # the horizontal branch dropped `lineSpacing` from the fallback chain,
+      # so authoring `lineSpacing: 8` silently got the default `spacing: 10`
+      # back instead. Match kjui's CollectionStack behavior.
+      context 'horizontal spacing fallback' do
+        it 'uses lineSpacing when no itemSpacing/columnSpacing is set' do
+          converter = described_class.new(component.merge('lineSpacing' => 8))
+          code = converter.convert
+          expect(code).to include('axis: .horizontal')
+          expect(code).to include('spacing: 8')
+        end
+
+        it 'still prefers itemSpacing over lineSpacing' do
+          converter = described_class.new(component.merge('itemSpacing' => 12, 'lineSpacing' => 8))
+          code = converter.convert
+          expect(code).to include('spacing: 12')
+        end
+
+        it 'falls back to default 10 when no spacing attr is set' do
+          converter = described_class.new(component)
+          code = converter.convert
+          expect(code).to include('spacing: 10')
+        end
+      end
     end
 
     context 'with cell classes' do
