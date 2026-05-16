@@ -152,6 +152,13 @@ module KjuiTools
                               "import com.kotlinjsonui.embed.EmbedNavigationMode"],
             embedded_event: "import com.kotlinjsonui.embed.EmbeddedEvent",
             viewmodel_compose: "import androidx.lifecycle.viewmodel.compose.viewModel",
+            # `hiltViewModel(viewModelStoreOwner, key)` from
+            # androidx.hilt:hilt-navigation-compose. Works for both
+            # @HiltViewModel-annotated VMs (resolved via HiltViewModelFactory)
+            # and plain no-arg VMs (fallback to NewInstanceFactory). Used by
+            # EmbedComponent so child ViewModels load in Hilt projects without
+            # NoSuchMethodException on missing no-arg ctor.
+            hilt_viewmodel: "import androidx.hilt.navigation.compose.hiltViewModel",
             composition_local_provider: "import androidx.compose.runtime.CompositionLocalProvider",
             window_size_class: ["import androidx.compose.material3.windowsizeclass.WindowSizeClass",
                                 "import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass"],
