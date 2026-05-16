@@ -235,6 +235,53 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
         expect(result).to include('CardCellView')
       end
 
+      # Regression: kjui-collection-stack-horizontal-line-spacing.
+      # A horizontal CollectionStack collapses lines into a single row of
+      # cells, so `lineSpacing` (the inter-line gap) IS the inter-cell gap
+      # there. The old fallback chain dropped `lineSpacing` for horizontal,
+      # which made `lineSpacing: 8` silently emit no spacing arg on Android
+      # while the LazyHorizontalGrid path already accepted it. CollectionStack
+      # must match that behavior.
+      context 'horizontal CollectionStack spacing fallback' do
+        it 'uses lineSpacing as inter-cell spacing when no itemSpacing/columnSpacing is set' do
+          json_data = {
+            'type' => 'Collection',
+            'layout' => 'horizontal',
+            'items' => '@{chips}',
+            'lineSpacing' => 8,
+            'sections' => [{ 'cell' => 'ChipCell' }]
+          }
+          result = described_class.generate(json_data, 0, required_imports)
+          expect(result).to include('CollectionStackAxis.HORIZONTAL')
+          expect(result).to include('spacing = 8.dp')
+        end
+
+        it 'still prefers itemSpacing over lineSpacing in horizontal' do
+          json_data = {
+            'type' => 'Collection',
+            'layout' => 'horizontal',
+            'items' => '@{chips}',
+            'itemSpacing' => 12,
+            'lineSpacing' => 8,
+            'sections' => [{ 'cell' => 'ChipCell' }]
+          }
+          result = described_class.generate(json_data, 0, required_imports)
+          expect(result).to include('spacing = 12.dp')
+        end
+
+        it 'vertical CollectionStack still uses lineSpacing first (no regression)' do
+          json_data = {
+            'type' => 'Collection',
+            'items' => '@{messages}',
+            'lineSpacing' => 6,
+            'sections' => [{ 'cell' => 'MessageCell' }]
+          }
+          result = described_class.generate(json_data, 0, required_imports)
+          expect(result).to include('CollectionStackAxis.VERTICAL')
+          expect(result).to include('spacing = 6.dp')
+        end
+      end
+
       it 'handles vertical layout' do
         json_data = {
           'type' => 'Collection',
