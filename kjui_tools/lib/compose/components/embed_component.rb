@@ -26,7 +26,12 @@ module KjuiTools
 
           # Imports needed in the generated parent screen file.
           required_imports&.add(:embed_container)
-          required_imports&.add(:viewmodel_compose)
+          # `hiltViewModel(...)` works for BOTH Hilt-injected and no-arg
+          # ViewModels — Hilt VMs resolve via HiltViewModelFactory, plain
+          # VMs fall back to NewInstanceFactory. The old emit of
+          # `androidx.lifecycle.viewmodel.compose.viewModel(...)` crashed
+          # at runtime for Hilt VMs (NoSuchMethodException on no-arg ctor).
+          required_imports&.add(:hilt_viewmodel)
           # The embedded screen's composable lives alongside other view files;
           # compose_builder's import resolver maps "tabview:Name" → import path
           # and APPENDS "View" itself (compose_builder.rb:1092). So we must
@@ -64,7 +69,7 @@ module KjuiTools
           end
           code += "\n" + indent(') { embedScope ->', depth)
           code += "\n" + indent("#{embedded_view_class(screen)}(", depth + 1)
-          code += "\n" + indent('viewModel = androidx.lifecycle.viewmodel.compose.viewModel(', depth + 2)
+          code += "\n" + indent('viewModel = androidx.hilt.navigation.compose.hiltViewModel(', depth + 2)
           code += "\n" + indent('viewModelStoreOwner = embedScope.viewModelStoreOwner,', depth + 3)
           code += "\n" + indent("key = \"#{embed_id}\"", depth + 3)
           code += "\n" + indent(')', depth + 2)

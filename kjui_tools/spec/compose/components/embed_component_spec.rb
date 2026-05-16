@@ -20,14 +20,17 @@ RSpec.describe KjuiTools::Compose::Components::EmbedComponent do
         expect(result).to include('key = "detailPane"')
       end
 
-      it 'requests embed_container and viewmodel_compose imports' do
+      it 'requests embed_container and hilt_viewmodel imports' do
         described_class.generate(
           { 'type' => 'Embed', 'id' => 'p', 'screen' => 'foo' },
           0,
           required_imports
         )
         expect(required_imports).to include(:embed_container)
-        expect(required_imports).to include(:viewmodel_compose)
+        expect(required_imports).to include(:hilt_viewmodel)
+        # Old emit path is gone — `viewmodel_compose` would pull in the
+        # NewInstanceFactory-only `viewModel(...)` API.
+        expect(required_imports).not_to include(:viewmodel_compose)
       end
 
       it 'converts snake_case screen to PascalCase composable' do
@@ -142,6 +145,35 @@ RSpec.describe KjuiTools::Compose::Components::EmbedComponent do
         )
         expect(required_imports).to include('tabview:PhotoRegistration')
         expect(required_imports).not_to include('tabview:PhotoRegistrationView')
+      end
+    end
+
+    # Regression: kjui-embed-child-vm-non-hilt-factory.
+    # Previously emitted `androidx.lifecycle.viewmodel.compose.viewModel(...)`
+    # which uses NewInstanceFactory and crashes on @HiltViewModel-annotated VMs
+    # with NoSuchMethodException (no no-arg ctor). The replacement
+    # `hiltViewModel(viewModelStoreOwner, key)` works for BOTH Hilt and plain
+    # VMs — Hilt VMs resolve via HiltViewModelFactory, plain VMs fall back to
+    # NewInstanceFactory.
+    context 'child VM factory (regression: kjui-embed-child-vm-non-hilt-factory)' do
+      it 'emits hiltViewModel(...) for the embedded screen, not viewModel(...)' do
+        result = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'detailPane', 'screen' => 'item_detail' },
+          0,
+          required_imports
+        )
+        expect(result).to include('viewModel = androidx.hilt.navigation.compose.hiltViewModel(')
+        expect(result).not_to include('viewModel = androidx.lifecycle.viewmodel.compose.viewModel(')
+      end
+
+      it 'forwards viewModelStoreOwner and a stable key to hiltViewModel' do
+        result = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'detailPane', 'screen' => 'item_detail' },
+          0,
+          required_imports
+        )
+        expect(result).to include('viewModelStoreOwner = embedScope.viewModelStoreOwner,')
+        expect(result).to include('key = "detailPane"')
       end
     end
 
