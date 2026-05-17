@@ -51,6 +51,72 @@ RSpec.describe KjuiTools::Compose::Helpers::VisibilityHelper do
       result = described_class.wrap_with_visibility(json_data, component_code, 0, required_imports)
       expect(result).to include('}')
     end
+
+    # Regression: kjui-section-extracted-box-drops-centerhorizontal-align.
+    # When a View with `centerHorizontal: true` (e.g. from `responsive.regular`)
+    # was wrapped with VisibilityWrapper under a Column or Row parent, the
+    # helper STRIPPED the inner `.align(...)` without hoisting it — silently
+    # erasing the alignment. VisibilityWrapper internally delegates to a
+    # Box(modifier=modifier), which is in the caller's scope, so the
+    # appropriately-typed `.align(...)` (ColumnScope.align for Column, etc.)
+    # propagates correctly when hoisted onto the wrapper. Verify hoisting
+    # works for all three parent scopes.
+    context 'hoisting .align(...) onto VisibilityWrapper (regression)' do
+      let(:component_code) do
+        # Mimic the post-build_alignment+ContainerComponent emit shape that
+        # wrap_with_visibility receives: a Box with `.align(...)` already
+        # injected into the outer modifier chain.
+        <<~KOTLIN.chomp
+          Box(
+              modifier = Modifier
+                  .testTag("save_button")
+                  .semantics { testTagsAsResourceId = true }
+                  .align(Alignment.CenterHorizontally)
+                  .widthIn(max = 400.dp)
+                  .fillMaxWidth(),
+              contentAlignment = Alignment.Center
+          ) {
+              Text("Save")
+          }
+        KOTLIN
+      end
+
+      it 'hoists ColumnScope.align(Alignment.CenterHorizontally) for Column parent' do
+        json_data = { 'visibility' => '@{saveButtonVisibility}', 'centerHorizontal' => true }
+        result = described_class.wrap_with_visibility(json_data, component_code, 0, required_imports, 'Column')
+        expect(result).to include('VisibilityWrapper(')
+        expect(result).to include('modifier = Modifier.align(Alignment.CenterHorizontally)')
+        # And the inner Box must no longer carry the same align (would
+        # otherwise resolve in BoxScope inside VisibilityWrapper's internal
+        # Box and double-apply).
+        inner = result.split('VisibilityWrapper(').last
+        expect(inner.scan('.align(Alignment.CenterHorizontally)').size).to eq(1)
+      end
+
+      it 'hoists RowScope.align(Alignment.CenterVertically) for Row parent' do
+        row_component_code = component_code.sub('Alignment.CenterHorizontally', 'Alignment.CenterVertically')
+        json_data = { 'visibility' => '@{saveButtonVisibility}', 'centerVertical' => true }
+        result = described_class.wrap_with_visibility(json_data, row_component_code, 0, required_imports, 'Row')
+        expect(result).to include('modifier = Modifier.align(Alignment.CenterVertically)')
+      end
+
+      it 'still hoists for Box parent (existing behavior preserved)' do
+        box_component_code = component_code.sub('Alignment.CenterHorizontally', 'BiasAlignment(0f, -1f)')
+        json_data = { 'visibility' => '@{saveButtonVisibility}', 'centerHorizontal' => true }
+        result = described_class.wrap_with_visibility(json_data, box_component_code, 0, required_imports, 'Box')
+        expect(result).to include('modifier = Modifier.align(BiasAlignment(0f, -1f))')
+      end
+
+      it 'does NOT hoist when the container has no own alignment attrs' do
+        # Guards against stealing a nested descendant's `.align(...)` —
+        # only the wrapped container's OWN alignment hoists.
+        json_data = { 'visibility' => '@{saveButtonVisibility}' }  # no centerHorizontal etc.
+        result = described_class.wrap_with_visibility(json_data, component_code, 0, required_imports, 'Column')
+        # The wrapper has no .align hoisted; the inner Box retains its own.
+        expect(result).not_to match(/VisibilityWrapper\([^{]*modifier = Modifier\.align/m)
+        expect(result).to include('.align(Alignment.CenterHorizontally)')  # untouched on inner
+      end
+    end
   end
 
   describe '.should_skip_render?' do

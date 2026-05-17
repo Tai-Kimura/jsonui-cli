@@ -46,8 +46,24 @@ module KjuiTools
             end
           end
 
-          # Pass align modifier to VisibilityWrapper — only valid in BoxScope.
-          # Column/Row have different align signatures, so skip hoisting there.
+          # Hoist the wrapped container's outer `.align(...)` to the
+          # VisibilityWrapper itself.
+          #
+          # VisibilityWrapper is a `@Composable` function that internally
+          # delegates to `Box(modifier = modifier) { content() }`. Function
+          # calls don't introduce a Layout node, so the inner Box is
+          # effectively a direct child of whatever scope the caller is in:
+          # if VisibilityWrapper(...) is called from ColumnScope, the inner
+          # Box is ColumnScope's direct child and ColumnScope.align(...) on
+          # the modifier resolves correctly. Same for RowScope and BoxScope.
+          # That means hoisting works uniformly across all three parent
+          # scopes — we just splice the `.align(...)` call (created in the
+          # parent's scope) onto the wrapper's `modifier = Modifier...`
+          # chain. The previous version skipped hoisting for Column/Row and
+          # silently *dropped* the inner Box's align, which made
+          # `responsive.regular.centerHorizontal: true` a no-op once
+          # wrap_with_visibility ran on a Column-parent View (see
+          # `kjui-section-extracted-box-drops-centerhorizontal-align`).
           #
           # IMPORTANT: only hoist when the wrapped container itself declared
           # alignment attrs. Otherwise the first `.align(...)` we match in
@@ -59,23 +75,14 @@ module KjuiTools
             json_data['centerHorizontal'] || json_data['centerVertical'] ||
             json_data['centerInParent']
 
-          if parent_type == 'Box' || parent_type.nil?
-            if container_has_own_alignment
-              # Use balanced parentheses matching to handle nested calls like BiasAlignment(-1f, 1f)
-              # Anchor to the OUTER `modifier = Modifier` block so we don't steal
-              # a descendant Box's align that happens to appear earlier in the string.
-              outer_modifier_regex = /(modifier\s*=\s*Modifier\b(?:(?!\)\s*\{).)*?)(\n\s*\.align\(([^()]*(?:\([^()]*\))?[^()]*)\))/m
-              if (m = component_code.match(outer_modifier_regex))
-                align_content = m[3]
-                wrapper_modifier_parts << ".align(#{align_content})"
-                component_code = component_code.sub(m[2], '')
-              end
-            end
-          elsif container_has_own_alignment
-            # Column/Row: remove invalid BoxScope.align() from inner component — but only
-            # from the OUTER container's modifier chain, not nested descendants.
+          if container_has_own_alignment
+            # Use balanced parentheses matching to handle nested calls like BiasAlignment(-1f, 1f)
+            # Anchor to the OUTER `modifier = Modifier` block so we don't steal
+            # a descendant Box's align that happens to appear earlier in the string.
             outer_modifier_regex = /(modifier\s*=\s*Modifier\b(?:(?!\)\s*\{).)*?)(\n\s*\.align\(([^()]*(?:\([^()]*\))?[^()]*)\))/m
             if (m = component_code.match(outer_modifier_regex))
+              align_content = m[3]
+              wrapper_modifier_parts << ".align(#{align_content})"
               component_code = component_code.sub(m[2], '')
             end
           end
