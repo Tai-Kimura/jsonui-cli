@@ -575,6 +575,67 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
           expect(described_class.single_column_sections?(sections, json)).to be true
         end
       end
+
+      # Regression: kjui-collection-columns-binding-crash-in-generate-sections-content.
+      # Top-level `generate` resolves `columns_emit_info` and sets a literal
+      # sentinel for the grid count, but the nested `generate_sections_content`
+      # path was reading `json_data['columns']` raw — for a binding form that
+      # returns the string `"@{prop}"`, which then crashed the LCM/item_span
+      # math with "String can't be coerced into Integer".
+      context 'binding-driven columns with sections (regression)' do
+        it 'does not raise when columns is a binding AND sections is defined' do
+          json = {
+            'type' => 'Collection',
+            'id' => 'grid_collection',
+            'columns' => '@{gridColumnCount}',
+            'items' => '@{gridItems}',
+            'sections' => [{ 'cell' => 'ProductGridCell' }]
+          }
+          expect { described_class.generate(json, 0, Set.new) }.not_to raise_error
+        end
+
+        it 'emits GridCells.Fixed(data.<prop>) for the grid count' do
+          json = {
+            'type' => 'Collection',
+            'id' => 'grid_collection',
+            'columns' => '@{gridColumnCount}',
+            'items' => '@{gridItems}',
+            'sections' => [{ 'cell' => 'ProductGridCell' }]
+          }
+          result = described_class.generate(json, 0, Set.new)
+          expect(result).to include('columns = GridCells.Fixed(data.gridColumnCount)')
+        end
+
+        it 'uses items(size) (no GridItemSpan span arg) for the binding case' do
+          # Under a runtime-resolved grid, the LCM-based span math is
+          # meaningless; the binding path must force span = 1 so the
+          # `items(size)` branch is taken instead of
+          # `items(size, span = { GridItemSpan(N) })`.
+          json = {
+            'type' => 'Collection',
+            'id' => 'grid_collection',
+            'columns' => '@{gridColumnCount}',
+            'items' => '@{gridItems}',
+            'sections' => [{ 'cell' => 'ProductGridCell' }]
+          }
+          result = described_class.generate(json, 0, Set.new)
+          expect(result).to match(/items\(cellData\.data\.size\)\s*\{\s*cellIndex/)
+          expect(result).not_to match(/GridItemSpan\(2\)/)  # sentinel must not leak
+        end
+
+        it 'comments the section header with the runtime expression, not the sentinel' do
+          # Cosmetic but informative: previously emitted "// Section 1: X (2 columns)"
+          # under a binding, which would mislead a reader expecting a literal.
+          json = {
+            'type' => 'Collection',
+            'columns' => '@{gridColumnCount}',
+            'items' => '@{gridItems}',
+            'sections' => [{ 'cell' => 'ProductGridCell' }]
+          }
+          result = described_class.generate(json, 0, Set.new)
+          expect(result).to include('// Section 1: ProductGridCell (data.gridColumnCount columns)')
+        end
+      end
     end
   end
 end

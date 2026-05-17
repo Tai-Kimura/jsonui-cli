@@ -16,6 +16,11 @@ module KjuiTools
             shape: ["import androidx.compose.foundation.shape.RoundedCornerShape",
                     "import androidx.compose.ui.draw.clip",
                     "import androidx.compose.ui.draw.clipToBounds"],
+            # Used when a border or shadow modifier renders without an
+            # accompanying `cornerRadius` — `RectangleShape` lives in a
+            # different package than `RoundedCornerShape`, so registering
+            # `:shape` alone is not enough.
+            rectangle_shape: "import androidx.compose.ui.graphics.RectangleShape",
             text_align: "import androidx.compose.ui.text.style.TextAlign",
             text_overflow: "import androidx.compose.ui.text.style.TextOverflow",
             text_auto_size: "import androidx.compose.foundation.text.TextAutoSize",

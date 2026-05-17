@@ -412,8 +412,17 @@ module KjuiTools
         def self.generate_sections_content(json_data, sections, grid_columns, depth, required_imports, gravity_alignment)
           code = ""
           items_property = json_data['items']
-          default_columns = json_data['columns'] || 1
-          
+          # `columns` may be a literal int or a `@{binding}`. In the binding
+          # case `json_data['columns']` is the string `"@{prop}"` and using
+          # it as a numeric `default_columns` crashes the LCM / item_span
+          # math below ("String can't be coerced into Integer"). Consult
+          # `columns_emit_info` exactly like the top-level `generate` path
+          # does, and fall back to `grid_columns` (the sentinel set by the
+          # caller for the binding case — see `generate`).
+          columns_info = columns_emit_info(json_data)
+          columns_binding = columns_info[:is_binding]
+          default_columns = columns_info[:literal] || grid_columns
+
           # Check if we need GridItemSpan
           # Need it for headers/footers or when sections have different column counts
           has_headers_or_footers = sections.any? { |s| s['header'] || s['footer'] }
@@ -459,14 +468,25 @@ module KjuiTools
               cell_view_name = section['cell']
               section_columns = section['columns'] || default_columns
 
-              # Calculate the span for items in this section
-              item_span = grid_columns / section_columns
+              # Calculate the span for items in this section. Under a
+              # binding-driven grid the runtime column count is unknown, so
+              # the LCM-based span math is meaningless — force span = 1 so
+              # each cell occupies one runtime column and we fall through
+              # to the `items(size)` branch below. (A literal per-section
+              # override under a binding-grid still gets span = 1 here for
+              # the same reason; a different span would assume a known
+              # grid width.)
+              item_span = columns_binding ? 1 : grid_columns / section_columns
 
               if cell_view_name
                 section_var = use_hoisted ? "section#{index}" : 'section'
                 cell_data_var = use_hoisted ? "cellData#{index}" : 'cellData'
 
-                code += "\n" + indent("// Section #{index + 1}: #{cell_view_name} (#{section_columns} columns)", depth + 1)
+                # Under a binding-driven grid, the actual column count is
+                # resolved at runtime; reflect that in the comment instead
+                # of printing the sentinel (~= 2) which would be misleading.
+                section_columns_comment = columns_binding && !section['columns'] ? columns_info[:expr] : section_columns
+                code += "\n" + indent("// Section #{index + 1}: #{cell_view_name} (#{section_columns_comment} columns)", depth + 1)
                 if use_hoisted
                   # `section#{index}` is hoisted; just guard null.
                   code += "\n" + indent("if (#{section_var} != null) {", depth + 1)

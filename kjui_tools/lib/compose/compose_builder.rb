@@ -287,8 +287,13 @@ module KjuiTools
         end
 
         # Wrap with VisibilityWrapper for all components
-        # Container types already handle this in handle_container_result, so skip them
-        unless %w[View ScrollView Scroll GradientView BlurView TabView Embed].include?(component_type)
+        # Container types already handle this in handle_container_result, so skip them.
+        # `Embed` is NOT actually a container (EmbedComponent.generate returns a
+        # plain String, not a Hash) so handle_container_result falls through
+        # without wrapping — exclude it from the skip list so this fallback
+        # path applies and `visibility: "@{...}"` on an Embed node actually
+        # gates rendering.
+        unless %w[View ScrollView Scroll GradientView BlurView TabView].include?(component_type)
           code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
         end
 

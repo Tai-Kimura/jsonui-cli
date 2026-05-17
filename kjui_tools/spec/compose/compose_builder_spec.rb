@@ -211,6 +211,64 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
     end
   end
 
+  # Regression: kjui-embed-visibility-attribute-ignored.
+  # `Embed` was in the exclusion list for the fallback VisibilityWrapper
+  # path. `EmbedComponent.generate` returns a plain String (not a Hash),
+  # so `handle_container_result` falls through without wrapping — and the
+  # fallback wrap was being explicitly skipped for `Embed`. Result:
+  # `visibility: "@{prop}"` on an Embed node was silently dropped, so
+  # tablet master-detail couldn't hide the right pane on initial state.
+  describe '#generate_component (Embed visibility regression)' do
+    let(:builder) do
+      b = described_class.new
+      b.instance_variable_set(:@required_imports, Set.new)
+      b.instance_variable_set(:@included_views, Set.new)
+      b.instance_variable_set(:@custom_components, Set.new)
+      b.instance_variable_set(:@responsive_functions, [])
+      b.instance_variable_set(:@responsive_counter, 0)
+      b
+    end
+
+    it 'wraps Embed with VisibilityWrapper when visibility binding is set' do
+      json = {
+        'type' => 'Embed',
+        'id' => 'detail_pane',
+        'screen' => 'product_detail',
+        'visibility' => '@{detailPaneVisibility}'
+      }
+      result = builder.send(:generate_component, json, 0, nil)
+      expect(result).to include('VisibilityWrapper(')
+      expect(result).to include('visibility = data.detailPaneVisibility')
+      expect(result).to include('EmbedContainer(')
+    end
+
+    it 'guards weight + visibility with `if (... != "gone")` for Row-scope Embeds' do
+      # Without the guard, Compose still reserves slot space for a gone
+      # weighted child, breaking the 2-pane split rebalance.
+      json = {
+        'type' => 'Embed',
+        'id' => 'detail_pane',
+        'screen' => 'product_detail',
+        'weight' => 1,
+        'visibility' => '@{detailPaneVisibility}'
+      }
+      result = builder.send(:generate_component, json, 0, 'Row')
+      expect(result).to include('if (data.detailPaneVisibility.lowercase() != "gone")')
+      expect(result).to include('VisibilityWrapper(')
+    end
+
+    it 'emits Embed unchanged when no visibility attribute is set (back-compat)' do
+      json = {
+        'type' => 'Embed',
+        'id' => 'detail_pane',
+        'screen' => 'product_detail'
+      }
+      result = builder.send(:generate_component, json, 0, nil)
+      expect(result).not_to include('VisibilityWrapper')
+      expect(result).to include('EmbedContainer(')
+    end
+  end
+
   describe 'private helper methods' do
     let(:builder) { described_class.new }
 
