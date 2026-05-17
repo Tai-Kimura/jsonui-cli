@@ -387,11 +387,17 @@ module KjuiTools
             required_imports&.add(:drop_shadow)
 
             if json_data['shadow'].is_a?(String)
+              required_imports&.add(:rectangle_shape)
               modifiers << ".dropShadow(shape = RectangleShape, shadow = Shadow(radius = 4.dp))"
             elsif json_data['shadow'].is_a?(Hash)
               shadow = json_data['shadow']
               radius = shadow['radius'] || 4
-              shape = json_data['cornerRadius'] ? "RoundedCornerShape(#{json_data['cornerRadius']}.dp)" : "RectangleShape"
+              if json_data['cornerRadius']
+                shape = "RoundedCornerShape(#{json_data['cornerRadius']}.dp)"
+              else
+                required_imports&.add(:rectangle_shape)
+                shape = "RectangleShape"
+              end
               modifiers << ".dropShadow(shape = #{shape}, shadow = Shadow(radius = #{radius}.dp))"
             end
           end
@@ -997,7 +1003,16 @@ module KjuiTools
           border_color = ResourceResolver.process_color(json_data['borderColor'], required_imports)
           border_width = json_data['borderWidth']
           border_style = json_data['borderStyle'] || 'solid'
-          border_shape = json_data['cornerRadius'] ? "RoundedCornerShape(#{json_data['cornerRadius']}.dp)" : "RectangleShape"
+          if json_data['cornerRadius']
+            border_shape = "RoundedCornerShape(#{json_data['cornerRadius']}.dp)"
+          else
+            # `RectangleShape` is in `androidx.compose.ui.graphics`, NOT the
+            # `androidx.compose.foundation.shape` namespace covered by
+            # `:shape`. Register a separate import key so the generated
+            # file actually resolves the reference.
+            required_imports&.add(:rectangle_shape)
+            border_shape = "RectangleShape"
+          end
 
           case border_style
           when 'dashed'

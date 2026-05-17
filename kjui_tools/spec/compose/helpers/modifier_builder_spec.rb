@@ -205,6 +205,53 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
       expect(result.join).to include('.border(2.dp,')
       expect(result.join).to include('RoundedCornerShape(4.dp)')
     end
+
+    # Regression: kjui-border-without-corner-radius-missing-rectangle-shape-import.
+    # `RectangleShape` lives in `androidx.compose.ui.graphics`, NOT in the
+    # `androidx.compose.foundation.shape` namespace registered by `:shape`.
+    # Border emit without `cornerRadius` referenced `RectangleShape` but
+    # never asked for its import, blowing up Kotlin compile with
+    # "Unresolved reference 'RectangleShape'".
+    it 'registers :rectangle_shape import when border has no cornerRadius' do
+      json_data = { 'borderColor' => '#0000FF', 'borderWidth' => 1 }
+      described_class.build_background(json_data, imports)
+      expect(imports).to include(:rectangle_shape)
+    end
+
+    it 'does NOT register :rectangle_shape when cornerRadius is present' do
+      json_data = { 'borderColor' => '#0000FF', 'borderWidth' => 1, 'cornerRadius' => 4 }
+      described_class.build_background(json_data, imports)
+      expect(imports).not_to include(:rectangle_shape)
+    end
+
+    it 'emits .border(...) with RectangleShape literal when no cornerRadius' do
+      json_data = { 'borderColor' => '#0000FF', 'borderWidth' => 1 }
+      result = described_class.build_background(json_data, imports)
+      expect(result.join).to include('RectangleShape')
+      expect(result.join).not_to include('RoundedCornerShape')
+    end
+  end
+
+  describe '.build_shadow (RectangleShape import — regression)' do
+    let(:imports) { Set.new }
+
+    it 'registers :rectangle_shape when shadow has no cornerRadius (string form)' do
+      json_data = { 'shadow' => '#000000' }
+      described_class.build_shadow(json_data, imports)
+      expect(imports).to include(:rectangle_shape)
+    end
+
+    it 'registers :rectangle_shape when shadow has no cornerRadius (hash form)' do
+      json_data = { 'shadow' => { 'radius' => 6 } }
+      described_class.build_shadow(json_data, imports)
+      expect(imports).to include(:rectangle_shape)
+    end
+
+    it 'does NOT register :rectangle_shape when cornerRadius is present' do
+      json_data = { 'shadow' => { 'radius' => 6 }, 'cornerRadius' => 8 }
+      described_class.build_shadow(json_data, imports)
+      expect(imports).not_to include(:rectangle_shape)
+    end
   end
 
   describe '.build_visibility' do
