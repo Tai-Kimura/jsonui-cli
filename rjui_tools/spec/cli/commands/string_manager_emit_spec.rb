@@ -53,6 +53,22 @@ RSpec.describe 'StringManager emit' do
         expect(out).to include('return this._cache[defaultLang][key] || key;')
       end
     end
+
+    # Regression: rjui-stringmanager-proxy-digit-underscore.
+    # The TSX generator collapses `_` before BOTH letters and digits when
+    # camelCasing (`trouble_1_symptom` → `Trouble1Symptom`). The proxy must
+    # mirror that: `/_([a-z])/g` would only collapse `_<letter>` and leave
+    # `_1` intact, so `$s.…Trouble1Symptom` lookups returned `undefined` and
+    # rendered as empty `<span>`s. The fix widens the char class to
+    # `[a-z0-9]`; `toUpperCase()` is a no-op on digits so the callback
+    # works unchanged.
+    it 'createCamelCaseProxy regex includes digits in the underscore-strip class' do
+      [true, false].each do |is_ts|
+        out = content_for(is_ts: is_ts)
+        expect(out).to include('key.replace(/_([a-z0-9])/g')
+        expect(out).not_to include('key.replace(/_([a-z])/g')
+      end
+    end
   end
 
   describe RjuiTools::CLI::Commands::InitCommand do
@@ -91,6 +107,21 @@ RSpec.describe 'StringManager emit' do
       ].each do |out|
         expect(out).to include('getDefaultString(key')
         expect(out).to include("const defaultLang = 'en';")
+      end
+    end
+
+    # Regression: rjui-stringmanager-proxy-digit-underscore (init-time stub
+    # must match build-time output — `jui init` lays down the same proxy
+    # before any build runs, so the digit-underscore handling needs to be
+    # present at scaffold time too).
+    it 'init stub createCamelCaseProxy regex includes digits' do
+      strings_json = JSON.pretty_generate({ 'en' => {} })
+      [
+        instance.send(:string_manager_typescript_stub, strings_json, 'en', '// H', '// F'),
+        instance.send(:string_manager_javascript_stub, strings_json, 'en', '// H', '// F'),
+      ].each do |out|
+        expect(out).to include('key.replace(/_([a-z0-9])/g')
+        expect(out).not_to include('key.replace(/_([a-z])/g')
       end
     end
   end
