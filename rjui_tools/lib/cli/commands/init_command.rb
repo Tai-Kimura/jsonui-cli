@@ -195,7 +195,7 @@ module RjuiTools
             function createCamelCaseProxy(obj) {
               const camelCaseMap = {};
               for (const key in obj) {
-                const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+                const camelKey = key.replace(/_([a-z0-9])/g, (_, letter) => letter.toUpperCase());
                 camelCaseMap[camelKey] = obj[key];
                 camelCaseMap[key] = obj[key]; // Also keep snake_case access
               }
@@ -320,7 +320,7 @@ module RjuiTools
             function createCamelCaseProxy(obj: StringMap): StringMap {
               const camelCaseMap: StringMap = {};
               for (const key in obj) {
-                const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+                const camelKey = key.replace(/_([a-z0-9])/g, (_, letter) => letter.toUpperCase());
                 camelCaseMap[camelKey] = obj[key];
                 camelCaseMap[key] = obj[key];
               }
