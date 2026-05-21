@@ -6,8 +6,7 @@ module SjuiTools
       module FrameHelper
         def apply_frame_constraints
           # サイズ制約（minWidth, maxWidth, minHeight, maxHeight）
-          has_size_constraints = @component['minWidth'] || @component['maxWidth'] || @component['minHeight'] || @component['maxHeight']
-          if has_size_constraints
+          if @component['minWidth'] || @component['maxWidth'] || @component['minHeight'] || @component['maxHeight']
             min_width = @component['minWidth']
             max_width = @component['maxWidth']
             min_height = @component['minHeight']
@@ -83,27 +82,6 @@ module SjuiTools
             v_fixed = needs_v_fixed || (needs_h_fixed && height_is_wrap && !max_height)
             if h_fixed || v_fixed
               @modifier_bag.register(:fixed_size, ".fixedSize(horizontal: #{h_fixed}, vertical: #{v_fixed})")
-            end
-          else
-            # No min/max constraints: still need to honor explicit
-            # `width: wrapContent` / `height: wrapContent` by emitting
-            # `.fixedSize` so the node sizes to its intrinsic content.
-            # Without this, custom components that internally use
-            # `.frame(maxWidth: .infinity)` (e.g. MarkdownText) expand to
-            # parent fill — diverging from Android's
-            # `Modifier.wrapContentWidth()` semantics.
-            #
-            # Regression: sjui-wrap-content-without-max-skips-fixed-size-emit.
-            # The check is `width.is_explicit_wrap` (not `width.nil?`) so
-            # components with no size attrs at all keep their current
-            # behavior of emitting nothing — only spec authors who write
-            # `wrapContent` opt into the .fixedSize emit.
-            width_str = @component['width'].to_s.downcase
-            height_str = @component['height'].to_s.downcase
-            width_is_wrap_explicit = width_str == 'wrapcontent' || width_str == 'wrap_content'
-            height_is_wrap_explicit = height_str == 'wrapcontent' || height_str == 'wrap_content'
-            if width_is_wrap_explicit || height_is_wrap_explicit
-              @modifier_bag.register(:fixed_size, ".fixedSize(horizontal: #{width_is_wrap_explicit}, vertical: #{height_is_wrap_explicit})")
             end
           end
         end
