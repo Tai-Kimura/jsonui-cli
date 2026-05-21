@@ -275,6 +275,48 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       expect(result).to include('14.sp')
       expect(result).to include('FontWeight.Bold')
     end
+
+    # Regression: kjui-textfield-onsubmit-helper-arity-mismatch.
+    # `get_event_handler_invocation` requires 3 positional args
+    # (handler, view_id, value_expr). The onSubmit binding-form caller
+    # was passing only 2, raising `ArgumentError: wrong number of
+    # arguments (given 2, expected 3)` mid-build and halting Compose
+    # generation for any layout that wires `onSubmit` to a @{handler}.
+    # Pass `nil` for value_expr — onSubmit carries no value to forward.
+    it 'generates TextField with onSubmit binding (no ArgumentError)' do
+      json_data = {
+        'type' => 'TextField',
+        'id' => 'search_field',
+        'onSubmit' => '@{onAddTap}'
+      }
+      expect {
+        described_class.generate(json_data, 0, required_imports)
+      }.not_to raise_error
+    end
+
+    it 'wires onSubmit binding into KeyboardActions.onDone/onGo/onSearch/onSend' do
+      json_data = {
+        'type' => 'TextField',
+        'id' => 'search_field',
+        'onSubmit' => '@{onAddTap}'
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('keyboardActions = KeyboardActions(')
+      expect(result).to include('onDone = { data.onAddTap?.invoke() }')
+      expect(result).to include('onGo = { data.onAddTap?.invoke() }')
+      expect(result).to include('onSearch = { data.onAddTap?.invoke() }')
+      expect(result).to include('onSend = { data.onAddTap?.invoke() }')
+    end
+
+    it 'wires onSubmit raw method name into KeyboardActions' do
+      json_data = {
+        'type' => 'TextField',
+        'id' => 'search_field',
+        'onSubmit' => 'submitNewTag'
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('onDone = { data.submitNewTag?.invoke() }')
+    end
   end
 
   describe '.extract_variable_name' do

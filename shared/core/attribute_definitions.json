@@ -1717,6 +1717,10 @@
       "type": "string",
       "description": "End editing event handler"
     },
+    "onSubmit": {
+      "type": "string",
+      "description": "Submit event handler — fires when the user taps the return/done key (binding or raw method name). On SwiftUI emitted as .onSubmit { ... }; on Compose emitted in KeyboardActions.onDone/onGo/onSearch/onSend"
+    },
     "onDeleteBackward": {
       "type": "string",
       "description": "Delete backward (backspace) event handler",
