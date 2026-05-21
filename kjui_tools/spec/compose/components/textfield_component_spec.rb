@@ -317,6 +317,99 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('onDone = { data.submitNewTag?.invoke() }')
     end
+
+    # Regression: kjui-keyboardactions-import-missing.
+    # The KeyboardActions emit path must also register the import key
+    # so import_manager actually writes the `import …KeyboardActions`
+    # line into the generated file. Previously the key was added but
+    # absent from IMPORTS_MAP, so it was silently dropped.
+    it 'registers :keyboard_actions import key when onSubmit emits' do
+      json_data = {
+        'type' => 'TextField',
+        'id' => 'search_field',
+        'onSubmit' => '@{onAddTap}'
+      }
+      described_class.generate(json_data, 0, required_imports)
+      expect(required_imports).to include(:keyboard_actions)
+    end
+
+    # Focus chain refactor (paired with kjui-keyboardactions-import-missing).
+    # Before: `fieldId` / `nextFocusId` emitted a dead-code reference to a
+    # non-existent `FocusManager.requestFocus(...)` helper. After: each
+    # `fieldId` field declares its own `FocusRequester` via `remember`,
+    # attaches it via the `.focusRequester(...)` modifier, and sibling
+    # fields look up the target by `focusRequester_<nextFocusId>`.
+    context 'fieldId emits FocusRequester declaration and modifier' do
+      let(:json_data) do
+        {
+          'type' => 'TextField',
+          'id' => 'first_input',
+          'fieldId' => 'email_field'
+        }
+      end
+
+      it 'emits `val focusRequester_<fieldId> = remember { FocusRequester() }` before the component call' do
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('val focusRequester_email_field = remember { FocusRequester() }')
+      end
+
+      it 'attaches .focusRequester(...) to the component modifier' do
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('.focusRequester(focusRequester_email_field)')
+      end
+
+      it 'registers the :focus_requester and :remember import keys' do
+        described_class.generate(json_data, 0, required_imports)
+        expect(required_imports).to include(:focus_requester)
+        expect(required_imports).to include(:remember)
+      end
+    end
+
+    context 'nextFocusId emits FocusRequester.requestFocus() in onNext/onDone' do
+      let(:json_data) do
+        {
+          'type' => 'TextField',
+          'id' => 'first_input',
+          'nextFocusId' => 'password_field',
+          'returnKeyType' => 'Next'
+        }
+      end
+
+      it 'emits onNext = { focusRequester_<nextFocusId>.requestFocus() }' do
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('onNext = { focusRequester_password_field.requestFocus() }')
+        expect(result).to include('onDone = { focusRequester_password_field.requestFocus() }')
+      end
+
+      it 'NEVER emits the legacy non-existent FocusManager.requestFocus reference' do
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).not_to include('FocusManager.requestFocus')
+      end
+    end
+
+    context 'fieldId + nextFocusId + onSubmit combined' do
+      let(:json_data) do
+        {
+          'type' => 'TextField',
+          'id' => 'first_input',
+          'fieldId' => 'email_field',
+          'nextFocusId' => 'password_field',
+          'onSubmit' => '@{onSubmitForm}'
+        }
+      end
+
+      it 'declares its own FocusRequester, references next field, and wires onSubmit handler' do
+        result = described_class.generate(json_data, 0, required_imports)
+        # own declaration
+        expect(result).to include('val focusRequester_email_field = remember { FocusRequester() }')
+        # own modifier registration
+        expect(result).to include('.focusRequester(focusRequester_email_field)')
+        # focus chain to next
+        expect(result).to include('focusRequester_password_field.requestFocus()')
+        # onSubmit handler still wired into onGo/onSearch/onSend (onDone goes to focus chain when next_focus_id is set)
+        expect(result).to include('onGo = { data.onSubmitForm?.invoke() }')
+      end
+    end
   end
 
   describe '.extract_variable_name' do
