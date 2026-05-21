@@ -166,18 +166,37 @@ module SjuiTools
               add_line "data.#{focus_var} = newValue"
             end
             add_line "}"
+          end
 
-            # nextFocus: move focus to next field on submit
-            if @component['nextFocus']
-              next_field = to_camel_case(@component['nextFocus'])
-              next_focus_var = "#{next_field}IsFocused"
-              add_modifier_line ".onSubmit {"
-              indent do
-                add_line "data.#{focus_var} = false"
-                add_line "data.#{next_focus_var} = true"
-              end
-              add_line "}"
+          # Combined .onSubmit { } block — handles `nextFocus` (focus chain)
+          # and/or `onSubmit` (user-defined handler). When both are set, focus
+          # chain runs first then onSubmit handler fires, both inside the
+          # single SwiftUI .onSubmit closure (SwiftUI does not expose
+          # per-return-key slots like Compose's KeyboardActions).
+          on_submit_body = []
+          if @component['id'] && @component['nextFocus']
+            field_id = to_camel_case(@component['id'])
+            focus_var = "#{field_id}IsFocused"
+            next_field = to_camel_case(@component['nextFocus'])
+            next_focus_var = "#{next_field}IsFocused"
+            on_submit_body << "data.#{focus_var} = false"
+            on_submit_body << "data.#{next_focus_var} = true"
+          end
+          if @component['onSubmit']
+            on_submit = @component['onSubmit']
+            view_id = @component['id'] || 'textfield'
+            on_submit_body << if is_binding?(on_submit)
+                                get_event_handler_invocation(on_submit, view_id)
+                              else
+                                "data.#{on_submit}?()"
+                              end
+          end
+          unless on_submit_body.empty?
+            add_modifier_line ".onSubmit {"
+            indent do
+              on_submit_body.each { |line| add_line line }
             end
+            add_line "}"
           end
 
           # TextField manages its own padding/background/cornerRadius/border

@@ -341,8 +341,13 @@ module KjuiTools
               actions << "onDone = { FocusManager.requestFocus(\"#{next_focus_id}\") }"
             end
             if on_submit
+              # `get_event_handler_invocation` is a 3-arity helper
+              # (handler, view_id, value_expr). `onSubmit` carries no value
+              # to pass to the handler, so `value_expr` is `nil` — which
+              # also matches every other no-value call site in this codegen.
+              # Regression: kjui-textfield-onsubmit-helper-arity-mismatch.
               submit_call = Helpers::ModifierBuilder.is_binding?(on_submit) ?
-                Helpers::ModifierBuilder.get_event_handler_invocation(on_submit, json_data['id'] || 'textfield') :
+                Helpers::ModifierBuilder.get_event_handler_invocation(on_submit, json_data['id'] || 'textfield', nil) :
                 "data.#{on_submit}?.invoke()"
               actions << "onDone = { #{submit_call} }" unless next_focus_id
               actions << "onGo = { #{submit_call} }"

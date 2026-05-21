@@ -414,5 +414,134 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextFieldConverter do
         expect(code).to include('.shadow(')
       end
     end
+
+    # Regression: sjui-textfield-onsubmit-not-exposed.
+    # JSON `onSubmit` was not honored — only `nextFocus` triggered a
+    # .onSubmit { } block. Now `onSubmit` (binding form `@{handler}` or
+    # raw method name `handler`) emits the SwiftUI .onSubmit closure,
+    # mirroring kjui's KeyboardActions.onDone/onGo/onSearch/onSend wiring.
+    context 'with onSubmit binding handler' do
+      let(:component) do
+        {
+          'type' => 'TextField',
+          'id' => 'search_field',
+          'hint' => 'Search',
+          'text' => '@{searchText}',
+          'onSubmit' => '@{onAddTap}'
+        }
+      end
+
+      it 'emits .onSubmit { data.onAddTap?() }' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('.onSubmit {')
+        expect(code).to include('data.onAddTap?()')
+      end
+    end
+
+    context 'with onSubmit raw method name (non-binding)' do
+      let(:component) do
+        {
+          'type' => 'TextField',
+          'id' => 'search_field',
+          'hint' => 'Search',
+          'text' => '@{searchText}',
+          'onSubmit' => 'submitNewTag'
+        }
+      end
+
+      it 'emits .onSubmit { data.submitNewTag?() }' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('.onSubmit {')
+        expect(code).to include('data.submitNewTag?()')
+      end
+    end
+
+    context 'with onSubmit and no id' do
+      let(:component) do
+        {
+          'type' => 'TextField',
+          'hint' => 'Search',
+          'onSubmit' => '@{onAddTap}'
+        }
+      end
+
+      it 'still emits .onSubmit even without an id' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('.onSubmit {')
+        expect(code).to include('data.onAddTap?()')
+      end
+    end
+
+    context 'with nextFocus only (no onSubmit)' do
+      let(:component) do
+        {
+          'type' => 'TextField',
+          'id' => 'first_field',
+          'hint' => 'First',
+          'text' => '@{firstText}',
+          'nextFocus' => 'second_field'
+        }
+      end
+
+      it 'emits .onSubmit { } that chains focus to nextFocus field' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('.onSubmit {')
+        expect(code).to include('data.firstFieldIsFocused = false')
+        expect(code).to include('data.secondFieldIsFocused = true')
+        expect(code).not_to match(/data\.\w+\?\(\)/)
+      end
+    end
+
+    context 'with both nextFocus and onSubmit (combined)' do
+      let(:component) do
+        {
+          'type' => 'TextField',
+          'id' => 'first_field',
+          'hint' => 'First',
+          'text' => '@{firstText}',
+          'nextFocus' => 'second_field',
+          'onSubmit' => '@{onAddTap}'
+        }
+      end
+
+      it 'emits a single .onSubmit { } that runs focus chain then onSubmit handler' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        # Single .onSubmit block (no duplicate)
+        expect(code.scan('.onSubmit {').size).to eq(1)
+        # Focus chain present
+        expect(code).to include('data.firstFieldIsFocused = false')
+        expect(code).to include('data.secondFieldIsFocused = true')
+        # onSubmit handler present
+        expect(code).to include('data.onAddTap?()')
+      end
+    end
+
+    context 'with neither nextFocus nor onSubmit' do
+      let(:component) do
+        {
+          'type' => 'TextField',
+          'id' => 'search_field',
+          'hint' => 'Search',
+          'text' => '@{searchText}'
+        }
+      end
+
+      it 'does NOT emit .onSubmit { } block' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).not_to include('.onSubmit {')
+      end
+    end
   end
 end
