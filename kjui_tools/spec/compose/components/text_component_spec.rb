@@ -182,6 +182,113 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       expect(result).to include('maxLines = 1')
       expect(result).to include('overflow = TextOverflow.Ellipsis')
     end
+
+    # Regression family: kjui-label-lines-and-linebreakmode-double-overflow-emit.
+    # `lines`, `autoShrink`, `minimumScaleFactor`, and `lineBreakMode` each
+    # used to append their own `overflow = ...` (and `maxLines = ...` for
+    # auto-shrink paths) independently. Combinations produced duplicate
+    # named args — invalid Kotlin. Verify each combination emits each
+    # named arg exactly once and that `lineBreakMode` takes precedence
+    # over the implicit Ellipsis default.
+    context 'overflow / maxLines deduplication' do
+      it 'emits a single overflow when lines + lineBreakMode: tail are combined' do
+        json_data = {
+          'type' => 'Text', 'text' => 'Test',
+          'lines' => 1, 'lineBreakMode' => 'Tail'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result.scan('overflow =').size).to eq(1)
+        expect(result).to include('overflow = TextOverflow.Ellipsis')
+        expect(result.scan('maxLines =').size).to eq(1)
+        expect(result).to include('maxLines = 1')
+      end
+
+      it 'lineBreakMode: clip overrides the implicit Ellipsis from lines' do
+        json_data = {
+          'type' => 'Text', 'text' => 'Test',
+          'lines' => 2, 'lineBreakMode' => 'clip'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result.scan('overflow =').size).to eq(1)
+        expect(result).to include('overflow = TextOverflow.Clip')
+        expect(result).not_to include('overflow = TextOverflow.Ellipsis')
+      end
+
+      it 'lineBreakMode: word resolves to Ellipsis (still emitted once)' do
+        json_data = {
+          'type' => 'Text', 'text' => 'Test',
+          'lines' => 3, 'lineBreakMode' => 'word'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result.scan('overflow =').size).to eq(1)
+        expect(result).to include('overflow = TextOverflow.Ellipsis')
+        expect(result).to include('maxLines = 3')
+      end
+
+      it 'unmapped lineBreakMode (head) leaves the lines-default Ellipsis intact, once' do
+        json_data = {
+          'type' => 'Text', 'text' => 'Test',
+          'lines' => 1, 'lineBreakMode' => 'head'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        # head/middle/char are silent-skip in the lineBreakMode case;
+        # the lines-default Ellipsis survives.
+        expect(result.scan('overflow =').size).to eq(1)
+        expect(result).to include('overflow = TextOverflow.Ellipsis')
+      end
+
+      it 'emits a single maxLines / overflow when lines + autoShrink are combined' do
+        json_data = {
+          'type' => 'Text', 'text' => 'Test', 'fontSize' => 14,
+          'lines' => 2, 'autoShrink' => true
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result.scan('maxLines =').size).to eq(1)
+        # Explicit `lines` wins over autoShrink's implicit `maxLines = 1`
+        expect(result).to include('maxLines = 2')
+        expect(result.scan('overflow =').size).to eq(1)
+        expect(result).to include('overflow = TextOverflow.Ellipsis')
+        # autoSize emit is still present
+        expect(result).to include('TextAutoSize.StepBased')
+      end
+
+      it 'emits a single maxLines / overflow when lines + minimumScaleFactor are combined' do
+        json_data = {
+          'type' => 'Text', 'text' => 'Test', 'fontSize' => 14,
+          'lines' => 4, 'minimumScaleFactor' => 0.5
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result.scan('maxLines =').size).to eq(1)
+        expect(result).to include('maxLines = 4')
+        expect(result.scan('overflow =').size).to eq(1)
+      end
+
+      it 'emits autoSize + single maxLines/overflow when autoShrink + lineBreakMode: clip combine (lineBreakMode wins)' do
+        json_data = {
+          'type' => 'Text', 'text' => 'Test', 'fontSize' => 14,
+          'autoShrink' => true, 'lineBreakMode' => 'clip'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result.scan('overflow =').size).to eq(1)
+        expect(result).to include('overflow = TextOverflow.Clip')
+        expect(result.scan('maxLines =').size).to eq(1)
+        expect(result).to include('maxLines = 1')
+      end
+
+      it 'lines: 0 still emits Int.MAX_VALUE with no overflow (preserved semantics)' do
+        json_data = { 'type' => 'Text', 'text' => 'Test', 'lines' => 0 }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('maxLines = Int.MAX_VALUE')
+        expect(result).not_to include('overflow =')
+      end
+
+      it 'lineBreakMode alone (no lines) emits only overflow, no maxLines' do
+        json_data = { 'type' => 'Text', 'text' => 'Test', 'lineBreakMode' => 'tail' }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('overflow = TextOverflow.Ellipsis')
+        expect(result).not_to include('maxLines =')
+      end
+    end
   end
 
   describe '.generate_with_partial_attributes_for_linkable' do
