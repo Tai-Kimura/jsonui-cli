@@ -103,6 +103,168 @@ RSpec.describe SjuiTools::SwiftUI::Views::FrameHelper do
         expect(helper.generated_code.first).to include('alignment: .topLeading')
       end
     end
+
+    # Regression family: wrapContent .fixedSize emit on LEAVES ONLY.
+    #
+    # History:
+    # - sjui-wrap-content-without-max-skips-fixed-size-emit (original bug):
+    #   `apply_frame_constraints` early-returned when no min/max was set,
+    #   so MarkdownText with `width: wrapContent` filled parent because
+    #   its internal `.frame(maxWidth: .infinity)` had nothing to push
+    #   back against. Android emitted `Modifier.wrapContentWidth()`
+    #   correctly, producing cross-platform divergence.
+    # - sjui-wrap-content-fixed-size-too-aggressive-on-containers
+    #   (regression of the first fix): the original re-fix added
+    #   `.fixedSize` for ANY type, locking VStack/HStack containers
+    #   to their children's intrinsic width and breaking 228 layout
+    #   files (chat screen text spilled past screen width).
+    # - Current fix: emit `.fixedSize` only on intrinsic-content LEAF
+    #   types. Containers (View/ScrollView/Collection/SafeAreaView/etc.
+    #   and any node with `child` array) are excluded.
+    context 'wrapContent .fixedSize emit (leaf-only gate)' do
+      context 'leaf: MarkdownText with width: wrapContent (no min/max)' do
+        let(:component) { { 'type' => 'MarkdownText', 'width' => 'wrapContent' } }
+
+        it 'emits .fixedSize(horizontal: true, vertical: false)' do
+          helper = helper_class.new(component)
+          helper.apply_frame_constraints
+
+          expect(helper.generated_code).to include(
+            '.fixedSize(horizontal: true, vertical: false)'
+          )
+        end
+      end
+
+      context 'leaf: Label with height: wrapContent (no min/max)' do
+        let(:component) { { 'type' => 'Label', 'height' => 'wrapContent' } }
+
+        it 'emits .fixedSize(horizontal: false, vertical: true)' do
+          helper = helper_class.new(component)
+          helper.apply_frame_constraints
+
+          expect(helper.generated_code).to include(
+            '.fixedSize(horizontal: false, vertical: true)'
+          )
+        end
+      end
+
+      context 'leaf: MarkdownText with both width and height: wrapContent' do
+        let(:component) do
+          { 'type' => 'MarkdownText', 'width' => 'wrapContent', 'height' => 'wrapContent' }
+        end
+
+        it 'emits .fixedSize(horizontal: true, vertical: true)' do
+          helper = helper_class.new(component)
+          helper.apply_frame_constraints
+
+          expect(helper.generated_code).to include(
+            '.fixedSize(horizontal: true, vertical: true)'
+          )
+        end
+      end
+
+      context 'leaf: MarkdownText with width: wrapContent + maxWidth (gate-path, no horizontal fixedSize)' do
+        let(:component) do
+          { 'type' => 'MarkdownText', 'width' => 'wrapContent', 'maxWidth' => 600 }
+        end
+
+        it 'does NOT emit horizontal .fixedSize (maxWidth caps it)' do
+          helper = helper_class.new(component)
+          helper.apply_frame_constraints
+
+          fixed_size_line = helper.generated_code.find { |l| l.include?('.fixedSize') }
+          expect(fixed_size_line).not_to include('horizontal: true')
+        end
+      end
+
+      context 'container: View with width: wrapContent (no min/max)' do
+        let(:component) { { 'type' => 'View', 'width' => 'wrapContent' } }
+
+        it 'does NOT emit .fixedSize (containers must not lock to children intrinsic width)' do
+          helper = helper_class.new(component)
+          helper.apply_frame_constraints
+
+          expect(helper.generated_code).to be_empty
+        end
+      end
+
+      context 'container: View with both width and height: wrapContent (no min/max)' do
+        let(:component) do
+          { 'type' => 'View', 'width' => 'wrapContent', 'height' => 'wrapContent' }
+        end
+
+        it 'does NOT emit .fixedSize' do
+          helper = helper_class.new(component)
+          helper.apply_frame_constraints
+
+          expect(helper.generated_code).to be_empty
+        end
+      end
+
+      context 'container: ScrollView with width: wrapContent' do
+        let(:component) { { 'type' => 'ScrollView', 'width' => 'wrapContent' } }
+
+        it 'does NOT emit .fixedSize' do
+          helper = helper_class.new(component)
+          helper.apply_frame_constraints
+
+          expect(helper.generated_code).to be_empty
+        end
+      end
+
+      context 'container: Collection with height: wrapContent' do
+        let(:component) { { 'type' => 'Collection', 'height' => 'wrapContent' } }
+
+        it 'does NOT emit .fixedSize' do
+          helper = helper_class.new(component)
+          helper.apply_frame_constraints
+
+          expect(helper.generated_code).to be_empty
+        end
+      end
+
+      context 'container by child-array presence: unknown type with children' do
+        # Defense-in-depth: even a non-builtin type that hosts children
+        # must not get .fixedSize, because the children may require
+        # wrap-when-bound semantics from the parent.
+        let(:component) do
+          {
+            'type' => 'CustomContainer',
+            'width' => 'wrapContent',
+            'child' => [{ 'type' => 'Label', 'text' => 'hello' }]
+          }
+        end
+
+        it 'does NOT emit .fixedSize when child array is non-empty' do
+          helper = helper_class.new(component)
+          helper.apply_frame_constraints
+
+          expect(helper.generated_code).to be_empty
+        end
+      end
+
+      context 'no size attributes at all' do
+        let(:component) { { 'type' => 'MarkdownText' } }
+
+        it 'emits nothing (no implicit wrapContent → no .fixedSize)' do
+          helper = helper_class.new(component)
+          helper.apply_frame_constraints
+
+          expect(helper.generated_code).to be_empty
+        end
+      end
+
+      context 'leaf with fixed numeric width only (no wrapContent)' do
+        let(:component) { { 'type' => 'Label', 'width' => 100 } }
+
+        it 'emits nothing from apply_frame_constraints' do
+          helper = helper_class.new(component)
+          helper.apply_frame_constraints
+
+          expect(helper.generated_code).to be_empty
+        end
+      end
+    end
   end
 
   describe '#apply_frame_size' do
