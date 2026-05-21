@@ -166,6 +166,35 @@ class ArrayGenericTests(unittest.TestCase):
         self.assertTrue(tm.is_registered("[Foo?]?"))
 
 
+class ListAliasTests(unittest.TestCase):
+    """Canonical `List(T)` spelling must resolve identically to `Array(T)`.
+
+    Regression: jui-generate-project-list-canonical-type-not-converted-for-swift.
+    Spec authors mix `List(T)` and `Array(T)` interchangeably; without an
+    explicit `List($T)` builtin the iOS Repository Protocol emitted
+    `List(Foo)` verbatim — invalid Swift. Kotlin/TS were symmetrically
+    broken (`List(Foo)` is not Kotlin syntax either); only Swift hard-
+    failed first because xcodebuild surfaced the error fastest.
+    """
+
+    def test_list_canonical_resolves_per_platform(self):
+        tm = TypeMapper(None)
+        self.assertEqual(tm.resolve_class("List(UserTag)", "ios"), "[UserTag]")
+        self.assertEqual(tm.resolve_class("List(UserTag)", "android"), "List<UserTag>")
+        self.assertEqual(tm.resolve_class("List(UserTag)", "web"), "UserTag[]")
+
+    def test_list_canonical_with_primitive(self):
+        tm = TypeMapper(None)
+        self.assertEqual(tm.resolve_class("List(String)", "ios"), "[String]")
+        self.assertEqual(tm.resolve_class("List(String)", "android"), "List<String>")
+        self.assertEqual(tm.resolve_class("List(String)", "web"), "string[]")
+
+    def test_list_canonical_is_registered(self):
+        tm = TypeMapper(None)
+        self.assertTrue(tm.is_registered("List(Foo)"))
+        self.assertTrue(tm.is_registered("List(String)"))
+
+
 class IsRegisteredTests(unittest.TestCase):
     def test_primitive_is_registered(self):
         tm = TypeMapper(None)

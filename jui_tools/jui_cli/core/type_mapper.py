@@ -89,6 +89,16 @@ _BUILTIN_TYPES = {
         "android": {"class": "List<$T>"},
         "web": {"class": "$T[]"},
     },
+    # Canonical `List(T)` alias — same shape as `Array(T)`. Spec authors
+    # reach for either spelling interchangeably; without this entry the
+    # iOS Swift Protocol leaks `List(Foo)` verbatim and fails to compile
+    # (Swift has no `List(...)` syntax). Kotlin/TS are symmetric since
+    # both generators route through this same TypeMapper.
+    "List($T)": {
+        "class": "[$T]",
+        "android": {"class": "List<$T>"},
+        "web": {"class": "$T[]"},
+    },
     "AsyncThrowingStream<$T,$E>": {
         "class": "AsyncThrowingStream<$T, $E>",
         "android": {
