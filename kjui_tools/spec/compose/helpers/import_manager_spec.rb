@@ -49,6 +49,33 @@ RSpec.describe KjuiTools::Compose::Helpers::ImportManager do
       expect(result[:box]).to include('Box')
       expect(result[:arrangement]).to include('Arrangement')
     end
+
+    # Regression: kjui-keyboardactions-import-missing.
+    # `textfield_component.rb` calls `required_imports.add(:keyboard_actions)`
+    # whenever it emits `keyboardActions = KeyboardActions(...)` for
+    # nextFocus / onSubmit wiring. Without a corresponding IMPORTS_MAP
+    # entry, the Set add was silently dropped and the generated
+    # `*GeneratedView.kt` referenced `KeyboardActions` without an
+    # import → kotlinc Unresolved reference.
+    it 'maps :keyboard_actions to androidx.compose.foundation.text.KeyboardActions' do
+      result = described_class.get_imports_map
+      expect(result).to have_key(:keyboard_actions)
+      expect(result[:keyboard_actions]).to eq(
+        'import androidx.compose.foundation.text.KeyboardActions'
+      )
+    end
+
+    # Regression: kjui-keyboardactions-import-missing (focus chain refactor).
+    # `textfield_component` now emits `val focusRequester_<id> = remember {
+    # FocusRequester() }` + `.focusRequester(focusRequester_<id>)`. Both
+    # the class and the modifier function must resolve.
+    it 'maps :focus_requester to both FocusRequester class and focusRequester modifier' do
+      result = described_class.get_imports_map
+      expect(result).to have_key(:focus_requester)
+      expect(result[:focus_requester]).to be_an(Array)
+      expect(result[:focus_requester]).to include('import androidx.compose.ui.focus.FocusRequester')
+      expect(result[:focus_requester]).to include('import androidx.compose.ui.focus.focusRequester')
+    end
   end
 
   describe '.update_imports' do

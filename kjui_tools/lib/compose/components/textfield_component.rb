@@ -94,6 +94,31 @@ module KjuiTools
             code += Helpers::FontSpecHelper.emit_resolve_block(tf_resolved_var, tf_font_args, depth, required_imports) + "\n"
           end
 
+          # Focus chain (fieldId / nextFocusId).
+          #
+          # Compose's standard `FocusRequester` is per-component. To support
+          # spec-driven `nextFocusId` lookups we emit `val focusRequester_<id>
+          # = remember { FocusRequester() }` for every field that declares
+          # `fieldId`, then reference `focusRequester_<nextFocusId>` from the
+          # source field's KeyboardActions.
+          #
+          # Contract:
+          #   - Target field MUST set `fieldId: "<id>"` to be referenceable
+          #   - Source field references it via `nextFocusId: "<id>"`
+          #   - Both fields MUST share the same composable scope (siblings
+          #     under the same parent layout); cross-screen focus chain is
+          #     out of scope (matches the previous broken intent).
+          #
+          # Regression: kjui-keyboardactions-import-missing — the original
+          # emit referenced a non-existent `FocusManager.requestFocus(...)`
+          # helper. Refactored to use Compose stdlib `FocusRequester` only.
+          focus_field_id = json_data['fieldId']
+          if focus_field_id
+            required_imports&.add(:focus_requester)
+            required_imports&.add(:remember)
+            code += indent("val focusRequester_#{focus_field_id} = remember { FocusRequester() }", depth) + "\n"
+          end
+
           if has_margins
             required_imports&.add(:box)
             code += indent("CustomTextFieldWithMargins(", depth)
@@ -128,6 +153,7 @@ module KjuiTools
             # TextField modifier (size, padding goes to contentPadding)
             textfield_modifiers = []
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+            textfield_modifiers << ".focusRequester(focusRequester_#{focus_field_id})" if focus_field_id
             if textfield_modifiers.any?
               code += "\n" + indent("textFieldModifier = Modifier", depth + 1)
               textfield_modifiers.each do |mod|
@@ -149,6 +175,7 @@ module KjuiTools
               modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             end
             modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+            modifiers << ".focusRequester(focusRequester_#{focus_field_id})" if focus_field_id
 
             if modifiers.any?
               code += "\n" + indent("modifier = Modifier", depth + 1)
@@ -319,26 +346,25 @@ module KjuiTools
             code += ",\n" + indent("onEndEditing = { data.#{json_data['onEndEditing']}?.invoke() }", depth + 1)
           end
           
-          # Focus management - fieldId, nextFocusId
-          field_id = json_data['fieldId']
+          # Focus management — `fieldId` is already wired above (the
+          # `val focusRequester_<id> = remember { FocusRequester() }`
+          # declaration + `.focusRequester(...)` modifier). Here we
+          # only need to wire KeyboardActions for `nextFocusId` lookup
+          # and `onSubmit`.
           next_focus_id = json_data['nextFocusId']
           on_submit = json_data['onSubmit']
-
-          if field_id
-            required_imports&.add(:focus_requester)
-            required_imports&.add(:focus_manager)
-            required_imports&.add(:launched_effect)
-
-            code += ",\n" + indent("// Focus chain: fieldId=#{field_id}#{next_focus_id ? ", nextFocusId=#{next_focus_id}" : ''}", depth + 1)
-          end
 
           # KeyboardActions for focus chain / submit
           if next_focus_id || on_submit
             required_imports&.add(:keyboard_actions)
             actions = []
             if next_focus_id
-              actions << "onNext = { FocusManager.requestFocus(\"#{next_focus_id}\") }"
-              actions << "onDone = { FocusManager.requestFocus(\"#{next_focus_id}\") }"
+              # Target field MUST have `fieldId: "<next_focus_id>"` set so
+              # `focusRequester_<next_focus_id>` exists in the same
+              # composable scope. Spec-side contract; codegen does not
+              # validate cross-field reachability.
+              actions << "onNext = { focusRequester_#{next_focus_id}.requestFocus() }"
+              actions << "onDone = { focusRequester_#{next_focus_id}.requestFocus() }"
             end
             if on_submit
               # `get_event_handler_invocation` is a 3-arity helper
