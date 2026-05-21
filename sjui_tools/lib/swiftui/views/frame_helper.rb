@@ -4,21 +4,6 @@ module SjuiTools
   module SwiftUI
     module Views
       module FrameHelper
-        # Types that act as containers in sjui. `.fixedSize(...)` must NOT
-        # be auto-emitted on these from the gate-less `wrapContent` path —
-        # locking a container to its children's intrinsic width prevents
-        # nested long Labels from wrapping, breaking layouts at screen-
-        # width boundaries. The denylist is the inverse of "intrinsic-
-        # content leaves" (Label, Text, MarkdownText, Image, IconLabel,
-        # NetworkImage, Button, TextField, etc.) and matches the
-        # case-statement in `ConverterFactory#create_converter` for
-        # types that accept children.
-        WRAP_CONTENT_FIXED_SIZE_CONTAINER_TYPES = %w[
-          View SafeAreaView GradientView
-          Scroll ScrollView Collection Table TabView
-          Blur BlurView
-        ].freeze
-
         def apply_frame_constraints
           # サイズ制約（minWidth, maxWidth, minHeight, maxHeight）
           if @component['minWidth'] || @component['maxWidth'] || @component['minHeight'] || @component['maxHeight']
@@ -97,38 +82,6 @@ module SjuiTools
             v_fixed = needs_v_fixed || (needs_h_fixed && height_is_wrap && !max_height)
             if h_fixed || v_fixed
               @modifier_bag.register(:fixed_size, ".fixedSize(horizontal: #{h_fixed}, vertical: #{v_fixed})")
-            end
-          else
-            # No min/max constraints: honor explicit `width: wrapContent` /
-            # `height: wrapContent` on intrinsic-content LEAF nodes by
-            # emitting `.fixedSize`. Custom components that internally use
-            # `.frame(maxWidth: .infinity)` (e.g. MarkdownText) would
-            # otherwise expand to parent fill, diverging from Android's
-            # `Modifier.wrapContentWidth()` semantics.
-            #
-            # Container nodes (View/ScrollView/Collection/SafeAreaView/etc.
-            # and any node with a `child` array) are EXCLUDED — locking a
-            # container to its children's intrinsic width prevents nested
-            # long text from wrapping and breaks screen-width layouts.
-            #
-            # Regression history:
-            # - sjui-wrap-content-without-max-skips-fixed-size-emit
-            #   (original bug: MarkdownText filled parent on iPhone)
-            # - sjui-wrap-content-fixed-size-too-aggressive-on-containers
-            #   (first fix was type-agnostic → broke 228 files via
-            #   container `.fixedSize`. Re-introduced here gated to
-            #   leaves only.)
-            width_str = @component['width'].to_s.downcase
-            height_str = @component['height'].to_s.downcase
-            width_is_wrap_explicit = width_str == 'wrapcontent' || width_str == 'wrap_content'
-            height_is_wrap_explicit = height_str == 'wrapcontent' || height_str == 'wrap_content'
-            if width_is_wrap_explicit || height_is_wrap_explicit
-              component_type = @component['type']
-              has_children = @component['child'].is_a?(Array) && !@component['child'].empty?
-              is_container = WRAP_CONTENT_FIXED_SIZE_CONTAINER_TYPES.include?(component_type) || has_children
-              unless is_container
-                @modifier_bag.register(:fixed_size, ".fixedSize(horizontal: #{width_is_wrap_explicit}, vertical: #{height_is_wrap_explicit})")
-              end
             end
           end
         end
