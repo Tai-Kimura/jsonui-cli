@@ -186,26 +186,36 @@ module KjuiTools
             component_code += ",\n" + indent("textAlign = TextAlign.Center", depth + 1)
           end
 
-          # Lines (maxLines)
+          # Lines / overflow / auto-shrink — compute consolidated maxLines +
+          # overflow values upfront so each named arg is emitted at most once.
+          # Previously `lines`, `autoShrink`, `minimumScaleFactor`, and
+          # `lineBreakMode` each appended their own `overflow = ...` (and
+          # `maxLines = ...` for the auto-shrink paths) independently, so
+          # combinations like `lines + lineBreakMode` or `lines + autoShrink`
+          # produced duplicate named args and kotlinc halted with
+          # "named arg specified twice".
+          # Regression: kjui-label-lines-and-linebreakmode-double-overflow-emit.
+          max_lines_value = nil
+          overflow_value = nil
+
           if json_data['lines']
             if json_data['lines'] == 0
-              component_code += ",\n" + indent("maxLines = Int.MAX_VALUE", depth + 1)
+              max_lines_value = 'Int.MAX_VALUE'
             else
-              component_code += ",\n" + indent("maxLines = #{json_data['lines']}", depth + 1)
-              required_imports&.add(:text_overflow)
-              component_code += ",\n" + indent("overflow = TextOverflow.Ellipsis", depth + 1)
+              max_lines_value = json_data['lines'].to_s
+              overflow_value = 'TextOverflow.Ellipsis'
             end
           end
 
-          # Auto shrink text using TextAutoSize
+          # Auto shrink text using TextAutoSize (auto-size emit stays here;
+          # maxLines / overflow defer to the consolidated emit below).
           if json_data['autoShrink']
             font_size = json_data['fontSize'] || 14
             min_font_size = (font_size.to_f * 0.5).round(1)
             required_imports&.add(:text_auto_size)
-            required_imports&.add(:text_overflow)
             component_code += ",\n" + indent("autoSize = TextAutoSize.StepBased(minFontSize = #{min_font_size}.sp)", depth + 1)
-            component_code += ",\n" + indent("maxLines = 1", depth + 1)
-            component_code += ",\n" + indent("overflow = TextOverflow.Ellipsis", depth + 1)
+            max_lines_value ||= '1'
+            overflow_value ||= 'TextOverflow.Ellipsis'
           end
 
           # Minimum scale factor (auto-shrink text) using TextAutoSize
@@ -214,20 +224,30 @@ module KjuiTools
             min_font_size = (font_size.to_f * json_data['minimumScaleFactor'].to_f).round(1)
             required_imports&.add(:text_auto_size)
             component_code += ",\n" + indent("autoSize = TextAutoSize.StepBased(minFontSize = #{min_font_size}.sp)", depth + 1)
-            component_code += ",\n" + indent("maxLines = 1", depth + 1)
-            required_imports&.add(:text_overflow)
-            component_code += ",\n" + indent("overflow = TextOverflow.Ellipsis", depth + 1)
+            max_lines_value ||= '1'
+            overflow_value ||= 'TextOverflow.Ellipsis'
           end
 
-          # Line break mode (overflow)
+          # `lineBreakMode`, when explicitly set, takes precedence over the
+          # implicit Ellipsis from `lines` / `autoShrink` / `minimumScaleFactor`.
+          # Unmapped enum values (`head`/`middle`/`char`) leave the prior
+          # value untouched — matches the original silent-skip semantics
+          # for those modes.
           if json_data['lineBreakMode']
-            required_imports&.add(:text_overflow)
             case json_data['lineBreakMode'].downcase
             when 'clip'
-              component_code += ",\n" + indent("overflow = TextOverflow.Clip", depth + 1)
+              overflow_value = 'TextOverflow.Clip'
             when 'tail', 'word'
-              component_code += ",\n" + indent("overflow = TextOverflow.Ellipsis", depth + 1)
+              overflow_value = 'TextOverflow.Ellipsis'
             end
+          end
+
+          if max_lines_value
+            component_code += ",\n" + indent("maxLines = #{max_lines_value}", depth + 1)
+          end
+          if overflow_value
+            required_imports&.add(:text_overflow)
+            component_code += ",\n" + indent("overflow = #{overflow_value}", depth + 1)
           end
 
           # highlightColor - color when pressed/selected
