@@ -153,6 +153,27 @@ module KjuiTools
             # TextField modifier (size, padding goes to contentPadding)
             textfield_modifiers = []
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+            # When the outer Box uses `Modifier.weight(N)` to claim a Row /
+            # Column slot, the slot's measured size is bounded only on the
+            # *outer* (Box) modifier. The inner BasicTextField inside the
+            # Box defaults to wrap-content and does NOT inherit the Box's
+            # bounded width/height, so the field renders narrow and leaves
+            # blank space inside the weighted slot. Mirror Compose's
+            # standard pattern: when weight is requested, the inner
+            # textFieldModifier must explicitly `.fillMaxWidth()` (Row
+            # parent) or `.fillMaxHeight()` (Column parent) to occupy the
+            # outer slot. Skip when build_size already emitted the same
+            # modifier via `width: matchParent` / `height: matchParent`.
+            # Regression: kjui-textfield-weight-not-fillmaxwidth-inner.
+            if json_data['weight'] && json_data['weight'].to_f > 0
+              fill_modifier = case parent_type
+                              when 'Row' then '.fillMaxWidth()'
+                              when 'Column' then '.fillMaxHeight()'
+                              end
+              if fill_modifier && !textfield_modifiers.include?(fill_modifier)
+                textfield_modifiers << fill_modifier
+              end
+            end
             textfield_modifiers << ".focusRequester(focusRequester_#{focus_field_id})" if focus_field_id
             if textfield_modifiers.any?
               code += "\n" + indent("textFieldModifier = Modifier", depth + 1)

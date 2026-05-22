@@ -387,6 +387,90 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       end
     end
 
+    # Regression: kjui-textfield-weight-not-fillmaxwidth-inner.
+    # `CustomTextFieldWithMargins(boxModifier = Modifier.weight(N), textFieldModifier = Modifier)`
+    # leaves the inner BasicTextField at wrap-content — the Box's weighted
+    # slot does not propagate as a width/height constraint to its child.
+    # The codegen must auto-emit `.fillMaxWidth()` (Row parent) or
+    # `.fillMaxHeight()` (Column parent) on textFieldModifier when weight
+    # is set and a margin path forces the Box wrapper.
+    context 'weighted TextField with margins (forces Box wrap)' do
+      it 'emits .fillMaxWidth() on textFieldModifier when weight is set under a Row parent' do
+        json_data = {
+          'type' => 'TextField',
+          'id' => 'search_field',
+          'weight' => 1,
+          'rightMargin' => 8,
+          'text' => '@{searchText}'
+        }
+        result = described_class.generate(json_data, 0, required_imports, 'Row')
+        expect(result).to include('CustomTextFieldWithMargins(')
+        expect(result).to include('boxModifier = Modifier')
+        expect(result).to include('.weight(1f)')
+        expect(result).to include('textFieldModifier = Modifier')
+        expect(result).to include('.fillMaxWidth()')
+      end
+
+      it 'emits .fillMaxHeight() on textFieldModifier when weight is set under a Column parent' do
+        json_data = {
+          'type' => 'TextField',
+          'id' => 'tall_field',
+          'weight' => 1,
+          'topMargin' => 8,
+          'text' => '@{txt}'
+        }
+        result = described_class.generate(json_data, 0, required_imports, 'Column')
+        expect(result).to include('textFieldModifier = Modifier')
+        expect(result).to include('.fillMaxHeight()')
+      end
+
+      it 'does NOT duplicate .fillMaxWidth() when width: matchParent is already explicit' do
+        # build_size emits .fillMaxWidth() for matchParent; the weight
+        # auto-injection must dedupe to a single named modifier rather
+        # than producing `.fillMaxWidth().fillMaxWidth()`. The only emit
+        # site for `.fillMaxWidth()` in this generator is inside the
+        # textFieldModifier chain, so a global single-occurrence check
+        # is equivalent to per-chunk dedup verification.
+        json_data = {
+          'type' => 'TextField',
+          'id' => 'sf',
+          'weight' => 1,
+          'width' => 'matchParent',
+          'rightMargin' => 8
+        }
+        result = described_class.generate(json_data, 0, required_imports, 'Row')
+        expect(result.scan('.fillMaxWidth()').size).to eq(1)
+      end
+
+      it 'does NOT emit fill modifier when weight is absent (e.g. fixed width field with margins)' do
+        json_data = {
+          'type' => 'TextField',
+          'id' => 'sf',
+          'width' => 200,
+          'rightMargin' => 8
+        }
+        result = described_class.generate(json_data, 0, required_imports, 'Row')
+        expect(result).not_to include('.fillMaxWidth()')
+        expect(result).not_to include('.fillMaxHeight()')
+      end
+
+      it 'does NOT emit fill modifier when weight is set but parent is not Row/Column (e.g. nil parent)' do
+        # No-op safety: if parent isn't a Row/Column scope, `.weight()`
+        # itself wouldn't make sense (build_weight skips it via the
+        # truthy parent_orientation guard). Same logic for the inner
+        # fill — there's no axis to fill on.
+        json_data = {
+          'type' => 'TextField',
+          'id' => 'sf',
+          'weight' => 1,
+          'rightMargin' => 8
+        }
+        result = described_class.generate(json_data, 0, required_imports, nil)
+        expect(result).not_to include('.fillMaxWidth()')
+        expect(result).not_to include('.fillMaxHeight()')
+      end
+    end
+
     context 'fieldId + nextFocusId + onSubmit combined' do
       let(:json_data) do
         {
