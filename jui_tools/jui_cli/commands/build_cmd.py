@@ -65,6 +65,12 @@ def cmd_build(args: argparse.Namespace) -> int:
     _distribute_images(config_mgr, config, platforms, args)
     _distribute_hotload_config(config_mgr, platforms, args)
 
+    # Sync swagger-derived DTO + Domain scaffold files. Halts on §3.3
+    # invariants (oneOf, multi-file $ref, direct self-ref, etc.) so the
+    # downstream platform builds never see a broken model.
+    if _sync_api_models(config_mgr, platforms, args) is False:
+        return 1
+
     # Converter scaffolding is an explicit, one-time author action — run
     # `jui g converter --from <spec>` (or `--all --skip-existing`) yourself
     # when you add or change a `docs/components/json/*.component.json`. We
@@ -623,6 +629,88 @@ def _distribute_hotload_config(
             _sync_android_network_security(platform_root, client_ip)
 
 
+def _sync_api_models(
+    config_mgr: ConfigManager,
+    platforms: dict,
+    args,
+) -> bool:
+    """Emit swagger-derived DTO + Domain scaffold for each enabled platform.
+
+    Returns True on success / no-op (no swagger files), False on a fatal
+    schema error (callers should abort the build).
+
+    Per platform behavior:
+
+    - iOS: full implementation in Phase 1 — DTOs are regenerated, Domain
+      scaffolds emitted only when absent, orphan DTOs pruned.
+    - Android / Web: planners arrive in Phase 2 / 3 — until then they are
+      silently skipped (no warning) so consumers can adopt the iOS portion
+      first.
+    """
+    from ..core.api_model_sync import (
+        apply_plan,
+        collect_docs,
+        has_planner,
+        plan_for,
+        planners_for,
+    )
+    from ..core.openapi_loader import OpenAPILoadError
+
+    try:
+        docs = collect_docs(config_mgr)
+    except OpenAPILoadError as e:
+        print(f"\nERROR [api-model]: {e}")
+        return False
+
+    if not docs:
+        return True
+
+    # Report filter activity (v2 plan §2.5). Aggregated across all docs;
+    # in practice consumers have one swagger file, so the per-doc breakdown
+    # is overkill.
+    filtered_out = sorted({n for doc in docs for n in doc.filtered_out})
+    if filtered_out:
+        preview = ", ".join(filtered_out[:8])
+        more = f", ... (+{len(filtered_out) - 8} more)" if len(filtered_out) > 8 else ""
+        print(
+            f"[api-codegen] filtered out {len(filtered_out)} schema(s) not "
+            f"reachable from configured paths/schemas: {preview}{more}"
+        )
+
+    selected_platforms = planners_for(args)
+    total_dto = 0
+    total_scaffold = 0
+    total_pruned = 0
+
+    for platform in selected_platforms:
+        if platform not in platforms:
+            continue
+        if not has_planner(platform):
+            continue  # Phase 2 / 3 placeholder
+        pconfig = platforms[platform]
+        try:
+            plan = plan_for(platform, config_mgr, pconfig, docs)
+        except OpenAPILoadError as e:
+            print(f"\nERROR [api-model:{platform}]: {e}")
+            return False
+        dto_written, scaffold_written, pruned = apply_plan(plan, prune_orphans=True)
+        total_dto += dto_written
+        total_scaffold += scaffold_written
+        total_pruned += pruned
+
+    if total_dto or total_scaffold or total_pruned:
+        suffix_parts = []
+        if total_dto:
+            suffix_parts.append(f"{total_dto} DTO file(s)")
+        if total_scaffold:
+            suffix_parts.append(f"{total_scaffold} new domain scaffold(s)")
+        if total_pruned:
+            suffix_parts.append(f"pruned {total_pruned} orphan(s)")
+        print("API model sync: " + ", ".join(suffix_parts))
+
+    return True
+
+
 def _load_all_specs(config_mgr: ConfigManager) -> list[tuple[Path, ScreenSpec]]:
     """Load every ``*.spec.json`` under the project's spec directory.
 
@@ -740,6 +828,34 @@ def _sync_viewmodel_protocols(
         emit_warnings(all_warnings)
 
     type_mapper = TypeMapper(config_mgr.type_map_file)
+
+    # Auto-register swagger-derived schema names so Repository/UseCase
+    # signatures like ``returnType: "User"`` resolve without `jui verify`
+    # warnings. Per plan §9.2 / C5, manual entries in
+    # `.jsonui-type-map.json` always win — `register_schemas` skips
+    # shadowed names and returns them for info-level reporting.
+    try:
+        from ..core.api_model_sync import collect_docs as _collect_api_docs
+        api_docs = _collect_api_docs(config_mgr)
+    except Exception:
+        api_docs = []
+    if api_docs:
+        schema_names = [
+            schema.name
+            for doc in api_docs
+            for schema in doc.schemas
+        ] + [
+            enum.name
+            for doc in api_docs
+            for enum in doc.enums
+        ]
+        shadowed = type_mapper.register_schemas(schema_names)
+        if shadowed:
+            preview = ", ".join(shadowed[:5]) + ("..." if len(shadowed) > 5 else "")
+            print(
+                f"  info: {len(shadowed)} swagger schema(s) shadowed by user "
+                f"mapping in .jsonui-type-map.json ({preview})"
+            )
 
     # Map platform name → (generator_factory, Impl-patch helpers)
     def _get_gen(platform: str, pconfig: dict):
