@@ -629,8 +629,17 @@ class AndroidGenerator:
         return sig
 
     def _var_proto_signature(self, var: VarDef) -> str:
-        """Kotlin Protocol signature for a ``view_model.vars`` entry."""
+        """Kotlin Protocol signature for a ``view_model.vars`` entry.
+
+        ``observable: true`` switches the shape to ``val name: StateFlow<T>``
+        so the Compose canonical Impl (``private MutableStateFlow + override
+        val StateFlow.asStateFlow()``) can override it — mirrors
+        :func:`protocol_sync.default_var_signature` but applies the
+        Android-specific ``_map_type`` for spec → Kotlin type translation.
+        """
         type_str = _kotlin_optional(self._map_type(var.type), var.optional)
+        if var.observable and not var.read_only:
+            return f"val {var.name}: StateFlow<{type_str}>"
         keyword = "val" if var.read_only else "var"
         return f"{keyword} {var.name}: {type_str}"
 
