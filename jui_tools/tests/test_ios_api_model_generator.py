@@ -160,9 +160,12 @@ class DtoEmissionTests(unittest.TestCase):
             gen = _make_generator(Path(tmpdir))
             src = gen.generate_dto_source(m, doc)
         self.assertIn("let labels: [String: TagDto]", src)
-        # Map drops Hashable
-        self.assertIn("struct MDto: Codable, Sendable, Equatable {", src)
-        self.assertNotIn(", Hashable", src)
+        # All DTOs declare Hashable — the explicit hash(into:) body handles
+        # the synthesis-incompatible map field by omitting it from the
+        # hash while keeping the conformance.
+        self.assertIn("struct MDto: Codable, Sendable, Equatable, Hashable {", src)
+        self.assertIn("func hash(into hasher: inout Hasher) {", src)
+        self.assertIn("Omitted from hash (synthesis-incompatible types): labels", src)
 
     def test_no_coding_keys_when_no_rename_needed(self):
         doc = parse_swagger(_doc({
@@ -207,6 +210,138 @@ class DtoEmissionTests(unittest.TestCase):
             gen = _make_generator(Path(tmpdir))
             src = gen.generate_dto_source(doc.schemas[0], doc)
         self.assertIn("@available(*, deprecated)", src)
+
+
+class HashableConformanceTests(unittest.TestCase):
+    """Every DTO declares Hashable. When Swift auto-synthesis would fail
+    (map / array-of-map fields), an explicit ``hash(into:)`` body is
+    emitted that hashes the synthesis-safe subset and lists the omitted
+    fields in a trailing comment. See bug
+    sjui-api-model-hashable-synthesis-fails-for-nested-non-hashable-types.
+    """
+
+    def _emit(self, schemas: dict, name: str) -> str:
+        doc = parse_swagger(_doc(schemas), "test.json")
+        schema = next(s for s in doc.schemas if s.name == name)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            return _make_generator(Path(tmpdir)).generate_dto_source(schema, doc)
+
+    def test_primitive_only_schema_declares_hashable_without_explicit_body(self):
+        src = self._emit({
+            "User": {
+                "type": "object",
+                "required": ["id"],
+                "properties": {
+                    "id": {"type": "string"},
+                    "age": {"type": "integer"},
+                },
+            },
+        }, "User")
+        self.assertIn(": Codable, Sendable, Equatable, Hashable {", src)
+        # Swift compiler synthesizes for primitive-only schemas — no
+        # explicit body needed.
+        self.assertNotIn("func hash(into hasher:", src)
+
+    def test_map_field_schema_declares_hashable_with_explicit_body(self):
+        src = self._emit({
+            "TasteProfile": {
+                "type": "object",
+                "required": ["peaty"],
+                "properties": {
+                    "sparse_vector": {
+                        "type": "object",
+                        "additionalProperties": {"type": "number"},
+                    },
+                    "peaty": {"type": "number"},
+                    "experience_level": {"type": "string"},
+                },
+            },
+        }, "TasteProfile")
+        self.assertIn(": Codable, Sendable, Equatable, Hashable {", src)
+        self.assertIn("func hash(into hasher: inout Hasher) {", src)
+        self.assertIn("hasher.combine(peaty)", src)
+        self.assertIn("hasher.combine(experienceLevel)", src)
+        self.assertNotIn("hasher.combine(sparseVector)", src)
+        self.assertIn(
+            "Omitted from hash (synthesis-incompatible types): sparseVector",
+            src,
+        )
+
+    def test_object_ref_fields_are_hashed(self):
+        """Object refs are safe because every DTO declares Hashable."""
+        src = self._emit({
+            "Tag": {"type": "object", "properties": {"name": {"type": "string"}}},
+            "Article": {
+                "type": "object",
+                "required": ["tag", "labels"],
+                "properties": {
+                    "tag": {"$ref": "#/components/schemas/Tag"},
+                    "labels": {
+                        "type": "object",
+                        "additionalProperties": {"type": "string"},
+                    },
+                },
+            },
+        }, "Article")
+        self.assertIn("func hash(into hasher: inout Hasher) {", src)
+        self.assertIn("hasher.combine(tag)", src)
+        self.assertNotIn("hasher.combine(labels)", src)
+        self.assertIn(
+            "Omitted from hash (synthesis-incompatible types): labels",
+            src,
+        )
+
+    def test_array_of_map_omitted_from_hash(self):
+        src = self._emit({
+            "M": {
+                "type": "object",
+                "required": ["rows"],
+                "properties": {
+                    "rows": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {"type": "string"},
+                        },
+                    },
+                    "name": {"type": "string"},
+                },
+            },
+        }, "M")
+        self.assertIn("func hash(into hasher: inout Hasher) {", src)
+        self.assertIn("hasher.combine(name)", src)
+        self.assertNotIn("hasher.combine(rows)", src)
+        self.assertIn(
+            "Omitted from hash (synthesis-incompatible types): rows",
+            src,
+        )
+
+    def test_array_of_primitive_is_hashed(self):
+        src = self._emit({
+            "M": {
+                "type": "object",
+                "required": ["tags"],
+                "properties": {"tags": {"type": "array", "items": {"type": "string"}}},
+            },
+        }, "M")
+        self.assertNotIn("func hash(into hasher:", src)
+
+    def test_hash_combine_uses_camel_case_property_names(self):
+        src = self._emit({
+            "M": {
+                "type": "object",
+                "required": ["display_name"],
+                "properties": {
+                    "display_name": {"type": "string"},
+                    "extra_data": {
+                        "type": "object",
+                        "additionalProperties": {"type": "string"},
+                    },
+                },
+            },
+        }, "M")
+        self.assertIn("hasher.combine(displayName)", src)
+        self.assertNotIn("hasher.combine(display_name)", src)
 
 
 class EnumEmissionTests(unittest.TestCase):
