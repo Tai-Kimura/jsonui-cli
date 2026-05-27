@@ -77,6 +77,43 @@ class ViewModelScaffoldTypeTests(unittest.TestCase):
             self.assertIn("import kotlinx.coroutines.flow.asStateFlow", code)
 
 
+class ObservableVarProtocolTests(unittest.TestCase):
+    """Bug regression: ``_var_proto_signature`` in android_generator was
+    bypassing the StateFlow path baked into ``protocol_sync``. The
+    Android Protocol must declare observable vars as
+    ``val name: StateFlow<T>`` even when invoked through the platform-
+    specific signature builder (which the Android generator passes to
+    ``collect_protocol_members``)."""
+
+    def test_observable_var_emits_state_flow_in_protocol_interface(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gen = _make_generator(root)
+            spec = _make_spec(
+                "HistoryList",
+                vars=[
+                    VarDef(
+                        name="filterSheetData",
+                        type="HistoryFilterSheetData",
+                        observable=True,
+                    ),
+                    VarDef(
+                        name="counter",
+                        type="Int",
+                        observable=False,
+                    ),
+                ],
+            )
+            code = gen.generate_viewmodel_protocol(spec, impl_source=None)
+        # Observable var → StateFlow getter.
+        self.assertIn(
+            "val filterSheetData: StateFlow<HistoryFilterSheetData>",
+            code,
+        )
+        # Non-observable stays as plain `var`.
+        self.assertIn("var counter: Int", code)
+
+
 class ObservableVarScaffoldTests(unittest.TestCase):
     """Bug fix: ``observable: true`` vars emit Compose canonical
     ``private MutableStateFlow + override val StateFlow.asStateFlow()``
