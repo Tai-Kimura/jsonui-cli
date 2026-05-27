@@ -180,7 +180,9 @@ class IosApiModelGenerator:
         # decoder reads the sibling discriminator first, then dispatches into
         # the matching variant decode; encoder is symmetric.
         if has_oneof:
-            body_lines.extend(_emit_swift_oneof_init_from_decoder(schema, enum_names))
+            body_lines.extend(
+                _emit_swift_oneof_init_from_decoder(schema, enum_names, enums_by_name)
+            )
             body_lines.extend(_emit_swift_oneof_encode_to_encoder(schema, enum_names))
 
         # Explicit ``hash(into:)`` when Swift auto-synthesis would fail —
@@ -601,9 +603,19 @@ def _emit_swift_memberwise_init(
 def _emit_swift_oneof_init_from_decoder(
     schema: SchemaDef,
     enum_names: set[str],
+    enums_by_name: dict[str, EnumDef],
 ) -> list[str]:
     """Emit ``init(from decoder:)`` that dispatches each oneOf field on its
-    discriminator sibling's wire value."""
+    discriminator sibling.
+
+    When the discriminator sibling is an inline-derived enum (the common
+    case for swaggers that declare ``type: string, enum: [...]``), the
+    dispatch ``switch`` compares against enum case identifiers
+    (``case .conversationId``). When the sibling is a plain ``String``,
+    we keep the string-literal cases. Both forms preserve the
+    ``default: .unknown`` fallback for forward-compat with new server
+    values.
+    """
     lines: list[str] = ["", "    init(from decoder: Decoder) throws {"]
     lines.append("        let container = try decoder.container(keyedBy: CodingKeys.self)")
 
@@ -612,8 +624,6 @@ def _emit_swift_oneof_init_from_decoder(
         if f.type.is_one_of_ref:
             continue
         name = _swift_property_name(f)
-        if f.type.is_one_of_ref:
-            continue
         type_str = _swift_type_with_enums(f.type, enum_names)
         bare = type_str.rstrip("?")
         if f.type.nullable:
@@ -630,9 +640,16 @@ def _emit_swift_oneof_init_from_decoder(
         if not f.type.is_one_of_ref or f.type.one_of is None:
             continue
         prop = _swift_property_name(f)
-        type_name = _swift_oneof_nested_type_name(f)
         disc_field = _find_field_by_wire_name(schema, f.type.one_of.discriminator_property)
         disc_prop = _swift_property_name(disc_field) if disc_field else f.type.one_of.discriminator_property
+        disc_enum = None
+        if (
+            disc_field is not None
+            and disc_field.type.is_enum_ref
+            and disc_field.type.ref_name in enums_by_name
+        ):
+            disc_enum = enums_by_name[disc_field.type.ref_name]
+
         lines.append(f"        switch self.{disc_prop} {{")
         for variant in f.type.one_of.variants:
             case = _swift_oneof_case_ident(variant.discriminator_value)
@@ -642,7 +659,26 @@ def _emit_swift_oneof_init_from_decoder(
                 else f"try container.decodeIfPresent({variant.ref_name}Dto.self, forKey: .{prop}) ?? "
                      f"{variant.ref_name}Dto()"
             )
-            lines.append(f'        case "{variant.discriminator_value}":')
+            if disc_enum is not None:
+                # discriminator is enum-typed → reference the enum case
+                # identifier rather than a raw string literal so the
+                # ``switch self.type`` (typed) compiles.
+                enum_case_raw = resolve_enum_case_for_default(
+                    disc_enum, variant.discriminator_value
+                )
+                if enum_case_raw is None:
+                    raise ValueError(
+                        f"Schema {schema.name!r}: oneOf mapping value "
+                        f"{variant.discriminator_value!r} is not a case of "
+                        f"enum {disc_enum.name!r}. Add the value to the "
+                        f"enum or remove it from the discriminator mapping."
+                    )
+                enum_case = escape_keyword(
+                    snake_to_camel(enum_case_raw), language="swift"
+                )
+                lines.append(f"        case .{enum_case}:")
+            else:
+                lines.append(f'        case "{variant.discriminator_value}":')
             lines.append(f"            self.{prop} = .{case}({decode_call})")
         lines.append("        default:")
         lines.append(f"            self.{prop} = .unknown")

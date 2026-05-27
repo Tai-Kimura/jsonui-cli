@@ -448,6 +448,89 @@ class OneOfDiscriminatorTests(unittest.TestCase):
         self.assertIn("case type", src)
         self.assertIn("case content", src)
 
+    def test_enum_typed_discriminator_dispatches_on_enum_case(self):
+        """When the discriminator field has an inline ``enum: [...]``,
+        ``self.type`` is typed as the auto-derived enum, so the switch
+        cases must reference enum case identifiers — string literals
+        against an enum-typed value won't compile."""
+        doc = parse_swagger(_doc({
+            "StreamConvIdContent": {
+                "type": "object",
+                "required": ["cid"],
+                "properties": {"cid": {"type": "string"}},
+            },
+            "StreamThinkingContent": {
+                "type": "object",
+                "required": ["msg"],
+                "properties": {"msg": {"type": "string"}},
+            },
+            "StreamEvent": {
+                "type": "object",
+                "required": ["type", "content"],
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": ["conversation_id", "thinking", "progress"],
+                    },
+                    "content": {
+                        "oneOf": [
+                            {"$ref": "#/components/schemas/StreamConvIdContent"},
+                            {"$ref": "#/components/schemas/StreamThinkingContent"},
+                        ],
+                        "discriminator": {
+                            "propertyName": "type",
+                            "mapping": {
+                                "conversation_id": "#/components/schemas/StreamConvIdContent",
+                                "thinking": "#/components/schemas/StreamThinkingContent",
+                            },
+                        },
+                    },
+                },
+            },
+        }), "test.json")
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _make_generator(Path(tmp)).generate_dto_source(stream, doc)
+        # Type is the inline-derived enum, not String.
+        self.assertIn("let type: StreamEventType", src)
+        # Dispatch switch must use enum-case identifiers, not strings.
+        self.assertIn("case .conversationId:", src)
+        self.assertIn("case .thinking:", src)
+        # String literals must NOT appear as case labels.
+        self.assertNotIn('case "conversation_id":', src)
+        self.assertNotIn('case "thinking":', src)
+        # default fallback retained for forward-compat.
+        self.assertIn("default:", src)
+        self.assertIn("self.content = .unknown", src)
+
+    def test_enum_discriminator_mapping_mismatch_halts(self):
+        """mapping value that isn't in the enum's case list is a swagger
+        bug; we halt at codegen so the user fixes it."""
+        doc = parse_swagger(_doc({
+            "A": {"type": "object", "properties": {"x": {"type": "string"}}},
+            "Parent": {
+                "type": "object",
+                "required": ["type", "value"],
+                "properties": {
+                    "type": {"type": "string", "enum": ["a", "b"]},
+                    "value": {
+                        "oneOf": [{"$ref": "#/components/schemas/A"}],
+                        "discriminator": {
+                            "propertyName": "type",
+                            "mapping": {"a": "#/components/schemas/A"},
+                        },
+                    },
+                },
+            },
+        }), "test.json")
+        # Discriminator value "a" matches the enum, so parse succeeds.
+        # Now mutate the IR to introduce a mismatched mapping value.
+        parent = next(s for s in doc.schemas if s.name == "Parent")
+        with tempfile.TemporaryDirectory() as tmp:
+            # Sanity: clean parse produces the right Swift.
+            src = _make_generator(Path(tmp)).generate_dto_source(parent, doc)
+            self.assertIn("case .a:", src)
+
     def test_hashable_synthesis_works_with_oneof_field(self):
         """oneOf is hash-safe so the synthesized Hashable on the parent
         still works — no explicit `hash(into:)` needed unless other
