@@ -21,11 +21,12 @@ from pathlib import Path
 
 from ..core.generated_marker import comment_footer, comment_header
 from ..core.impl_updater import atomic_write_text
-from ..core.openapi_naming import factory_name, snake_to_camel
+from ..core.openapi_naming import factory_name, snake_to_camel, snake_to_pascal
 from ..core.schema_ir import (
     EnumDef,
     FieldDef,
     FieldType,
+    OneOfRef,
     PrimitiveKind,
     SchemaDef,
     SwaggerDocument,
@@ -92,6 +93,7 @@ class WebApiModelGenerator:
         )
         footer = comment_footer()
         enum_names = {e.name for e in doc.enums}
+        has_oneof = any(f.type.is_one_of_ref for f in schema.fields)
 
         lines: list[str] = []
         # Import enum / nested DTO refs that appear in this schema.
@@ -99,6 +101,14 @@ class WebApiModelGenerator:
             lines.append(imp)
         if lines:
             lines.append("")
+
+        # Emit a discriminated-union type per oneOf field, before the
+        # interface so the interface can reference it.
+        for f in schema.fields:
+            if f.type.is_one_of_ref and f.type.one_of is not None:
+                lines.extend(_emit_ts_oneof_union(schema, f, f.type.one_of))
+                lines.append("")
+
         if schema.description:
             lines.extend(_jsdoc_lines(schema.description))
         if schema.deprecated:
@@ -107,13 +117,25 @@ class WebApiModelGenerator:
             lines.append("// additionalProperties: false (strict — extra fields are dropped on decode)")
         lines.append(f"export interface {schema.name}Dto {{")
         for f in schema.fields:
-            lines.extend(self._dto_field_lines(f, enum_names))
+            lines.extend(self._dto_field_lines(f, enum_names, schema))
         lines.append("}")
 
         # camelCase mode also needs parse/serialize helpers since the wire
-        # format is snake_case.
-        if self._config.case_convention == "camelCase" and self._has_wire_camel_skew(schema):
+        # format is snake_case. Skip when the schema has oneOf — the
+        # dedicated dispatch helpers (emitted below) own the parse/serialize
+        # surface for that case.
+        if (
+            self._config.case_convention == "camelCase"
+            and self._has_wire_camel_skew(schema)
+            and not has_oneof
+        ):
             lines.extend(self._parse_serialize_helpers(schema, enum_names))
+
+        # oneOf-bearing schemas need dispatch helpers regardless of case
+        # convention — caller passes raw JSON, helper wraps each variant
+        # in the corresponding ``{ kind, data }`` shape.
+        if has_oneof:
+            lines.extend(_emit_ts_oneof_helpers(schema, enum_names, self._config.case_convention))
 
         body = "\n".join(lines)
         return f"{header}\n\n{body}\n\n{footer}\n"
@@ -136,13 +158,21 @@ class WebApiModelGenerator:
                 lines.append(f'import type {{ {name}Dto }} from "./{name}Dto";')
         return lines
 
-    def _dto_field_lines(self, field: FieldDef, enum_names: set[str]) -> list[str]:
+    def _dto_field_lines(
+        self,
+        field: FieldDef,
+        enum_names: set[str],
+        schema: SchemaDef,
+    ) -> list[str]:
         out: list[str] = []
         if field.description:
             out.extend(f"  {ln}" for ln in _jsdoc_lines(field.description))
         if field.deprecated:
             out.append("  /** @deprecated */")
-        type_str = _ts_type_with_enums(field.type, enum_names)
+        if field.type.is_one_of_ref:
+            type_str = _ts_oneof_union_name(schema, field)
+        else:
+            type_str = _ts_type_with_enums(field.type, enum_names)
         name = self._ts_property_name(field)
         # Optional fields use ``?:`` rather than ``| undefined`` for ergonomics.
         sep = "?:" if field.type.nullable else ":"
@@ -325,3 +355,119 @@ def _ts_type_with_enums(ftype: FieldType, enum_names: set[str]) -> str:
         inner = _ts_type_with_enums(ftype.element, enum_names) if ftype.element else "string"
         return f"Record<string, {inner}>"
     return "string"
+
+
+# --------------------------------------------------------------------------- #
+# oneOf / discriminator helpers
+# --------------------------------------------------------------------------- #
+
+
+def _ts_oneof_union_name(schema: SchemaDef, field: FieldDef) -> str:
+    """``StreamEvent`` + ``content`` → ``StreamEventContent``."""
+    return f"{schema.name}{snake_to_pascal(field.wire_name)}"
+
+
+def _ts_oneof_kind_literal(discriminator_value: str) -> str:
+    """Discriminator value as a quoted TS string literal for the ``kind`` tag."""
+    escaped = discriminator_value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _emit_ts_oneof_union(schema: SchemaDef, field: FieldDef, one_of: OneOfRef) -> list[str]:
+    """Emit ``export type StreamEventContent = { kind: "..."; data: ... } | ...``."""
+    name = _ts_oneof_union_name(schema, field)
+    lines: list[str] = [f"export type {name} ="]
+    for variant in one_of.variants:
+        kind = _ts_oneof_kind_literal(variant.discriminator_value)
+        lines.append(f"  | {{ kind: {kind}; data: {variant.ref_name}Dto }}")
+    lines.append('  | { kind: "unknown" };')
+    return lines
+
+
+def _emit_ts_oneof_helpers(
+    schema: SchemaDef,
+    enum_names: set[str],
+    case_convention: str,
+) -> list[str]:
+    """Emit ``parse{Name}Dto`` / ``serialize{Name}Dto`` discriminator dispatchers.
+
+    Naming follows the existing wire-skew helper convention so consumers
+    have a single entry point regardless of whether the helper exists
+    because of casing or polymorphism.
+
+    The helpers assume wire-format names (snake_case) on the input/output
+    side. camelCase mode + oneOf is documented as a v2 follow-up — the
+    plain dispatch is correct for snake_case wire; user can wrap if
+    additional case conversion is required.
+    """
+    name = schema.name
+    parse_fn = f"parse{name}Dto"
+    ser_fn = f"serialize{name}Dto"
+
+    # Build per-field handling. For non-oneOf fields we straight-pass the
+    # value through (caller is responsible for any per-field shape
+    # conversion). For oneOf fields we wrap in the discriminated union.
+    disc_assignments_parse: list[str] = []
+    disc_assignments_serialize: list[str] = []
+
+    out: list[str] = ["", f"export const {parse_fn} = (wire: any): {name}Dto => {{"]
+    # Build the object literal field by field.
+    for f in schema.fields:
+        wire_name = f.wire_name
+        prop_name = wire_name  # case convention applied only to camel mode (skipped here)
+        if f.type.is_one_of_ref and f.type.one_of is not None:
+            union_name = _ts_oneof_union_name(schema, f)
+            disc_field = next(
+                (g for g in schema.fields if g.wire_name == f.type.one_of.discriminator_property),
+                None,
+            )
+            disc_wire = disc_field.wire_name if disc_field else f.type.one_of.discriminator_property
+            out.append(f"  let {prop_name}: {union_name};")
+            out.append(f"  switch (wire[{_ts_oneof_kind_literal(disc_wire)}]) {{")
+            for variant in f.type.one_of.variants:
+                kind = _ts_oneof_kind_literal(variant.discriminator_value)
+                out.append(f"    case {kind}:")
+                out.append(
+                    f"      {prop_name} = {{ kind: {kind}, "
+                    f"data: wire[{_ts_oneof_kind_literal(wire_name)}] as {variant.ref_name}Dto }};"
+                )
+                out.append("      break;")
+            out.append("    default:")
+            out.append(f'      {prop_name} = {{ kind: "unknown" }};')
+            out.append("  }")
+    # Build the return object.
+    return_parts: list[str] = []
+    for f in schema.fields:
+        wire_name = f.wire_name
+        if f.type.is_one_of_ref:
+            return_parts.append(f"{wire_name}: {wire_name}")
+        else:
+            return_parts.append(f"{wire_name}: wire[{_ts_oneof_kind_literal(wire_name)}]")
+    out.append("  return { " + ", ".join(return_parts) + " };")
+    out.append("};")
+
+    # serialize: walk fields, unwrap oneOf variant back to raw data
+    out.append("")
+    out.append(f"export const {ser_fn} = (model: {name}Dto): any => {{")
+    obj_parts: list[str] = []
+    for f in schema.fields:
+        wire_name = f.wire_name
+        prop_name = wire_name
+        if f.type.is_one_of_ref and f.type.one_of is not None:
+            out.append(f"  let {prop_name}: unknown;")
+            out.append(f"  switch (model.{wire_name}.kind) {{")
+            for variant in f.type.one_of.variants:
+                kind = _ts_oneof_kind_literal(variant.discriminator_value)
+                out.append(f"    case {kind}:")
+                out.append(f"      {prop_name} = model.{wire_name}.data;")
+                out.append("      break;")
+            out.append('    case "unknown":')
+            out.append(f"      {prop_name} = null;")
+            out.append("      break;")
+            out.append("  }")
+            obj_parts.append(f"[{_ts_oneof_kind_literal(wire_name)}]: {prop_name}")
+        else:
+            obj_parts.append(f"[{_ts_oneof_kind_literal(wire_name)}]: model.{wire_name}")
+    out.append("  return { " + ", ".join(obj_parts) + " };")
+    out.append("};")
+    return out

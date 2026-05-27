@@ -344,6 +344,122 @@ class HashableConformanceTests(unittest.TestCase):
         self.assertNotIn("hasher.combine(display_name)", src)
 
 
+class OneOfDiscriminatorTests(unittest.TestCase):
+    """oneOf + discriminator emits a nested ``enum Content: Codable`` and
+    custom ``init(from:)`` / ``encode(to:)`` that dispatch on the sibling
+    discriminator. See bug
+    ``jui-codegen-oneof-not-supported-blocks-discriminated-union-schemas``.
+    """
+
+    def _stream_event_doc(self):
+        return parse_swagger(_doc({
+            "StreamConvIdContent": {
+                "type": "object",
+                "required": ["cid"],
+                "properties": {"cid": {"type": "string"}},
+            },
+            "StreamThinkingContent": {
+                "type": "object",
+                "required": ["msg"],
+                "properties": {"msg": {"type": "string"}},
+            },
+            "StreamEvent": {
+                "type": "object",
+                "required": ["type", "content"],
+                "properties": {
+                    "type": {"type": "string"},
+                    "content": {
+                        "oneOf": [
+                            {"$ref": "#/components/schemas/StreamConvIdContent"},
+                            {"$ref": "#/components/schemas/StreamThinkingContent"},
+                        ],
+                        "discriminator": {
+                            "propertyName": "type",
+                            "mapping": {
+                                "conversation_id": "#/components/schemas/StreamConvIdContent",
+                                "thinking": "#/components/schemas/StreamThinkingContent",
+                            },
+                        },
+                    },
+                },
+            },
+        }), "test.json")
+
+    def test_nested_enum_emitted_with_variants(self):
+        doc = self._stream_event_doc()
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _make_generator(Path(tmp)).generate_dto_source(stream, doc)
+        self.assertIn("let content: Content", src)
+        self.assertIn("enum Content: Codable, Sendable, Equatable, Hashable {", src)
+        self.assertIn("case conversationId(StreamConvIdContentDto)", src)
+        self.assertIn("case thinking(StreamThinkingContentDto)", src)
+        self.assertIn("case unknown", src)
+
+    def test_init_from_decoder_dispatches_on_discriminator(self):
+        doc = self._stream_event_doc()
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _make_generator(Path(tmp)).generate_dto_source(stream, doc)
+        self.assertIn("init(from decoder: Decoder) throws {", src)
+        self.assertIn(
+            'self.type = try container.decode(String.self, forKey: .type)',
+            src,
+        )
+        self.assertIn("switch self.type {", src)
+        self.assertIn(
+            'case "conversation_id":\n            self.content = .conversationId('
+            'try container.decode(StreamConvIdContentDto.self, forKey: .content))',
+            src,
+        )
+        self.assertIn("default:\n            self.content = .unknown", src)
+
+    def test_encode_to_encoder_symmetric(self):
+        doc = self._stream_event_doc()
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _make_generator(Path(tmp)).generate_dto_source(stream, doc)
+        self.assertIn("func encode(to encoder: Encoder) throws {", src)
+        self.assertIn("try container.encode(self.type, forKey: .type)", src)
+        self.assertIn(
+            "case .conversationId(let value): try container.encode(value, forKey: .content)",
+            src,
+        )
+        self.assertIn(
+            "case .unknown: try container.encodeNil(forKey: .content)",
+            src,
+        )
+
+    def test_memberwise_init_emitted(self):
+        """Swift suppresses memberwise init once we write init(from:); we
+        restore it manually so consumers can construct DTOs at call sites."""
+        doc = self._stream_event_doc()
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _make_generator(Path(tmp)).generate_dto_source(stream, doc)
+        self.assertIn("init(type: String, content: Content) {", src)
+
+    def test_coding_keys_always_emitted_for_oneof(self):
+        doc = self._stream_event_doc()
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _make_generator(Path(tmp)).generate_dto_source(stream, doc)
+        self.assertIn("enum CodingKeys: String, CodingKey {", src)
+        self.assertIn("case type", src)
+        self.assertIn("case content", src)
+
+    def test_hashable_synthesis_works_with_oneof_field(self):
+        """oneOf is hash-safe so the synthesized Hashable on the parent
+        still works — no explicit `hash(into:)` needed unless other
+        unsafe fields are present."""
+        doc = self._stream_event_doc()
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _make_generator(Path(tmp)).generate_dto_source(stream, doc)
+        # All fields are hash-safe (String + oneOf), so no explicit body.
+        self.assertNotIn("func hash(into hasher:", src)
+
+
 class EnumEmissionTests(unittest.TestCase):
     def test_string_enum(self):
         doc = parse_swagger(_doc({

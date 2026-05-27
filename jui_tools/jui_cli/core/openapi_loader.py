@@ -31,6 +31,8 @@ from .schema_ir import (
     EnumDef,
     FieldDef,
     FieldType,
+    OneOfRef,
+    OneOfVariant,
     PrimitiveKind,
     SchemaDef,
     SwaggerDocument,
@@ -223,6 +225,25 @@ def parse_swagger(
         )
 
     schemas.extend(inline_schemas)
+
+    # oneOf discriminator: validate that each parent carrying a one_of
+    # field actually declares a sibling property matching
+    # ``discriminator.propertyName``. Catches typos in swagger early.
+    for schema in schemas:
+        for f in schema.fields:
+            if f.type.is_one_of_ref and f.type.one_of is not None:
+                disc_prop = f.type.one_of.discriminator_property
+                if not any(g.wire_name == disc_prop for g in schema.fields):
+                    raise OpenAPILoadError(
+                        "oneof-discriminator-sibling-missing",
+                        f"Schema {schema.name!r} field {f.wire_name!r} uses "
+                        f"discriminator.propertyName={disc_prop!r} but no "
+                        f"sibling property with that name exists in the "
+                        f"parent schema. Add the property or fix the "
+                        f"discriminator name.",
+                        source=source_path,
+                        pointer=schema.source_pointer,
+                    )
 
     # Cycle detection — only direct self-reference without collection
     # indirection. Collection-mediated cycles are explicitly allowed (§3.3 / Q13).
@@ -452,22 +473,201 @@ def _check_ref_local(ref: str, *, source_path: str, pointer: str) -> None:
     )
 
 
-def _check_polymorphic(body: dict[str, Any], *, source_path: str, pointer: str) -> None:
-    """Halt on ``oneOf`` / ``anyOf`` / discriminator (Q11)."""
-    for key in ("oneOf", "anyOf"):
-        if key in body:
+def _parse_one_of_discriminator(
+    body: dict[str, Any],
+    *,
+    top_level_names: set[str],
+    source_path: str,
+    pointer: str,
+) -> OneOfRef:
+    """Parse ``{ oneOf: [...], discriminator: { propertyName, mapping } }``.
+
+    Validates everything the v1 contract requires:
+
+    - ``discriminator`` is a dict with non-empty ``propertyName`` (string)
+    - ``mapping`` is a non-empty dict (explicit mapping required in v1)
+    - every mapping value is a same-file ``$ref`` to a top-level schema
+    - every ``oneOf`` entry is itself a ``$ref`` (inline variants not
+      supported)
+    - the set of variants in ``oneOf`` matches the set of mapped refs
+
+    Returns an :class:`OneOfRef` with variants in **mapping order** so
+    generators emit deterministic ``case`` / ``when`` branches.
+    """
+    disc = body.get("discriminator")
+    if not isinstance(disc, dict):
+        raise OpenAPILoadError(
+            "invalid-discriminator",
+            "'discriminator' must be a dict with 'propertyName' and 'mapping'",
+            source=source_path,
+            pointer=pointer,
+        )
+    prop_name = disc.get("propertyName")
+    if not isinstance(prop_name, str) or not prop_name.strip():
+        raise OpenAPILoadError(
+            "invalid-discriminator",
+            "'discriminator.propertyName' must be a non-empty string",
+            source=source_path,
+            pointer=pointer,
+        )
+    mapping = disc.get("mapping")
+    if not isinstance(mapping, dict) or not mapping:
+        raise OpenAPILoadError(
+            "invalid-discriminator",
+            "'discriminator.mapping' is required (explicit map of "
+            "discriminator value → variant $ref). Default-from-schema-name "
+            "is deferred to v2.",
+            source=source_path,
+            pointer=pointer,
+        )
+
+    one_of = body.get("oneOf")
+    if not isinstance(one_of, list) or not one_of:
+        raise OpenAPILoadError(
+            "invalid-oneof",
+            "'oneOf' must be a non-empty list of $ref objects",
+            source=source_path,
+            pointer=pointer,
+        )
+
+    # Collect variant ref names from oneOf (inline variants not supported).
+    one_of_refs: set[str] = set()
+    for i, entry in enumerate(one_of):
+        if not isinstance(entry, dict) or "$ref" not in entry or len(entry) != 1:
             raise OpenAPILoadError(
-                "polymorphic-not-supported",
-                f"'{key}' polymorphism is not supported in v1 (Q11). "
-                f"Wait for v2 sealed-class / discriminated-union codegen.",
+                "invalid-oneof",
+                "Each oneOf entry must be a `$ref` object — inline variants "
+                "are not supported in v1.",
+                source=source_path,
+                pointer=f"{pointer}/oneOf/{i}",
+            )
+        ref = entry["$ref"]
+        _check_ref_local(ref, source_path=source_path, pointer=f"{pointer}/oneOf/{i}")
+        ref_name = ref.rsplit("/", 1)[-1]
+        if ref_name not in top_level_names:
+            raise OpenAPILoadError(
+                "oneof-variant-not-found",
+                f"oneOf variant {ref_name!r} is not a top-level schema. "
+                f"Inline / nested variants are not supported in v1.",
+                source=source_path,
+                pointer=f"{pointer}/oneOf/{i}",
+            )
+        one_of_refs.add(ref_name)
+
+    # Parse mapping in declared order; validate each ref + cross-check.
+    variants: list[OneOfVariant] = []
+    mapped_refs: set[str] = set()
+    for disc_value, ref in mapping.items():
+        if not isinstance(disc_value, str) or not disc_value.strip():
+            raise OpenAPILoadError(
+                "invalid-discriminator",
+                "discriminator.mapping keys must be non-empty strings",
                 source=source_path,
                 pointer=pointer,
             )
-    if "discriminator" in body:
+        if not isinstance(ref, str):
+            raise OpenAPILoadError(
+                "invalid-discriminator",
+                f"discriminator.mapping[{disc_value!r}] must be a $ref string",
+                source=source_path,
+                pointer=pointer,
+            )
+        _check_ref_local(ref, source_path=source_path, pointer=pointer)
+        ref_name = ref.rsplit("/", 1)[-1]
+        if ref_name not in top_level_names:
+            raise OpenAPILoadError(
+                "oneof-variant-not-found",
+                f"discriminator.mapping[{disc_value!r}] → {ref_name!r} is "
+                f"not a top-level schema",
+                source=source_path,
+                pointer=pointer,
+            )
+        if ref_name not in one_of_refs:
+            raise OpenAPILoadError(
+                "discriminator-mapping-mismatch",
+                f"discriminator.mapping[{disc_value!r}] points to {ref_name!r} "
+                f"but this schema is not listed in the oneOf array. Add it "
+                f"to oneOf or remove the mapping entry.",
+                source=source_path,
+                pointer=pointer,
+            )
+        variants.append(OneOfVariant(disc_value, ref_name))
+        mapped_refs.add(ref_name)
+
+    # Every oneOf entry must have a mapping (otherwise it's unreachable).
+    unmapped = one_of_refs - mapped_refs
+    if unmapped:
+        raise OpenAPILoadError(
+            "discriminator-mapping-mismatch",
+            "oneOf variants are missing from discriminator.mapping: "
+            + ", ".join(sorted(unmapped))
+            + ". Add explicit mapping entries for each variant.",
+            source=source_path,
+            pointer=pointer,
+        )
+
+    return OneOfRef(
+        discriminator_property=prop_name,
+        variants=tuple(variants),
+    )
+
+
+def _check_polymorphic(
+    body: dict[str, Any],
+    *,
+    source_path: str,
+    pointer: str,
+    at_field_level: bool = False,
+) -> None:
+    """Halt on unsupported polymorphism.
+
+    Allowed in v1:
+    - ``oneOf`` **with** ``discriminator`` and explicit ``mapping``, **only
+      at field level** (parsed in :func:`_field_type`)
+
+    Halted:
+    - Schema-level ``oneOf`` even with discriminator — top-level
+      discriminated unions are a v2 follow-up
+    - Field-level ``oneOf`` alone (no discriminator) — no way to dispatch
+    - ``anyOf`` — untagged union, codegen pattern unclear, deferred to v2
+    - ``discriminator`` without ``oneOf`` — meaningless alone
+    """
+    if "anyOf" in body:
         raise OpenAPILoadError(
             "polymorphic-not-supported",
-            "'discriminator' is not supported in v1 (Q11). "
-            "Used with oneOf/anyOf for polymorphic types, both halted in v1.",
+            "'anyOf' polymorphism is not supported. "
+            "Wait for v2 untagged-union codegen.",
+            source=source_path,
+            pointer=pointer,
+        )
+    if "oneOf" in body and "discriminator" not in body:
+        raise OpenAPILoadError(
+            "polymorphic-not-supported",
+            "'oneOf' without 'discriminator' is not supported. "
+            "Add a discriminator block with an explicit mapping so codegen "
+            "knows which sibling field tags the union and which value selects "
+            "which variant.",
+            source=source_path,
+            pointer=pointer,
+        )
+    if "discriminator" in body and "oneOf" not in body:
+        raise OpenAPILoadError(
+            "polymorphic-not-supported",
+            "'discriminator' without 'oneOf' is meaningless. "
+            "Either remove the discriminator or add a oneOf list of variants.",
+            source=source_path,
+            pointer=pointer,
+        )
+    # Schema-level oneOf even with discriminator is deferred to v2 —
+    # discriminated envelopes (the OpenAPI-standard pattern) need different
+    # codegen than field-level oneOf and aren't yet implemented.
+    if not at_field_level and "oneOf" in body and "discriminator" in body:
+        raise OpenAPILoadError(
+            "polymorphic-not-supported",
+            "Schema-level 'oneOf' + 'discriminator' (top-level discriminated "
+            "envelope) is not supported in v1. v1 supports oneOf + discriminator "
+            "only when used inside a property (field-level union with a sibling "
+            "tag field). Wait for v2 envelope codegen.",
             source=source_path,
             pointer=pointer,
         )
@@ -582,7 +782,24 @@ def _field_type(
     (transitively, since nested inline objects can themselves contain inline
     objects/enums).
     """
-    _check_polymorphic(body, source_path=source_path, pointer=pointer)
+    _check_polymorphic(body, source_path=source_path, pointer=pointer, at_field_level=True)
+
+    # 1pre. ``oneOf`` + ``discriminator`` with explicit ``mapping`` →
+    # discriminated union. The parent schema's field becomes a tagged enum;
+    # generators emit a custom Codable / KSerializer / discriminated union
+    # type and dispatch on the sibling property named in ``discriminator``.
+    if "oneOf" in body and "discriminator" in body:
+        one_of = _parse_one_of_discriminator(
+            body,
+            top_level_names=top_level_names,
+            source_path=source_path,
+            pointer=pointer,
+        )
+        return (
+            FieldType(is_one_of_ref=True, one_of=one_of),
+            [],
+            [],
+        )
 
     # 1a. Field-level ``allOf: [{$ref: X}]`` is the OpenAPI 3 idiom for adding
     # nullable / default / description to a $ref'd type. Unwrap it to the

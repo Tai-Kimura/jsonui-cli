@@ -208,6 +208,103 @@ class RefTypeTests(unittest.TestCase):
         self.assertIn("labels: Record<string, TagDto>;", src)
 
 
+class OneOfDiscriminatorTests(unittest.TestCase):
+    """oneOf + discriminator emits a TypeScript discriminated-union type
+    + ``parse{Name}Dto`` / ``serialize{Name}Dto`` helpers that dispatch
+    on the sibling discriminator wire value. See bug
+    ``jui-codegen-oneof-not-supported-blocks-discriminated-union-schemas``.
+    """
+
+    def _stream_event_doc(self):
+        return parse_swagger(_doc({
+            "StreamConvIdContent": {
+                "type": "object",
+                "required": ["cid"],
+                "properties": {"cid": {"type": "string"}},
+            },
+            "StreamThinkingContent": {
+                "type": "object",
+                "required": ["msg"],
+                "properties": {"msg": {"type": "string"}},
+            },
+            "StreamEvent": {
+                "type": "object",
+                "required": ["type", "content"],
+                "properties": {
+                    "type": {"type": "string"},
+                    "content": {
+                        "oneOf": [
+                            {"$ref": "#/components/schemas/StreamConvIdContent"},
+                            {"$ref": "#/components/schemas/StreamThinkingContent"},
+                        ],
+                        "discriminator": {
+                            "propertyName": "type",
+                            "mapping": {
+                                "conversation_id": "#/components/schemas/StreamConvIdContent",
+                                "thinking": "#/components/schemas/StreamThinkingContent",
+                            },
+                        },
+                    },
+                },
+            },
+        }), "test.json")
+
+    def test_discriminated_union_type_emitted(self):
+        doc = self._stream_event_doc()
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp)).generate_dto_source(stream, doc)
+        self.assertIn("export type StreamEventContent =", src)
+        self.assertIn(
+            '| { kind: "conversation_id"; data: StreamConvIdContentDto }',
+            src,
+        )
+        self.assertIn(
+            '| { kind: "thinking"; data: StreamThinkingContentDto }',
+            src,
+        )
+        self.assertIn('| { kind: "unknown" };', src)
+
+    def test_interface_uses_union_type(self):
+        doc = self._stream_event_doc()
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp)).generate_dto_source(stream, doc)
+        self.assertIn("export interface StreamEventDto {", src)
+        self.assertIn("content: StreamEventContent;", src)
+
+    def test_parse_helper_dispatches_on_discriminator(self):
+        doc = self._stream_event_doc()
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp)).generate_dto_source(stream, doc)
+        self.assertIn(
+            "export const parseStreamEventDto = (wire: any): StreamEventDto =>",
+            src,
+        )
+        self.assertIn('switch (wire["type"]) {', src)
+        self.assertIn('case "conversation_id":', src)
+        self.assertIn(
+            'content = { kind: "conversation_id", data: '
+            'wire["content"] as StreamConvIdContentDto };',
+            src,
+        )
+        self.assertIn('default:\n      content = { kind: "unknown" };', src)
+
+    def test_serialize_helper_unwraps_union(self):
+        doc = self._stream_event_doc()
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp)).generate_dto_source(stream, doc)
+        self.assertIn(
+            "export const serializeStreamEventDto = (model: StreamEventDto): any =>",
+            src,
+        )
+        self.assertIn("switch (model.content.kind) {", src)
+        self.assertIn('case "conversation_id":\n      content = model.content.data;', src)
+        self.assertIn('case "unknown":\n      content = null;', src)
+
+
 class WriteBehaviorTests(unittest.TestCase):
     def test_dto_written_idempotent(self):
         doc = parse_swagger(_doc(_user_schema()), "test.json")
