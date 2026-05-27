@@ -41,6 +41,28 @@ def register_generate_command(subparsers: argparse._SubParsersAction) -> None:
         help="Skip converters that already exist (used by `jui build`)",
     )
 
+    # jui g api — preview swagger-driven DTO + Domain model generation
+    api_parser = gen_sub.add_parser(
+        "api",
+        help="Preview swagger → DTO + Domain model generation (uses api.schemas filter)",
+    )
+    api_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be generated, but don't write any files",
+    )
+    api_parser.add_argument(
+        "--platform",
+        choices=("ios", "android", "web"),
+        help="Restrict to a single platform",
+    )
+    api_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="as_json",
+        help="Emit JSON (used by MCP wrappers)",
+    )
+
 
 def cmd_generate(args: argparse.Namespace) -> int:
     """Execute jui generate."""
@@ -52,9 +74,129 @@ def cmd_generate(args: argparse.Namespace) -> int:
         return _cmd_generate_screen(args)
     elif gen_type == "converter":
         return _cmd_generate_converter(args)
+    elif gen_type == "api":
+        return _cmd_generate_api(args)
     else:
-        print("Usage: jui generate <project|screen|converter> [options]")
+        print("Usage: jui generate <project|screen|converter|api> [options]")
         return 1
+
+
+def _cmd_generate_api(args: argparse.Namespace) -> int:
+    """Preview / drive the swagger → DTO + Domain pipeline.
+
+    v1 only supports ``--dry-run`` (returns the filter result + planned
+    file list without writing). A future ``jui g api`` without ``--dry-run``
+    will trigger the same emit path as ``jui build`` for the API model
+    portion only (use case 1 in the v3 plan §7 Phase 4). For now,
+    without ``--dry-run`` the user is pointed to ``jui build``.
+    """
+    import json
+
+    from ..core.api_model_sync import (
+        collect_docs,
+        has_planner,
+        plan_for,
+        planners_for,
+    )
+    from ..core.config_manager import ConfigManager
+    from ..core.openapi_loader import OpenAPILoadError
+
+    config_mgr = ConfigManager()
+    if not config_mgr.exists():
+        msg = "jui.config.json not found. Run 'jui init' first."
+        if getattr(args, "as_json", False):
+            print(json.dumps({"error": msg}, indent=2, ensure_ascii=False))
+        else:
+            print(f"ERROR: {msg}")
+        return 1
+
+    if not args.dry_run:
+        # Without --dry-run we don't write here either — `jui build` is the
+        # canonical write path for the full pipeline. Surface that.
+        msg = (
+            "`jui g api` currently supports --dry-run only. "
+            "Use `jui build` to actually write DTO + Domain files."
+        )
+        if getattr(args, "as_json", False):
+            print(json.dumps({"error": msg}, indent=2, ensure_ascii=False))
+        else:
+            print(msg)
+        return 1
+
+    config = config_mgr.load()
+    platforms = config.get("platforms") or {}
+
+    # Loader returns docs with kept/filtered_out already populated.
+    try:
+        docs = collect_docs(config_mgr)
+    except OpenAPILoadError as e:
+        payload = {
+            "error": str(e),
+            "code": getattr(e, "code", "openapi-load-error"),
+            "source": getattr(e, "source", ""),
+            "pointer": getattr(e, "pointer", ""),
+        }
+        if getattr(args, "as_json", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(f"ERROR [{payload['code']}]: {payload['error']}")
+        return 1
+
+    selected_platforms = (
+        [args.platform] if args.platform else planners_for(args)
+    )
+
+    swagger_files = [
+        {
+            "source_path": d.source_path,
+            "title": d.title,
+            "version": d.version,
+            "kept": sorted(s.name for s in d.schemas) + sorted(e.name for e in d.enums),
+            "filtered_out": sorted(d.filtered_out),
+            "skip_domain_matches": sorted(d.skip_domain_overrides),
+        }
+        for d in docs
+    ]
+
+    per_platform: dict[str, dict] = {}
+    for platform in selected_platforms:
+        if platform not in platforms or not has_planner(platform):
+            continue
+        try:
+            plan = plan_for(platform, config_mgr, platforms[platform], docs)
+        except OpenAPILoadError as e:
+            per_platform[platform] = {"error": str(e)}
+            continue
+        per_platform[platform] = {
+            "would_write_dto": sorted(str(p) for p in plan.expected_files),
+            "would_write_domain_scaffold": sorted(str(p) for p in plan.domain_scaffolds),
+        }
+
+    payload = {
+        "filter_active": any(d.filtered_out or d.skip_domain_overrides for d in docs),
+        "swagger_files": swagger_files,
+        "platforms": per_platform,
+    }
+
+    if getattr(args, "as_json", False):
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        # Human-readable summary
+        for sf in swagger_files:
+            print(f"swagger: {sf['source_path']}")
+            print(f"  title:   {sf['title']} v{sf['version']}")
+            print(f"  kept:    {len(sf['kept'])} schemas/enums")
+            print(f"  excluded: {len(sf['filtered_out'])}")
+            if sf["skip_domain_matches"]:
+                print(f"  skip_domain: {', '.join(sf['skip_domain_matches'])}")
+        for platform, info in per_platform.items():
+            if "error" in info:
+                print(f"\n[{platform}] ERROR: {info['error']}")
+                continue
+            dtos = info["would_write_dto"]
+            doms = info["would_write_domain_scaffold"]
+            print(f"\n[{platform}] would write {len(dtos)} DTO files, {len(doms)} domain scaffolds")
+    return 0
 
 
 def _cmd_generate_project(args: argparse.Namespace) -> int:
