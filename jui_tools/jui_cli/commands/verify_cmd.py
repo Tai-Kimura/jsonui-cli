@@ -226,9 +226,66 @@ def cmd_verify(args: argparse.Namespace) -> int:
             "regeneration is idempotent."
         )
 
-    if args.fail_on_diff and (any(r.has_diff for r in results) or data_orphans):
+    # API model drift — independent of Layout drift, gated by --fail-on-diff.
+    api_drift = _check_api_model_drift(config_mgr, config, args)
+    if api_drift:
+        print(
+            f"\n**API model drift detected ({len(api_drift)} file(s)):**"
+        )
+        for line in api_drift:
+            print(f"- {line}")
+        print(
+            "  → run `jui build` (or `jui g api` once available) to regenerate."
+        )
+
+    if args.fail_on_diff and (any(r.has_diff for r in results) or data_orphans or api_drift):
         return 1
     return 0
+
+
+def _check_api_model_drift(config_mgr, config, args) -> list[str]:
+    """Compare in-memory swagger regen output against on-disk DTOs.
+
+    Implements the §5.5 semantic: ``jui verify`` regenerates the DTO
+    bytes in memory and compares against the files written by the last
+    ``jui build``. Independent of the build pipeline — running
+    ``jui verify`` directly catches drift even when ``jui build``
+    hasn't been run.
+
+    Returns a list of human-readable drift descriptions (empty = no drift).
+    Schema errors (oneOf, multi-file ref, etc.) surface as drift entries
+    so the user sees them via the same report path.
+    """
+    from ..core.api_model_sync import (
+        collect_docs,
+        diff_plan,
+        has_planner,
+        plan_for,
+    )
+    from ..core.openapi_loader import OpenAPILoadError
+
+    platforms = config.get("platforms") or {}
+    selected_platforms = [args.platform] if args.platform else list(platforms.keys())
+
+    try:
+        docs = collect_docs(config_mgr)
+    except OpenAPILoadError as e:
+        return [f"swagger load error: {e}"]
+
+    if not docs:
+        return []
+
+    drift: list[str] = []
+    for platform in selected_platforms:
+        if platform not in platforms or not has_planner(platform):
+            continue
+        try:
+            plan = plan_for(platform, config_mgr, platforms[platform], docs)
+        except OpenAPILoadError as e:
+            drift.append(f"[{platform}] swagger error: {e}")
+            continue
+        drift.extend(f"[{platform}] {line}" for line in diff_plan(plan))
+    return drift
 
 
 def _collect_custom_type_refs(spec):

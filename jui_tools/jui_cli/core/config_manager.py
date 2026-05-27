@@ -16,7 +16,30 @@ DEFAULT_CONFIG = {
     "strings_file": "",
     "type_map_file": ".jsonui-type-map.json",
     "document_tools_path": "",
+    "api_directory": "docs/api",
+    "api": {},
     "platforms": {},
+}
+
+
+# Per-platform defaults for ``api.platforms.<platform>``. Each generator
+# also accepts a ``None`` argument and falls back to its own defaults, but
+# centralizing them here keeps ``jui build --verbose`` output predictable.
+API_PLATFORM_DEFAULTS = {
+    "ios": {
+        "model_dir": "Model",
+        "dto_subdir": "Generated",
+    },
+    "android": {
+        "model_package": "model",
+        "dto_subpackage": "generated",
+        "serializer": "moshi",      # moshi | kotlinx | none
+    },
+    "web": {
+        "model_dir": "models",
+        "dto_subdir": "generated",
+        "case_convention": "snake_case",   # snake_case | camelCase
+    },
 }
 
 
@@ -125,6 +148,40 @@ class ConfigManager:
         config = self.load()
         tmf = config.get("type_map_file", "")
         return self.project_root / tmf if tmf else None
+
+    @property
+    def api_directory(self) -> Path:
+        """Directory containing swagger / OpenAPI JSON files.
+
+        Default: ``docs/api`` under the project root. Override via the
+        top-level ``api_directory`` key in ``jui.config.json``.
+        """
+        config = self.load()
+        return self.project_root / config.get("api_directory", "docs/api")
+
+    def api_platform_config(self, platform: str) -> dict[str, Any]:
+        """Return ``api.platforms.<platform>`` merged with defaults.
+
+        Always returns a dict — missing user config falls back to the
+        builtin defaults defined in :data:`API_PLATFORM_DEFAULTS`.
+        Generators consume this via :meth:`load` + this method.
+        """
+        config = self.load()
+        api_cfg = config.get("api", {}) or {}
+        per_platform = (api_cfg.get("platforms") or {}).get(platform) or {}
+        defaults = API_PLATFORM_DEFAULTS.get(platform, {})
+        return {**defaults, **per_platform}
+
+    def api_schemas_config(self) -> dict[str, Any]:
+        """Return the raw ``api.schemas`` block from ``jui.config.json``.
+
+        Returns an empty dict when unset. The caller (typically
+        :class:`SchemaFilterConfig.from_dict`) normalizes missing keys
+        and ``[]`` values to "filter not in effect" per v2 plan §2.4.
+        """
+        config = self.load()
+        api_cfg = config.get("api", {}) or {}
+        return api_cfg.get("schemas") or {}
 
     @property
     def document_tools_path(self) -> Path | None:

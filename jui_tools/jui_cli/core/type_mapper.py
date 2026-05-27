@@ -165,6 +165,39 @@ class TypeMapper:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         self._types.update(data.get("types", {}))
+        # User entries shadow built-ins and any subsequently auto-registered
+        # swagger schemas. We remember the user-defined keys so
+        # ``register_schemas`` can skip them and report the shadowing.
+        self._user_keys: set[str] = set(data.get("types") or {})
+
+    def register_schemas(self, schema_names: list[str]) -> list[str]:
+        """Register swagger-derived schema names as pass-through types.
+
+        Each registered name resolves to the same identifier on every
+        platform (Domain wrapper type is identical across iOS/Android/Web —
+        ``User`` is always ``User``). The point of the registration is
+        :meth:`is_registered`, which ``jui verify`` uses to decide which
+        type identifiers to flag as missing from ``.jsonui-type-map.json``.
+
+        Per plan §9.2 / C5: **manual entries from
+        ``.jsonui-type-map.json`` always win**. This method silently
+        skips any name already present in the user map and returns the
+        list of skipped (shadowed) names so the caller can surface an
+        info-level log.
+        """
+        shadowed: list[str] = []
+        user_keys = getattr(self, "_user_keys", set())
+        for name in schema_names:
+            if name in user_keys:
+                shadowed.append(name)
+                continue
+            # Don't clobber an existing entry that came from a previous
+            # call — registration is idempotent across multiple swagger
+            # docs that mention the same schema name.
+            if name in self._types and name not in user_keys:
+                continue
+            self._types[name] = {"class": name}
+        return shadowed
 
     def resolve(self, spec_type: str, platform: str = "ios") -> dict[str, Any]:
         """Resolve a spec type to class name, default value, and imports.
