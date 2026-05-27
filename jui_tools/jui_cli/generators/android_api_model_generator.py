@@ -260,7 +260,21 @@ class AndroidApiModelGenerator:
     def generate_domain_source(self, schema: SchemaDef) -> str:
         """Plain ``class`` (not ``data class``) so users can freely add
         ``var`` stored properties / equality / methods. Mirrors the v3
-        plan §2.2 Android section."""
+        plan §2.2 Android section.
+
+        For ``serializer == "kotlinx"`` the scaffold also carries the
+        ``@Serializable(with = {Name}Serializer::class)`` annotation and a
+        delegating ``KSerializer`` object below the user customization
+        zone, marked with AUTO-GENERATED markers so subsequent builds can
+        regenerate just the serializer block without touching user edits.
+        Required because Retrofit + kotlinx.serialization converter and
+        ``@Serializable`` composites refuse non-``@Serializable`` types
+        for request / response / nested field positions — see bug
+        ``kjui-wrapper-class-not-serializable-blocks-retrofit-and-composites``.
+        """
+        if self._config.serializer == "kotlinx":
+            return self._generate_kotlinx_domain_source(schema)
+
         return (
             f"package {self._domain_package()}\n"
             "\n"
@@ -270,6 +284,26 @@ class AndroidApiModelGenerator:
             "    // User customization zone — add proxies, computed properties,\n"
             "    // stored properties, methods, and conversions here.\n"
             "}\n"
+        )
+
+    def _generate_kotlinx_domain_source(self, schema: SchemaDef) -> str:
+        name = schema.name
+        imports = "\n".join(
+            [f"import {self._dto_package()}.{name}Dto"]
+            + list(_KOTLINX_DOMAIN_IMPORTS)
+        )
+        return (
+            f"package {self._domain_package()}\n"
+            "\n"
+            f"{imports}\n"
+            "\n"
+            f"@Serializable(with = {name}Serializer::class)\n"
+            f"class {name}(val dto: {name}Dto) {{\n"
+            "    // User customization zone — add proxies, computed properties,\n"
+            "    // stored properties, methods, and conversions here.\n"
+            "}\n"
+            "\n"
+            f"{_generate_kotlinx_serializer_block(name)}"
         )
 
     # ----------------------------- writes ---------------------------- #
@@ -293,6 +327,13 @@ class AndroidApiModelGenerator:
     def write_domain(self, schema: SchemaDef) -> "AndroidApiModelGenerator.WriteResult":
         path = self.domain_path(schema.name)
         if path.exists():
+            if self._config.serializer == "kotlinx":
+                wrote = _patch_kotlinx_domain(path, schema.name)
+                return self.WriteResult(
+                    path=path,
+                    wrote=wrote,
+                    skipped_existing=not wrote,
+                )
             return self.WriteResult(path=path, wrote=False, skipped_existing=True)
         wrote = atomic_write_text(path, self.generate_domain_source(schema))
         return self.WriteResult(path=path, wrote=wrote)
@@ -301,6 +342,139 @@ class AndroidApiModelGenerator:
 # --------------------------------------------------------------------------- #
 # Internals
 # --------------------------------------------------------------------------- #
+
+
+# kotlinx mode Domain wrapper — AUTO-GENERATED block markers. Codegen owns
+# the lines between BEGIN and END (inclusive); the rest of the file is user-
+# owned and never touched once the scaffold has been written once.
+_KOTLINX_SERIALIZER_BEGIN = (
+    "// ╔═══ AUTO-GENERATED Serializer — do not edit, will be overwritten on next build ═══"
+)
+_KOTLINX_SERIALIZER_END = "// ╚═══ END AUTO-GENERATED Serializer ═══"
+
+_KOTLINX_DOMAIN_IMPORTS: tuple[str, ...] = (
+    "import kotlinx.serialization.KSerializer",
+    "import kotlinx.serialization.Serializable",
+    "import kotlinx.serialization.descriptors.SerialDescriptor",
+    "import kotlinx.serialization.encoding.Decoder",
+    "import kotlinx.serialization.encoding.Encoder",
+)
+
+
+def _generate_kotlinx_serializer_block(name: str) -> str:
+    """Render the delegating ``KSerializer`` object for a Domain wrapper.
+
+    Descriptor is forwarded from ``{name}Dto.serializer()`` so the wire
+    format is exactly the DTO's — the wrapper is invisible on the wire.
+    """
+    return (
+        f"{_KOTLINX_SERIALIZER_BEGIN}\n"
+        f"object {name}Serializer : KSerializer<{name}> {{\n"
+        f"    private val dtoSerializer = {name}Dto.serializer()\n"
+        f"    override val descriptor: SerialDescriptor = dtoSerializer.descriptor\n"
+        f"    override fun serialize(encoder: Encoder, value: {name}) =\n"
+        f"        dtoSerializer.serialize(encoder, value.dto)\n"
+        f"    override fun deserialize(decoder: Decoder): {name} =\n"
+        f"        {name}(dtoSerializer.deserialize(decoder))\n"
+        f"}}\n"
+        f"{_KOTLINX_SERIALIZER_END}\n"
+    )
+
+
+def _patch_kotlinx_domain(path: Path, schema_name: str) -> bool:
+    """Update an existing kotlinx Domain wrapper to carry the serializer.
+
+    Three idempotent transformations:
+
+    1. Insert ``import kotlinx.serialization.*`` lines that are missing
+       from the import block (after the package line).
+    2. If ``@Serializable(with = {Name}Serializer::class)`` does not
+       already appear in the file, inject it on the line immediately
+       above the ``class {Name}(`` declaration.
+    3. Replace or append the AUTO-GENERATED serializer block. When the
+       markers already exist, the block between them is rewritten;
+       otherwise the block is appended at end-of-file.
+
+    Returns True when any of the three steps actually changed the file
+    contents — used by ``write_domain`` to report ``wrote`` accurately.
+    Atomic write (single file replace) so a crash mid-patch never leaves
+    a half-edited Kotlin source.
+
+    User customization zone (the class body) is never read or modified.
+    """
+    import re
+
+    original = path.read_text(encoding="utf-8")
+    text = original
+
+    annotation = f"@Serializable(with = {schema_name}Serializer::class)"
+    class_decl_re = re.compile(rf"^class {re.escape(schema_name)}\b", re.MULTILINE)
+
+    # Step 1: ensure required imports are present. Insert after the last
+    # existing import line, or directly after the package line when the
+    # file has no imports yet.
+    lines = text.splitlines()
+    package_idx = next(
+        (i for i, ln in enumerate(lines) if ln.startswith("package ")),
+        None,
+    )
+    if package_idx is not None:
+        existing_imports = {
+            ln.strip() for ln in lines if ln.strip().startswith("import ")
+        }
+        missing = [imp for imp in _KOTLINX_DOMAIN_IMPORTS if imp not in existing_imports]
+        if missing:
+            # Find the last consecutive import line after the package decl.
+            last_import_idx = package_idx
+            for i in range(package_idx + 1, len(lines)):
+                if lines[i].strip().startswith("import "):
+                    last_import_idx = i
+                elif lines[i].strip() == "":
+                    continue
+                else:
+                    break
+            insert_at = last_import_idx + 1
+            for imp in reversed(missing):
+                lines.insert(insert_at, imp)
+        text = "\n".join(lines)
+        if not text.endswith("\n"):
+            text += "\n"
+
+    # Step 2: inject @Serializable annotation above the class declaration
+    # when the file doesn't already carry an annotation that targets the
+    # codegen serializer. Detect both with `in` (avoids re-injection on
+    # second build) and by string presence (avoids stomping a user's
+    # manual customization that already specifies a different serializer).
+    if annotation not in text:
+        match = class_decl_re.search(text)
+        if match:
+            insert_pos = match.start()
+            # Only inject when the line above does not already carry an
+            # `@Serializable(with = ` annotation — user may have written
+            # their own variant; we leave that alone.
+            prior_newline = text.rfind("\n", 0, insert_pos)
+            prior_line_start = text.rfind("\n", 0, prior_newline) + 1 if prior_newline >= 0 else 0
+            prior_line = text[prior_line_start:prior_newline]
+            if "@Serializable(with = " not in prior_line:
+                text = text[:insert_pos] + f"{annotation}\n" + text[insert_pos:]
+
+    # Step 3: replace or append the serializer block.
+    serializer_block = _generate_kotlinx_serializer_block(schema_name)
+    if _KOTLINX_SERIALIZER_BEGIN in text and _KOTLINX_SERIALIZER_END in text:
+        begin = text.index(_KOTLINX_SERIALIZER_BEGIN)
+        end = text.index(_KOTLINX_SERIALIZER_END) + len(_KOTLINX_SERIALIZER_END)
+        # Trim trailing newline from the source block once so the splice
+        # doesn't double-up blank lines after replacement.
+        replacement = serializer_block.rstrip("\n")
+        text = text[:begin] + replacement + text[end:]
+    else:
+        if not text.endswith("\n"):
+            text += "\n"
+        text += "\n" + serializer_block
+
+    if text == original:
+        return False
+    return atomic_write_text(path, text)
 
 
 def _relative_source(absolute_path: str) -> str:
