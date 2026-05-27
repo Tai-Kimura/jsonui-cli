@@ -53,16 +53,27 @@ class SyncPlan:
 def _shadowed_schema_names(config_mgr: ConfigManager) -> set[str]:
     """Names the user has shadowed in ``.jsonui-type-map.json``.
 
-    Loaded once per planner call. Shadowed schemas are owned by the
-    consumer (hand-written data class / struct) so DTO emit, Domain
-    scaffold, and the kotlinx Domain patcher all need to leave them
-    alone — touching them would either overwrite hand-written code
-    (DTO/scaffold) or emit references to a non-existent ``XxxDto``
-    (patcher).
+    Shadow opts the consumer out of the auto Domain wrapper (scaffold +
+    Android kotlinx patcher) — they own the ``{Name}.kt`` file
+    themselves and may not use the canonical
+    ``class {Name}(val dto: {Name}Dto)`` shape at all. DTO emit is
+    unaffected; the hand-written wrapper typically still references
+    ``{Name}Dto`` for wire decode.
+
+    Trailing ``?`` is stripped from each key because spec authors often
+    write ``"ClientAnalysis?"`` in the type map to map the nullable
+    spec type — Kotlin / Swift collapse ``T`` and ``T?`` to the same
+    class, so shadowing one variant means the user owns the type.
+    Non-schema-shaped keys (``Array<$T>`` generics, primitive aliases
+    like ``Int``) survive the strip unchanged but won't match any
+    swagger schema name, so the filter is a no-op for them.
     """
     from .type_mapper import TypeMapper
 
-    return TypeMapper(config_mgr.type_map_file).user_keys()
+    return {
+        key.rstrip("?")
+        for key in TypeMapper(config_mgr.type_map_file).user_keys()
+    }
 
 
 def plan_android(
@@ -123,9 +134,18 @@ def plan_android(
     shadowed = _shadowed_schema_names(config_mgr)
     for doc in docs:
         for schema in doc.schemas:
-            if schema.name in shadowed:
-                continue
+            # DTO is always emitted regardless of shadow status: it carries
+            # the wire format and the Domain wrapper that the user
+            # hand-writes still references it as ``val dto: {Name}Dto``.
+            # Dropping the DTO would orphan-prune it and leave the
+            # consumer's hand-written wrapper with an unresolved type.
             expected[gen.dto_path(schema.name)] = gen.generate_dto_source(schema, doc)
+            if schema.name in shadowed:
+                # Shadow opts the consumer out of the auto Domain wrapper
+                # (scaffold + kotlinx patcher) — they own the file at
+                # ``{Name}.kt`` themselves and may not use the wrapper
+                # shape at all.
+                continue
             if not doc.should_skip_domain(schema):
                 dpath = gen.domain_path(schema.name)
                 scaffolds[dpath] = gen.generate_domain_source(schema)
@@ -139,8 +159,8 @@ def plan_android(
                         lambda p=dpath, n=schema.name: _patch_kotlinx_domain(p, n)
                     )
         for enum in doc.enums:
-            if enum.name in shadowed:
-                continue
+            # Enums live in the DTO subpackage and are treated as wire
+            # types — emit unconditionally, mirroring DTO behavior.
             expected[gen.enum_path(enum.name)] = gen.generate_enum_source(enum, doc)
     return SyncPlan(
         platform="android",
@@ -178,14 +198,14 @@ def plan_web(
     shadowed = _shadowed_schema_names(config_mgr)
     for doc in docs:
         for schema in doc.schemas:
+            # DTO emit is unconditional — the hand-written Domain wrapper
+            # for a shadowed schema still consumes ``XxxDto``.
+            expected[gen.dto_path(schema.name)] = gen.generate_dto_source(schema, doc)
             if schema.name in shadowed:
                 continue
-            expected[gen.dto_path(schema.name)] = gen.generate_dto_source(schema, doc)
             if not doc.should_skip_domain(schema):
                 scaffolds[gen.domain_path(schema.name)] = gen.generate_domain_source(schema)
         for enum in doc.enums:
-            if enum.name in shadowed:
-                continue
             expected[gen.enum_path(enum.name)] = gen.generate_enum_source(enum, doc)
     return SyncPlan(platform="web", expected_files=expected, domain_scaffolds=scaffolds)
 
@@ -221,17 +241,18 @@ def plan_ios(
     shadowed = _shadowed_schema_names(config_mgr)
     for doc in docs:
         for schema in doc.schemas:
+            # DTO emit is unconditional — see plan_android for the
+            # rationale (shadowed Domain wrappers still reference the
+            # auto-emitted DTO via ``let dto: XxxDto``).
+            expected[gen.dto_path(schema.name)] = gen.generate_dto_source(schema, doc)
             if schema.name in shadowed:
                 continue
-            expected[gen.dto_path(schema.name)] = gen.generate_dto_source(schema, doc)
             # OR-evaluate per-schema x-jui-skip-domain (schema.skip_domain)
             # and per-app api.schemas.skip_domain (doc.skip_domain_overrides).
             # v2 plan §2.6.
             if not doc.should_skip_domain(schema):
                 scaffolds[gen.domain_path(schema.name)] = gen.generate_domain_source(schema)
         for enum in doc.enums:
-            if enum.name in shadowed:
-                continue
             expected[gen.enum_path(enum.name)] = gen.generate_enum_source(enum, doc)
     return SyncPlan(platform="ios", expected_files=expected, domain_scaffolds=scaffolds)
 

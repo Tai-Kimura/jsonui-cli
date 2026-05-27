@@ -461,6 +461,71 @@ class KotlinxDomainSerializerTests(unittest.TestCase):
             1,
         )
 
+    def test_patcher_skips_non_wrapper_data_class(self):
+        """Defense in depth for the wrapper-shape gate: even if the
+        shadow filter misses a hand-written data class (e.g. the
+        type-map entry is missing or has an unrecognized form),
+        ``_patch_kotlinx_domain`` must NOT inject the delegating
+        serializer onto a file whose class lacks ``val dto: {Name}Dto``.
+        Injecting the block would reference ``value.dto`` which doesn't
+        exist on a data class with custom fields, and kotlinc halts
+        with ``Unresolved reference 'dto'``.
+        """
+        _, schema = self._doc_and_schema()  # schema.name == "AuthResponse"
+        with tempfile.TemporaryDirectory() as tmp:
+            gen = _gen(Path(tmp), "kotlinx")
+            existing = (
+                "package com.example.app.model\n"
+                "\n"
+                "import kotlinx.serialization.Serializable\n"
+                "\n"
+                "@Serializable\n"
+                "data class AuthResponse(\n"
+                "    val customField: String,\n"
+                "    val anotherField: Int,\n"
+                ")\n"
+            )
+            path = gen.domain_path("AuthResponse")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(existing, encoding="utf-8")
+
+            result = gen.write_domain(schema)
+            after = path.read_text(encoding="utf-8")
+
+        # Patcher must report no-op and file content unchanged.
+        self.assertFalse(result.wrote)
+        self.assertEqual(after, existing)
+        # No serializer block injected.
+        self.assertNotIn("AuthResponseSerializer", after)
+        self.assertNotIn("AUTO-GENERATED Serializer", after)
+
+    def test_patcher_runs_on_wrapper_with_val_dto_member(self):
+        """Regression — wrapper-shape gate must still let the canonical
+        ``class X(val dto: XDto)`` form through. Verifies the gate
+        recognizes the wrapper member regex correctly."""
+        _, schema = self._doc_and_schema()
+        with tempfile.TemporaryDirectory() as tmp:
+            gen = _gen(Path(tmp), "kotlinx")
+            existing = (
+                "package com.example.app.model\n"
+                "\n"
+                "import com.example.app.model.generated.AuthResponseDto\n"
+                "\n"
+                "class AuthResponse(val dto: AuthResponseDto) {\n"
+                "    val tokenUpper: String get() = dto.token.uppercase()\n"
+                "}\n"
+            )
+            path = gen.domain_path("AuthResponse")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(existing, encoding="utf-8")
+
+            result = gen.write_domain(schema)
+            updated = path.read_text(encoding="utf-8")
+
+        self.assertTrue(result.wrote)
+        self.assertIn("@Serializable(with = AuthResponseSerializer::class)", updated)
+        self.assertIn("object AuthResponseSerializer", updated)
+
     def test_marker_block_replaced_even_if_unrelated_serializer_object_exists(self):
         """An unrelated ``object FooSerializer`` (different schema) at
         file scope must not block patching of the target schema's
@@ -989,82 +1054,125 @@ class ApplyPlanKotlinxPatcherTests(unittest.TestCase):
         # apply_plan reports the patch as a scaffold write.
         self.assertEqual(scaffold_written, 1)
 
-    def test_plan_android_skips_shadowed_schemas(self):
-        """Schemas listed in ``.jsonui-type-map.json`` are owned by the
-        consumer's hand-written data class. Plan must skip DTO emit,
-        Domain scaffold creation, AND patcher registration for them —
-        any of those touching the shadow file corrupts consumer code.
+    def _plan_with_shadowed(self, type_map_types: dict, swagger_schemas: dict):
+        """Helper: build a temp project + plan_android over the given inputs.
+
+        Returns the SyncPlan so individual tests assert against fields.
+        Used by both shadow-filter tests below — keeps fixture setup in
+        one place so the planner is exercised identically.
         """
         import json
         from jui_cli.core.api_model_sync import plan_android
+        from jui_cli.core.config_manager import ConfigManager
         from jui_cli.core.openapi_loader import parse_swagger
 
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_root = Path(tmp)
-            # Minimal jui.config.json so ConfigManager loads.
-            (tmp_root / "jui.config.json").write_text(json.dumps({
-                "platforms": {"android": {"root": "app-android"}},
-                "type_map_file": ".jsonui-type-map.json",
-            }), encoding="utf-8")
-            # Shadow ClientAnalysis (hand-written, no auto DTO).
-            (tmp_root / ".jsonui-type-map.json").write_text(json.dumps({
-                "types": {
-                    "ClientAnalysis": {"class": "ClientAnalysis"},
+        tmp = tempfile.TemporaryDirectory()
+        tmp_root = Path(tmp.name)
+        (tmp_root / "jui.config.json").write_text(json.dumps({
+            "platforms": {"android": {"root": "app-android"}},
+            "type_map_file": ".jsonui-type-map.json",
+            "api": {
+                "platforms": {
+                    "android": {"serializer": "kotlinx"},
                 },
-            }), encoding="utf-8")
-            # Minimal Android tree so the path resolver finds kotlin/.
-            (tmp_root / "app-android/app/src/main/kotlin").mkdir(parents=True)
-            (tmp_root / "app-android/kjui.config.json").write_text(json.dumps({
-                "package_name": "foo.app",
-                "source_directory": "app/src/main",
-            }), encoding="utf-8")
+            },
+        }), encoding="utf-8")
+        (tmp_root / ".jsonui-type-map.json").write_text(json.dumps({
+            "types": type_map_types,
+        }), encoding="utf-8")
+        (tmp_root / "app-android/app/src/main/kotlin").mkdir(parents=True)
+        (tmp_root / "app-android/kjui.config.json").write_text(json.dumps({
+            "package_name": "foo.app",
+            "source_directory": "app/src/main",
+        }), encoding="utf-8")
 
-            from jui_cli.core.config_manager import ConfigManager
-            cm = ConfigManager(tmp_root / "jui.config.json")
-            doc = parse_swagger({
-                "openapi": "3.0.3",
-                "info": {"title": "T", "version": "1"},
-                "components": {"schemas": {
-                    # Shadowed — codegen must skip.
-                    "ClientAnalysis": {
-                        "type": "object",
-                        "required": ["score"],
-                        "properties": {"score": {"type": "integer"}},
-                    },
-                    # Not shadowed — codegen emits normally.
-                    "Normal": {
-                        "type": "object",
-                        "required": ["id"],
-                        "properties": {"id": {"type": "string"}},
-                    },
-                }},
-            }, "test.json")
+        cm = ConfigManager(tmp_root / "jui.config.json")
+        doc = parse_swagger({
+            "openapi": "3.0.3",
+            "info": {"title": "T", "version": "1"},
+            "components": {"schemas": swagger_schemas},
+        }, "test.json")
+        plan = plan_android(cm, {"root": "app-android"}, [doc])
+        return plan, tmp  # caller drops `tmp` to clean up
 
-            plan = plan_android(
-                cm,
-                {"root": "app-android"},
-                [doc],
-            )
-
-        # No expected_files / scaffolds / patchers entries reference the
-        # shadowed schema by file name.
-        all_paths = (
-            list(plan.expected_files)
-            + list(plan.domain_scaffolds)
-            + list(plan.domain_patchers)
+    def test_plan_android_shadow_keeps_dto_drops_scaffold_and_patcher(self):
+        """Regression for the over-broad shadow filter: when a schema is
+        type-map shadowed, the planner must still emit the DTO (so the
+        hand-written wrapper's ``val dto: XxxDto`` reference resolves and
+        orphan prune doesn't delete the file) but must skip both the
+        Domain scaffold and the kotlinx patcher (consumer owns the file).
+        Non-shadowed schemas must still get all three.
+        """
+        plan, tmp = self._plan_with_shadowed(
+            type_map_types={
+                "BarSimple": {"class": "BarSimple"},
+            },
+            swagger_schemas={
+                "BarSimple": {
+                    "type": "object",
+                    "required": ["id"],
+                    "properties": {"id": {"type": "string"}},
+                },
+                "Normal": {
+                    "type": "object",
+                    "required": ["id"],
+                    "properties": {"id": {"type": "string"}},
+                },
+            },
         )
-        for path in all_paths:
+        try:
+            expected_names = {p.name for p in plan.expected_files}
+            scaffold_names = {p.name for p in plan.domain_scaffolds}
+            patcher_names = {p.name for p in plan.domain_patchers}
+
+            # Shadowed schema: DTO emitted, scaffold + patcher skipped.
+            self.assertIn("BarSimpleDto.kt", expected_names)
+            self.assertNotIn("BarSimple.kt", scaffold_names)
+            self.assertNotIn("BarSimple.kt", patcher_names)
+
+            # Non-shadowed schema: DTO + scaffold + patcher all present.
+            self.assertIn("NormalDto.kt", expected_names)
+            self.assertIn("Normal.kt", scaffold_names)
+            self.assertIn("Normal.kt", patcher_names)
+        finally:
+            tmp.cleanup()
+
+    def test_plan_android_shadow_strips_question_mark_suffix(self):
+        """Type-map keys often carry the spec nullable suffix (e.g.
+        ``"ClientAnalysis?"``). Strip the ``?`` before matching swagger
+        schema names so the user's intent — "I own this type" — applies
+        to both the nullable and non-nullable variants (which are the
+        same class on Kotlin/Swift)."""
+        plan, tmp = self._plan_with_shadowed(
+            type_map_types={
+                "ClientAnalysis?": {"class": "ClientAnalysis?"},
+            },
+            swagger_schemas={
+                "ClientAnalysis": {
+                    "type": "object",
+                    "required": ["id"],
+                    "properties": {"id": {"type": "string"}},
+                },
+            },
+        )
+        try:
+            self.assertIn(
+                "ClientAnalysisDto.kt",
+                {p.name for p in plan.expected_files},
+                "DTO must still be emitted for shadow w/ ? suffix",
+            )
             self.assertNotIn(
-                "ClientAnalysis",
-                path.name,
-                f"shadowed schema leaked into plan: {path}",
+                "ClientAnalysis.kt",
+                {p.name for p in plan.domain_scaffolds},
+                "shadow w/ ? suffix must skip scaffold",
             )
-        # The non-shadowed schema is still emitted as expected.
-        normal_paths = [p for p in plan.expected_files if "Normal" in p.name]
-        self.assertTrue(
-            normal_paths,
-            "non-shadowed schema must still emit",
-        )
+            self.assertNotIn(
+                "ClientAnalysis.kt",
+                {p.name for p in plan.domain_patchers},
+                "shadow w/ ? suffix must skip patcher",
+            )
+        finally:
+            tmp.cleanup()
 
     def test_apply_plan_idempotent_when_patcher_no_change(self):
         from jui_cli.core.api_model_sync import SyncPlan, apply_plan
