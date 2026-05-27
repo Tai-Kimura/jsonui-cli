@@ -4,6 +4,8 @@
 - ``snake_to_pascal``: ``display_name`` → ``DisplayName``
 - ``camel_to_lower``: ``HTTPResponse`` → ``httpResponse`` (per plan §2.2)
 - ``escape_keyword``: language-specific reserved word handling
+- ``resolve_enum_case_for_default``: match a swagger ``default`` value to its
+  enum case identifier (used by per-platform default literal emitters)
 
 The factory function naming rule from plan §2.2 — ``{camelCaseName}FromDto`` —
 is implemented in :func:`factory_name`, with the special-case of leading
@@ -13,6 +15,10 @@ consecutive uppercase letters down-cased to only the first character
 from __future__ import annotations
 
 import re
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .schema_ir import EnumDef
 
 # Reserved-word tables. Generators consult the relevant set when emitting
 # field / case / variable names. We err on the side of escaping anything
@@ -124,6 +130,37 @@ def factory_name(schema_name: str) -> str:
     """
     camel = _down_case_leading_caps(snake_to_pascal(schema_name))
     return f"{camel}FromDto"
+
+
+def resolve_enum_case_for_default(enum: "EnumDef", value: Any) -> str | None:
+    """Find the case identifier of *enum* that matches *value*, or None.
+
+    Used by per-platform default literal emitters to translate a swagger
+    ``default: "favorite"`` on an enum-typed field into the platform-native
+    enum case reference (``ReactionType.FAVORITE`` / ``ReactionType.favorite``)
+    instead of a string literal — which would be a compile-time type
+    mismatch on Swift and Kotlin.
+
+    Returns the **raw case name** (as stored in :attr:`EnumDef.case_names`).
+    Callers must apply their language's identifier transform (Kotlin
+    SCREAMING_SNAKE, Swift camelCase, keyword escape) themselves.
+
+    Returns ``None`` when the swagger ``default`` does not match any case —
+    that's a schema bug; the emitter skips the default rather than halting
+    so the decoder fills the field at runtime.
+    """
+    from .schema_ir import PrimitiveKind
+
+    if enum.kind == PrimitiveKind.STRING and isinstance(value, str):
+        for case_name, raw in zip(enum.case_names, enum.string_values):
+            if raw == value:
+                return case_name
+        return None
+    if enum.kind == PrimitiveKind.INTEGER and isinstance(value, int) and not isinstance(value, bool):
+        for case_name, raw_int in zip(enum.case_names, enum.integer_values):
+            if raw_int == value:
+                return case_name
+    return None
 
 
 def escape_keyword(name: str, *, language: str) -> str:

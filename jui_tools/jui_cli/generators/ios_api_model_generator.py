@@ -23,7 +23,11 @@ from pathlib import Path
 
 from ..core.generated_marker import comment_footer, comment_header
 from ..core.impl_updater import atomic_write_text
-from ..core.openapi_naming import escape_keyword, snake_to_camel
+from ..core.openapi_naming import (
+    escape_keyword,
+    resolve_enum_case_for_default,
+    snake_to_camel,
+)
 from ..core.schema_ir import (
     EnumDef,
     FieldDef,
@@ -107,7 +111,8 @@ class IosApiModelGenerator:
         )
         footer = comment_footer()
 
-        enum_names = {e.name for e in doc.enums}
+        enums_by_name = {e.name: e for e in doc.enums}
+        enum_names = set(enums_by_name)
 
         conformances = ["Codable"]
         if schema.is_sendable:
@@ -132,7 +137,7 @@ class IosApiModelGenerator:
 
         # Stored properties (one per field).
         for f in schema.fields:
-            body_lines.extend(_dto_field_lines(f, enum_names))
+            body_lines.extend(_dto_field_lines(f, enum_names, enums_by_name))
 
         # Custom CodingKeys when at least one field is renamed.
         if any(_swift_property_name(f) != f.wire_name for f in schema.fields):
@@ -280,7 +285,11 @@ def _doc_comment_lines(text: str) -> list[str]:
     return out
 
 
-def _dto_field_lines(field: FieldDef, enum_names: set[str]) -> list[str]:
+def _dto_field_lines(
+    field: FieldDef,
+    enum_names: set[str],
+    enums_by_name: dict[str, EnumDef],
+) -> list[str]:
     """Lines emitted for one DTO stored property.
 
     Includes:
@@ -300,7 +309,7 @@ def _dto_field_lines(field: FieldDef, enum_names: set[str]) -> list[str]:
         out.append("    @available(*, deprecated)")
     type_str = _swift_type_with_enums(field.type, enum_names)
     name = _swift_property_name(field)
-    default = _swift_default_literal(field, type_str)
+    default = _swift_default_literal(field, type_str, enums_by_name)
     line = f"    let {name}: {type_str}"
     if default is not None:
         line += f" = {default}"
@@ -360,8 +369,17 @@ def _swift_type_with_enums(ftype: FieldType, enum_names: set[str]) -> str:
     return _swift_type(ftype)
 
 
-def _swift_default_literal(field: FieldDef, type_str: str) -> str | None:
+def _swift_default_literal(
+    field: FieldDef,
+    type_str: str,
+    enums_by_name: dict[str, EnumDef],
+) -> str | None:
     """Render OpenAPI ``default`` to a Swift literal, or None if absent.
+
+    Enum-typed fields emit ``EnumName.caseName`` (or the keyword-escaped
+    form) instead of a raw string / integer literal. Required to compile
+    when a swagger schema uses ``allOf: [$ref: <enum>] + default: <value>``
+    on a Swift enum without ``ExpressibleByStringLiteral``.
 
     Conservative: only emit literals for scalar defaults whose JSON shape
     maps cleanly to Swift. Complex defaults (objects / arrays of objects)
@@ -372,6 +390,17 @@ def _swift_default_literal(field: FieldDef, type_str: str) -> str | None:
     value = field.default
     if value is None:
         return "nil"
+
+    # Enum-typed field → EnumName.caseName.
+    ftype = field.type
+    if (ftype.is_object_ref or ftype.is_enum_ref) and ftype.ref_name in enums_by_name:
+        enum = enums_by_name[ftype.ref_name]
+        case_name = resolve_enum_case_for_default(enum, value)
+        if case_name is None:
+            return None
+        ident = escape_keyword(_swift_case_name(case_name), language="swift")
+        return f"{enum.name}.{ident}"
+
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (int, float)):

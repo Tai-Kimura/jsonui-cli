@@ -325,6 +325,113 @@ class RefTypeTests(unittest.TestCase):
         self.assertIn("val labels: Map<String, TagDto>", src)
 
 
+class EnumDefaultLiteralTests(unittest.TestCase):
+    """Regression — `allOf: [$ref: <enum>] + default: <value>` must emit
+    `EnumName.CASE` not a raw string literal (else kotlinc halts on type
+    mismatch). See bug
+    jui-android-codegen-allof-ref-enum-emits-domain-name-with-string-default.
+    """
+
+    def _reaction_doc(self):
+        return parse_swagger(_doc({
+            "ReactionType": {
+                "type": "string",
+                "enum": ["favorite", "want_to_drink"],
+            },
+            "ReactionTypeBody": {
+                "type": "object",
+                "properties": {
+                    "reaction_type": {
+                        "allOf": [{"$ref": "#/components/schemas/ReactionType"}],
+                        "default": "favorite",
+                    },
+                },
+            },
+        }), "test.json")
+
+    def test_string_enum_default_emits_case_reference(self):
+        doc = self._reaction_doc()
+        body = next(s for s in doc.schemas if s.name == "ReactionTypeBody")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "moshi").generate_dto_source(body, doc)
+        self.assertIn("val reactionType: ReactionType? = ReactionType.FAVORITE", src)
+        self.assertNotIn('= "favorite"', src)
+
+    def test_string_enum_default_emits_case_reference_kotlinx(self):
+        doc = self._reaction_doc()
+        body = next(s for s in doc.schemas if s.name == "ReactionTypeBody")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "kotlinx").generate_dto_source(body, doc)
+        self.assertIn("ReactionType.FAVORITE", src)
+
+    def test_integer_enum_default_emits_case_reference(self):
+        doc = parse_swagger(_doc({
+            "Severity": {
+                "type": "integer",
+                "enum": [1, 2, 3],
+                "x-enum-varnames": ["low", "medium", "high"],
+            },
+            "Alert": {
+                "type": "object",
+                "properties": {
+                    "level": {
+                        "allOf": [{"$ref": "#/components/schemas/Severity"}],
+                        "default": 2,
+                    },
+                },
+            },
+        }), "test.json")
+        alert = next(s for s in doc.schemas if s.name == "Alert")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "moshi").generate_dto_source(alert, doc)
+        self.assertIn("val level: Severity? = Severity.MEDIUM", src)
+
+    def test_default_not_in_enum_skipped(self):
+        """Swagger bug — value not in enum. Skip default rather than halt."""
+        doc = parse_swagger(_doc({
+            "ReactionType": {
+                "type": "string",
+                "enum": ["favorite", "want_to_drink"],
+            },
+            "ReactionTypeBody": {
+                "type": "object",
+                "properties": {
+                    "reaction_type": {
+                        "allOf": [{"$ref": "#/components/schemas/ReactionType"}],
+                        "default": "bogus",
+                    },
+                },
+            },
+        }), "test.json")
+        body = next(s for s in doc.schemas if s.name == "ReactionTypeBody")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "moshi").generate_dto_source(body, doc)
+        # No default emitted on the enum-typed field — caller must pass a
+        # value explicitly. We deliberately do *not* fall back to ``= null``
+        # because the swagger asserted a default that turned out to be
+        # invalid; surfacing it via "missing argument" at call sites tells
+        # the user to fix the schema.
+        self.assertIn("val reactionType: ReactionType?,", src)
+        self.assertNotIn('"bogus"', src)
+        self.assertNotIn("= ReactionType.", src)
+        self.assertNotIn("= null", src)
+
+    def test_primitive_string_default_unaffected(self):
+        """Regression — non-enum string defaults still emit as literals."""
+        doc = parse_swagger(_doc({
+            "Greeting": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string", "default": "hello"},
+                },
+            },
+        }), "test.json")
+        body = doc.schemas[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "moshi").generate_dto_source(body, doc)
+        self.assertIn('val message: String? = "hello"', src)
+
+
 class WriteBehaviorTests(unittest.TestCase):
     def test_dto_written_idempotent(self):
         doc = parse_swagger(_doc(_user_schema()), "test.json")

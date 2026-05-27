@@ -272,6 +272,99 @@ class DomainScaffoldTests(unittest.TestCase):
         self.assertNotIn("DO NOT EDIT", src)
 
 
+class EnumDefaultLiteralTests(unittest.TestCase):
+    """Regression — `allOf: [$ref: <enum>] + default: <value>` must emit
+    `EnumName.caseName` not a string literal (Swift enums are not
+    ExpressibleByStringLiteral, so the bare literal would not compile).
+    See bug jui-android-codegen-allof-ref-enum-emits-domain-name-with-string-default.
+    """
+
+    def _reaction_doc(self):
+        return parse_swagger(_doc({
+            "ReactionType": {
+                "type": "string",
+                "enum": ["favorite", "want_to_drink"],
+            },
+            "ReactionTypeBody": {
+                "type": "object",
+                "properties": {
+                    "reaction_type": {
+                        "allOf": [{"$ref": "#/components/schemas/ReactionType"}],
+                        "default": "favorite",
+                    },
+                },
+            },
+        }), "test.json")
+
+    def test_string_enum_default_emits_case_reference(self):
+        doc = self._reaction_doc()
+        body = next(s for s in doc.schemas if s.name == "ReactionTypeBody")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _make_generator(Path(tmp)).generate_dto_source(body, doc)
+        self.assertIn("let reactionType: ReactionType? = ReactionType.favorite", src)
+        self.assertNotIn('= "favorite"', src)
+
+    def test_integer_enum_default_emits_case_reference(self):
+        doc = parse_swagger(_doc({
+            "Severity": {
+                "type": "integer",
+                "enum": [1, 2, 3],
+                "x-enum-varnames": ["low", "medium", "high"],
+            },
+            "Alert": {
+                "type": "object",
+                "properties": {
+                    "level": {
+                        "allOf": [{"$ref": "#/components/schemas/Severity"}],
+                        "default": 2,
+                    },
+                },
+            },
+        }), "test.json")
+        alert = next(s for s in doc.schemas if s.name == "Alert")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _make_generator(Path(tmp)).generate_dto_source(alert, doc)
+        self.assertIn("let level: Severity? = Severity.medium", src)
+
+    def test_default_not_in_enum_skipped(self):
+        doc = parse_swagger(_doc({
+            "ReactionType": {
+                "type": "string",
+                "enum": ["favorite", "want_to_drink"],
+            },
+            "ReactionTypeBody": {
+                "type": "object",
+                "properties": {
+                    "reaction_type": {
+                        "allOf": [{"$ref": "#/components/schemas/ReactionType"}],
+                        "default": "bogus",
+                    },
+                },
+            },
+        }), "test.json")
+        body = next(s for s in doc.schemas if s.name == "ReactionTypeBody")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _make_generator(Path(tmp)).generate_dto_source(body, doc)
+        # No default and no string literal — line is bare ``let ...: T?``.
+        self.assertIn("let reactionType: ReactionType?", src)
+        self.assertNotIn('"bogus"', src)
+        self.assertNotIn("= ReactionType.", src)
+
+    def test_primitive_string_default_unaffected(self):
+        doc = parse_swagger(_doc({
+            "Greeting": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string", "default": "hello"},
+                },
+            },
+        }), "test.json")
+        body = doc.schemas[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _make_generator(Path(tmp)).generate_dto_source(body, doc)
+        self.assertIn('let message: String? = "hello"', src)
+
+
 class WriteBehaviorTests(unittest.TestCase):
     def test_dto_written_on_first_call(self):
         doc = parse_swagger(_doc({

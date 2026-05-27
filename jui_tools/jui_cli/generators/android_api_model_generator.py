@@ -30,7 +30,11 @@ from pathlib import Path
 
 from ..core.generated_marker import comment_footer, comment_header
 from ..core.impl_updater import atomic_write_text
-from ..core.openapi_naming import escape_keyword, snake_to_camel
+from ..core.openapi_naming import (
+    escape_keyword,
+    resolve_enum_case_for_default,
+    snake_to_camel,
+)
 from ..core.schema_ir import (
     EnumDef,
     FieldDef,
@@ -115,7 +119,8 @@ class AndroidApiModelGenerator:
             generator=self.GENERATOR_NAME,
         )
         footer = comment_footer()
-        enum_names = {e.name for e in doc.enums}
+        enums_by_name = {e.name: e for e in doc.enums}
+        enum_names = set(enums_by_name)
 
         lines: list[str] = []
         lines.append(f"package {self._dto_package()}")
@@ -137,7 +142,9 @@ class AndroidApiModelGenerator:
         lines.append(f"data class {schema.name}Dto(")
         last = len(schema.fields) - 1
         for i, f in enumerate(schema.fields):
-            for ln in self._dto_field_lines(f, enum_names, trailing_comma=(i < last) or True):
+            for ln in self._dto_field_lines(
+                f, enum_names, enums_by_name, trailing_comma=(i < last) or True
+            ):
                 lines.append(ln)
         # Trailing comma after the last field is valid Kotlin and matches Moshi codegen output.
         lines.append(")")
@@ -168,6 +175,7 @@ class AndroidApiModelGenerator:
         self,
         field: FieldDef,
         enum_names: set[str],
+        enums_by_name: dict[str, EnumDef],
         *,
         trailing_comma: bool,
     ) -> list[str]:
@@ -178,7 +186,7 @@ class AndroidApiModelGenerator:
             out.append('    @Deprecated("field marked deprecated")')
         type_str = _kotlin_type_with_enums(field.type, enum_names)
         name = _kotlin_property_name(field)
-        default = _kotlin_default_literal(field)
+        default = _kotlin_default_literal(field, enums_by_name)
         rename_annot = self._field_rename_annotation(field, name)
         prefix = f"    {rename_annot}val " if rename_annot else "    val "
         decl = f"{prefix}{name}: {type_str}"
@@ -361,8 +369,17 @@ def _kotlin_type_with_enums(ftype: FieldType, enum_names: set[str]) -> str:
     return f"{base}?" if ftype.nullable else base
 
 
-def _kotlin_default_literal(field: FieldDef) -> str | None:
+def _kotlin_default_literal(
+    field: FieldDef,
+    enums_by_name: dict[str, EnumDef],
+) -> str | None:
     """Render OpenAPI ``default`` as a Kotlin literal, or None if absent.
+
+    Enum-typed fields (``field.type.is_object_ref`` / ``is_enum_ref`` resolving
+    to an enum schema) emit ``EnumName.CASE_NAME`` instead of a raw string /
+    integer literal — required so ``allOf: [$ref: <enum>] + default: <value>``
+    compiles. When the swagger ``default`` does not match any enum case, the
+    default is skipped entirely (decoder fills the field at runtime).
 
     Conservatively skips complex defaults — the JSON parser will fill them.
     """
@@ -375,6 +392,17 @@ def _kotlin_default_literal(field: FieldDef) -> str | None:
     value = field.default
     if value is None:
         return "null"
+
+    # Enum-typed field → resolve to EnumName.CASE_NAME.
+    ftype = field.type
+    if (ftype.is_object_ref or ftype.is_enum_ref) and ftype.ref_name in enums_by_name:
+        enum = enums_by_name[ftype.ref_name]
+        case_name = resolve_enum_case_for_default(enum, value)
+        if case_name is None:
+            return None
+        ident = escape_keyword(_kotlin_enum_case(case_name), language="kotlin")
+        return f"{enum.name}.{ident}"
+
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (int, float)):
