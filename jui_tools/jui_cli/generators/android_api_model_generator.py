@@ -293,13 +293,25 @@ class AndroidApiModelGenerator:
         for ann in self._dto_class_annotations():
             lines.append(ann)
 
+        # kotlinx.serialization default-serializes enum cases by their
+        # Kotlin name (e.g. ``CONVERSATION_ID``), but swaggers expect the
+        # raw wire value (``conversation_id``). Without ``@SerialName`` per
+        # case, the wire ↔ case mapping breaks at runtime even though the
+        # constructor-stored ``wire`` property is correct. Emit the
+        # rename annotation whenever the case identifier diverges from the
+        # raw value.
+        use_serial_name = self._config.serializer == "kotlinx"
         if enum.kind == PrimitiveKind.STRING:
             lines.append(f"enum class {enum.name}(val wire: String) {{")
             cases = list(zip(enum.case_names, enum.string_values))
             for i, (case_name, raw) in enumerate(cases):
                 ident = escape_keyword(_kotlin_enum_case(case_name), language="kotlin")
                 suffix = "," if i < len(cases) - 1 else ";"
-                lines.append(f'    {ident}("{raw}"){suffix}')
+                ident_bare = ident.strip("`")
+                if use_serial_name and ident_bare != raw:
+                    lines.append(f'    @SerialName("{raw}") {ident}("{raw}"){suffix}')
+                else:
+                    lines.append(f'    {ident}("{raw}"){suffix}')
             lines.append("}")
         else:
             lines.append(f"enum class {enum.name}(val wire: Int) {{")
@@ -307,7 +319,10 @@ class AndroidApiModelGenerator:
             for i, (case_name, raw_int) in enumerate(cases_int):
                 ident = escape_keyword(_kotlin_enum_case(case_name), language="kotlin")
                 suffix = "," if i < len(cases_int) - 1 else ";"
-                lines.append(f"    {ident}({raw_int}){suffix}")
+                if use_serial_name:
+                    lines.append(f'    @SerialName("{raw_int}") {ident}({raw_int}){suffix}')
+                else:
+                    lines.append(f"    {ident}({raw_int}){suffix}")
             lines.append("}")
 
         body = "\n".join(lines)
@@ -794,10 +809,21 @@ def _emit_kotlin_oneof_serializer(
             None,
         )
         disc_prop = _kotlin_property_name(disc_field) if disc_field else f.type.one_of.discriminator_property
+        # When the discriminator field is an inline-derived enum the Kotlin
+        # type is the enum (``StreamEventType``) — compare against its
+        # ``.wire`` raw-string property so the literal cases below still
+        # type-check. ``.wire`` is unconditionally emitted by the enum
+        # codegen so this is always safe when ``is_enum_ref`` is true.
+        disc_is_enum = (
+            disc_field is not None
+            and disc_field.type.is_enum_ref
+            and disc_field.type.ref_name in enum_names
+        )
+        when_arg = f"{disc_prop}.wire" if disc_is_enum else disc_prop
         lines.append(
             f'        val {prop}Elem = obj["{f.wire_name}"] ?: JsonNull'
         )
-        lines.append(f'        val {prop}: {name}Dto.{nested} = when ({disc_prop}) {{')
+        lines.append(f'        val {prop}: {name}Dto.{nested} = when ({when_arg}) {{')
         for variant in f.type.one_of.variants:
             cls = _kotlin_oneof_variant_class_name(variant.discriminator_value)
             lines.append(

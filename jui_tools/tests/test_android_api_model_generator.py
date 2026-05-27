@@ -702,6 +702,125 @@ class OneOfDiscriminatorTests(unittest.TestCase):
         ):
             self.assertIn(imp, src)
 
+    def test_enum_typed_discriminator_compares_wire_string(self):
+        """When discriminator field has inline ``enum: [...]``, the
+        Kotlin ``when`` arg must be ``type.wire`` (String) — comparing
+        the enum-typed ``type`` against String literals would not
+        compile."""
+        doc = parse_swagger(_doc({
+            "StreamConvIdContent": {
+                "type": "object",
+                "required": ["cid"],
+                "properties": {"cid": {"type": "string"}},
+            },
+            "StreamThinkingContent": {
+                "type": "object",
+                "required": ["msg"],
+                "properties": {"msg": {"type": "string"}},
+            },
+            "StreamEvent": {
+                "type": "object",
+                "required": ["type", "content"],
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": ["conversation_id", "thinking", "progress"],
+                    },
+                    "content": {
+                        "oneOf": [
+                            {"$ref": "#/components/schemas/StreamConvIdContent"},
+                            {"$ref": "#/components/schemas/StreamThinkingContent"},
+                        ],
+                        "discriminator": {
+                            "propertyName": "type",
+                            "mapping": {
+                                "conversation_id": "#/components/schemas/StreamConvIdContent",
+                                "thinking": "#/components/schemas/StreamThinkingContent",
+                            },
+                        },
+                    },
+                },
+            },
+        }), "test.json")
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "kotlinx").generate_dto_source(stream, doc)
+        # Decoded into the typed enum:
+        self.assertIn("val type: StreamEventType = json.decodeFromJsonElement(", src)
+        # when arg must be ``type.wire``, not ``type``.
+        self.assertIn("when (type.wire) {", src)
+        # String literal branches are preserved.
+        self.assertIn('"conversation_id" -> StreamEventDto.Content.ConversationId(', src)
+        self.assertIn('"thinking" -> StreamEventDto.Content.Thinking(', src)
+        # else fallback kept.
+        self.assertIn("else -> StreamEventDto.Content.Unknown", src)
+
+    def test_string_typed_discriminator_unchanged(self):
+        """Existing behavior for non-enum String discriminator stays the
+        same — the when arg is the bare property."""
+        doc = parse_swagger(_doc({
+            "ConvId": {"type": "object", "properties": {"id": {"type": "string"}}},
+            "Parent": {
+                "type": "object",
+                "required": ["type", "content"],
+                "properties": {
+                    # No enum — plain String discriminator.
+                    "type": {"type": "string"},
+                    "content": {
+                        "oneOf": [{"$ref": "#/components/schemas/ConvId"}],
+                        "discriminator": {
+                            "propertyName": "type",
+                            "mapping": {"conv_id": "#/components/schemas/ConvId"},
+                        },
+                    },
+                },
+            },
+        }), "test.json")
+        parent = next(s for s in doc.schemas if s.name == "Parent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "kotlinx").generate_dto_source(parent, doc)
+        # type stays as String, when arg is bare ``type``.
+        self.assertIn("val type: String", src)
+        self.assertIn("when (type) {", src)
+        self.assertIn('"conv_id" -> ParentDto.Content.ConvId(', src)
+
+    def test_enum_cases_get_serial_name_annotations(self):
+        """kotlinx serializes enum case names by default, not the
+        constructor wire value. We must emit ``@SerialName("wire")`` per
+        case so the wire ↔ enum mapping works at runtime."""
+        doc = parse_swagger(_doc({
+            "AuthProvider": {
+                "type": "string",
+                "enum": ["google", "apple_id", "email"],
+            },
+        }), "test.json")
+        enum = doc.enums[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "kotlinx").generate_enum_source(enum, doc)
+        # Cases whose Kotlin identifier differs from the wire value carry
+        # an explicit ``@SerialName`` annotation.
+        self.assertIn('@SerialName("apple_id") APPLE_ID("apple_id")', src)
+        # Cases where the wire value matches the identifier (e.g.
+        # lowercase "google" → SCREAMING_SNAKE "GOOGLE" — diverges, so
+        # annotation is required).
+        self.assertIn('@SerialName("google") GOOGLE("google")', src)
+        self.assertIn('@SerialName("email") EMAIL("email")', src)
+
+    def test_enum_cases_no_serial_name_in_moshi_or_none(self):
+        """Moshi / none modes don't use kotlinx — no ``@SerialName``."""
+        doc = parse_swagger(_doc({
+            "AuthProvider": {
+                "type": "string",
+                "enum": ["google", "apple"],
+            },
+        }), "test.json")
+        enum = doc.enums[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            src_moshi = _gen(Path(tmp), "moshi").generate_enum_source(enum, doc)
+            src_none = _gen(Path(tmp), "none").generate_enum_source(enum, doc)
+        self.assertNotIn("@SerialName(", src_moshi)
+        self.assertNotIn("@SerialName(", src_none)
+
     def test_moshi_mode_halts(self):
         doc = self._stream_event_doc()
         stream = next(s for s in doc.schemas if s.name == "StreamEvent")
