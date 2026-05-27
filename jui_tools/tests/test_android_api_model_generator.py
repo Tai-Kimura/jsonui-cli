@@ -414,6 +414,91 @@ class KotlinxDomainSerializerTests(unittest.TestCase):
             self.assertFalse(r2.wrote)
             self.assertTrue(r2.skipped_existing)
 
+    def test_skip_when_serializer_object_already_exists_outside_marker(self):
+        """If the user / earlier codegen has already declared
+        ``object {Name}Serializer`` at file scope (no markers),
+        the patcher must NOT append another marker-wrapped block —
+        kotlinc would halt with ``Redeclaration``."""
+        _, schema = self._doc_and_schema()
+        with tempfile.TemporaryDirectory() as tmp:
+            gen = _gen(Path(tmp), "kotlinx")
+            existing = (
+                "package com.example.app.model\n"
+                "\n"
+                "import com.example.app.model.generated.AuthResponseDto\n"
+                "import kotlinx.serialization.KSerializer\n"
+                "import kotlinx.serialization.Serializable\n"
+                "import kotlinx.serialization.descriptors.SerialDescriptor\n"
+                "import kotlinx.serialization.encoding.Decoder\n"
+                "import kotlinx.serialization.encoding.Encoder\n"
+                "\n"
+                "@Serializable(with = AuthResponseSerializer::class)\n"
+                "class AuthResponse(val dto: AuthResponseDto)\n"
+                "\n"
+                "object AuthResponseSerializer : KSerializer<AuthResponse> {\n"
+                "    private val dtoSerializer = AuthResponseDto.serializer()\n"
+                "    override val descriptor: SerialDescriptor = dtoSerializer.descriptor\n"
+                "    override fun serialize(encoder: Encoder, value: AuthResponse) =\n"
+                "        dtoSerializer.serialize(encoder, value.dto)\n"
+                "    override fun deserialize(decoder: Decoder): AuthResponse =\n"
+                "        AuthResponse(dtoSerializer.deserialize(decoder))\n"
+                "}\n"
+            )
+            path = gen.domain_path("AuthResponse")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(existing, encoding="utf-8")
+
+            result = gen.write_domain(schema)
+            updated = path.read_text(encoding="utf-8")
+
+        # Patcher reports no write (everything already in place).
+        self.assertFalse(result.wrote)
+        # No marker block injected (would have duplicated the object).
+        self.assertNotIn("AUTO-GENERATED Serializer", updated)
+        # Existing serializer object preserved.
+        self.assertEqual(
+            updated.count("object AuthResponseSerializer : KSerializer<AuthResponse>"),
+            1,
+        )
+
+    def test_marker_block_replaced_even_if_unrelated_serializer_object_exists(self):
+        """An unrelated ``object FooSerializer`` (different schema) at
+        file scope must not block patching of the target schema's
+        marker block — regex match must be schema-name specific."""
+        _, schema = self._doc_and_schema()
+        with tempfile.TemporaryDirectory() as tmp:
+            gen = _gen(Path(tmp), "kotlinx")
+            # Start from a fully patched scaffold, then add an unrelated
+            # serializer object at the bottom.
+            path = gen.domain_path("AuthResponse")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(gen.generate_domain_source(schema), encoding="utf-8")
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(
+                    "\nobject UnrelatedSerializer : KSerializer<Unit> {\n"
+                    "    // hand-written, leave alone\n"
+                    "}\n"
+                )
+
+            # Mutate the marker block — patcher should restore it.
+            current = path.read_text(encoding="utf-8")
+            corrupted = current.replace(
+                "private val dtoSerializer = AuthResponseDto.serializer()",
+                "private val dtoSerializer = TamperedDto.serializer()",
+            )
+            path.write_text(corrupted, encoding="utf-8")
+
+            result = gen.write_domain(schema)
+            updated = path.read_text(encoding="utf-8")
+
+        self.assertTrue(result.wrote)
+        self.assertIn(
+            "private val dtoSerializer = AuthResponseDto.serializer()",
+            updated,
+        )
+        # Unrelated object preserved.
+        self.assertIn("object UnrelatedSerializer", updated)
+
     def test_custom_user_with_annotation_not_overwritten(self):
         """If the user manually wrote a different serializer annotation,
         the patcher leaves it alone — only the AUTO-GENERATED block fires."""
@@ -903,6 +988,83 @@ class ApplyPlanKotlinxPatcherTests(unittest.TestCase):
         )
         # apply_plan reports the patch as a scaffold write.
         self.assertEqual(scaffold_written, 1)
+
+    def test_plan_android_skips_shadowed_schemas(self):
+        """Schemas listed in ``.jsonui-type-map.json`` are owned by the
+        consumer's hand-written data class. Plan must skip DTO emit,
+        Domain scaffold creation, AND patcher registration for them —
+        any of those touching the shadow file corrupts consumer code.
+        """
+        import json
+        from jui_cli.core.api_model_sync import plan_android
+        from jui_cli.core.openapi_loader import parse_swagger
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp)
+            # Minimal jui.config.json so ConfigManager loads.
+            (tmp_root / "jui.config.json").write_text(json.dumps({
+                "platforms": {"android": {"root": "app-android"}},
+                "type_map_file": ".jsonui-type-map.json",
+            }), encoding="utf-8")
+            # Shadow ClientAnalysis (hand-written, no auto DTO).
+            (tmp_root / ".jsonui-type-map.json").write_text(json.dumps({
+                "types": {
+                    "ClientAnalysis": {"class": "ClientAnalysis"},
+                },
+            }), encoding="utf-8")
+            # Minimal Android tree so the path resolver finds kotlin/.
+            (tmp_root / "app-android/app/src/main/kotlin").mkdir(parents=True)
+            (tmp_root / "app-android/kjui.config.json").write_text(json.dumps({
+                "package_name": "foo.app",
+                "source_directory": "app/src/main",
+            }), encoding="utf-8")
+
+            from jui_cli.core.config_manager import ConfigManager
+            cm = ConfigManager(tmp_root / "jui.config.json")
+            doc = parse_swagger({
+                "openapi": "3.0.3",
+                "info": {"title": "T", "version": "1"},
+                "components": {"schemas": {
+                    # Shadowed — codegen must skip.
+                    "ClientAnalysis": {
+                        "type": "object",
+                        "required": ["score"],
+                        "properties": {"score": {"type": "integer"}},
+                    },
+                    # Not shadowed — codegen emits normally.
+                    "Normal": {
+                        "type": "object",
+                        "required": ["id"],
+                        "properties": {"id": {"type": "string"}},
+                    },
+                }},
+            }, "test.json")
+
+            plan = plan_android(
+                cm,
+                {"root": "app-android"},
+                [doc],
+            )
+
+        # No expected_files / scaffolds / patchers entries reference the
+        # shadowed schema by file name.
+        all_paths = (
+            list(plan.expected_files)
+            + list(plan.domain_scaffolds)
+            + list(plan.domain_patchers)
+        )
+        for path in all_paths:
+            self.assertNotIn(
+                "ClientAnalysis",
+                path.name,
+                f"shadowed schema leaked into plan: {path}",
+            )
+        # The non-shadowed schema is still emitted as expected.
+        normal_paths = [p for p in plan.expected_files if "Normal" in p.name]
+        self.assertTrue(
+            normal_paths,
+            "non-shadowed schema must still emit",
+        )
 
     def test_apply_plan_idempotent_when_patcher_no_change(self):
         from jui_cli.core.api_model_sync import SyncPlan, apply_plan

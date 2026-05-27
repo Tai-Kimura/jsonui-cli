@@ -50,6 +50,21 @@ class SyncPlan:
     domain_patchers: dict[Path, Callable[[], bool]] = field(default_factory=dict)
 
 
+def _shadowed_schema_names(config_mgr: ConfigManager) -> set[str]:
+    """Names the user has shadowed in ``.jsonui-type-map.json``.
+
+    Loaded once per planner call. Shadowed schemas are owned by the
+    consumer (hand-written data class / struct) so DTO emit, Domain
+    scaffold, and the kotlinx Domain patcher all need to leave them
+    alone — touching them would either overwrite hand-written code
+    (DTO/scaffold) or emit references to a non-existent ``XxxDto``
+    (patcher).
+    """
+    from .type_mapper import TypeMapper
+
+    return TypeMapper(config_mgr.type_map_file).user_keys()
+
+
 def plan_android(
     config_mgr: ConfigManager,
     pconfig: dict,
@@ -105,8 +120,11 @@ def plan_android(
     scaffolds: dict[Path, str] = {}
     patchers: dict[Path, Callable[[], bool]] = {}
     is_kotlinx = api_cfg["serializer"] == "kotlinx"
+    shadowed = _shadowed_schema_names(config_mgr)
     for doc in docs:
         for schema in doc.schemas:
+            if schema.name in shadowed:
+                continue
             expected[gen.dto_path(schema.name)] = gen.generate_dto_source(schema, doc)
             if not doc.should_skip_domain(schema):
                 dpath = gen.domain_path(schema.name)
@@ -121,6 +139,8 @@ def plan_android(
                         lambda p=dpath, n=schema.name: _patch_kotlinx_domain(p, n)
                     )
         for enum in doc.enums:
+            if enum.name in shadowed:
+                continue
             expected[gen.enum_path(enum.name)] = gen.generate_enum_source(enum, doc)
     return SyncPlan(
         platform="android",
@@ -155,12 +175,17 @@ def plan_web(
 
     expected: dict[Path, str] = {}
     scaffolds: dict[Path, str] = {}
+    shadowed = _shadowed_schema_names(config_mgr)
     for doc in docs:
         for schema in doc.schemas:
+            if schema.name in shadowed:
+                continue
             expected[gen.dto_path(schema.name)] = gen.generate_dto_source(schema, doc)
             if not doc.should_skip_domain(schema):
                 scaffolds[gen.domain_path(schema.name)] = gen.generate_domain_source(schema)
         for enum in doc.enums:
+            if enum.name in shadowed:
+                continue
             expected[gen.enum_path(enum.name)] = gen.generate_enum_source(enum, doc)
     return SyncPlan(platform="web", expected_files=expected, domain_scaffolds=scaffolds)
 
@@ -193,8 +218,11 @@ def plan_ios(
 
     expected: dict[Path, str] = {}
     scaffolds: dict[Path, str] = {}
+    shadowed = _shadowed_schema_names(config_mgr)
     for doc in docs:
         for schema in doc.schemas:
+            if schema.name in shadowed:
+                continue
             expected[gen.dto_path(schema.name)] = gen.generate_dto_source(schema, doc)
             # OR-evaluate per-schema x-jui-skip-domain (schema.skip_domain)
             # and per-app api.schemas.skip_domain (doc.skip_domain_overrides).
@@ -202,6 +230,8 @@ def plan_ios(
             if not doc.should_skip_domain(schema):
                 scaffolds[gen.domain_path(schema.name)] = gen.generate_domain_source(schema)
         for enum in doc.enums:
+            if enum.name in shadowed:
+                continue
             expected[gen.enum_path(enum.name)] = gen.generate_enum_source(enum, doc)
     return SyncPlan(platform="ios", expected_files=expected, domain_scaffolds=scaffolds)
 
