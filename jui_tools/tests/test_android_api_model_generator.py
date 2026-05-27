@@ -271,6 +271,182 @@ class DomainScaffoldTests(unittest.TestCase):
         self.assertNotIn("@generated", src)
 
 
+class KotlinxDomainSerializerTests(unittest.TestCase):
+    """kotlinx-mode Domain wrappers carry a delegating KSerializer so they
+    are usable as Retrofit request/response types and as fields inside
+    `@Serializable` composites. See bug
+    kjui-wrapper-class-not-serializable-blocks-retrofit-and-composites.
+    """
+
+    def _doc_and_schema(self):
+        doc = parse_swagger(_doc({
+            "AuthResponse": {
+                "type": "object",
+                "required": ["token"],
+                "properties": {"token": {"type": "string"}},
+            },
+        }), "test.json")
+        return doc, doc.schemas[0]
+
+    def test_new_scaffold_has_serializable_annotation_and_block(self):
+        _, schema = self._doc_and_schema()
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "kotlinx").generate_domain_source(schema)
+        self.assertIn("@Serializable(with = AuthResponseSerializer::class)", src)
+        self.assertIn("class AuthResponse(val dto: AuthResponseDto)", src)
+        self.assertIn("object AuthResponseSerializer : KSerializer<AuthResponse>", src)
+        self.assertIn("private val dtoSerializer = AuthResponseDto.serializer()", src)
+        self.assertIn("AUTO-GENERATED Serializer", src)
+        self.assertIn("END AUTO-GENERATED Serializer", src)
+        # Required imports.
+        for imp in (
+            "import kotlinx.serialization.KSerializer",
+            "import kotlinx.serialization.Serializable",
+            "import kotlinx.serialization.descriptors.SerialDescriptor",
+            "import kotlinx.serialization.encoding.Decoder",
+            "import kotlinx.serialization.encoding.Encoder",
+            "import com.example.app.model.generated.AuthResponseDto",
+        ):
+            self.assertIn(imp, src)
+
+    def test_moshi_mode_emits_plain_scaffold(self):
+        _, schema = self._doc_and_schema()
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "moshi").generate_domain_source(schema)
+        self.assertNotIn("@Serializable", src)
+        self.assertNotIn("KSerializer", src)
+        self.assertNotIn("AUTO-GENERATED Serializer", src)
+        self.assertIn("class AuthResponse(val dto: AuthResponseDto)", src)
+
+    def test_none_mode_emits_plain_scaffold(self):
+        _, schema = self._doc_and_schema()
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "none").generate_domain_source(schema)
+        self.assertNotIn("@Serializable", src)
+        self.assertNotIn("KSerializer", src)
+
+    def test_existing_scaffold_gets_annotation_and_block_appended(self):
+        """An old scaffold (pre-fix shape) gets annotation + block added on
+        next build. User customization zone is preserved verbatim."""
+        _, schema = self._doc_and_schema()
+        with tempfile.TemporaryDirectory() as tmp:
+            gen = _gen(Path(tmp), "kotlinx")
+            existing = (
+                "package com.example.app.model\n"
+                "\n"
+                "import com.example.app.model.generated.AuthResponseDto\n"
+                "\n"
+                "class AuthResponse(val dto: AuthResponseDto) {\n"
+                "    val tokenUpper: String get() = dto.token.uppercase()\n"
+                "}\n"
+            )
+            path = gen.domain_path("AuthResponse")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(existing, encoding="utf-8")
+
+            result = gen.write_domain(schema)
+            self.assertTrue(result.wrote)
+            self.assertFalse(result.skipped_existing)
+            updated = path.read_text(encoding="utf-8")
+
+        # User customization is preserved verbatim.
+        self.assertIn("val tokenUpper: String get() = dto.token.uppercase()", updated)
+        # Annotation is injected immediately above the class declaration.
+        self.assertIn(
+            "@Serializable(with = AuthResponseSerializer::class)\n"
+            "class AuthResponse(val dto: AuthResponseDto) {",
+            updated,
+        )
+        # Serializer block is appended at end of file.
+        self.assertIn("object AuthResponseSerializer : KSerializer<AuthResponse>", updated)
+        # Required imports added without duplicating the existing DTO import.
+        self.assertEqual(updated.count("import com.example.app.model.generated.AuthResponseDto"), 1)
+        self.assertIn("import kotlinx.serialization.Serializable", updated)
+
+    def test_existing_scaffold_with_old_block_gets_block_replaced(self):
+        """When markers exist, the block between them is rewritten (not
+        appended again). Idempotency across two rebuilds."""
+        _, schema = self._doc_and_schema()
+        with tempfile.TemporaryDirectory() as tmp:
+            gen = _gen(Path(tmp), "kotlinx")
+            # Simulate first build output.
+            path = gen.domain_path("AuthResponse")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(gen.generate_domain_source(schema), encoding="utf-8")
+
+            # User adds a proxy.
+            current = path.read_text(encoding="utf-8")
+            current = current.replace(
+                "    // stored properties, methods, and conversions here.",
+                "    // stored properties, methods, and conversions here.\n"
+                "    val tokenUpper: String get() = dto.token.uppercase()",
+            )
+            path.write_text(current, encoding="utf-8")
+
+            # Mutate the auto block to verify it gets restored.
+            corrupted = current.replace(
+                "private val dtoSerializer = AuthResponseDto.serializer()",
+                "private val dtoSerializer = TamperedDto.serializer()",
+            )
+            path.write_text(corrupted, encoding="utf-8")
+
+            # Re-run write_domain.
+            result = gen.write_domain(schema)
+            self.assertTrue(result.wrote)
+            updated = path.read_text(encoding="utf-8")
+
+        # Block restored (corruption gone).
+        self.assertIn("private val dtoSerializer = AuthResponseDto.serializer()", updated)
+        self.assertNotIn("TamperedDto.serializer", updated)
+        # User proxy still in the user zone.
+        self.assertIn("val tokenUpper: String get() = dto.token.uppercase()", updated)
+        # Exactly one block (markers not duplicated).
+        self.assertEqual(updated.count("AUTO-GENERATED Serializer — do not edit"), 1)
+
+    def test_idempotent_second_call_no_change(self):
+        _, schema = self._doc_and_schema()
+        with tempfile.TemporaryDirectory() as tmp:
+            gen = _gen(Path(tmp), "kotlinx")
+            r1 = gen.write_domain(schema)
+            self.assertTrue(r1.wrote)
+            r2 = gen.write_domain(schema)
+            # Existing file matches what we'd regenerate → no change.
+            self.assertFalse(r2.wrote)
+            self.assertTrue(r2.skipped_existing)
+
+    def test_custom_user_with_annotation_not_overwritten(self):
+        """If the user manually wrote a different serializer annotation,
+        the patcher leaves it alone — only the AUTO-GENERATED block fires."""
+        _, schema = self._doc_and_schema()
+        with tempfile.TemporaryDirectory() as tmp:
+            gen = _gen(Path(tmp), "kotlinx")
+            existing = (
+                "package com.example.app.model\n"
+                "\n"
+                "import com.example.app.model.generated.AuthResponseDto\n"
+                "import kotlinx.serialization.Serializable\n"
+                "\n"
+                "@Serializable(with = MyCustomSerializer::class)\n"
+                "class AuthResponse(val dto: AuthResponseDto)\n"
+            )
+            path = gen.domain_path("AuthResponse")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(existing, encoding="utf-8")
+
+            gen.write_domain(schema)
+            updated = path.read_text(encoding="utf-8")
+
+        # User's annotation is preserved.
+        self.assertIn("@Serializable(with = MyCustomSerializer::class)", updated)
+        # Codegen does NOT inject a competing annotation above the class.
+        self.assertNotIn(
+            "@Serializable(with = AuthResponseSerializer::class)\nclass AuthResponse",
+            updated,
+        )
+        # Serializer block is still appended (codegen artifact, harmless).
+        self.assertIn("object AuthResponseSerializer", updated)
+
+
 class RefTypeTests(unittest.TestCase):
     def test_object_ref_uses_dto_suffix(self):
         doc = parse_swagger(_doc({
