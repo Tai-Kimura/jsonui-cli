@@ -19,9 +19,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 from .config_manager import ConfigManager
 from .openapi_loader import OpenAPILoadError, load_swagger
@@ -35,11 +35,19 @@ class SyncPlan:
 
     Used by verify_cmd to compare expected output against disk without
     actually writing. ``build_cmd`` consumes the same plan and persists it.
+
+    ``domain_patchers`` carries optional in-place mutators for Domain
+    scaffold files that already exist on disk — used by the Android
+    kotlinx pipeline to retroactively inject ``@Serializable(with = ...)``
+    + the delegating ``KSerializer`` block onto pre-existing wrappers
+    that were emitted before the kotlinx Serializer feature landed.
+    Each callable returns True iff it actually changed the file.
     """
 
     platform: str
     expected_files: dict[Path, str]  # absolute path → expected source
     domain_scaffolds: dict[Path, str]  # absolute path → scaffold source (write only if absent)
+    domain_patchers: dict[Path, Callable[[], bool]] = field(default_factory=dict)
 
 
 def plan_android(
@@ -70,6 +78,7 @@ def plan_android(
     from ..generators.android_api_model_generator import (
         AndroidApiModelGenerator,
         AndroidApiPlatformConfig,
+        _patch_kotlinx_domain,
     )
 
     platform_root = config_mgr.project_root / pconfig["root"]
@@ -94,14 +103,31 @@ def plan_android(
 
     expected: dict[Path, str] = {}
     scaffolds: dict[Path, str] = {}
+    patchers: dict[Path, Callable[[], bool]] = {}
+    is_kotlinx = api_cfg["serializer"] == "kotlinx"
     for doc in docs:
         for schema in doc.schemas:
             expected[gen.dto_path(schema.name)] = gen.generate_dto_source(schema, doc)
             if not doc.should_skip_domain(schema):
-                scaffolds[gen.domain_path(schema.name)] = gen.generate_domain_source(schema)
+                dpath = gen.domain_path(schema.name)
+                scaffolds[dpath] = gen.generate_domain_source(schema)
+                # kotlinx Domain wrappers need the @Serializable annotation
+                # and a delegating KSerializer block. Hand a patcher to
+                # ``apply_plan`` so existing scaffolds (emitted before
+                # this feature landed) get retroactively patched on the
+                # next ``jui build``.
+                if is_kotlinx:
+                    patchers[dpath] = (
+                        lambda p=dpath, n=schema.name: _patch_kotlinx_domain(p, n)
+                    )
         for enum in doc.enums:
             expected[gen.enum_path(enum.name)] = gen.generate_enum_source(enum, doc)
-    return SyncPlan(platform="android", expected_files=expected, domain_scaffolds=scaffolds)
+    return SyncPlan(
+        platform="android",
+        expected_files=expected,
+        domain_scaffolds=scaffolds,
+        domain_patchers=patchers,
+    )
 
 
 def plan_web(
@@ -214,6 +240,14 @@ def apply_plan(plan: SyncPlan, *, prune_orphans: bool) -> tuple[int, int, int]:
 
     for path, source in plan.domain_scaffolds.items():
         if path.exists():
+            # Run the per-path patcher (if any) — used by kotlinx Android
+            # to retroactively add ``@Serializable`` + the delegating
+            # ``KSerializer`` block to wrappers emitted before that
+            # feature landed. Patchers are idempotent; subsequent builds
+            # over an already-patched file return False.
+            patcher = plan.domain_patchers.get(path)
+            if patcher is not None and patcher():
+                scaffold_written += 1
             continue
         if atomic_write_text(path, source):
             scaffold_written += 1

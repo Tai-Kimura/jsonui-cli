@@ -838,6 +838,108 @@ class OneOfDiscriminatorTests(unittest.TestCase):
         self.assertIn("kotlinx serializer", str(ctx.exception))
 
 
+class ApplyPlanKotlinxPatcherTests(unittest.TestCase):
+    """Regression for the apply_plan path that retroactively patches
+    pre-existing Domain wrapper scaffolds with the kotlinx
+    ``@Serializable`` annotation + delegating ``KSerializer`` block.
+
+    The earlier fix wired ``_patch_kotlinx_domain`` into the generator's
+    ``write_domain`` method, but ``apply_plan`` doesn't go through
+    ``write_domain`` — it shortcuts with ``if path.exists(): continue``,
+    leaving 100+ wrappers in consumer projects un-patched and crashing
+    at runtime with ``Serializer for class '...' is not found``.
+    See bug
+    ``kjui-android-domain-existing-scaffolds-not-retroactively-patched-with-serializable``.
+    """
+
+    def test_apply_plan_patches_existing_kotlinx_scaffold(self):
+        from jui_cli.core.api_model_sync import SyncPlan, apply_plan
+        from jui_cli.generators.android_api_model_generator import (
+            _patch_kotlinx_domain,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp)
+            dto_path = tmp_root / "app/src/main/kotlin/foo/model/generated/UserProfileDto.kt"
+            domain_path = tmp_root / "app/src/main/kotlin/foo/model/UserProfile.kt"
+            dto_path.parent.mkdir(parents=True, exist_ok=True)
+            domain_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Pre-existing un-patched Domain wrapper.
+            domain_path.write_text(
+                "package foo.model\n"
+                "\n"
+                "import foo.model.generated.UserProfileDto\n"
+                "\n"
+                "class UserProfile(val dto: UserProfileDto)\n",
+                encoding="utf-8",
+            )
+            # Stub DTO so the serializer reference resolves on inspection.
+            dto_path.write_text("// dto stub\n", encoding="utf-8")
+
+            plan = SyncPlan(
+                platform="android",
+                expected_files={dto_path: "// dto stub\n"},
+                domain_scaffolds={domain_path: "// scaffold (would-be) source\n"},
+                domain_patchers={
+                    domain_path: lambda: _patch_kotlinx_domain(
+                        domain_path, "UserProfile"
+                    ),
+                },
+            )
+
+            dto_written, scaffold_written, pruned = apply_plan(plan, prune_orphans=False)
+            updated = domain_path.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "@Serializable(with = UserProfileSerializer::class)",
+            updated,
+            "annotation must be injected into pre-existing scaffold",
+        )
+        self.assertIn(
+            "object UserProfileSerializer : KSerializer<UserProfile>",
+            updated,
+            "delegating KSerializer block must be appended",
+        )
+        # apply_plan reports the patch as a scaffold write.
+        self.assertEqual(scaffold_written, 1)
+
+    def test_apply_plan_idempotent_when_patcher_no_change(self):
+        from jui_cli.core.api_model_sync import SyncPlan, apply_plan
+        from jui_cli.generators.android_api_model_generator import (
+            _patch_kotlinx_domain,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp)
+            domain_path = tmp_root / "app/src/main/kotlin/foo/model/UserProfile.kt"
+            domain_path.parent.mkdir(parents=True, exist_ok=True)
+            # Pre-existing un-patched scaffold.
+            domain_path.write_text(
+                "package foo.model\n"
+                "\n"
+                "import foo.model.generated.UserProfileDto\n"
+                "\n"
+                "class UserProfile(val dto: UserProfileDto)\n",
+                encoding="utf-8",
+            )
+
+            patcher = lambda: _patch_kotlinx_domain(domain_path, "UserProfile")
+            plan = SyncPlan(
+                platform="android",
+                expected_files={},
+                domain_scaffolds={domain_path: "// scaffold\n"},
+                domain_patchers={domain_path: patcher},
+            )
+
+            # First run patches the file.
+            _, first_written, _ = apply_plan(plan, prune_orphans=False)
+            self.assertEqual(first_written, 1)
+            # Second run is a no-op.
+            _, second_written, _ = apply_plan(plan, prune_orphans=False)
+            self.assertEqual(second_written, 0)
+
+
 class WrapperSchemaTests(unittest.TestCase):
     """Non-object schemas emit ``data class XDto(val value: T)`` +
     a custom KSerializer that delegates to the inner type's serializer.
