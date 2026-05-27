@@ -722,6 +722,73 @@ class OneOfDiscriminatorTests(unittest.TestCase):
         self.assertIn("Schema-level", str(ctx.exception))
 
 
+class WrapperSchemaTests(unittest.TestCase):
+    """Non-object top-level schemas (``type: string`` / ``type: array``)
+    parse into ``SchemaDef(is_wrapper=True)`` with a synthesized single
+    field — used for oneOf variants that wrap a bare value. See bug
+    jui-android-codegen-empty-data-class-for-non-object-schema-types.
+    """
+
+    def test_string_wrapper(self):
+        doc = parse_swagger(_doc({
+            "Thinking": {"type": "string", "description": "LLM text"},
+        }), "test.json")
+        schema = doc.schemas[0]
+        self.assertTrue(schema.is_wrapper)
+        self.assertEqual(schema.wrapper_field_name, "value")
+        self.assertIsNotNone(schema.wrapped_type)
+        self.assertTrue(schema.wrapped_type.is_primitive)
+        self.assertEqual(len(schema.fields), 1)
+        self.assertEqual(schema.fields[0].wire_name, "value")
+
+    def test_array_wrapper(self):
+        doc = parse_swagger(_doc({
+            "Item": {"type": "object", "properties": {"id": {"type": "string"}}},
+            "Results": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/Item"},
+            },
+        }), "test.json")
+        results = next(s for s in doc.schemas if s.name == "Results")
+        self.assertTrue(results.is_wrapper)
+        self.assertEqual(results.wrapper_field_name, "items")
+        self.assertTrue(results.wrapped_type.is_array)
+        self.assertEqual(results.wrapped_type.element.ref_name, "Item")
+
+    def test_object_schema_not_wrapper(self):
+        doc = parse_swagger(_doc({
+            "User": {
+                "type": "object",
+                "required": ["id"],
+                "properties": {"id": {"type": "string"}},
+            },
+        }), "test.json")
+        self.assertFalse(doc.schemas[0].is_wrapper)
+        self.assertIsNone(doc.schemas[0].wrapped_type)
+
+    def test_enum_only_schema_not_wrapper(self):
+        """``type: string`` + ``enum: [...]`` is still parsed as an
+        :class:`EnumDef`, not a wrapper schema."""
+        doc = parse_swagger(_doc({
+            "Color": {"type": "string", "enum": ["red", "blue"]},
+        }), "test.json")
+        self.assertEqual(len(doc.schemas), 0)
+        self.assertEqual(len(doc.enums), 1)
+        self.assertEqual(doc.enums[0].name, "Color")
+
+    def test_integer_wrapper(self):
+        doc = parse_swagger(_doc({
+            "Count": {"type": "integer", "format": "int64"},
+        }), "test.json")
+        schema = doc.schemas[0]
+        self.assertTrue(schema.is_wrapper)
+        self.assertEqual(schema.fields[0].wire_name, "value")
+        self.assertEqual(
+            schema.wrapped_type.primitive,
+            schema.fields[0].type.primitive,
+        )
+
+
 class RefHaltsTests(unittest.TestCase):
     def test_relative_file_ref_halts(self):
         with self.assertRaises(OpenAPILoadError) as ctx:

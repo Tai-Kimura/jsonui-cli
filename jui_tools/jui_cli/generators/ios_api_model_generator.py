@@ -143,6 +143,16 @@ class IosApiModelGenerator:
             f"struct {schema.name}Dto: {', '.join(conformances)} {{"
         )
 
+        # Wrapper schemas (top-level ``type: string`` / ``type: array`` etc.)
+        # take a separate emission path: a single stored property + a
+        # ``singleValueContainer``-based Codable so the wire format is the
+        # bare wrapped value rather than a JSON object envelope.
+        if schema.is_wrapper:
+            body_lines.extend(_emit_swift_wrapper_body(schema, enum_names))
+            body_lines.append("}")
+            body = "\n".join(body_lines)
+            return f"{header}\nimport Foundation\n\n{body}\n\n{footer}\n"
+
         has_oneof = any(f.type.is_one_of_ref for f in schema.fields)
 
         # Stored properties (one per field).
@@ -725,3 +735,43 @@ def _find_field_by_wire_name(schema: SchemaDef, wire_name: str) -> FieldDef | No
         if f.wire_name == wire_name:
             return f
     return None
+
+
+# --------------------------------------------------------------------------- #
+# Non-object wrapper schemas (``type: string`` / ``type: array`` etc.)
+# --------------------------------------------------------------------------- #
+
+
+def _emit_swift_wrapper_body(
+    schema: SchemaDef,
+    enum_names: set[str],
+) -> list[str]:
+    """Lines for the body of a wrapper DTO.
+
+    Emits a single stored property of the wrapped type, a memberwise
+    initializer (Swift suppresses the auto one once we declare a custom
+    ``init(from:)``), and a pair of ``singleValueContainer``-based
+    Codable methods so the wire format is just the bare value
+    (``"hello"`` / ``[1, 2, 3]``) — not a JSON object.
+    """
+    field = schema.fields[0]
+    type_str = _swift_type_with_enums(field.type, enum_names)
+    name = field.wire_name
+
+    return [
+        f"    let {name}: {type_str}",
+        "",
+        f"    init({name}: {type_str}) {{",
+        f"        self.{name} = {name}",
+        "    }",
+        "",
+        "    init(from decoder: Decoder) throws {",
+        "        let container = try decoder.singleValueContainer()",
+        f"        self.{name} = try container.decode({type_str}.self)",
+        "    }",
+        "",
+        "    func encode(to encoder: Encoder) throws {",
+        "        var container = encoder.singleValueContainer()",
+        f"        try container.encode(self.{name})",
+        "    }",
+    ]

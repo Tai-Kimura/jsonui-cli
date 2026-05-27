@@ -463,10 +463,25 @@ class AndroidGenerator:
         return "\n".join(lines)
 
     def _var_impl_declaration(self, var: VarDef) -> str:
-        """Kotlin Impl-side var declaration with ``override``."""
+        """Kotlin Impl-side var declaration with ``override``.
+
+        ``observable: true`` vars get the Compose canonical scaffold:
+        a ``private MutableStateFlow`` backing field and an
+        ``override val name: StateFlow<T>.asStateFlow()`` view. This is
+        what the Protocol declares (``val name: StateFlow<T>``) and what
+        Compose UI consumes via ``viewModel.name.collectAsState()``.
+        """
         type_str = _kotlin_optional(self._map_type(var.type), var.optional)
-        keyword = "val" if var.read_only else "var"
         init = self._var_default_value(var)
+        if var.observable and not var.read_only:
+            init_expr = init if init is not None else "null"
+            return (
+                f"    private val _{var.name}: MutableStateFlow<{type_str}> = "
+                f"MutableStateFlow({init_expr})\n"
+                f"    override val {var.name}: StateFlow<{type_str}> = "
+                f"_{var.name}.asStateFlow()"
+            )
+        keyword = "val" if var.read_only else "var"
         prefix = "override "
         if init is None:
             return f"    {prefix}{keyword} {var.name}: {type_str}"

@@ -192,6 +192,17 @@ class SchemaDef:
         is_hashable: True if all fields' types are hashable
             (typed maps break Hashable on Swift).
         is_sendable: True if all fields' types are Sendable conformant.
+        is_wrapper: True when the swagger schema is a non-object top-level
+            type (``type: string`` / ``type: integer`` / ``type: array``
+            etc.). The wire format is the bare wrapped value (no JSON
+            object envelope), so codegen emits a single-field wrapper type
+            with a custom single-value (en|de)coder.
+        wrapped_type: For wrapper schemas, the :class:`FieldType` of the
+            sole synthesized field. ``None`` for regular object schemas.
+        wrapper_field_name: Synthesized field name on the wrapper — by
+            convention ``"items"`` for ``type: array``, ``"value"`` for
+            primitives. Used by every platform generator so consumer code
+            accesses ``dto.value`` or ``dto.items``.
     """
 
     name: str
@@ -204,6 +215,9 @@ class SchemaDef:
     is_equatable: bool = True
     is_hashable: bool = True
     is_sendable: bool = True
+    is_wrapper: bool = False
+    wrapped_type: "FieldType | None" = None
+    wrapper_field_name: str = "value"
 
     def referenced_schemas(self) -> set[str]:
         names: set[str] = set()

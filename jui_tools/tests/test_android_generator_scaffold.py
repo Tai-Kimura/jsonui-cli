@@ -20,17 +20,21 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from jui_cli.core.spec_extractor import ScreenSpec, ViewModelDef
+from jui_cli.core.spec_extractor import ScreenSpec, VarDef, ViewModelDef
 from jui_cli.core.type_mapper import TypeMapper
 from jui_cli.generators.android_generator import AndroidGenerator
 
 
-def _make_spec(name: str = "FilterSheet") -> ScreenSpec:
+def _make_spec(
+    name: str = "FilterSheet",
+    *,
+    vars: list[VarDef] | None = None,
+) -> ScreenSpec:
     return ScreenSpec(
         name=name,
         display_name=name,
         description="",
-        view_model=ViewModelDef(),
+        view_model=ViewModelDef(vars=vars or []),
     )
 
 
@@ -71,6 +75,50 @@ class ViewModelScaffoldTypeTests(unittest.TestCase):
             code = gen.generate_viewmodel_impl(_make_spec("FooSheet"))
 
             self.assertIn("import kotlinx.coroutines.flow.asStateFlow", code)
+
+
+class ObservableVarScaffoldTests(unittest.TestCase):
+    """Bug fix: ``observable: true`` vars emit Compose canonical
+    ``private MutableStateFlow + override val StateFlow.asStateFlow()``
+    on the Impl scaffold. The Protocol declares them as
+    ``val name: StateFlow<T>`` (verified in test_protocol_sync.py)."""
+
+    def test_observable_var_emits_state_flow_pair(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gen = _make_generator(root)
+            spec = _make_spec(
+                "HistoryList",
+                vars=[
+                    VarDef(
+                        name="filterSheetData",
+                        type="HistoryFilterSheetData",
+                        observable=True,
+                    ),
+                ],
+            )
+            code = gen.generate_viewmodel_impl(spec)
+        self.assertIn(
+            "private val _filterSheetData: MutableStateFlow<HistoryFilterSheetData>",
+            code,
+        )
+        self.assertIn(
+            "override val filterSheetData: StateFlow<HistoryFilterSheetData> "
+            "= _filterSheetData.asStateFlow()",
+            code,
+        )
+
+    def test_non_observable_var_emits_plain_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gen = _make_generator(root)
+            spec = _make_spec(
+                "Foo",
+                vars=[VarDef(name="counter", type="Int", observable=False)],
+            )
+            code = gen.generate_viewmodel_impl(spec)
+        self.assertIn("override var counter: Int", code)
+        self.assertNotIn("MutableStateFlow<Int>", code)
 
 
 class ViewModelScaffoldBindTests(unittest.TestCase):

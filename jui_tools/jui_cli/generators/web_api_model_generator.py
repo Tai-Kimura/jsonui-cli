@@ -93,6 +93,16 @@ class WebApiModelGenerator:
         )
         footer = comment_footer()
         enum_names = {e.name for e in doc.enums}
+
+        # Wrapper path: ``type: string`` / ``type: array`` etc. become a
+        # TypeScript type alias (``export type FooDto = string;``).
+        # Structural typing makes this transparent at every call site —
+        # the alias is interchangeable with the underlying primitive.
+        if schema.is_wrapper:
+            return _generate_web_wrapper_dto(
+                schema, doc, header, footer, enum_names
+            )
+
         has_oneof = any(f.type.is_one_of_ref for f in schema.fields)
 
         lines: list[str] = []
@@ -355,6 +365,46 @@ def _ts_type_with_enums(ftype: FieldType, enum_names: set[str]) -> str:
         inner = _ts_type_with_enums(ftype.element, enum_names) if ftype.element else "string"
         return f"Record<string, {inner}>"
     return "string"
+
+
+# --------------------------------------------------------------------------- #
+# Non-object wrapper helpers
+# --------------------------------------------------------------------------- #
+
+
+def _generate_web_wrapper_dto(
+    schema: SchemaDef,
+    doc: SwaggerDocument,
+    header: str,
+    footer: str,
+    enum_names: set[str],
+) -> str:
+    """Render a wrapper DTO as an ``export type`` alias.
+
+    Structural typing in TypeScript makes the alias indistinguishable
+    from the underlying primitive at every call site (so a ``ThinkingDto``
+    in a discriminated union or repository return type just acts as a
+    string at runtime).
+    """
+    wrapped_type_str = _ts_type_with_enums(schema.wrapped_type, enum_names) \
+        if schema.wrapped_type is not None else "unknown"
+
+    refs = schema.referenced_schemas()
+    lines: list[str] = []
+    for name in sorted(refs):
+        if name in enum_names:
+            lines.append(f'import type {{ {name} }} from "./{name}";')
+        else:
+            lines.append(f'import type {{ {name}Dto }} from "./{name}Dto";')
+    if lines:
+        lines.append("")
+    if schema.description:
+        lines.extend(_jsdoc_lines(schema.description))
+    if schema.deprecated:
+        lines.append("/** @deprecated */")
+    lines.append(f"export type {schema.name}Dto = {wrapped_type_str};")
+    body = "\n".join(lines)
+    return f"{header}\n\n{body}\n\n{footer}\n"
 
 
 # --------------------------------------------------------------------------- #
