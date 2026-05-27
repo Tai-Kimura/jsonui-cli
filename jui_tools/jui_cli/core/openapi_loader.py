@@ -187,6 +187,31 @@ def parse_swagger(
 
         merged = _resolve_all_of(body, schemas_root, source_path=source_path, pointer=pointer)
         _check_polymorphic(merged, source_path=source_path, pointer=pointer)
+
+        # Wrapper path: top-level non-object schemas (``type: string`` /
+        # ``type: array`` / etc.) are emitted as single-field wrapper DTOs
+        # with custom single-value (en|de)coders. Detected before
+        # ``_check_object_typed`` because that helper only fires on
+        # ``type: object`` and would silently allow ``type: string`` to
+        # fall through into ``_extract_fields`` which returns empty fields.
+        if _is_wrapper_schema(merged):
+            wrapper_schema, wrapper_extras, wrapper_enums = _parse_wrapper_schema(
+                name,
+                merged,
+                schema_names,
+                inline_names,
+                source_path=source_path,
+                pointer=pointer,
+            )
+            for derived in wrapper_extras:
+                inline_schemas.append(derived)
+                inline_names.add(derived.name)
+            for enum_def in wrapper_enums:
+                if enum_def.name not in {e.name for e in enums}:
+                    enums.append(enum_def)
+            schemas.append(wrapper_schema)
+            continue
+
         _check_object_typed(merged, source_path=source_path, pointer=pointer)
 
         fields, extra_inline, extra_enums = _extract_fields(
@@ -279,6 +304,83 @@ def _str_or_none(v: Any) -> str | None:
     if isinstance(v, str) and v.strip():
         return v
     return None
+
+
+def _is_wrapper_schema(body: dict[str, Any]) -> bool:
+    """True when a top-level schema body is a non-object primitive/array.
+
+    These wire as bare values (``"hello"``, ``[1, 2, 3]``) — not JSON
+    objects — so codegen has to emit a single-field wrapper with a
+    custom single-value (en|de)coder rather than the normal object DTO.
+
+    ``type: string|integer`` + ``enum`` is excluded because the
+    enum-only branch handles it earlier in :func:`parse_swagger`. Bodies
+    that have ``properties`` are excluded too (an object that happens
+    to declare a ``type:`` is just a normal object).
+    """
+    t = body.get("type")
+    if t not in ("string", "integer", "number", "boolean", "array"):
+        return False
+    if body.get("properties"):
+        return False
+    if t in ("string", "integer") and "enum" in body:
+        return False
+    return True
+
+
+def _parse_wrapper_schema(
+    name: str,
+    body: dict[str, Any],
+    top_level_names: set[str],
+    inline_names: set[str],
+    *,
+    source_path: str,
+    pointer: str,
+) -> tuple[SchemaDef, list[SchemaDef], list[EnumDef]]:
+    """Build a single-field wrapper :class:`SchemaDef` for a non-object schema.
+
+    Reuses :func:`_field_type` to resolve primitives / arrays / inline
+    derived schemas — anything the regular object path can emit. The
+    synthesized field is named ``"items"`` for arrays and ``"value"`` for
+    everything else; this is the property consumer code will see on the
+    generated DTO (``dto.value`` / ``dto.items``).
+    """
+    wrapped_type, extra_inline, extra_enums = _field_type(
+        body,
+        parent_name=name,
+        field_name="value",
+        top_level_names=top_level_names,
+        inline_names=inline_names,
+        source_path=source_path,
+        pointer=pointer,
+    )
+    field_name = "items" if wrapped_type.is_array else "value"
+    field = FieldDef(
+        wire_name=field_name,
+        type=wrapped_type,
+        required=True,
+        description=None,
+        deprecated=False,
+        default=None,
+        has_default=False,
+    )
+    fields = [field]
+    schema = SchemaDef(
+        name=name,
+        fields=fields,
+        description=_str_or_none(body.get("description")),
+        deprecated=bool(body.get("deprecated", False)),
+        skip_domain=bool(body.get("x-jui-skip-domain", False)),
+        source_pointer=f"{source_path}{pointer}",
+        is_strict=False,
+        is_equatable=_all_equatable(fields),
+        is_hashable=_all_hashable(fields),
+        is_sendable=_all_sendable(fields),
+        is_wrapper=True,
+        wrapped_type=wrapped_type,
+        wrapper_field_name=field_name,
+    )
+    return schema, list(extra_inline), list(extra_enums)
 
 
 def _is_enum_only(body: dict[str, Any]) -> bool:

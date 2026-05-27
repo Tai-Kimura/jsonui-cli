@@ -124,6 +124,24 @@ class AndroidApiModelGenerator:
                 f"Switch api.platforms.android.serializer to 'kotlinx' or wait "
                 f"for v2 Moshi sealed-class codegen."
             )
+        if schema.is_wrapper and self._config.serializer != "kotlinx":
+            raise ValueError(
+                f"Schema {schema.name!r} is a non-object wrapper "
+                f"(type: {schema.wrapped_type and (schema.wrapped_type.primitive or 'array')}), "
+                f"which requires the kotlinx serializer for the custom "
+                f"single-value KSerializer (current={self._config.serializer!r}). "
+                f"Switch api.platforms.android.serializer to 'kotlinx' or "
+                f"factor the swagger schema into an object wrapper."
+            )
+
+        if schema.is_wrapper:
+            return _generate_kotlin_wrapper_dto(
+                schema,
+                doc,
+                self._dto_package(),
+                enum_names={e.name for e in doc.enums},
+                generator_name=self.GENERATOR_NAME,
+            )
 
         header = comment_header(
             source=_relative_source(doc.source_path) + f"#{schema.source_pointer.rsplit('#', 1)[-1]}",
@@ -662,6 +680,131 @@ def _kotlin_default_literal(
     if isinstance(value, dict) and not value:
         return "emptyMap()"
     return None
+
+
+# --------------------------------------------------------------------------- #
+# Non-object wrapper helpers (kotlinx only)
+# --------------------------------------------------------------------------- #
+
+
+def _kotlin_wrapper_serializer_expr(
+    ftype: FieldType,
+    enum_names: set[str],
+) -> tuple[str, list[str]]:
+    """Return ``(serializerExpr, extraImports)`` for a wrapped Kotlin type.
+
+    Used by the wrapper DTO emitter — both for the ``descriptor`` source
+    and for the ``encodeSerializableValue`` / ``decodeSerializableValue``
+    calls that thread payload bytes through the right kotlinx serializer.
+    Returns the canonical ``T.serializer()`` form when one exists.
+    """
+    if ftype.is_primitive:
+        mapping = {
+            PrimitiveKind.STRING: ("String.serializer()", "import kotlinx.serialization.builtins.serializer"),
+            PrimitiveKind.INTEGER_32: ("Int.serializer()", "import kotlinx.serialization.builtins.serializer"),
+            PrimitiveKind.INTEGER_64: ("Long.serializer()", "import kotlinx.serialization.builtins.serializer"),
+            PrimitiveKind.INTEGER: ("Int.serializer()", "import kotlinx.serialization.builtins.serializer"),
+            PrimitiveKind.FLOAT: ("Float.serializer()", "import kotlinx.serialization.builtins.serializer"),
+            PrimitiveKind.DOUBLE: ("Double.serializer()", "import kotlinx.serialization.builtins.serializer"),
+            PrimitiveKind.BOOLEAN: ("Boolean.serializer()", "import kotlinx.serialization.builtins.serializer"),
+        }
+        expr, imp = mapping[ftype.primitive]
+        return expr, [imp]
+    if ftype.is_enum_ref:
+        return f"{ftype.ref_name}.serializer()", []
+    if ftype.is_object_ref:
+        return f"{ftype.ref_name}Dto.serializer()", []
+    if ftype.is_array and ftype.element is not None:
+        inner_expr, inner_imports = _kotlin_wrapper_serializer_expr(
+            ftype.element, enum_names
+        )
+        return (
+            f"ListSerializer({inner_expr})",
+            inner_imports + ["import kotlinx.serialization.builtins.ListSerializer"],
+        )
+    # Maps and other shapes don't have a canonical wrapper serializer
+    # pattern in v1 — caller halts before reaching here.
+    raise ValueError(
+        f"Unsupported wrapped type for Kotlin wrapper schema: {ftype}"
+    )
+
+
+def _generate_kotlin_wrapper_dto(
+    schema: SchemaDef,
+    doc: SwaggerDocument,
+    dto_package: str,
+    *,
+    enum_names: set[str],
+    generator_name: str,
+) -> str:
+    """Render a wrapper DTO file (data class + custom KSerializer object)."""
+    field = schema.fields[0]
+    field_name = field.wire_name
+    field_type = _kotlin_type_with_enums(field.type, enum_names)
+
+    header = comment_header(
+        source=_relative_source(doc.source_path) + f"#{schema.source_pointer.rsplit('#', 1)[-1]}",
+        generator=generator_name,
+    )
+    footer = comment_footer()
+
+    serializer_expr, serializer_imports = _kotlin_wrapper_serializer_expr(
+        field.type, enum_names
+    )
+
+    base_imports = [
+        "import kotlinx.serialization.KSerializer",
+        "import kotlinx.serialization.Serializable",
+        "import kotlinx.serialization.descriptors.SerialDescriptor",
+        "import kotlinx.serialization.encoding.Decoder",
+        "import kotlinx.serialization.encoding.Encoder",
+    ]
+    # Dedupe while preserving declaration order so the output is
+    # deterministic regardless of which serializer expression resolves to
+    # which helper.
+    seen: set[str] = set()
+    imports: list[str] = []
+    for imp in base_imports + serializer_imports:
+        if imp in seen:
+            continue
+        seen.add(imp)
+        imports.append(imp)
+
+    lines: list[str] = []
+    lines.append(f"package {dto_package}")
+    lines.append("")
+    lines.extend(imports)
+    lines.append("")
+    if schema.description:
+        lines.extend(_kdoc_lines(schema.description))
+    if schema.deprecated:
+        lines.append('@Deprecated("schema marked deprecated")')
+    lines.append(f"@Serializable(with = {schema.name}DtoSerializer::class)")
+    lines.append(f"data class {schema.name}Dto(val {field_name}: {field_type})")
+    lines.append("")
+    lines.append(
+        f"object {schema.name}DtoSerializer : KSerializer<{schema.name}Dto> {{"
+    )
+    lines.append(
+        f"    private val inner: KSerializer<{field_type}> = {serializer_expr}"
+    )
+    lines.append("    override val descriptor: SerialDescriptor = inner.descriptor")
+    lines.append("")
+    lines.append(
+        f"    override fun serialize(encoder: Encoder, value: {schema.name}Dto) {{"
+    )
+    lines.append(f"        encoder.encodeSerializableValue(inner, value.{field_name})")
+    lines.append("    }")
+    lines.append("")
+    lines.append(f"    override fun deserialize(decoder: Decoder): {schema.name}Dto {{")
+    lines.append(
+        f"        return {schema.name}Dto(decoder.decodeSerializableValue(inner))"
+    )
+    lines.append("    }")
+    lines.append("}")
+
+    body = "\n".join(lines)
+    return f"{header}\n\n{body}\n\n{footer}\n"
 
 
 # --------------------------------------------------------------------------- #

@@ -208,6 +208,40 @@ class RefTypeTests(unittest.TestCase):
         self.assertIn("labels: Record<string, TagDto>;", src)
 
 
+class WrapperSchemaTests(unittest.TestCase):
+    """Non-object top-level schemas emit as TS type aliases — structural
+    typing makes the alias indistinguishable from the underlying primitive
+    at every call site."""
+
+    def test_string_wrapper_emits_type_alias(self):
+        doc = parse_swagger(_doc({
+            "Thinking": {"type": "string", "description": "LLM text"},
+        }), "test.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp)).generate_dto_source(doc.schemas[0], doc)
+        self.assertIn("export type ThinkingDto = string;", src)
+        self.assertIn("/** LLM text */", src)
+        # No interface — wrapper is purely a type alias.
+        self.assertNotIn("export interface ThinkingDto", src)
+
+    def test_array_wrapper_imports_element_type(self):
+        doc = parse_swagger(_doc({
+            "Result": {"type": "object", "properties": {"id": {"type": "string"}}},
+            "Results": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/Result"},
+            },
+        }), "test.json")
+        results = next(s for s in doc.schemas if s.name == "Results")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp)).generate_dto_source(results, doc)
+        self.assertIn(
+            'import type { ResultDto } from "./ResultDto";',
+            src,
+        )
+        self.assertIn("export type ResultsDto = ResultDto[];", src)
+
+
 class OneOfDiscriminatorTests(unittest.TestCase):
     """oneOf + discriminator emits a TypeScript discriminated-union type
     + ``parse{Name}Dto`` / ``serialize{Name}Dto`` helpers that dispatch

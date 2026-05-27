@@ -64,13 +64,30 @@ def default_method_signature(method: MethodDef, *, platform: str) -> str:
 
 
 def default_var_signature(var: VarDef, *, platform: str) -> str:
-    """Platform-default signature for a ``view_model.vars`` entry (Protocol side)."""
+    """Platform-default signature for a ``view_model.vars`` entry (Protocol side).
+
+    ``observable: true`` on the spec carries semantics that need different
+    protocol shapes per platform — every platform has a different
+    "this value changes and the UI should re-render" pattern:
+
+    - iOS: ``var <name>: T { get set }`` — the Combine ``@Published var``
+      Impl matches that shape directly.
+    - Android (Compose): ``val <name>: StateFlow<T>`` — the canonical
+      Impl pattern is ``private MutableStateFlow + override val
+      StateFlow.asStateFlow()``. The Protocol must declare ``val`` of
+      ``StateFlow<T>``, not ``var T``, or the Impl's getter can't
+      override the Protocol's setter.
+    - Web: pass-through (Web reactive primitive choice is consumer-side).
+    """
     if platform == "ios":
         type_str = _swift_optional(var.type, var.optional)
         accessors = "{ get }" if var.read_only else "{ get set }"
         return f"var {var.name}: {type_str} {accessors}"
     if platform == "android":
         type_str = _kotlin_optional(var.type, var.optional)
+        if var.observable and not var.read_only:
+            # Compose canonical — see docstring above.
+            return f"val {var.name}: StateFlow<{type_str}>"
         keyword = "val" if var.read_only else "var"
         return f"{keyword} {var.name}: {type_str}"
     if platform == "web":

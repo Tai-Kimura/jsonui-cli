@@ -838,6 +838,71 @@ class OneOfDiscriminatorTests(unittest.TestCase):
         self.assertIn("kotlinx serializer", str(ctx.exception))
 
 
+class WrapperSchemaTests(unittest.TestCase):
+    """Non-object schemas emit ``data class XDto(val value: T)`` +
+    a custom KSerializer that delegates to the inner type's serializer.
+    kotlinx-only; Moshi / none halt.
+    """
+
+    def _wrapper_doc(self):
+        return parse_swagger(_doc({
+            "Result": {
+                "type": "object",
+                "required": ["id"],
+                "properties": {"id": {"type": "string"}},
+            },
+            "Thinking": {"type": "string", "description": "LLM text"},
+            "Results": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/Result"},
+            },
+        }), "test.json")
+
+    def test_string_wrapper_emits_serializer(self):
+        doc = self._wrapper_doc()
+        thinking = next(s for s in doc.schemas if s.name == "Thinking")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "kotlinx").generate_dto_source(thinking, doc)
+        self.assertIn("@Serializable(with = ThinkingDtoSerializer::class)", src)
+        self.assertIn("data class ThinkingDto(val value: String)", src)
+        self.assertIn("object ThinkingDtoSerializer : KSerializer<ThinkingDto>", src)
+        self.assertIn(
+            "private val inner: KSerializer<String> = String.serializer()",
+            src,
+        )
+        self.assertIn(
+            "override val descriptor: SerialDescriptor = inner.descriptor",
+            src,
+        )
+        self.assertIn("encoder.encodeSerializableValue(inner, value.value)", src)
+        self.assertIn(
+            "return ThinkingDto(decoder.decodeSerializableValue(inner))",
+            src,
+        )
+        self.assertIn("import kotlinx.serialization.builtins.serializer", src)
+
+    def test_array_wrapper_emits_list_serializer(self):
+        doc = self._wrapper_doc()
+        results = next(s for s in doc.schemas if s.name == "Results")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "kotlinx").generate_dto_source(results, doc)
+        self.assertIn("data class ResultsDto(val items: List<ResultDto>)", src)
+        self.assertIn(
+            "private val inner: KSerializer<List<ResultDto>> = "
+            "ListSerializer(ResultDto.serializer())",
+            src,
+        )
+        self.assertIn("import kotlinx.serialization.builtins.ListSerializer", src)
+
+    def test_wrapper_moshi_mode_halts(self):
+        doc = self._wrapper_doc()
+        thinking = next(s for s in doc.schemas if s.name == "Thinking")
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError) as ctx:
+                _gen(Path(tmp), "moshi").generate_dto_source(thinking, doc)
+        self.assertIn("kotlinx serializer", str(ctx.exception))
+
+
 class WriteBehaviorTests(unittest.TestCase):
     def test_dto_written_idempotent(self):
         doc = parse_swagger(_doc(_user_schema()), "test.json")

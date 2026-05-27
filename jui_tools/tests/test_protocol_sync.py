@@ -51,20 +51,44 @@ class DefaultSignatureTests(unittest.TestCase):
             "suspend fun fetch(id: String): Bool",
         )
 
-    def test_var_plain(self):
+    def test_var_observable_default_android_emits_state_flow(self):
+        """``observable: true`` is the default — Android Protocol must
+        declare the var as ``val StateFlow<T>`` so the Compose canonical
+        ``override val ... = _x.asStateFlow()`` Impl can override it.
+        iOS / Web are unaffected (Combine ``@Published var`` /
+        framework-specific reactive)."""
         v = VarDef(name="isLoading", type="Bool")
-        self.assertEqual(default_var_signature(v, platform="ios"), "var isLoading: Bool { get set }")
-        self.assertEqual(default_var_signature(v, platform="android"), "var isLoading: Bool")
+        self.assertEqual(
+            default_var_signature(v, platform="ios"),
+            "var isLoading: Bool { get set }",
+        )
+        self.assertEqual(
+            default_var_signature(v, platform="android"),
+            "val isLoading: StateFlow<Bool>",
+        )
         self.assertEqual(default_var_signature(v, platform="web"), "isLoading: Bool")
+
+    def test_var_non_observable_android_emits_plain_var(self):
+        v = VarDef(name="counter", type="Int", observable=False)
+        self.assertEqual(
+            default_var_signature(v, platform="android"),
+            "var counter: Int",
+        )
+        # iOS still requires { get set } regardless of observable flag.
+        self.assertEqual(
+            default_var_signature(v, platform="ios"),
+            "var counter: Int { get set }",
+        )
 
     def test_var_read_only(self):
         v = VarDef(name="staticLabel", type="String", read_only=True)
         self.assertIn("{ get }", default_var_signature(v, platform="ios"))
+        # read_only short-circuits the observable path → plain ``val``.
         self.assertEqual(default_var_signature(v, platform="android"), "val staticLabel: String")
         self.assertTrue(default_var_signature(v, platform="web").startswith("readonly "))
 
     def test_var_optional_closure(self):
-        v = VarDef(name="onDismiss", type="() -> Void", optional=True)
+        v = VarDef(name="onDismiss", type="() -> Void", optional=True, observable=False)
         self.assertIn("(() -> Void)?", default_var_signature(v, platform="ios"))
         self.assertIn("(() -> Void)?", default_var_signature(v, platform="android"))
 

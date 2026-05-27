@@ -212,6 +212,53 @@ class DtoEmissionTests(unittest.TestCase):
         self.assertIn("@available(*, deprecated)", src)
 
 
+class WrapperSchemaTests(unittest.TestCase):
+    """Non-object top-level schemas (``type: string`` / ``type: array``)
+    emit as single-field DTOs with ``singleValueContainer``-based
+    Codable so the wire format is the bare wrapped value.
+    """
+
+    def test_string_wrapper_emits_single_value_container(self):
+        doc = parse_swagger(_doc({
+            "Thinking": {"type": "string", "description": "LLM text"},
+        }), "test.json")
+        schema = doc.schemas[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _make_generator(Path(tmp)).generate_dto_source(schema, doc)
+        self.assertIn(
+            "struct ThinkingDto: Codable, Sendable, Equatable, Hashable {",
+            src,
+        )
+        self.assertIn("let value: String", src)
+        self.assertIn("init(value: String) {", src)
+        self.assertIn("init(from decoder: Decoder) throws {", src)
+        self.assertIn(
+            "let container = try decoder.singleValueContainer()",
+            src,
+        )
+        self.assertIn(
+            "self.value = try container.decode(String.self)",
+            src,
+        )
+        self.assertIn("func encode(to encoder: Encoder) throws {", src)
+        self.assertIn("try container.encode(self.value)", src)
+
+    def test_array_wrapper_emits_items_field(self):
+        doc = parse_swagger(_doc({
+            "Result": {"type": "object", "properties": {"id": {"type": "string"}}},
+            "Results": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/Result"},
+            },
+        }), "test.json")
+        results = next(s for s in doc.schemas if s.name == "Results")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _make_generator(Path(tmp)).generate_dto_source(results, doc)
+        self.assertIn("struct ResultsDto:", src)
+        self.assertIn("let items: [ResultDto]", src)
+        self.assertIn("self.items = try container.decode([ResultDto].self)", src)
+
+
 class HashableConformanceTests(unittest.TestCase):
     """Every DTO declares Hashable. When Swift auto-synthesis would fail
     (map / array-of-map fields), an explicit ``hash(into:)`` body is
