@@ -492,11 +492,25 @@ def _patch_kotlinx_domain(path: Path, schema_name: str) -> bool:
     a half-edited Kotlin source.
 
     User customization zone (the class body) is never read or modified.
+
+    Wrapper-shape gate: when the file doesn't actually have a
+    ``val dto: {Name}Dto`` member (i.e. consumer hand-wrote a plain
+    ``data class`` or some other non-wrapper shape and parked it at the
+    Domain wrapper path), the patcher is a no-op. Injecting the
+    serializer onto a non-wrapper class would reference ``value.dto``,
+    which doesn't exist there, and the build would halt with
+    ``Unresolved reference 'dto'``.
     """
     import re
 
     original = path.read_text(encoding="utf-8")
     text = original
+
+    wrapper_member_re = re.compile(
+        rf"\bval\s+dto\s*:\s*{re.escape(schema_name)}Dto\b"
+    )
+    if not wrapper_member_re.search(text):
+        return False
 
     annotation = f"@Serializable(with = {schema_name}Serializer::class)"
     class_decl_re = re.compile(rf"^class {re.escape(schema_name)}\b", re.MULTILINE)
