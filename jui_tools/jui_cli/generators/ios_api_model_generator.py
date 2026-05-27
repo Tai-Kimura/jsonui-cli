@@ -114,13 +114,19 @@ class IosApiModelGenerator:
         enums_by_name = {e.name: e for e in doc.enums}
         enum_names = set(enums_by_name)
 
+        # Hashable is always declared so consumers can put DTOs in `Set` /
+        # `Dictionary` keys without having to write extensions. When the
+        # schema has a field Swift can't auto-synthesize on (map, array of
+        # map, etc.) we emit an explicit ``hash(into:)`` body that hashes
+        # the synthesis-safe subset — see ``_emit_hash_body`` below.
+        # Equatable / Sendable still respect their own flags; only
+        # Hashable is forced on.
         conformances = ["Codable"]
         if schema.is_sendable:
             conformances.append("Sendable")
         if schema.is_equatable:
             conformances.append("Equatable")
-        if schema.is_hashable:
-            conformances.append("Hashable")
+        conformances.append("Hashable")
 
         body_lines: list[str] = []
         if schema.description:
@@ -150,6 +156,11 @@ class IosApiModelGenerator:
                 else:
                     body_lines.append(f'        case {prop} = "{f.wire_name}"')
             body_lines.append("    }")
+
+        # Explicit ``hash(into:)`` when Swift auto-synthesis would fail —
+        # currently triggered by any map / array-of-map / nested-map field.
+        if _schema_needs_explicit_hash(schema):
+            body_lines.extend(_emit_hash_body_lines(schema))
 
         body_lines.append("}")
 
@@ -320,6 +331,67 @@ def _dto_field_lines(
 def _swift_property_name(field: FieldDef) -> str:
     """Wire ``snake_case`` → Swift ``camelCase`` + reserved-word escape."""
     return escape_keyword(snake_to_camel(field.wire_name), language="swift")
+
+
+def _hash_safe(ftype: FieldType) -> bool:
+    """True when Swift can hash a field of this type without help.
+
+    Primitives, enums and object refs are safe — object refs because every
+    DTO now declares ``Hashable`` unconditionally (see plan
+    ``2026-05-27-ios-dto-hashable-explicit-body.md``). Arrays inherit
+    safety from their element type. Maps short-circuit to False — the
+    auto-synthesis path bails on ``[K: V]`` even when both K and V are
+    Hashable in many real-world Swift compiler versions, so we keep the
+    rule conservative.
+    """
+    if ftype.is_primitive:
+        return True
+    if ftype.is_enum_ref:
+        return True
+    if ftype.is_object_ref:
+        return True
+    if ftype.is_map:
+        return False
+    if ftype.is_array and ftype.element is not None:
+        return _hash_safe(ftype.element)
+    return False
+
+
+def _schema_needs_explicit_hash(schema: SchemaDef) -> bool:
+    """True iff at least one field requires us to hand-write ``hash(into:)``."""
+    return any(not _hash_safe(f.type) for f in schema.fields)
+
+
+def _emit_hash_body_lines(schema: SchemaDef) -> list[str]:
+    """Emit the explicit ``hash(into:)`` body for *schema*.
+
+    Hash-safe fields are ``hasher.combine``'d in declaration order. Unsafe
+    fields are listed in a trailing comment so a reader can tell at a
+    glance which fields were dropped from the hash and why. The Equatable
+    auto-synthesis still considers every field, so ``a == b ⟹ hash(a) ==
+    hash(b)`` holds (if all fields equal, the safe subset is also equal,
+    so hashes match). The reverse — ``hash(a) == hash(b) ⟹ a == b`` — is
+    never required by the Hashable contract.
+    """
+    safe: list[str] = []
+    omitted: list[str] = []
+    for f in schema.fields:
+        name = _swift_property_name(f)
+        if _hash_safe(f.type):
+            safe.append(name)
+        else:
+            omitted.append(name)
+
+    lines: list[str] = ["", "    func hash(into hasher: inout Hasher) {"]
+    for name in safe:
+        lines.append(f"        hasher.combine({name})")
+    if omitted:
+        lines.append(
+            "        // Omitted from hash (synthesis-incompatible types): "
+            + ", ".join(omitted)
+        )
+    lines.append("    }")
+    return lines
 
 
 def _swift_case_name(case_name: str) -> str:
