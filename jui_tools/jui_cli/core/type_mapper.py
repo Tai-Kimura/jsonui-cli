@@ -170,6 +170,16 @@ class TypeMapper:
         # ``register_schemas`` can skip them and report the shadowing.
         self._user_keys: set[str] = set(data.get("types") or {})
 
+    def user_keys(self) -> set[str]:
+        """Names that the user explicitly declared in ``.jsonui-type-map.json``.
+
+        Used by ``api_model_sync`` to skip DTO emit + Domain scaffold
+        patching for schemas the consumer has hand-taken-over via a
+        type-map shadow entry. Returns a copy so callers can mutate
+        without affecting the mapper.
+        """
+        return set(getattr(self, "_user_keys", set()))
+
     def register_schemas(self, schema_names: list[str]) -> list[str]:
         """Register swagger-derived schema names as pass-through types.
 

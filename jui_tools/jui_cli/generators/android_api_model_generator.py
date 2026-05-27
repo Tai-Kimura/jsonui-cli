@@ -551,13 +551,28 @@ def _patch_kotlinx_domain(path: Path, schema_name: str) -> bool:
 
     # Step 3: replace or append the serializer block.
     serializer_block = _generate_kotlinx_serializer_block(schema_name)
-    if _KOTLINX_SERIALIZER_BEGIN in text and _KOTLINX_SERIALIZER_END in text:
+    markers_present = (
+        _KOTLINX_SERIALIZER_BEGIN in text and _KOTLINX_SERIALIZER_END in text
+    )
+    serializer_decl_re = re.compile(
+        rf"^object {re.escape(schema_name)}Serializer\b",
+        re.MULTILINE,
+    )
+    if markers_present:
         begin = text.index(_KOTLINX_SERIALIZER_BEGIN)
         end = text.index(_KOTLINX_SERIALIZER_END) + len(_KOTLINX_SERIALIZER_END)
         # Trim trailing newline from the source block once so the splice
         # doesn't double-up blank lines after replacement.
         replacement = serializer_block.rstrip("\n")
         text = text[:begin] + replacement + text[end:]
+    elif serializer_decl_re.search(text):
+        # Marker-less serializer object already at file scope — owned by
+        # the user or by an earlier codegen pass that pre-dated the
+        # marker convention. Appending another block would duplicate the
+        # ``object`` declaration and trigger a ``Redeclaration`` halt,
+        # so leave the existing one in place. Annotation injection in
+        # Step 2 is already idempotent.
+        pass
     else:
         if not text.endswith("\n"):
             text += "\n"
