@@ -42,6 +42,103 @@ class SyncPlan:
     domain_scaffolds: dict[Path, str]  # absolute path → scaffold source (write only if absent)
 
 
+def plan_android(
+    config_mgr: ConfigManager,
+    pconfig: dict,
+    docs: list[SwaggerDocument],
+) -> SyncPlan:
+    """Build the Android write plan without touching disk.
+
+    Resolves ``kjui.config.json#source_directory`` + ``package_name`` so
+    DTO + Domain files land in the package layout the existing kjui
+    ViewModel / Repository / data classes already use.
+
+    Resolution rules (fixes bug ``jui-android-api-model-generator-wrong-
+    source-dir-and-base-package``):
+
+    - Kotlin files live under ``<source_directory>/kotlin/`` (or
+      ``/java/`` fallback) — kjui's ``source_directory`` points at the
+      source-set root, not the language sub-source-set
+    - The consumer's ``package_name`` (e.g. ``com.acme.mobile``)
+      is read from ``kjui.config.json`` and used as the FQN base
+    - ``api.platforms.android.model_package`` is treated as either:
+        * a full FQN (contains a ``.``) — used verbatim
+        * a bare subpackage name — prefixed with ``package_name``
+    - ``dto_subpackage`` is always appended to ``model_package`` to form
+      the DTO package
+    """
+    from ..generators.android_api_model_generator import (
+        AndroidApiModelGenerator,
+        AndroidApiPlatformConfig,
+    )
+
+    platform_root = config_mgr.project_root / pconfig["root"]
+    sources_root, base_package = _resolve_android_sources_and_package(platform_root)
+    api_cfg = config_mgr.api_platform_config("android")
+
+    raw_model_pkg = api_cfg["model_package"]
+    if "." in raw_model_pkg:
+        domain_package = raw_model_pkg
+    else:
+        domain_package = f"{base_package}.{raw_model_pkg}"
+    dto_package = f"{domain_package}.{api_cfg['dto_subpackage']}"
+
+    gen = AndroidApiModelGenerator(
+        AndroidApiPlatformConfig(
+            sources_root=sources_root,
+            domain_package=domain_package,
+            dto_package=dto_package,
+            serializer=api_cfg["serializer"],
+        )
+    )
+
+    expected: dict[Path, str] = {}
+    scaffolds: dict[Path, str] = {}
+    for doc in docs:
+        for schema in doc.schemas:
+            expected[gen.dto_path(schema.name)] = gen.generate_dto_source(schema, doc)
+            if not doc.should_skip_domain(schema):
+                scaffolds[gen.domain_path(schema.name)] = gen.generate_domain_source(schema)
+        for enum in doc.enums:
+            expected[gen.enum_path(enum.name)] = gen.generate_enum_source(enum, doc)
+    return SyncPlan(platform="android", expected_files=expected, domain_scaffolds=scaffolds)
+
+
+def plan_web(
+    config_mgr: ConfigManager,
+    pconfig: dict,
+    docs: list[SwaggerDocument],
+) -> SyncPlan:
+    """Build the Web write plan without touching disk."""
+    from ..generators.web_api_model_generator import (
+        WebApiModelGenerator,
+        WebApiPlatformConfig,
+    )
+
+    platform_root = config_mgr.project_root / pconfig["root"]
+    sources_root = _resolve_web_sources_root(platform_root)
+    api_cfg = config_mgr.api_platform_config("web")
+    gen = WebApiModelGenerator(
+        WebApiPlatformConfig(
+            sources_root=sources_root,
+            model_dir=api_cfg["model_dir"],
+            dto_subdir=api_cfg["dto_subdir"],
+            case_convention=api_cfg["case_convention"],
+        )
+    )
+
+    expected: dict[Path, str] = {}
+    scaffolds: dict[Path, str] = {}
+    for doc in docs:
+        for schema in doc.schemas:
+            expected[gen.dto_path(schema.name)] = gen.generate_dto_source(schema, doc)
+            if not doc.should_skip_domain(schema):
+                scaffolds[gen.domain_path(schema.name)] = gen.generate_domain_source(schema)
+        for enum in doc.enums:
+            expected[gen.enum_path(enum.name)] = gen.generate_enum_source(enum, doc)
+    return SyncPlan(platform="web", expected_files=expected, domain_scaffolds=scaffolds)
+
+
 def plan_ios(
     config_mgr: ConfigManager,
     pconfig: dict,
@@ -189,6 +286,73 @@ def _resolve_ios_sources_root(platform_root: Path) -> Path:
     return platform_root
 
 
+def _resolve_android_sources_and_package(platform_root: Path) -> tuple[Path, str]:
+    """Mirror ``AndroidGenerator`` for source dir + base package resolution.
+
+    Reads ``<platform_root>/kjui.config.json``:
+
+    - ``source_directory`` — source-set root, default ``app/src/main``
+      (kjui convention; Kotlin files live in the ``kotlin/`` sub-source-set
+      under it, matching ``data_directory: "kotlin/<pkg>/data"`` etc.)
+    - ``package_name`` — base FQN, default ``com.example.app``
+
+    The returned ``sources_root`` is ``<source_directory>/kotlin/`` (with
+    ``java/`` fallback when ``kotlin/`` doesn't exist). The Kotlin sub-
+    source-set must be part of the path because the Kotlin compiler maps
+    file location to package via ``kotlin/<pkg-path>/<File>.kt``; without
+    it, generated DTOs would land outside the source set and not be
+    compiled.
+
+    Bug history: this function previously used ``source_directory``
+    verbatim and hardcoded ``com.example.app``, dropping the
+    ``kotlin/`` sub-source-set and overriding the consumer's
+    ``package_name``. See report
+    ``2026-05-27-jui-android-api-model-generator-wrong-source-dir-and-base-package.md``.
+    """
+    kjui_config = platform_root / "kjui.config.json"
+    source_directory = "app/src/main"
+    base_package = "com.example.app"
+    if kjui_config.exists():
+        try:
+            with open(kjui_config, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            source_directory = data.get("source_directory", source_directory)
+            base_package = (
+                data.get("package_name")
+                or data.get("base_package")
+                or data.get("package")
+                or base_package
+            )
+        except (OSError, json.JSONDecodeError):
+            pass
+    sources_root = platform_root / source_directory / "kotlin"
+    if not sources_root.exists():
+        alt_java = platform_root / source_directory / "java"
+        if alt_java.exists():
+            sources_root = alt_java
+    return sources_root, base_package
+
+
+def _resolve_web_sources_root(platform_root: Path) -> Path:
+    """Web: source root is the directory holding ``src/`` (default the
+    platform_root itself, since ``model_dir`` is already config-controlled).
+
+    Reads ``<platform_root>/rjui.config.json#source_directory`` when present
+    so projects with non-standard layouts (e.g. ``app/src``) still work.
+    """
+    rjui_config = platform_root / "rjui.config.json"
+    if rjui_config.exists():
+        try:
+            with open(rjui_config, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            source_dir = data.get("source_directory", "")
+            if source_dir:
+                return platform_root / source_dir
+        except (OSError, json.JSONDecodeError):
+            pass
+    return platform_root / "src"
+
+
 # --------------------------------------------------------------------------- #
 # Generator dispatch
 # --------------------------------------------------------------------------- #
@@ -196,8 +360,8 @@ def _resolve_ios_sources_root(platform_root: Path) -> Path:
 
 _PLATFORM_PLANNERS = {
     "ios": plan_ios,
-    # "android": plan_android,  # Phase 2
-    # "web": plan_web,          # Phase 3
+    "android": plan_android,
+    "web": plan_web,
 }
 
 

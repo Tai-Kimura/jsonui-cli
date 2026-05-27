@@ -10,6 +10,7 @@ from .commands.build_cmd import register_build_command, cmd_build
 from .commands.verify_cmd import register_verify_command, cmd_verify
 from .commands.migrate_cmd import register_migrate_command, cmd_migrate_layouts
 from .commands.lint_generated_cmd import register_lint_generated_command, cmd_lint_generated
+from .commands.ls_cmd import register_ls_command, cmd_ls
 from .commands.sync_tool_cmd import register_sync_tool_command, cmd_sync_tool
 from .commands.hotload_cmd import register_hotload_command, cmd_hotload
 
@@ -43,6 +44,9 @@ def main(argv: list[str] | None = None) -> int:
     # jui lint-generated
     register_lint_generated_command(subparsers)
 
+    # jui ls (MCP discovery commands)
+    register_ls_command(subparsers)
+
     # jui sync_tool
     register_sync_tool_command(subparsers)
 
@@ -65,6 +69,7 @@ def main(argv: list[str] | None = None) -> int:
         "verify": cmd_verify,
         "migrate-layouts": cmd_migrate_layouts,
         "lint-generated": cmd_lint_generated,
+        "ls": cmd_ls,
         "sync_tool": cmd_sync_tool,
         "hotload": cmd_hotload,
     }
