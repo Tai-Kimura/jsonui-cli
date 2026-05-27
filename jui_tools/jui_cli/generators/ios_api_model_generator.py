@@ -27,11 +27,13 @@ from ..core.openapi_naming import (
     escape_keyword,
     resolve_enum_case_for_default,
     snake_to_camel,
+    snake_to_pascal,
 )
 from ..core.schema_ir import (
     EnumDef,
     FieldDef,
     FieldType,
+    OneOfRef,
     PrimitiveKind,
     SchemaDef,
     SwaggerDocument,
@@ -141,12 +143,29 @@ class IosApiModelGenerator:
             f"struct {schema.name}Dto: {', '.join(conformances)} {{"
         )
 
+        has_oneof = any(f.type.is_one_of_ref for f in schema.fields)
+
         # Stored properties (one per field).
         for f in schema.fields:
             body_lines.extend(_dto_field_lines(f, enum_names, enums_by_name))
 
-        # Custom CodingKeys when at least one field is renamed.
-        if any(_swift_property_name(f) != f.wire_name for f in schema.fields):
+        # Nested ``enum {Field}: Codable`` declarations — one per oneOf field.
+        # Variants live alongside the parent type so consumers refer to them as
+        # ``StreamEventDto.Content.conversationId(...)``.
+        for f in schema.fields:
+            if f.type.is_one_of_ref and f.type.one_of is not None:
+                body_lines.extend(_emit_swift_oneof_nested_enum(f, f.type.one_of))
+
+        # Memberwise initializer — Swift suppresses the auto-synthesized one
+        # once we write a custom ``init(from decoder:)`` below, so explicitly
+        # restore it for consumers who construct DTOs at call sites.
+        if has_oneof:
+            body_lines.extend(_emit_swift_memberwise_init(schema, enum_names))
+
+        # Custom CodingKeys when at least one field is renamed, OR always when
+        # the schema has a oneOf field (the custom ``init(from:)`` needs the
+        # keys to dispatch).
+        if has_oneof or any(_swift_property_name(f) != f.wire_name for f in schema.fields):
             body_lines.append("")
             body_lines.append("    enum CodingKeys: String, CodingKey {")
             for f in schema.fields:
@@ -156,6 +175,13 @@ class IosApiModelGenerator:
                 else:
                     body_lines.append(f'        case {prop} = "{f.wire_name}"')
             body_lines.append("    }")
+
+        # Custom ``init(from:)`` + ``encode(to:)`` for oneOf-bearing schemas:
+        # decoder reads the sibling discriminator first, then dispatches into
+        # the matching variant decode; encoder is symmetric.
+        if has_oneof:
+            body_lines.extend(_emit_swift_oneof_init_from_decoder(schema, enum_names))
+            body_lines.extend(_emit_swift_oneof_encode_to_encoder(schema, enum_names))
 
         # Explicit ``hash(into:)`` when Swift auto-synthesis would fail —
         # currently triggered by any map / array-of-map / nested-map field.
@@ -318,7 +344,10 @@ def _dto_field_lines(
             out.append(f"    {ln}")
     if field.deprecated:
         out.append("    @available(*, deprecated)")
-    type_str = _swift_type_with_enums(field.type, enum_names)
+    if field.type.is_one_of_ref:
+        type_str = _swift_oneof_field_type(field)
+    else:
+        type_str = _swift_type_with_enums(field.type, enum_names)
     name = _swift_property_name(field)
     default = _swift_default_literal(field, type_str, enums_by_name)
     line = f"    let {name}: {type_str}"
@@ -336,19 +365,22 @@ def _swift_property_name(field: FieldDef) -> str:
 def _hash_safe(ftype: FieldType) -> bool:
     """True when Swift can hash a field of this type without help.
 
-    Primitives, enums and object refs are safe — object refs because every
-    DTO now declares ``Hashable`` unconditionally (see plan
-    ``2026-05-27-ios-dto-hashable-explicit-body.md``). Arrays inherit
-    safety from their element type. Maps short-circuit to False — the
-    auto-synthesis path bails on ``[K: V]`` even when both K and V are
-    Hashable in many real-world Swift compiler versions, so we keep the
-    rule conservative.
+    Primitives, enums, object refs and oneOf union refs are safe — object
+    refs because every DTO now declares ``Hashable`` unconditionally (see
+    plan ``2026-05-27-ios-dto-hashable-explicit-body.md``), oneOf because
+    the nested enum we emit conforms to Hashable through its associated
+    DTO values. Arrays inherit safety from their element type. Maps
+    short-circuit to False — the auto-synthesis path bails on ``[K: V]``
+    even when both K and V are Hashable in many real-world Swift compiler
+    versions, so we keep the rule conservative.
     """
     if ftype.is_primitive:
         return True
     if ftype.is_enum_ref:
         return True
     if ftype.is_object_ref:
+        return True
+    if ftype.is_one_of_ref:
         return True
     if ftype.is_map:
         return False
@@ -497,3 +529,163 @@ _PRIMITIVE_TO_SWIFT: dict[PrimitiveKind, str] = {
     PrimitiveKind.DOUBLE: "Double",
     PrimitiveKind.BOOLEAN: "Bool",
 }
+
+
+# --------------------------------------------------------------------------- #
+# oneOf / discriminator helpers
+# --------------------------------------------------------------------------- #
+
+
+def _swift_oneof_nested_type_name(field: FieldDef) -> str:
+    """Nested enum name for a oneOf field — e.g. ``content`` → ``Content``."""
+    return snake_to_pascal(field.wire_name)
+
+
+def _swift_oneof_field_type(field: FieldDef) -> str:
+    """Render a oneOf field's type as a reference to the nested enum."""
+    base = _swift_oneof_nested_type_name(field)
+    return f"{base}?" if field.type.nullable else base
+
+
+def _swift_oneof_case_ident(discriminator_value: str) -> str:
+    """``conversation_id`` → ``conversationId`` (snake → camel + escape)."""
+    return escape_keyword(snake_to_camel(discriminator_value), language="swift")
+
+
+def _emit_swift_oneof_nested_enum(field: FieldDef, one_of: OneOfRef) -> list[str]:
+    """Emit ``enum Content: Codable, Sendable, Equatable, Hashable { ... }``.
+
+    Each variant carries the corresponding DTO type as associated value;
+    an ``unknown`` case provides forward-compatibility when the server
+    introduces a new discriminator value before the client is rebuilt.
+    """
+    type_name = _swift_oneof_nested_type_name(field)
+    lines: list[str] = [
+        "",
+        f"    enum {type_name}: Codable, Sendable, Equatable, Hashable {{",
+    ]
+    for variant in one_of.variants:
+        case = _swift_oneof_case_ident(variant.discriminator_value)
+        lines.append(f"        case {case}({variant.ref_name}Dto)")
+    lines.append("        case unknown")
+    lines.append("    }")
+    return lines
+
+
+def _emit_swift_memberwise_init(
+    schema: SchemaDef,
+    enum_names: set[str],
+) -> list[str]:
+    """Emit a memberwise ``init`` so consumers can build oneOf-bearing DTOs.
+
+    Swift suppresses the auto-synthesized memberwise initializer once a
+    custom ``init(from decoder:)`` is declared in the same type, so we
+    have to re-emit it manually.
+    """
+    params: list[str] = []
+    for f in schema.fields:
+        name = _swift_property_name(f)
+        if f.type.is_one_of_ref:
+            type_str = _swift_oneof_field_type(f)
+        else:
+            type_str = _swift_type_with_enums(f.type, enum_names)
+        params.append(f"{name}: {type_str}")
+    lines: list[str] = ["", f"    init({', '.join(params)}) {{"]
+    for f in schema.fields:
+        name = _swift_property_name(f)
+        lines.append(f"        self.{name} = {name}")
+    lines.append("    }")
+    return lines
+
+
+def _emit_swift_oneof_init_from_decoder(
+    schema: SchemaDef,
+    enum_names: set[str],
+) -> list[str]:
+    """Emit ``init(from decoder:)`` that dispatches each oneOf field on its
+    discriminator sibling's wire value."""
+    lines: list[str] = ["", "    init(from decoder: Decoder) throws {"]
+    lines.append("        let container = try decoder.container(keyedBy: CodingKeys.self)")
+
+    # Decode non-oneOf fields first — they're plain Codable.
+    for f in schema.fields:
+        if f.type.is_one_of_ref:
+            continue
+        name = _swift_property_name(f)
+        if f.type.is_one_of_ref:
+            continue
+        type_str = _swift_type_with_enums(f.type, enum_names)
+        bare = type_str.rstrip("?")
+        if f.type.nullable:
+            lines.append(
+                f"        self.{name} = try container.decodeIfPresent({bare}.self, forKey: .{name})"
+            )
+        else:
+            lines.append(
+                f"        self.{name} = try container.decode({bare}.self, forKey: .{name})"
+            )
+
+    # Dispatch each oneOf field.
+    for f in schema.fields:
+        if not f.type.is_one_of_ref or f.type.one_of is None:
+            continue
+        prop = _swift_property_name(f)
+        type_name = _swift_oneof_nested_type_name(f)
+        disc_field = _find_field_by_wire_name(schema, f.type.one_of.discriminator_property)
+        disc_prop = _swift_property_name(disc_field) if disc_field else f.type.one_of.discriminator_property
+        lines.append(f"        switch self.{disc_prop} {{")
+        for variant in f.type.one_of.variants:
+            case = _swift_oneof_case_ident(variant.discriminator_value)
+            decode_call = (
+                f"try container.decode({variant.ref_name}Dto.self, forKey: .{prop})"
+                if not f.type.nullable
+                else f"try container.decodeIfPresent({variant.ref_name}Dto.self, forKey: .{prop}) ?? "
+                     f"{variant.ref_name}Dto()"
+            )
+            lines.append(f'        case "{variant.discriminator_value}":')
+            lines.append(f"            self.{prop} = .{case}({decode_call})")
+        lines.append("        default:")
+        lines.append(f"            self.{prop} = .unknown")
+        lines.append("        }")
+    lines.append("    }")
+    return lines
+
+
+def _emit_swift_oneof_encode_to_encoder(
+    schema: SchemaDef,
+    enum_names: set[str],
+) -> list[str]:
+    """Emit the symmetric ``encode(to:)`` for oneOf-bearing schemas."""
+    lines: list[str] = ["", "    func encode(to encoder: Encoder) throws {"]
+    lines.append("        var container = encoder.container(keyedBy: CodingKeys.self)")
+
+    for f in schema.fields:
+        name = _swift_property_name(f)
+        if f.type.is_one_of_ref and f.type.one_of is not None:
+            lines.append(f"        switch self.{name} {{")
+            for variant in f.type.one_of.variants:
+                case = _swift_oneof_case_ident(variant.discriminator_value)
+                lines.append(
+                    f"        case .{case}(let value): "
+                    f"try container.encode(value, forKey: .{name})"
+                )
+            lines.append(f"        case .unknown: try container.encodeNil(forKey: .{name})")
+            lines.append("        }")
+            continue
+        if f.type.nullable:
+            lines.append(
+                f"        try container.encodeIfPresent(self.{name}, forKey: .{name})"
+            )
+        else:
+            lines.append(
+                f"        try container.encode(self.{name}, forKey: .{name})"
+            )
+    lines.append("    }")
+    return lines
+
+
+def _find_field_by_wire_name(schema: SchemaDef, wire_name: str) -> FieldDef | None:
+    for f in schema.fields:
+        if f.wire_name == wire_name:
+            return f
+    return None

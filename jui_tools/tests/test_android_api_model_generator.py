@@ -608,6 +608,117 @@ class EnumDefaultLiteralTests(unittest.TestCase):
         self.assertIn('val message: String? = "hello"', src)
 
 
+class OneOfDiscriminatorTests(unittest.TestCase):
+    """oneOf + discriminator emits a sealed-class union + a custom
+    KSerializer for the parent. Only the kotlinx serializer is supported
+    in v1; Moshi / none must halt with a clear error.
+    """
+
+    def _stream_event_doc(self):
+        return parse_swagger(_doc({
+            "StreamConvIdContent": {
+                "type": "object",
+                "required": ["cid"],
+                "properties": {"cid": {"type": "string"}},
+            },
+            "StreamThinkingContent": {
+                "type": "object",
+                "required": ["msg"],
+                "properties": {"msg": {"type": "string"}},
+            },
+            "StreamEvent": {
+                "type": "object",
+                "required": ["type", "content"],
+                "properties": {
+                    "type": {"type": "string"},
+                    "content": {
+                        "oneOf": [
+                            {"$ref": "#/components/schemas/StreamConvIdContent"},
+                            {"$ref": "#/components/schemas/StreamThinkingContent"},
+                        ],
+                        "discriminator": {
+                            "propertyName": "type",
+                            "mapping": {
+                                "conversation_id": "#/components/schemas/StreamConvIdContent",
+                                "thinking": "#/components/schemas/StreamThinkingContent",
+                            },
+                        },
+                    },
+                },
+            },
+        }), "test.json")
+
+    def test_sealed_class_emitted_with_data_variants(self):
+        doc = self._stream_event_doc()
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "kotlinx").generate_dto_source(stream, doc)
+        self.assertIn("val content: Content", src)
+        self.assertIn("sealed class Content {", src)
+        self.assertIn(
+            "data class ConversationId(val data: StreamConvIdContentDto) : Content()",
+            src,
+        )
+        self.assertIn(
+            "data class Thinking(val data: StreamThinkingContentDto) : Content()",
+            src,
+        )
+        self.assertIn("data object Unknown : Content()", src)
+
+    def test_custom_kserializer_emitted(self):
+        doc = self._stream_event_doc()
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "kotlinx").generate_dto_source(stream, doc)
+        self.assertIn(
+            "@Serializable(with = StreamEventDtoSerializer::class)",
+            src,
+        )
+        self.assertIn(
+            "object StreamEventDtoSerializer : KSerializer<StreamEventDto>",
+            src,
+        )
+        # serialize/deserialize bodies
+        self.assertIn("override fun serialize(encoder: Encoder, value: StreamEventDto)", src)
+        self.assertIn("override fun deserialize(decoder: Decoder): StreamEventDto", src)
+        # dispatch on discriminator
+        self.assertIn('"conversation_id" -> StreamEventDto.Content.ConversationId(', src)
+        self.assertIn('"thinking" -> StreamEventDto.Content.Thinking(', src)
+        self.assertIn("else -> StreamEventDto.Content.Unknown", src)
+
+    def test_required_kotlinx_json_imports_present(self):
+        doc = self._stream_event_doc()
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "kotlinx").generate_dto_source(stream, doc)
+        for imp in (
+            "import kotlinx.serialization.KSerializer",
+            "import kotlinx.serialization.descriptors.buildClassSerialDescriptor",
+            "import kotlinx.serialization.json.JsonDecoder",
+            "import kotlinx.serialization.json.JsonEncoder",
+            "import kotlinx.serialization.json.buildJsonObject",
+            "import kotlinx.serialization.json.decodeFromJsonElement",
+            "import kotlinx.serialization.json.jsonObject",
+        ):
+            self.assertIn(imp, src)
+
+    def test_moshi_mode_halts(self):
+        doc = self._stream_event_doc()
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError) as ctx:
+                _gen(Path(tmp), "moshi").generate_dto_source(stream, doc)
+        self.assertIn("kotlinx serializer", str(ctx.exception))
+
+    def test_none_mode_halts(self):
+        doc = self._stream_event_doc()
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError) as ctx:
+                _gen(Path(tmp), "none").generate_dto_source(stream, doc)
+        self.assertIn("kotlinx serializer", str(ctx.exception))
+
+
 class WriteBehaviorTests(unittest.TestCase):
     def test_dto_written_idempotent(self):
         doc = parse_swagger(_doc(_user_schema()), "test.json")

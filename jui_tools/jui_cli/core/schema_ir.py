@@ -36,6 +36,39 @@ class PrimitiveKind(str, Enum):
 
 
 @dataclass(frozen=True)
+class OneOfVariant:
+    """One arm of a discriminated ``oneOf`` union.
+
+    Attributes:
+        discriminator_value: the raw string value (matched against the
+            sibling discriminator field's wire value).
+        ref_name: the variant schema name (must resolve to a top-level
+            entry in ``components.schemas``).
+    """
+
+    discriminator_value: str
+    ref_name: str
+
+
+@dataclass(frozen=True)
+class OneOfRef:
+    """A field whose value is one of several variant DTOs, tagged by a
+    sibling property in the parent schema.
+
+    ``discriminator_property`` is the **wire name** of the sibling that
+    carries the discriminator value (as ``String`` on the wire). v1
+    enforces that the sibling exists in the same parent schema; nested /
+    self-discriminator variants are deferred to v2.
+
+    ``variants`` preserves the swagger ``discriminator.mapping`` order so
+    generators emit cases / branches deterministically.
+    """
+
+    discriminator_property: str
+    variants: tuple[OneOfVariant, ...]
+
+
+@dataclass(frozen=True)
 class FieldType:
     """The type of a single DTO field.
 
@@ -49,6 +82,7 @@ class FieldType:
         is_array: ``element`` carries the element type recursively.
         is_map: ``element`` carries the value type
             (``additionalProperties: <typed>``).
+        is_one_of_ref: ``one_of`` carries the discriminated union spec.
         nullable: True if the field is optional or ``nullable: true``.
     """
 
@@ -57,9 +91,11 @@ class FieldType:
     is_object_ref: bool = False
     is_array: bool = False
     is_map: bool = False
+    is_one_of_ref: bool = False
     primitive: PrimitiveKind | None = None
     ref_name: str | None = None
     element: "FieldType | None" = None
+    one_of: OneOfRef | None = None
     nullable: bool = False
 
     def referenced_schemas(self) -> set[str]:
@@ -75,6 +111,9 @@ class FieldType:
             names.add(self.ref_name)
         if self.element is not None:
             names |= self.element.referenced_schemas()
+        if self.one_of is not None:
+            for v in self.one_of.variants:
+                names.add(v.ref_name)
         return names
 
     def is_collection(self) -> bool:

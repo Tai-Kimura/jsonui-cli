@@ -522,7 +522,7 @@ class CycleDetectionTests(unittest.TestCase):
 
 
 class PolymorphicHaltsTests(unittest.TestCase):
-    def test_one_of_halts(self):
+    def test_one_of_without_discriminator_halts(self):
         with self.assertRaises(OpenAPILoadError) as ctx:
             parse_swagger(_doc({
                 "Response": {
@@ -543,7 +543,7 @@ class PolymorphicHaltsTests(unittest.TestCase):
             }), "test.json")
         self.assertEqual(ctx.exception.code, "polymorphic-not-supported")
 
-    def test_discriminator_halts(self):
+    def test_discriminator_alone_halts(self):
         with self.assertRaises(OpenAPILoadError) as ctx:
             parse_swagger(_doc({
                 "M": {
@@ -553,6 +553,173 @@ class PolymorphicHaltsTests(unittest.TestCase):
                 },
             }), "test.json")
         self.assertEqual(ctx.exception.code, "polymorphic-not-supported")
+
+
+class OneOfDiscriminatorTests(unittest.TestCase):
+    """Field-level ``oneOf`` + ``discriminator`` is now a supported v1
+    construct — it parses into an :class:`OneOfRef` carrying the
+    sibling discriminator property name and the variant tag mapping.
+    """
+
+    def _stream_event_doc(self, extra: dict | None = None):
+        body = {
+            "StreamConvIdContent": {
+                "type": "object",
+                "required": ["cid"],
+                "properties": {"cid": {"type": "string"}},
+            },
+            "StreamThinkingContent": {
+                "type": "object",
+                "required": ["msg"],
+                "properties": {"msg": {"type": "string"}},
+            },
+            "StreamEvent": {
+                "type": "object",
+                "required": ["type", "content"],
+                "properties": {
+                    "type": {"type": "string"},
+                    "content": {
+                        "oneOf": [
+                            {"$ref": "#/components/schemas/StreamConvIdContent"},
+                            {"$ref": "#/components/schemas/StreamThinkingContent"},
+                        ],
+                        "discriminator": {
+                            "propertyName": "type",
+                            "mapping": {
+                                "conversation_id": "#/components/schemas/StreamConvIdContent",
+                                "thinking": "#/components/schemas/StreamThinkingContent",
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        if extra:
+            body.update(extra)
+        return _doc(body)
+
+    def test_oneof_with_discriminator_parses_ir(self):
+        doc = parse_swagger(self._stream_event_doc(), "test.json")
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        content_field = next(f for f in stream.fields if f.wire_name == "content")
+        self.assertTrue(content_field.type.is_one_of_ref)
+        self.assertIsNotNone(content_field.type.one_of)
+        one_of = content_field.type.one_of
+        self.assertEqual(one_of.discriminator_property, "type")
+        self.assertEqual(
+            [(v.discriminator_value, v.ref_name) for v in one_of.variants],
+            [
+                ("conversation_id", "StreamConvIdContent"),
+                ("thinking", "StreamThinkingContent"),
+            ],
+        )
+
+    def test_oneof_preserves_mapping_order(self):
+        """Mapping order is preserved so codegen emits cases deterministically."""
+        doc_dict = self._stream_event_doc()
+        # Reverse the mapping declaration order.
+        doc_dict["components"]["schemas"]["StreamEvent"]["properties"]["content"][
+            "discriminator"
+        ]["mapping"] = {
+            "thinking": "#/components/schemas/StreamThinkingContent",
+            "conversation_id": "#/components/schemas/StreamConvIdContent",
+        }
+        doc = parse_swagger(doc_dict, "test.json")
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        one_of = next(f for f in stream.fields if f.wire_name == "content").type.one_of
+        self.assertEqual(
+            [v.discriminator_value for v in one_of.variants],
+            ["thinking", "conversation_id"],
+        )
+
+    def test_oneof_referenced_schemas_includes_variants(self):
+        """``referenced_schemas`` must include every variant so orphan
+        prune and import emit don't strand them."""
+        doc = parse_swagger(self._stream_event_doc(), "test.json")
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        refs = stream.referenced_schemas()
+        self.assertIn("StreamConvIdContent", refs)
+        self.assertIn("StreamThinkingContent", refs)
+
+    def test_oneof_variant_not_in_top_level_halts(self):
+        doc_dict = self._stream_event_doc()
+        # Point mapping at a non-existent ref.
+        doc_dict["components"]["schemas"]["StreamEvent"]["properties"]["content"][
+            "discriminator"
+        ]["mapping"]["thinking"] = "#/components/schemas/DoesNotExist"
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "oneof-variant-not-found")
+
+    def test_oneof_inline_variant_halts(self):
+        doc_dict = self._stream_event_doc()
+        doc_dict["components"]["schemas"]["StreamEvent"]["properties"]["content"]["oneOf"][0] = {
+            "type": "object",
+            "properties": {"foo": {"type": "string"}},
+        }
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "invalid-oneof")
+
+    def test_oneof_mapping_referencing_missing_variant_halts(self):
+        doc_dict = self._stream_event_doc()
+        # mapping has an extra variant not in oneOf list.
+        doc_dict["components"]["schemas"]["StreamEvent"]["properties"]["content"][
+            "discriminator"
+        ]["mapping"]["extra"] = "#/components/schemas/StreamConvIdContent"
+        # Remove StreamConvIdContent from oneOf to force mismatch (extra now
+        # points to a schema not in oneOf).
+        doc_dict["components"]["schemas"]["StreamEvent"]["properties"]["content"]["oneOf"] = [
+            {"$ref": "#/components/schemas/StreamThinkingContent"},
+        ]
+        del doc_dict["components"]["schemas"]["StreamEvent"]["properties"]["content"][
+            "discriminator"
+        ]["mapping"]["conversation_id"]
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "discriminator-mapping-mismatch")
+
+    def test_oneof_missing_mapping_halts(self):
+        doc_dict = self._stream_event_doc()
+        del doc_dict["components"]["schemas"]["StreamEvent"]["properties"]["content"][
+            "discriminator"
+        ]["mapping"]
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "invalid-discriminator")
+
+    def test_oneof_discriminator_sibling_missing_halts(self):
+        doc_dict = self._stream_event_doc()
+        # Rename `type` so the sibling no longer matches discriminator.propertyName.
+        props = doc_dict["components"]["schemas"]["StreamEvent"]["properties"]
+        props["kind"] = props.pop("type")
+        doc_dict["components"]["schemas"]["StreamEvent"]["required"] = ["kind", "content"]
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "oneof-discriminator-sibling-missing")
+
+    def test_one_of_at_schema_level_still_halts(self):
+        """Schema-level oneOf (not inside a field) is still v2 work — halts."""
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_doc({
+                "PolymorphicEnvelope": {
+                    "oneOf": [
+                        {"$ref": "#/components/schemas/A"},
+                        {"$ref": "#/components/schemas/B"},
+                    ],
+                    "discriminator": {
+                        "propertyName": "type",
+                        "mapping": {
+                            "a": "#/components/schemas/A",
+                            "b": "#/components/schemas/B",
+                        },
+                    },
+                },
+                "A": {"type": "object", "properties": {"x": {"type": "string"}}},
+                "B": {"type": "object", "properties": {"y": {"type": "string"}}},
+            }), "test.json")
+        self.assertEqual(ctx.exception.code, "polymorphic-not-supported")
+        self.assertIn("Schema-level", str(ctx.exception))
 
 
 class RefHaltsTests(unittest.TestCase):

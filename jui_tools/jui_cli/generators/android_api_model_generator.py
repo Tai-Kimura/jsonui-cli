@@ -34,11 +34,13 @@ from ..core.openapi_naming import (
     escape_keyword,
     resolve_enum_case_for_default,
     snake_to_camel,
+    snake_to_pascal,
 )
 from ..core.schema_ir import (
     EnumDef,
     FieldDef,
     FieldType,
+    OneOfRef,
     PrimitiveKind,
     SchemaDef,
     SwaggerDocument,
@@ -114,6 +116,15 @@ class AndroidApiModelGenerator:
 
     def generate_dto_source(self, schema: SchemaDef, doc: SwaggerDocument) -> str:
         """Return the Kotlin source for the DTO file (with @generated banner)."""
+        has_oneof = any(f.type.is_one_of_ref for f in schema.fields)
+        if has_oneof and self._config.serializer != "kotlinx":
+            raise ValueError(
+                f"Schema {schema.name!r} uses oneOf + discriminator, which "
+                f"requires the kotlinx serializer (current={self._config.serializer!r}). "
+                f"Switch api.platforms.android.serializer to 'kotlinx' or wait "
+                f"for v2 Moshi sealed-class codegen."
+            )
+
         header = comment_header(
             source=_relative_source(doc.source_path) + f"#{schema.source_pointer.rsplit('#', 1)[-1]}",
             generator=self.GENERATOR_NAME,
@@ -125,9 +136,9 @@ class AndroidApiModelGenerator:
         lines: list[str] = []
         lines.append(f"package {self._dto_package()}")
         lines.append("")
-        for imp in self._dto_imports():
+        for imp in self._dto_imports(has_oneof=has_oneof):
             lines.append(imp)
-        if self._dto_imports():
+        if self._dto_imports(has_oneof=has_oneof):
             lines.append("")
         if schema.description:
             lines.extend(_kdoc_lines(schema.description))
@@ -137,7 +148,7 @@ class AndroidApiModelGenerator:
             lines.append("// additionalProperties: false (strict — extra fields are dropped on decode)")
 
         # Annotation line(s) at class scope (Moshi / kotlinx only).
-        for ann in self._dto_class_annotations():
+        for ann in self._dto_class_annotations(schema=schema, has_oneof=has_oneof):
             lines.append(ann)
         lines.append(f"data class {schema.name}Dto(")
         last = len(schema.fields) - 1
@@ -147,27 +158,71 @@ class AndroidApiModelGenerator:
             ):
                 lines.append(ln)
         # Trailing comma after the last field is valid Kotlin and matches Moshi codegen output.
-        lines.append(")")
+        if has_oneof:
+            # Nested sealed class declarations + closing of the data class.
+            lines.append(") {")
+            for f in schema.fields:
+                if f.type.is_one_of_ref and f.type.one_of is not None:
+                    lines.extend(_emit_kotlin_oneof_sealed_class(f, f.type.one_of))
+            lines.append("}")
+            # Custom KSerializer object for the parent DTO (placed at file
+            # scope, alongside the data class).
+            lines.append("")
+            lines.extend(
+                _emit_kotlin_oneof_serializer(
+                    schema, self._dto_package(), enum_names
+                )
+            )
+        else:
+            lines.append(")")
         body = "\n".join(lines)
         return f"{header}\n\n{body}\n\n{footer}\n"
 
-    def _dto_imports(self) -> list[str]:
+    def _dto_imports(self, *, has_oneof: bool = False) -> list[str]:
         if self._config.serializer == "moshi":
             return [
                 "import com.squareup.moshi.Json",
                 "import com.squareup.moshi.JsonClass",
             ]
         if self._config.serializer == "kotlinx":
-            return [
+            base = [
                 "import kotlinx.serialization.SerialName",
                 "import kotlinx.serialization.Serializable",
             ]
+            if has_oneof:
+                # oneOf parents drive a custom KSerializer that hand-rolls
+                # the JSON parse/emit, so we pull in the Json* helpers and
+                # the descriptor builders here.
+                base.extend([
+                    "import kotlinx.serialization.KSerializer",
+                    "import kotlinx.serialization.descriptors.SerialDescriptor",
+                    "import kotlinx.serialization.descriptors.buildClassSerialDescriptor",
+                    "import kotlinx.serialization.descriptors.element",
+                    "import kotlinx.serialization.encoding.Decoder",
+                    "import kotlinx.serialization.encoding.Encoder",
+                    "import kotlinx.serialization.json.JsonDecoder",
+                    "import kotlinx.serialization.json.JsonEncoder",
+                    "import kotlinx.serialization.json.JsonNull",
+                    "import kotlinx.serialization.json.buildJsonObject",
+                    "import kotlinx.serialization.json.decodeFromJsonElement",
+                    "import kotlinx.serialization.json.encodeToJsonElement",
+                    "import kotlinx.serialization.json.jsonObject",
+                    "import kotlinx.serialization.json.put",
+                ])
+            return base
         return []
 
-    def _dto_class_annotations(self) -> list[str]:
+    def _dto_class_annotations(
+        self,
+        *,
+        schema: SchemaDef | None = None,
+        has_oneof: bool = False,
+    ) -> list[str]:
         if self._config.serializer == "moshi":
             return ["@JsonClass(generateAdapter = true)"]
         if self._config.serializer == "kotlinx":
+            if has_oneof and schema is not None:
+                return [f"@Serializable(with = {schema.name}DtoSerializer::class)"]
             return ["@Serializable"]
         return []
 
@@ -184,7 +239,10 @@ class AndroidApiModelGenerator:
             out.extend(f"    {ln}" for ln in _kdoc_lines(field.description))
         if field.deprecated:
             out.append('    @Deprecated("field marked deprecated")')
-        type_str = _kotlin_type_with_enums(field.type, enum_names)
+        if field.type.is_one_of_ref:
+            type_str = _kotlin_oneof_field_type(field)
+        else:
+            type_str = _kotlin_type_with_enums(field.type, enum_names)
         name = _kotlin_property_name(field)
         default = _kotlin_default_literal(field, enums_by_name)
         rename_annot = self._field_rename_annotation(field, name)
@@ -589,3 +647,172 @@ def _kotlin_default_literal(
     if isinstance(value, dict) and not value:
         return "emptyMap()"
     return None
+
+
+# --------------------------------------------------------------------------- #
+# oneOf / discriminator helpers (kotlinx only)
+# --------------------------------------------------------------------------- #
+
+
+def _kotlin_oneof_nested_type_name(field: FieldDef) -> str:
+    """Nested sealed class name — e.g. ``content`` → ``Content``."""
+    return snake_to_pascal(field.wire_name)
+
+
+def _kotlin_oneof_field_type(field: FieldDef) -> str:
+    """Type expression for a oneOf field — references the nested sealed class."""
+    base = _kotlin_oneof_nested_type_name(field)
+    return f"{base}?" if field.type.nullable else base
+
+
+def _kotlin_oneof_variant_class_name(discriminator_value: str) -> str:
+    """``conversation_id`` → ``ConversationId`` for the data-class variant."""
+    return snake_to_pascal(discriminator_value)
+
+
+def _emit_kotlin_oneof_sealed_class(field: FieldDef, one_of: OneOfRef) -> list[str]:
+    """Emit a nested ``sealed class Content`` with one ``data class`` per variant.
+
+    Each variant wraps the corresponding DTO under ``val data: XDto``.
+    ``data object Unknown`` provides forward-compat for unrecognized
+    discriminator values from the server.
+    """
+    type_name = _kotlin_oneof_nested_type_name(field)
+    lines: list[str] = []
+    lines.append(f"    sealed class {type_name} {{")
+    for variant in one_of.variants:
+        cls = _kotlin_oneof_variant_class_name(variant.discriminator_value)
+        lines.append("        @Serializable")
+        lines.append(
+            f"        data class {cls}(val data: {variant.ref_name}Dto) : {type_name}()"
+        )
+    lines.append("        @Serializable")
+    lines.append(f"        data object Unknown : {type_name}()")
+    lines.append("    }")
+    return lines
+
+
+def _emit_kotlin_oneof_serializer(
+    schema: SchemaDef,
+    dto_package: str,
+    enum_names: set[str],
+) -> list[str]:
+    """Emit ``object {Name}DtoSerializer : KSerializer<{Name}Dto>``.
+
+    Parses the JSON object once, reads each discriminator field, then
+    dispatches into the matching variant's DTO decoder using the
+    surrounding ``Json`` instance via ``decodeFromJsonElement``. The
+    serialize path mirrors this by encoding each non-oneOf field straight
+    into the resulting ``JsonObject`` and folding each oneOf variant's
+    underlying DTO back into the named slot.
+    """
+    name = schema.name
+    lines: list[str] = []
+    lines.append(f"object {name}DtoSerializer : KSerializer<{name}Dto> {{")
+    lines.append(
+        f'    override val descriptor: SerialDescriptor = '
+        f'buildClassSerialDescriptor("{name}Dto") {{'
+    )
+    for f in schema.fields:
+        prop = _kotlin_property_name(f)
+        if f.type.is_one_of_ref and f.type.one_of is not None:
+            nested = _kotlin_oneof_nested_type_name(f)
+            lines.append(
+                f'        element("{f.wire_name}", '
+                f'buildClassSerialDescriptor("{nested}") {{}})'
+            )
+        else:
+            kt_type = _kotlin_type_with_enums(f.type, enum_names)
+            base = kt_type.rstrip("?")
+            lines.append(f'        element<{base}>("{f.wire_name}")')
+    lines.append("    }")
+
+    # ---------- serialize ----------
+    lines.append("")
+    lines.append(f"    override fun serialize(encoder: Encoder, value: {name}Dto) {{")
+    lines.append(
+        '        val jsonEncoder = encoder as? JsonEncoder '
+        f'?: error("{name}DtoSerializer requires Json format")'
+    )
+    lines.append("        val json = jsonEncoder.json")
+    lines.append("        val obj = buildJsonObject {")
+    for f in schema.fields:
+        prop = _kotlin_property_name(f)
+        if f.type.is_one_of_ref and f.type.one_of is not None:
+            nested = _kotlin_oneof_nested_type_name(f)
+            lines.append(f"            val {prop}Json = when (val c = value.{prop}) {{")
+            for variant in f.type.one_of.variants:
+                cls = _kotlin_oneof_variant_class_name(variant.discriminator_value)
+                lines.append(
+                    f"                is {name}Dto.{nested}.{cls} -> json.encodeToJsonElement(c.data)"
+                )
+            lines.append(f"                {name}Dto.{nested}.Unknown -> JsonNull")
+            lines.append("            }")
+            lines.append(f'            put("{f.wire_name}", {prop}Json)')
+        else:
+            lines.append(f'            put("{f.wire_name}", json.encodeToJsonElement(value.{prop}))')
+    lines.append("        }")
+    lines.append("        jsonEncoder.encodeJsonElement(obj)")
+    lines.append("    }")
+
+    # ---------- deserialize ----------
+    lines.append("")
+    lines.append(f"    override fun deserialize(decoder: Decoder): {name}Dto {{")
+    lines.append(
+        '        val jsonDecoder = decoder as? JsonDecoder '
+        f'?: error("{name}DtoSerializer requires Json format")'
+    )
+    lines.append("        val json = jsonDecoder.json")
+    lines.append("        val obj = jsonDecoder.decodeJsonElement().jsonObject")
+
+    # Decode each non-oneOf field; for oneOf fields, dispatch on its
+    # discriminator sibling.
+    for f in schema.fields:
+        prop = _kotlin_property_name(f)
+        if f.type.is_one_of_ref:
+            continue
+        kt_type = _kotlin_type_with_enums(f.type, enum_names)
+        base = kt_type.rstrip("?")
+        if f.type.nullable:
+            lines.append(
+                f'        val {prop}: {kt_type} = obj["{f.wire_name}"]?.let '
+                f'{{ json.decodeFromJsonElement<{base}>(it) }}'
+            )
+        else:
+            lines.append(
+                f'        val {prop}: {kt_type} = json.decodeFromJsonElement('
+                f'obj["{f.wire_name}"] ?: error("missing {f.wire_name}"))'
+            )
+
+    for f in schema.fields:
+        if not f.type.is_one_of_ref or f.type.one_of is None:
+            continue
+        prop = _kotlin_property_name(f)
+        nested = _kotlin_oneof_nested_type_name(f)
+        disc_field = next(
+            (g for g in schema.fields if g.wire_name == f.type.one_of.discriminator_property),
+            None,
+        )
+        disc_prop = _kotlin_property_name(disc_field) if disc_field else f.type.one_of.discriminator_property
+        lines.append(
+            f'        val {prop}Elem = obj["{f.wire_name}"] ?: JsonNull'
+        )
+        lines.append(f'        val {prop}: {name}Dto.{nested} = when ({disc_prop}) {{')
+        for variant in f.type.one_of.variants:
+            cls = _kotlin_oneof_variant_class_name(variant.discriminator_value)
+            lines.append(
+                f'            "{variant.discriminator_value}" -> {name}Dto.{nested}.{cls}('
+                f'json.decodeFromJsonElement<{variant.ref_name}Dto>({prop}Elem))'
+            )
+        lines.append(f"            else -> {name}Dto.{nested}.Unknown")
+        lines.append("        }")
+
+    # Construct the data class — fields in declaration order.
+    init_args = ", ".join(
+        f"{_kotlin_property_name(f)} = {_kotlin_property_name(f)}"
+        for f in schema.fields
+    )
+    lines.append(f"        return {name}Dto({init_args})")
+    lines.append("    }")
+    lines.append("}")
+    return lines
