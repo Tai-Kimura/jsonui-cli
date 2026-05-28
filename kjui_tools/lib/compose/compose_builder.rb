@@ -225,7 +225,7 @@ module KjuiTools
           result = Components::ScrollViewComponent.generate(json_data, depth, @required_imports, parent_type, is_root: is_root)
           handle_container_result(result, depth, parent_type)
         when 'SafeAreaView'
-          generate_safe_area_view(json_data, depth)
+          generate_safe_area_view(json_data, depth, is_root: is_root)
         when 'View'
           result = Components::ContainerComponent.generate(json_data, depth, @required_imports, parent_type, is_root: is_root)
           handle_container_result(result, depth, parent_type)
@@ -588,7 +588,7 @@ module KjuiTools
         end
       end
 
-      def generate_safe_area_view(json_data, depth)
+      def generate_safe_area_view(json_data, depth, is_root: false)
         # Add import for SafeAreaConfig
         @required_imports&.add(:safe_area_config)
 
@@ -602,7 +602,7 @@ module KjuiTools
 
         # Check if any child has relative positioning - if so, use ConstraintLayout
         if has_relative_positioning_in_children?(children)
-          return generate_safe_area_view_with_constraints(json_data, children, edges, depth)
+          return generate_safe_area_view_with_constraints(json_data, children, edges, depth, is_root: is_root)
         end
 
         # Parse orientation for child layout
@@ -650,7 +650,12 @@ module KjuiTools
         modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
         modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
 
-        code += Helpers::ModifierBuilder.format(modifiers, depth)
+        # `is_root` flows from generate_component when SafeAreaView is the
+        # *GeneratedView's root composable. ModifierBuilder.format then
+        # opens the chain from the caller's `modifier` parameter so
+        # external gestures / layout modifiers wrap the safe-area /
+        # background chain emitted inside.
+        code += Helpers::ModifierBuilder.format(modifiers, depth, is_root: is_root)
         code += "\n" + indent(") {", depth)
 
         children.each do |child|
@@ -675,7 +680,7 @@ module KjuiTools
         end
       end
 
-      def generate_safe_area_view_with_constraints(json_data, children, edges, depth)
+      def generate_safe_area_view_with_constraints(json_data, children, edges, depth, is_root: false)
         @required_imports&.add(:constraint_layout)
 
         # Get parent SafeAreaConfig and filter edges
@@ -710,7 +715,10 @@ module KjuiTools
         modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
         modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
 
-        code += Helpers::ModifierBuilder.format(modifiers, depth)
+        # See `generate_safe_area_view` — `is_root` opens the chain from
+        # caller's `modifier` so SafeAreaView roots wrapping a
+        # ConstraintLayout still forward external modifiers.
+        code += Helpers::ModifierBuilder.format(modifiers, depth, is_root: is_root)
         code += "\n" + indent(") {", depth)
 
         # Create constraint references for children with IDs

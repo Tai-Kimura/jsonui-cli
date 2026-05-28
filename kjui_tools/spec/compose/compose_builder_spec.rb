@@ -566,6 +566,41 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
           expect(result).to include('modifier = modifier')
         end
 
+        it 'root SafeAreaView emits `modifier = modifier` chain' do
+          # Regression for kjui-safearea-view-root-discards-external-modifier-parameter.
+          # Most screen-level *GeneratedView (bar Home/Splash/Reset/Forgot/...
+          # and many client screens) have SafeAreaView at the root. They
+          # were missed by the initial container-root batch, and a
+          # screen-level caller modifier was silently dropped.
+          json = { 'type' => 'SafeAreaView', 'orientation' => 'vertical' }
+          result = builder.send(:generate_component, json, 1, nil, is_root: true)
+          expect(result).to include('modifier = modifier')
+          expect(result).not_to match(/modifier = Modifier\b\s+\.fillMaxWidth/)
+        end
+
+        it 'non-root SafeAreaView falls back to `modifier = Modifier` (regression guard)' do
+          json = { 'type' => 'SafeAreaView', 'orientation' => 'vertical' }
+          result = builder.send(:generate_component, json)
+          expect(result).to include('modifier = Modifier')
+        end
+
+        it 'root SafeAreaView with constraint children also propagates' do
+          # The ConstraintLayout-wrapped SafeAreaView path lives in a
+          # separate emitter (`generate_safe_area_view_with_constraints`).
+          # It must also honor `is_root` so screens that need relative
+          # positioning at the safe-area root still forward the modifier.
+          json = {
+            'type' => 'SafeAreaView',
+            'child' => [
+              { 'type' => 'View', 'id' => 'header' },
+              { 'type' => 'ScrollView', 'id' => 'content', 'alignBottomOfView' => 'header' }
+            ]
+          }
+          result = builder.send(:generate_component, json, 1, nil, is_root: true)
+          expect(result).to include('ConstraintLayout(')
+          expect(result).to include('modifier = modifier')
+        end
+
         it 'SafeDynamicView call site forwards caller `modifier`' do
           # Sibling fix to is_root: in dynamic mode the GeneratedView
           # invokes SafeDynamicView(...). The library entry point accepts
