@@ -401,6 +401,46 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
       result = described_class.format([], 0)
       expect(result).to eq('')
     end
+
+    context 'with is_root: true (caller modifier propagation)' do
+      it 'starts the chain from lowercase `modifier`' do
+        modifiers = ['.padding(16.dp)']
+        result = described_class.format(modifiers, 0, is_root: true)
+        expect(result).to include('modifier = modifier')
+        expect(result).not_to include('modifier = Modifier')
+        expect(result).to include('.padding(16.dp)')
+      end
+
+      it 'emits a standalone `modifier = modifier` for an empty chain' do
+        result = described_class.format([], 0, is_root: true)
+        expect(result).to include('modifier = modifier')
+        # No fresh `Modifier` starting point should appear.
+        expect(result).not_to include('modifier = Modifier')
+      end
+
+      it 'works when modifiers start with the literal "Modifier" sentinel' do
+        # Some callers prepend "Modifier" as a sentinel — the chain still
+        # opens from caller's `modifier` when is_root.
+        modifiers = ['Modifier', '.fillMaxSize()']
+        result = described_class.format(modifiers, 0, is_root: true)
+        expect(result).to include('modifier = modifier')
+        expect(result).to include('.fillMaxSize()')
+      end
+    end
+
+    context 'with is_root: false (default, nested)' do
+      it 'starts the chain from uppercase `Modifier` (regression guard)' do
+        modifiers = ['.padding(16.dp)']
+        result = described_class.format(modifiers, 0)
+        expect(result).to include('modifier = Modifier')
+        expect(result).not_to match(/modifier = modifier\b/)
+      end
+
+      it 'returns "" for an empty chain when not root (regression guard)' do
+        result = described_class.format([], 0)
+        expect(result).to eq('')
+      end
+    end
   end
 
   describe '.process_dimension' do

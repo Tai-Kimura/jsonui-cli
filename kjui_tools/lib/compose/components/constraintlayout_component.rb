@@ -8,20 +8,20 @@ module KjuiTools
   module Compose
     module Components
       class ConstraintLayoutComponent
-        def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+        def self.generate(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
           required_imports&.add(:constraint_layout)
-          
+
           # Check if any child has relative positioning attributes
           children = json_data['child'] || []
           children = [children] unless children.is_a?(Array)
-          
+
           has_constraints = children.any? { |child| has_relative_positioning?(child) }
-          
+
           if has_constraints
-            generate_constraint_layout(json_data, children, depth, required_imports, parent_type)
+            generate_constraint_layout(json_data, children, depth, required_imports, parent_type, is_root: is_root)
           else
             # Fall back to regular Box/Column/Row
-            Components::ContainerComponent.generate(json_data, depth, required_imports)
+            Components::ContainerComponent.generate(json_data, depth, required_imports, parent_type, is_root: is_root)
           end
         end
         
@@ -67,9 +67,9 @@ module KjuiTools
           return !has_positioning_constraints?(component)
         end
         
-        def self.generate_constraint_layout(json_data, children, depth, required_imports, parent_type = nil)
+        def self.generate_constraint_layout(json_data, children, depth, required_imports, parent_type = nil, is_root: false)
           code = indent("ConstraintLayout(", depth)
-          
+
           # Build modifiers
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
@@ -79,7 +79,9 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
-          code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
+          if modifiers.any? || is_root
+            code += Helpers::ModifierBuilder.format(modifiers, depth, is_root: is_root)
+          end
           code += "\n" + indent(") {", depth)
           
           # Create constraint references

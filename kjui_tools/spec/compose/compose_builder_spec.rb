@@ -530,6 +530,74 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         result = builder.send(:generate_component, { 'type' => 'Scroll' })
         expect(result).not_to be_empty
       end
+
+      # Regression for kjui-generated-view-discards-external-modifier-parameter:
+      # the *GeneratedView fn signature declares `modifier: Modifier =
+      # Modifier`, but the root composable's chain must START from caller's
+      # `modifier` so external gestures / layout modifiers wrap the
+      # internal chain. Without is_root threading, the chain starts from
+      # a fresh `Modifier` and the caller's modifier is silently dropped.
+      context 'is_root threading (caller modifier propagation)' do
+        it 'root View emits `modifier = modifier` chain when is_root: true' do
+          json = { 'type' => 'View', 'orientation' => 'vertical' }
+          result = builder.send(:generate_component, json, 1, nil, is_root: true)
+          expect(result).to include('modifier = modifier')
+          # The starting point must be `modifier` (caller param), not `Modifier`.
+          expect(result).not_to match(/modifier = Modifier\b/)
+        end
+
+        it 'non-root View emits `modifier = Modifier` chain (default)' do
+          json = { 'type' => 'View', 'orientation' => 'vertical', 'width' => 100 }
+          result = builder.send(:generate_component, json)
+          expect(result).to include('modifier = Modifier')
+          expect(result).not_to match(/modifier = modifier\b/)
+        end
+
+        it 'root View with no internal modifiers still emits `modifier = modifier`' do
+          # Box with absolutely nothing in its modifier chain — without
+          # the is_root: true clause, ModifierBuilder.format would
+          # return "" and the caller's modifier would never reach the
+          # composable. This case is the "no-internal-modifier root"
+          # edge in the bug report.
+          json = { 'type' => 'View' }
+          result = builder.send(:generate_component, json, 1, nil, is_root: true)
+          # Note: testTag may still get added even with empty json; the
+          # critical invariant is the chain starts from `modifier`.
+          expect(result).to include('modifier = modifier')
+        end
+
+        it 'SafeDynamicView call site forwards caller `modifier`' do
+          # Sibling fix to is_root: in dynamic mode the GeneratedView
+          # invokes SafeDynamicView(...). The library entry point accepts
+          # `modifier: Modifier = Modifier` already, so passing
+          # `modifier = modifier,` at the call site lets external modifiers
+          # reach the dynamic-mode path too.
+          result = builder.send(:generate_dynamic_view_content, 'demo/layout', { 'type' => 'View' }, 1)
+          expect(result).to include('SafeDynamicView(')
+          expect(result).to match(/modifier\s*=\s*modifier,/)
+        end
+
+        it 'root responsive View propagates is_root into every branch' do
+          builder.instance_variable_set(:@responsive_functions, [])
+          builder.instance_variable_set(:@responsive_counter, 0)
+          json = {
+            'type' => 'View',
+            'orientation' => 'vertical',
+            'responsive' => {
+              'regular' => { 'maxWidth' => 720 }
+            },
+            'child' => [{ 'type' => 'Text', 'text' => 'Hi' }]
+          }
+          result = builder.send(:generate_component, json, 1, nil, is_root: true)
+          # Inline if/else emits two branches (the conditional one + the
+          # default fallback). Both branch roots must anchor on caller
+          # modifier so gesture / layout modifiers reach the View no
+          # matter which branch the device falls into. (Children inside
+          # the branch — e.g. the child Text — still use fresh
+          # `modifier = Modifier`; that's correct, they're not roots.)
+          expect(result.scan(/modifier = modifier\b/).size).to be >= 2
+        end
+      end
     end
 
     describe '#generate_safe_area_view' do

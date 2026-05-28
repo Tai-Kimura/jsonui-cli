@@ -7,17 +7,17 @@ module KjuiTools
   module Compose
     module Components
       class ContainerComponent
-        def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+        def self.generate(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
           container_type = json_data['type'] || 'View'
           orientation = json_data['orientation']
-          
+
           # Check if any child has relative positioning
           children = json_data['child'] || []
           children = [children] unless children.is_a?(Array)
-          
+
           if has_relative_positioning?(children)
             # Use ConstraintLayout for relative positioning
-            return ConstraintLayoutComponent.generate(json_data, depth, required_imports)
+            return ConstraintLayoutComponent.generate(json_data, depth, required_imports, parent_type, is_root: is_root)
           end
           
           # Determine layout type
@@ -67,7 +67,17 @@ module KjuiTools
           # constraint semantics.
           Helpers::ModifierBuilder.reorder_alignment_anchor!(modifiers)
 
-          code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
+          # `is_root` flows from compose_builder when this container is the
+          # *GeneratedView's root composable. ModifierBuilder.format then
+          # starts the chain from the caller's `modifier` parameter so
+          # external modifiers (gestures, layout) wrap the internal chain.
+          # When `is_root && modifiers.empty?`, format still emits a
+          # standalone `modifier = modifier` clause — without that, an
+          # internally-modifier-less root would silently drop the caller's
+          # modifier.
+          if modifiers.any? || is_root
+            code += Helpers::ModifierBuilder.format(modifiers, depth, is_root: is_root)
+          end
           
           # Add gravity settings
           if json_data['gravity']
