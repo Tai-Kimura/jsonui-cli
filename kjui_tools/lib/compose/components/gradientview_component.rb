@@ -7,7 +7,7 @@ module KjuiTools
   module Compose
     module Components
       class GradientviewComponent
-        def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+        def self.generate(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
           # GradientView maps to a Box with gradient background
           code = indent("Box(", depth)
           
@@ -67,7 +67,9 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
-          code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
+          if modifiers.any? || is_root
+            code += Helpers::ModifierBuilder.format(modifiers, depth, is_root: is_root)
+          end
           code += "\n" + indent(") {", depth)
           
           # Process children

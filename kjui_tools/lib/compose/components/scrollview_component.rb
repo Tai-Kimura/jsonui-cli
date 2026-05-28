@@ -6,7 +6,7 @@ module KjuiTools
   module Compose
     module Components
       class ScrollViewComponent
-        def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+        def self.generate(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
           # スクロール方向の判定
           # horizontalScroll属性、orientation属性、またはchild要素の配置から判定
           is_horizontal = false
@@ -59,7 +59,9 @@ module KjuiTools
             modifiers << ".imePadding()"
           end
 
-          code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
+          if modifiers.any? || is_root
+            code += Helpers::ModifierBuilder.format(modifiers, depth, is_root: is_root)
+          end
 
           # scrollEnabled - controls whether the user can scroll
           if json_data.key?('scrollEnabled')

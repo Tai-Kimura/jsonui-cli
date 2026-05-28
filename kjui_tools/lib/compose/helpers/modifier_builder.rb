@@ -825,18 +825,35 @@ module KjuiTools
           constraints
         end
         
-        def self.format(modifiers, depth)
-          return "" if modifiers.empty?
+        # is_root: when true, start the modifier chain from the caller's
+        # `modifier` (lowercase) parameter instead of a fresh `Modifier`.
+        # The generated *GeneratedView function signature exposes
+        # `modifier: Modifier = Modifier` to callers (e.g. for
+        # combinedClickable, weight, layout). Chaining from the parameter
+        # puts caller modifiers OUTSIDE the internal chain so they apply
+        # to the full element area (e.g. padding-inclusive). When
+        # `is_root` and the internal chain is empty we still emit a
+        # `modifier = modifier` clause so the caller's modifier is wired
+        # in — otherwise root composables with no internal modifiers
+        # would silently drop the caller's modifier.
+        def self.format(modifiers, depth, is_root: false)
+          return "" if modifiers.empty? && !is_root
+
+          base = is_root ? "modifier = modifier" : "modifier = Modifier"
+
+          if modifiers.empty?
+            return "\n" + indent(base, depth + 1)
+          end
 
           # Check if first modifier is already "Modifier"
           if modifiers[0] == "Modifier"
-            code = "\n" + indent("modifier = Modifier", depth + 1)
+            code = "\n" + indent(base, depth + 1)
             # Skip the first "Modifier" and process the rest
             modifiers[1..-1].each do |mod|
               code += "\n" + indent("    #{mod}", depth + 1)
             end
           else
-            code = "\n" + indent("modifier = Modifier", depth + 1)
+            code = "\n" + indent(base, depth + 1)
 
             if modifiers.length == 1 && modifiers[0].start_with?('.')
               code += modifiers[0]

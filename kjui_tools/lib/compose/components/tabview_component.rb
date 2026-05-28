@@ -7,7 +7,13 @@ module KjuiTools
   module Compose
     module Components
       class TabviewComponent
-        def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+        # `is_root` is accepted for signature parity with other container
+        # generators but currently unused — TabView emits a Scaffold whose
+        # `modifier` parameter is not yet caller-wired. Top-level screens
+        # rarely use TabView as their root layout. If/when a consumer
+        # screen does, thread `is_root` into the `Scaffold(modifier =
+        # modifier, ...)` call here.
+        def self.generate(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
           # TabView maps to NavigationBar with NavigationBarItem in Compose (Material 3)
           required_imports&.add(:navigation_bar)
           required_imports&.add(:remember_state)

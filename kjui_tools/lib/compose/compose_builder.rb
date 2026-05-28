@@ -172,7 +172,7 @@ module KjuiTools
 
       private
 
-      def generate_component(json_data, depth = 0, parent_type = nil)
+      def generate_component(json_data, depth = 0, parent_type = nil, is_root: false)
         return "" unless json_data.is_a?(Hash)
 
         # Skip data-spec / shared_data / variables entries that may appear
@@ -208,7 +208,7 @@ module KjuiTools
 
         # Check for responsive component — delegate to responsive generation
         if Helpers::ResponsiveHelper.responsive?(json_data)
-          return generate_responsive_component(json_data, depth, parent_type)
+          return generate_responsive_component(json_data, depth, parent_type, is_root: is_root)
         end
 
         component_type = json_data['type'] || 'View'
@@ -222,12 +222,12 @@ module KjuiTools
         # Generate component based on type
         code = case component_type
         when 'ScrollView', 'Scroll'
-          result = Components::ScrollViewComponent.generate(json_data, depth, @required_imports, parent_type)
+          result = Components::ScrollViewComponent.generate(json_data, depth, @required_imports, parent_type, is_root: is_root)
           handle_container_result(result, depth, parent_type)
         when 'SafeAreaView'
           generate_safe_area_view(json_data, depth)
         when 'View'
-          result = Components::ContainerComponent.generate(json_data, depth, @required_imports, parent_type)
+          result = Components::ContainerComponent.generate(json_data, depth, @required_imports, parent_type, is_root: is_root)
           handle_container_result(result, depth, parent_type)
         when 'Text', 'Label'
           Components::TextComponent.generate(json_data, depth, @required_imports, parent_type)
@@ -268,13 +268,13 @@ module KjuiTools
         when 'WebView'
           Components::WebviewComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'GradientView'
-          result = Components::GradientviewComponent.generate(json_data, depth, @required_imports, parent_type)
+          result = Components::GradientviewComponent.generate(json_data, depth, @required_imports, parent_type, is_root: is_root)
           handle_container_result(result, depth, parent_type)
         when 'BlurView'
-          result = Components::BlurviewComponent.generate(json_data, depth, @required_imports, parent_type)
+          result = Components::BlurviewComponent.generate(json_data, depth, @required_imports, parent_type, is_root: is_root)
           handle_container_result(result, depth, parent_type)
         when 'TabView'
-          result = Components::TabviewComponent.generate(json_data, depth, @required_imports, parent_type)
+          result = Components::TabviewComponent.generate(json_data, depth, @required_imports, parent_type, is_root: is_root)
           handle_container_result(result, depth, parent_type)
         when 'Embed'
           result = Components::EmbedComponent.generate(json_data, depth, @required_imports, parent_type)
@@ -437,14 +437,14 @@ module KjuiTools
       # references inside the modifier chain resolve against the
       # GeneratedView's `data` / `viewModel` parameters. This mirrors the
       # existing Embed / Collection inline paths above.
-      def generate_responsive_component(json_data, depth, parent_type)
+      def generate_responsive_component(json_data, depth, parent_type, is_root: false)
         @responsive_counter += 1
-        generate_view_responsive_inline(json_data, depth, parent_type)
+        generate_view_responsive_inline(json_data, depth, parent_type, is_root: is_root)
       end
 
       # Emit an inline `if/else` chain that renders the View per branch
       # with merged attrs. No file-scope helper is registered.
-      def generate_view_responsive_inline(json_data, depth, parent_type)
+      def generate_view_responsive_inline(json_data, depth, parent_type, is_root: false)
         branches = JsonUIShared::ResponsiveResolver.build_branches(json_data)
         @required_imports&.add(:local_configuration)
 
@@ -462,12 +462,17 @@ module KjuiTools
           elsif first
             # Only a default branch — emit the body directly with no
             # surrounding conditional.
-            return generate_non_responsive_component(attrs, depth, parent_type)
+            return generate_non_responsive_component(attrs, depth, parent_type, is_root: is_root)
           else
             lines << indent("} else {", depth)
           end
 
-          lines << generate_non_responsive_component(attrs, depth + 1, parent_type)
+          # Each branch's body is itself a root composable for the
+          # caller's `modifier` — long-press / gesture / layout modifier
+          # must reach whichever branch renders. Propagate `is_root` into
+          # every branch so the per-branch root container starts from
+          # `modifier = modifier` (caller) rather than a fresh `Modifier`.
+          lines << generate_non_responsive_component(attrs, depth + 1, parent_type, is_root: is_root)
         end
 
         lines << indent("}", depth)
@@ -475,7 +480,7 @@ module KjuiTools
       end
 
       # Generate a component without responsive handling (to avoid infinite recursion)
-      def generate_non_responsive_component(json_data, depth, parent_type)
+      def generate_non_responsive_component(json_data, depth, parent_type, is_root: false)
         component_type = json_data['type'] || 'View'
 
         code = case component_type
@@ -486,11 +491,11 @@ module KjuiTools
         when 'Image'
           Components::ImageComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'View'
-          result = Components::ContainerComponent.generate(json_data, depth, @required_imports, parent_type)
+          result = Components::ContainerComponent.generate(json_data, depth, @required_imports, parent_type, is_root: is_root)
           handle_container_result(result, depth, parent_type)
         else
           # Fall through to normal generation for other types (responsive already stripped)
-          generate_component(json_data, depth, parent_type)
+          generate_component(json_data, depth, parent_type, is_root: is_root)
         end
 
         code
@@ -849,7 +854,11 @@ module KjuiTools
           view_name = to_pascal_case(File.basename(layout_name))
 
           # Generate both static and dynamic versions
-          static_content = generate_component(json_data, 1)
+          # is_root: true on the static content threads the caller's
+          # `modifier` parameter into the root composable's modifier chain
+          # so callers can apply gesture / layout modifiers (e.g.
+          # combinedClickable for long-press) from outside the GeneratedView.
+          static_content = generate_component(json_data, 1, nil, is_root: true)
           dynamic_content = generate_dynamic_view_content(layout_name, json_data, 1)
 
           # Lift oversized container children into file-scope @Composable
@@ -1113,6 +1122,12 @@ module KjuiTools
         code = ""
         code += "#{indent_str}    SafeDynamicView(\n"
         code += "#{indent_str}        layoutName = \"#{layout_name}\",\n"
+        # Forward the caller's `modifier` parameter so external gestures /
+        # layout modifiers reach the dynamic-mode rendering too. The
+        # library `SafeDynamicView` already accepts `modifier: Modifier =
+        # Modifier`; without this line, dynamic mode silently dropped
+        # caller modifiers (matching the static-mode root bug).
+        code += "#{indent_str}        modifier = modifier,\n"
         code += "#{indent_str}        data = data.toMap(),\n"
         code += "#{indent_str}        fallback = {\n"
         code += "#{indent_str}            // Show error or loading state when dynamic view is not available\n"
