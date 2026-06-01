@@ -215,10 +215,34 @@ class AndroidGenerator:
         # Pick the most common one (ties broken alphabetically for stability).
         return max(sorted(counts.keys()), key=lambda k: counts[k])
 
+    def _viewmodel_impl_dir(self) -> Path:
+        """Physical directory that holds ViewModel *impl* scaffolds.
+
+        The kjui Compose builder hard-codes ``import <pkg>.viewmodels.X``
+        (plural) in every GeneratedView, and projects accordingly keep their
+        impls in a plural ``viewmodels/`` directory while *protocols* live in
+        singular ``viewmodel/protocol/``. The old code hard-coded the singular
+        ``viewmodel/`` here, so `jui generate project` wrote a duplicate impl
+        set into a directory the build never imports — diverging from the real
+        impls and breaking the Android compile.
+
+        Honour whichever directory already holds ``*ViewModel.kt`` impls
+        (plural preferred, since that's what Compose imports); for a fresh
+        project with neither, default to plural to match the builder.
+        """
+        plural = self._src_base / "viewmodels"
+        singular = self._src_base / "viewmodel"
+        if plural.is_dir() and any(plural.glob("*ViewModel.kt")):
+            return plural
+        if singular.is_dir() and any(singular.glob("*ViewModel.kt")):
+            return singular
+        return plural
+
     def _viewmodel_impl_package(self) -> str:
+        impl_dir = self._viewmodel_impl_dir()
         return self._detect_existing_package(
-            self._src_base / "viewmodel",
-            f"{self._package}.viewmodel",
+            impl_dir,
+            f"{self._package}.{impl_dir.name}",
         )
 
     def _viewmodel_protocol_package(self) -> str:
@@ -239,7 +263,7 @@ class AndroidGenerator:
 
     def viewmodel_impl_path(self, name: str, subdir: str = "") -> Path:
         del subdir
-        return self._src_base / "viewmodel" / f"{name}ViewModel.kt"
+        return self._viewmodel_impl_dir() / f"{name}ViewModel.kt"
 
     def viewmodel_protocol_fqn(self, name: str) -> str:
         """Fully-qualified class name for ``<name>ViewModelProtocol``.
