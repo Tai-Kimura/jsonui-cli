@@ -303,7 +303,7 @@ module SjuiTools
                         # does not check responsive — that's ViewConverter's role for
                         # built-in `View` containers, and each extension converter has
                         # to opt in on its own surface.
-                        if SjuiTools::SwiftUI::Views::ResponsiveHelper.responsive?(@component) && @factory
+                        if JsonUIShared::ResponsiveResolver.responsive?(@component) && @factory
                           func_name = @factory.next_responsive_name
                           func_code = SjuiTools::SwiftUI::Views::ResponsiveHelper.generate_leaf_function(
                             func_name, @component, @factory, @indent_level,
