@@ -160,10 +160,24 @@ RSpec.describe SjuiTools::SwiftUI::Generators::ConverterGenerator do
       result = generator.send(:converter_template)
 
       expect(result).to include("require_relative '../responsive_helper'")
-      expect(result).to include('ResponsiveHelper.responsive?(@component)')
       expect(result).to include('ResponsiveHelper.generate_leaf_function(')
       expect(result).to include('@factory.next_responsive_name')
       expect(result).to include('@factory.register_responsive_function(func_code)')
+    end
+
+    # Regression: sjui-converter-generator-emits-responsive-as-module-method-crash
+    # The responsive guard must call JsonUIShared::ResponsiveResolver.responsive?
+    # directly (mirror embed/collection converters) — NOT
+    # ResponsiveHelper.responsive?, which is an INSTANCE method on the module and
+    # crashes with `undefined method 'responsive?' for ...ResponsiveHelper:Module`
+    # the moment a scaffolded component (or a sibling node on its layout) carries
+    # a `responsive` block, aborting iOS GeneratedView codegen.
+    it 'guards responsive via the resolver, not the ResponsiveHelper.responsive? module method (regression: sjui-converter-generator-emits-responsive-as-module-method-crash)' do
+      generator = described_class.new('ScannerCamera')
+      result = generator.send(:converter_template)
+
+      expect(result).to include('JsonUIShared::ResponsiveResolver.responsive?(@component)')
+      expect(result).not_to include('ResponsiveHelper.responsive?(@component)')
     end
   end
 
