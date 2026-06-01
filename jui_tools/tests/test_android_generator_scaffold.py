@@ -222,13 +222,92 @@ class ViewModelScaffoldPackageDetectionTests(unittest.TestCase):
             self.assertIn("package com.example.consumer_app.viewmodels", code)
             self.assertNotIn("package com.example.consumer_app.viewmodel\n", code)
 
-    def test_falls_back_to_default_when_dir_is_empty(self):
+    def test_falls_back_to_plural_default_when_dir_is_empty(self):
+        # Fresh project with no impls yet: default to PLURAL `viewmodels`,
+        # matching what the kjui Compose builder hard-codes in every
+        # `import <pkg>.viewmodels.XViewModel`. (Was singular `viewmodel`,
+        # which produced impls the GeneratedView could never import.)
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             gen = _make_generator(root)
 
             code = gen.generate_viewmodel_impl(_make_spec("FreshSheet"))
-            self.assertIn("package com.example.consumer_app.viewmodel", code)
+            self.assertIn("package com.example.consumer_app.viewmodels", code)
+
+
+class ViewModelImplDirTargetTests(unittest.TestCase):
+    """Regression: kjui-generate-project-emits-singular-viewmodel-package-duplicates.
+
+    Real consumer layout (bar): impls physically in plural ``viewmodels/``
+    (package ``<pkg>.viewmodels``, what every GeneratedView imports), while
+    protocols live in singular ``viewmodel/protocol/``. The old generator
+    hard-coded the singular ``viewmodel/`` for impls, so `jui generate project`
+    wrote a *duplicate* impl set into a dir the build never imports — diverging
+    from the canonical impls and breaking ``:app:compileDevDebugKotlin``. The
+    impl path + package must follow the directory that actually holds the
+    impls.
+    """
+
+    _SRC = "app/src/main/kotlin/com/example/consumer_app"
+
+    def _seed_plural_impls(self, root: Path) -> Path:
+        vm_dir = root / self._SRC / "viewmodels"
+        vm_dir.mkdir(parents=True, exist_ok=True)
+        (vm_dir / "HomeViewModel.kt").write_text(
+            "package com.example.consumer_app.viewmodels\n\nclass HomeViewModel\n",
+            encoding="utf-8",
+        )
+        return vm_dir
+
+    def test_impl_path_targets_existing_plural_viewmodels_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._seed_plural_impls(root)
+            gen = _make_generator(root)
+
+            path = gen.viewmodel_impl_path("NewSheet")
+            # Lands in plural viewmodels/, NOT a divergent singular viewmodel/.
+            self.assertEqual(path.parent.name, "viewmodels")
+            self.assertFalse(
+                (root / self._SRC / "viewmodel" / "NewSheetViewModel.kt").exists()
+            )
+
+    def test_impl_package_follows_plural_dir_even_when_singular_only_holds_protocols(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._seed_plural_impls(root)
+            # Singular dir exists but only carries protocol/ (no *ViewModel.kt) —
+            # exactly the bar layout that previously defeated detection.
+            proto_dir = root / self._SRC / "viewmodel" / "protocol"
+            proto_dir.mkdir(parents=True, exist_ok=True)
+            (proto_dir / "HomeViewModelProtocol.kt").write_text(
+                "package com.example.consumer_app.viewmodel.protocol\n\n"
+                "interface HomeViewModelProtocol\n",
+                encoding="utf-8",
+            )
+            gen = _make_generator(root)
+
+            code = gen.generate_viewmodel_impl(_make_spec("NewSheet"))
+            self.assertIn("package com.example.consumer_app.viewmodels", code)
+            self.assertNotIn("package com.example.consumer_app.viewmodel\n", code)
+
+    def test_honours_existing_singular_impl_dir_when_that_is_where_impls_live(self):
+        # Backward-compat: a project that genuinely keeps impls in singular
+        # viewmodel/ keeps getting singular scaffolds (no forced migration).
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            vm_dir = root / self._SRC / "viewmodel"
+            vm_dir.mkdir(parents=True, exist_ok=True)
+            (vm_dir / "HomeViewModel.kt").write_text(
+                "package com.example.consumer_app.viewmodel\n\nclass HomeViewModel\n",
+                encoding="utf-8",
+            )
+            gen = _make_generator(root)
+
+            path = gen.viewmodel_impl_path("NewSheet")
+            self.assertEqual(path.parent.name, "viewmodel")
+            code = gen.generate_viewmodel_impl(_make_spec("NewSheet"))
+            self.assertIn("package com.example.consumer_app.viewmodel\n", code)
 
     def test_protocol_fqn_follows_existing_protocol_package(self):
         with tempfile.TemporaryDirectory() as tmp:
