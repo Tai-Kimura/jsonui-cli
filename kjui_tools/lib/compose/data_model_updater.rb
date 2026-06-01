@@ -445,23 +445,23 @@ module KjuiTools
             
             case class_type
             when 'String'
-              content += "map[\"#{name}\"] as? String ?: \"\""
+              content += "map[\"#{name}\"] as? String ?: #{from_map_fallback(prop, class_type, '""')}"
             when 'Int'
-              content += "(map[\"#{name}\"] as? Number)?.toInt() ?: 0"
+              content += "(map[\"#{name}\"] as? Number)?.toInt() ?: #{from_map_fallback(prop, class_type, '0')}"
             when 'Double'
-              content += "(map[\"#{name}\"] as? Number)?.toDouble() ?: 0.0"
+              content += "(map[\"#{name}\"] as? Number)?.toDouble() ?: #{from_map_fallback(prop, class_type, '0.0')}"
             when 'Float'
-              content += "(map[\"#{name}\"] as? Number)?.toFloat() ?: 0f"
+              content += "(map[\"#{name}\"] as? Number)?.toFloat() ?: #{from_map_fallback(prop, class_type, '0f')}"
             when 'Bool', 'Boolean'
-              content += "map[\"#{name}\"] as? Boolean ?: false"
+              content += "map[\"#{name}\"] as? Boolean ?: #{from_map_fallback(prop, class_type, 'false')}"
             when 'Color'
-              content += "map[\"#{name}\"] as? Color ?: Color.Unspecified"
+              content += "map[\"#{name}\"] as? Color ?: #{from_map_fallback(prop, class_type, 'Color.Unspecified')}"
             when 'CollectionDataSource'
               content += "com.kotlinjsonui.data.CollectionDataSource()"
             when /^List<.*>$/
-              content += "map[\"#{name}\"] as? #{kotlin_type} ?: emptyList()"
+              content += "map[\"#{name}\"] as? #{kotlin_type} ?: #{from_map_fallback(prop, class_type, 'emptyList()')}"
             when /^Map<.*>$/
-              content += "map[\"#{name}\"] as? #{kotlin_type} ?: emptyMap()"
+              content += "map[\"#{name}\"] as? #{kotlin_type} ?: #{from_map_fallback(prop, class_type, 'emptyMap()')}"
             else
               # For custom types, try to cast directly
               content += "map[\"#{name}\"] as? #{kotlin_type}"
@@ -551,6 +551,19 @@ module KjuiTools
           # Return as-is for custom types
           json_class
         end
+      end
+
+      # Fallback literal for a `fromMap` field when the map entry is missing or
+      # type-mismatched. Prefer the declared `defaultValue` (formatted as a
+      # Kotlin literal, exactly as the `var x: T = <default>` field declaration
+      # does) so `fromMap` and the field default stay in sync; iOS (sjui) keeps
+      # the field default on mismatch, so this restores cross-platform symmetry.
+      # Falls back to the bare type zero value only when no `defaultValue` is
+      # declared.
+      def from_map_fallback(prop, json_class, zero_literal)
+        default_value = prop['defaultValue']
+        return zero_literal if default_value.nil? || default_value == 'nil'
+        format_default_value(default_value, json_class)
       end
 
       def format_default_value(value, json_class)

@@ -438,6 +438,45 @@ RSpec.describe KjuiTools::Compose::DataModelUpdater do
           expect(result).not_to include('com.acme.mobile.model.domain.ProductListing')
         end
       end
+
+      # Regression: kjui-data-frommap-fallback-ignores-declared-default-value
+      # fromMap must fall back to the declared defaultValue (matching the
+      # `var x: T = <default>` field declaration + iOS's field-default-on-mismatch
+      # behaviour), not a hard-coded type zero value.
+      context 'with fromMap default-value fallback' do
+        it 'uses the declared Double defaultValue, not 0.0' do
+          properties = [
+            { 'name' => 'cellOpacity', 'class' => 'Double', 'defaultValue' => 1.0 }
+          ]
+          result = updater.send(:generate_data_content, 'Test', properties, [])
+          expect(result).to include('var cellOpacity: Double = 1.0')
+          expect(result).to include('cellOpacity = (map["cellOpacity"] as? Number)?.toDouble() ?: 1.0')
+          expect(result).not_to include('?: 0.0')
+        end
+
+        it 'uses the declared Int / Float / String / Boolean defaultValues' do
+          properties = [
+            { 'name' => 'count', 'class' => 'Int', 'defaultValue' => 5 },
+            { 'name' => 'ratio', 'class' => 'Float', 'defaultValue' => 0.5 },
+            { 'name' => 'label', 'class' => 'String', 'defaultValue' => 'hi' },
+            { 'name' => 'enabled', 'class' => 'Boolean', 'defaultValue' => true }
+          ]
+          result = updater.send(:generate_data_content, 'Test', properties, [])
+          expect(result).to include('count = (map["count"] as? Number)?.toInt() ?: 5')
+          expect(result).to include('ratio = (map["ratio"] as? Number)?.toFloat() ?: 0.5f')
+          expect(result).to include('label = map["label"] as? String ?: "hi"')
+          expect(result).to include('enabled = map["enabled"] as? Boolean ?: true')
+        end
+
+        it 'keeps the type zero value when no defaultValue is declared' do
+          properties = [
+            { 'name' => 'opacity', 'class' => 'Double', 'defaultValue' => nil }
+          ]
+          result = updater.send(:generate_data_content, 'Test', properties, [])
+          # No declared default → nullable field, zero-value fromMap fallback.
+          expect(result).to include('opacity = (map["opacity"] as? Number)?.toDouble() ?: 0.0')
+        end
+      end
     end
 
     describe '#extract_event_bindings' do
