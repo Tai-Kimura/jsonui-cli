@@ -140,8 +140,9 @@ module KjuiTools
           # 1. Margins first (outer spacing) - must be before size for outer margin behavior
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
 
-          # 2. Size
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          # 2. Size (parent_type lets a vertical-container weight pair with
+          #    wrapContentHeight for `gravity: center` vertical centering)
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type))
 
           # 3. Shadow before background
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))

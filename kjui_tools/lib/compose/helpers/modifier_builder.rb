@@ -267,7 +267,7 @@ module KjuiTools
           modifiers.insert(wrap_idx, fill)
         end
 
-        def self.build_size(json_data)
+        def self.build_size(json_data, parent_type = nil)
           modifiers = []
 
           # Handle 'frame' attribute - object with width/height
@@ -323,33 +323,40 @@ module KjuiTools
 
           # Same outside-in argument applies to height: heightIn must be
           # before fillMaxHeight / height.
-          # Label/Text with minHeight + center/bottom gravity needs a
-          # defaultMinSize + wrapContentHeight pair (preserves alignment).
-          label_min_height_special =
-            (json_data['type'] == 'Label' || json_data['type'] == 'Text') &&
-            json_data['minHeight'] && json_data['gravity']
-          if label_min_height_special
+          #
+          # Label/Text vertical glyph alignment: Compose `Text` has no vertical
+          # text-align, so whenever a Label fills a taller area (minHeight,
+          # height:matchParent, or a vertical-container weight) and its gravity
+          # asks for vertical center/bottom, we pair the fill with
+          # `.wrapContentHeight(align = ...)` to move the glyphs within the filled
+          # area — matching iOS `.frame(alignment: .center)`.
+          # Regression: kjui-label-gravity-center-not-vertically-centered
+          #             (extends the original minHeight-only handling).
+          is_label = json_data['type'] == 'Label' || json_data['type'] == 'Text'
+          label_valign = nil
+          if is_label && json_data['gravity']
             gravity_parts = if json_data['gravity'].is_a?(Array)
                               json_data['gravity'].map { |g| g.to_s.strip.downcase }
                             else
                               json_data['gravity'].to_s.split('|').map { |g| g.strip.downcase }
                             end
-            wants_vertical_align =
-              gravity_parts.include?('center') ||
-              gravity_parts.include?('centervertical') ||
-              gravity_parts.include?('center_vertical') ||
-              gravity_parts.include?('bottom')
-          else
-            wants_vertical_align = false
+            if gravity_parts.include?('bottom')
+              label_valign = 'Alignment.Bottom'
+            elsif gravity_parts.include?('center') ||
+                  gravity_parts.include?('centervertical') ||
+                  gravity_parts.include?('center_vertical') ||
+                  gravity_parts.include?('centerinparent') ||
+                  gravity_parts.include?('center_in_parent')
+              label_valign = 'Alignment.CenterVertically'
+            end
           end
 
-          if wants_vertical_align
+          valign_emitted = false
+          if label_valign && json_data['minHeight']
+            # minHeight + vertical gravity: defaultMinSize floor + wrapContentHeight.
             modifiers << ".defaultMinSize(minHeight = #{json_data['minHeight']}.dp)"
-            if gravity_parts.include?('bottom')
-              modifiers << ".wrapContentHeight(align = Alignment.Bottom)"
-            else
-              modifiers << ".wrapContentHeight(align = Alignment.CenterVertically)"
-            end
+            modifiers << ".wrapContentHeight(align = #{label_valign})"
+            valign_emitted = true
             # `maxHeight` (if any) is still applied below as a normal heightIn.
             if json_data['maxHeight']
               modifiers << ".heightIn(max = #{json_data['maxHeight']}.dp)"
@@ -363,12 +370,25 @@ module KjuiTools
           end
 
           # Height - skip if heightWeight is present and height is 0
+          fills_height = false
           if json_data['height'] == 'matchParent'
             modifiers << ".fillMaxHeight()"
+            fills_height = true
           elsif json_data['height'] == 'wrapContent'
             modifiers << ".wrapContentHeight()"
           elsif json_data['height'] && !(json_data['heightWeight'] && json_data['height'] == 0)
             modifiers << ".height(#{process_dimension(json_data['height'])})"
+          elsif parent_type == 'Column' && (json_data['weight'] || json_data['heightWeight'])
+            # Weight in a vertical container fills the height slice (the
+            # `.weight(..)` modifier itself is emitted by build_weight); no
+            # explicit height modifier here, but it still fills for valign.
+            fills_height = true
+          end
+
+          # Pair the height-fill with wrapContentHeight(align) so a centered/
+          # bottom Label actually moves its glyphs within the filled area.
+          if label_valign && fills_height && !valign_emitted
+            modifiers << ".wrapContentHeight(align = #{label_valign})"
           end
           
           # Aspect ratio
