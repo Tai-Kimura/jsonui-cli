@@ -120,6 +120,30 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       expect(result).to include('textAlign = TextAlign.End')
     end
 
+    # Regression: kjui-label-gravity-center-not-vertically-centered.
+    # A height-filling Label with gravity:center must vertically center its
+    # glyphs (textAlign only handles horizontal). iOS centers via
+    # .frame(alignment: .center); Android needs wrapContentHeight(align).
+    it 'vertically centers a height:matchParent Label with gravity:center' do
+      json_data = {
+        'type' => 'Label', 'text' => 'Guide', 'height' => 'matchParent',
+        'gravity' => 'center', 'textAlign' => 'center'
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('.fillMaxHeight()')
+      expect(result).to include('.wrapContentHeight(align = Alignment.CenterVertically)')
+      expect(result).to include('textAlign = TextAlign.Center') # horizontal still emitted
+    end
+
+    it 'vertically centers a weighted Label inside a vertical (Column) container' do
+      json_data = {
+        'type' => 'Label', 'text' => 'Guide', 'weight' => 1, 'gravity' => 'center'
+      }
+      result = described_class.generate(json_data, 0, required_imports, 'Column')
+      expect(result).to include('.weight(1f)')
+      expect(result).to include('.wrapContentHeight(align = Alignment.CenterVertically)')
+    end
+
     it 'generates text with max lines' do
       json_data = { 'type' => 'Text', 'text' => 'Test', 'lines' => 2 }
       result = described_class.generate(json_data, 0, required_imports)
