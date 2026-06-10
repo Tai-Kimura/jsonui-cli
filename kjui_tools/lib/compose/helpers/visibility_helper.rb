@@ -37,36 +37,51 @@ module KjuiTools
           if has_weight_in_scope
             wrapper_modifier_parts << ".weight(#{weight_value}f)"
             fill_modifier = parent_type == 'Row' ? '.fillMaxWidth()' : '.fillMaxHeight()'
-            fill_indent = ' ' * ((depth + 2) * 4)
 
             # Strip the inner `.weight(Nf)` and add the fill modifier in its
-            # place — for EVERY branch of an inline responsive if/else chain,
-            # not just the first. The VisibilityWrapper now owns the weight
-            # (hoisted above); each branch must fill the weighted space it
-            # provides. A first-match-only `sub` left the else branch's
-            # `.weight(Nf)` inside the VisibilityWrapper content lambda, which
-            # has no Column/Row scope → "Modifier.weight cannot be called in
-            # this context" compile halt (kjui-responsive-visibility-weight-
-            # second-branch-weight-remains).
-            weight_re = /\n\s*\.weight\(\s*#{Regexp.escape(weight_value.to_s)}f?\s*\)/
-            # Match each `modifier = Modifier ...` chain that ends in the
-            # weight, tempered so a match cannot span into the next chain —
-            # descendant modifier chains without a weight stay untouched.
-            chain_re = /(modifier\s*=\s*Modifier)\b((?:(?!modifier\s*=\s*Modifier).)*?)#{weight_re}/m
-            if component_code.match?(chain_re)
+            # place. The VisibilityWrapper now owns the weight (hoisted
+            # above), so the wrap target's own modifier chain must drop its
+            # weight and fill the weighted space the wrapper provides.
+            #
+            # This must hit the wrap target's OWN chain only — and, for a
+            # responsive inline `if/else` chain, each *branch root* (same
+            # shallowest indentation). It must NOT touch a descendant
+            # component's legitimate `.weight(...)` (e.g. a weighted spacer
+            # child inside the wrapped container) — doing so breaks that
+            # child's layout AND, by removing `.weight(`, perturbs
+            # section_extractor's scope-bound lift heuristic, causing massive
+            # spurious churn. (Bug: kjui-visibility-weight-gsub-strips-
+            # descendant-weights.)
+            #
+            # Two earlier shapes were both wrong: a first-match `sub` missed
+            # the else branch's weight (compile halt:
+            # kjui-responsive-visibility-weight-second-branch); an unbounded
+            # `gsub` hit descendants (this bug). The fix: transform only the
+            # weight-bearing `modifier = Modifier` chains whose `modifier`
+            # line sits at the MINIMUM indentation among such chains — i.e.
+            # the top-level / branch-root chains, never the deeper descendants.
+            weight_re = /\n[ \t]*\.weight\(\s*#{Regexp.escape(weight_value.to_s)}f?\s*\)/
+            # Weighted components are always emitted multi-line (see
+            # collection_component's modifier note), so the `modifier =
+            # Modifier` of a weight-bearing chain starts its own line; capture
+            # that line's leading indent. Tempered so a match never spans into
+            # the next chain.
+            chain_re = /^([ \t]*)(modifier\s*=\s*Modifier)\b((?:(?!modifier\s*=\s*Modifier).)*?)#{weight_re}/m
+            indents = component_code.scan(chain_re).map { |m| m[0].length }
+            if indents.any?
+              min_indent = indents.min
               component_code = component_code.gsub(chain_re) do
-                head = Regexp.last_match(1)
-                mid  = Regexp.last_match(2)
-                inserted = mid.include?(fill_modifier) ? '' : "\n#{fill_indent}#{fill_modifier}"
-                "#{head}#{inserted}#{mid}"
-              end
-            else
-              # Defensive fallback: weight not inside a modifier=Modifier
-              # chain (unexpected shape) — strip every weight and prepend the
-              # fill once so we never leave a scope-breaking `.weight` behind.
-              component_code = component_code.gsub(weight_re, '')
-              unless component_code.include?(fill_modifier)
-                component_code = component_code.sub(/(modifier\s*=\s*Modifier)\b/i, "\\1\n#{fill_indent}#{fill_modifier}")
+                indent = Regexp.last_match(1)
+                head   = Regexp.last_match(2)
+                mid    = Regexp.last_match(3)
+                if indent.length == min_indent
+                  fill_indent = ' ' * (indent.length + 4)
+                  inserted = mid.include?(fill_modifier) ? '' : "\n#{fill_indent}#{fill_modifier}"
+                  "#{indent}#{head}#{inserted}#{mid}"
+                else
+                  # Descendant chain — leave its weight and the whole match intact.
+                  Regexp.last_match(0)
+                end
               end
             end
           end

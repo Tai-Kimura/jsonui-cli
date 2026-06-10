@@ -99,6 +99,64 @@ RSpec.describe KjuiTools::Compose::Helpers::VisibilityHelper do
       end
     end
 
+    # Regression: kjui-visibility-weight-gsub-strips-descendant-weights.
+    # The wrap target's OWN modifier chain must lose its weight (hoisted to
+    # the wrapper), but a weighted DESCENDANT (e.g. a centering spacer child
+    # with its own `weight: 1`) must keep its `.weight(...)`. Stripping the
+    # descendant breaks its layout AND perturbs section_extractor's
+    # scope-bound lift heuristic (massive spurious churn). Only the
+    # shallowest (top-level / branch-root) weight chains are transformed.
+    context 'weight strip preserves weighted descendant children' do
+      let(:container_code) do
+        # `suggestion_cards_container` (weight:1 + visibility) wrapping two
+        # weighted spacer children (also weight:1, same value).
+        <<~KOTLIN.chomp
+          Column(
+              modifier = Modifier
+                  .testTag("suggestion_cards_container")
+                  .weight(1f),
+          ) {
+              Box(
+                  modifier = Modifier
+                      .testTag("suggestion_spacer_top")
+                      .weight(1f)
+                      .fillMaxWidth()
+              ) {
+              }
+              Box(
+                  modifier = Modifier
+                      .testTag("suggestion_spacer_bottom")
+                      .weight(1f)
+                      .fillMaxWidth()
+              ) {
+              }
+          }
+        KOTLIN
+      end
+
+      it 'strips only the container weight, keeps both descendant spacer weights' do
+        json_data = { 'visibility' => '@{suggestionCardsVisibility}', 'weight' => 1 }
+        result = described_class.wrap_with_visibility(json_data, container_code, 0, required_imports, 'Column')
+
+        # Wrapper hoists exactly one weight.
+        expect(result).to include('modifier = Modifier.weight(1f)')
+
+        # Both descendant spacers keep their `.weight(1f)`.
+        top = result[/suggestion_spacer_top.*?\)\s*\{/m]
+        bottom = result[/suggestion_spacer_bottom.*?\)\s*\{/m]
+        expect(top).to include('.weight(1f)')
+        expect(bottom).to include('.weight(1f)')
+
+        # Total `.weight(` = wrapper hoist (1) + two preserved descendants (2).
+        # The container's own weight was stripped (3, not 4).
+        expect(result.scan('.weight(').length).to eq(3)
+
+        # Exactly one fill was injected — onto the container chain only, NOT
+        # the descendants.
+        expect(result.scan('.fillMaxHeight()').length).to eq(1)
+      end
+    end
+
     # Regression: kjui-section-extracted-box-drops-centerhorizontal-align.
     # When a View with `centerHorizontal: true` (e.g. from `responsive.regular`)
     # was wrapped with VisibilityWrapper under a Column or Row parent, the
