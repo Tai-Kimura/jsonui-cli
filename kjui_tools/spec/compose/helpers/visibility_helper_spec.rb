@@ -52,6 +52,53 @@ RSpec.describe KjuiTools::Compose::Helpers::VisibilityHelper do
       expect(result).to include('}')
     end
 
+    # Regression: kjui-responsive-visibility-weight-second-branch-weight-remains.
+    # When a responsive Collection/Embed inline if/else chain has `weight` +
+    # `visibility` under a Column parent, the wrapper hoists ONE `.weight`,
+    # and EVERY branch's inner `.weight(Nf)` must be stripped and replaced
+    # with `.fillMaxHeight()`. A first-match-only sub left the else branch's
+    # `.weight` inside the VisibilityWrapper content lambda (no ColumnScope)
+    # → "Modifier.weight cannot be called in this context" compile halt.
+    context 'weight strip across all branches of an inline chain' do
+      let(:chain_code) do
+        <<~KOTLIN.chomp
+          if (LocalConfiguration.current.screenWidthDp >= 840) {
+              LazyVerticalGrid(
+                  modifier = Modifier
+                      .testTag("bar_list_collection")
+                      .weight(1f),
+              ) {
+              }
+          } else {
+              CollectionStack(
+                  modifier = Modifier
+                      .testTag("bar_list_collection")
+                      .weight(1f),
+              ) {
+              }
+          }
+        KOTLIN
+      end
+
+      it 'strips inner .weight from every branch and fills instead (Column parent)' do
+        json_data = { 'visibility' => '@{contentVisibility}', 'weight' => 1 }
+        result = described_class.wrap_with_visibility(json_data, chain_code, 0, required_imports, 'Column')
+
+        # The wrapper owns the single weight...
+        expect(result).to include('modifier = Modifier.weight(1f)')
+        # ...and the gone-guard wraps the weighted child.
+        expect(result).to include('if (data.contentVisibility.lowercase() != "gone")')
+
+        # Exactly ONE `.weight(` survives — the wrapper's hoisted one. Both
+        # branch weights are stripped (else they'd sit in the content lambda
+        # which has no ColumnScope and fail to compile).
+        expect(result.scan('.weight(').length).to eq(1)
+
+        # Both branches now fill the weighted space instead.
+        expect(result.scan('.fillMaxHeight()').length).to eq(2)
+      end
+    end
+
     # Regression: kjui-section-extracted-box-drops-centerhorizontal-align.
     # When a View with `centerHorizontal: true` (e.g. from `responsive.regular`)
     # was wrapped with VisibilityWrapper under a Column or Row parent, the
