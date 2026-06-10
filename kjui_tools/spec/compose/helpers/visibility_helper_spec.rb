@@ -157,6 +157,39 @@ RSpec.describe KjuiTools::Compose::Helpers::VisibilityHelper do
       end
     end
 
+    # Regression: kjui-visibility-weight-fill-check-misses-post-weight-fill.
+    # The fill-existence check must inspect the WHOLE chain, including the
+    # part AFTER `.weight(...)`. A chain that already carries a fill modifier
+    # downstream of its weight must NOT get a second, redundant fill injected.
+    context 'weight strip skips fill injection when a fill already follows the weight' do
+      let(:post_weight_fill_code) do
+        # `grant_credits_item` (Row parent, weight:1 + visibility) whose own
+        # chain already has `.fillMaxWidth()` AFTER the weight.
+        <<~KOTLIN.chomp
+          Column(
+              modifier = Modifier
+                  .testTag("grant_credits_item")
+                  .weight(1f)
+                  .wrapContentHeight()
+                  .fillMaxWidth(),
+          ) {
+          }
+        KOTLIN
+      end
+
+      it 'does not duplicate the fill modifier (Row parent, fill after weight)' do
+        json_data = { 'visibility' => '@{grantCreditsVisibility}', 'weight' => 1 }
+        result = described_class.wrap_with_visibility(json_data, post_weight_fill_code, 0, required_imports, 'Row')
+
+        # Wrapper hoists the weight; the inner chain's weight is stripped.
+        expect(result).to include('modifier = Modifier.weight(1f)')
+        # The pre-existing `.fillMaxWidth()` is kept, and NO duplicate added.
+        expect(result.scan('.fillMaxWidth()').length).to eq(1)
+        # Inner weight gone (only the hoisted wrapper weight remains).
+        expect(result.scan('.weight(').length).to eq(1)
+      end
+    end
+
     # Regression: kjui-section-extracted-box-drops-centerhorizontal-align.
     # When a View with `centerHorizontal: true` (e.g. from `responsive.regular`)
     # was wrapped with VisibilityWrapper under a Column or Row parent, the
