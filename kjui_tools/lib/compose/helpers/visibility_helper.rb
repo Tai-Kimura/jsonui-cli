@@ -64,9 +64,17 @@ module KjuiTools
             # Weighted components are always emitted multi-line (see
             # collection_component's modifier note), so the `modifier =
             # Modifier` of a weight-bearing chain starts its own line; capture
-            # that line's leading indent. Tempered so a match never spans into
-            # the next chain.
-            chain_re = /^([ \t]*)(modifier\s*=\s*Modifier)\b((?:(?!modifier\s*=\s*Modifier).)*?)#{weight_re}/m
+            # that line's leading indent. `mid` is the chain segment BEFORE
+            # the weight; `tail` is the segment AFTER it (the remaining
+            # `.call(...)` continuation lines, each starting with `.`, which
+            # stop before the component's closing `) {` / a sibling arg /
+            # child content). Capturing the tail lets the fill-existence
+            # check see a `.fillMaxWidth()`/`.fillMaxHeight()` that already
+            # sits *after* the weight — otherwise we inject a redundant
+            # duplicate fill (bug: kjui-visibility-weight-fill-check-misses-
+            # post-weight-fill). Tempered so a match never spans into the
+            # next chain.
+            chain_re = /^([ \t]*)(modifier\s*=\s*Modifier)\b((?:(?!modifier\s*=\s*Modifier).)*?)#{weight_re}((?:\n[ \t]+\.[^\n]*)*)/m
             indents = component_code.scan(chain_re).map { |m| m[0].length }
             if indents.any?
               min_indent = indents.min
@@ -74,10 +82,14 @@ module KjuiTools
                 indent = Regexp.last_match(1)
                 head   = Regexp.last_match(2)
                 mid    = Regexp.last_match(3)
+                tail   = Regexp.last_match(4)
                 if indent.length == min_indent
                   fill_indent = ' ' * (indent.length + 4)
-                  inserted = mid.include?(fill_modifier) ? '' : "\n#{fill_indent}#{fill_modifier}"
-                  "#{indent}#{head}#{inserted}#{mid}"
+                  # Check the ENTIRE chain (before AND after the weight) for an
+                  # existing fill before injecting one.
+                  has_fill = mid.include?(fill_modifier) || tail.include?(fill_modifier)
+                  inserted = has_fill ? '' : "\n#{fill_indent}#{fill_modifier}"
+                  "#{indent}#{head}#{inserted}#{mid}#{tail}"
                 else
                   # Descendant chain — leave its weight and the whole match intact.
                   Regexp.last_match(0)
