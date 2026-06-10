@@ -269,6 +269,76 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
     end
   end
 
+  # Regression: kjui-collection-responsive-inline-drops-visibility-binding.
+  # The Embed+responsive and Collection+responsive dispatch branches in
+  # generate_component `return` the inline if/else chain BEFORE reaching the
+  # bottom-of-method wrap_with_visibility. Neither component self-wraps, so a
+  # responsive node carrying `visibility: "@{...}"` rendered unconditionally
+  # on Android while iOS honored it (cross-platform asymmetry; broke a
+  # grid/list display toggle). The chain must be wrapped in one
+  # VisibilityWrapper.
+  describe '#generate_component (responsive inline visibility regression)' do
+    let(:builder) do
+      b = described_class.new
+      b.instance_variable_set(:@required_imports, Set.new)
+      b.instance_variable_set(:@included_views, Set.new)
+      b.instance_variable_set(:@custom_components, Set.new)
+      b.instance_variable_set(:@responsive_functions, [])
+      b.instance_variable_set(:@responsive_counter, 0)
+      b
+    end
+
+    it 'wraps a responsive Collection with VisibilityWrapper around the if/else chain' do
+      json = {
+        'type' => 'Collection',
+        'id' => 'grid_collection',
+        'width' => 'matchParent',
+        'height' => 'matchParent',
+        'visibility' => '@{gridVisibility}',
+        'columns' => 2,
+        'responsive' => { 'regular' => { 'columns' => 3 } },
+        'items' => '@{gridItems}'
+      }
+      result = builder.send(:generate_component, json, 0, nil)
+      expect(result).to include('VisibilityWrapper(')
+      expect(result).to include('visibility = data.gridVisibility')
+      # The responsive branch condition still lives inside the wrapper body.
+      expect(result).to include('LocalConfiguration.current.screenWidthDp')
+      # VisibilityWrapper must open before the inline `if (` branch.
+      expect(result.index('VisibilityWrapper(')).to be < result.index('if (')
+    end
+
+    it 'wraps a responsive Embed with VisibilityWrapper around the if/else chain' do
+      json = {
+        'type' => 'Embed',
+        'id' => 'detail_pane',
+        'screen' => 'product_detail',
+        'visibility' => '@{detailPaneVisibility}',
+        'responsive' => { 'regular' => { 'screen' => 'product_detail_wide' } }
+      }
+      result = builder.send(:generate_component, json, 0, nil)
+      expect(result).to include('VisibilityWrapper(')
+      expect(result).to include('visibility = data.detailPaneVisibility')
+      expect(result).to include('EmbedContainer(')
+      expect(result.index('VisibilityWrapper(')).to be < result.index('if (')
+    end
+
+    it 'emits a responsive Collection unchanged when no visibility attribute is set (back-compat)' do
+      json = {
+        'type' => 'Collection',
+        'id' => 'grid_collection',
+        'width' => 'matchParent',
+        'height' => 'matchParent',
+        'columns' => 2,
+        'responsive' => { 'regular' => { 'columns' => 3 } },
+        'items' => '@{gridItems}'
+      }
+      result = builder.send(:generate_component, json, 0, nil)
+      expect(result).not_to include('VisibilityWrapper')
+      expect(result).to include('LocalConfiguration.current.screenWidthDp')
+    end
+  end
+
   describe 'private helper methods' do
     let(:builder) { described_class.new }
 

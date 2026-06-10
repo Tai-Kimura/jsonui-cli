@@ -192,7 +192,14 @@ module KjuiTools
         # (see update_generated_file responsive_functions append). Inline
         # avoids both.
         if json_data['type'] == 'Embed' && Helpers::ResponsiveHelper.responsive?(json_data)
-          return generate_embed_responsive_inline(json_data, depth, parent_type)
+          code = generate_embed_responsive_inline(json_data, depth, parent_type)
+          # The inline path returns early, BEFORE the top-level
+          # wrap_with_visibility at the bottom of this method. Embed does not
+          # self-wrap (it relies on that bottom wrap for the non-responsive
+          # path), so without this the `visibility: "@{...}"` binding on a
+          # responsive Embed is silently dropped. Wrap the whole if/else
+          # chain in one VisibilityWrapper, mirroring sjui's single wrapper.
+          return Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, @required_imports, parent_type)
         end
 
         # Collection + responsive: same inline treatment as Embed. The
@@ -203,7 +210,13 @@ module KjuiTools
         # neither in scope, so we inline the if/else at the call site.
         # Mirrors sjui's collection_converter.rb Group { if/else } shape.
         if json_data['type'] == 'Collection' && Helpers::ResponsiveHelper.responsive?(json_data)
-          return generate_collection_responsive_inline(json_data, depth, parent_type)
+          code = generate_collection_responsive_inline(json_data, depth, parent_type)
+          # Same early-return-before-visibility-wrap bug as the Embed path
+          # above. Collection does not self-wrap, so a responsive Collection
+          # carrying `visibility: "@{...}"` (e.g. a grid/list display toggle)
+          # would otherwise render unconditionally on Android while iOS
+          # honors it. Wrap the inline if/else chain in one VisibilityWrapper.
+          return Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, @required_imports, parent_type)
         end
 
         # Check for responsive component — delegate to responsive generation
