@@ -8,6 +8,7 @@ from typing import Any
 
 from ..validator import TestValidator, ValidationResult
 from ..spec_doc import SpecValidator, generate_spec_html, generate_component_html
+from ..spec_doc.rules_config import load_rules_for_path
 from .html import (
     generate_screen_html,
     generate_flow_html,
@@ -24,6 +25,24 @@ from .html import (
 from .html.sidebar import escape_html
 from .markdown import generate_markdown, generate_schema_markdown
 from .mermaid import generate_mermaid_html
+
+
+def _validator_for(spec_file: Path) -> SpecValidator:
+    """Build a :class:`SpecValidator` whose custom rules are discovered from
+    *spec_file*'s own location.
+
+    The doc generators validate many files in one run. A single reused
+    validator freezes its custom rules to whatever the FIRST validated file
+    resolved — ``SpecValidator`` only auto-discovers ``.jsonui-doc-rules.json``
+    while its rules are still empty (``validate_file``'s lazy load). So a
+    later file whose nearest config differs from the first one's is validated
+    against the wrong rule set, making the pre-generate / page-generate passes
+    falsely ``SKIP`` custom component types that the standalone ``validate``
+    path (which loads rules per file) accepts. Constructing a fresh validator
+    per file restores that per-file discovery. Bug:
+    doc-pregenerate-component-validation-ignores-custom-rules.
+    """
+    return SpecValidator(custom_rules=load_rules_for_path(spec_file))
 
 
 class DocumentGenerator:
@@ -1175,7 +1194,6 @@ def _generate_spec_pages(
     Returns:
         Tuple of (spec_files_info, component_files_info) for navigation
     """
-    spec_validator = SpecValidator()
     spec_files_found = []
     component_files_found = []
 
@@ -1206,7 +1224,7 @@ def _generate_spec_pages(
 
         for spec_file, spec_docs_path in sorted(spec_files_found, key=lambda x: x[0]):
             try:
-                result = spec_validator.validate_file(spec_file)
+                result = _validator_for(spec_file).validate_file(spec_file)
 
                 if not result.is_valid:
                     if not collect_only:
@@ -1277,7 +1295,7 @@ def _generate_spec_pages(
 
         for comp_file, comp_docs_path in sorted(component_files_found, key=lambda x: x[0]):
             try:
-                result = spec_validator.validate_file(comp_file)
+                result = _validator_for(comp_file).validate_file(comp_file)
 
                 if not result.is_valid:
                     if not collect_only:
@@ -1355,10 +1373,8 @@ def _pre_generate_spec_docs(
         docs_base: Base docs directory (e.g., /path/to/project/docs)
         spec_subdir: Subdirectory name for spec files (default: "screens", can be "requirements")
     """
-    from ..spec_doc import SpecValidator, generate_spec_html, generate_spec_markdown
+    from ..spec_doc import generate_spec_html, generate_spec_markdown
     from ..cli import generate_component_html, generate_component_markdown
-
-    spec_validator = SpecValidator()
 
     # Process screen specifications
     spec_json_dir = docs_base / spec_subdir / "json"
@@ -1374,7 +1390,7 @@ def _pre_generate_spec_docs(
 
             for spec_file in sorted(spec_files):
                 try:
-                    result = spec_validator.validate_file(spec_file)
+                    result = _validator_for(spec_file).validate_file(spec_file)
                     if not result.is_valid:
                         print(f"    SKIP: {spec_file.name} (validation errors)")
                         continue
@@ -1418,7 +1434,7 @@ def _pre_generate_spec_docs(
 
             for comp_file in sorted(comp_files):
                 try:
-                    result = spec_validator.validate_file(comp_file)
+                    result = _validator_for(comp_file).validate_file(comp_file)
                     if not result.is_valid:
                         print(f"    SKIP: {comp_file.name} (validation errors)")
                         continue

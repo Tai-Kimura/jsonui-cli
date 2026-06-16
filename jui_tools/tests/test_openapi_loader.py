@@ -889,6 +889,45 @@ class LoadSwaggerDirectoryTests(unittest.TestCase):
             docs = load_swagger(tmp)
             self.assertEqual(docs, [])
 
+    def test_skips_unrelated_yaml_does_not_halt(self):
+        # A YAML artifact that is NOT a swagger doc (another workstream's
+        # notes, a CI config) must be skipped like a non-swagger JSON — not
+        # hard-halt the build. Regression: jui-api-dir-unrelated-yaml-hard-error.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "cs-bot-notes.yaml").write_text(
+                "name: cs-bot\nsteps:\n  - build\n  - deploy\n", encoding="utf-8"
+            )
+            docs = load_swagger(tmp)
+            self.assertEqual(docs, [])
+
+    def test_unrelated_yaml_does_not_block_real_json_swagger(self):
+        # The real JSON SSoT must still load even when an unrelated YAML
+        # shares the directory.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "unrelated.yaml").write_text("name: not-a-swagger\n", encoding="utf-8")
+            (tmp / "api.json").write_text(
+                json.dumps(_doc({
+                    "User": {"type": "object", "properties": {"id": {"type": "string"}}},
+                })),
+                encoding="utf-8",
+            )
+            docs = load_swagger(tmp)
+            self.assertEqual(len(docs), 1)
+
+    def test_swagger_authored_in_yaml_still_halts(self):
+        # A YAML that DOES look like swagger (intended input) keeps the
+        # helpful "convert to JSON" halt.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "spec.yml").write_text(
+                "swagger: '2.0'\ninfo:\n  title: X\n", encoding="utf-8"
+            )
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "yaml-not-supported")
+
     def test_loads_valid_swagger(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)

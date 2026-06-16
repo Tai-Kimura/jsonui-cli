@@ -550,6 +550,96 @@ class OneOfDiscriminatorTests(unittest.TestCase):
         self.assertIn("default:", src)
         self.assertIn("self.content = .unknown", src)
 
+    def test_enum_typed_discriminator_exhaustive_mapping_omits_default(self):
+        """When the enum-typed discriminator's every case is mapped, the
+        ``switch self.type`` is already exhaustive — a trailing ``default:``
+        is dead code that trips Swift's "Default will never be executed"
+        warning (zero-warning invariant). It must be omitted. Regression:
+        jui-oneof-decoder-dead-default-for-exhaustive-enum-discriminator."""
+        doc = parse_swagger(_doc({
+            "StreamConvIdContent": {
+                "type": "object",
+                "required": ["cid"],
+                "properties": {"cid": {"type": "string"}},
+            },
+            "StreamThinkingContent": {
+                "type": "object",
+                "required": ["msg"],
+                "properties": {"msg": {"type": "string"}},
+            },
+            "StreamEvent": {
+                "type": "object",
+                "required": ["type", "content"],
+                "properties": {
+                    # Enum cases EXACTLY equal the mapping keys → exhaustive.
+                    "type": {
+                        "type": "string",
+                        "enum": ["conversation_id", "thinking"],
+                    },
+                    "content": {
+                        "oneOf": [
+                            {"$ref": "#/components/schemas/StreamConvIdContent"},
+                            {"$ref": "#/components/schemas/StreamThinkingContent"},
+                        ],
+                        "discriminator": {
+                            "propertyName": "type",
+                            "mapping": {
+                                "conversation_id": "#/components/schemas/StreamConvIdContent",
+                                "thinking": "#/components/schemas/StreamThinkingContent",
+                            },
+                        },
+                    },
+                },
+            },
+        }), "test.json")
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _make_generator(Path(tmp)).generate_dto_source(stream, doc)
+        # Enum-typed dispatch over both cases...
+        self.assertIn("case .conversationId:", src)
+        self.assertIn("case .thinking:", src)
+        # ...with NO dead default in the decoder switch.
+        self.assertNotIn("default:\n            self.content = .unknown", src)
+        # But the Content enum still declares `.unknown` (used by encode).
+        self.assertIn("case unknown", src)
+        self.assertIn("case .unknown: try container.encodeNil(forKey: .content)", src)
+
+    def test_enum_typed_discriminator_partial_mapping_keeps_default(self):
+        """An enum-typed discriminator with an UNMAPPED case keeps the
+        reachable ``default: .unknown`` (it routes the unmapped enum case)."""
+        doc = parse_swagger(_doc({
+            "A": {"type": "object", "properties": {"x": {"type": "string"}}},
+            "B": {"type": "object", "properties": {"y": {"type": "string"}}},
+            "Parent": {
+                "type": "object",
+                "required": ["type", "value"],
+                "properties": {
+                    # 3 enum cases, only 2 mapped → NOT exhaustive.
+                    "type": {"type": "string", "enum": ["a", "b", "c"]},
+                    "value": {
+                        "oneOf": [
+                            {"$ref": "#/components/schemas/A"},
+                            {"$ref": "#/components/schemas/B"},
+                        ],
+                        "discriminator": {
+                            "propertyName": "type",
+                            "mapping": {
+                                "a": "#/components/schemas/A",
+                                "b": "#/components/schemas/B",
+                            },
+                        },
+                    },
+                },
+            },
+        }), "test.json")
+        parent = next(s for s in doc.schemas if s.name == "Parent")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _make_generator(Path(tmp)).generate_dto_source(parent, doc)
+        self.assertIn("case .a:", src)
+        self.assertIn("case .b:", src)
+        # `c` is unmapped, so the default is reachable and retained.
+        self.assertIn("default:\n            self.value = .unknown", src)
+
     def test_enum_discriminator_mapping_mismatch_halts(self):
         """mapping value that isn't in the enum's case list is a swagger
         bug; we halt at codegen so the user fixes it."""
