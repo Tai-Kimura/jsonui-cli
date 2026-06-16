@@ -76,6 +76,27 @@ def is_swagger_file(path: Path) -> bool:
     return "openapi" in data or "swagger" in data
 
 
+_YAML_SWAGGER_KEY_RE = re.compile(r"^(?:openapi|swagger)\s*:", re.MULTILINE)
+
+
+def is_swagger_yaml_file(path: Path) -> bool:
+    """Return True if a YAML *path* looks like an OpenAPI / Swagger doc.
+
+    v1 cannot parse YAML (Q8), but we still need to tell apart a YAML swagger
+    the user *intended* as a codegen input (→ the helpful "convert to JSON"
+    halt) from an unrelated YAML artifact that merely shares the api
+    directory (→ skip it, like a non-swagger ``*.json``). Decided by a cheap
+    text scan for a top-level ``openapi:`` / ``swagger:`` key — no YAML parser
+    dependency, mirroring :func:`is_swagger_file`'s top-level-key check.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return False
+    return bool(_YAML_SWAGGER_KEY_RE.search(text))
+
+
 def load_swagger(
     api_directory: Path,
     *,
@@ -97,6 +118,13 @@ def load_swagger(
         return []
 
     for yml in sorted(api_directory.rglob("*.yaml")) + sorted(api_directory.rglob("*.yml")):
+        # Only the "convert to JSON" guidance applies to YAML the user meant
+        # as a codegen input. An unrelated YAML artifact sharing the api dir
+        # (another workstream's contract, a doc) must be skipped like a
+        # non-swagger JSON — otherwise one stray file hard-halts `jui build`
+        # for every subproject that doesn't even consume it.
+        if not is_swagger_yaml_file(yml):
+            continue
         raise OpenAPILoadError(
             "yaml-not-supported",
             "YAML swagger files are not supported in v1 (Q8). Convert to JSON.",

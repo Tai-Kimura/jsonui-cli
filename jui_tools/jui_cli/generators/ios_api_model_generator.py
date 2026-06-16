@@ -661,6 +661,7 @@ def _emit_swift_oneof_init_from_decoder(
             disc_enum = enums_by_name[disc_field.type.ref_name]
 
         lines.append(f"        switch self.{disc_prop} {{")
+        covered_enum_cases: set[str] = set()
         for variant in f.type.one_of.variants:
             case = _swift_oneof_case_ident(variant.discriminator_value)
             decode_call = (
@@ -683,6 +684,7 @@ def _emit_swift_oneof_init_from_decoder(
                         f"enum {disc_enum.name!r}. Add the value to the "
                         f"enum or remove it from the discriminator mapping."
                     )
+                covered_enum_cases.add(enum_case_raw)
                 enum_case = escape_keyword(
                     snake_to_camel(enum_case_raw), language="swift"
                 )
@@ -690,8 +692,21 @@ def _emit_swift_oneof_init_from_decoder(
             else:
                 lines.append(f'        case "{variant.discriminator_value}":')
             lines.append(f"            self.{prop} = .{case}({decode_call})")
-        lines.append("        default:")
-        lines.append(f"            self.{prop} = .unknown")
+        # A trailing ``default:`` is unreachable — and Swift warns "Default
+        # will never be executed", violating the zero-warning invariant —
+        # when the discriminator is an enum whose every case is mapped: the
+        # switch is already exhaustive, and an out-of-enum wire value fails
+        # earlier at ``decode(<Enum>.self)``. Omit the default in that case.
+        # For a string-typed (open) discriminator, or an enum that is only
+        # partially mapped, the default is reachable and still routes
+        # unmapped values to ``.unknown``.
+        enum_exhaustive = (
+            disc_enum is not None
+            and set(disc_enum.case_names).issubset(covered_enum_cases)
+        )
+        if not enum_exhaustive:
+            lines.append("        default:")
+            lines.append(f"            self.{prop} = .unknown")
         lines.append("        }")
     lines.append("    }")
     return lines
