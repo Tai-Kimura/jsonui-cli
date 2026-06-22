@@ -36,7 +36,9 @@ JSONUI_CLI_DIR=/opt/jsonui-cli curl -fsSL ... | bash
 # Install specific tools only
 JSONUI_TOOLS="sjui kjui" curl -fsSL ... | bash
 
-# Available tools: sjui, kjui, rjui, jui, test, doc
+# Available tools: sjui, kjui, rjui, jui, test, doc, mcp
+# "all" (default) includes mcp — the Claude Code MCP server (jsonui-mcp-server),
+# installed to ~/.jsonui-mcp-server and registered in ~/.claude.json (needs Node.js).
 JSONUI_TOOLS="test doc" curl -fsSL ... | bash
 ```
 

@@ -8,7 +8,10 @@
 # Options:
 #   JSONUI_INSTALL_DIR  - Base directory; jsonui-cli/ is created inside it.
 #   JSONUI_CLI_DIR      - Full install path (overrides JSONUI_INSTALL_DIR).
-#   JSONUI_TOOLS        - Tools to install: all, sjui, kjui, rjui, jui, test, doc (default: all)
+#   JSONUI_TOOLS        - Tools to install: all, sjui, kjui, rjui, jui, test, doc, mcp (default: all)
+#
+# "mcp" installs the Claude Code MCP server (jsonui-mcp-server) and registers
+# it in ~/.claude.json. Included in "all"; needs Node.js.
 #
 # Default install dir (neither var set): $HOME/.jsonui-cli — aligns with
 # jsonui-mcp-server's 4-layer fallback and the platform tools' lookup.
@@ -33,7 +36,7 @@ while [ $# -gt 0 ]; do
             echo "Options:"
             echo "  -d, --dir DIR    Base directory; jsonui-cli/ is created inside it."
             echo "                   Ignored if JSONUI_CLI_DIR is set."
-            echo "  -t, --tools LIST Tools to install: all, sjui, kjui, rjui, jui, test, doc (default: all)"
+            echo "  -t, --tools LIST Tools to install: all, sjui, kjui, rjui, jui, test, doc, mcp (default: all)"
             echo "  -h, --help       Show this help message"
             echo ""
             echo "Default install dir (no -d / env): \$HOME/.jsonui-cli"
@@ -53,6 +56,11 @@ done
 
 # Configuration
 REPO_URL="https://github.com/Tai-Kimura/jsonui-cli.git"
+# jsonui-mcp-server is a separate repo with its own self-contained installer
+# (clones itself to ~/.jsonui-mcp-server, npm build, and registers the
+# `jui-tools` MCP server in ~/.claude.json). We delegate to it rather than
+# duplicating that logic. Overridable for forks / pinned versions.
+MCP_INSTALLER_URL="${JSONUI_MCP_INSTALLER_URL:-https://raw.githubusercontent.com/Tai-Kimura/jsonui-mcp-server/main/install.sh}"
 # Resolve the install directory:
 #   1. JSONUI_CLI_DIR     — full path, used verbatim.
 #   2. JSONUI_INSTALL_DIR — base dir; jsonui-cli/ is created inside it.
@@ -313,6 +321,33 @@ install_python_tool() {
 if should_install "jui"  && [ -d "jui_tools" ];      then install_python_tool jui_tools      jui; fi
 if should_install "test" && [ -d "test_tools" ];     then install_python_tool test_tools     jsonui-test; fi
 if should_install "doc"  && [ -d "document_tools" ]; then install_python_tool document_tools jsonui-doc; fi
+
+# jsonui-mcp-server (Claude Code MCP). Separate repo — delegate to its own
+# self-contained installer, which clones itself to ~/.jsonui-mcp-server,
+# builds, and registers the `jui-tools` MCP server in ~/.claude.json. Runs
+# by default (part of "all"); opt out with JSONUI_TOOLS that omits "mcp".
+# Honors JSONUI_MCP_DIR / CLAUDE_JSON / JSONUI_MCP_REPO (passed through env).
+if should_install "mcp"; then
+    echo ""
+    if ! command -v node >/dev/null 2>&1; then
+        warning "Skipping MCP server (jui-tools) — Node.js required. Install later: curl -fsSL $MCP_INSTALLER_URL | bash"
+    else
+        info "Installing jsonui-mcp-server (Claude Code MCP)..."
+        MCP_TMP="$(mktemp)"
+        if curl -fsSL "$MCP_INSTALLER_URL" -o "$MCP_TMP" && [ -s "$MCP_TMP" ]; then
+            # Run in a subshell so the MCP installer's own `set -e` / `cd`
+            # can't abort or relocate this bootstrap.
+            if (bash "$MCP_TMP"); then
+                success "jsonui-mcp-server installed + registered in ~/.claude.json (restart Claude Code to activate)"
+            else
+                warning "MCP server install failed — retry manually: curl -fsSL $MCP_INSTALLER_URL | bash"
+            fi
+        else
+            warning "Could not download MCP installer ($MCP_INSTALLER_URL) — skipped"
+        fi
+        rm -f "$MCP_TMP"
+    fi
+fi
 
 # Detect shell
 SHELL_NAME=$(basename "$SHELL")
