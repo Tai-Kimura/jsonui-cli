@@ -6,10 +6,12 @@
 #   curl -fsSL https://raw.githubusercontent.com/Tai-Kimura/jsonui-cli/main/installer/bootstrap.sh | bash
 #
 # Options:
-#   JSONUI_INSTALL_DIR  - Base directory (default: current directory). jsonui-cli/ will be created inside.
-#   JSONUI_CLI_DIR      - Full install path (overrides JSONUI_INSTALL_DIR). Set this to e.g.
-#                         $HOME/.jsonui-cli to align with jsonui-mcp-server's 4-layer fallback.
+#   JSONUI_INSTALL_DIR  - Base directory; jsonui-cli/ is created inside it.
+#   JSONUI_CLI_DIR      - Full install path (overrides JSONUI_INSTALL_DIR).
 #   JSONUI_TOOLS        - Tools to install: all, sjui, kjui, rjui, jui, test, doc (default: all)
+#
+# Default install dir (neither var set): $HOME/.jsonui-cli — aligns with
+# jsonui-mcp-server's 4-layer fallback and the platform tools' lookup.
 #
 
 set -e
@@ -29,10 +31,12 @@ while [ $# -gt 0 ]; do
             echo "Usage: bootstrap.sh [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  -d, --dir DIR    Base directory (default: .). jsonui-cli/ will be created inside."
+            echo "  -d, --dir DIR    Base directory; jsonui-cli/ is created inside it."
             echo "                   Ignored if JSONUI_CLI_DIR is set."
             echo "  -t, --tools LIST Tools to install: all, sjui, kjui, rjui, jui, test, doc (default: all)"
             echo "  -h, --help       Show this help message"
+            echo ""
+            echo "Default install dir (no -d / env): \$HOME/.jsonui-cli"
             echo ""
             echo "Environment variables:"
             echo "  JSONUI_INSTALL_DIR  Base directory (same as --dir)."
@@ -49,8 +53,21 @@ done
 
 # Configuration
 REPO_URL="https://github.com/Tai-Kimura/jsonui-cli.git"
-BASE_DIR="${JSONUI_INSTALL_DIR:-.}"
-INSTALL_DIR="${JSONUI_CLI_DIR:-$BASE_DIR/jsonui-cli}"
+# Resolve the install directory:
+#   1. JSONUI_CLI_DIR     — full path, used verbatim.
+#   2. JSONUI_INSTALL_DIR — base dir; jsonui-cli/ is created inside it.
+#   3. neither            — default to $HOME/.jsonui-cli.
+# The default is the home-dotted dir (NOT ./jsonui-cli in the current
+# directory) so it lands where jsonui-mcp-server's 4-layer fallback and the
+# platform tools look, and so a bare `curl ... | bash` from any cwd doesn't
+# scatter a stray jsonui-cli/ into wherever it was run.
+if [ -n "$JSONUI_CLI_DIR" ]; then
+    INSTALL_DIR="$JSONUI_CLI_DIR"
+elif [ -n "$JSONUI_INSTALL_DIR" ]; then
+    INSTALL_DIR="$JSONUI_INSTALL_DIR/jsonui-cli"
+else
+    INSTALL_DIR="$HOME/.jsonui-cli"
+fi
 TOOLS="${JSONUI_TOOLS:-all}"
 
 # Colors
