@@ -21,10 +21,17 @@ A unified repository for JsonUI CLI tools across all platforms.
 curl -fsSL https://raw.githubusercontent.com/Tai-Kimura/jsonui-cli/main/installer/bootstrap.sh | bash
 ```
 
+Installs to `$HOME/.jsonui-cli` by default (where jsonui-mcp-server and the
+platform tools look). The installer prints absolute `export PATH=...` lines to
+add to your shell rc.
+
 Options:
 ```bash
-# Custom install directory
-JSONUI_INSTALL_DIR=/opt/jsonui-cli curl -fsSL ... | bash
+# Custom base directory (jsonui-cli/ is created inside it)
+JSONUI_INSTALL_DIR=/opt curl -fsSL ... | bash
+
+# Custom full install path
+JSONUI_CLI_DIR=/opt/jsonui-cli curl -fsSL ... | bash
 
 # Install specific tools only
 JSONUI_TOOLS="sjui kjui" curl -fsSL ... | bash
