@@ -18,6 +18,20 @@ from typing import Mapping
 _MAX_PARENT_HOPS = 10
 
 
+def _rbenv_version_installed(version: str) -> bool:
+    """Return True if *version* is installed under rbenv.
+
+    rbenv keeps each Ruby at ``$RBENV_ROOT/versions/<version>`` (default
+    ``~/.rbenv/versions/<version>``) — the same directory rbenv itself
+    consults — so a cheap ``is_dir()`` check avoids shelling out to rbenv
+    (which may not even be on $PATH at this point).
+    """
+    rbenv_root = os.environ.get("RBENV_ROOT") or os.path.join(
+        os.path.expanduser("~"), ".rbenv"
+    )
+    return (Path(rbenv_root) / "versions" / version).is_dir()
+
+
 def resolve_tool(tool_name: str, cwd: Path) -> str:
     """Return an absolute path to a project-local tool, or the bare name.
 
@@ -56,7 +70,8 @@ def build_tool_env(
 
     When ``resolved`` is a project-local tool path and the tool directory
     has a ``.ruby-version`` file, ``RBENV_VERSION`` is exported so the
-    local Ruby toolchain is used. ``extra`` is merged on top (e.g.
+    local Ruby toolchain is used — but ONLY when that exact version is
+    actually installed under rbenv. ``extra`` is merged on top (e.g.
     ``JUI_SKIP_EXISTING=1`` for non-interactive invocations).
     """
     env_overrides: dict[str, str] = {}
@@ -65,7 +80,17 @@ def build_tool_env(
         tool_dir = Path(resolved).resolve().parent.parent  # bin/{tool} -> {tool}_tools/
         ruby_version_file = tool_dir / ".ruby-version"
         if ruby_version_file.exists():
-            env_overrides["RBENV_VERSION"] = ruby_version_file.read_text().strip()
+            pinned = ruby_version_file.read_text().strip()
+            # Only force RBENV_VERSION when that exact Ruby is installed.
+            # The bundled `.ruby-version` pins the maintainer's dev Ruby
+            # (e.g. 3.2.2); forcing it unconditionally hard-fails `jui build`
+            # for every consumer who lacks that exact patch
+            # ("rbenv: version `3.2.2' is not installed (set by
+            # RBENV_VERSION environment variable)"). When it's absent we omit
+            # the override and let rbenv resolve the consumer's own
+            # .ruby-version / global Ruby, which runs the tool fine.
+            if pinned and _rbenv_version_installed(pinned):
+                env_overrides["RBENV_VERSION"] = pinned
 
     if extra:
         env_overrides.update(extra)

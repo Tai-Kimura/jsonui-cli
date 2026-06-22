@@ -5,6 +5,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from jui_cli.core.tool_resolver import build_tool_env, resolve_tool
 
@@ -58,7 +59,8 @@ class BuildToolEnvTest(unittest.TestCase):
         # subprocess inherits the parent env unchanged.
         self.assertIsNone(build_tool_env("sjui", "sjui"))
 
-    def test_includes_rbenv_version_from_local_install(self):
+    @patch("jui_cli.core.tool_resolver._rbenv_version_installed", return_value=True)
+    def test_includes_rbenv_version_when_pinned_version_installed(self, _mock):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             tool_dir = root / "sjui_tools"
@@ -74,7 +76,45 @@ class BuildToolEnvTest(unittest.TestCase):
             # Parent env is preserved
             self.assertIn("PATH", env)
 
-    def test_merges_extra_env_on_top(self):
+    @patch("jui_cli.core.tool_resolver._rbenv_version_installed", return_value=False)
+    def test_omits_rbenv_version_when_pinned_version_not_installed(self, _mock):
+        # The bundled `.ruby-version` pins the maintainer's dev Ruby. When the
+        # consumer doesn't have that exact patch installed, RBENV_VERSION must
+        # NOT be forced (else `jui build` hard-fails "version not installed");
+        # rbenv falls back to the consumer's own Ruby. Regression:
+        # jui-build-forces-uninstalled-rbenv-version-from-bundled-ruby-version.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tool_dir = root / "rjui_tools"
+            bin_dir = tool_dir / "bin"
+            bin_dir.mkdir(parents=True)
+            bin_path = bin_dir / "rjui"
+            bin_path.write_text("#!/bin/sh\n")
+            (tool_dir / ".ruby-version").write_text("3.2.2\n")
+
+            # No extras and no RBENV_VERSION → env is None (inherit parent).
+            self.assertIsNone(build_tool_env(str(bin_path), "rjui"))
+
+    @patch("jui_cli.core.tool_resolver._rbenv_version_installed", return_value=False)
+    def test_extra_applies_even_when_pinned_version_not_installed(self, _mock):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tool_dir = root / "rjui_tools"
+            bin_dir = tool_dir / "bin"
+            bin_dir.mkdir(parents=True)
+            bin_path = bin_dir / "rjui"
+            bin_path.write_text("#!/bin/sh\n")
+            (tool_dir / ".ruby-version").write_text("3.2.2\n")
+
+            env = build_tool_env(
+                str(bin_path), "rjui", extra={"JUI_SKIP_EXISTING": "1"}
+            )
+            self.assertIsNotNone(env)
+            self.assertNotIn("RBENV_VERSION", env)
+            self.assertEqual(env.get("JUI_SKIP_EXISTING"), "1")
+
+    @patch("jui_cli.core.tool_resolver._rbenv_version_installed", return_value=True)
+    def test_merges_extra_env_on_top(self, _mock):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             tool_dir = root / "rjui_tools"
@@ -97,6 +137,17 @@ class BuildToolEnvTest(unittest.TestCase):
         env = build_tool_env("sjui", "sjui", extra={"JUI_SKIP_EXISTING": "1"})
         self.assertIsNotNone(env)
         self.assertEqual(env.get("JUI_SKIP_EXISTING"), "1")
+
+
+class RbenvVersionInstalledTest(unittest.TestCase):
+    def test_detects_installed_version_under_rbenv_root(self):
+        from jui_cli.core.tool_resolver import _rbenv_version_installed
+
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "versions" / "3.2.2").mkdir(parents=True)
+            with patch.dict(os.environ, {"RBENV_ROOT": tmp}):
+                self.assertTrue(_rbenv_version_installed("3.2.2"))
+                self.assertFalse(_rbenv_version_installed("3.3.0"))
 
 
 if __name__ == "__main__":
