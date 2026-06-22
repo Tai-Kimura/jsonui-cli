@@ -128,6 +128,14 @@ fi
 
 cd "$INSTALL_DIR"
 
+# Canonicalize INSTALL_DIR to an absolute path now that it exists. The
+# default install dir is cwd-relative (`./jsonui-cli`), and the generated
+# PATH exports below embed $INSTALL_DIR verbatim — a relative path there
+# would only resolve from the directory the installer happened to run in,
+# so `jui` (and the Ruby tools) would vanish from any other cwd. Resolve it
+# once here so every export line is absolute.
+INSTALL_DIR="$(pwd -P)"
+
 # Copy shared attribute_definitions.json to each tool
 info "Setting up shared resources..."
 ATTR_DEF="shared/core/attribute_definitions.json"
@@ -297,9 +305,17 @@ case "$SHELL_NAME" in
     *)    SHELL_RC="$HOME/.profile" ;;
 esac
 
-# Generate PATH export
-# Python-tool wrappers (jui / jsonui-doc / jsonui-test) self-inject sys.path,
-# so PATH alone is enough — no pip install required.
+# Generate PATH export (absolute paths — see INSTALL_DIR canonicalization above).
+#
+# The Python-tool launchers (jui / jsonui-doc / jsonui-test) self-inject
+# sys.path, so putting their bin dir on PATH is enough to RUN them — no pip
+# console script needed, and immune to pip dropping the script into a
+# scripts dir that isn't on PATH (the common `--user` / PEP 668 failure).
+#
+# Caveat: only the core commands are pure-stdlib. `jui hotload` additionally
+# imports `watchdog` + `aiohttp`; the `pip install -e .` step above installs
+# those as deps. If that pip step was skipped/failed, the core jui commands
+# still work via PATH, but `jui hotload` needs `pip install watchdog aiohttp`.
 PATH_EXPORTS=""
 [ -x "$INSTALL_DIR/jui_tools/bin/jui" ]            && PATH_EXPORTS="$PATH_EXPORTS\nexport PATH=\"$INSTALL_DIR/jui_tools/bin:\$PATH\""
 [ -x "$INSTALL_DIR/document_tools/jsonui-doc" ]    && PATH_EXPORTS="$PATH_EXPORTS\nexport PATH=\"$INSTALL_DIR/document_tools:\$PATH\""
@@ -323,4 +339,8 @@ echo -e "  ${BLUE}source $SHELL_RC${NC}"
 echo ""
 echo "Or run this to add automatically:"
 echo -e "  ${BLUE}echo -e '$PATH_EXPORTS' >> $SHELL_RC && source $SHELL_RC${NC}"
+echo ""
+echo "Note: the lines above use absolute paths and put 'jui' on PATH via its"
+echo "self-contained launcher — no pip console script required for core commands."
+echo -e "'jui hotload' also needs: ${BLUE}pip3 install watchdog aiohttp${NC} (installed by this script's pip step when available)."
 echo ""
