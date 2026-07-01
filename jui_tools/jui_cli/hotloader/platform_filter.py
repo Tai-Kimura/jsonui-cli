@@ -1,26 +1,12 @@
-"""Apply platform-specific filtering to a resolved layout tree.
+"""Thin re-export — implementation moved to ``jui_cli.core.normalizer``.
 
-Thin wrapper around the existing ``PlatformResolver`` so the hotload
-server uses the same platform-override / platform-string-filter rules
-that ``jui build`` applies at build time.
+The platform-filter wrapper was promoted from the hotloader to the
+shared build-time normalizer (renderer SSoT plan, phase 05). Import from
+``jui_cli.core.normalizer.platform_filter`` in new code; this module
+only keeps the historical import path working.
 """
 from __future__ import annotations
 
-from typing import Any
+from ..core.normalizer.platform_filter import VALID_PLATFORMS, filter_for_platform
 
-from ..core.platform_resolver import PlatformResolver, VALID_PLATFORMS
-
-
-def filter_for_platform(node: Any, platform: str) -> Any:
-    """Return a copy of *node* with platform overrides merged and
-    non-matching string-valued ``platform`` filters dropped.
-
-    Raises ``ValueError`` if *platform* is not one of iOS / Android /
-    Web. Hotload only serves iOS + Android today; Web is accepted for
-    symmetry in case anyone points a web client at the server.
-    """
-    if platform not in VALID_PLATFORMS:
-        raise ValueError(
-            f"Unknown platform {platform!r}. Valid: {', '.join(VALID_PLATFORMS)}"
-        )
-    return PlatformResolver(platform).resolve_tree(node)
+__all__ = ["VALID_PLATFORMS", "filter_for_platform"]

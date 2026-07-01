@@ -14,9 +14,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .include_expander import IncludeExpander
-from .platform_filter import filter_for_platform
-from .style_merger import StyleMerger
+from ..core.normalizer.include_expander import IncludeExpander
+from ..core.normalizer.platform_filter import filter_for_platform
+from ..core.normalizer.style_merger import StyleMerger
 
 
 class LayoutResolver:
