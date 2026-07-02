@@ -11,6 +11,9 @@ module JsonUI
     # Typed attribute extraction for the `TabView` component.
     # Overrides the common definition of: `tintColor`.
     module TabViewAttributes
+      # Declared-attribute rows — part of the public metadata
+      # contract together with `rows` / `declared?` / `alias_map`
+      # (see the directory README).
       ATTRS = [
         # Tab change handler - binding only (@{functionName})
         { name: 'onTabChange', kind: :binding }.freeze,
@@ -31,12 +34,32 @@ module JsonUI
       ].freeze
 
       # Returns a Hash keyed by canonical attribute name.
+      # `canonical_only: true` disables alias fallback for
+      # L1-normalized input (aliases are already rewritten).
       # Common attributes are merged first; component-level
       # definitions override on name collision.
-      def self.extract(hash)
-        out = CommonAttributes.extract(hash)
-        out.merge!(AttrCoerce.extract_table(hash, ATTRS, 'TabView'))
+      def self.extract(hash, canonical_only: false)
+        out = CommonAttributes.extract(hash, canonical_only: canonical_only)
+        out.merge!(AttrCoerce.extract_table(hash, ATTRS, 'TabView',
+                                            canonical_only: canonical_only))
         out
+      end
+
+      # Canonical name => extraction row (common rows merged
+      # first; component rows override on name collision).
+      def self.rows
+        @rows ||= AttrTable.build_rows(CommonAttributes::ATTRS, ATTRS)
+      end
+
+      # True when `key` is a declared canonical name or alias
+      # spelling.
+      def self.declared?(key)
+        rows.key?(key) || alias_map.key?(key)
+      end
+
+      # Alias spelling => canonical attribute name.
+      def self.alias_map
+        @alias_map ||= AttrTable.build_alias_map(rows)
       end
     end
   end
