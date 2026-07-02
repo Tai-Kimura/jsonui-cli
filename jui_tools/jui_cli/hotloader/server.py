@@ -33,7 +33,7 @@ from aiohttp import WSMsgType, web
 
 from .config_loader import HotloadConfig
 from .layout_resolver import LayoutResolver
-from .platform_filter import VALID_PLATFORMS
+from ..core.normalizer.platform_filter import VALID_PLATFORMS
 from .watcher import FileChange, LayoutWatcher
 
 

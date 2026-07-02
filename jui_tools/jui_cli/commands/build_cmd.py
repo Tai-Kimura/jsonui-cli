@@ -162,15 +162,44 @@ def _prune_orphans(
     return removed
 
 
+def _normalize_layouts_enabled(config_mgr: ConfigManager) -> bool:
+    """``jui.config.json`` → ``"build": {"normalizeLayouts": true}``.
+
+    Default is false — distribution is byte-identical to previous
+    releases unless the project explicitly opts in. Experimental until
+    the conformance suite gates it (renderer SSoT plan, phase 05).
+    """
+    config = config_mgr.load()
+    build_cfg = config.get("build") or {}
+    return bool(isinstance(build_cfg, dict) and build_cfg.get("normalizeLayouts"))
+
+
 def _distribute_layouts(config_mgr: ConfigManager, platforms: dict, args) -> None:
     """Copy Layout JSON from shared layouts/ to each platform.
 
     If a Layout file contains ``platform`` overrides they are resolved
     for the target platform before writing.
+
+    When ``"build": {"normalizeLayouts": true}`` (experimental) is set in
+    ``jui.config.json``, the distributed copies are L1-canonicalized
+    (alias → canonical attribute rewrite + ``$jui`` marker). The shared
+    source files under ``layouts_directory`` are NEVER rewritten — the
+    authoring surface stays L0.
     """
     layouts_src = config_mgr.layouts_directory
     if not layouts_src.exists():
         return
+
+    canonicalizer = None
+    if _normalize_layouts_enabled(config_mgr):
+        # Lazy import — the normalizer is never loaded on flag-off builds.
+        from ..core.normalizer import Canonicalizer
+
+        canonicalizer = Canonicalizer()
+        print(
+            "normalizeLayouts enabled (experimental): distributing "
+            "L1-canonicalized layouts"
+        )
 
     for platform, pconfig in platforms.items():
         if args.ios_only and platform != "ios":
@@ -218,6 +247,15 @@ def _distribute_layouts(config_mgr: ConfigManager, platforms: dict, args) -> Non
             # Resolve platform-specific overrides
             if PlatformResolver.has_platform_key(data):
                 data = resolver.resolve_tree(data)
+
+            # L1 canonicalization (opt-in). Applies only to the
+            # distributed platform-side copy; ``layouts_src`` is L0.
+            if canonicalizer is not None and isinstance(data, dict):
+                data, norm_warnings = canonicalizer.canonicalize(
+                    data, source=rel.as_posix()
+                )
+                for warning in norm_warnings:
+                    print(f"  WARNING [normalize]: {warning}")
 
             # Inject the @generated marker *at distribution time* — the
             # per-platform copy is the truly auto-generated artifact (the

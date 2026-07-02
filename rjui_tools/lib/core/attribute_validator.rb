@@ -58,8 +58,9 @@ module RjuiTools
         # Check each attribute in the merged component
         merged_component.each do |key, value|
           # Skip internal/structural attributes (including _ prefixed internal flags
-          # such as `_generated` markers added by `jui build`).
-          next if key == 'type' || key.start_with?('_')
+          # such as `_generated` markers and the `$jui` normalization marker
+          # added by `jui build`).
+          next if key == 'type' || key == '$jui' || key.start_with?('_')
 
           # Skip child/children if all items are data-only definitions (no type)
           if (key == 'child' || key == 'children') && !valid_attrs.key?(key)
