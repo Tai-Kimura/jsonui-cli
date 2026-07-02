@@ -8,11 +8,11 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 1,
-  "generatedFrom": "cb25fd48a33e7101f199ab578b6d60c58dfbc0bef6bddea62df30abeeccfd64c",
+  "generatedFrom": "bfebdac10d8e897fa6a08ac8c89e511420a6e0d4b6235b1638c9322baf943194",
   "counts": {
-    "fixtures": 629,
+    "fixtures": 624,
     "assertable": 25,
-    "visual": 604,
+    "visual": 599,
     "skipped": 177
   },
   "fixtures": [
@@ -1597,26 +1597,6 @@
       "test": "fixtures/common/alignTopOfView__static.test.json"
     },
     {
-      "id": "common/alignTopOfView__alias_alignTopView",
-      "component": "common",
-      "attribute": "alignTopOfView",
-      "case": "alias_alignTopView",
-      "class": "visual",
-      "host": "View",
-      "writtenKey": "alignTopView",
-      "aliasOf": "common/alignTopOfView__static",
-      "value": "anchor",
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/common/alignTopOfView__alias_alignTopView.layout.json",
-      "test": "fixtures/common/alignTopOfView__alias_alignTopView.test.json"
-    },
-    {
       "id": "common/alignBottomOfView__static",
       "component": "common",
       "attribute": "alignBottomOfView",
@@ -1635,26 +1615,6 @@
       "deprecated": null,
       "layout": "fixtures/common/alignBottomOfView__static.layout.json",
       "test": "fixtures/common/alignBottomOfView__static.test.json"
-    },
-    {
-      "id": "common/alignBottomOfView__alias_alignBottomView",
-      "component": "common",
-      "attribute": "alignBottomOfView",
-      "case": "alias_alignBottomView",
-      "class": "visual",
-      "host": "View",
-      "writtenKey": "alignBottomView",
-      "aliasOf": "common/alignBottomOfView__static",
-      "value": "anchor",
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/common/alignBottomOfView__alias_alignBottomView.layout.json",
-      "test": "fixtures/common/alignBottomOfView__alias_alignBottomView.test.json"
     },
     {
       "id": "common/alignLeftOfView__static",
@@ -1677,26 +1637,6 @@
       "test": "fixtures/common/alignLeftOfView__static.test.json"
     },
     {
-      "id": "common/alignLeftOfView__alias_alignLeftView",
-      "component": "common",
-      "attribute": "alignLeftOfView",
-      "case": "alias_alignLeftView",
-      "class": "visual",
-      "host": "View",
-      "writtenKey": "alignLeftView",
-      "aliasOf": "common/alignLeftOfView__static",
-      "value": "anchor",
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/common/alignLeftOfView__alias_alignLeftView.layout.json",
-      "test": "fixtures/common/alignLeftOfView__alias_alignLeftView.test.json"
-    },
-    {
       "id": "common/alignRightOfView__static",
       "component": "common",
       "attribute": "alignRightOfView",
@@ -1715,26 +1655,6 @@
       "deprecated": null,
       "layout": "fixtures/common/alignRightOfView__static.layout.json",
       "test": "fixtures/common/alignRightOfView__static.test.json"
-    },
-    {
-      "id": "common/alignRightOfView__alias_alignRightView",
-      "component": "common",
-      "attribute": "alignRightOfView",
-      "case": "alias_alignRightView",
-      "class": "visual",
-      "host": "View",
-      "writtenKey": "alignRightView",
-      "aliasOf": "common/alignRightOfView__static",
-      "value": "anchor",
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/common/alignRightOfView__alias_alignRightView.layout.json",
-      "test": "fixtures/common/alignRightOfView__alias_alignRightView.test.json"
     },
     {
       "id": "common/alignTopView__static",
@@ -6154,26 +6074,6 @@
       "deprecated": null,
       "layout": "fixtures/Button/tapBackground__static.layout.json",
       "test": "fixtures/Button/tapBackground__static.test.json"
-    },
-    {
-      "id": "Button/tapBackground__alias_highlightBackground",
-      "component": "Button",
-      "attribute": "tapBackground",
-      "case": "alias_highlightBackground",
-      "class": "visual",
-      "host": "Button",
-      "writtenKey": "highlightBackground",
-      "aliasOf": "Button/tapBackground__static",
-      "value": "#FF0000",
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/Button/tapBackground__alias_highlightBackground.layout.json",
-      "test": "fixtures/Button/tapBackground__alias_highlightBackground.test.json"
     },
     {
       "id": "Button/highlightBackground__static",

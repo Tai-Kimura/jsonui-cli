@@ -1,0 +1,3650 @@
+{
+  "manifestHash" : "4f679408f1028dcaa83afc8dbccc7ea72716b67c3e55bd46a4bc200c9c78d577",
+  "platform" : "ios",
+  "results" : [
+    {
+      "detail" : "",
+      "id" : "common/width__matchparent",
+      "screenshot" : "artifacts/ios/common_width__matchparent.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/width__wrapcontent",
+      "screenshot" : "artifacts/ios/common_width__wrapcontent.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/width__static",
+      "screenshot" : "artifacts/ios/common_width__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/height__matchparent",
+      "screenshot" : "artifacts/ios/common_height__matchparent.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/height__wrapcontent",
+      "screenshot" : "artifacts/ios/common_height__wrapcontent.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/height__static",
+      "screenshot" : "artifacts/ios/common_height__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/minWidth__static",
+      "screenshot" : "artifacts/ios/common_minWidth__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/maxWidth__static",
+      "screenshot" : "artifacts/ios/common_maxWidth__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/minHeight__static",
+      "screenshot" : "artifacts/ios/common_minHeight__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/maxHeight__static",
+      "screenshot" : "artifacts/ios/common_maxHeight__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/widthWeight__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/heightWeight__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/maxWidthWeight__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/maxHeightWeight__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/minWidthWeight__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/minHeightWeight__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/aspectWidth__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/aspectHeight__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "common/weight__static",
+      "screenshot" : "artifacts/ios/common_weight__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/background__static",
+      "screenshot" : "artifacts/ios/common_background__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/tapBackground__static",
+      "screenshot" : "artifacts/ios/common_tapBackground__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/highlightBackground__static",
+      "screenshot" : "artifacts/ios/common_highlightBackground__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/disabledBackground__static",
+      "screenshot" : "artifacts/ios/common_disabledBackground__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/defaultBackground__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "common/cornerRadius__static",
+      "screenshot" : "artifacts/ios/common_cornerRadius__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/borderWidth__static",
+      "screenshot" : "artifacts/ios/common_borderWidth__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/borderColor__static",
+      "screenshot" : "artifacts/ios/common_borderColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/borderStyle__solid",
+      "screenshot" : "artifacts/ios/common_borderStyle__solid.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/borderStyle__dashed",
+      "screenshot" : "artifacts/ios/common_borderStyle__dashed.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/borderStyle__dotted",
+      "screenshot" : "artifacts/ios/common_borderStyle__dotted.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alpha__static",
+      "screenshot" : "artifacts/ios/common_alpha__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/opacity__static",
+      "screenshot" : "artifacts/ios/common_opacity__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/opacity__alias_alpha",
+      "screenshot" : "artifacts/ios/common_opacity__alias_alpha.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/visibility__visible",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/visibility__invisible",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/visibility__gone",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/hidden__true",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/hidden__false",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/padding__static",
+      "screenshot" : "artifacts/ios/common_padding__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/paddings__static",
+      "screenshot" : "artifacts/ios/common_paddings__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/paddingTop__static",
+      "screenshot" : "artifacts/ios/common_paddingTop__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/paddingBottom__static",
+      "screenshot" : "artifacts/ios/common_paddingBottom__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/paddingLeft__static",
+      "screenshot" : "artifacts/ios/common_paddingLeft__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/paddingRight__static",
+      "screenshot" : "artifacts/ios/common_paddingRight__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/paddingStart__static",
+      "screenshot" : "artifacts/ios/common_paddingStart__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/paddingEnd__static",
+      "screenshot" : "artifacts/ios/common_paddingEnd__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/rightPadding__static",
+      "screenshot" : "artifacts/ios/common_rightPadding__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/leftPadding__static",
+      "screenshot" : "artifacts/ios/common_leftPadding__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/topPadding__static",
+      "screenshot" : "artifacts/ios/common_topPadding__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/bottomPadding__static",
+      "screenshot" : "artifacts/ios/common_bottomPadding__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/minTopPadding__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/minBottomPadding__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/minLeftPadding__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/minRightPadding__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/maxTopPadding__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/maxBottomPadding__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/maxLeftPadding__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/maxRightPadding__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "common/margins__static",
+      "screenshot" : "artifacts/ios/common_margins__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/topMargin__static",
+      "screenshot" : "artifacts/ios/common_topMargin__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/bottomMargin__static",
+      "screenshot" : "artifacts/ios/common_bottomMargin__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/leftMargin__static",
+      "screenshot" : "artifacts/ios/common_leftMargin__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/rightMargin__static",
+      "screenshot" : "artifacts/ios/common_rightMargin__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/startMargin__static",
+      "screenshot" : "artifacts/ios/common_startMargin__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/endMargin__static",
+      "screenshot" : "artifacts/ios/common_endMargin__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/minTopMargin__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/minBottomMargin__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/minLeftMargin__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/minRightMargin__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/maxTopMargin__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/maxBottomMargin__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/maxLeftMargin__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/maxRightMargin__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "common/centerInParent__true",
+      "screenshot" : "artifacts/ios/common_centerInParent__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/centerVertical__true",
+      "screenshot" : "artifacts/ios/common_centerVertical__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/centerHorizontal__true",
+      "screenshot" : "artifacts/ios/common_centerHorizontal__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignTop__true",
+      "screenshot" : "artifacts/ios/common_alignTop__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignBottom__true",
+      "screenshot" : "artifacts/ios/common_alignBottom__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignLeft__true",
+      "screenshot" : "artifacts/ios/common_alignLeft__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignRight__true",
+      "screenshot" : "artifacts/ios/common_alignRight__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignTopOfView__static",
+      "screenshot" : "artifacts/ios/common_alignTopOfView__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignTopOfView__alias_alignTopView",
+      "screenshot" : "artifacts/ios/common_alignTopOfView__alias_alignTopView.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignBottomOfView__static",
+      "screenshot" : "artifacts/ios/common_alignBottomOfView__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignBottomOfView__alias_alignBottomView",
+      "screenshot" : "artifacts/ios/common_alignBottomOfView__alias_alignBottomView.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignLeftOfView__static",
+      "screenshot" : "artifacts/ios/common_alignLeftOfView__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignLeftOfView__alias_alignLeftView",
+      "screenshot" : "artifacts/ios/common_alignLeftOfView__alias_alignLeftView.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignRightOfView__static",
+      "screenshot" : "artifacts/ios/common_alignRightOfView__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignRightOfView__alias_alignRightView",
+      "screenshot" : "artifacts/ios/common_alignRightOfView__alias_alignRightView.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignTopView__static",
+      "screenshot" : "artifacts/ios/common_alignTopView__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignBottomView__static",
+      "screenshot" : "artifacts/ios/common_alignBottomView__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignLeftView__static",
+      "screenshot" : "artifacts/ios/common_alignLeftView__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignRightView__static",
+      "screenshot" : "artifacts/ios/common_alignRightView__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignCenterVerticalView__static",
+      "screenshot" : "artifacts/ios/common_alignCenterVerticalView__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignCenterHorizontalView__static",
+      "screenshot" : "artifacts/ios/common_alignCenterHorizontalView__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/toView__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "common/shadow__static",
+      "screenshot" : "artifacts/ios/common_shadow__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/clipToBounds__true",
+      "screenshot" : "artifacts/ios/common_clipToBounds__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/tintColor__static",
+      "screenshot" : "artifacts/ios/common_tintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/compressHorizontal__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/compressVertical__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/hugHorizontal__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/hugVertical__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/wrapContent__true",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/innerPadding__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "common/effectStyle__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "common/enabled__true",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/enabled__false",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/indexBelow__static",
+      "screenshot" : "artifacts/ios/common_indexBelow__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/indexAbove__static",
+      "screenshot" : "artifacts/ios/common_indexAbove__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/gravity__top",
+      "screenshot" : "artifacts/ios/common_gravity__top.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/gravity__bottom",
+      "screenshot" : "artifacts/ios/common_gravity__bottom.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/gravity__centervertical",
+      "screenshot" : "artifacts/ios/common_gravity__centervertical.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/gravity__left",
+      "screenshot" : "artifacts/ios/common_gravity__left.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/gravity__right",
+      "screenshot" : "artifacts/ios/common_gravity__right.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/gravity__centerhorizontal",
+      "screenshot" : "artifacts/ios/common_gravity__centerhorizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/gravity__center",
+      "screenshot" : "artifacts/ios/common_gravity__center.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignment__topleading",
+      "screenshot" : "artifacts/ios/common_alignment__topleading.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignment__top",
+      "screenshot" : "artifacts/ios/common_alignment__top.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignment__toptrailing",
+      "screenshot" : "artifacts/ios/common_alignment__toptrailing.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignment__leading",
+      "screenshot" : "artifacts/ios/common_alignment__leading.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignment__center",
+      "screenshot" : "artifacts/ios/common_alignment__center.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignment__trailing",
+      "screenshot" : "artifacts/ios/common_alignment__trailing.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignment__bottomleading",
+      "screenshot" : "artifacts/ios/common_alignment__bottomleading.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignment__bottom",
+      "screenshot" : "artifacts/ios/common_alignment__bottom.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignment__bottomtrailing",
+      "screenshot" : "artifacts/ios/common_alignment__bottomtrailing.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/distribution__fill",
+      "screenshot" : "artifacts/ios/common_distribution__fill.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/distribution__fillequally",
+      "screenshot" : "artifacts/ios/common_distribution__fillequally.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/distribution__equalspacing",
+      "screenshot" : "artifacts/ios/common_distribution__equalspacing.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/distribution__equalcentering",
+      "screenshot" : "artifacts/ios/common_distribution__equalcentering.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/minStartMargin__static",
+      "screenshot" : "artifacts/ios/common_minStartMargin__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/maxStartMargin__static",
+      "screenshot" : "artifacts/ios/common_maxStartMargin__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/minEndMargin__static",
+      "screenshot" : "artifacts/ios/common_minEndMargin__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/maxEndMargin__static",
+      "screenshot" : "artifacts/ios/common_maxEndMargin__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/idealWidth__static",
+      "screenshot" : "artifacts/ios/common_idealWidth__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/idealHeight__static",
+      "screenshot" : "artifacts/ios/common_idealHeight__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/text__static",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/hint__static",
+      "screenshot" : "artifacts/ios/Label_hint__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/placeholder__static",
+      "screenshot" : "artifacts/ios/Label_placeholder__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/font__static",
+      "screenshot" : "artifacts/ios/Label_font__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/fontSize__static",
+      "screenshot" : "artifacts/ios/Label_fontSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/fontColor__static",
+      "screenshot" : "artifacts/ios/Label_fontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/fontFamily__static",
+      "screenshot" : "artifacts/ios/Label_fontFamily__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Label/lineHeight__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Label/textTransform__none",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Label/textTransform__capitalize",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Label/textTransform__uppercase",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Label/textTransform__lowercase",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "Label/selected__true",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/textAlign__left",
+      "screenshot" : "artifacts/ios/Label_textAlign__left.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/textAlign__center",
+      "screenshot" : "artifacts/ios/Label_textAlign__center.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/textAlign__right",
+      "screenshot" : "artifacts/ios/Label_textAlign__right.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/textAlign__left_2",
+      "screenshot" : "artifacts/ios/Label_textAlign__left_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/textAlign__center_2",
+      "screenshot" : "artifacts/ios/Label_textAlign__center_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/textAlign__right_2",
+      "screenshot" : "artifacts/ios/Label_textAlign__right_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/lines__static",
+      "screenshot" : "artifacts/ios/Label_lines__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/lineBreakMode__char",
+      "screenshot" : "artifacts/ios/Label_lineBreakMode__char.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/lineBreakMode__clip",
+      "screenshot" : "artifacts/ios/Label_lineBreakMode__clip.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/lineBreakMode__word",
+      "screenshot" : "artifacts/ios/Label_lineBreakMode__word.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/lineBreakMode__head",
+      "screenshot" : "artifacts/ios/Label_lineBreakMode__head.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/lineBreakMode__middle",
+      "screenshot" : "artifacts/ios/Label_lineBreakMode__middle.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/lineBreakMode__tail",
+      "screenshot" : "artifacts/ios/Label_lineBreakMode__tail.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/lineHeightMultiple__static",
+      "screenshot" : "artifacts/ios/Label_lineHeightMultiple__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/lineSpacing__static",
+      "screenshot" : "artifacts/ios/Label_lineSpacing__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/edgeInset__static",
+      "screenshot" : "artifacts/ios/Label_edgeInset__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/underline__true",
+      "screenshot" : "artifacts/ios/Label_underline__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/strikethrough__true",
+      "screenshot" : "artifacts/ios/Label_strikethrough__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/autoShrink__true",
+      "screenshot" : "artifacts/ios/Label_autoShrink__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/minimumScaleFactor__static",
+      "screenshot" : "artifacts/ios/Label_minimumScaleFactor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/linkable__true",
+      "screenshot" : "artifacts/ios/Label_linkable__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/textShadow__static",
+      "screenshot" : "artifacts/ios/Label_textShadow__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/hintColor__static",
+      "screenshot" : "artifacts/ios/Label_hintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/highlightColor__static",
+      "screenshot" : "artifacts/ios/Label_highlightColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/fontWeight__static",
+      "screenshot" : "artifacts/ios/Label_fontWeight__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/text__static",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/hint__static",
+      "screenshot" : "artifacts/ios/TextField_hint__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/placeholder__static",
+      "screenshot" : "artifacts/ios/TextField_placeholder__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/hintColor__static",
+      "screenshot" : "artifacts/ios/TextField_hintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/hintFont__static",
+      "screenshot" : "artifacts/ios/TextField_hintFont__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/hintFontSize__static",
+      "screenshot" : "artifacts/ios/TextField_hintFontSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/font__static",
+      "screenshot" : "artifacts/ios/TextField_font__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/fontSize__static",
+      "screenshot" : "artifacts/ios/TextField_fontSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/fontColor__static",
+      "screenshot" : "artifacts/ios/TextField_fontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/textAlign__left",
+      "screenshot" : "artifacts/ios/TextField_textAlign__left.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/textAlign__center",
+      "screenshot" : "artifacts/ios/TextField_textAlign__center.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/textAlign__right",
+      "screenshot" : "artifacts/ios/TextField_textAlign__right.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/textAlign__left_2",
+      "screenshot" : "artifacts/ios/TextField_textAlign__left_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/textAlign__center_2",
+      "screenshot" : "artifacts/ios/TextField_textAlign__center_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/textAlign__right_2",
+      "screenshot" : "artifacts/ios/TextField_textAlign__right_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/borderStyle__none",
+      "screenshot" : "artifacts/ios/TextField_borderStyle__none.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/borderStyle__line",
+      "screenshot" : "artifacts/ios/TextField_borderStyle__line.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/borderStyle__bezel",
+      "screenshot" : "artifacts/ios/TextField_borderStyle__bezel.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/borderStyle__roundedrect",
+      "screenshot" : "artifacts/ios/TextField_borderStyle__roundedrect.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/borderStyle__roundedrect_2",
+      "screenshot" : "artifacts/ios/TextField_borderStyle__roundedrect_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/borderStyle__line_2",
+      "screenshot" : "artifacts/ios/TextField_borderStyle__line_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/borderStyle__bezel_2",
+      "screenshot" : "artifacts/ios/TextField_borderStyle__bezel_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/input__default",
+      "screenshot" : "artifacts/ios/TextField_input__default.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/input__alphabet",
+      "screenshot" : "artifacts/ios/TextField_input__alphabet.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/input__allphabet",
+      "screenshot" : "artifacts/ios/TextField_input__allphabet.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/input__email",
+      "screenshot" : "artifacts/ios/TextField_input__email.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/input__number",
+      "screenshot" : "artifacts/ios/TextField_input__number.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/input__phone",
+      "screenshot" : "artifacts/ios/TextField_input__phone.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/input__url",
+      "screenshot" : "artifacts/ios/TextField_input__url.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/input__password",
+      "screenshot" : "artifacts/ios/TextField_input__password.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/input__decimal",
+      "screenshot" : "artifacts/ios/TextField_input__decimal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/returnKeyType__done",
+      "screenshot" : "artifacts/ios/TextField_returnKeyType__done.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/returnKeyType__go",
+      "screenshot" : "artifacts/ios/TextField_returnKeyType__go.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/returnKeyType__next",
+      "screenshot" : "artifacts/ios/TextField_returnKeyType__next.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/returnKeyType__return",
+      "screenshot" : "artifacts/ios/TextField_returnKeyType__return.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/returnKeyType__search",
+      "screenshot" : "artifacts/ios/TextField_returnKeyType__search.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/returnKeyType__send",
+      "screenshot" : "artifacts/ios/TextField_returnKeyType__send.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/returnKeyType__continue",
+      "screenshot" : "artifacts/ios/TextField_returnKeyType__continue.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/returnKeyType__join",
+      "screenshot" : "artifacts/ios/TextField_returnKeyType__join.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/returnKeyType__route",
+      "screenshot" : "artifacts/ios/TextField_returnKeyType__route.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/returnKeyType__yahoo",
+      "screenshot" : "artifacts/ios/TextField_returnKeyType__yahoo.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/returnKeyType__google",
+      "screenshot" : "artifacts/ios/TextField_returnKeyType__google.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/contentType__static",
+      "screenshot" : "artifacts/ios/TextField_contentType__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/secure__true",
+      "screenshot" : "artifacts/ios/TextField_secure__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/fieldPadding__static",
+      "screenshot" : "artifacts/ios/TextField_fieldPadding__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/textPaddingLeft__static",
+      "screenshot" : "artifacts/ios/TextField_textPaddingLeft__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "TextField/textPaddingRight__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "TextField/hasContainer__true",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "TextField/textVerticalAlign__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "TextField/applyLiquidGlass__true",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "TextField/accessoryCornerRadius__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "TextField/glassEffectStyle__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/accessoryBackground__static",
+      "screenshot" : "artifacts/ios/TextField_accessoryBackground__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/accessoryTextColor__static",
+      "screenshot" : "artifacts/ios/TextField_accessoryTextColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/doneText__static",
+      "screenshot" : "artifacts/ios/TextField_doneText__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/tintColor__static",
+      "screenshot" : "artifacts/ios/TextField_tintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/autocapitalizationType__static",
+      "screenshot" : "artifacts/ios/TextField_autocapitalizationType__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/autocorrectionType__static",
+      "screenshot" : "artifacts/ios/TextField_autocorrectionType__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/spellCheckingType__static",
+      "screenshot" : "artifacts/ios/TextField_spellCheckingType__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/keyboardAppearance__static",
+      "screenshot" : "artifacts/ios/TextField_keyboardAppearance__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/clearButtonMode__static",
+      "screenshot" : "artifacts/ios/TextField_clearButtonMode__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "TextField/leftViewMode__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "TextField/rightViewMode__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/maxLength__static",
+      "screenshot" : "artifacts/ios/TextField_maxLength__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextField/pattern__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextField/required__true",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/fontFamily__static",
+      "screenshot" : "artifacts/ios/TextField_fontFamily__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextField/disabledBackground__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/placeholderColor__static",
+      "screenshot" : "artifacts/ios/TextField_placeholderColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/text__static",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/hint__static",
+      "screenshot" : "artifacts/ios/TextView_hint__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/placeholder__static",
+      "screenshot" : "artifacts/ios/TextView_placeholder__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/hintColor__static",
+      "screenshot" : "artifacts/ios/TextView_hintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/hintFont__static",
+      "screenshot" : "artifacts/ios/TextView_hintFont__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/hintFontSize__static",
+      "screenshot" : "artifacts/ios/TextView_hintFontSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/hintLineHeightMultiple__static",
+      "screenshot" : "artifacts/ios/TextView_hintLineHeightMultiple__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/font__static",
+      "screenshot" : "artifacts/ios/TextView_font__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/fontSize__static",
+      "screenshot" : "artifacts/ios/TextView_fontSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/fontColor__static",
+      "screenshot" : "artifacts/ios/TextView_fontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/textAlign__left",
+      "screenshot" : "artifacts/ios/TextView_textAlign__left.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/textAlign__center",
+      "screenshot" : "artifacts/ios/TextView_textAlign__center.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/textAlign__right",
+      "screenshot" : "artifacts/ios/TextView_textAlign__right.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/textAlign__left_2",
+      "screenshot" : "artifacts/ios/TextView_textAlign__left_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/textAlign__center_2",
+      "screenshot" : "artifacts/ios/TextView_textAlign__center_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/textAlign__right_2",
+      "screenshot" : "artifacts/ios/TextView_textAlign__right_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/containerInset__static",
+      "screenshot" : "artifacts/ios/TextView_containerInset__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/flexible__true",
+      "screenshot" : "artifacts/ios/TextView_flexible__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/input__default",
+      "screenshot" : "artifacts/ios/TextView_input__default.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/input__alphabet",
+      "screenshot" : "artifacts/ios/TextView_input__alphabet.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/input__allphabet",
+      "screenshot" : "artifacts/ios/TextView_input__allphabet.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/input__email",
+      "screenshot" : "artifacts/ios/TextView_input__email.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/input__number",
+      "screenshot" : "artifacts/ios/TextView_input__number.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/input__phone",
+      "screenshot" : "artifacts/ios/TextView_input__phone.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/input__url",
+      "screenshot" : "artifacts/ios/TextView_input__url.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/input__password",
+      "screenshot" : "artifacts/ios/TextView_input__password.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/input__decimal",
+      "screenshot" : "artifacts/ios/TextView_input__decimal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/returnKeyType__done",
+      "screenshot" : "artifacts/ios/TextView_returnKeyType__done.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/returnKeyType__go",
+      "screenshot" : "artifacts/ios/TextView_returnKeyType__go.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/returnKeyType__next",
+      "screenshot" : "artifacts/ios/TextView_returnKeyType__next.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/returnKeyType__return",
+      "screenshot" : "artifacts/ios/TextView_returnKeyType__return.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/returnKeyType__search",
+      "screenshot" : "artifacts/ios/TextView_returnKeyType__search.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/returnKeyType__send",
+      "screenshot" : "artifacts/ios/TextView_returnKeyType__send.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/returnKeyType__continue",
+      "screenshot" : "artifacts/ios/TextView_returnKeyType__continue.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/returnKeyType__join",
+      "screenshot" : "artifacts/ios/TextView_returnKeyType__join.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/returnKeyType__route",
+      "screenshot" : "artifacts/ios/TextView_returnKeyType__route.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/returnKeyType__yahoo",
+      "screenshot" : "artifacts/ios/TextView_returnKeyType__yahoo.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/returnKeyType__google",
+      "screenshot" : "artifacts/ios/TextView_returnKeyType__google.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/editable__true",
+      "screenshot" : "artifacts/ios/TextView_editable__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/lineBreakMode__static",
+      "screenshot" : "artifacts/ios/TextView_lineBreakMode__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/keyboardType__static",
+      "screenshot" : "artifacts/ios/TextView_keyboardType__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextView/maxLength__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextView/pattern__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextView/required__true",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextView/selectable__true",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextView/rows__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextView/cols__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextView/resize__none",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextView/resize__both",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextView/resize__horizontal",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextView/resize__vertical",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/fontFamily__static",
+      "screenshot" : "artifacts/ios/TextView_fontFamily__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextView/disabledBackground__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/edgeInset__static",
+      "screenshot" : "artifacts/ios/TextView_edgeInset__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "EditText/text__static",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "EditText/hint__static",
+      "screenshot" : "artifacts/ios/EditText_hint__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "EditText/placeholder__static",
+      "screenshot" : "artifacts/ios/EditText_placeholder__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "EditText/hintColor__static",
+      "screenshot" : "artifacts/ios/EditText_hintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "EditText/inputType__static",
+      "screenshot" : "artifacts/ios/EditText_inputType__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Input/text__static",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Input/hint__static",
+      "screenshot" : "artifacts/ios/Input_hint__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Input/placeholder__static",
+      "screenshot" : "artifacts/ios/Input_placeholder__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Input/hintColor__static",
+      "screenshot" : "artifacts/ios/Input_hintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/text__static",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/font__static",
+      "screenshot" : "artifacts/ios/Button_font__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/fontSize__static",
+      "screenshot" : "artifacts/ios/Button_fontSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/fontColor__static",
+      "screenshot" : "artifacts/ios/Button_fontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/disabledFontColor__static",
+      "screenshot" : "artifacts/ios/Button_disabledFontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/highlightColor__static",
+      "screenshot" : "artifacts/ios/Button_highlightColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/highlightColor__alias_hilightColor",
+      "screenshot" : "artifacts/ios/Button_highlightColor__alias_hilightColor.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/hilightColor__static",
+      "screenshot" : "artifacts/ios/Button_hilightColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/tapBackground__static",
+      "screenshot" : "artifacts/ios/Button_tapBackground__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/tapBackground__alias_highlightBackground",
+      "screenshot" : "artifacts/ios/Button_tapBackground__alias_highlightBackground.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/highlightBackground__static",
+      "screenshot" : "artifacts/ios/Button_highlightBackground__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/image__static",
+      "screenshot" : "artifacts/ios/Button_image__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/textAlign__left",
+      "screenshot" : "artifacts/ios/Button_textAlign__left.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/textAlign__center",
+      "screenshot" : "artifacts/ios/Button_textAlign__center.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/textAlign__right",
+      "screenshot" : "artifacts/ios/Button_textAlign__right.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Button/buttonType__button",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Button/buttonType__submit",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Button/buttonType__reset",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/fontWeight__static",
+      "screenshot" : "artifacts/ios/Button_fontWeight__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/src__static",
+      "screenshot" : "artifacts/ios/Image_src__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/srcName__static",
+      "screenshot" : "artifacts/ios/Image_srcName__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/highlightSrc__static",
+      "screenshot" : "artifacts/ios/Image_highlightSrc__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "Image/highlightSrcName__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/contentMode__fit",
+      "screenshot" : "artifacts/ios/Image_contentMode__fit.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/contentMode__fill",
+      "screenshot" : "artifacts/ios/Image_contentMode__fill.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/contentMode__center",
+      "screenshot" : "artifacts/ios/Image_contentMode__center.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/contentMode__top",
+      "screenshot" : "artifacts/ios/Image_contentMode__top.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/contentMode__bottom",
+      "screenshot" : "artifacts/ios/Image_contentMode__bottom.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/contentMode__left",
+      "screenshot" : "artifacts/ios/Image_contentMode__left.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/contentMode__right",
+      "screenshot" : "artifacts/ios/Image_contentMode__right.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/contentMode__aspectfill",
+      "screenshot" : "artifacts/ios/Image_contentMode__aspectfill.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/contentMode__aspectfit",
+      "screenshot" : "artifacts/ios/Image_contentMode__aspectfit.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/contentMode__center_2",
+      "screenshot" : "artifacts/ios/Image_contentMode__center_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/contentMode__scaletofill",
+      "screenshot" : "artifacts/ios/Image_contentMode__scaletofill.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/contentMode__top_2",
+      "screenshot" : "artifacts/ios/Image_contentMode__top_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/contentMode__bottom_2",
+      "screenshot" : "artifacts/ios/Image_contentMode__bottom_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/contentMode__left_2",
+      "screenshot" : "artifacts/ios/Image_contentMode__left_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/contentMode__right_2",
+      "screenshot" : "artifacts/ios/Image_contentMode__right_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/renderingMode__original",
+      "screenshot" : "artifacts/ios/Image_renderingMode__original.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/renderingMode__template",
+      "screenshot" : "artifacts/ios/Image_renderingMode__template.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Image/alt__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Image/loading__lazy",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Image/loading__eager",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/loadingImage__static",
+      "screenshot" : "artifacts/ios/Image_loadingImage__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/errorImage__static",
+      "screenshot" : "artifacts/ios/Image_errorImage__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/systemIcon__static",
+      "screenshot" : "artifacts/ios/Image_systemIcon__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/hint__static",
+      "screenshot" : "artifacts/ios/NetworkImage_hint__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/placeholder__static",
+      "screenshot" : "artifacts/ios/NetworkImage_placeholder__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/defaultImage__static",
+      "screenshot" : "artifacts/ios/NetworkImage_defaultImage__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/errorImage__static",
+      "screenshot" : "artifacts/ios/NetworkImage_errorImage__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/loadingImage__static",
+      "screenshot" : "artifacts/ios/NetworkImage_loadingImage__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/contentMode__fit",
+      "screenshot" : "artifacts/ios/NetworkImage_contentMode__fit.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/contentMode__fill",
+      "screenshot" : "artifacts/ios/NetworkImage_contentMode__fill.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/contentMode__center",
+      "screenshot" : "artifacts/ios/NetworkImage_contentMode__center.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/contentMode__top",
+      "screenshot" : "artifacts/ios/NetworkImage_contentMode__top.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/contentMode__bottom",
+      "screenshot" : "artifacts/ios/NetworkImage_contentMode__bottom.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/contentMode__left",
+      "screenshot" : "artifacts/ios/NetworkImage_contentMode__left.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/contentMode__right",
+      "screenshot" : "artifacts/ios/NetworkImage_contentMode__right.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/contentMode__aspectfill",
+      "screenshot" : "artifacts/ios/NetworkImage_contentMode__aspectfill.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/contentMode__aspectfit",
+      "screenshot" : "artifacts/ios/NetworkImage_contentMode__aspectfit.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/contentMode__center_2",
+      "screenshot" : "artifacts/ios/NetworkImage_contentMode__center_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "NetworkImage/alt__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "NetworkImage/loading__lazy",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "NetworkImage/loading__eager",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/prompt__static",
+      "screenshot" : "artifacts/ios/SelectBox_prompt__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/hint__static",
+      "screenshot" : "artifacts/ios/SelectBox_hint__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/placeholder__static",
+      "screenshot" : "artifacts/ios/SelectBox_placeholder__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/hintColor__static",
+      "screenshot" : "artifacts/ios/SelectBox_hintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/text__static",
+      "screenshot" : "artifacts/ios/SelectBox_text__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/items__static",
+      "screenshot" : "artifacts/ios/SelectBox_items__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/selectItemType__normal",
+      "screenshot" : "artifacts/ios/SelectBox_selectItemType__normal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/selectItemType__date",
+      "screenshot" : "artifacts/ios/SelectBox_selectItemType__date.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/selectedIndex__static",
+      "screenshot" : "artifacts/ios/SelectBox_selectedIndex__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "SelectBox/selectedItem__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/datePickerMode__date",
+      "screenshot" : "artifacts/ios/SelectBox_datePickerMode__date.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/datePickerMode__time",
+      "screenshot" : "artifacts/ios/SelectBox_datePickerMode__time.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/datePickerMode__datetime",
+      "screenshot" : "artifacts/ios/SelectBox_datePickerMode__datetime.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/datePickerMode__dateandtime",
+      "screenshot" : "artifacts/ios/SelectBox_datePickerMode__dateandtime.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/datePickerMode__countdown",
+      "screenshot" : "artifacts/ios/SelectBox_datePickerMode__countdown.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/datePickerStyle__automatic",
+      "screenshot" : "artifacts/ios/SelectBox_datePickerStyle__automatic.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/datePickerStyle__wheel",
+      "screenshot" : "artifacts/ios/SelectBox_datePickerStyle__wheel.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/datePickerStyle__wheels",
+      "screenshot" : "artifacts/ios/SelectBox_datePickerStyle__wheels.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/datePickerStyle__compact",
+      "screenshot" : "artifacts/ios/SelectBox_datePickerStyle__compact.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/datePickerStyle__graphical",
+      "screenshot" : "artifacts/ios/SelectBox_datePickerStyle__graphical.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/datePickerStyle__inline",
+      "screenshot" : "artifacts/ios/SelectBox_datePickerStyle__inline.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/dateStringFormat__static",
+      "screenshot" : "artifacts/ios/SelectBox_dateStringFormat__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/minimumDate__static",
+      "screenshot" : "artifacts/ios/SelectBox_minimumDate__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/maximumDate__static",
+      "screenshot" : "artifacts/ios/SelectBox_maximumDate__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/minuteInterval__1",
+      "screenshot" : "artifacts/ios/SelectBox_minuteInterval__1.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/minuteInterval__2",
+      "screenshot" : "artifacts/ios/SelectBox_minuteInterval__2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/minuteInterval__3",
+      "screenshot" : "artifacts/ios/SelectBox_minuteInterval__3.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/minuteInterval__4",
+      "screenshot" : "artifacts/ios/SelectBox_minuteInterval__4.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/minuteInterval__5",
+      "screenshot" : "artifacts/ios/SelectBox_minuteInterval__5.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/minuteInterval__6",
+      "screenshot" : "artifacts/ios/SelectBox_minuteInterval__6.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/minuteInterval__10",
+      "screenshot" : "artifacts/ios/SelectBox_minuteInterval__10.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/minuteInterval__12",
+      "screenshot" : "artifacts/ios/SelectBox_minuteInterval__12.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/minuteInterval__15",
+      "screenshot" : "artifacts/ios/SelectBox_minuteInterval__15.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/minuteInterval__20",
+      "screenshot" : "artifacts/ios/SelectBox_minuteInterval__20.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/minuteInterval__30",
+      "screenshot" : "artifacts/ios/SelectBox_minuteInterval__30.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/minuteInterval__static",
+      "screenshot" : "artifacts/ios/SelectBox_minuteInterval__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/font__static",
+      "screenshot" : "artifacts/ios/SelectBox_font__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/fontSize__static",
+      "screenshot" : "artifacts/ios/SelectBox_fontSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/fontColor__static",
+      "screenshot" : "artifacts/ios/SelectBox_fontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "SelectBox/inView__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "SelectBox/referenceView__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "SelectBox/colorScheme__light",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "SelectBox/colorScheme__dark",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "SelectBox/multiple__true",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "SelectBox/size__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/selectedValue__static",
+      "screenshot" : "artifacts/ios/SelectBox_selectedValue__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/isOn__true",
+      "screenshot" : "artifacts/ios/Switch_isOn__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/value__static",
+      "screenshot" : "artifacts/ios/Switch_value__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/checked__true",
+      "screenshot" : "artifacts/ios/Switch_checked__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/enabled__true",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/enabled__false",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/tint__static",
+      "screenshot" : "artifacts/ios/Switch_tint__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/tintColor__static",
+      "screenshot" : "artifacts/ios/Switch_tintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/onTintColor__static",
+      "screenshot" : "artifacts/ios/Switch_onTintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/thumbTintColor__static",
+      "screenshot" : "artifacts/ios/Switch_thumbTintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "Switch/offTintColor__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Switch/labelPosition__leading",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Switch/labelPosition__trailing",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/trackTintColor__static",
+      "screenshot" : "artifacts/ios/Switch_trackTintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Toggle/isOn__true",
+      "screenshot" : "artifacts/ios/Toggle_isOn__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Toggle/value__static",
+      "screenshot" : "artifacts/ios/Toggle_value__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Toggle/checked__true",
+      "screenshot" : "artifacts/ios/Toggle_checked__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Toggle/enabled__true",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Toggle/enabled__false",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Toggle/tint__static",
+      "screenshot" : "artifacts/ios/Toggle_tint__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Toggle/tintColor__static",
+      "screenshot" : "artifacts/ios/Toggle_tintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Toggle/onTintColor__static",
+      "screenshot" : "artifacts/ios/Toggle_onTintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Toggle/thumbTintColor__static",
+      "screenshot" : "artifacts/ios/Toggle_thumbTintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "Toggle/offTintColor__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Toggle/labelPosition__leading",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Toggle/labelPosition__trailing",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "Toggle/trackTintColor__static",
+      "screenshot" : "artifacts/ios/Toggle_trackTintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Segment/items__static",
+      "screenshot" : "artifacts/ios/Segment_items__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Segment/selectedIndex__static",
+      "screenshot" : "artifacts/ios/Segment_selectedIndex__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Segment/tintColor__static",
+      "screenshot" : "artifacts/ios/Segment_tintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Segment/normalColor__static",
+      "screenshot" : "artifacts/ios/Segment_normalColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Segment/selectedColor__static",
+      "screenshot" : "artifacts/ios/Segment_selectedColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "Segment/apportionsSegmentWidthsByContent__true",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "Slider/value__static",
+      "screenshot" : "artifacts/ios/Slider_value__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Slider/minValue__static",
+      "screenshot" : "artifacts/ios/Slider_minValue__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Slider/minimum__static",
+      "screenshot" : "artifacts/ios/Slider_minimum__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Slider/minimum__alias_minimumValue",
+      "screenshot" : "artifacts/ios/Slider_minimum__alias_minimumValue.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Slider/minimum__alias_minValue",
+      "screenshot" : "artifacts/ios/Slider_minimum__alias_minValue.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Slider/maxValue__static",
+      "screenshot" : "artifacts/ios/Slider_maxValue__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Slider/maximum__static",
+      "screenshot" : "artifacts/ios/Slider_maximum__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Slider/maximum__alias_maximumValue",
+      "screenshot" : "artifacts/ios/Slider_maximum__alias_maximumValue.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Slider/maximum__alias_maxValue",
+      "screenshot" : "artifacts/ios/Slider_maximum__alias_maxValue.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Slider/tintColor__static",
+      "screenshot" : "artifacts/ios/Slider_tintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "Slider/minimumValueImage__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "Slider/maximumValueImage__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Slider/step__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "Slider/progressTintColor__static",
+      "screenshot" : "artifacts/ios/Slider_progressTintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Slider/trackTintColor__static",
+      "screenshot" : "artifacts/ios/Slider_trackTintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Progress/progress__static",
+      "screenshot" : "artifacts/ios/Progress_progress__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Progress/tintColor__static",
+      "screenshot" : "artifacts/ios/Progress_tintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Progress/progressTintColor__static",
+      "screenshot" : "artifacts/ios/Progress_progressTintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Progress/trackTintColor__static",
+      "screenshot" : "artifacts/ios/Progress_trackTintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "Progress/progressViewStyle__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "Progress/progressImage__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "Progress/trackImage__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "Progress/hidesWhenStopped__true",
+      "screenshot" : "artifacts/ios/Progress_hidesWhenStopped__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Progress/indicatorStyle__medium",
+      "screenshot" : "artifacts/ios/Progress_indicatorStyle__medium.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Progress/indicatorStyle__large",
+      "screenshot" : "artifacts/ios/Progress_indicatorStyle__large.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Progress/color__static",
+      "screenshot" : "artifacts/ios/Progress_color__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/orientation__horizontal",
+      "screenshot" : "artifacts/ios/View_orientation__horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/orientation__vertical",
+      "screenshot" : "artifacts/ios/View_orientation__vertical.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/direction__toptobottom",
+      "screenshot" : "artifacts/ios/View_direction__toptobottom.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/direction__bottomtotop",
+      "screenshot" : "artifacts/ios/View_direction__bottomtotop.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/direction__lefttoright",
+      "screenshot" : "artifacts/ios/View_direction__lefttoright.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/direction__righttoleft",
+      "screenshot" : "artifacts/ios/View_direction__righttoleft.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/direction__none",
+      "screenshot" : "artifacts/ios/View_direction__none.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/alignment__static",
+      "screenshot" : "artifacts/ios/View_alignment__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/distribution__fill",
+      "screenshot" : "artifacts/ios/View_distribution__fill.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/distribution__fillequally",
+      "screenshot" : "artifacts/ios/View_distribution__fillequally.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/distribution__equalspacing",
+      "screenshot" : "artifacts/ios/View_distribution__equalspacing.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/distribution__equalcentering",
+      "screenshot" : "artifacts/ios/View_distribution__equalcentering.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/spacing__static",
+      "screenshot" : "artifacts/ios/View_spacing__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "View/gradient__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "View/gradientDirection__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "View/locations__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "View/highlighted__true",
+      "screenshot" : "artifacts/ios/View_highlighted__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "View/flexWrap__nowrap",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "View/flexWrap__wrap",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "View/flexWrap__wrap-reverse",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "View/draggable__true",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "ScrollView/orientation__horizontal",
+      "screenshot" : "artifacts/ios/ScrollView_orientation__horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "ScrollView/orientation__vertical",
+      "screenshot" : "artifacts/ios/ScrollView_orientation__vertical.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "ScrollView/scrollMode__inner",
+      "screenshot" : "artifacts/ios/ScrollView_scrollMode__inner.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "ScrollView/scrollMode__window",
+      "screenshot" : "artifacts/ios/ScrollView_scrollMode__window.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "ScrollView/showsHorizontalScrollIndicator__true",
+      "screenshot" : "artifacts/ios/ScrollView_showsHorizontalScrollIndicator__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "ScrollView/showsVerticalScrollIndicator__true",
+      "screenshot" : "artifacts/ios/ScrollView_showsVerticalScrollIndicator__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "ScrollView/contentSize__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "ScrollView/contentOffset__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "ScrollView/indicatorStyle__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "ScrollView/scrollBehavior__auto",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "ScrollView/scrollBehavior__smooth",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/lazy__lazy",
+      "screenshot" : "artifacts/ios/Collection_lazy__lazy.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/lazy__eager",
+      "screenshot" : "artifacts/ios/Collection_lazy__eager.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/lazy__none",
+      "screenshot" : "artifacts/ios/Collection_lazy__none.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/columns__static",
+      "screenshot" : "artifacts/ios/Collection_columns__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/columnSpacing__static",
+      "screenshot" : "artifacts/ios/Collection_columnSpacing__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/itemSpacing__static",
+      "screenshot" : "artifacts/ios/Collection_itemSpacing__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/lineSpacing__static",
+      "screenshot" : "artifacts/ios/Collection_lineSpacing__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/horizontalScroll__true",
+      "screenshot" : "artifacts/ios/Collection_horizontalScroll__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/orientation__horizontal",
+      "screenshot" : "artifacts/ios/Collection_orientation__horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/orientation__vertical",
+      "screenshot" : "artifacts/ios/Collection_orientation__vertical.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/layout__vertical",
+      "screenshot" : "artifacts/ios/Collection_layout__vertical.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/layout__horizontal",
+      "screenshot" : "artifacts/ios/Collection_layout__horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/layout__flow",
+      "screenshot" : "artifacts/ios/Collection_layout__flow.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/layout__flow_2",
+      "screenshot" : "artifacts/ios/Collection_layout__flow_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/layout__leftaligned",
+      "screenshot" : "artifacts/ios/Collection_layout__leftaligned.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/layout__leftaligned_2",
+      "screenshot" : "artifacts/ios/Collection_layout__leftaligned_2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/insets__static",
+      "screenshot" : "artifacts/ios/Collection_insets__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/insetHorizontal__static",
+      "screenshot" : "artifacts/ios/Collection_insetHorizontal__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/insetVertical__static",
+      "screenshot" : "artifacts/ios/Collection_insetVertical__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/contentInsets__static",
+      "screenshot" : "artifacts/ios/Collection_contentInsets__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/itemWeight__static",
+      "screenshot" : "artifacts/ios/Collection_itemWeight__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/showsHorizontalScrollIndicator__true",
+      "screenshot" : "artifacts/ios/Collection_showsHorizontalScrollIndicator__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/showsVerticalScrollIndicator__true",
+      "screenshot" : "artifacts/ios/Collection_showsVerticalScrollIndicator__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Collection/columnCount__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/scrollAnchor__top",
+      "screenshot" : "artifacts/ios/Collection_scrollAnchor__top.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/scrollAnchor__center",
+      "screenshot" : "artifacts/ios/Collection_scrollAnchor__center.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/scrollAnchor__bottom",
+      "screenshot" : "artifacts/ios/Collection_scrollAnchor__bottom.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/defaultScrollAnchor__top",
+      "screenshot" : "artifacts/ios/Collection_defaultScrollAnchor__top.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/defaultScrollAnchor__center",
+      "screenshot" : "artifacts/ios/Collection_defaultScrollAnchor__center.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/defaultScrollAnchor__bottom",
+      "screenshot" : "artifacts/ios/Collection_defaultScrollAnchor__bottom.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode compose not hosted (SwiftUI dynamic host)",
+      "id" : "Collection/reverseLayout__true",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/containerInset__static",
+      "screenshot" : "artifacts/ios/Collection_containerInset__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Collection/sectionSticky__true",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/label__static",
+      "screenshot" : "artifacts/ios/Radio_label__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/text__static",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/group__static",
+      "screenshot" : "artifacts/ios/Radio_group__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/icon__static",
+      "screenshot" : "artifacts/ios/Radio_icon__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/selectedIcon__static",
+      "screenshot" : "artifacts/ios/Radio_selectedIcon__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/selected_icon__static",
+      "screenshot" : "artifacts/ios/Radio_selected_icon__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/checked__true",
+      "screenshot" : "artifacts/ios/Radio_checked__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/value__static",
+      "screenshot" : "artifacts/ios/Radio_value__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/font__static",
+      "screenshot" : "artifacts/ios/Radio_font__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/fontSize__static",
+      "screenshot" : "artifacts/ios/Radio_fontSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/fontColor__static",
+      "screenshot" : "artifacts/ios/Radio_fontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/spacing__static",
+      "screenshot" : "artifacts/ios/Radio_spacing__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/checkedColor__static",
+      "screenshot" : "artifacts/ios/Radio_checkedColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/uncheckedColor__static",
+      "screenshot" : "artifacts/ios/Radio_uncheckedColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/iconSize__static",
+      "screenshot" : "artifacts/ios/Radio_iconSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/iconColor__static",
+      "screenshot" : "artifacts/ios/Radio_iconColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/label__static",
+      "screenshot" : "artifacts/ios/CheckBox_label__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/text__static",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/isOn__true",
+      "screenshot" : "artifacts/ios/CheckBox_isOn__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/checked__true",
+      "screenshot" : "artifacts/ios/CheckBox_checked__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/icon__static",
+      "screenshot" : "artifacts/ios/CheckBox_icon__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/src__static",
+      "screenshot" : "artifacts/ios/CheckBox_src__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/selectedIcon__static",
+      "screenshot" : "artifacts/ios/CheckBox_selectedIcon__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/onSrc__static",
+      "screenshot" : "artifacts/ios/CheckBox_onSrc__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/value__static",
+      "screenshot" : "artifacts/ios/CheckBox_value__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/enabled__true",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/enabled__false",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/font__static",
+      "screenshot" : "artifacts/ios/CheckBox_font__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/fontSize__static",
+      "screenshot" : "artifacts/ios/CheckBox_fontSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/fontColor__static",
+      "screenshot" : "artifacts/ios/CheckBox_fontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/spacing__static",
+      "screenshot" : "artifacts/ios/CheckBox_spacing__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/checkedColor__static",
+      "screenshot" : "artifacts/ios/CheckBox_checkedColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/uncheckedColor__static",
+      "screenshot" : "artifacts/ios/CheckBox_uncheckedColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/iconSize__static",
+      "screenshot" : "artifacts/ios/CheckBox_iconSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/iconColor__static",
+      "screenshot" : "artifacts/ios/CheckBox_iconColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/checked__true",
+      "screenshot" : "artifacts/ios/Check_checked__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/isOn__true",
+      "screenshot" : "artifacts/ios/Check_isOn__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/label__static",
+      "screenshot" : "artifacts/ios/Check_label__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/text__static",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/icon__static",
+      "screenshot" : "artifacts/ios/Check_icon__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/src__static",
+      "screenshot" : "artifacts/ios/Check_src__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/selectedIcon__static",
+      "screenshot" : "artifacts/ios/Check_selectedIcon__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/onSrc__static",
+      "screenshot" : "artifacts/ios/Check_onSrc__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/enabled__true",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/enabled__false",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/font__static",
+      "screenshot" : "artifacts/ios/Check_font__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/fontSize__static",
+      "screenshot" : "artifacts/ios/Check_fontSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/fontColor__static",
+      "screenshot" : "artifacts/ios/Check_fontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/spacing__static",
+      "screenshot" : "artifacts/ios/Check_spacing__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/checkedColor__static",
+      "screenshot" : "artifacts/ios/Check_checkedColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/uncheckedColor__static",
+      "screenshot" : "artifacts/ios/Check_uncheckedColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/iconSize__static",
+      "screenshot" : "artifacts/ios/Check_iconSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/iconColor__static",
+      "screenshot" : "artifacts/ios/Check_iconColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Indicator/indicatorStyle__medium",
+      "screenshot" : "artifacts/ios/Indicator_indicatorStyle__medium.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Indicator/indicatorStyle__large",
+      "screenshot" : "artifacts/ios/Indicator_indicatorStyle__large.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Indicator/color__static",
+      "screenshot" : "artifacts/ios/Indicator_color__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Indicator/hidesWhenStopped__true",
+      "screenshot" : "artifacts/ios/Indicator_hidesWhenStopped__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "GradientView/gradient__static",
+      "screenshot" : "artifacts/ios/GradientView_gradient__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "GradientView/gradientDirection__vertical",
+      "screenshot" : "artifacts/ios/GradientView_gradientDirection__vertical.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "GradientView/gradientDirection__horizontal",
+      "screenshot" : "artifacts/ios/GradientView_gradientDirection__horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "GradientView/gradientDirection__oblique",
+      "screenshot" : "artifacts/ios/GradientView_gradientDirection__oblique.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "GradientView/locations__static",
+      "screenshot" : "artifacts/ios/GradientView_locations__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Blur/effectStyle__light",
+      "screenshot" : "artifacts/ios/Blur_effectStyle__light.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Blur/effectStyle__dark",
+      "screenshot" : "artifacts/ios/Blur_effectStyle__dark.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Blur/effectStyle__extralight",
+      "screenshot" : "artifacts/ios/Blur_effectStyle__extralight.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "IconLabel/text__static",
+      "status" : "pass"
+    },
+    {
+      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "id" : "IconLabel/selected__true",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "IconLabel/font__static",
+      "screenshot" : "artifacts/ios/IconLabel_font__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "IconLabel/fontSize__static",
+      "screenshot" : "artifacts/ios/IconLabel_fontSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "IconLabel/fontColor__static",
+      "screenshot" : "artifacts/ios/IconLabel_fontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "IconLabel/textShadow__static",
+      "screenshot" : "artifacts/ios/IconLabel_textShadow__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "IconLabel/selectedFontColor__static",
+      "screenshot" : "artifacts/ios/IconLabel_selectedFontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "IconLabel/icon_on__static",
+      "screenshot" : "artifacts/ios/IconLabel_icon_on__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "IconLabel/icon_off__static",
+      "screenshot" : "artifacts/ios/IconLabel_icon_off__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "IconLabel/iconPosition__left",
+      "screenshot" : "artifacts/ios/IconLabel_iconPosition__left.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "IconLabel/iconPosition__right",
+      "screenshot" : "artifacts/ios/IconLabel_iconPosition__right.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "IconLabel/iconPosition__top",
+      "screenshot" : "artifacts/ios/IconLabel_iconPosition__top.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "IconLabel/iconPosition__bottom",
+      "screenshot" : "artifacts/ios/IconLabel_iconPosition__bottom.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "IconLabel/iconMargin__static",
+      "screenshot" : "artifacts/ios/IconLabel_iconMargin__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Web/html__static",
+      "screenshot" : "artifacts/ios/Web_html__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Web/sandbox__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Web/allow__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "SafeAreaView/orientation__horizontal",
+      "screenshot" : "artifacts/ios/SafeAreaView_orientation__horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SafeAreaView/orientation__vertical",
+      "screenshot" : "artifacts/ios/SafeAreaView_orientation__vertical.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TabView/selectedIndex__static",
+      "screenshot" : "artifacts/ios/TabView_selectedIndex__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TabView/selectedIndex__alias_selectedTabIndex",
+      "screenshot" : "artifacts/ios/TabView_selectedIndex__alias_selectedTabIndex.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TabView/tabs__static",
+      "screenshot" : "artifacts/ios/TabView_tabs__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TabView/tintColor__static",
+      "screenshot" : "artifacts/ios/TabView_tintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TabView/unselectedColor__static",
+      "screenshot" : "artifacts/ios/TabView_unselectedColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TabView/tabBarBackground__static",
+      "screenshot" : "artifacts/ios/TabView_tabBarBackground__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TabView/showLabels__true",
+      "screenshot" : "artifacts/ios/TabView_showLabels__true.png",
+      "status" : "pass"
+    }
+  ],
+  "runner" : {
+    "name" : "xcuitest",
+    "version" : "ios-18.6"
+  }
+}
