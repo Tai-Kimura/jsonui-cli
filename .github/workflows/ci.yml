@@ -71,9 +71,11 @@ jobs:
           ruby-version: "3.3"
           bundler-cache: ${{ matrix.bundler }}
           working-directory: ${{ matrix.bundler && matrix.tool || '' }}
-      - name: Install rspec (no Gemfile)
+      - name: Install gems (no Gemfile)
+        # sjui_tools has no Gemfile; its specs need rspec + simplecov and the
+        # xcodeproj gem (lib/core/xcode_project_manager.rb).
         if: ${{ !matrix.bundler }}
-        run: gem install rspec simplecov --no-document
+        run: gem install rspec simplecov xcodeproj --no-document
       - name: rspec (bundle)
         if: ${{ matrix.bundler }}
         working-directory: ${{ matrix.tool }}
