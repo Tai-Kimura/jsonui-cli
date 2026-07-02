@@ -305,7 +305,7 @@ module SjuiTools
           apply_margins
 
           # Opacity (alpha/opacity)
-          alpha_value = @component['alpha'] || @component['opacity']
+          alpha_value = attr_with_alias('opacity', 'alpha')
           if alpha_value
             if is_binding?(alpha_value)
               @modifier_bag.register(:opacity, ".opacity(#{binding_data_expr(alpha_value)})")

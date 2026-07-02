@@ -234,7 +234,7 @@ module SjuiTools
           apply_margins
 
           # Apply other modifiers
-          alpha_value = @component['alpha'] || @component['opacity']
+          alpha_value = attr_with_alias('opacity', 'alpha')
           if alpha_value
             @modifier_bag.register(:opacity, ".opacity(#{alpha_value})")
           end

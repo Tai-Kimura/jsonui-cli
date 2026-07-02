@@ -12,6 +12,7 @@ require_relative 'style_loader'
 require_relative 'include_expander'
 require_relative '../core/attribute_validator'
 require_relative '../core/layout_validator'
+require_relative '../core/normalization'
 require_relative 'views/color_helper'
 
 module SjuiTools
@@ -39,6 +40,12 @@ module SjuiTools
         if json_data['partial'] == true
           return nil
         end
+
+        # L1-normalized layouts (`$jui` marker from `jui build`) take the
+        # canonical-only attribute lookup path; raw layouts keep the
+        # alias-tolerant L0 path. Class-level per-file state, same
+        # pattern as validation_enabled.
+        Views::BaseViewConverter.layout_normalized = Core::Normalization.canonicalized?(json_data)
 
         # Styleファイルを適用
         json_data = StyleLoader.load_and_merge(json_data)
@@ -108,6 +115,9 @@ module SjuiTools
         # Read and parse JSON
         json_content = File.read(json_file_path)
         json_data = JSON.parse(json_content)
+
+        # Per-file normalization state (see convert_file)
+        Views::BaseViewConverter.layout_normalized = Core::Normalization.canonicalized?(json_data)
 
         # Apply styles
         json_data = StyleLoader.load_and_merge(json_data)
@@ -334,6 +344,8 @@ module SjuiTools
       # This ensures style attributes are not incorrectly flagged
       def validate_json_tree(json_data, file_name = nil)
         @validator ||= Core::AttributeValidator.new(:swiftui)
+        # Canonical-only validation for L1-normalized layouts
+        @validator.normalized = Core::Normalization.canonicalized?(json_data)
         @current_validation_file = file_name
         validate_component_recursive(json_data, nil)
         @validator.print_warnings

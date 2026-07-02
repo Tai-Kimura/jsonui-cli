@@ -16,7 +16,7 @@ module SjuiTools
           tabs = @component['tabs'] || []
 
           # Build TabView with selection binding if provided
-          selected_index = @component['selectedIndex']
+          selected_index = attr_with_alias('selectedIndex', 'selectedTabIndex')
           if selected_index && is_binding?(selected_index)
             binding_prop = extract_binding_property(selected_index)
             add_line "TabView(selection: $data.#{binding_prop}) {"
@@ -47,7 +47,7 @@ module SjuiTools
                   icon_type = tab['iconType'] || 'system'
 
                   # Get selection binding for conditional icon
-                  selected_index = @component['selectedIndex']
+                  selected_index = attr_with_alias('selectedIndex', 'selectedTabIndex')
                   selection_var = if selected_index && is_binding?(selected_index)
                                     "data.#{extract_binding_property(selected_index)}"
                                   else
@@ -136,9 +136,11 @@ module SjuiTools
             add_modifier_line ".toolbarBackground(.visible, for: .tabBar)"
           end
 
-          # Apply onTabChange handler
-          if @component['onTabChange']
-            handler = @component['onTabChange']
+          # Apply tab-change handler. onValueChange is the canonical
+          # name; onTabChange / onPageChanged are its definitions
+          # aliases (L0 fallback only).
+          handler = attr_with_alias('onValueChange', 'onTabChange', 'onPageChanged')
+          if handler
             if is_binding?(handler)
               handler_prop = extract_binding_property(handler)
               add_modifier_line ".onChange(of: selectedTab) { _, newValue in"

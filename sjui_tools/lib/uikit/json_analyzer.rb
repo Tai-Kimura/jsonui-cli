@@ -6,6 +6,7 @@ require_relative 'view_binding_handler_factory'
 require_relative 'string_module'
 require_relative '../core/logger'
 require_relative '../core/attribute_validator'
+require_relative '../core/normalization'
 require_relative '../core/type_converter'
 
 module SjuiTools
@@ -50,6 +51,11 @@ module SjuiTools
 
       def analyze_json(file_name, loaded_json, element_path = [], parent_orientation = nil)
         json = loaded_json
+        # At the file root, pick the canonical-only validation path for
+        # L1-normalized layouts (`$jui` marker from `jui build`)
+        if element_path.empty?
+          @validator.normalized = Core::Normalization.canonicalized?(loaded_json)
+        end
         current_view = {"name": "", "type": "", "element_path": element_path, "file_name": file_name}
 
         # Check if this is an include element with data

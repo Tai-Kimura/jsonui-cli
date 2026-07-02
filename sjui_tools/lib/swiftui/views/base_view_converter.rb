@@ -36,6 +36,25 @@ module SjuiTools
           @@validation_enabled
         end
 
+        # Per-file normalization state, set by JsonToSwiftUIConverter from
+        # the root `$jui` marker (Core::Normalization.canonicalized?)
+        # before converting a layout. When true, alias attribute
+        # spellings were already rewritten to their canonical names by
+        # `jui build` normalizeLayouts, and converters take the
+        # canonical-only lookup path (see #attr_with_alias). Class-level
+        # for the same reason as validation_enabled: converters are
+        # instantiated per node deep inside helpers without a shared
+        # per-conversion config object.
+        @@layout_normalized = false
+
+        def self.layout_normalized=(normalized)
+          @@layout_normalized = normalized
+        end
+
+        def self.layout_normalized?
+          @@layout_normalized
+        end
+
         attr_reader :state_variables, :modifier_bag
 
         def initialize(component, indent_level = 0, action_manager = nil, binding_registry = nil)
@@ -65,6 +84,26 @@ module SjuiTools
 
         def add_modifier_line(modifier)
           add_line "    #{modifier}"
+        end
+
+        # Canonical-name attribute lookup with alias fallback.
+        #
+        # Reads `canonical` from @component first; when absent, each
+        # alias spelling (from attribute_definitions.json `aliases`) is
+        # consulted in order — but only for raw (L0) layouts. For
+        # L1-normalized layouts (`$jui` marker) the normalizer has
+        # already rewritten alias spellings, so the fallback is skipped
+        # entirely and only the canonical name is honored.
+        def attr_with_alias(canonical, *aliases)
+          value = @component[canonical]
+          return value unless value.nil?
+          return nil if self.class.layout_normalized?
+
+          aliases.each do |alias_name|
+            value = @component[alias_name]
+            return value unless value.nil?
+          end
+          nil
         end
 
         # Compute the modifier lines apply_modifiers WOULD register for the
@@ -269,7 +308,7 @@ module SjuiTools
           apply_margins
 
           # 透明度 (alphaとopacityの両方をサポート)
-          alpha_value = @component['alpha'] || @component['opacity']
+          alpha_value = attr_with_alias('opacity', 'alpha')
           if alpha_value
             if is_binding?(alpha_value)
               @modifier_bag.register(:opacity, ".opacity(#{binding_data_expr(alpha_value)})")
