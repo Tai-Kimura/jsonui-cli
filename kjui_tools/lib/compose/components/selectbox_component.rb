@@ -263,7 +263,9 @@ module KjuiTools
           paddings = json_data['paddings'] || json_data['padding']
           if paddings
             if paddings.is_a?(Array) && paddings.length == 4
-              code += ",\n" + indent("contentPadding = PaddingValues(top = #{paddings[0]}.dp, start = #{paddings[1]}.dp, bottom = #{paddings[2]}.dp, end = #{paddings[3]}.dp)", depth + 1)
+              # JSON 4-element order is [top, right, bottom, left] (same as
+              # ModifierBuilder padding): right -> end, left -> start.
+              code += ",\n" + indent("contentPadding = PaddingValues(top = #{paddings[0]}.dp, end = #{paddings[1]}.dp, bottom = #{paddings[2]}.dp, start = #{paddings[3]}.dp)", depth + 1)
             elsif paddings.is_a?(Array) && paddings.length == 2
               code += ",\n" + indent("contentPadding = PaddingValues(horizontal = #{paddings[1]}.dp, vertical = #{paddings[0]}.dp)", depth + 1)
             elsif paddings.is_a?(Array) && paddings.length == 1

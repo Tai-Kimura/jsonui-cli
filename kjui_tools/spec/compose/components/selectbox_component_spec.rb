@@ -23,6 +23,14 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
         expect(required_imports).to include(:selectbox_component)
       end
 
+      it 'maps 4-element paddings as [top, right, bottom, left] to contentPadding' do
+        json_data = { 'type' => 'SelectBox', 'paddings' => [1, 2, 3, 4] }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include(
+          'contentPadding = PaddingValues(top = 1.dp, end = 2.dp, bottom = 3.dp, start = 4.dp)'
+        )
+      end
+
       it 'generates SelectBox with static options array' do
         json_data = {
           'type' => 'SelectBox',
