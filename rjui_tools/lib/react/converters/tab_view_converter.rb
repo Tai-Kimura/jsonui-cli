@@ -13,7 +13,7 @@ module RjuiTools
           id_attr = build_id_attr
           testid_attr = build_testid_attr
           tag_attr = build_tag_attr
-          tabs = json['tabs'] || []
+          tabs = attributes['tabs'] || []
 
           selected_binding = build_selected_binding
           on_change = build_on_change
@@ -48,16 +48,16 @@ module RjuiTools
           classes = ['flex', 'flex-col', 'h-screen']
 
           # Width/Height
-          classes << TailwindMapper.map_width(json['width'])
-          classes << TailwindMapper.map_height(json['height'])
+          classes << TailwindMapper.map_width(attributes['width'])
+          classes << TailwindMapper.map_height(attributes['height'])
 
           # Background
-          if json['background']
-            if has_binding?(json['background'])
+          if attributes['background']
+            if has_binding?(attributes['background'])
               @dynamic_styles ||= {}
-              @dynamic_styles['backgroundColor'] = convert_binding(json['background'])
+              @dynamic_styles['backgroundColor'] = convert_binding(attributes['background'])
             else
-              classes << TailwindMapper.map_color(json['background'], 'bg')
+              classes << TailwindMapper.map_color(attributes['background'], 'bg')
             end
           end
 
@@ -68,12 +68,12 @@ module RjuiTools
           classes = ['flex', 'border-t', 'border-gray-200']
 
           # Tab bar background
-          if json['tabBarBackground']
-            if has_binding?(json['tabBarBackground'])
+          if attributes['tabBarBackground']
+            if has_binding?(attributes['tabBarBackground'])
               # Handle binding - will need dynamic style
               classes << 'bg-white' # fallback
             else
-              classes << TailwindMapper.map_color(json['tabBarBackground'], 'bg')
+              classes << TailwindMapper.map_color(attributes['tabBarBackground'], 'bg')
             end
           else
             classes << 'bg-white'
@@ -108,7 +108,7 @@ module RjuiTools
           style_attr = button_style ? "\n#{indent_str(8)}style={#{button_style}}" : ''
 
           # Show/hide labels
-          show_labels = json['showLabels'] != false
+          show_labels = attributes['showLabels'] != false
           label_jsx = show_labels ? "\n#{indent_str(8)}<span className=\"text-xs mt-1\">#{title}</span>" : ''
 
           on_change = build_on_change
@@ -130,8 +130,8 @@ module RjuiTools
         end
 
         def build_tab_button_class(index, selected_binding)
-          tint = json['tintColor'] || 'blue-600'
-          unselected = json['unselectedColor'] || 'gray-500'
+          tint = attributes['tintColor'] || 'blue-600'
+          unselected = attributes['unselectedColor'] || 'gray-500'
 
           # `cursor-pointer` is required because Tailwind's preflight resets
           # the default browser pointer cursor on <button> back to the regular
@@ -219,7 +219,7 @@ module RjuiTools
 
         def build_selected_binding
           # selectedTabIndex is the definitions alias of selectedIndex
-          selected = attr_lookup('selectedIndex', 'selectedTabIndex')
+          selected = attributes['selectedIndex']
 
           if selected && has_binding?(selected)
             extract_binding_property(selected)
@@ -231,13 +231,13 @@ module RjuiTools
         def build_on_change
           # Canonical name is onValueChange; onTabChange / onPageChanged
           # are the definitions aliases for TabView.
-          handler = attr_lookup('onValueChange', 'onTabChange', 'onPageChanged')
+          handler = attributes['onValueChange']
 
           if handler && has_binding?(handler)
             extract_binding_property(handler)
           else
             # Generate setter from the binding
-            selected = attr_lookup('selectedIndex', 'selectedTabIndex')
+            selected = attributes['selectedIndex']
             raw_binding = if selected && has_binding?(selected)
                             extract_raw_binding_property(selected)
                           else
