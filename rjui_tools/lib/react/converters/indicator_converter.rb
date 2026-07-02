@@ -36,9 +36,9 @@ module RjuiTools
           classes = []
 
           # Size from width/height or size string
-          width = json['width']
-          height = json['height']
-          size = json['size'] || 'medium'
+          width = attributes['width']
+          height = attributes['height']
+          size = attributes['size'] || 'medium'
 
           if width && height
             classes << "w-[#{width}px]"
@@ -59,19 +59,19 @@ module RjuiTools
           classes << 'rounded-full'
 
           # Border width
-          border_width = json['strokeWidth'] || json['borderWidth'] || 2
+          border_width = attributes['strokeWidth'] || attributes['borderWidth'] || 2
           classes << "border-#{border_width}"
 
           classes << 'border-transparent'
 
           # Color
-          color = json['color'] || json['tintColor'] || '#3B82F6'
+          color = attributes['color'] || attributes['tintColor'] || '#3B82F6'
           if color.start_with?('#')
             classes << "border-t-[#{color}]"
-            classes << "border-r-[#{color}]" if json['halfSpinner']
+            classes << "border-r-[#{color}]" if attributes['halfSpinner']
           else
             classes << "border-t-#{color}"
-            classes << "border-r-#{color}" if json['halfSpinner']
+            classes << "border-r-#{color}" if attributes['halfSpinner']
           end
 
           classes.join(' ')
