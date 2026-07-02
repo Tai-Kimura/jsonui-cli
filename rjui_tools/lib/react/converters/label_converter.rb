@@ -15,12 +15,12 @@ module RjuiTools
           tag_attr = build_tag_attr
 
           # Check if we need partialAttributes rendering
-          jsx = if json['partialAttributes'] && json['partialAttributes'].is_a?(Array) && !json['partialAttributes'].empty?
+          jsx = if attributes['partialAttributes'] && attributes['partialAttributes'].is_a?(Array) && !attributes['partialAttributes'].empty?
             render_partial_attributes(indent, id_attr, class_name, style_attr, onclick_attr, testid_attr, tag_attr)
-          elsif json['linkable']
+          elsif attributes['linkable']
             render_linkable_text(indent, id_attr, class_name, style_attr, onclick_attr, testid_attr, tag_attr)
           else
-            text = convert_binding(json['text'] || '')
+            text = convert_binding(attributes['text'] || '')
             "#{indent_str(indent)}<span#{id_attr} className=\"#{class_name}\"#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>#{text}</span>"
           end
 
@@ -35,8 +35,8 @@ module RjuiTools
           # Vertical/horizontal alignment with flex
           # Default: vertically centered. gravity overrides vertical, textAlign overrides horizontal.
           classes << 'flex'
-          if json['gravity']
-            gravity_str = json['gravity'].is_a?(Array) ? json['gravity'].join('|') : json['gravity'].to_s
+          if attributes['gravity']
+            gravity_str = attributes['gravity'].is_a?(Array) ? attributes['gravity'].join('|') : attributes['gravity'].to_s
             if gravity_str.include?('top')
               classes << 'items-start'
             elsif gravity_str.include?('bottom')
@@ -49,7 +49,7 @@ module RjuiTools
           end
 
           # textAlign → justify-* for horizontal alignment within flex
-          case json['textAlign']&.downcase
+          case attributes['textAlign']&.downcase
           when 'center'
             classes << 'justify-center'
           when 'right'
@@ -59,25 +59,25 @@ module RjuiTools
           end
 
           # Line clamp for multiple lines
-          if json['lines'] && json['lines'] > 0
-            if json['lines'] == 1
+          if attributes['lines'] && attributes['lines'] > 0
+            if attributes['lines'] == 1
               classes << 'truncate'
             else
-              classes << "line-clamp-#{json['lines']}"
+              classes << "line-clamp-#{attributes['lines']}"
             end
           end
 
           # Underline
-          classes << 'underline' if json['underline']
+          classes << 'underline' if attributes['underline']
 
           # Strikethrough
-          classes << 'line-through' if json['strikethrough']
+          classes << 'line-through' if attributes['strikethrough']
 
           # Cursor pointer for clickable items
-          classes << 'cursor-pointer' if json['onClick'] || json['onclick']
+          classes << 'cursor-pointer' if attributes['onClick'] || attributes['onclick']
 
           # Linkable text
-          classes << 'cursor-pointer' if json['linkable']
+          classes << 'cursor-pointer' if attributes['linkable']
 
           classes.compact.reject(&:empty?).join(' ')
         end
@@ -87,18 +87,18 @@ module RjuiTools
           super
 
           # Line spacing / line height
-          if json['lineHeightMultiple']
-            @dynamic_styles['lineHeight'] = json['lineHeightMultiple'].to_s
-          elsif json['lineSpacing']
+          if attributes['lineHeightMultiple']
+            @dynamic_styles['lineHeight'] = attributes['lineHeightMultiple'].to_s
+          elsif attributes['lineSpacing']
             # Convert lineSpacing (px) to lineHeight (em-ish)
-            font_size = json['fontSize'] || 16
-            line_height = ((font_size + json['lineSpacing'].to_f) / font_size).round(2)
+            font_size = attributes['fontSize'] || 16
+            line_height = ((font_size + attributes['lineSpacing'].to_f) / font_size).round(2)
             @dynamic_styles['lineHeight'] = line_height.to_s
           end
 
           # edgeInset (Label internal padding)
-          if json['edgeInset']
-            edge_inset = json['edgeInset']
+          if attributes['edgeInset']
+            edge_inset = attributes['edgeInset']
             if edge_inset.is_a?(Array)
               case edge_inset.length
               when 1
@@ -119,13 +119,13 @@ module RjuiTools
           end
 
           # Disabled font color
-          if json['enabled'] == false && json['disabledFontColor']
-            @dynamic_styles['color'] = "'#{json['disabledFontColor']}'"
+          if attributes['enabled'] == false && attributes['disabledFontColor']
+            @dynamic_styles['color'] = "'#{attributes['disabledFontColor']}'"
           end
 
           # lineBreakMode (truncation)
-          if json['lineBreakMode']
-            case json['lineBreakMode']
+          if attributes['lineBreakMode']
+            case attributes['lineBreakMode']
             when 'Head'
               @dynamic_styles['textOverflow'] = "'ellipsis'"
               @dynamic_styles['direction'] = "'rtl'"
@@ -138,14 +138,14 @@ module RjuiTools
               @dynamic_styles['textOverflow'] = "'ellipsis'"
             end
             @dynamic_styles['overflow'] = "'hidden'"
-            @dynamic_styles['whiteSpace'] = "'nowrap'" unless json['lines'] && json['lines'] > 1
+            @dynamic_styles['whiteSpace'] = "'nowrap'" unless attributes['lines'] && attributes['lines'] > 1
           end
 
           # autoShrink - use CSS font-size clamp or viewport units
           # This is a simplified version - full implementation would need JS
-          if json['autoShrink']
-            min_scale = json['minimumScaleFactor'] || 0.5
-            font_size = json['fontSize'] || 16
+          if attributes['autoShrink']
+            min_scale = attributes['minimumScaleFactor'] || 0.5
+            font_size = attributes['fontSize'] || 16
             min_size = (font_size * min_scale).round
             # Use min() to allow shrinking but not below minimum
             @dynamic_styles['fontSize'] = "'min(#{font_size}px, max(#{min_size}px, 1vw))'"
@@ -167,8 +167,8 @@ module RjuiTools
 
         # Render text with partial attributes (styled spans within text)
         def render_partial_attributes(indent, id_attr, class_name, style_attr, onclick_attr, testid_attr, tag_attr)
-          text = json['text'] || ''
-          partials = json['partialAttributes']
+          text = attributes['text'] || ''
+          partials = attributes['partialAttributes']
 
           # Build JSX with styled spans
           lines = []
@@ -231,7 +231,7 @@ module RjuiTools
 
         # Render linkable text (auto-detect URLs and make them clickable)
         def render_linkable_text(indent, id_attr, class_name, style_attr, onclick_attr, testid_attr, tag_attr)
-          text = json['text'] || ''
+          text = attributes['text'] || ''
 
           # For React, we'll render with a data attribute and let the app handle link detection
           # Or use a simple regex-based approach
