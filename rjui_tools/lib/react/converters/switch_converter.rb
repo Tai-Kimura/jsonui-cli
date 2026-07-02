@@ -26,11 +26,16 @@ module RjuiTools
           # iOS-style toggle switch using pure CSS
           switch_html = build_switch_element(checked_attr, on_change, disabled_attr, tint_color, thumb_color, off_tint_color)
 
+          # The layout `id` lands on the wrapper (div/label), not on the inner
+          # <input>, so reflect the disabled state on the wrapper for
+          # accessibility / testability (mirrors the native `disabled` attr).
+          aria_disabled_attr = build_aria_disabled_attr
+
           jsx = if text.empty?
-            "#{indent_str(indent)}<div#{id_attr} className=\"#{class_name}\"#{style_attr}#{testid_attr}#{tag_attr}>#{switch_html}</div>"
+            "#{indent_str(indent)}<div#{id_attr} className=\"#{class_name}\"#{style_attr}#{testid_attr}#{tag_attr}#{aria_disabled_attr}>#{switch_html}</div>"
           else
             <<~JSX.chomp
-              #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center gap-3 cursor-pointer"#{style_attr}#{testid_attr}#{tag_attr}>
+              #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center gap-3 cursor-pointer"#{style_attr}#{testid_attr}#{tag_attr}#{aria_disabled_attr}>
               #{indent_str(indent + 2)}#{switch_html}
               #{indent_str(indent + 2)}<span>#{convert_binding(text)}</span>
               #{indent_str(indent)}</label>
