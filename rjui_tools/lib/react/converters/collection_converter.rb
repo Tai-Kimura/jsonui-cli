@@ -36,22 +36,22 @@ module RjuiTools
           # 1fr))` into `@dynamic_styles` instead. A literal int keeps the
           # existing `grid-cols-N` shortcut, which is one byte shorter
           # than the inline-style equivalent.
-          raw_columns = json['columnCount'] || json['columns']
+          raw_columns = attributes['columnCount'] || attributes['columns']
           columns_binding = raw_columns.is_a?(String) && has_binding?(raw_columns)
           columns = columns_binding ? nil : (raw_columns || 1)
-          layout = json['orientation'] || json['layout'] || json['scrollDirection'] || 'vertical'
+          layout = attributes['orientation'] || attributes['layout'] || attributes['scrollDirection'] || 'vertical'
           is_horizontal = layout.to_s.downcase == 'horizontal'
           # lazy: "none" → drop overflow scroll classes; Collection is expected to
           # render inside an already-scrollable parent.
-          is_lazy = json['lazy'] != 'none'
+          is_lazy = attributes['lazy'] != 'none'
 
           if is_horizontal
             # Horizontal scroll collection
             classes << 'overflow-x-auto' if is_lazy
             classes << 'flex flex-row'
-            classes << 'flex-nowrap' if is_lazy && json['scrollEnabled'] != false
+            classes << 'flex-nowrap' if is_lazy && attributes['scrollEnabled'] != false
             # For horizontal: columnSpacing (or lineSpacing/itemSpacing) = gap between items
-            spacing = json['columnSpacing'] || json['lineSpacing'] || json['itemSpacing'] || json['spacing']
+            spacing = attributes['columnSpacing'] || attributes['lineSpacing'] || attributes['itemSpacing'] || attributes['spacing']
             classes << "gap-[#{spacing}px]" if spacing
           elsif !columns_binding && columns == 1
             # List style (single column). A binding-form `columns` can't
@@ -59,9 +59,9 @@ module RjuiTools
             # time so we always route through the grid path below to keep
             # the layout structure stable across runtime column changes.
             classes << 'flex flex-col'
-            classes << 'overflow-y-auto' if is_lazy && json['scrollEnabled'] != false
+            classes << 'overflow-y-auto' if is_lazy && attributes['scrollEnabled'] != false
             # lineSpacing for vertical spacing between items
-            spacing = json['lineSpacing'] || json['itemSpacing'] || json['spacing']
+            spacing = attributes['lineSpacing'] || attributes['itemSpacing'] || attributes['spacing']
             classes << "gap-[#{spacing}px]" if spacing
           else
             # Grid layout
@@ -77,8 +77,8 @@ module RjuiTools
               classes << "grid-cols-#{columns}"
             end
             # lineSpacing for row gap, itemSpacing for column gap
-            row_gap = json['lineSpacing']
-            col_gap = json['itemSpacing'] || json['spacing']
+            row_gap = attributes['lineSpacing']
+            col_gap = attributes['itemSpacing'] || attributes['spacing']
             if row_gap && col_gap
               classes << "gap-x-[#{col_gap}px] gap-y-[#{row_gap}px]"
             elsif row_gap
@@ -89,7 +89,7 @@ module RjuiTools
           end
 
           # Content insets as padding
-          content_inset = json['contentInset']
+          content_inset = attributes['contentInset']
           if content_inset.is_a?(Array) && content_inset.length == 4
             top, left, bottom, right = content_inset
             classes << "pt-[#{top}px]" if top&.positive?
@@ -104,8 +104,8 @@ module RjuiTools
         private
 
         def generate_collection_content(indent)
-          sections = json['sections'] || []
-          items_binding = extract_collection_binding(json['items'])
+          sections = attributes['sections'] || []
+          items_binding = extract_collection_binding(attributes['items'])
 
           content_lines = []
 
@@ -128,8 +128,8 @@ module RjuiTools
           header_view = extract_view_name(section['header'])
           cell_view = extract_view_name(section['cell'])
           footer_view = extract_view_name(section['footer'])
-          cell_id_prop = json['cellIdProperty']
-          auto_tracking = json['autoChangeTrackingId'] == true
+          cell_id_prop = attributes['cellIdProperty']
+          auto_tracking = attributes['autoChangeTrackingId'] == true
 
           # Header
           if header_view
@@ -185,15 +185,15 @@ module RjuiTools
         def generate_legacy_content(indent)
           lines = []
 
-          cell_classes = json['cellClasses'] || []
-          header_classes = json['headerClasses'] || []
-          footer_classes = json['footerClasses'] || []
+          cell_classes = attributes['cellClasses'] || []
+          header_classes = attributes['headerClasses'] || []
+          footer_classes = attributes['footerClasses'] || []
 
           cell_view = extract_view_name(cell_classes.first) if cell_classes.any?
           header_view = extract_view_name(header_classes.first) if header_classes.any?
           footer_view = extract_view_name(footer_classes.first) if footer_classes.any?
 
-          items_binding = extract_collection_binding(json['items'])
+          items_binding = extract_collection_binding(attributes['items'])
 
           # Header
           if header_view
