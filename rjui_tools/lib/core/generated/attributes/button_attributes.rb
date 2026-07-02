@@ -38,7 +38,7 @@ module JsonUI
         # Button image
         { name: 'image', kind: :string }.freeze,
         # Background when tapped - hex string or color name from colors.json
-        { name: 'tapBackground', kind: :string, aliases: ['highlightBackground'].freeze }.freeze,
+        { name: 'tapBackground', kind: :string }.freeze,
         # Button text (can be data binding, supports interpolation)
         { name: 'text', kind: :string, bindable: true }.freeze,
         # Text alignment

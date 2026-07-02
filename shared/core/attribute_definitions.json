@@ -575,31 +575,19 @@
     },
     "alignTopOfView": {
       "type": "string",
-      "description": "Align below specified view ID",
-      "aliases": [
-        "alignTopView"
-      ]
+      "description": "Align below specified view ID"
     },
     "alignBottomOfView": {
       "type": "string",
-      "description": "Align above specified view ID",
-      "aliases": [
-        "alignBottomView"
-      ]
+      "description": "Align above specified view ID"
     },
     "alignLeftOfView": {
       "type": "string",
-      "description": "Align to right of specified view ID",
-      "aliases": [
-        "alignLeftView"
-      ]
+      "description": "Align to right of specified view ID"
     },
     "alignRightOfView": {
       "type": "string",
-      "description": "Align to left of specified view ID",
-      "aliases": [
-        "alignRightView"
-      ]
+      "description": "Align to left of specified view ID"
     },
     "alignTopView": {
       "type": "string",
@@ -2186,10 +2174,7 @@
     },
     "tapBackground": {
       "type": "string",
-      "description": "Background when tapped - hex string or color name from colors.json",
-      "aliases": [
-        "highlightBackground"
-      ]
+      "description": "Background when tapped - hex string or color name from colors.json"
     },
     "highlightBackground": {
       "type": "string",

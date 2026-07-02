@@ -42,10 +42,12 @@ module RjuiTools
           classes << 'cursor-pointer'
           classes << 'transition-colors'
 
-          # Hover state (tapBackground; highlightBackground is the
-          # definitions alias of tapBackground for Button — alias +
-          # normalized handling is inside TypedAttributes)
-          tap_background = attributes['tapBackground']
+          # Hover state. tapBackground (tap state) and
+          # highlightBackground (highlighted state) are DISTINCT
+          # attributes in the definitions/runtimes, but the web has a
+          # single hover/active affordance — both map onto it here
+          # (tapBackground wins when both are present).
+          tap_background = attributes['tapBackground'] || attributes['highlightBackground']
           if tap_background
             hover_color = TailwindMapper.map_color(tap_background, 'hover:bg')
             classes << hover_color
