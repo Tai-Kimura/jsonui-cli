@@ -244,6 +244,22 @@ module SjuiTools
           blur blurview gradientview gradient
         ].freeze
 
+        # Component types that are guaranteed to surface at least one
+        # accessibility element of their own when visible (text, controls,
+        # images). Used to decide whether a container can ever collapse to a
+        # single accessibility child (the "merge hazard" — see
+        # apply_accessibility_identifier). Types NOT listed here (Collection,
+        # Table, Web, TabView, Include, Embed, DynamicComponent, bare
+        # decorative Views…) may yield zero elements at runtime, so they are
+        # conservatively not counted.
+        CERTAIN_ACCESSIBILITY_ELEMENT_TYPES = %w[
+          label text iconlabel button
+          textfield edittext input textview
+          image circleimage networkimage
+          switch toggle checkbox check radio
+          segment progress slider indicator selectbox
+        ].freeze
+
         def generated_code
           # Emit all modifiers from the bag in correct order
           @modifier_bag.emit_all(self)
@@ -276,23 +292,95 @@ module SjuiTools
         # - The invisible 0.5pt anchor overlay prevents SwiftUI from merging
         #   two nested containers when the outer one has exactly one
         #   accessibility child (the merge drops the inner container's
-        #   identifier): with the anchor the container always has at least two
+        #   identifier): with the anchor the container has at least two
         #   children, so it is never collapsed into its single child.
+        #
+        # DEPTH BUDGET (device stack-overflow regression, see
+        # docs/bugs report sjui-container-accessibility-anchor-overlay-
+        # stack-overflow-on-device): the anchor overlay adds several
+        # ModifiedContent layers plus an overlay-content subtree to the
+        # screen's single generic body expression. Emitted unconditionally it
+        # is an O(all-containers) depth cost — on a real device (smaller main
+        # thread stack than the simulator) a large screen exhausted the stack
+        # during one DEBUG body evaluation. The merge hazard only exists when
+        # the container can end up with fewer than two accessibility
+        # children, so the anchor is now emitted only for those containers
+        # (accessibility_merge_hazard?); every other id-bearing container
+        # gets just .accessibilityElement(children: .contain) +
+        # .accessibilityIdentifier (2 flat modifier lines).
         def apply_accessibility_identifier
           return if @component['visibility'] == 'invisible'
 
           type_name = (@component['type'] || '').downcase
           if ACCESSIBILITY_CONTAINER_TYPES.include?(type_name)
-            add_modifier_line ".overlay(alignment: .topLeading) {"
-            indent do
-              add_modifier_line "Color.clear"
-              add_modifier_line "    .frame(width: 0.5, height: 0.5)"
-              add_modifier_line "    .accessibilityElement(children: .ignore)"
+            if accessibility_merge_hazard?
+              add_modifier_line ".overlay(alignment: .topLeading) {"
+              indent do
+                add_modifier_line "Color.clear"
+                add_modifier_line "    .frame(width: 0.5, height: 0.5)"
+                add_modifier_line "    .accessibilityElement(children: .ignore)"
+              end
+              add_modifier_line "}"
             end
-            add_modifier_line "}"
             add_modifier_line ".accessibilityElement(children: .contain)"
           end
           add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}\")"
+        end
+
+        # A container is at risk of the single-child accessibility merge
+        # (which drops the inner element's identifier) only when its subtree
+        # can yield fewer than two accessibility children at runtime. This is
+        # a conservative static approximation: a child contributes only when
+        # it is *guaranteed* to be present and to surface accessibility
+        # elements —
+        #   - statically always visible (no visibility attribute, or the
+        #     literal "visible"; bindings / invisible / gone may vanish)
+        #   - a guaranteed element type (CERTAIN_ACCESSIBILITY_ELEMENT_TYPES)
+        #     contributes 1; an id-bearing container contributes 1 (it becomes
+        #     an explicit accessibility container itself under this same
+        #     rule); an id-less plain container contributes its own
+        #     guaranteed children (they are promoted to the grandparent's
+        #     accessibility children)
+        # Anything uncertain (includes, Collection/Table/Web, data-driven
+        # subtrees) contributes 0, so uncertainty errs toward emitting the
+        # anchor, never toward dropping a needed one.
+        #
+        # Keep in sync with SwiftJsonUI
+        # DynamicModifierHelper.accessibilityMergeHazard.
+        def accessibility_merge_hazard?
+          guaranteed_accessible_child_count(@component) < 2
+        end
+
+        def guaranteed_accessible_child_count(component)
+          child_nodes(component).sum { |c| guaranteed_accessibility_contribution(c) }
+        end
+
+        def child_nodes(component)
+          raw = component['child'] || []
+          nodes = raw.is_a?(Array) ? raw : [raw]
+          # Ignore data declarations ({"data": ...} without type/include)
+          nodes.select { |c| c.is_a?(Hash) && (c['type'] || c['include']) }
+        end
+
+        def guaranteed_accessibility_contribution(child)
+          return 0 if child['include'] # unknown subtree at this stage
+
+          visibility = child['visibility']
+          return 0 if visibility && visibility != 'visible'
+
+          type = (child['type'] || '').downcase
+          if ACCESSIBILITY_CONTAINER_TYPES.include?(type)
+            # id-bearing container: becomes an explicit accessibility
+            # container (a single element) under apply_accessibility_identifier
+            return 1 if child['id']
+
+            # plain container: its accessible descendants are promoted to the
+            # grandparent's accessibility children (2 is enough — the caller
+            # only compares against 2)
+            return [guaranteed_accessible_child_count(child), 2].min
+          end
+
+          CERTAIN_ACCESSIBILITY_ELEMENT_TYPES.include?(type) ? 1 : 0
         end
 
         # 共通のモディファイア適用メソッド
