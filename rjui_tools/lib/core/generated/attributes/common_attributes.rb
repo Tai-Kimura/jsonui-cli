@@ -16,7 +16,7 @@ module JsonUI
         # Align to parent bottom (binding supported)
         { name: 'alignBottom', kind: :boolean, bindable: true }.freeze,
         # Align above specified view ID
-        { name: 'alignBottomOfView', kind: :string, aliases: ['alignBottomView'].freeze }.freeze,
+        { name: 'alignBottomOfView', kind: :string }.freeze,
         # Align bottom edge with specified view
         { name: 'alignBottomView', kind: :string }.freeze,
         # Align horizontal center with specified view
@@ -26,19 +26,19 @@ module JsonUI
         # Align to parent left (binding supported)
         { name: 'alignLeft', kind: :boolean, bindable: true }.freeze,
         # Align to right of specified view ID
-        { name: 'alignLeftOfView', kind: :string, aliases: ['alignLeftView'].freeze }.freeze,
+        { name: 'alignLeftOfView', kind: :string }.freeze,
         # Align left edge with specified view
         { name: 'alignLeftView', kind: :string }.freeze,
         # Align to parent right (binding supported)
         { name: 'alignRight', kind: :boolean, bindable: true }.freeze,
         # Align to left of specified view ID
-        { name: 'alignRightOfView', kind: :string, aliases: ['alignRightView'].freeze }.freeze,
+        { name: 'alignRightOfView', kind: :string }.freeze,
         # Align right edge with specified view
         { name: 'alignRightView', kind: :string }.freeze,
         # Align to parent top (binding supported)
         { name: 'alignTop', kind: :boolean, bindable: true }.freeze,
         # Align below specified view ID
-        { name: 'alignTopOfView', kind: :string, aliases: ['alignTopView'].freeze }.freeze,
+        { name: 'alignTopOfView', kind: :string }.freeze,
         # Align top edge with specified view
         { name: 'alignTopView', kind: :string }.freeze,
         # String alternative to numeric gravity. Resolves to SwiftUI Alignment / Compose Arrangement+Alignment.
