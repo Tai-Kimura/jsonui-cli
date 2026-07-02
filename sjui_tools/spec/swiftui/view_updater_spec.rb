@@ -265,4 +265,56 @@ RSpec.describe SjuiTools::SwiftUI::ViewUpdater do
       expect(result).to eq("  Line1\n\n  Line2")
     end
   end
+
+  describe 'private #generate_split_code (weighted section extraction)' do
+    # Regression: a section-extracted weight:0 wrapContent child must keep the
+    # call-site .fixedSize(...) contract that the inline path emits inside
+    # AnyView(...). Section extraction must be an emit-equivalent transform
+    # (drops-weighted-child-call-site-fixed-size).
+    let(:full_body_code) do
+      <<~SWIFT.chomp
+        WeightedVStack(alignment: .leading, children: [
+          (
+            view: AnyView(
+              Text("a")
+            ),
+            weight: 0
+          ),
+          (
+            view: AnyView(
+              Text("b")
+            ),
+            weight: 1
+          )
+        ])
+      SWIFT
+    end
+
+    let(:root_children) do
+      [
+        { code: 'Text("a")', weight: 0, fixed_size: '.fixedSize(horizontal: false, vertical: true)' },
+        { code: 'Text("b")', weight: 1, fixed_size: nil }
+      ]
+    end
+
+    it 'appends the captured fixedSize to the extracted weight:0 child call site' do
+      body_code, _section_functions = updater.send(:generate_split_code, full_body_code, root_children)
+
+      expect(body_code).to include('view: AnyView(section0().fixedSize(horizontal: false, vertical: true))')
+    end
+
+    it 'leaves a child without a fixedSize contract as a plain section call' do
+      body_code, _section_functions = updater.send(:generate_split_code, full_body_code, root_children)
+
+      expect(body_code).to include('view: AnyView(section1())')
+      expect(body_code).not_to include('section1().fixedSize')
+    end
+
+    it 'still emits a section function body for the extracted child' do
+      _body_code, section_functions = updater.send(:generate_split_code, full_body_code, root_children)
+
+      expect(section_functions).to include('func section0()')
+      expect(section_functions).to include('Text("a")')
+    end
+  end
 end

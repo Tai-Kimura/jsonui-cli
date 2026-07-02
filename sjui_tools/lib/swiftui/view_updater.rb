@@ -165,8 +165,16 @@ module SjuiTools
         root_children.each_with_index do |child_info, index|
           weight = child_info[:weight]
           comma = index < root_children.size - 1 ? ',' : ''
+          # Preserve the call-site wrapContent contract (.fixedSize) captured at
+          # inline-emit time. Without this, section extraction silently drops the
+          # weight:0 wrapContent child's cross-axis fixedSize
+          # (drops-weighted-child-call-site-fixed-size bug). Appending it to the
+          # section#{index}() call is emit-equivalent to the inline placement
+          # inside AnyView(...).
+          fixed_size = child_info[:fixed_size]
+          view_expr = fixed_size ? "section#{index}()#{fixed_size}" : "section#{index}()"
           body_lines << "    ("
-          body_lines << "      view: AnyView(section#{index}()),"
+          body_lines << "      view: AnyView(#{view_expr}),"
           body_lines << "      weight: #{weight}"
           body_lines << "    )#{comma}"
         end

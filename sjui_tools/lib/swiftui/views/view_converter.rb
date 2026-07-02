@@ -288,16 +288,14 @@ module SjuiTools
                     # Capture the full generated code for this child (including VisibilityWrapper)
                     full_child_code = @generated_code[before_count..].join("\n")
 
-                    # Save full child code for potential body splitting
-                    @weighted_children_info << { code: full_child_code, weight: weight }
-
-                    # State変数を継承
-                    if child_converter.respond_to?(:state_variables) && child_converter.state_variables
-                      @state_variables.concat(child_converter.state_variables)
-                    end
-
-                    # weight: 0 の子要素で、サイズ指定がない場合は .fixedSize() を追加
-                    # これにより WeightedHStack/VStack が intrinsic size を正しく計測できる
+                    # weight: 0 の子要素で、サイズ指定がない場合は cross-axis の
+                    # .fixedSize() を付与する (wrapContent 契約)。これにより
+                    # WeightedHStack/VStack が intrinsic size を正しく計測できる。
+                    # inline emit と section 抽出 (view_updater) の両経路で同一の
+                    # modifier を使えるよう、ここで文字列を決めて child info に保持する。
+                    # info に持たせないと section 抽出時に call-site modifier が消える
+                    # (drops-weighted-child-call-site-fixed-size bug)。
+                    fixed_size_modifier = nil
                     if weight == 0
                       needs_fixed_size = if orientation == 'horizontal'
                         # 横方向: width が wrapContent または未指定の場合
@@ -310,12 +308,25 @@ module SjuiTools
                       end
 
                       if needs_fixed_size
-                        if orientation == 'horizontal'
-                          add_line "    .fixedSize(horizontal: true, vertical: false)"
+                        fixed_size_modifier = if orientation == 'horizontal'
+                          ".fixedSize(horizontal: true, vertical: false)"
                         else
-                          add_line "    .fixedSize(horizontal: false, vertical: true)"
+                          ".fixedSize(horizontal: false, vertical: true)"
                         end
                       end
+                    end
+
+                    # Save full child code + fixedSize contract for potential body splitting
+                    @weighted_children_info << { code: full_child_code, weight: weight, fixed_size: fixed_size_modifier }
+
+                    # State変数を継承
+                    if child_converter.respond_to?(:state_variables) && child_converter.state_variables
+                      @state_variables.concat(child_converter.state_variables)
+                    end
+
+                    # inline emit: AnyView(...) の内側に fixedSize を追加
+                    if fixed_size_modifier
+                      add_line "    #{fixed_size_modifier}"
                     end
 
                     add_line "  ),"
