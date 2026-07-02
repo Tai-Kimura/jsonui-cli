@@ -2,6 +2,7 @@
 
 require 'json'
 require_relative 'style_loader'
+require_relative '../core/normalization'
 
 module KjuiTools
   module Compose
@@ -46,6 +47,11 @@ module KjuiTools
           # include先のJSONを読み込む
           include_content = File.read(include_file_path)
           included_json = JSON.parse(include_content)
+
+          # A distributed partial may carry its own `$jui` normalization
+          # marker; it is root-level build metadata, not a renderable
+          # attribute, so it must not leak into the expanded subtree.
+          included_json.delete(Core::Normalization::MARKER_KEY)
 
           # スタイルを適用
           included_json = StyleLoader.load_and_merge(included_json)
