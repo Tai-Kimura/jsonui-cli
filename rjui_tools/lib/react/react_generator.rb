@@ -43,6 +43,10 @@ module RjuiTools
         'CircleImage' => Converters::ImageConverter,
         'NetworkImage' => Converters::ImageConverter,
         'TextField' => Converters::TextFieldConverter,
+        # EditText / Input are aliases for TextField (attribute_definitions
+        # `_alias_of: TextField`; kept for Android / HTML naming compatibility)
+        'EditText' => Converters::TextFieldConverter,
+        'Input' => Converters::TextFieldConverter,
         'TextView' => Converters::TextViewConverter,
         'Scroll' => Converters::ScrollViewConverter,
         'ScrollView' => Converters::ScrollViewConverter,
