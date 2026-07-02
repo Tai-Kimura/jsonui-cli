@@ -115,10 +115,25 @@ def cmd_verify(args: argparse.Namespace) -> int:
     merger = ParentSpecMerger(spec_dir=spec_dir)
     type_mapper = TypeMapper(config_mgr.type_map_file)
     layout_gen = LayoutGenerator(type_mapper)
+
+    # On normalizeLayouts projects (experimental), apply the same L1
+    # canonicalization to BOTH sides of every comparison so alias
+    # rewriting / the $jui marker can never register as drift.
+    normalizer = None
+    from .build_cmd import _normalize_layouts_enabled
+    if _normalize_layouts_enabled(config_mgr):
+        from ..core.normalizer import Canonicalizer
+
+        _canonicalizer = Canonicalizer()
+
+        def normalizer(tree):
+            canonical, _warnings = _canonicalizer.canonicalize(tree)
+            return canonical
+
     # ``layouts_root`` lets the checker follow cellClasses/include
     # references into neighbouring cell Layout JSON files so the
     # actual-layout view of ids matches the aggregated spec tree.
-    checker = ViewDiffChecker(layouts_root=layouts_root)
+    checker = ViewDiffChecker(layouts_root=layouts_root, normalizer=normalizer)
 
     results = []
     missing_layouts: list[str] = []
@@ -154,6 +169,12 @@ def cmd_verify(args: argparse.Namespace) -> int:
             continue
         with open(actual_path, "r", encoding="utf-8") as f:
             actual = json.load(f)
+
+        # Canonicalize both sides up front (idempotent — the checker also
+        # normalizes) so the data-section diff below sees the same trees.
+        if normalizer is not None:
+            generated = normalizer(generated)
+            actual = normalizer(actual)
 
         diff = checker.compare(
             generated, actual, screen=sf.stem.replace(".spec", "")

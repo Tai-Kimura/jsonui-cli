@@ -242,5 +242,33 @@ class NormalizeApiTest(unittest.TestCase):
         self.assertTrue(result.warnings[0].startswith("home.json: "))
 
 
+class VerifyNormalizationTest(unittest.TestCase):
+    """`jui verify` applies the same canonicalization to both sides —
+    an L1-distributed layout must never register as drift against the
+    L0 spec-generated tree."""
+
+    def test_view_diff_checker_no_false_drift_between_l0_and_l1(self):
+        from jui_cli.core.view_diff_checker import ViewDiffChecker
+
+        canon = Canonicalizer(_table())
+
+        def normalizer(tree):
+            return canon.canonicalize(tree)[0]
+
+        generated_l0 = {
+            "type": "View",
+            "id": "root",
+            "alpha": 1,
+            "child": [{"type": "Slider", "id": "volume", "minValue": 0}],
+        }
+        # Simulate the distributed platform-side copy (L1 + $jui marker).
+        actual_l1, _ = canon.canonicalize(generated_l0)
+
+        checker = ViewDiffChecker(normalizer=normalizer)
+        diff = checker.compare(generated_l0, actual_l1, screen="home")
+        self.assertFalse(diff.has_diff)
+        self.assertEqual(diff.total_match_pct, 100)
+
+
 if __name__ == "__main__":
     unittest.main()

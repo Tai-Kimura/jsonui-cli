@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 @dataclass
@@ -49,10 +49,19 @@ class DiffResult:
 class ViewDiffChecker:
     """Structural diff between two Layout JSON trees."""
 
-    def __init__(self, layouts_root: Path | None = None):
+    def __init__(
+        self,
+        layouts_root: Path | None = None,
+        normalizer: Callable[[Any], Any] | None = None,
+    ):
         # Root directory used to resolve ``cellClasses`` / ``include``
         # references when comparing against an actual Layout JSON tree.
         self._layouts_root = Path(layouts_root) if layouts_root else None
+        # Optional tree transform applied to BOTH sides of the comparison
+        # (and to referenced layout files). Used by ``jui verify`` on
+        # normalizeLayouts projects so L1 canonicalization can never
+        # produce false drift between spec-generated and on-disk trees.
+        self._normalizer = normalizer
 
     def compare(
         self,
@@ -60,6 +69,9 @@ class ViewDiffChecker:
         actual: dict[str, Any],
         screen: str = "",
     ) -> DiffResult:
+        if self._normalizer is not None:
+            generated = self._normalizer(generated)
+            actual = self._normalizer(actual)
         result = DiffResult(screen=screen)
 
         gen_index: dict[str, str] = {}
@@ -150,6 +162,8 @@ class ViewDiffChecker:
             sub = json.loads(path.read_text())
         except (OSError, ValueError):
             return
+        if self._normalizer is not None:
+            sub = self._normalizer(sub)
         self._flatten(sub, out, resolve_refs=True, loaded_files=loaded)
 
 
