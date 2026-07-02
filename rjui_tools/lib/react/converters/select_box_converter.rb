@@ -8,7 +8,7 @@ module RjuiTools
       class SelectBoxConverter < BaseConverter
         def convert(indent = 2)
           # Date picker mode: selectItemType == "Date"
-          select_item_type = json['selectItemType']
+          select_item_type = attributes['selectItemType']
           if select_item_type&.downcase == 'date'
             return generate_date_picker(indent)
           end
@@ -18,7 +18,7 @@ module RjuiTools
           id_attr = build_id_attr
           testid_attr = build_testid_attr
           tag_attr = build_tag_attr
-          items = json['items'] || []
+          items = attributes['items'] || []
 
           value_attr = build_value_attr
           on_change = build_on_change
@@ -42,32 +42,32 @@ module RjuiTools
           classes << 'border'
           classes << 'rounded-md'
           classes << 'pl-3 pr-8 py-2'
-          classes << 'bg-white' unless json['background']
+          classes << 'bg-white' unless attributes['background']
           classes << 'cursor-pointer'
           classes << 'outline-none'
           classes << 'focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
 
           # Border color
-          border_color = json['borderColor']
+          border_color = attributes['borderColor']
           classes << TailwindMapper.map_color(border_color, 'border') if border_color
 
           # Font color
-          font_color = json['fontColor']
+          font_color = attributes['fontColor']
           classes << TailwindMapper.map_color(font_color, 'text') if font_color
 
           # Font size
-          font_size = json['fontSize']
+          font_size = attributes['fontSize']
           classes << TailwindMapper.map_font_size(font_size) if font_size
 
           # Hint/placeholder color for when no value is selected
-          hint_color = json['hintColor'] || json['placeholderColor']
+          hint_color = attributes['hintColor'] || attributes['placeholderColor']
           @select_hint_color = hint_color || 'gray-400'
 
           # Disabled state
-          if json['enabled'] == false
+          if attributes['enabled'] == false
             classes << 'opacity-50 cursor-not-allowed'
-          elsif has_binding?(json['enabled'])
-            binding_expr = extract_binding_property(json['enabled'])
+          elsif has_binding?(attributes['enabled'])
+            binding_expr = extract_binding_property(attributes['enabled'])
             classes << "${!#{binding_expr} ? 'opacity-50 cursor-not-allowed' : ''}"
           end
 
@@ -79,12 +79,12 @@ module RjuiTools
         # Build className attribute for select, with dynamic hint color when no value is selected
         def build_select_class_attr(class_name)
           hint_color = @select_hint_color
-          value_binding = json['selectedValue'] || json['value']
+          value_binding = attributes['selectedValue'] || attributes['value']
 
           if value_binding && has_binding?(value_binding)
             prop = extract_binding_property(value_binding)
             hint_class = "text-#{hint_color}"
-            font_color = json['fontColor']
+            font_color = attributes['fontColor']
             normal_class = font_color ? "text-#{font_color}" : ''
             "className={`#{class_name} ${#{prop} ? '#{normal_class}' : '#{hint_class}'}`}"
           else
@@ -104,7 +104,7 @@ module RjuiTools
 
         def generate_dynamic_select(indent, id_attr, class_name, style_attr, testid_attr, tag_attr, value_attr, on_change, disabled_attr, items)
           items_prop = extract_binding_property(items)
-          hint = json['prompt'] || json['hint'] || json['placeholder']
+          hint = attributes['prompt'] || attributes['hint'] || attributes['placeholder']
           hint_text = resolve_hint_text(hint)
           # Placeholder row is selectable (no `disabled hidden`) so picking
           # it clears the value back to "" — the unselected state mirrors
@@ -132,7 +132,7 @@ module RjuiTools
             end
           end.join("\n")
 
-          hint = json['prompt'] || json['hint'] || json['placeholder']
+          hint = attributes['prompt'] || attributes['hint'] || attributes['placeholder']
           if hint
             hint_text = resolve_hint_text(hint)
             # Placeholder row is selectable (no `disabled hidden`) so picking
@@ -151,7 +151,7 @@ module RjuiTools
         end
 
         def build_value_attr
-          value = json['selectedValue'] || json['value']
+          value = attributes['selectedValue'] || attributes['value']
 
           if value && has_binding?(value)
             prop = extract_binding_property(value)
@@ -164,7 +164,7 @@ module RjuiTools
         end
 
         def build_on_change
-          handler = json['onValueChange'] || json['onValueChanged'] || json['onChange']
+          handler = attributes['onValueChange'] || attributes['onValueChanged'] || attributes['onChange']
           if handler
             if has_binding?(handler)
               prop = extract_binding_property(handler)
@@ -175,7 +175,7 @@ module RjuiTools
           end
 
           # Auto-generate onChange from value binding (two-way binding)
-          value_key = json['selectedValue'] || json['value'] || json['selectedIndex']
+          value_key = attributes['selectedValue'] || attributes['value'] || attributes['selectedIndex']
           if value_key && has_binding?(value_key)
             property_name = value_key.match(/@\{(.+)\}/)[1]
             handler_name = "on#{property_name[0].upcase}#{property_name[1..]}Change"
@@ -186,7 +186,7 @@ module RjuiTools
         end
 
         def build_disabled_attr
-          enabled = json['enabled']
+          enabled = attributes['enabled']
           return '' if enabled.nil?
 
           if has_binding?(enabled)
@@ -207,7 +207,7 @@ module RjuiTools
           disabled_attr = build_disabled_attr
 
           # Determine input type from datePickerMode
-          date_picker_mode = json['datePickerMode']&.downcase
+          date_picker_mode = attributes['datePickerMode']&.downcase
           input_type = case date_picker_mode
                        when 'time' then 'time'
                        when 'datetime', 'dateandtime' then 'datetime-local'
@@ -215,7 +215,7 @@ module RjuiTools
                        end
 
           # Value binding (selectedDate or selectedValue)
-          date_value = json['selectedDate'] || json['selectedValue'] || json['value']
+          date_value = attributes['selectedDate'] || attributes['selectedValue'] || attributes['value']
           value_attr = if date_value && has_binding?(date_value)
                          prop = extract_binding_property(date_value)
                          " value={#{prop} || ''}"
@@ -226,8 +226,8 @@ module RjuiTools
                        end
 
           # Min/max date
-          min_attr = json['minimumDate'] ? " min=\"#{json['minimumDate']}\"" : ''
-          max_attr = json['maximumDate'] ? " max=\"#{json['maximumDate']}\"" : ''
+          min_attr = attributes['minimumDate'] ? " min=\"#{attributes['minimumDate']}\"" : ''
+          max_attr = attributes['maximumDate'] ? " max=\"#{attributes['maximumDate']}\"" : ''
 
           # onChange handler
           on_change = build_date_on_change(date_value)
@@ -242,7 +242,7 @@ module RjuiTools
         end
 
         def build_date_style_attr
-          color_scheme = json['colorScheme']
+          color_scheme = attributes['colorScheme']
           existing_style = build_style_attr
 
           if color_scheme
@@ -258,7 +258,7 @@ module RjuiTools
 
         def build_date_on_change(date_value)
           # Custom handler takes priority
-          handler = json['onValueChange'] || json['onChange']
+          handler = attributes['onValueChange'] || attributes['onChange']
           if handler && has_binding?(handler)
             prop = extract_binding_property(handler)
             return " onChange={(e) => #{prop}?.(e.target.value)}"
