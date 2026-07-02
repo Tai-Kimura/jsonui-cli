@@ -89,16 +89,66 @@ RSpec.describe RjuiTools::Core::TypedAttributes do
       a = attrs({'type' => 'View', 'padding' => [8, 16]})
       expect(a['padding']).to eq([8, 16])
     end
+  end
 
-    it 'passes onClick action objects through (kind :binding is lossy)' do
+  describe 'binding-only attributes (kind :binding — raw preserved)' do
+    it 'passes onClick action objects through the typed path' do
       handler = { 'action' => 'link', 'url' => 'https://example.invalid' }
       a = attrs({'type' => 'Button', 'text' => 'Go', 'onClick' => handler})
       expect(a['onClick']).to eq(handler)
     end
 
-    it 'keeps onClick binding strings verbatim' do
+    it 'keeps onClick binding strings verbatim (@{} wrapper recovered)' do
       a = attrs({'type' => 'Button', 'text' => 'Go', 'onClick' => '@{handleTap}'})
       expect(a['onClick']).to eq('@{handleTap}')
+    end
+
+    it 'keeps bare handler names as-is' do
+      a = attrs({'type' => 'Button', 'text' => 'Go', 'onClick' => 'handleTap'})
+      expect(a['onClick']).to eq('handleTap')
+    end
+  end
+
+  describe 'lenient enum matching' do
+    it 'passes declared values through verbatim' do
+      a = attrs({'type' => 'Label', 'text' => 'x', 'textAlign' => 'Left'})
+      expect(a['textAlign']).to eq('Left')
+    end
+
+    it 'matches case-insensitively (spelling the enum does not declare)' do
+      # Button only declares 'Left'/'Center'/'Right'; the web mapper is
+      # case-insensitive, so lowercase spellings must survive extraction.
+      a = attrs({'type' => 'Button', 'text' => 'Go', 'textAlign' => 'left'})
+      expect(a['textAlign']).to eq('left')
+    end
+
+    it 'warns but passes unknown enum values through (never nil-drops)' do
+      warnings = []
+      JsonUI::Generated::AttrWarnings.handler = ->(msg) { warnings << msg }
+      a = attrs({'type' => 'Label', 'text' => 'x', 'visibility' => 'bogus'})
+      expect(a['visibility']).to eq('bogus')
+      expect(warnings).to include(a_string_including('common.visibility'))
+    ensure
+      JsonUI::Generated::AttrWarnings.handler = nil
+    end
+
+    it 'passes non-string enum values through (resize boolean truthiness)' do
+      a = attrs({'type' => 'TextView', 'resize' => true})
+      expect(a['resize']).to be true
+    end
+  end
+
+  describe 'declared? (metadata contract)' do
+    it 'is true for canonical names, alias spellings, and common keys' do
+      a = attrs({'type' => 'Slider'})
+      expect(a.declared?('minimum')).to be true
+      expect(a.declared?('minimumValue')).to be true
+      expect(a.declared?('background')).to be true
+    end
+
+    it 'is false for undeclared keys' do
+      a = attrs({'type' => 'Slider'})
+      expect(a.declared?('customProp')).to be false
     end
   end
 

@@ -20,23 +20,26 @@ module RjuiTools
     # semantics:
     #
     # - Canonical attribute names resolve through the generated extraction
-    #   table: alias fallback (L0 layouts), type coercion, enum
-    #   validation. Alias spellings passed as `key` are redirected to
-    #   their canonical row.
-    # - Binding-capable values come back in the raw layout representation
-    #   (`"@{expr}"` string or the static value) so the existing
-    #   `has_binding?` / `extract_binding_property` converter logic keeps
-    #   working unchanged; the AttrValue wrapper is unwrapped here.
+    #   table: alias fallback (L0 layouts), type coercion, lenient enum
+    #   matching (case-insensitive; unknown values warn and pass through
+    #   raw). Alias spellings passed as `key` are redirected to their
+    #   canonical row.
+    # - Binding-capable and binding-only values come back in the raw
+    #   layout representation (`"@{expr}"` string, static value, or the
+    #   original action-object Hash) so the existing `has_binding?` /
+    #   `extract_binding_property` converter logic keeps working
+    #   unchanged; the AttrValue wrapper is unwrapped here via
+    #   `AttrValue#raw`.
     # - L1-normalized layouts (`$jui` marker) take the canonical-only
-    #   path: alias spellings are ignored entirely (the normalizer has
-    #   already rewritten them, so any leftover is stale input).
+    #   path: `extract(..., canonical_only: true)` ignores alias
+    #   spellings entirely (the normalizer has already rewritten them,
+    #   so any leftover is stale input).
     # - Keys not declared in attribute_definitions.json (extension
     #   component props, web-only custom keys, structural internals) pass
     #   through to the raw JSON value untouched.
-    # - RAW_LOOKUP_KEYS / `kind: :binding` rows resolve with declared
-    #   alias handling but WITHOUT type coercion, because the generated
-    #   coercion is narrower than what the web codegen accepts (see
-    #   comments on the constant).
+    # - RAW_LOOKUP_KEYS rows resolve with declared alias handling but
+    #   WITHOUT type coercion, because the generated coercion is narrower
+    #   than what the web codegen accepts (see comments on the constant).
     class TypedAttributes
       GENERATED = JsonUI::Generated
 
@@ -95,45 +98,30 @@ module RjuiTools
       #   ([all] | [v, h] | [t, r, b, l]).
       # - tag: kind :number, but rjui emits it as a data-tag string and
       #   accepts string tags.
-      # - textAlign: enum casing differs per component (Label declares
-      #   'Left'..'right', Button only 'Left'/'Center'/'Right'), while
-      #   TailwindMapper.map_text_align is case-insensitive.
-      # - input (TextField): the web converter accepts spellings the enum
-      #   doesn't declare ('URL', 'tel', 'webSearch', 'numberPad', ...)
-      #   and matches case-insensitively.
-      # - contentMode (Image/NetworkImage): converter accepts lowerCamel
-      #   spellings ('aspectFit', 'scaleToFill', 'aspect_fit') that the
-      #   enum doesn't declare.
-      # - resize (TextView): definitions declare a CSS-style enum
-      #   ('none'/'both'/...) but the web converter historically accepts
-      #   boolean truthiness; keep raw until the converter maps the enum.
-      # - navigationMode (Embed): definitions only declare 'delegate' but
-      #   the converter forwards future values ('isolated', v1.5) as-is.
-      # - gradientDirection (GradientView): enum declares capitalized
-      #   values only; the web converter matches case-insensitively.
       #
-      # (Candidates for a definitions/emitter revision — see the 06 plan
-      # feedback.)
+      # These are all number/dimension-typed keys that accept web-only
+      # CSS value shapes — a :css_dimension definitions kind was
+      # deliberately deferred (06 plan §5 item 5), so the bridge keeps
+      # absorbing them. The former enum entries (textAlign, input,
+      # contentMode, resize, navigationMode, gradientDirection) were
+      # resolved by the lenient (case-insensitive, warn-but-pass)
+      # generated enum matching and now go through the extraction table.
       RAW_LOOKUP_KEYS = %w[
         width height
         minWidth maxWidth minHeight maxHeight
         padding
         tag
-        textAlign
-        input
-        contentMode
-        resize
-        navigationMode
-        gradientDirection
       ].freeze
 
       def initialize(json, component_type: nil, normalized: false)
         @json = json.is_a?(Hash) ? json : {}
         @normalized = normalized
         @module = TYPE_MODULES[component_type || @json['type']]
-        @rows = build_rows
-        @alias_to_canonical = build_alias_map
-        @extracted = extraction_module.extract(extract_source)
+        # Declared-attribute metadata comes straight from the generated
+        # modules' public API (rows / alias_map).
+        @rows = extraction_module.rows
+        @alias_to_canonical = extraction_module.alias_map
+        @extracted = extraction_module.extract(@json, canonical_only: @normalized)
       end
 
       # Raw-equivalent read of a declared attribute (canonical name or
@@ -153,6 +141,12 @@ module RjuiTools
         !self[key].nil?
       end
 
+      # True when `key` is declared (canonical name or alias spelling)
+      # for this component in attribute_definitions.json.
+      def declared?(key)
+        @rows.key?(key) || @alias_to_canonical.key?(key)
+      end
+
       # Escape hatch: raw JSON value under the exact key, no alias /
       # coercion handling. Structural reads should keep using the node
       # hash directly; this exists for diagnostic paths.
@@ -166,48 +160,8 @@ module RjuiTools
         @module || GENERATED::CommonAttributes
       end
 
-      # Common rows first, component rows override on name collision —
-      # same precedence as the generated extract methods.
-      def build_rows
-        rows = {}
-        GENERATED::CommonAttributes::ATTRS.each { |row| rows[row[:name]] = row }
-        if @module && @module.const_defined?(:ATTRS)
-          @module::ATTRS.each { |row| rows[row[:name]] = row }
-        end
-        rows
-      end
-
-      # alias spelling → canonical row name. Alias names that are ALSO
-      # standalone rows (e.g. `alpha` next to `opacity`) keep their own
-      # row and are not redirected.
-      def build_alias_map
-        map = {}
-        @rows.each_value do |row|
-          Array(row[:aliases]).each do |alias_name|
-            next if @rows.key?(alias_name)
-
-            map[alias_name] = row[:name]
-          end
-        end
-        map
-      end
-
-      # The generated extract methods always consult alias spellings. On
-      # an L1-normalized layout the canonical-only path is required, and
-      # alias spellings cannot legitimately exist (the normalizer
-      # rewrote them) — so strip every declared alias spelling from the
-      # extraction input. No-op when none are present.
-      def extract_source
-        return @json unless @normalized
-
-        alias_keys = @rows.each_value.flat_map { |row| Array(row[:aliases]) }
-        return @json if alias_keys.empty? || alias_keys.none? { |k| @json.key?(k) }
-
-        @json.reject { |k, _| alias_keys.include?(k) }
-      end
-
       def raw_row?(row)
-        row[:kind] == :binding || RAW_LOOKUP_KEYS.include?(row[:name])
+        RAW_LOOKUP_KEYS.include?(row[:name])
       end
 
       # Canonical-first raw lookup honoring the normalized (canonical-
@@ -224,12 +178,11 @@ module RjuiTools
         nil
       end
 
-      # AttrValue → raw layout representation ("@{expr}" or static value)
-      # so existing converter binding logic works unchanged.
+      # AttrValue → raw layout representation ("@{expr}", static value,
+      # or the original action-object Hash) so existing converter
+      # binding logic works unchanged.
       def unwrap(value)
-        return value unless value.is_a?(GENERATED::AttrValue)
-
-        value.binding? ? "@{#{value.binding_expression}}" : value.value
+        value.is_a?(GENERATED::AttrValue) ? value.raw : value
       end
     end
   end

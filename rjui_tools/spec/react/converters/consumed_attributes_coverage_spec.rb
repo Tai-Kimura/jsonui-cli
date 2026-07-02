@@ -104,9 +104,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
 
       it 'reads only declared attributes (plus the recorded undeclared allowlist)' do
         ta = RjuiTools::Core::TypedAttributes.new({ 'type' => component_type_for(file) })
-        rows = ta.send(:build_rows)
-        alias_map = ta.send(:build_alias_map)
-        actual_undeclared = expected_keys.reject { |k| rows.key?(k) || alias_map.key?(k) }
+        actual_undeclared = expected_keys.reject { |k| ta.declared?(k) }
         expect(actual_undeclared).to eq(UNDECLARED[file])
       end
     end
