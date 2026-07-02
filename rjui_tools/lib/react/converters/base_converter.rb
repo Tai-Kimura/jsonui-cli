@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../../core/typed_attributes'
 require_relative '../tailwind_mapper'
 require_relative '../responsive_helper'
 require_relative '../helpers/string_manager_helper'
@@ -22,6 +23,19 @@ module RjuiTools
 
         def convert(indent = 2)
           raise NotImplementedError, 'Subclasses must implement convert method'
+        end
+
+        # Typed attribute access backed by the generated extraction tables
+        # (lib/core/generated/attributes/, emitted from
+        # attribute_definitions.json). Converters read node attributes as
+        # `attributes['key']` — canonical/alias resolution and type
+        # coercion happen in one place instead of per-call-site
+        # `json['key']` reads. See Core::TypedAttributes for semantics.
+        def attributes
+          @attributes ||= Core::TypedAttributes.new(
+            json,
+            normalized: layout_normalized?
+          )
         end
 
         protected
