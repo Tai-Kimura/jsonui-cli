@@ -2,796 +2,796 @@
 
 # JsonUI Conformance Report
 
-- Manifest: `8f5452dda116273d44d16d834d57506666ed752e6148cd8eb03676d9c0a43a57` (sha256)
-- Definitions: `3285fa86e5e83295c45d1e0042403d726144497c8257d036d10d828e62ab295c` (sha256)
-- Fixtures: 629 (assertable: 25, visual: 604) / skipped attributes: 176
+- Manifest: `61e027eb4e9c898d9fa1a57f6de2eee9e86d7a79c7aa114afe964c3c689021d9` (sha256)
+- Definitions: `bfebdac10d8e897fa6a08ac8c89e511420a6e0d4b6235b1638c9322baf943194` (sha256)
+- Fixtures: 624 (assertable: 25, visual: 599) / skipped attributes: 177
 
 Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
 
 ## Cross-platform mismatches
 
-_No platform results loaded — run the platform conformance suites first._
+_No cross-platform mismatches._
 
 ## Platforms
 
-_No results found under `results/`._
+| Platform | Runner | Results | pass | fail | error | skipped | Manifest |
+|---|---|---|---|---|---|---|---|
+| android | uiautomator 2.3.0 | 624 | 492 | 0 | 0 | 132 | current |
+| ios | xcuitest ios-18.6 | 624 | 515 | 0 | 0 | 109 | current |
+| web | playwright 1.61.1 | 624 | 491 | 0 | 0 | 133 | current |
 
 ## Matrix
 
 ### common
 
-| Fixture | Case | Class |
-|---|---|---|
-| `width` | `matchparent` | visual |
-| `width` | `wrapcontent` | visual |
-| `width` | `static` | visual |
-| `height` | `matchparent` | visual |
-| `height` | `wrapcontent` | visual |
-| `height` | `static` | visual |
-| `minWidth` | `static` | visual |
-| `maxWidth` | `static` | visual |
-| `minHeight` | `static` | visual |
-| `maxHeight` | `static` | visual |
-| `widthWeight` | `static` | visual |
-| `heightWeight` | `static` | visual |
-| `maxWidthWeight` | `static` | visual |
-| `maxHeightWeight` | `static` | visual |
-| `minWidthWeight` | `static` | visual |
-| `minHeightWeight` | `static` | visual |
-| `aspectWidth` | `static` | visual |
-| `aspectHeight` | `static` | visual |
-| `weight` | `static` | visual |
-| `background` | `static` | visual |
-| `tapBackground` | `static` | visual |
-| `highlightBackground` | `static` | visual |
-| `disabledBackground` | `static` | visual |
-| `defaultBackground` | `static` | visual |
-| `cornerRadius` | `static` | visual |
-| `borderWidth` | `static` | visual |
-| `borderColor` | `static` | visual |
-| `borderStyle` | `solid` | visual |
-| `borderStyle` | `dashed` | visual |
-| `borderStyle` | `dotted` | visual |
-| `alpha` | `static` | visual |
-| `opacity` | `static` | visual |
-| `opacity` (alias) | `alias_alpha` | visual |
-| `visibility` | `visible` | assertable |
-| `visibility` | `invisible` | assertable |
-| `visibility` | `gone` | assertable |
-| `hidden` | `true` | assertable |
-| `hidden` | `false` | assertable |
-| `padding` | `static` | visual |
-| `paddings` | `static` | visual |
-| `paddingTop` | `static` | visual |
-| `paddingBottom` | `static` | visual |
-| `paddingLeft` | `static` | visual |
-| `paddingRight` | `static` | visual |
-| `paddingStart` | `static` | visual |
-| `paddingEnd` | `static` | visual |
-| `rightPadding` | `static` | visual |
-| `leftPadding` | `static` | visual |
-| `topPadding` | `static` | visual |
-| `bottomPadding` | `static` | visual |
-| `minTopPadding` | `static` | visual |
-| `minBottomPadding` | `static` | visual |
-| `minLeftPadding` | `static` | visual |
-| `minRightPadding` | `static` | visual |
-| `maxTopPadding` | `static` | visual |
-| `maxBottomPadding` | `static` | visual |
-| `maxLeftPadding` | `static` | visual |
-| `maxRightPadding` | `static` | visual |
-| `margins` | `static` | visual |
-| `topMargin` | `static` | visual |
-| `bottomMargin` | `static` | visual |
-| `leftMargin` | `static` | visual |
-| `rightMargin` | `static` | visual |
-| `startMargin` | `static` | visual |
-| `endMargin` | `static` | visual |
-| `minTopMargin` | `static` | visual |
-| `minBottomMargin` | `static` | visual |
-| `minLeftMargin` | `static` | visual |
-| `minRightMargin` | `static` | visual |
-| `maxTopMargin` | `static` | visual |
-| `maxBottomMargin` | `static` | visual |
-| `maxLeftMargin` | `static` | visual |
-| `maxRightMargin` | `static` | visual |
-| `centerInParent` | `true` | visual |
-| `centerVertical` | `true` | visual |
-| `centerHorizontal` | `true` | visual |
-| `alignTop` | `true` | visual |
-| `alignBottom` | `true` | visual |
-| `alignLeft` | `true` | visual |
-| `alignRight` | `true` | visual |
-| `alignTopOfView` | `static` | visual |
-| `alignTopOfView` (alias) | `alias_alignTopView` | visual |
-| `alignBottomOfView` | `static` | visual |
-| `alignBottomOfView` (alias) | `alias_alignBottomView` | visual |
-| `alignLeftOfView` | `static` | visual |
-| `alignLeftOfView` (alias) | `alias_alignLeftView` | visual |
-| `alignRightOfView` | `static` | visual |
-| `alignRightOfView` (alias) | `alias_alignRightView` | visual |
-| `alignTopView` | `static` | visual |
-| `alignBottomView` | `static` | visual |
-| `alignLeftView` | `static` | visual |
-| `alignRightView` | `static` | visual |
-| `alignCenterVerticalView` | `static` | visual |
-| `alignCenterHorizontalView` | `static` | visual |
-| `toView` | `static` | visual |
-| `shadow` | `static` | visual |
-| `clipToBounds` | `true` | visual |
-| `tintColor` | `static` | visual |
-| `compressHorizontal` | `static` | visual |
-| `compressVertical` | `static` | visual |
-| `hugHorizontal` | `static` | visual |
-| `hugVertical` | `static` | visual |
-| `wrapContent` | `true` | visual |
-| `innerPadding` | `static` | visual |
-| `effectStyle` | `static` | visual |
-| `enabled` | `true` | assertable |
-| `enabled` | `false` | assertable |
-| `indexBelow` | `static` | visual |
-| `indexAbove` | `static` | visual |
-| `gravity` | `top` | visual |
-| `gravity` | `bottom` | visual |
-| `gravity` | `centervertical` | visual |
-| `gravity` | `left` | visual |
-| `gravity` | `right` | visual |
-| `gravity` | `centerhorizontal` | visual |
-| `gravity` | `center` | visual |
-| `alignment` | `topleading` | visual |
-| `alignment` | `top` | visual |
-| `alignment` | `toptrailing` | visual |
-| `alignment` | `leading` | visual |
-| `alignment` | `center` | visual |
-| `alignment` | `trailing` | visual |
-| `alignment` | `bottomleading` | visual |
-| `alignment` | `bottom` | visual |
-| `alignment` | `bottomtrailing` | visual |
-| `distribution` | `fill` | visual |
-| `distribution` | `fillequally` | visual |
-| `distribution` | `equalspacing` | visual |
-| `distribution` | `equalcentering` | visual |
-| `minStartMargin` | `static` | visual |
-| `maxStartMargin` | `static` | visual |
-| `minEndMargin` | `static` | visual |
-| `maxEndMargin` | `static` | visual |
-| `idealWidth` | `static` | visual |
-| `idealHeight` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `width` | `matchparent` | visual | ✅ | ✅ | ✅ |
+| `width` | `wrapcontent` | visual | ✅ | ✅ | ✅ |
+| `width` | `static` | visual | ✅ | ✅ | ✅ |
+| `height` | `matchparent` | visual | ✅ | ✅ | ✅ |
+| `height` | `wrapcontent` | visual | ✅ | ✅ | ✅ |
+| `height` | `static` | visual | ✅ | ✅ | ✅ |
+| `minWidth` | `static` | visual | ✅ | ✅ | ✅ |
+| `maxWidth` | `static` | visual | ✅ | ✅ | ✅ |
+| `minHeight` | `static` | visual | ✅ | ✅ | ✅ |
+| `maxHeight` | `static` | visual | ✅ | ✅ | ✅ |
+| `widthWeight` | `static` | visual | – | – | – |
+| `heightWeight` | `static` | visual | – | – | – |
+| `maxWidthWeight` | `static` | visual | – | – | – |
+| `maxHeightWeight` | `static` | visual | – | – | – |
+| `minWidthWeight` | `static` | visual | – | – | – |
+| `minHeightWeight` | `static` | visual | – | – | – |
+| `aspectWidth` | `static` | visual | – | – | – |
+| `aspectHeight` | `static` | visual | – | – | – |
+| `weight` | `static` | visual | ✅ | ✅ | ✅ |
+| `background` | `static` | visual | ✅ | ✅ | ✅ |
+| `tapBackground` | `static` | visual | ✅ | ✅ | ✅ |
+| `highlightBackground` | `static` | visual | ✅ | ✅ | ✅ |
+| `disabledBackground` | `static` | visual | ✅ | ✅ | ✅ |
+| `defaultBackground` | `static` | visual | – | – | – |
+| `cornerRadius` | `static` | visual | ✅ | ✅ | ✅ |
+| `borderWidth` | `static` | visual | ✅ | ✅ | ✅ |
+| `borderColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `borderStyle` | `solid` | visual | ✅ | ✅ | ✅ |
+| `borderStyle` | `dashed` | visual | ✅ | ✅ | ✅ |
+| `borderStyle` | `dotted` | visual | ✅ | ✅ | ✅ |
+| `alpha` | `static` | visual | ✅ | ✅ | ✅ |
+| `opacity` | `static` | visual | ✅ | ✅ | ✅ |
+| `opacity` (alias) | `alias_alpha` | visual | ✅ | ✅ | ✅ |
+| `visibility` | `visible` | assertable | ✅ | ✅ | ✅ |
+| `visibility` | `invisible` | assertable | ✅ | ✅ | ✅ |
+| `visibility` | `gone` | assertable | ✅ | ✅ | ✅ |
+| `hidden` | `true` | assertable | ✅ | ✅ | ✅ |
+| `hidden` | `false` | assertable | ✅ | ✅ | ✅ |
+| `padding` | `static` | visual | ✅ | ✅ | ✅ |
+| `paddings` | `static` | visual | ✅ | ✅ | ✅ |
+| `paddingTop` | `static` | visual | ✅ | ✅ | ✅ |
+| `paddingBottom` | `static` | visual | ✅ | ✅ | ✅ |
+| `paddingLeft` | `static` | visual | ✅ | ✅ | ✅ |
+| `paddingRight` | `static` | visual | ✅ | ✅ | ✅ |
+| `paddingStart` | `static` | visual | ✅ | ✅ | ✅ |
+| `paddingEnd` | `static` | visual | ✅ | ✅ | ✅ |
+| `rightPadding` | `static` | visual | ✅ | ✅ | ✅ |
+| `leftPadding` | `static` | visual | ✅ | ✅ | ✅ |
+| `topPadding` | `static` | visual | ✅ | ✅ | ✅ |
+| `bottomPadding` | `static` | visual | ✅ | ✅ | ✅ |
+| `minTopPadding` | `static` | visual | – | – | – |
+| `minBottomPadding` | `static` | visual | – | – | – |
+| `minLeftPadding` | `static` | visual | – | – | – |
+| `minRightPadding` | `static` | visual | – | – | – |
+| `maxTopPadding` | `static` | visual | – | – | – |
+| `maxBottomPadding` | `static` | visual | – | – | – |
+| `maxLeftPadding` | `static` | visual | – | – | – |
+| `maxRightPadding` | `static` | visual | – | – | – |
+| `margins` | `static` | visual | ✅ | ✅ | ✅ |
+| `topMargin` | `static` | visual | ✅ | ✅ | ✅ |
+| `bottomMargin` | `static` | visual | ✅ | ✅ | ✅ |
+| `leftMargin` | `static` | visual | ✅ | ✅ | ✅ |
+| `rightMargin` | `static` | visual | ✅ | ✅ | ✅ |
+| `startMargin` | `static` | visual | ✅ | ✅ | ✅ |
+| `endMargin` | `static` | visual | ✅ | ✅ | ✅ |
+| `minTopMargin` | `static` | visual | – | – | – |
+| `minBottomMargin` | `static` | visual | – | – | – |
+| `minLeftMargin` | `static` | visual | – | – | – |
+| `minRightMargin` | `static` | visual | – | – | – |
+| `maxTopMargin` | `static` | visual | – | – | – |
+| `maxBottomMargin` | `static` | visual | – | – | – |
+| `maxLeftMargin` | `static` | visual | – | – | – |
+| `maxRightMargin` | `static` | visual | – | – | – |
+| `centerInParent` | `true` | visual | ✅ | ✅ | ✅ |
+| `centerVertical` | `true` | visual | ✅ | ✅ | ✅ |
+| `centerHorizontal` | `true` | visual | ✅ | ✅ | ✅ |
+| `alignTop` | `true` | visual | ✅ | ✅ | ✅ |
+| `alignBottom` | `true` | visual | ✅ | ✅ | ✅ |
+| `alignLeft` | `true` | visual | ✅ | ✅ | ✅ |
+| `alignRight` | `true` | visual | ✅ | ✅ | ✅ |
+| `alignTopOfView` | `static` | visual | ✅ | ✅ | ✅ |
+| `alignBottomOfView` | `static` | visual | ✅ | ✅ | ✅ |
+| `alignLeftOfView` | `static` | visual | ✅ | ✅ | ✅ |
+| `alignRightOfView` | `static` | visual | ✅ | ✅ | ✅ |
+| `alignTopView` | `static` | visual | ✅ | ✅ | ✅ |
+| `alignBottomView` | `static` | visual | ✅ | ✅ | ✅ |
+| `alignLeftView` | `static` | visual | ✅ | ✅ | ✅ |
+| `alignRightView` | `static` | visual | ✅ | ✅ | ✅ |
+| `alignCenterVerticalView` | `static` | visual | ✅ | ✅ | ✅ |
+| `alignCenterHorizontalView` | `static` | visual | ✅ | ✅ | ✅ |
+| `toView` | `static` | visual | – | – | – |
+| `shadow` | `static` | visual | ✅ | ✅ | ✅ |
+| `clipToBounds` | `true` | visual | ✅ | ✅ | ✅ |
+| `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `compressHorizontal` | `static` | visual | – | – | – |
+| `compressVertical` | `static` | visual | – | – | – |
+| `hugHorizontal` | `static` | visual | – | – | – |
+| `hugVertical` | `static` | visual | – | – | – |
+| `wrapContent` | `true` | visual | – | – | – |
+| `innerPadding` | `static` | visual | – | – | – |
+| `effectStyle` | `static` | visual | – | – | – |
+| `enabled` | `true` | assertable | ✅ | ✅ | ✅ |
+| `enabled` | `false` | assertable | ✅ | ✅ | ✅ |
+| `indexBelow` | `static` | visual | ✅ | ✅ | ✅ |
+| `indexAbove` | `static` | visual | ✅ | ✅ | ✅ |
+| `gravity` | `top` | visual | ✅ | ✅ | ✅ |
+| `gravity` | `bottom` | visual | ✅ | ✅ | ✅ |
+| `gravity` | `centervertical` | visual | ✅ | ✅ | ✅ |
+| `gravity` | `left` | visual | ✅ | ✅ | ✅ |
+| `gravity` | `right` | visual | ✅ | ✅ | ✅ |
+| `gravity` | `centerhorizontal` | visual | ✅ | ✅ | ✅ |
+| `gravity` | `center` | visual | ✅ | ✅ | ✅ |
+| `alignment` | `topleading` | visual | ✅ | ✅ | – |
+| `alignment` | `top` | visual | ✅ | ✅ | – |
+| `alignment` | `toptrailing` | visual | ✅ | ✅ | – |
+| `alignment` | `leading` | visual | ✅ | ✅ | – |
+| `alignment` | `center` | visual | ✅ | ✅ | – |
+| `alignment` | `trailing` | visual | ✅ | ✅ | – |
+| `alignment` | `bottomleading` | visual | ✅ | ✅ | – |
+| `alignment` | `bottom` | visual | ✅ | ✅ | – |
+| `alignment` | `bottomtrailing` | visual | ✅ | ✅ | – |
+| `distribution` | `fill` | visual | ✅ | ✅ | – |
+| `distribution` | `fillequally` | visual | ✅ | ✅ | – |
+| `distribution` | `equalspacing` | visual | ✅ | ✅ | – |
+| `distribution` | `equalcentering` | visual | ✅ | ✅ | – |
+| `minStartMargin` | `static` | visual | – | ✅ | – |
+| `maxStartMargin` | `static` | visual | – | ✅ | – |
+| `minEndMargin` | `static` | visual | – | ✅ | – |
+| `maxEndMargin` | `static` | visual | – | ✅ | – |
+| `idealWidth` | `static` | visual | – | ✅ | – |
+| `idealHeight` | `static` | visual | – | ✅ | – |
 
 ### Label
 
-| Fixture | Case | Class |
-|---|---|---|
-| `text` | `static` | assertable |
-| `hint` | `static` | visual |
-| `placeholder` | `static` | visual |
-| `font` | `static` | visual |
-| `fontSize` | `static` | visual |
-| `fontColor` | `static` | visual |
-| `fontFamily` | `static` | visual |
-| `lineHeight` | `static` | visual |
-| `textTransform` | `none` | visual |
-| `textTransform` | `capitalize` | visual |
-| `textTransform` | `uppercase` | visual |
-| `textTransform` | `lowercase` | visual |
-| `selected` | `true` | visual |
-| `textAlign` | `left` | visual |
-| `textAlign` | `center` | visual |
-| `textAlign` | `right` | visual |
-| `textAlign` | `left_2` | visual |
-| `textAlign` | `center_2` | visual |
-| `textAlign` | `right_2` | visual |
-| `lines` | `static` | visual |
-| `lineBreakMode` | `char` | visual |
-| `lineBreakMode` | `clip` | visual |
-| `lineBreakMode` | `word` | visual |
-| `lineBreakMode` | `head` | visual |
-| `lineBreakMode` | `middle` | visual |
-| `lineBreakMode` | `tail` | visual |
-| `lineHeightMultiple` | `static` | visual |
-| `lineSpacing` | `static` | visual |
-| `edgeInset` | `static` | visual |
-| `underline` | `true` | visual |
-| `strikethrough` | `true` | visual |
-| `autoShrink` | `true` | visual |
-| `minimumScaleFactor` | `static` | visual |
-| `linkable` | `true` | visual |
-| `textShadow` | `static` | visual |
-| `hintColor` | `static` | visual |
-| `highlightColor` | `static` | visual |
-| `fontWeight` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `hint` | `static` | visual | ✅ | ✅ | ✅ |
+| `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
+| `font` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontFamily` | `static` | visual | ✅ | ✅ | ✅ |
+| `lineHeight` | `static` | visual | – | – | ✅ |
+| `textTransform` | `none` | visual | – | – | ✅ |
+| `textTransform` | `capitalize` | visual | – | – | ✅ |
+| `textTransform` | `uppercase` | visual | – | – | ✅ |
+| `textTransform` | `lowercase` | visual | – | – | ✅ |
+| `selected` | `true` | visual | – | – | – |
+| `textAlign` | `left` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `center` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `right` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `left_2` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `center_2` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `right_2` | visual | ✅ | ✅ | ✅ |
+| `lines` | `static` | visual | ✅ | ✅ | ✅ |
+| `lineBreakMode` | `char` | visual | ✅ | ✅ | ✅ |
+| `lineBreakMode` | `clip` | visual | ✅ | ✅ | ✅ |
+| `lineBreakMode` | `word` | visual | ✅ | ✅ | ✅ |
+| `lineBreakMode` | `head` | visual | ✅ | ✅ | ✅ |
+| `lineBreakMode` | `middle` | visual | ✅ | ✅ | ✅ |
+| `lineBreakMode` | `tail` | visual | ✅ | ✅ | ✅ |
+| `lineHeightMultiple` | `static` | visual | ✅ | ✅ | ✅ |
+| `lineSpacing` | `static` | visual | ✅ | ✅ | ✅ |
+| `edgeInset` | `static` | visual | ✅ | ✅ | ✅ |
+| `underline` | `true` | visual | ✅ | ✅ | ✅ |
+| `strikethrough` | `true` | visual | ✅ | ✅ | ✅ |
+| `autoShrink` | `true` | visual | ✅ | ✅ | ✅ |
+| `minimumScaleFactor` | `static` | visual | ✅ | ✅ | ✅ |
+| `linkable` | `true` | visual | ✅ | ✅ | ✅ |
+| `textShadow` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `highlightColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontWeight` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### TextField
 
-| Fixture | Case | Class |
-|---|---|---|
-| `text` | `static` | assertable |
-| `hint` | `static` | visual |
-| `placeholder` | `static` | visual |
-| `hintColor` | `static` | visual |
-| `hintFont` | `static` | visual |
-| `hintFontSize` | `static` | visual |
-| `font` | `static` | visual |
-| `fontSize` | `static` | visual |
-| `fontColor` | `static` | visual |
-| `textAlign` | `left` | visual |
-| `textAlign` | `center` | visual |
-| `textAlign` | `right` | visual |
-| `textAlign` | `left_2` | visual |
-| `textAlign` | `center_2` | visual |
-| `textAlign` | `right_2` | visual |
-| `borderStyle` | `none` | visual |
-| `borderStyle` | `line` | visual |
-| `borderStyle` | `bezel` | visual |
-| `borderStyle` | `roundedrect` | visual |
-| `borderStyle` | `roundedrect_2` | visual |
-| `borderStyle` | `line_2` | visual |
-| `borderStyle` | `bezel_2` | visual |
-| `input` | `default` | visual |
-| `input` | `alphabet` | visual |
-| `input` | `allphabet` | visual |
-| `input` | `email` | visual |
-| `input` | `number` | visual |
-| `input` | `phone` | visual |
-| `input` | `url` | visual |
-| `input` | `password` | visual |
-| `input` | `decimal` | visual |
-| `returnKeyType` | `done` | visual |
-| `returnKeyType` | `go` | visual |
-| `returnKeyType` | `next` | visual |
-| `returnKeyType` | `return` | visual |
-| `returnKeyType` | `search` | visual |
-| `returnKeyType` | `send` | visual |
-| `returnKeyType` | `continue` | visual |
-| `returnKeyType` | `join` | visual |
-| `returnKeyType` | `route` | visual |
-| `returnKeyType` | `yahoo` | visual |
-| `returnKeyType` | `google` | visual |
-| `contentType` | `static` | visual |
-| `secure` | `true` | visual |
-| `fieldPadding` | `static` | visual |
-| `textPaddingLeft` | `static` | visual |
-| `textPaddingRight` | `static` | visual |
-| `hasContainer` | `true` | visual |
-| `textVerticalAlign` | `static` | visual |
-| `applyLiquidGlass` | `true` | visual |
-| `accessoryCornerRadius` | `static` | visual |
-| `glassEffectStyle` | `static` | visual |
-| `accessoryBackground` | `static` | visual |
-| `accessoryTextColor` | `static` | visual |
-| `doneText` | `static` | visual |
-| `tintColor` | `static` | visual |
-| `autocapitalizationType` | `static` | visual |
-| `autocorrectionType` | `static` | visual |
-| `spellCheckingType` | `static` | visual |
-| `keyboardAppearance` | `static` | visual |
-| `clearButtonMode` | `static` | visual |
-| `leftViewMode` | `static` | visual |
-| `rightViewMode` | `static` | visual |
-| `maxLength` | `static` | visual |
-| `pattern` | `static` | visual |
-| `required` | `true` | visual |
-| `fontFamily` | `static` | visual |
-| `disabledBackground` | `static` | visual |
-| `placeholderColor` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `hint` | `static` | visual | ✅ | ✅ | ✅ |
+| `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintFont` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintFontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `font` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `left` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `center` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `right` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `left_2` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `center_2` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `right_2` | visual | ✅ | ✅ | ✅ |
+| `borderStyle` | `none` | visual | ✅ | ✅ | ✅ |
+| `borderStyle` | `line` | visual | ✅ | ✅ | ✅ |
+| `borderStyle` | `bezel` | visual | ✅ | ✅ | ✅ |
+| `borderStyle` | `roundedrect` | visual | ✅ | ✅ | ✅ |
+| `borderStyle` | `roundedrect_2` | visual | ✅ | ✅ | ✅ |
+| `borderStyle` | `line_2` | visual | ✅ | ✅ | ✅ |
+| `borderStyle` | `bezel_2` | visual | ✅ | ✅ | ✅ |
+| `input` | `default` | visual | ✅ | ✅ | ✅ |
+| `input` | `alphabet` | visual | ✅ | ✅ | ✅ |
+| `input` | `allphabet` | visual | ✅ | ✅ | ✅ |
+| `input` | `email` | visual | ✅ | ✅ | ✅ |
+| `input` | `number` | visual | ✅ | ✅ | ✅ |
+| `input` | `phone` | visual | ✅ | ✅ | ✅ |
+| `input` | `url` | visual | ✅ | ✅ | ✅ |
+| `input` | `password` | visual | ✅ | ✅ | ✅ |
+| `input` | `decimal` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `done` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `go` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `next` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `return` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `search` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `send` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `continue` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `join` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `route` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `yahoo` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `google` | visual | ✅ | ✅ | ✅ |
+| `contentType` | `static` | visual | ✅ | ✅ | ✅ |
+| `secure` | `true` | visual | – | ✅ | – |
+| `fieldPadding` | `static` | visual | – | ✅ | – |
+| `textPaddingLeft` | `static` | visual | ✅ | ✅ | ✅ |
+| `textPaddingRight` | `static` | visual | – | – | – |
+| `hasContainer` | `true` | visual | – | – | – |
+| `textVerticalAlign` | `static` | visual | – | – | – |
+| `applyLiquidGlass` | `true` | visual | – | – | – |
+| `accessoryCornerRadius` | `static` | visual | – | – | – |
+| `glassEffectStyle` | `static` | visual | – | – | – |
+| `accessoryBackground` | `static` | visual | – | ✅ | – |
+| `accessoryTextColor` | `static` | visual | – | ✅ | – |
+| `doneText` | `static` | visual | – | ✅ | – |
+| `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `autocapitalizationType` | `static` | visual | ✅ | ✅ | ✅ |
+| `autocorrectionType` | `static` | visual | ✅ | ✅ | ✅ |
+| `spellCheckingType` | `static` | visual | – | ✅ | – |
+| `keyboardAppearance` | `static` | visual | ✅ | ✅ | ✅ |
+| `clearButtonMode` | `static` | visual | – | ✅ | – |
+| `leftViewMode` | `static` | visual | – | – | – |
+| `rightViewMode` | `static` | visual | – | – | – |
+| `maxLength` | `static` | visual | ✅ | ✅ | ✅ |
+| `pattern` | `static` | visual | – | – | ✅ |
+| `required` | `true` | visual | – | – | ✅ |
+| `fontFamily` | `static` | visual | ✅ | ✅ | ✅ |
+| `disabledBackground` | `static` | visual | – | – | ✅ |
+| `placeholderColor` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### TextView
 
-| Fixture | Case | Class |
-|---|---|---|
-| `text` | `static` | assertable |
-| `hint` | `static` | visual |
-| `placeholder` | `static` | visual |
-| `hintColor` | `static` | visual |
-| `hintFont` | `static` | visual |
-| `hintFontSize` | `static` | visual |
-| `hintLineHeightMultiple` | `static` | visual |
-| `font` | `static` | visual |
-| `fontSize` | `static` | visual |
-| `fontColor` | `static` | visual |
-| `textAlign` | `left` | visual |
-| `textAlign` | `center` | visual |
-| `textAlign` | `right` | visual |
-| `textAlign` | `left_2` | visual |
-| `textAlign` | `center_2` | visual |
-| `textAlign` | `right_2` | visual |
-| `containerInset` | `static` | visual |
-| `flexible` | `true` | visual |
-| `input` | `default` | visual |
-| `input` | `alphabet` | visual |
-| `input` | `allphabet` | visual |
-| `input` | `email` | visual |
-| `input` | `number` | visual |
-| `input` | `phone` | visual |
-| `input` | `url` | visual |
-| `input` | `password` | visual |
-| `input` | `decimal` | visual |
-| `returnKeyType` | `done` | visual |
-| `returnKeyType` | `go` | visual |
-| `returnKeyType` | `next` | visual |
-| `returnKeyType` | `return` | visual |
-| `returnKeyType` | `search` | visual |
-| `returnKeyType` | `send` | visual |
-| `returnKeyType` | `continue` | visual |
-| `returnKeyType` | `join` | visual |
-| `returnKeyType` | `route` | visual |
-| `returnKeyType` | `yahoo` | visual |
-| `returnKeyType` | `google` | visual |
-| `editable` | `true` | visual |
-| `lineBreakMode` | `static` | visual |
-| `keyboardType` | `static` | visual |
-| `maxLength` | `static` | visual |
-| `pattern` | `static` | visual |
-| `required` | `true` | visual |
-| `selectable` | `true` | visual |
-| `rows` | `static` | visual |
-| `cols` | `static` | visual |
-| `resize` | `none` | visual |
-| `resize` | `both` | visual |
-| `resize` | `horizontal` | visual |
-| `resize` | `vertical` | visual |
-| `fontFamily` | `static` | visual |
-| `disabledBackground` | `static` | visual |
-| `edgeInset` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `hint` | `static` | visual | ✅ | ✅ | ✅ |
+| `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintFont` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintFontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintLineHeightMultiple` | `static` | visual | ✅ | ✅ | ✅ |
+| `font` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `left` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `center` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `right` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `left_2` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `center_2` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `right_2` | visual | ✅ | ✅ | ✅ |
+| `containerInset` | `static` | visual | ✅ | ✅ | ✅ |
+| `flexible` | `true` | visual | ✅ | ✅ | ✅ |
+| `input` | `default` | visual | ✅ | ✅ | ✅ |
+| `input` | `alphabet` | visual | ✅ | ✅ | ✅ |
+| `input` | `allphabet` | visual | ✅ | ✅ | ✅ |
+| `input` | `email` | visual | ✅ | ✅ | ✅ |
+| `input` | `number` | visual | ✅ | ✅ | ✅ |
+| `input` | `phone` | visual | ✅ | ✅ | ✅ |
+| `input` | `url` | visual | ✅ | ✅ | ✅ |
+| `input` | `password` | visual | ✅ | ✅ | ✅ |
+| `input` | `decimal` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `done` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `go` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `next` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `return` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `search` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `send` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `continue` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `join` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `route` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `yahoo` | visual | ✅ | ✅ | ✅ |
+| `returnKeyType` | `google` | visual | ✅ | ✅ | ✅ |
+| `editable` | `true` | visual | ✅ | ✅ | ✅ |
+| `lineBreakMode` | `static` | visual | ✅ | ✅ | ✅ |
+| `keyboardType` | `static` | visual | ✅ | ✅ | ✅ |
+| `maxLength` | `static` | visual | – | – | ✅ |
+| `pattern` | `static` | visual | – | – | ✅ |
+| `required` | `true` | visual | – | – | ✅ |
+| `selectable` | `true` | visual | – | – | ✅ |
+| `rows` | `static` | visual | – | – | ✅ |
+| `cols` | `static` | visual | – | – | ✅ |
+| `resize` | `none` | visual | – | – | ✅ |
+| `resize` | `both` | visual | – | – | ✅ |
+| `resize` | `horizontal` | visual | – | – | ✅ |
+| `resize` | `vertical` | visual | – | – | ✅ |
+| `fontFamily` | `static` | visual | ✅ | ✅ | ✅ |
+| `disabledBackground` | `static` | visual | – | – | ✅ |
+| `edgeInset` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### EditText
 
-| Fixture | Case | Class |
-|---|---|---|
-| `text` | `static` | assertable |
-| `hint` | `static` | visual |
-| `placeholder` | `static` | visual |
-| `hintColor` | `static` | visual |
-| `inputType` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `hint` | `static` | visual | ✅ | ✅ | ✅ |
+| `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `inputType` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### Input
 
-| Fixture | Case | Class |
-|---|---|---|
-| `text` | `static` | assertable |
-| `hint` | `static` | visual |
-| `placeholder` | `static` | visual |
-| `hintColor` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `hint` | `static` | visual | ✅ | ✅ | ✅ |
+| `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintColor` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### Button
 
-| Fixture | Case | Class |
-|---|---|---|
-| `text` | `static` | assertable |
-| `font` | `static` | visual |
-| `fontSize` | `static` | visual |
-| `fontColor` | `static` | visual |
-| `disabledFontColor` | `static` | visual |
-| `highlightColor` | `static` | visual |
-| `highlightColor` (alias) | `alias_hilightColor` | visual |
-| `hilightColor` | `static` | visual |
-| `tapBackground` | `static` | visual |
-| `tapBackground` (alias) | `alias_highlightBackground` | visual |
-| `highlightBackground` | `static` | visual |
-| `image` | `static` | visual |
-| `textAlign` | `left` | visual |
-| `textAlign` | `center` | visual |
-| `textAlign` | `right` | visual |
-| `buttonType` | `button` | visual |
-| `buttonType` | `submit` | visual |
-| `buttonType` | `reset` | visual |
-| `fontWeight` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `font` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `disabledFontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `highlightColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `highlightColor` (alias) | `alias_hilightColor` | visual | ✅ | ✅ | ✅ |
+| `hilightColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `tapBackground` | `static` | visual | ✅ | ✅ | ✅ |
+| `highlightBackground` | `static` | visual | ✅ | ✅ | ✅ |
+| `image` | `static` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `left` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `center` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `right` | visual | ✅ | ✅ | ✅ |
+| `buttonType` | `button` | visual | – | – | ✅ |
+| `buttonType` | `submit` | visual | – | – | ✅ |
+| `buttonType` | `reset` | visual | – | – | ✅ |
+| `fontWeight` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### Image
 
-| Fixture | Case | Class |
-|---|---|---|
-| `src` | `static` | visual |
-| `srcName` | `static` | visual |
-| `highlightSrc` | `static` | visual |
-| `highlightSrcName` | `static` | visual |
-| `contentMode` | `fit` | visual |
-| `contentMode` | `fill` | visual |
-| `contentMode` | `center` | visual |
-| `contentMode` | `top` | visual |
-| `contentMode` | `bottom` | visual |
-| `contentMode` | `left` | visual |
-| `contentMode` | `right` | visual |
-| `contentMode` | `aspectfill` | visual |
-| `contentMode` | `aspectfit` | visual |
-| `contentMode` | `center_2` | visual |
-| `contentMode` | `scaletofill` | visual |
-| `contentMode` | `top_2` | visual |
-| `contentMode` | `bottom_2` | visual |
-| `contentMode` | `left_2` | visual |
-| `contentMode` | `right_2` | visual |
-| `renderingMode` | `original` | visual |
-| `renderingMode` | `template` | visual |
-| `alt` | `static` | visual |
-| `loading` | `lazy` | visual |
-| `loading` | `eager` | visual |
-| `loadingImage` | `static` | visual |
-| `errorImage` | `static` | visual |
-| `systemIcon` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `src` | `static` | visual | ✅ | ✅ | ✅ |
+| `srcName` | `static` | visual | ✅ | ✅ | ✅ |
+| `highlightSrc` | `static` | visual | – | ✅ | – |
+| `highlightSrcName` | `static` | visual | – | – | – |
+| `contentMode` | `fit` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `fill` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `center` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `top` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `bottom` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `left` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `right` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `aspectfill` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `aspectfit` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `center_2` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `scaletofill` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `top_2` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `bottom_2` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `left_2` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `right_2` | visual | ✅ | ✅ | ✅ |
+| `renderingMode` | `original` | visual | ✅ | ✅ | – |
+| `renderingMode` | `template` | visual | ✅ | ✅ | – |
+| `alt` | `static` | visual | – | – | ✅ |
+| `loading` | `lazy` | visual | – | – | ✅ |
+| `loading` | `eager` | visual | – | – | ✅ |
+| `loadingImage` | `static` | visual | ✅ | ✅ | – |
+| `errorImage` | `static` | visual | ✅ | ✅ | – |
+| `systemIcon` | `static` | visual | – | ✅ | – |
 
 ### NetworkImage
 
-| Fixture | Case | Class |
-|---|---|---|
-| `hint` | `static` | visual |
-| `placeholder` | `static` | visual |
-| `defaultImage` | `static` | visual |
-| `errorImage` | `static` | visual |
-| `loadingImage` | `static` | visual |
-| `contentMode` | `fit` | visual |
-| `contentMode` | `fill` | visual |
-| `contentMode` | `center` | visual |
-| `contentMode` | `top` | visual |
-| `contentMode` | `bottom` | visual |
-| `contentMode` | `left` | visual |
-| `contentMode` | `right` | visual |
-| `contentMode` | `aspectfill` | visual |
-| `contentMode` | `aspectfit` | visual |
-| `contentMode` | `center_2` | visual |
-| `alt` | `static` | visual |
-| `loading` | `lazy` | visual |
-| `loading` | `eager` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `hint` | `static` | visual | ✅ | ✅ | ✅ |
+| `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
+| `defaultImage` | `static` | visual | ✅ | ✅ | ✅ |
+| `errorImage` | `static` | visual | ✅ | ✅ | – |
+| `loadingImage` | `static` | visual | ✅ | ✅ | – |
+| `contentMode` | `fit` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `fill` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `center` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `top` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `bottom` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `left` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `right` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `aspectfill` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `aspectfit` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `center_2` | visual | ✅ | ✅ | ✅ |
+| `alt` | `static` | visual | – | – | ✅ |
+| `loading` | `lazy` | visual | – | – | ✅ |
+| `loading` | `eager` | visual | – | – | ✅ |
 
 ### SelectBox
 
-| Fixture | Case | Class |
-|---|---|---|
-| `prompt` | `static` | visual |
-| `hint` | `static` | visual |
-| `placeholder` | `static` | visual |
-| `hintColor` | `static` | visual |
-| `text` | `static` | visual |
-| `items` | `static` | visual |
-| `selectItemType` | `normal` | visual |
-| `selectItemType` | `date` | visual |
-| `selectedIndex` | `static` | visual |
-| `selectedItem` | `static` | visual |
-| `datePickerMode` | `date` | visual |
-| `datePickerMode` | `time` | visual |
-| `datePickerMode` | `datetime` | visual |
-| `datePickerMode` | `dateandtime` | visual |
-| `datePickerMode` | `countdown` | visual |
-| `datePickerStyle` | `automatic` | visual |
-| `datePickerStyle` | `wheel` | visual |
-| `datePickerStyle` | `wheels` | visual |
-| `datePickerStyle` | `compact` | visual |
-| `datePickerStyle` | `graphical` | visual |
-| `datePickerStyle` | `inline` | visual |
-| `dateStringFormat` | `static` | visual |
-| `minimumDate` | `static` | visual |
-| `maximumDate` | `static` | visual |
-| `minuteInterval` | `1` | visual |
-| `minuteInterval` | `2` | visual |
-| `minuteInterval` | `3` | visual |
-| `minuteInterval` | `4` | visual |
-| `minuteInterval` | `5` | visual |
-| `minuteInterval` | `6` | visual |
-| `minuteInterval` | `10` | visual |
-| `minuteInterval` | `12` | visual |
-| `minuteInterval` | `15` | visual |
-| `minuteInterval` | `20` | visual |
-| `minuteInterval` | `30` | visual |
-| `minuteInterval` | `static` | visual |
-| `font` | `static` | visual |
-| `fontSize` | `static` | visual |
-| `fontColor` | `static` | visual |
-| `inView` | `static` | visual |
-| `referenceView` | `static` | visual |
-| `colorScheme` | `light` | visual |
-| `colorScheme` | `dark` | visual |
-| `multiple` | `true` | visual |
-| `size` | `static` | visual |
-| `selectedValue` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `prompt` | `static` | visual | ✅ | ✅ | ✅ |
+| `hint` | `static` | visual | ✅ | ✅ | ✅ |
+| `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `text` | `static` | visual | – | ✅ | – |
+| `items` | `static` | visual | ✅ | ✅ | ✅ |
+| `selectItemType` | `normal` | visual | ✅ | ✅ | ✅ |
+| `selectItemType` | `date` | visual | ✅ | ✅ | ✅ |
+| `selectedIndex` | `static` | visual | ✅ | ✅ | ✅ |
+| `selectedItem` | `static` | visual | – | – | – |
+| `datePickerMode` | `date` | visual | ✅ | ✅ | ✅ |
+| `datePickerMode` | `time` | visual | ✅ | ✅ | ✅ |
+| `datePickerMode` | `datetime` | visual | ✅ | ✅ | ✅ |
+| `datePickerMode` | `dateandtime` | visual | ✅ | ✅ | ✅ |
+| `datePickerMode` | `countdown` | visual | ✅ | ✅ | ✅ |
+| `datePickerStyle` | `automatic` | visual | ✅ | ✅ | ✅ |
+| `datePickerStyle` | `wheel` | visual | ✅ | ✅ | ✅ |
+| `datePickerStyle` | `wheels` | visual | ✅ | ✅ | ✅ |
+| `datePickerStyle` | `compact` | visual | ✅ | ✅ | ✅ |
+| `datePickerStyle` | `graphical` | visual | ✅ | ✅ | ✅ |
+| `datePickerStyle` | `inline` | visual | ✅ | ✅ | ✅ |
+| `dateStringFormat` | `static` | visual | ✅ | ✅ | ✅ |
+| `minimumDate` | `static` | visual | ✅ | ✅ | ✅ |
+| `maximumDate` | `static` | visual | ✅ | ✅ | ✅ |
+| `minuteInterval` | `1` | visual | ✅ | ✅ | ✅ |
+| `minuteInterval` | `2` | visual | ✅ | ✅ | ✅ |
+| `minuteInterval` | `3` | visual | ✅ | ✅ | ✅ |
+| `minuteInterval` | `4` | visual | ✅ | ✅ | ✅ |
+| `minuteInterval` | `5` | visual | ✅ | ✅ | ✅ |
+| `minuteInterval` | `6` | visual | ✅ | ✅ | ✅ |
+| `minuteInterval` | `10` | visual | ✅ | ✅ | ✅ |
+| `minuteInterval` | `12` | visual | ✅ | ✅ | ✅ |
+| `minuteInterval` | `15` | visual | ✅ | ✅ | ✅ |
+| `minuteInterval` | `20` | visual | ✅ | ✅ | ✅ |
+| `minuteInterval` | `30` | visual | ✅ | ✅ | ✅ |
+| `minuteInterval` | `static` | visual | ✅ | ✅ | ✅ |
+| `font` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `inView` | `static` | visual | – | – | – |
+| `referenceView` | `static` | visual | – | – | – |
+| `colorScheme` | `light` | visual | – | – | ✅ |
+| `colorScheme` | `dark` | visual | – | – | ✅ |
+| `multiple` | `true` | visual | – | – | ✅ |
+| `size` | `static` | visual | – | – | ✅ |
+| `selectedValue` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### Switch
 
-| Fixture | Case | Class |
-|---|---|---|
-| `isOn` | `true` | visual |
-| `value` | `static` | visual |
-| `checked` | `true` | visual |
-| `enabled` | `true` | assertable |
-| `enabled` | `false` | assertable |
-| `tint` | `static` | visual |
-| `tintColor` | `static` | visual |
-| `onTintColor` | `static` | visual |
-| `thumbTintColor` | `static` | visual |
-| `offTintColor` | `static` | visual |
-| `labelPosition` | `leading` | visual |
-| `labelPosition` | `trailing` | visual |
-| `trackTintColor` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `isOn` | `true` | visual | ✅ | ✅ | ✅ |
+| `value` | `static` | visual | ✅ | ✅ | ✅ |
+| `checked` | `true` | visual | ✅ | ✅ | ✅ |
+| `enabled` | `true` | assertable | ✅ | ✅ | ✅ |
+| `enabled` | `false` | assertable | ✅ | ✅ | ✅ |
+| `tint` | `static` | visual | ✅ | ✅ | ✅ |
+| `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `onTintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `thumbTintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `offTintColor` | `static` | visual | – | – | – |
+| `labelPosition` | `leading` | visual | ✅ | – | – |
+| `labelPosition` | `trailing` | visual | ✅ | – | – |
+| `trackTintColor` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### Toggle
 
-| Fixture | Case | Class |
-|---|---|---|
-| `isOn` | `true` | visual |
-| `value` | `static` | visual |
-| `checked` | `true` | visual |
-| `enabled` | `true` | assertable |
-| `enabled` | `false` | assertable |
-| `tint` | `static` | visual |
-| `tintColor` | `static` | visual |
-| `onTintColor` | `static` | visual |
-| `thumbTintColor` | `static` | visual |
-| `offTintColor` | `static` | visual |
-| `labelPosition` | `leading` | visual |
-| `labelPosition` | `trailing` | visual |
-| `trackTintColor` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `isOn` | `true` | visual | ✅ | ✅ | ✅ |
+| `value` | `static` | visual | ✅ | ✅ | ✅ |
+| `checked` | `true` | visual | ✅ | ✅ | ✅ |
+| `enabled` | `true` | assertable | ✅ | ✅ | ✅ |
+| `enabled` | `false` | assertable | ✅ | ✅ | ✅ |
+| `tint` | `static` | visual | ✅ | ✅ | ✅ |
+| `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `onTintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `thumbTintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `offTintColor` | `static` | visual | – | – | – |
+| `labelPosition` | `leading` | visual | ✅ | – | – |
+| `labelPosition` | `trailing` | visual | ✅ | – | – |
+| `trackTintColor` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### Segment
 
-| Fixture | Case | Class |
-|---|---|---|
-| `items` | `static` | visual |
-| `selectedIndex` | `static` | visual |
-| `tintColor` | `static` | visual |
-| `normalColor` | `static` | visual |
-| `selectedColor` | `static` | visual |
-| `apportionsSegmentWidthsByContent` | `true` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `items` | `static` | visual | ✅ | ✅ | ✅ |
+| `selectedIndex` | `static` | visual | ✅ | ✅ | ✅ |
+| `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `normalColor` | `static` | visual | – | ✅ | – |
+| `selectedColor` | `static` | visual | – | ✅ | – |
+| `apportionsSegmentWidthsByContent` | `true` | visual | – | – | – |
 
 ### Slider
 
-| Fixture | Case | Class |
-|---|---|---|
-| `value` | `static` | visual |
-| `minValue` | `static` | visual |
-| `minimum` | `static` | visual |
-| `minimum` (alias) | `alias_minimumValue` | visual |
-| `minimum` (alias) | `alias_minValue` | visual |
-| `maxValue` | `static` | visual |
-| `maximum` | `static` | visual |
-| `maximum` (alias) | `alias_maximumValue` | visual |
-| `maximum` (alias) | `alias_maxValue` | visual |
-| `tintColor` | `static` | visual |
-| `minimumValueImage` | `static` | visual |
-| `maximumValueImage` | `static` | visual |
-| `step` | `static` | visual |
-| `progressTintColor` | `static` | visual |
-| `trackTintColor` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `value` | `static` | visual | ✅ | ✅ | ✅ |
+| `minValue` | `static` | visual | ✅ | ✅ | ✅ |
+| `minimum` | `static` | visual | ✅ | ✅ | ✅ |
+| `minimum` (alias) | `alias_minimumValue` | visual | ✅ | ✅ | ✅ |
+| `minimum` (alias) | `alias_minValue` | visual | ✅ | ✅ | ✅ |
+| `maxValue` | `static` | visual | ✅ | ✅ | ✅ |
+| `maximum` | `static` | visual | ✅ | ✅ | ✅ |
+| `maximum` (alias) | `alias_maximumValue` | visual | ✅ | ✅ | ✅ |
+| `maximum` (alias) | `alias_maxValue` | visual | ✅ | ✅ | ✅ |
+| `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `minimumValueImage` | `static` | visual | – | – | – |
+| `maximumValueImage` | `static` | visual | – | – | – |
+| `step` | `static` | visual | – | – | ✅ |
+| `progressTintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `trackTintColor` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### Progress
 
-| Fixture | Case | Class |
-|---|---|---|
-| `progress` | `static` | visual |
-| `tintColor` | `static` | visual |
-| `progressTintColor` | `static` | visual |
-| `trackTintColor` | `static` | visual |
-| `progressViewStyle` | `static` | visual |
-| `progressImage` | `static` | visual |
-| `trackImage` | `static` | visual |
-| `hidesWhenStopped` | `true` | visual |
-| `indicatorStyle` | `medium` | visual |
-| `indicatorStyle` | `large` | visual |
-| `color` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `progress` | `static` | visual | ✅ | ✅ | ✅ |
+| `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `progressTintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `trackTintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `progressViewStyle` | `static` | visual | – | – | – |
+| `progressImage` | `static` | visual | – | – | – |
+| `trackImage` | `static` | visual | – | – | – |
+| `hidesWhenStopped` | `true` | visual | – | ✅ | – |
+| `indicatorStyle` | `medium` | visual | – | ✅ | – |
+| `indicatorStyle` | `large` | visual | – | ✅ | – |
+| `color` | `static` | visual | – | ✅ | – |
 
 ### View
 
-| Fixture | Case | Class |
-|---|---|---|
-| `orientation` | `horizontal` | visual |
-| `orientation` | `vertical` | visual |
-| `direction` | `toptobottom` | visual |
-| `direction` | `bottomtotop` | visual |
-| `direction` | `lefttoright` | visual |
-| `direction` | `righttoleft` | visual |
-| `direction` | `none` | visual |
-| `alignment` | `static` | visual |
-| `distribution` | `fill` | visual |
-| `distribution` | `fillequally` | visual |
-| `distribution` | `equalspacing` | visual |
-| `distribution` | `equalcentering` | visual |
-| `spacing` | `static` | visual |
-| `gradient` | `static` | visual |
-| `gradientDirection` | `static` | visual |
-| `locations` | `static` | visual |
-| `highlighted` | `true` | visual |
-| `flexWrap` | `nowrap` | visual |
-| `flexWrap` | `wrap` | visual |
-| `flexWrap` | `wrap-reverse` | visual |
-| `draggable` | `true` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `orientation` | `horizontal` | visual | ✅ | ✅ | ✅ |
+| `orientation` | `vertical` | visual | ✅ | ✅ | ✅ |
+| `direction` | `toptobottom` | visual | ✅ | ✅ | ✅ |
+| `direction` | `bottomtotop` | visual | ✅ | ✅ | ✅ |
+| `direction` | `lefttoright` | visual | ✅ | ✅ | ✅ |
+| `direction` | `righttoleft` | visual | ✅ | ✅ | ✅ |
+| `direction` | `none` | visual | ✅ | ✅ | ✅ |
+| `alignment` | `static` | visual | ✅ | ✅ | ✅ |
+| `distribution` | `fill` | visual | ✅ | ✅ | ✅ |
+| `distribution` | `fillequally` | visual | ✅ | ✅ | ✅ |
+| `distribution` | `equalspacing` | visual | ✅ | ✅ | ✅ |
+| `distribution` | `equalcentering` | visual | ✅ | ✅ | ✅ |
+| `spacing` | `static` | visual | ✅ | ✅ | ✅ |
+| `gradient` | `static` | visual | – | – | – |
+| `gradientDirection` | `static` | visual | – | – | – |
+| `locations` | `static` | visual | – | – | – |
+| `highlighted` | `true` | visual | ✅ | ✅ | ✅ |
+| `flexWrap` | `nowrap` | visual | – | – | ✅ |
+| `flexWrap` | `wrap` | visual | – | – | ✅ |
+| `flexWrap` | `wrap-reverse` | visual | – | – | ✅ |
+| `draggable` | `true` | visual | – | – | ✅ |
 
 ### ScrollView
 
-| Fixture | Case | Class |
-|---|---|---|
-| `orientation` | `horizontal` | visual |
-| `orientation` | `vertical` | visual |
-| `scrollMode` | `inner` | visual |
-| `scrollMode` | `window` | visual |
-| `showsHorizontalScrollIndicator` | `true` | visual |
-| `showsVerticalScrollIndicator` | `true` | visual |
-| `contentSize` | `static` | visual |
-| `contentOffset` | `static` | visual |
-| `indicatorStyle` | `static` | visual |
-| `scrollBehavior` | `auto` | visual |
-| `scrollBehavior` | `smooth` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `orientation` | `horizontal` | visual | ✅ | ✅ | ✅ |
+| `orientation` | `vertical` | visual | ✅ | ✅ | ✅ |
+| `scrollMode` | `inner` | visual | ✅ | ✅ | ✅ |
+| `scrollMode` | `window` | visual | ✅ | ✅ | ✅ |
+| `showsHorizontalScrollIndicator` | `true` | visual | ✅ | ✅ | ✅ |
+| `showsVerticalScrollIndicator` | `true` | visual | ✅ | ✅ | ✅ |
+| `contentSize` | `static` | visual | – | – | – |
+| `contentOffset` | `static` | visual | – | – | – |
+| `indicatorStyle` | `static` | visual | – | – | – |
+| `scrollBehavior` | `auto` | visual | – | – | ✅ |
+| `scrollBehavior` | `smooth` | visual | – | – | ✅ |
 
 ### Collection
 
-| Fixture | Case | Class |
-|---|---|---|
-| `lazy` | `lazy` | visual |
-| `lazy` | `eager` | visual |
-| `lazy` | `none` | visual |
-| `columns` | `static` | visual |
-| `columnSpacing` | `static` | visual |
-| `itemSpacing` | `static` | visual |
-| `lineSpacing` | `static` | visual |
-| `horizontalScroll` | `true` | visual |
-| `orientation` | `horizontal` | visual |
-| `orientation` | `vertical` | visual |
-| `layout` | `vertical` | visual |
-| `layout` | `horizontal` | visual |
-| `layout` | `flow` | visual |
-| `layout` | `flow_2` | visual |
-| `layout` | `leftaligned` | visual |
-| `layout` | `leftaligned_2` | visual |
-| `insets` | `static` | visual |
-| `insetHorizontal` | `static` | visual |
-| `insetVertical` | `static` | visual |
-| `contentInsets` | `static` | visual |
-| `itemWeight` | `static` | visual |
-| `showsHorizontalScrollIndicator` | `true` | visual |
-| `showsVerticalScrollIndicator` | `true` | visual |
-| `columnCount` | `static` | visual |
-| `scrollAnchor` | `top` | visual |
-| `scrollAnchor` | `center` | visual |
-| `scrollAnchor` | `bottom` | visual |
-| `defaultScrollAnchor` | `top` | visual |
-| `defaultScrollAnchor` | `center` | visual |
-| `defaultScrollAnchor` | `bottom` | visual |
-| `reverseLayout` | `true` | visual |
-| `containerInset` | `static` | visual |
-| `sectionSticky` | `true` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `lazy` | `lazy` | visual | ✅ | ✅ | ✅ |
+| `lazy` | `eager` | visual | ✅ | ✅ | ✅ |
+| `lazy` | `none` | visual | ✅ | ✅ | ✅ |
+| `columns` | `static` | visual | ✅ | ✅ | ✅ |
+| `columnSpacing` | `static` | visual | ✅ | ✅ | ✅ |
+| `itemSpacing` | `static` | visual | ✅ | ✅ | ✅ |
+| `lineSpacing` | `static` | visual | ✅ | ✅ | ✅ |
+| `horizontalScroll` | `true` | visual | ✅ | ✅ | ✅ |
+| `orientation` | `horizontal` | visual | ✅ | ✅ | ✅ |
+| `orientation` | `vertical` | visual | ✅ | ✅ | ✅ |
+| `layout` | `vertical` | visual | ✅ | ✅ | ✅ |
+| `layout` | `horizontal` | visual | ✅ | ✅ | ✅ |
+| `layout` | `flow` | visual | ✅ | ✅ | ✅ |
+| `layout` | `flow_2` | visual | ✅ | ✅ | ✅ |
+| `layout` | `leftaligned` | visual | ✅ | ✅ | ✅ |
+| `layout` | `leftaligned_2` | visual | ✅ | ✅ | ✅ |
+| `insets` | `static` | visual | ✅ | ✅ | ✅ |
+| `insetHorizontal` | `static` | visual | ✅ | ✅ | ✅ |
+| `insetVertical` | `static` | visual | ✅ | ✅ | ✅ |
+| `contentInsets` | `static` | visual | – | ✅ | – |
+| `itemWeight` | `static` | visual | – | ✅ | – |
+| `showsHorizontalScrollIndicator` | `true` | visual | ✅ | ✅ | ✅ |
+| `showsVerticalScrollIndicator` | `true` | visual | ✅ | ✅ | ✅ |
+| `columnCount` | `static` | visual | – | – | ✅ |
+| `scrollAnchor` | `top` | visual | ✅ | ✅ | ✅ |
+| `scrollAnchor` | `center` | visual | ✅ | ✅ | ✅ |
+| `scrollAnchor` | `bottom` | visual | ✅ | ✅ | ✅ |
+| `defaultScrollAnchor` | `top` | visual | ✅ | ✅ | ✅ |
+| `defaultScrollAnchor` | `center` | visual | ✅ | ✅ | ✅ |
+| `defaultScrollAnchor` | `bottom` | visual | ✅ | ✅ | ✅ |
+| `reverseLayout` | `true` | visual | ✅ | – | – |
+| `containerInset` | `static` | visual | – | ✅ | – |
+| `sectionSticky` | `true` | visual | ✅ | – | – |
 
 ### Radio
 
-| Fixture | Case | Class |
-|---|---|---|
-| `label` | `static` | visual |
-| `text` | `static` | assertable |
-| `group` | `static` | visual |
-| `icon` | `static` | visual |
-| `selectedIcon` | `static` | visual |
-| `selected_icon` | `static` | visual |
-| `checked` | `true` | visual |
-| `value` | `static` | visual |
-| `font` | `static` | visual |
-| `fontSize` | `static` | visual |
-| `fontColor` | `static` | visual |
-| `spacing` | `static` | visual |
-| `checkedColor` | `static` | visual |
-| `uncheckedColor` | `static` | visual |
-| `iconSize` | `static` | visual |
-| `iconColor` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `label` | `static` | visual | ✅ | ✅ | ✅ |
+| `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `group` | `static` | visual | ✅ | ✅ | ✅ |
+| `icon` | `static` | visual | ✅ | ✅ | – |
+| `selectedIcon` | `static` | visual | ✅ | ✅ | – |
+| `selected_icon` | `static` | visual | ✅ | ✅ | ✅ |
+| `checked` | `true` | visual | ✅ | ✅ | ✅ |
+| `value` | `static` | visual | ✅ | ✅ | ✅ |
+| `font` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `spacing` | `static` | visual | ✅ | ✅ | ✅ |
+| `checkedColor` | `static` | visual | ✅ | ✅ | – |
+| `uncheckedColor` | `static` | visual | ✅ | ✅ | – |
+| `iconSize` | `static` | visual | ✅ | ✅ | – |
+| `iconColor` | `static` | visual | ✅ | ✅ | – |
 
 ### CheckBox
 
-| Fixture | Case | Class |
-|---|---|---|
-| `label` | `static` | visual |
-| `text` | `static` | assertable |
-| `isOn` | `true` | visual |
-| `checked` | `true` | visual |
-| `icon` | `static` | visual |
-| `src` | `static` | visual |
-| `selectedIcon` | `static` | visual |
-| `onSrc` | `static` | visual |
-| `value` | `static` | visual |
-| `enabled` | `true` | assertable |
-| `enabled` | `false` | assertable |
-| `font` | `static` | visual |
-| `fontSize` | `static` | visual |
-| `fontColor` | `static` | visual |
-| `spacing` | `static` | visual |
-| `checkedColor` | `static` | visual |
-| `uncheckedColor` | `static` | visual |
-| `iconSize` | `static` | visual |
-| `iconColor` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `label` | `static` | visual | ✅ | ✅ | ✅ |
+| `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `isOn` | `true` | visual | ✅ | ✅ | ✅ |
+| `checked` | `true` | visual | ✅ | ✅ | ✅ |
+| `icon` | `static` | visual | ✅ | ✅ | – |
+| `src` | `static` | visual | ✅ | ✅ | ✅ |
+| `selectedIcon` | `static` | visual | ✅ | ✅ | – |
+| `onSrc` | `static` | visual | ✅ | ✅ | ✅ |
+| `value` | `static` | visual | ✅ | ✅ | ✅ |
+| `enabled` | `true` | assertable | ✅ | ✅ | ✅ |
+| `enabled` | `false` | assertable | ✅ | ✅ | ✅ |
+| `font` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `spacing` | `static` | visual | ✅ | ✅ | ✅ |
+| `checkedColor` | `static` | visual | ✅ | ✅ | – |
+| `uncheckedColor` | `static` | visual | ✅ | ✅ | – |
+| `iconSize` | `static` | visual | ✅ | ✅ | – |
+| `iconColor` | `static` | visual | ✅ | ✅ | – |
 
 ### Check
 
-| Fixture | Case | Class |
-|---|---|---|
-| `checked` | `true` | visual |
-| `isOn` | `true` | visual |
-| `label` | `static` | visual |
-| `text` | `static` | assertable |
-| `icon` | `static` | visual |
-| `src` | `static` | visual |
-| `selectedIcon` | `static` | visual |
-| `onSrc` | `static` | visual |
-| `enabled` | `true` | assertable |
-| `enabled` | `false` | assertable |
-| `font` | `static` | visual |
-| `fontSize` | `static` | visual |
-| `fontColor` | `static` | visual |
-| `spacing` | `static` | visual |
-| `checkedColor` | `static` | visual |
-| `uncheckedColor` | `static` | visual |
-| `iconSize` | `static` | visual |
-| `iconColor` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `checked` | `true` | visual | ✅ | ✅ | ✅ |
+| `isOn` | `true` | visual | ✅ | ✅ | ✅ |
+| `label` | `static` | visual | ✅ | ✅ | ✅ |
+| `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `icon` | `static` | visual | ✅ | ✅ | – |
+| `src` | `static` | visual | ✅ | ✅ | ✅ |
+| `selectedIcon` | `static` | visual | ✅ | ✅ | – |
+| `onSrc` | `static` | visual | ✅ | ✅ | ✅ |
+| `enabled` | `true` | assertable | ✅ | ✅ | ✅ |
+| `enabled` | `false` | assertable | ✅ | ✅ | ✅ |
+| `font` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `spacing` | `static` | visual | ✅ | ✅ | ✅ |
+| `checkedColor` | `static` | visual | ✅ | ✅ | – |
+| `uncheckedColor` | `static` | visual | ✅ | ✅ | – |
+| `iconSize` | `static` | visual | ✅ | ✅ | – |
+| `iconColor` | `static` | visual | ✅ | ✅ | – |
 
 ### Indicator
 
-| Fixture | Case | Class |
-|---|---|---|
-| `indicatorStyle` | `medium` | visual |
-| `indicatorStyle` | `large` | visual |
-| `color` | `static` | visual |
-| `hidesWhenStopped` | `true` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `indicatorStyle` | `medium` | visual | – | ✅ | – |
+| `indicatorStyle` | `large` | visual | – | ✅ | – |
+| `color` | `static` | visual | – | ✅ | – |
+| `hidesWhenStopped` | `true` | visual | – | ✅ | – |
 
 ### GradientView
 
-| Fixture | Case | Class |
-|---|---|---|
-| `gradient` | `static` | visual |
-| `gradientDirection` | `vertical` | visual |
-| `gradientDirection` | `horizontal` | visual |
-| `gradientDirection` | `oblique` | visual |
-| `locations` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `gradient` | `static` | visual | ✅ | ✅ | ✅ |
+| `gradientDirection` | `vertical` | visual | ✅ | ✅ | ✅ |
+| `gradientDirection` | `horizontal` | visual | ✅ | ✅ | ✅ |
+| `gradientDirection` | `oblique` | visual | ✅ | ✅ | ✅ |
+| `locations` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### Blur
 
-| Fixture | Case | Class |
-|---|---|---|
-| `effectStyle` | `light` | visual |
-| `effectStyle` | `dark` | visual |
-| `effectStyle` | `extralight` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `effectStyle` | `light` | visual | ✅ | ✅ | ✅ |
+| `effectStyle` | `dark` | visual | ✅ | ✅ | ✅ |
+| `effectStyle` | `extralight` | visual | ✅ | ✅ | ✅ |
 
 ### IconLabel
 
-| Fixture | Case | Class |
-|---|---|---|
-| `text` | `static` | assertable |
-| `selected` | `true` | visual |
-| `font` | `static` | visual |
-| `fontSize` | `static` | visual |
-| `fontColor` | `static` | visual |
-| `textShadow` | `static` | visual |
-| `selectedFontColor` | `static` | visual |
-| `icon_on` | `static` | visual |
-| `icon_off` | `static` | visual |
-| `iconPosition` | `left` | visual |
-| `iconPosition` | `right` | visual |
-| `iconPosition` | `top` | visual |
-| `iconPosition` | `bottom` | visual |
-| `iconMargin` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `selected` | `true` | visual | – | – | – |
+| `font` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `textShadow` | `static` | visual | ✅ | ✅ | ✅ |
+| `selectedFontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `icon_on` | `static` | visual | ✅ | ✅ | ✅ |
+| `icon_off` | `static` | visual | ✅ | ✅ | ✅ |
+| `iconPosition` | `left` | visual | ✅ | ✅ | ✅ |
+| `iconPosition` | `right` | visual | ✅ | ✅ | ✅ |
+| `iconPosition` | `top` | visual | ✅ | ✅ | ✅ |
+| `iconPosition` | `bottom` | visual | ✅ | ✅ | ✅ |
+| `iconMargin` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### Web
 
-| Fixture | Case | Class |
-|---|---|---|
-| `html` | `static` | visual |
-| `sandbox` | `static` | visual |
-| `allow` | `static` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `html` | `static` | visual | ✅ | ✅ | ✅ |
+| `sandbox` | `static` | visual | – | – | ✅ |
+| `allow` | `static` | visual | – | – | ✅ |
 
 ### SafeAreaView
 
-| Fixture | Case | Class |
-|---|---|---|
-| `orientation` | `horizontal` | visual |
-| `orientation` | `vertical` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `orientation` | `horizontal` | visual | ✅ | ✅ | ✅ |
+| `orientation` | `vertical` | visual | ✅ | ✅ | ✅ |
 
 ### TabView
 
-| Fixture | Case | Class |
-|---|---|---|
-| `selectedIndex` | `static` | visual |
-| `selectedIndex` (alias) | `alias_selectedTabIndex` | visual |
-| `tabs` | `static` | visual |
-| `tintColor` | `static` | visual |
-| `unselectedColor` | `static` | visual |
-| `tabBarBackground` | `static` | visual |
-| `showLabels` | `true` | visual |
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `selectedIndex` | `static` | visual | ✅ | ✅ | ✅ |
+| `selectedIndex` (alias) | `alias_selectedTabIndex` | visual | ✅ | ✅ | ✅ |
+| `tabs` | `static` | visual | ✅ | ✅ | ✅ |
+| `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `unselectedColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `tabBarBackground` | `static` | visual | ✅ | ✅ | ✅ |
+| `showLabels` | `true` | visual | ✅ | ✅ | ✅ |
 
 ## Skipped attributes
 
 | Component | Attribute | Reason |
 |---|---|---|
 | common | `_comment` | definition metadata, not an attribute |
+| common | `$jui` | metadata (not rendered) |
 | common | `id` | metadata (not rendered) |
 | common | `generatedBy` | metadata (not rendered) |
 | common | `partial` | metadata (not rendered) |
