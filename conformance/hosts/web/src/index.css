@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+/* Generated fixture components live under src/generated/ which is
+   gitignored; Tailwind v4's automatic source detection skips gitignored
+   files, so register the directory explicitly. */
+@source "./generated";
+
+/* Named-color utilities generated from Layouts/Resources/colors.json by
+   scripts/generate.mjs (bg-<key> / text-<key> / border-<key> / ...). */
+@import "./generated/conformance-colors.css";
+
+html,
+body,
+#app-root {
+  height: 100%;
+  margin: 0;
+}
