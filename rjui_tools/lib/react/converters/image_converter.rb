@@ -10,7 +10,7 @@ module RjuiTools
           class_name = build_class_name
           style_attr = build_style_attr
           src = build_src
-          alt = json['alt'] || json['accessibilityLabel'] || ''
+          alt = attributes['alt'] || attributes['accessibilityLabel'] || ''
           id_attr = build_id_attr
           onclick_attr = build_onclick_attr
           testid_attr = build_testid_attr
@@ -34,19 +34,19 @@ module RjuiTools
 
         def build_src
           # Priority: srcName > src > url > defaultImage
-          if json['srcName']
-            if has_binding?(json['srcName'])
-              binding_prop = extract_binding_property(json['srcName'])
+          if attributes['srcName']
+            if has_binding?(attributes['srcName'])
+              binding_prop = extract_binding_property(attributes['srcName'])
               "`/images/${#{binding_prop}}`"
             else
-              "/images/#{resolve_image_extension(json['srcName'])}"
+              "/images/#{resolve_image_extension(attributes['srcName'])}"
             end
-          elsif json['src']
-            convert_binding(json['src'])
-          elsif json['url']
-            convert_binding(json['url'])
-          elsif json['defaultImage']
-            "/images/#{resolve_image_extension(json['defaultImage'])}"
+          elsif attributes['src']
+            convert_binding(attributes['src'])
+          elsif attributes['url']
+            convert_binding(attributes['url'])
+          elsif attributes['defaultImage']
+            "/images/#{resolve_image_extension(attributes['defaultImage'])}"
           else
             '/images/placeholder.png'
           end
@@ -68,7 +68,7 @@ module RjuiTools
           classes = [super]
 
           # Content mode
-          case json['contentMode']&.downcase
+          case attributes['contentMode']&.downcase
           when 'aspectfit', 'aspect_fit'
             classes << 'object-contain'
           when 'aspectfill', 'aspect_fill'
@@ -87,7 +87,7 @@ module RjuiTools
           end
 
           # Clickable cursor
-          if json['canTap'] || json['onclick'] || json['onClick']
+          if attributes['canTap'] || attributes['onclick'] || attributes['onClick']
             classes << 'cursor-pointer'
           end
 
@@ -98,8 +98,8 @@ module RjuiTools
           super
 
           # Corner radius (for non-circle images)
-          if json['cornerRadius'] && json['type'] != 'CircleImage'
-            @dynamic_styles['borderRadius'] = "'#{json['cornerRadius']}px'"
+          if attributes['cornerRadius'] && json['type'] != 'CircleImage'
+            @dynamic_styles['borderRadius'] = "'#{attributes['cornerRadius']}px'"
           end
 
           return '' if @dynamic_styles.nil? || @dynamic_styles.empty?
@@ -115,9 +115,9 @@ module RjuiTools
         end
 
         def build_onclick_attr
-          return '' unless json['canTap'] || json['onclick'] || json['onClick']
+          return '' unless attributes['canTap'] || attributes['onclick'] || attributes['onClick']
 
-          onclick = json['onclick'] || json['onClick']
+          onclick = attributes['onclick'] || attributes['onClick']
           return '' unless onclick
 
           if onclick.end_with?(':')
