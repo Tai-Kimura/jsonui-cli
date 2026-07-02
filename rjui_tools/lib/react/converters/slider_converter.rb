@@ -15,14 +15,14 @@ module RjuiTools
 
           # Canonical names are minimum/maximum; minimumValue/minValue and
           # maximumValue/maxValue are the definitions aliases.
-          min_value = attr_lookup('minimum', 'minimumValue', 'minValue') || 0
-          max_value = attr_lookup('maximum', 'maximumValue', 'maxValue') || 100
-          step_value = json['step']
+          min_value = attributes['minimum'] || 0
+          max_value = attributes['maximum'] || 100
+          step_value = attributes['step']
 
           # Handle range array format: [min, max]
-          if json['range'].is_a?(Array) && json['range'].length == 2
-            min_value = json['range'][0]
-            max_value = json['range'][1]
+          if attributes['range'].is_a?(Array) && attributes['range'].length == 2
+            min_value = attributes['range'][0]
+            max_value = attributes['range'][1]
           end
 
           value_attr = build_value_attr
@@ -49,10 +49,10 @@ module RjuiTools
           classes << 'cursor-pointer'
 
           # Disabled state
-          if json['enabled'] == false
+          if attributes['enabled'] == false
             classes << 'opacity-50 cursor-not-allowed'
-          elsif has_binding?(json['enabled'])
-            binding_expr = extract_binding_property(json['enabled'])
+          elsif has_binding?(attributes['enabled'])
+            binding_expr = extract_binding_property(attributes['enabled'])
             classes << "${!#{binding_expr} ? 'opacity-50 cursor-not-allowed' : ''}"
           end
 
@@ -60,7 +60,7 @@ module RjuiTools
         end
 
         def build_value_attr
-          value = json['value']
+          value = attributes['value']
 
           if value && has_binding?(value)
             prop = extract_binding_property(value)
@@ -75,7 +75,7 @@ module RjuiTools
         def build_on_change
           # If custom handler is defined, use it (passing the event object).
           # onValueChanged is the definitions alias of onValueChange.
-          handler = attr_lookup('onValueChange', 'onValueChanged')
+          handler = attributes['onValueChange']
           if handler && has_binding?(handler)
             prop = extract_binding_property(handler)
             return " onChange={(e) => #{prop}?.(Number(e.target.value))}"
@@ -83,7 +83,7 @@ module RjuiTools
 
           # Auto-generate onChange from value binding property
           # e.g., value: "@{sliderValue}" -> onChange={(e) => data.onSliderValueChange?.(Number(e.target.value))}
-          value = json['value']
+          value = attributes['value']
           if value && has_binding?(value)
             property_name = extract_raw_binding_property(value)
             handler_name = "on#{capitalize_first(property_name)}Change"
@@ -100,7 +100,7 @@ module RjuiTools
         end
 
         def build_disabled_attr
-          enabled = json['enabled']
+          enabled = attributes['enabled']
           return '' if enabled.nil?
 
           if has_binding?(enabled)
@@ -115,10 +115,10 @@ module RjuiTools
         def build_slider_style_attr
           style_parts = []
 
-          tint_color = json['tintColor'] || json['minimumTrackTintColor']
+          tint_color = attributes['tintColor'] || attributes['minimumTrackTintColor']
           style_parts << "accentColor: '#{tint_color}'" if tint_color
 
-          max_track_color = json['maximumTrackTintColor']
+          max_track_color = attributes['maximumTrackTintColor']
           style_parts << "backgroundColor: '#{max_track_color}'" if max_track_color
 
           return '' if style_parts.empty?

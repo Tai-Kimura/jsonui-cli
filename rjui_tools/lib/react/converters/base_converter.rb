@@ -34,6 +34,7 @@ module RjuiTools
         def attributes
           @attributes ||= Core::TypedAttributes.new(
             json,
+            component_type: json['type'] || fallback_component_type,
             normalized: layout_normalized?
           )
         end
@@ -367,6 +368,18 @@ module RjuiTools
 
         def has_binding?(value)
           value.is_a?(String) && value.include?('@{')
+        end
+
+        # Component type for typed attribute extraction when the node
+        # itself has no `type` key (e.g. converter driven directly in
+        # specs, or a defaulted root). Derived from the converter class
+        # name: SliderConverter → 'Slider'. An explicit `type` always
+        # wins (SwitchConverter also serves 'Toggle' nodes, etc.).
+        def fallback_component_type
+          name = self.class.name.to_s.split('::').last
+          return nil unless name&.end_with?('Converter')
+
+          name.sub(/Converter\z/, '')
         end
 
         # True when the layout being generated carried the `$jui` L1

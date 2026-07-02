@@ -109,6 +109,8 @@ module RjuiTools
       #   boolean truthiness; keep raw until the converter maps the enum.
       # - navigationMode (Embed): definitions only declare 'delegate' but
       #   the converter forwards future values ('isolated', v1.5) as-is.
+      # - gradientDirection (GradientView): enum declares capitalized
+      #   values only; the web converter matches case-insensitively.
       #
       # (Candidates for a definitions/emitter revision — see the 06 plan
       # feedback.)
@@ -122,6 +124,7 @@ module RjuiTools
         contentMode
         resize
         navigationMode
+        gradientDirection
       ].freeze
 
       def initialize(json, component_type: nil, normalized: false)
