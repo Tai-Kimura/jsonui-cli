@@ -1,6 +1,6 @@
 {
   "platform": "web",
-  "manifestHash": "4f679408f1028dcaa83afc8dbccc7ea72716b67c3e55bd46a4bc200c9c78d577",
+  "manifestHash": "18edf3354224d62bca07d35cb2b014ee2308e6375a623dd125aec35cfa334f56",
   "runner": {
     "name": "playwright",
     "version": "1.61.1"
@@ -207,6 +207,21 @@
     },
     {
       "id": "common/visibility__gone",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/visibility__binding_visible",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/visibility__binding_invisible",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/visibility__binding_gone",
       "status": "pass",
       "detail": ""
     },
@@ -463,22 +478,10 @@
       "screenshot": "artifacts/web/common_alignTopOfView__static.png"
     },
     {
-      "id": "common/alignTopOfView__alias_alignTopView",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/common_alignTopOfView__alias_alignTopView.png"
-    },
-    {
       "id": "common/alignBottomOfView__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_alignBottomOfView__static.png"
-    },
-    {
-      "id": "common/alignBottomOfView__alias_alignBottomView",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/common_alignBottomOfView__alias_alignBottomView.png"
     },
     {
       "id": "common/alignLeftOfView__static",
@@ -487,22 +490,10 @@
       "screenshot": "artifacts/web/common_alignLeftOfView__static.png"
     },
     {
-      "id": "common/alignLeftOfView__alias_alignLeftView",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/common_alignLeftOfView__alias_alignLeftView.png"
-    },
-    {
       "id": "common/alignRightOfView__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_alignRightOfView__static.png"
-    },
-    {
-      "id": "common/alignRightOfView__alias_alignRightView",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/common_alignRightOfView__alias_alignRightView.png"
     },
     {
       "id": "common/alignTopView__static",
@@ -556,6 +547,21 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_clipToBounds__true.png"
+    },
+    {
+      "id": "common/onclick__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/onClick__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/onLongPress__callback_fire",
+      "status": "skipped",
+      "detail": "not applicable to web"
     },
     {
       "id": "common/tintColor__static",
@@ -663,6 +669,11 @@
       "screenshot": "artifacts/web/common_gravity__center.png"
     },
     {
+      "id": "common/onAppear__callback_fire",
+      "status": "skipped",
+      "detail": "mode: compose (host renders react mode)"
+    },
+    {
       "id": "common/alignment__topleading",
       "status": "skipped",
       "detail": "not applicable to web"
@@ -759,6 +770,11 @@
     },
     {
       "id": "Label/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_initial",
       "status": "pass",
       "detail": ""
     },
@@ -985,6 +1001,11 @@
     },
     {
       "id": "TextField/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "TextField/text__binding_twoway",
       "status": "pass",
       "detail": ""
     },
@@ -1308,6 +1329,11 @@
       "screenshot": "artifacts/web/TextField_tintColor__static.png"
     },
     {
+      "id": "TextField/onTextChange__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "TextField/autocapitalizationType__static",
       "status": "pass",
       "detail": "",
@@ -1383,6 +1409,11 @@
     },
     {
       "id": "TextView/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "TextView/text__binding_twoway",
       "status": "pass",
       "detail": ""
     },
@@ -1627,6 +1658,11 @@
       "screenshot": "artifacts/web/TextView_keyboardType__static.png"
     },
     {
+      "id": "TextView/onTextChange__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "TextView/maxLength__static",
       "status": "pass",
       "detail": "",
@@ -1762,6 +1798,11 @@
       "detail": ""
     },
     {
+      "id": "Button/text__binding_initial",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "Button/font__static",
       "status": "pass",
       "detail": "",
@@ -1808,12 +1849,6 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Button_tapBackground__static.png"
-    },
-    {
-      "id": "Button/tapBackground__alias_highlightBackground",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Button_tapBackground__alias_highlightBackground.png"
     },
     {
       "id": "Button/highlightBackground__static",
@@ -2373,6 +2408,16 @@
       "detail": "not applicable to web"
     },
     {
+      "id": "SelectBox/onValueChange__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "SelectBox/onValueChanged__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "SelectBox/colorScheme__light",
       "status": "pass",
       "detail": "",
@@ -2460,6 +2505,11 @@
       "detail": "not applicable to web"
     },
     {
+      "id": "Switch/onValueChange__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "Switch/labelPosition__leading",
       "status": "skipped",
       "detail": "not applicable to web"
@@ -2531,6 +2581,11 @@
       "id": "Toggle/offTintColor__static",
       "status": "skipped",
       "detail": "not applicable to web"
+    },
+    {
+      "id": "Toggle/onValueChange__callback_fire",
+      "status": "pass",
+      "detail": ""
     },
     {
       "id": "Toggle/labelPosition__leading",
@@ -3282,6 +3337,11 @@
       "screenshot": "artifacts/web/CheckBox_spacing__static.png"
     },
     {
+      "id": "CheckBox/onValueChange__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "CheckBox/checkedColor__static",
       "status": "skipped",
       "detail": "not applicable to web"
@@ -3379,6 +3439,11 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Check_spacing__static.png"
+    },
+    {
+      "id": "Check/onValueChange__callback_fire",
+      "status": "pass",
+      "detail": ""
     },
     {
       "id": "Check/checkedColor__static",
