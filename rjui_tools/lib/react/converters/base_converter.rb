@@ -29,8 +29,8 @@ module RjuiTools
         # (lib/core/generated/attributes/, emitted from
         # attribute_definitions.json). Converters read node attributes as
         # `attributes['key']` — canonical/alias resolution and type
-        # coercion happen in one place instead of per-call-site
-        # `json['key']` reads. See Core::TypedAttributes for semantics.
+        # coercion happen in one place instead of per-call-site raw JSON
+        # reads. See Core::TypedAttributes for semantics.
         def attributes
           @attributes ||= Core::TypedAttributes.new(
             json,
@@ -54,18 +54,18 @@ module RjuiTools
           end
 
           # Width/Height - handle matchParent with horizontal margin
-          left_margin = json['leftMargin'] || json['startMargin'] || 0
-          right_margin = json['rightMargin'] || json['endMargin'] || 0
+          left_margin = attributes['leftMargin'] || attributes['startMargin'] || 0
+          right_margin = attributes['rightMargin'] || attributes['endMargin'] || 0
           has_horizontal_margin = left_margin.is_a?(Numeric) && left_margin > 0 ||
                                   right_margin.is_a?(Numeric) && right_margin > 0
 
-          if json['width'] == 'matchParent' && has_horizontal_margin
+          if attributes['width'] == 'matchParent' && has_horizontal_margin
             # Use calc to account for margins
             total_margin = (left_margin.is_a?(Numeric) ? left_margin : 0) +
                           (right_margin.is_a?(Numeric) ? right_margin : 0)
             @dynamic_styles['width'] = "'calc(100% - #{total_margin}px)'"
           else
-            classes << TailwindMapper.map_width(json['width'])
+            classes << TailwindMapper.map_width(attributes['width'])
           end
           # matchParent height handling (axis-aware):
           # - ZStack child (absolute): use h-full — flex-1 doesn't apply
@@ -74,7 +74,7 @@ module RjuiTools
           #   from fixed-size siblings like a 3px accent bar
           # - flex-col parent or unknown (height is MAIN axis): use flex-1 —
           #   h-full overflows when siblings exist, flex-1 fills the gap
-          if json['height'] == 'matchParent' && !json['weight']
+          if attributes['height'] == 'matchParent' && !attributes['weight']
             if json['_overlay']
               classes << 'h-full'
             elsif json['_parent_orientation'] == 'horizontal'
@@ -88,12 +88,12 @@ module RjuiTools
               classes << 'flex-1 min-w-0 min-h-0'
             end
           else
-            classes << TailwindMapper.map_height(json['height'])
+            classes << TailwindMapper.map_height(attributes['height'])
           end
 
           # Prevent flex shrinking when fixed dimensions are specified
           # This ensures elements maintain their specified size in flex containers
-          if json['width'].is_a?(Numeric) || json['height'].is_a?(Numeric)
+          if attributes['width'].is_a?(Numeric) || attributes['height'].is_a?(Numeric)
             classes << 'shrink-0'
           end
 
@@ -102,71 +102,71 @@ module RjuiTools
           # prop via attribute_definitions/<Component>.json — otherwise the
           # wrapper <div> steals keys like CodeBlock#maxHeight that the
           # custom component uses for its own purpose.
-          classes << TailwindMapper.map_min_width(json['minWidth'])   if json['minWidth']   && decoration_allowed?('minWidth')
-          classes << TailwindMapper.map_max_width(json['maxWidth'])   if json['maxWidth']   && decoration_allowed?('maxWidth')
-          classes << TailwindMapper.map_min_height(json['minHeight']) if json['minHeight'] && decoration_allowed?('minHeight')
-          classes << TailwindMapper.map_max_height(json['maxHeight']) if json['maxHeight'] && decoration_allowed?('maxHeight')
+          classes << TailwindMapper.map_min_width(attributes['minWidth'])   if attributes['minWidth']   && decoration_allowed?('minWidth')
+          classes << TailwindMapper.map_max_width(attributes['maxWidth'])   if attributes['maxWidth']   && decoration_allowed?('maxWidth')
+          classes << TailwindMapper.map_min_height(attributes['minHeight']) if attributes['minHeight'] && decoration_allowed?('minHeight')
+          classes << TailwindMapper.map_max_height(attributes['maxHeight']) if attributes['maxHeight'] && decoration_allowed?('maxHeight')
 
           # Padding (array format)
-          classes << TailwindMapper.map_padding(json['padding'] || json['paddings'])
+          classes << TailwindMapper.map_padding(attributes['padding'] || attributes['paddings'])
 
           # Individual paddings (topPadding, bottomPadding, leftPadding, rightPadding)
           # Also support paddingTop, paddingRight, paddingBottom, paddingLeft format
           classes << TailwindMapper.map_individual_paddings(
-            json['topPadding'] || json['paddingTop'],
-            json['rightPadding'] || json['paddingRight'],
-            json['bottomPadding'] || json['paddingBottom'],
-            json['leftPadding'] || json['paddingLeft']
+            attributes['topPadding'] || attributes['paddingTop'],
+            attributes['rightPadding'] || attributes['paddingRight'],
+            attributes['bottomPadding'] || attributes['paddingBottom'],
+            attributes['leftPadding'] || attributes['paddingLeft']
           )
 
           # RTL-aware paddings (paddingStart, paddingEnd)
           classes << TailwindMapper.map_rtl_paddings(
-            json['paddingStart'],
-            json['paddingEnd']
+            attributes['paddingStart'],
+            attributes['paddingEnd']
           )
 
           # Insets (alternative padding format)
-          classes << TailwindMapper.map_insets(json['insets']) if json['insets']
-          classes << TailwindMapper.map_inset_horizontal(json['insetHorizontal']) if json['insetHorizontal']
+          classes << TailwindMapper.map_insets(attributes['insets']) if attributes['insets']
+          classes << TailwindMapper.map_inset_horizontal(attributes['insetHorizontal']) if attributes['insetHorizontal']
 
           # Margin (array format)
-          classes << TailwindMapper.map_margin(json['margins'])
+          classes << TailwindMapper.map_margin(attributes['margins'])
 
           # Individual margins (topMargin, bottomMargin, leftMargin, rightMargin)
           classes << TailwindMapper.map_individual_margins(
-            json['topMargin'],
-            json['rightMargin'],
-            json['bottomMargin'],
-            json['leftMargin']
+            attributes['topMargin'],
+            attributes['rightMargin'],
+            attributes['bottomMargin'],
+            attributes['leftMargin']
           )
 
           # RTL-aware margins (startMargin, endMargin)
           classes << TailwindMapper.map_rtl_margins(
-            json['startMargin'],
-            json['endMargin']
+            attributes['startMargin'],
+            attributes['endMargin']
           )
 
           # Background - check for dynamic binding or gradient
-          if json['background']
-            if has_binding?(json['background'])
-              @dynamic_styles['backgroundColor'] = convert_binding(json['background'])
-            elsif json['background'].to_s.include?('gradient')
+          if attributes['background']
+            if has_binding?(attributes['background'])
+              @dynamic_styles['backgroundColor'] = convert_binding(attributes['background'])
+            elsif attributes['background'].to_s.include?('gradient')
               # CSS gradients must be inline styles
-              @dynamic_styles['background'] = "'#{json['background']}'"
+              @dynamic_styles['background'] = "'#{attributes['background']}'"
             else
-              classes << TailwindMapper.map_color(json['background'], 'bg')
+              classes << TailwindMapper.map_color(attributes['background'], 'bg')
             end
           end
 
           # Corner radius
-          classes << TailwindMapper.map_corner_radius(json['cornerRadius']) if json['cornerRadius']
+          classes << TailwindMapper.map_corner_radius(attributes['cornerRadius']) if attributes['cornerRadius']
 
           # Text color - check for dynamic binding
-          if json['fontColor']
-            if has_binding?(json['fontColor'])
-              @dynamic_styles['color'] = convert_binding(json['fontColor'])
+          if attributes['fontColor']
+            if has_binding?(attributes['fontColor'])
+              @dynamic_styles['color'] = convert_binding(attributes['fontColor'])
             else
-              classes << TailwindMapper.map_color(json['fontColor'], 'text')
+              classes << TailwindMapper.map_color(attributes['fontColor'], 'text')
             end
           end
 
@@ -185,10 +185,10 @@ module RjuiTools
           # preserved: weight-name `font` strings map to font-* classes,
           # numeric/static `fontSize` maps to text-* classes, and bindings
           # spill into `@dynamic_styles` as before.
-          font_family_attr   = json['fontFamily']
-          font_attr          = json['font']
-          font_size_attr     = json['fontSize']
-          font_weight_attr   = json['fontWeight']
+          font_family_attr   = attributes['fontFamily']
+          font_attr          = attributes['font']
+          font_size_attr     = attributes['fontSize']
+          font_weight_attr   = attributes['fontWeight']
 
           if font_family_attr
             # Pick the weight-bearing string for the FontSpec. fontWeight
@@ -241,44 +241,45 @@ module RjuiTools
           end
 
           # Text align
-          classes << TailwindMapper.map_text_align(json['textAlign'])
+          classes << TailwindMapper.map_text_align(attributes['textAlign'])
 
           # Orientation (flex)
-          classes << TailwindMapper.map_orientation(json['orientation'])
+          classes << TailwindMapper.map_orientation(attributes['orientation'])
 
           # Shadow
-          classes << TailwindMapper.map_shadow(json['shadow']) if json['shadow']
+          classes << TailwindMapper.map_shadow(attributes['shadow']) if attributes['shadow']
 
           # Border
-          if json['borderWidth'] || json['borderColor'] || json['borderStyle']
-            border_width_binding = json['borderWidth'] && has_binding?(json['borderWidth'])
-            border_color_binding = json['borderColor'] && has_binding?(json['borderColor'])
-            border_style_binding = json['borderStyle'] && has_binding?(json['borderStyle'])
+          if attributes['borderWidth'] || attributes['borderColor'] || attributes['borderStyle']
+            border_width_binding = attributes['borderWidth'] && has_binding?(attributes['borderWidth'])
+            border_color_binding = attributes['borderColor'] && has_binding?(attributes['borderColor'])
+            border_style_binding = attributes['borderStyle'] && has_binding?(attributes['borderStyle'])
 
             if border_width_binding || border_color_binding || border_style_binding
               # Dynamic border - use inline styles
               if border_width_binding
-                prop = convert_binding(json['borderWidth']).gsub(/[{}]/, '')
+                prop = convert_binding(attributes['borderWidth']).gsub(/[{}]/, '')
                 @dynamic_styles['borderWidth'] = "`${#{prop}}px`"
-              elsif json['borderWidth']
-                @dynamic_styles['borderWidth'] = "'#{json['borderWidth']}px'"
+              elsif attributes['borderWidth']
+                @dynamic_styles['borderWidth'] = "'#{attributes['borderWidth']}px'"
               end
               if border_color_binding
-                @dynamic_styles['borderColor'] = convert_binding(json['borderColor'])
-              elsif json['borderColor']
-                @dynamic_styles['borderColor'] = "'#{json['borderColor']}'"
+                @dynamic_styles['borderColor'] = convert_binding(attributes['borderColor'])
+              elsif attributes['borderColor']
+                @dynamic_styles['borderColor'] = "'#{attributes['borderColor']}'"
               end
               if border_style_binding
-                @dynamic_styles['borderStyle'] = convert_binding(json['borderStyle'])
+                @dynamic_styles['borderStyle'] = convert_binding(attributes['borderStyle'])
               end
-              classes << 'border-solid' unless json['borderStyle']
+              classes << 'border-solid' unless attributes['borderStyle']
             else
-              classes << TailwindMapper.map_border(json['borderWidth'], json['borderColor'], json['borderStyle'])
+              classes << TailwindMapper.map_border(attributes['borderWidth'], attributes['borderColor'], attributes['borderStyle'])
             end
           end
 
-          # Opacity/Alpha (alpha is the definitions alias of opacity)
-          opacity = attr_lookup('opacity', 'alpha')
+          # Opacity/Alpha (alpha is the definitions alias of opacity;
+          # alias + normalized handling is inside TypedAttributes)
+          opacity = attributes['opacity']
           if opacity
             if has_binding?(opacity.to_s)
               @dynamic_styles['opacity'] = convert_binding(opacity.to_s)
@@ -288,7 +289,7 @@ module RjuiTools
           end
 
           # Visibility (hidden attribute - static)
-          classes << TailwindMapper.map_visibility(json['hidden']) if json['hidden']
+          classes << TailwindMapper.map_visibility(attributes['hidden']) if attributes['hidden']
 
           # Visibility attribute (supports data binding)
           # If it's a binding, we'll handle it with conditional render/class
@@ -296,8 +297,8 @@ module RjuiTools
           #   "gone"      -> hidden    (display:none, removed from layout)
           #   "invisible" -> invisible (visibility:hidden, keeps its space)
           #   "visible"   -> no class
-          if json['visibility'] && !has_binding?(json['visibility'])
-            case json['visibility']
+          if attributes['visibility'] && !has_binding?(attributes['visibility'])
+            case attributes['visibility']
             when 'gone'
               classes << 'hidden'
             when 'invisible'
@@ -306,54 +307,54 @@ module RjuiTools
           end
 
           # Disabled state
-          if json['enabled'] == false
+          if attributes['enabled'] == false
             classes << 'opacity-50'
             classes << 'pointer-events-none'
           end
 
           # User interaction enabled
-          if json['userInteractionEnabled'] == false
+          if attributes['userInteractionEnabled'] == false
             classes << 'pointer-events-none'
           end
 
           # Clip to bounds
-          classes << TailwindMapper.map_overflow(json['clipToBounds']) if json['clipToBounds']
+          classes << TailwindMapper.map_overflow(attributes['clipToBounds']) if attributes['clipToBounds']
 
           # Z-index
-          classes << TailwindMapper.map_z_index(json['zIndex']) if json['zIndex']
+          classes << TailwindMapper.map_z_index(attributes['zIndex']) if attributes['zIndex']
 
           # Flex grow (weight)
-          classes << TailwindMapper.map_flex_grow(json['weight']) if json['weight']
+          classes << TailwindMapper.map_flex_grow(attributes['weight']) if attributes['weight']
 
           # Self-centering (for non-View elements like Image, Label)
           # centerHorizontal: center this element horizontally within parent
           # centerVertical: center this element vertically within parent
-          classes << 'mx-auto' if json['centerHorizontal']
-          classes << 'my-auto' if json['centerVertical']
-          if json['centerInParent']
+          classes << 'mx-auto' if attributes['centerHorizontal']
+          classes << 'my-auto' if attributes['centerVertical']
+          if attributes['centerInParent']
             classes << 'mx-auto'
             classes << 'my-auto'
           end
 
           # Gravity alignment - pass orientation for correct flexbox mapping
-          classes.concat(TailwindMapper.map_gravity(json['gravity'], json['orientation'])) if json['gravity']
+          classes.concat(TailwindMapper.map_gravity(attributes['gravity'], attributes['orientation'])) if attributes['gravity']
 
           # Direction (RTL/LTR)
-          classes << TailwindMapper.map_direction(json['direction']) if json['direction']
+          classes << TailwindMapper.map_direction(attributes['direction']) if attributes['direction']
 
           # Additional className from JSON
-          classes << json['className'] if json['className']
+          classes << attributes['className'] if attributes['className']
 
           # Offset (position adjustment) - handled as dynamic style
-          if json['offsetX'] || json['offsetY']
-            offset_x = json['offsetX'] || 0
-            offset_y = json['offsetY'] || 0
+          if attributes['offsetX'] || attributes['offsetY']
+            offset_x = attributes['offsetX'] || 0
+            offset_y = attributes['offsetY'] || 0
             @dynamic_styles['transform'] = "'translate(#{offset_x}px, #{offset_y}px)'"
           end
 
           # Tint color (accent color for interactive elements)
-          if json['tintColor']
-            @dynamic_styles['accentColor'] = "'#{json['tintColor']}'"
+          if attributes['tintColor']
+            @dynamic_styles['accentColor'] = "'#{attributes['tintColor']}'"
           end
 
           # Append responsive Tailwind classes (breakpoint-prefixed overrides)
@@ -478,7 +479,7 @@ module RjuiTools
           # `height: matchParent` / `width: matchParent` is a main-axis or
           # cross-axis instruction. Same pattern as `_overlay` injection in
           # ViewConverter.
-          parent_orientation = json['orientation']
+          parent_orientation = attributes['orientation']
 
           child_array.filter_map do |child|
             # Skip data-only elements (they define props, not rendered content)
@@ -696,7 +697,7 @@ module RjuiTools
         end
 
         def extract_id
-          json['id'] || json['propertyName']
+          attributes['id'] || attributes['propertyName']
         end
 
         # Build the DOM id="..." attribute. Converters should use this instead
@@ -725,7 +726,7 @@ module RjuiTools
         # emitted on the wrapper, so the wrapper must reflect the disabled
         # state for accessibility and element-level testability.
         def build_aria_disabled_attr
-          enabled = json['enabled']
+          enabled = attributes['enabled']
           return '' if enabled.nil?
 
           if has_binding?(enabled)
@@ -739,14 +740,14 @@ module RjuiTools
 
         # Build data-testid attribute for testing
         def build_testid_attr
-          test_id = json['testId']
+          test_id = attributes['testId']
           return '' unless test_id
           " data-testid=\"#{test_id}\""
         end
 
         # Build tag attribute (as data-tag for reference)
         def build_tag_attr
-          tag = json['tag']
+          tag = attributes['tag']
           return '' unless tag
           " data-tag=\"#{tag}\""
         end
@@ -758,8 +759,8 @@ module RjuiTools
         # - { "action": "link", "url": "..." } -> opens URL in new tab
         def build_onclick_attr
           # Check onClick (camelCase) first - binding format only
-          if json['onClick']
-            handler = json['onClick']
+          if attributes['onClick']
+            handler = attributes['onClick']
             if handler.is_a?(Hash)
               # Action object: { "action": "link", "url": "..." }
               if handler['action'] == 'link' && handler['url']
@@ -779,8 +780,8 @@ module RjuiTools
           end
 
           # Check onclick (lowercase) - selector format only
-          if json['onclick']
-            handler = json['onclick']
+          if attributes['onclick']
+            handler = attributes['onclick']
             if is_binding_format?(handler)
               # ERROR: onclick (lowercase) must use selector format
               return " {/* ERROR: onclick requires selector format (string) */}"
@@ -818,8 +819,8 @@ module RjuiTools
 
         # Determine absolute position classes based on align attributes for overlay children
         def overlay_position_classes
-          has_align = json['centerInParent'] || json['centerVertical'] || json['centerHorizontal'] ||
-                      json['alignTop'] || json['alignBottom'] || json['alignLeft'] || json['alignRight']
+          has_align = attributes['centerInParent'] || attributes['centerVertical'] || attributes['centerHorizontal'] ||
+                      attributes['alignTop'] || attributes['alignBottom'] || attributes['alignLeft'] || attributes['alignRight']
 
           unless has_align
             return 'inset-0'
@@ -827,24 +828,24 @@ module RjuiTools
 
           classes = []
 
-          if json['centerInParent']
+          if attributes['centerInParent']
             classes << 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2'
           else
             # Vertical
-            if json['centerVertical']
+            if attributes['centerVertical']
               classes << 'top-1/2 -translate-y-1/2'
-            elsif json['alignBottom']
+            elsif attributes['alignBottom']
               classes << 'bottom-0'
-            elsif json['alignTop']
+            elsif attributes['alignTop']
               classes << 'top-0'
             end
 
             # Horizontal
-            if json['centerHorizontal']
+            if attributes['centerHorizontal']
               classes << 'left-1/2 -translate-x-1/2'
-            elsif json['alignRight']
+            elsif attributes['alignRight']
               classes << 'right-0'
-            elsif json['alignLeft']
+            elsif attributes['alignLeft']
               classes << 'left-0'
             end
           end
@@ -874,7 +875,7 @@ module RjuiTools
         # Only supports simple property binding like "@{isVisible}" - no ternary operators
         # Returns: { type: :gone/:invisible, condition: "..." } or nil
         def build_visibility_info
-          visibility = json['visibility']
+          visibility = attributes['visibility']
           return nil unless visibility && has_binding?(visibility)
 
           binding_expr = visibility.gsub(/@\{|\}/, '')

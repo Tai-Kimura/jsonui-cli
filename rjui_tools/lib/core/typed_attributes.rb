@@ -95,6 +95,9 @@ module RjuiTools
       #   ([all] | [v, h] | [t, r, b, l]).
       # - tag: kind :number, but rjui emits it as a data-tag string and
       #   accepts string tags.
+      # - textAlign: enum casing differs per component (Label declares
+      #   'Left'..'right', Button only 'Left'/'Center'/'Right'), while
+      #   TailwindMapper.map_text_align is case-insensitive.
       #
       # (Candidates for a definitions/emitter revision — see the 06 plan
       # feedback.)
@@ -103,6 +106,7 @@ module RjuiTools
         minWidth maxWidth minHeight maxHeight
         padding
         tag
+        textAlign
       ].freeze
 
       def initialize(json, component_type: nil, normalized: false)
