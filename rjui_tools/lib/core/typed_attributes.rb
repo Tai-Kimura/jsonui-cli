@@ -104,6 +104,9 @@ module RjuiTools
       # - contentMode (Image/NetworkImage): converter accepts lowerCamel
       #   spellings ('aspectFit', 'scaleToFill', 'aspect_fit') that the
       #   enum doesn't declare.
+      # - resize (TextView): definitions declare a CSS-style enum
+      #   ('none'/'both'/...) but the web converter historically accepts
+      #   boolean truthiness; keep raw until the converter maps the enum.
       #
       # (Candidates for a definitions/emitter revision — see the 06 plan
       # feedback.)
@@ -115,6 +118,7 @@ module RjuiTools
         textAlign
         input
         contentMode
+        resize
       ].freeze
 
       def initialize(json, component_type: nil, normalized: false)
