@@ -13,6 +13,7 @@ from .commands.lint_generated_cmd import register_lint_generated_command, cmd_li
 from .commands.ls_cmd import register_ls_command, cmd_ls
 from .commands.sync_tool_cmd import register_sync_tool_command, cmd_sync_tool
 from .commands.hotload_cmd import register_hotload_command, cmd_hotload
+from .commands.conformance_cmd import register_conformance_command, cmd_conformance
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -53,6 +54,9 @@ def main(argv: list[str] | None = None) -> int:
     # jui hotload
     register_hotload_command(subparsers)
 
+    # jui conformance
+    register_conformance_command(subparsers)
+
     args = parser.parse_args(argv)
 
     if args.command is None:
@@ -72,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
         "ls": cmd_ls,
         "sync_tool": cmd_sync_tool,
         "hotload": cmd_hotload,
+        "conformance": cmd_conformance,
     }
 
     handler = command_map.get(args.command)
