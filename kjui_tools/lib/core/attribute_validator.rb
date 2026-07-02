@@ -49,8 +49,9 @@ module KjuiTools
 
         # Check each attribute in the merged component
         merged_component.each do |key, value|
-          # Skip internal/structural attributes (including _ prefixed internal flags)
-          next if key == 'type' || key == 'mode' || key.start_with?('_')
+          # Skip internal/structural attributes (including _ prefixed internal
+          # flags and the `$jui` normalization marker added by `jui build`)
+          next if key == 'type' || key == 'mode' || key == '$jui' || key.start_with?('_')
 
           # Skip child/children if all items are data-only definitions (no type)
           if (key == 'child' || key == 'children') && !valid_attrs.key?(key)
