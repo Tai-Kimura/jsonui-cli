@@ -16,7 +16,13 @@ from pathlib import Path
 from jui_cli.conformance.fixture_generator import generate_conformance
 from jui_cli.conformance.report import ReportError, generate_report
 
-from .test_conformance_generator import SYNTHETIC_DEFS, _write_defs
+try:
+    # pytest collects tests as a package (relative import works)…
+    from .test_conformance_generator import SYNTHETIC_DEFS, _write_defs
+except ImportError:
+    # …while CI runs `python -m unittest discover -s tests`, which loads
+    # test modules top-level with no parent package.
+    from test_conformance_generator import SYNTHETIC_DEFS, _write_defs
 
 
 def _manifest_hash(out_dir: Path) -> str:
