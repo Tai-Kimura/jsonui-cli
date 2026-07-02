@@ -63,6 +63,34 @@ def register_generate_command(subparsers: argparse._SubParsersAction) -> None:
         help="Emit JSON (used by MCP wrappers)",
     )
 
+    # jui g attr-bindings — typed attribute extraction codegen (SSoT pillar C)
+    ab_parser = gen_sub.add_parser(
+        "attr-bindings",
+        help=(
+            "Generate typed attribute extraction code (Swift/Kotlin/Ruby) "
+            "from shared/core/attribute_definitions.json"
+        ),
+    )
+    ab_parser.add_argument(
+        "--lang",
+        choices=("swift", "kotlin", "ruby", "all"),
+        default="all",
+        help="Target language (default: all)",
+    )
+    ab_parser.add_argument(
+        "--out",
+        metavar="DIR",
+        help=(
+            "Output directory (default: <tool repo>/build/attr_codegen/<lang>). "
+            "With --lang all, per-language subdirectories are created under DIR."
+        ),
+    )
+    ab_parser.add_argument(
+        "--definitions",
+        metavar="PATH",
+        help="Override the attribute definitions file (default: bundled SSoT)",
+    )
+
 
 def cmd_generate(args: argparse.Namespace) -> int:
     """Execute jui generate."""
@@ -76,9 +104,97 @@ def cmd_generate(args: argparse.Namespace) -> int:
         return _cmd_generate_converter(args)
     elif gen_type == "api":
         return _cmd_generate_api(args)
+    elif gen_type == "attr-bindings":
+        return _cmd_generate_attr_bindings(args)
     else:
-        print("Usage: jui generate <project|screen|converter|api> [options]")
+        print("Usage: jui generate <project|screen|converter|api|attr-bindings> [options]")
         return 1
+
+
+def _cmd_generate_attr_bindings(args: argparse.Namespace) -> int:
+    """Execute jui g attr-bindings — typed attribute extraction codegen.
+
+    Emission is deterministic (sorted components/attributes, no
+    timestamps), so re-running always produces byte-identical output —
+    the results can sit under `jui verify`-style diff checks. The default
+    output stays inside this repo (build/attr_codegen/<lang>); writing
+    into external library repos requires an explicit ``--out``
+    (07/08/09 sync the build output instead of cross-repo writes).
+    """
+    import json
+    import shutil
+    from pathlib import Path
+
+    from ..generators.attr_codegen import model as attr_model
+    from ..generators.attr_codegen import (
+        kotlin_emitter,
+        ruby_emitter,
+        swift_emitter,
+    )
+
+    definitions = (
+        Path(args.definitions).resolve()
+        if args.definitions
+        else attr_model.default_definitions_path()
+    )
+    if not definitions.exists():
+        print(f"ERROR: attribute definitions not found: {definitions}")
+        return 1
+
+    model = attr_model.load_model(definitions)
+
+    emitters = {
+        "swift": swift_emitter.emit,
+        "kotlin": kotlin_emitter.emit,
+        "ruby": ruby_emitter.emit,
+    }
+    langs = list(emitters) if args.lang == "all" else [args.lang]
+
+    # Tool repo root (build/ output default) — generate_cmd.py lives at
+    # jui_tools/jui_cli/commands/, so repo root is three levels up.
+    repo_root = Path(__file__).resolve().parents[3]
+
+    skipped = attr_model.skipped_payload(model)
+    common_count = len(model.common.attrs)
+    component_count = len(model.components)
+    component_attr_count = sum(len(c.attrs) for c in model.components)
+
+    for lang in langs:
+        if args.out:
+            out_dir = Path(args.out)
+            if args.lang == "all":
+                out_dir = out_dir / lang
+        else:
+            out_dir = repo_root / "build" / "attr_codegen" / lang
+            # Default dir is owned by this generator — wipe stale output so
+            # renamed/removed components never leave orphan files behind.
+            if out_dir.exists():
+                shutil.rmtree(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        files = emitters[lang](model)
+        for rel_path, content in files.items():
+            target = out_dir / rel_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+
+        skip_path = out_dir / "skipped_attributes.json"
+        with open(skip_path, "w", encoding="utf-8") as f:
+            json.dump(skipped, f, indent=2, ensure_ascii=False, sort_keys=False)
+            f.write("\n")
+
+        print(f"[{lang}] wrote {len(files) + 1} file(s) → {out_dir}")
+
+    print(
+        f"\nComponents: {component_count} (+ common), attributes: "
+        f"{common_count} common + {component_attr_count} component-level, "
+        f"skipped: {len(model.skipped)}"
+    )
+    if model.skipped:
+        print("Skipped (see skipped_attributes.json):")
+        for s in model.skipped:
+            print(f"  - {s.component}.{s.name}: {s.reason}")
+    return 0
 
 
 def _cmd_generate_api(args: argparse.Namespace) -> int:
