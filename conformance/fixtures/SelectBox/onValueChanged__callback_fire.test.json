@@ -1,0 +1,44 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/onValueChanged__callback_fire.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.onValueChanged (callback_fire)",
+    "description": "Interactive conformance fixture for 'onValueChanged' on SelectBox (section: SelectBox, case: callback_fire). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "interactive",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "onValueChanged__callback_fire",
+      "description": "Interactive conformance fixture for 'onValueChanged' on SelectBox (section: SelectBox, case: callback_fire). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "mirror",
+          "equals": "ready"
+        },
+        {
+          "action": "selectOption",
+          "id": "target",
+          "label": "Two"
+        },
+        {
+          "assert": "text",
+          "id": "mirror",
+          "equals": "fired"
+        }
+      ]
+    }
+  ]
+}

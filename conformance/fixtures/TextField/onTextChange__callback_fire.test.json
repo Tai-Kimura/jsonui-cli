@@ -1,0 +1,44 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/onTextChange__callback_fire.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.onTextChange (callback_fire)",
+    "description": "Interactive conformance fixture for 'onTextChange' on TextField (section: TextField, case: callback_fire). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "interactive",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "onTextChange__callback_fire",
+      "description": "Interactive conformance fixture for 'onTextChange' on TextField (section: TextField, case: callback_fire). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "mirror",
+          "equals": "ready"
+        },
+        {
+          "action": "input",
+          "id": "target",
+          "value": "Typed Text"
+        },
+        {
+          "assert": "text",
+          "id": "mirror",
+          "equals": "fired"
+        }
+      ]
+    }
+  ]
+}

@@ -64,6 +64,33 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         help="Report output path (default: <dir>/REPORT.md)",
     )
 
+    baseline = sub.add_parser(
+        "baseline",
+        help="Screenshot baseline management (perceptual-hash manifests)",
+    )
+    baseline_sub = baseline.add_subparsers(dest="baseline_action")
+    baseline_update = baseline_sub.add_parser(
+        "update",
+        help="Hash artifacts/<platform>/*.png into baselines/<platform>.hashes.json",
+    )
+    baseline_update.add_argument(
+        "--platform",
+        required=True,
+        choices=["ios", "android", "web"],
+        help="Platform whose artifacts to baseline",
+    )
+    baseline_update.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory (default: {_DEFAULT_OUT})",
+    )
+    baseline_update.add_argument(
+        "--artifacts",
+        default=None,
+        help="Artifacts directory (default: <dir>/artifacts/<platform>)",
+    )
+
 
 def cmd_conformance(args: argparse.Namespace) -> int:
     """Dispatch to the right ``conformance`` subcommand."""
@@ -72,7 +99,9 @@ def cmd_conformance(args: argparse.Namespace) -> int:
         return _cmd_generate(args)
     if target == "report":
         return _cmd_report(args)
-    print("Usage: jui conformance <generate|report> [options]")
+    if target == "baseline":
+        return _cmd_baseline(args)
+    print("Usage: jui conformance <generate|report|baseline> [options]")
     return 1
 
 
@@ -91,10 +120,38 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     print(f"conformance fixtures written to {summary.out_dir}")
     print(
         f"  fixtures: {summary.fixture_count} "
-        f"(assertable: {summary.assertable_count}, visual: {summary.visual_count})"
+        f"(assertable: {summary.assertable_count}, visual: {summary.visual_count}, "
+        f"interactive: {summary.interactive_count})"
     )
     print(f"  skipped attributes (with reason): {summary.skipped_count}")
+    if summary.promoted:
+        promoted = ", ".join(f"{k}: {v}" for k, v in sorted(summary.promoted.items()))
+        print(f"  promoted out of skip reasons: {promoted}")
     print(f"  files written: {summary.files_written} (incl. manifest.json)")
+    return 0
+
+
+def _cmd_baseline(args: argparse.Namespace) -> int:
+    from ..conformance.baseline import BaselineError, update_baseline
+
+    action = getattr(args, "baseline_action", None)
+    if action != "update":
+        print("Usage: jui conformance baseline update --platform <ios|android|web> [options]")
+        return 1
+
+    conformance_dir = (
+        Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    )
+    artifacts_dir = Path(args.artifacts) if args.artifacts else None
+
+    try:
+        summary = update_baseline(conformance_dir, args.platform, artifacts_dir=artifacts_dir)
+    except BaselineError as e:
+        print(f"ERROR: {e}")
+        return 1
+
+    print(f"baseline written to {summary.out_path}")
+    print(f"  platform: {summary.platform}, screenshots hashed: {summary.hashed}")
     return 0
 
 
@@ -116,6 +173,12 @@ def _cmd_report(args: argparse.Namespace) -> int:
     print(f"report written to {summary.out_path}")
     print(f"  platforms: {', '.join(summary.platforms) if summary.platforms else '(none)'}")
     print(f"  cross-platform mismatches: {summary.mismatch_count}")
+    for platform, count in summary.visual_regressions.items():
+        no_baseline = summary.no_baseline.get(platform, 0)
+        print(
+            f"  {platform}: visual regressions: {count}"
+            + (f", screenshots without baseline: {no_baseline}" if no_baseline else "")
+        )
     if summary.stale_platforms:
         print(f"  STALE results: {', '.join(summary.stale_platforms)}")
     for platform, ids in summary.unknown_ids.items():

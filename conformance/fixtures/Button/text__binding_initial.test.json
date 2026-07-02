@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/text__binding_initial.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.text (binding_initial)",
+    "description": "Interactive conformance fixture for 'text' on Button (section: Button, case: binding_initial). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "interactive",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "text__binding_initial",
+      "description": "Interactive conformance fixture for 'text' on Button (section: Button, case: binding_initial). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "target",
+          "equals": "Bound Initial"
+        }
+      ]
+    }
+  ]
+}
