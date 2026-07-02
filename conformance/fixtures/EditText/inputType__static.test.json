@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/EditText/inputType__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance EditText.inputType (static)",
+    "description": "Conformance fixture for 'inputType' on EditText (section: EditText, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "EditText"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "inputType__static",
+      "description": "Conformance fixture for 'inputType' on EditText (section: EditText, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "EditText_inputType__static"
+        }
+      ]
+    }
+  ]
+}

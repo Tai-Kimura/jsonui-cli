@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Progress/progressTintColor__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Progress.progressTintColor (static)",
+    "description": "Conformance fixture for 'progressTintColor' on Progress (section: Progress, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Progress"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "progressTintColor__static",
+      "description": "Conformance fixture for 'progressTintColor' on Progress (section: Progress, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Progress_progressTintColor__static"
+        }
+      ]
+    }
+  ]
+}

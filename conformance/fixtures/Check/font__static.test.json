@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Check/font__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Check.font (static)",
+    "description": "Conformance fixture for 'font' on Check (section: Check, class: visual). Value under test: \"bold\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Check"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "font__static",
+      "description": "Conformance fixture for 'font' on Check (section: Check, class: visual). Value under test: \"bold\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Check_font__static"
+        }
+      ]
+    }
+  ]
+}

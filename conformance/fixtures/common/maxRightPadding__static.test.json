@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/maxRightPadding__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.maxRightPadding (static)",
+    "description": "Conformance fixture for 'maxRightPadding' on View (section: common, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "maxRightPadding__static",
+      "description": "Conformance fixture for 'maxRightPadding' on View (section: common, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_maxRightPadding__static"
+        }
+      ]
+    }
+  ]
+}

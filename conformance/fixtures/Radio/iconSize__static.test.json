@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/iconSize__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.iconSize (static)",
+    "description": "Conformance fixture for 'iconSize' on Radio (section: Radio, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "iconSize__static",
+      "description": "Conformance fixture for 'iconSize' on Radio (section: Radio, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_iconSize__static"
+        }
+      ]
+    }
+  ]
+}

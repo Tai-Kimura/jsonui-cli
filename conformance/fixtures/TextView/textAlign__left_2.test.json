@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/textAlign__left_2.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.textAlign (left_2)",
+    "description": "Conformance fixture for 'textAlign' on TextView (section: TextView, class: visual). Value under test: \"left\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "textAlign__left_2",
+      "description": "Conformance fixture for 'textAlign' on TextView (section: TextView, class: visual). Value under test: \"left\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_textAlign__left_2"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Slider/maximum__alias_maximumValue.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Slider.maximum (alias_maximumValue)",
+    "description": "Conformance fixture for 'maximum' on Slider (section: Slider, class: visual). Value under test: 10.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Slider"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "maximum__alias_maximumValue",
+      "description": "Conformance fixture for 'maximum' on Slider (section: Slider, class: visual). Value under test: 10.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Slider_maximum__alias_maximumValue"
+        }
+      ]
+    }
+  ]
+}

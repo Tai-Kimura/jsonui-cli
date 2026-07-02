@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/returnKeyType__continue.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.returnKeyType (continue)",
+    "description": "Conformance fixture for 'returnKeyType' on TextView (section: TextView, class: visual). Value under test: \"Continue\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "returnKeyType__continue",
+      "description": "Conformance fixture for 'returnKeyType' on TextView (section: TextView, class: visual). Value under test: \"Continue\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_returnKeyType__continue"
+        }
+      ]
+    }
+  ]
+}

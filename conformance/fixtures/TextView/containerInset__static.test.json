@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/containerInset__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.containerInset (static)",
+    "description": "Conformance fixture for 'containerInset' on TextView (section: TextView, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "containerInset__static",
+      "description": "Conformance fixture for 'containerInset' on TextView (section: TextView, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_containerInset__static"
+        }
+      ]
+    }
+  ]
+}

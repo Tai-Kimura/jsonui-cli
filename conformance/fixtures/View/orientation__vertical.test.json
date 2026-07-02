@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/orientation__vertical.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.orientation (vertical)",
+    "description": "Conformance fixture for 'orientation' on View (section: View, class: visual). Value under test: \"vertical\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "orientation__vertical",
+      "description": "Conformance fixture for 'orientation' on View (section: View, class: visual). Value under test: \"vertical\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_orientation__vertical"
+        }
+      ]
+    }
+  ]
+}

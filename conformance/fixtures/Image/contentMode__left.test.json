@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Image/contentMode__left.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Image.contentMode (left)",
+    "description": "Conformance fixture for 'contentMode' on Image (section: Image, class: visual). Value under test: \"left\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Image"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "contentMode__left",
+      "description": "Conformance fixture for 'contentMode' on Image (section: Image, class: visual). Value under test: \"left\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Image_contentMode__left"
+        }
+      ]
+    }
+  ]
+}

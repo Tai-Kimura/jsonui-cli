@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/visibility__gone.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.visibility (gone)",
+    "description": "Conformance fixture for 'visibility' on View (section: common, class: assertable). Value under test: \"gone\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "visibility__gone",
+      "description": "Conformance fixture for 'visibility' on View (section: common, class: assertable). Value under test: \"gone\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "notVisible",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

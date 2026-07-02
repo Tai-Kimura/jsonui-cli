@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/maxLength__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.maxLength (static)",
+    "description": "Conformance fixture for 'maxLength' on TextView (section: TextView, class: visual). Value under test: 5.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "maxLength__static",
+      "description": "Conformance fixture for 'maxLength' on TextView (section: TextView, class: visual). Value under test: 5.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_maxLength__static"
+        }
+      ]
+    }
+  ]
+}

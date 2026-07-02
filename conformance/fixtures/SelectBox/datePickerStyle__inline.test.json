@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/datePickerStyle__inline.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.datePickerStyle (inline)",
+    "description": "Conformance fixture for 'datePickerStyle' on SelectBox (section: SelectBox, class: visual). Value under test: \"inline\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "datePickerStyle__inline",
+      "description": "Conformance fixture for 'datePickerStyle' on SelectBox (section: SelectBox, class: visual). Value under test: \"inline\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_datePickerStyle__inline"
+        }
+      ]
+    }
+  ]
+}

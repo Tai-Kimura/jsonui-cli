@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/minTopPadding__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.minTopPadding (static)",
+    "description": "Conformance fixture for 'minTopPadding' on View (section: common, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "minTopPadding__static",
+      "description": "Conformance fixture for 'minTopPadding' on View (section: common, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_minTopPadding__static"
+        }
+      ]
+    }
+  ]
+}

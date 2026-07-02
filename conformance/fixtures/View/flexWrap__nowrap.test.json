@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/flexWrap__nowrap.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.flexWrap (nowrap)",
+    "description": "Conformance fixture for 'flexWrap' on View (section: View, class: visual). Value under test: \"nowrap\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "flexWrap__nowrap",
+      "description": "Conformance fixture for 'flexWrap' on View (section: View, class: visual). Value under test: \"nowrap\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_flexWrap__nowrap"
+        }
+      ]
+    }
+  ]
+}

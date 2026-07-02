@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/IconLabel/fontSize__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance IconLabel.fontSize (static)",
+    "description": "Conformance fixture for 'fontSize' on IconLabel (section: IconLabel, class: visual). Value under test: 20.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "IconLabel"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontSize__static",
+      "description": "Conformance fixture for 'fontSize' on IconLabel (section: IconLabel, class: visual). Value under test: 20.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "IconLabel_fontSize__static"
+        }
+      ]
+    }
+  ]
+}

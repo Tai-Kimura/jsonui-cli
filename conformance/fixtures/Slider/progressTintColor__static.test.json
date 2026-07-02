@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Slider/progressTintColor__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Slider.progressTintColor (static)",
+    "description": "Conformance fixture for 'progressTintColor' on Slider (section: Slider, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Slider"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "progressTintColor__static",
+      "description": "Conformance fixture for 'progressTintColor' on Slider (section: Slider, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Slider_progressTintColor__static"
+        }
+      ]
+    }
+  ]
+}

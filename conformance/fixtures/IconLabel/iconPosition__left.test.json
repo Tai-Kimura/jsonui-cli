@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/IconLabel/iconPosition__left.layout.json"
+  },
+  "metadata": {
+    "name": "conformance IconLabel.iconPosition (left)",
+    "description": "Conformance fixture for 'iconPosition' on IconLabel (section: IconLabel, class: visual). Value under test: \"Left\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "IconLabel"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "iconPosition__left",
+      "description": "Conformance fixture for 'iconPosition' on IconLabel (section: IconLabel, class: visual). Value under test: \"Left\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "IconLabel_iconPosition__left"
+        }
+      ]
+    }
+  ]
+}

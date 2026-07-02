@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/IconLabel/font__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance IconLabel.font (static)",
+    "description": "Conformance fixture for 'font' on IconLabel (section: IconLabel, class: visual). Value under test: \"bold\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "IconLabel"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "font__static",
+      "description": "Conformance fixture for 'font' on IconLabel (section: IconLabel, class: visual). Value under test: \"bold\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "IconLabel_font__static"
+        }
+      ]
+    }
+  ]
+}

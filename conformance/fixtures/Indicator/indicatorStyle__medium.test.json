@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Indicator/indicatorStyle__medium.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Indicator.indicatorStyle (medium)",
+    "description": "Conformance fixture for 'indicatorStyle' on Indicator (section: Indicator, class: visual). Value under test: \"medium\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Indicator"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "indicatorStyle__medium",
+      "description": "Conformance fixture for 'indicatorStyle' on Indicator (section: Indicator, class: visual). Value under test: \"medium\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Indicator_indicatorStyle__medium"
+        }
+      ]
+    }
+  ]
+}

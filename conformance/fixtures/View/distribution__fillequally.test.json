@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/distribution__fillequally.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.distribution (fillequally)",
+    "description": "Conformance fixture for 'distribution' on View (section: View, class: visual). Value under test: \"fillEqually\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "distribution__fillequally",
+      "description": "Conformance fixture for 'distribution' on View (section: View, class: visual). Value under test: \"fillEqually\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_distribution__fillequally"
+        }
+      ]
+    }
+  ]
+}

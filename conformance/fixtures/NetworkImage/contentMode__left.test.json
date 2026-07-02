@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/NetworkImage/contentMode__left.layout.json"
+  },
+  "metadata": {
+    "name": "conformance NetworkImage.contentMode (left)",
+    "description": "Conformance fixture for 'contentMode' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"left\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "NetworkImage"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "contentMode__left",
+      "description": "Conformance fixture for 'contentMode' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"left\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "NetworkImage_contentMode__left"
+        }
+      ]
+    }
+  ]
+}

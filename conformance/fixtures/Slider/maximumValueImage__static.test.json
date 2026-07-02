@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Slider/maximumValueImage__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Slider.maximumValueImage (static)",
+    "description": "Conformance fixture for 'maximumValueImage' on Slider (section: Slider, class: visual). Value under test: \"conformance_sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Slider"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "maximumValueImage__static",
+      "description": "Conformance fixture for 'maximumValueImage' on Slider (section: Slider, class: visual). Value under test: \"conformance_sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Slider_maximumValueImage__static"
+        }
+      ]
+    }
+  ]
+}

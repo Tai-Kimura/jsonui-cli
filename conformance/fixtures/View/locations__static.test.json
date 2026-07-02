@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/locations__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.locations (static)",
+    "description": "Conformance fixture for 'locations' on View (section: View, class: visual). Value under test: [0.0, 1.0].",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "locations__static",
+      "description": "Conformance fixture for 'locations' on View (section: View, class: visual). Value under test: [0.0, 1.0].",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_locations__static"
+        }
+      ]
+    }
+  ]
+}

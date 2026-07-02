@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/fontFamily__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.fontFamily (static)",
+    "description": "Conformance fixture for 'fontFamily' on TextView (section: TextView, class: visual). Value under test: \"sans-serif\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontFamily__static",
+      "description": "Conformance fixture for 'fontFamily' on TextView (section: TextView, class: visual). Value under test: \"sans-serif\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_fontFamily__static"
+        }
+      ]
+    }
+  ]
+}

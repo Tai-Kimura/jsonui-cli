@@ -1,0 +1,36 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Toggle/enabled__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Toggle.enabled (false)",
+    "description": "Conformance fixture for 'enabled' on Toggle (section: Toggle, class: assertable). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Toggle"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "enabled__false",
+      "description": "Conformance fixture for 'enabled' on Toggle (section: Toggle, class: assertable). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        },
+        {
+          "assert": "disabled",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/lineHeightMultiple__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.lineHeightMultiple (static)",
+    "description": "Conformance fixture for 'lineHeightMultiple' on Label (section: Label, class: visual). Value under test: 1.5.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "lineHeightMultiple__static",
+      "description": "Conformance fixture for 'lineHeightMultiple' on Label (section: Label, class: visual). Value under test: 1.5.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_lineHeightMultiple__static"
+        }
+      ]
+    }
+  ]
+}

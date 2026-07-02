@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/indexAbove__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.indexAbove (static)",
+    "description": "Conformance fixture for 'indexAbove' on View (section: common, class: visual). Value under test: \"anchor\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "indexAbove__static",
+      "description": "Conformance fixture for 'indexAbove' on View (section: common, class: visual). Value under test: \"anchor\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_indexAbove__static"
+        }
+      ]
+    }
+  ]
+}

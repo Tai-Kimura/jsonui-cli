@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/lineBreakMode__head.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.lineBreakMode (head)",
+    "description": "Conformance fixture for 'lineBreakMode' on Label (section: Label, class: visual). Value under test: \"Head\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "lineBreakMode__head",
+      "description": "Conformance fixture for 'lineBreakMode' on Label (section: Label, class: visual). Value under test: \"Head\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_lineBreakMode__head"
+        }
+      ]
+    }
+  ]
+}

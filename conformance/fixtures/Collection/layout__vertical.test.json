@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/layout__vertical.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.layout (vertical)",
+    "description": "Conformance fixture for 'layout' on Collection (section: Collection, class: visual). Value under test: \"vertical\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "layout__vertical",
+      "description": "Conformance fixture for 'layout' on Collection (section: Collection, class: visual). Value under test: \"vertical\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_layout__vertical"
+        }
+      ]
+    }
+  ]
+}

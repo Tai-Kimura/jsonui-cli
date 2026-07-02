@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/lazy__none.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.lazy (none)",
+    "description": "Conformance fixture for 'lazy' on Collection (section: Collection, class: visual). Value under test: \"none\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "lazy__none",
+      "description": "Conformance fixture for 'lazy' on Collection (section: Collection, class: visual). Value under test: \"none\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_lazy__none"
+        }
+      ]
+    }
+  ]
+}

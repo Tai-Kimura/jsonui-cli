@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/highlightColor__alias_hilightColor.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.highlightColor (alias_hilightColor)",
+    "description": "Conformance fixture for 'highlightColor' on Button (section: Button, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "highlightColor__alias_hilightColor",
+      "description": "Conformance fixture for 'highlightColor' on Button (section: Button, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_highlightColor__alias_hilightColor"
+        }
+      ]
+    }
+  ]
+}

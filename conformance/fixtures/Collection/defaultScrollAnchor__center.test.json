@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/defaultScrollAnchor__center.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.defaultScrollAnchor (center)",
+    "description": "Conformance fixture for 'defaultScrollAnchor' on Collection (section: Collection, class: visual). Value under test: \"center\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "defaultScrollAnchor__center",
+      "description": "Conformance fixture for 'defaultScrollAnchor' on Collection (section: Collection, class: visual). Value under test: \"center\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_defaultScrollAnchor__center"
+        }
+      ]
+    }
+  ]
+}

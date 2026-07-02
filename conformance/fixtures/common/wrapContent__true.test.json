@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/wrapContent__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.wrapContent (true)",
+    "description": "Conformance fixture for 'wrapContent' on View (section: common, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "wrapContent__true",
+      "description": "Conformance fixture for 'wrapContent' on View (section: common, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_wrapContent__true"
+        }
+      ]
+    }
+  ]
+}

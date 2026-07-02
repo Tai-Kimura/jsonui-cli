@@ -1,0 +1,37 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/IconLabel/text__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance IconLabel.text (static)",
+    "description": "Conformance fixture for 'text' on IconLabel (section: IconLabel, class: assertable). Value under test: \"Conformance Text\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "IconLabel"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "text__static",
+      "description": "Conformance fixture for 'text' on IconLabel (section: IconLabel, class: assertable). Value under test: \"Conformance Text\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        },
+        {
+          "assert": "text",
+          "id": "target",
+          "equals": "Conformance Text"
+        }
+      ]
+    }
+  ]
+}

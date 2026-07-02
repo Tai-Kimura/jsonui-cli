@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/minHeightWeight__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.minHeightWeight (static)",
+    "description": "Conformance fixture for 'minHeightWeight' on View (section: common, class: visual). Value under test: 0.25.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "minHeightWeight__static",
+      "description": "Conformance fixture for 'minHeightWeight' on View (section: common, class: visual). Value under test: 0.25.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_minHeightWeight__static"
+        }
+      ]
+    }
+  ]
+}

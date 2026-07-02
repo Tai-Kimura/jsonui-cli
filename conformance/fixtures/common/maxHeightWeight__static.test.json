@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/maxHeightWeight__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.maxHeightWeight (static)",
+    "description": "Conformance fixture for 'maxHeightWeight' on View (section: common, class: visual). Value under test: 0.75.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "maxHeightWeight__static",
+      "description": "Conformance fixture for 'maxHeightWeight' on View (section: common, class: visual). Value under test: 0.75.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_maxHeightWeight__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/hintLineHeightMultiple__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.hintLineHeightMultiple (static)",
+    "description": "Conformance fixture for 'hintLineHeightMultiple' on TextView (section: TextView, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "hintLineHeightMultiple__static",
+      "description": "Conformance fixture for 'hintLineHeightMultiple' on TextView (section: TextView, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_hintLineHeightMultiple__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/flexWrap__wrap-reverse.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.flexWrap (wrap-reverse)",
+    "description": "Conformance fixture for 'flexWrap' on View (section: View, class: visual). Value under test: \"wrap-reverse\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "flexWrap__wrap-reverse",
+      "description": "Conformance fixture for 'flexWrap' on View (section: View, class: visual). Value under test: \"wrap-reverse\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_flexWrap__wrap-reverse"
+        }
+      ]
+    }
+  ]
+}

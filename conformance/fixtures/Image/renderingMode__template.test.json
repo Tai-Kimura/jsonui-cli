@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Image/renderingMode__template.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Image.renderingMode (template)",
+    "description": "Conformance fixture for 'renderingMode' on Image (section: Image, class: visual). Value under test: \"template\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Image"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "renderingMode__template",
+      "description": "Conformance fixture for 'renderingMode' on Image (section: Image, class: visual). Value under test: \"template\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Image_renderingMode__template"
+        }
+      ]
+    }
+  ]
+}

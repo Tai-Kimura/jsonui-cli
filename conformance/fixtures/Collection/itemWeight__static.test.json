@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/itemWeight__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.itemWeight (static)",
+    "description": "Conformance fixture for 'itemWeight' on Collection (section: Collection, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "itemWeight__static",
+      "description": "Conformance fixture for 'itemWeight' on Collection (section: Collection, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_itemWeight__static"
+        }
+      ]
+    }
+  ]
+}

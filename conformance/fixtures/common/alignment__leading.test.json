@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/alignment__leading.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.alignment (leading)",
+    "description": "Conformance fixture for 'alignment' on View (section: common, class: visual). Value under test: \"leading\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "alignment__leading",
+      "description": "Conformance fixture for 'alignment' on View (section: common, class: visual). Value under test: \"leading\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_alignment__leading"
+        }
+      ]
+    }
+  ]
+}

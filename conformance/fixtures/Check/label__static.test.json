@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Check/label__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Check.label (static)",
+    "description": "Conformance fixture for 'label' on Check (section: Check, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Check"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "label__static",
+      "description": "Conformance fixture for 'label' on Check (section: Check, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Check_label__static"
+        }
+      ]
+    }
+  ]
+}

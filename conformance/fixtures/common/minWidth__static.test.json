@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/minWidth__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.minWidth (static)",
+    "description": "Conformance fixture for 'minWidth' on View (section: common, class: visual). Value under test: 50.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "minWidth__static",
+      "description": "Conformance fixture for 'minWidth' on View (section: common, class: visual). Value under test: 50.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_minWidth__static"
+        }
+      ]
+    }
+  ]
+}

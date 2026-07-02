@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/NetworkImage/hint__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance NetworkImage.hint (static)",
+    "description": "Conformance fixture for 'hint' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"Conformance Hint\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "NetworkImage"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "hint__static",
+      "description": "Conformance fixture for 'hint' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"Conformance Hint\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "NetworkImage_hint__static"
+        }
+      ]
+    }
+  ]
+}

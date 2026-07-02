@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/input__email.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.input (email)",
+    "description": "Conformance fixture for 'input' on TextView (section: TextView, class: visual). Value under test: \"email\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "input__email",
+      "description": "Conformance fixture for 'input' on TextView (section: TextView, class: visual). Value under test: \"email\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_input__email"
+        }
+      ]
+    }
+  ]
+}

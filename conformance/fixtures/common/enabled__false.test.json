@@ -1,0 +1,36 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/enabled__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.enabled (false)",
+    "description": "Conformance fixture for 'enabled' on Button (section: common, class: assertable). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "enabled__false",
+      "description": "Conformance fixture for 'enabled' on Button (section: common, class: assertable). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        },
+        {
+          "assert": "disabled",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

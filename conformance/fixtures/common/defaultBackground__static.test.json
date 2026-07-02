@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/defaultBackground__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.defaultBackground (static)",
+    "description": "Conformance fixture for 'defaultBackground' on Button (section: common, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "defaultBackground__static",
+      "description": "Conformance fixture for 'defaultBackground' on Button (section: common, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_defaultBackground__static"
+        }
+      ]
+    }
+  ]
+}

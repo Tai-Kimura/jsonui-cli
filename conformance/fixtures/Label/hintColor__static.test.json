@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/hintColor__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.hintColor (static)",
+    "description": "Conformance fixture for 'hintColor' on Label (section: Label, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "hintColor__static",
+      "description": "Conformance fixture for 'hintColor' on Label (section: Label, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_hintColor__static"
+        }
+      ]
+    }
+  ]
+}

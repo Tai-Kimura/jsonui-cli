@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/IconLabel/iconMargin__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance IconLabel.iconMargin (static)",
+    "description": "Conformance fixture for 'iconMargin' on IconLabel (section: IconLabel, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "IconLabel"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "iconMargin__static",
+      "description": "Conformance fixture for 'iconMargin' on IconLabel (section: IconLabel, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "IconLabel_iconMargin__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/alignTopView__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.alignTopView (static)",
+    "description": "Conformance fixture for 'alignTopView' on View (section: common, class: visual). Value under test: \"anchor\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "alignTopView__static",
+      "description": "Conformance fixture for 'alignTopView' on View (section: common, class: visual). Value under test: \"anchor\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_alignTopView__static"
+        }
+      ]
+    }
+  ]
+}

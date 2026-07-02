@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/alignBottomView__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.alignBottomView (static)",
+    "description": "Conformance fixture for 'alignBottomView' on View (section: common, class: visual). Value under test: \"anchor\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "alignBottomView__static",
+      "description": "Conformance fixture for 'alignBottomView' on View (section: common, class: visual). Value under test: \"anchor\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_alignBottomView__static"
+        }
+      ]
+    }
+  ]
+}

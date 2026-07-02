@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/direction__righttoleft.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.direction (righttoleft)",
+    "description": "Conformance fixture for 'direction' on View (section: View, class: visual). Value under test: \"rightToLeft\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "direction__righttoleft",
+      "description": "Conformance fixture for 'direction' on View (section: View, class: visual). Value under test: \"rightToLeft\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_direction__righttoleft"
+        }
+      ]
+    }
+  ]
+}

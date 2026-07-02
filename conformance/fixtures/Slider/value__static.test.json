@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Slider/value__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Slider.value (static)",
+    "description": "Conformance fixture for 'value' on Slider (section: Slider, class: visual). Value under test: 0.5.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Slider"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "value__static",
+      "description": "Conformance fixture for 'value' on Slider (section: Slider, class: visual). Value under test: 0.5.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Slider_value__static"
+        }
+      ]
+    }
+  ]
+}

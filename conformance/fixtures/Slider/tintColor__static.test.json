@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Slider/tintColor__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Slider.tintColor (static)",
+    "description": "Conformance fixture for 'tintColor' on Slider (section: Slider, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Slider"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "tintColor__static",
+      "description": "Conformance fixture for 'tintColor' on Slider (section: Slider, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Slider_tintColor__static"
+        }
+      ]
+    }
+  ]
+}

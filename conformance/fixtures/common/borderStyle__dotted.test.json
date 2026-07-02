@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/borderStyle__dotted.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.borderStyle (dotted)",
+    "description": "Conformance fixture for 'borderStyle' on View (section: common, class: visual). Value under test: \"dotted\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "borderStyle__dotted",
+      "description": "Conformance fixture for 'borderStyle' on View (section: common, class: visual). Value under test: \"dotted\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_borderStyle__dotted"
+        }
+      ]
+    }
+  ]
+}

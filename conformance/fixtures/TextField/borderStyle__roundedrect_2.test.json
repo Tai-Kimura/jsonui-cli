@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/borderStyle__roundedrect_2.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.borderStyle (roundedrect_2)",
+    "description": "Conformance fixture for 'borderStyle' on TextField (section: TextField, class: visual). Value under test: \"RoundedRect\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "borderStyle__roundedrect_2",
+      "description": "Conformance fixture for 'borderStyle' on TextField (section: TextField, class: visual). Value under test: \"RoundedRect\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_borderStyle__roundedrect_2"
+        }
+      ]
+    }
+  ]
+}

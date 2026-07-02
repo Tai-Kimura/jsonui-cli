@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/ScrollView/contentOffset__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance ScrollView.contentOffset (static)",
+    "description": "Conformance fixture for 'contentOffset' on ScrollView (section: ScrollView, class: visual). Value under test: [0, 50].",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "ScrollView"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "contentOffset__static",
+      "description": "Conformance fixture for 'contentOffset' on ScrollView (section: ScrollView, class: visual). Value under test: [0, 50].",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "ScrollView_contentOffset__static"
+        }
+      ]
+    }
+  ]
+}

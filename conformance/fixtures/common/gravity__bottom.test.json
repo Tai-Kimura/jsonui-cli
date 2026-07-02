@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/gravity__bottom.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.gravity (bottom)",
+    "description": "Conformance fixture for 'gravity' on View (section: common, class: visual). Value under test: \"bottom\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "gravity__bottom",
+      "description": "Conformance fixture for 'gravity' on View (section: common, class: visual). Value under test: \"bottom\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_gravity__bottom"
+        }
+      ]
+    }
+  ]
+}

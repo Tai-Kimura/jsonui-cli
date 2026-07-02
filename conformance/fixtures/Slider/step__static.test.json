@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Slider/step__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Slider.step (static)",
+    "description": "Conformance fixture for 'step' on Slider (section: Slider, class: visual). Value under test: 1.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Slider"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "step__static",
+      "description": "Conformance fixture for 'step' on Slider (section: Slider, class: visual). Value under test: 1.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Slider_step__static"
+        }
+      ]
+    }
+  ]
+}

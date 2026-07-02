@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/hidden__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.hidden (false)",
+    "description": "Conformance fixture for 'hidden' on View (section: common, class: assertable). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "hidden__false",
+      "description": "Conformance fixture for 'hidden' on View (section: common, class: assertable). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

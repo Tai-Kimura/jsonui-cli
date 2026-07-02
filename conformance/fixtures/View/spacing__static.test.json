@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/spacing__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.spacing (static)",
+    "description": "Conformance fixture for 'spacing' on View (section: View, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "spacing__static",
+      "description": "Conformance fixture for 'spacing' on View (section: View, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_spacing__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/distribution__equalspacing.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.distribution (equalspacing)",
+    "description": "Conformance fixture for 'distribution' on View (section: View, class: visual). Value under test: \"equalSpacing\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "distribution__equalspacing",
+      "description": "Conformance fixture for 'distribution' on View (section: View, class: visual). Value under test: \"equalSpacing\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_distribution__equalspacing"
+        }
+      ]
+    }
+  ]
+}

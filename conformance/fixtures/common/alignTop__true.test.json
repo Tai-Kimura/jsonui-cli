@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/alignTop__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.alignTop (true)",
+    "description": "Conformance fixture for 'alignTop' on View (section: common, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "alignTop__true",
+      "description": "Conformance fixture for 'alignTop' on View (section: common, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_alignTop__true"
+        }
+      ]
+    }
+  ]
+}

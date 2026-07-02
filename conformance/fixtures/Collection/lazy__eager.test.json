@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/lazy__eager.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.lazy (eager)",
+    "description": "Conformance fixture for 'lazy' on Collection (section: Collection, class: visual). Value under test: \"eager\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "lazy__eager",
+      "description": "Conformance fixture for 'lazy' on Collection (section: Collection, class: visual). Value under test: \"eager\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_lazy__eager"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/hintColor__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.hintColor (static)",
+    "description": "Conformance fixture for 'hintColor' on TextView (section: TextView, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "hintColor__static",
+      "description": "Conformance fixture for 'hintColor' on TextView (section: TextView, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_hintColor__static"
+        }
+      ]
+    }
+  ]
+}

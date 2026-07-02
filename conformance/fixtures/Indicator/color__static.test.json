@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Indicator/color__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Indicator.color (static)",
+    "description": "Conformance fixture for 'color' on Indicator (section: Indicator, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Indicator"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "color__static",
+      "description": "Conformance fixture for 'color' on Indicator (section: Indicator, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Indicator_color__static"
+        }
+      ]
+    }
+  ]
+}

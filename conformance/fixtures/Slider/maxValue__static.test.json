@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Slider/maxValue__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Slider.maxValue (static)",
+    "description": "Conformance fixture for 'maxValue' on Slider (section: Slider, class: visual). Value under test: 10.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Slider"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "maxValue__static",
+      "description": "Conformance fixture for 'maxValue' on Slider (section: Slider, class: visual). Value under test: 10.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Slider_maxValue__static"
+        }
+      ]
+    }
+  ]
+}

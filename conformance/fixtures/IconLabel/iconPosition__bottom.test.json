@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/IconLabel/iconPosition__bottom.layout.json"
+  },
+  "metadata": {
+    "name": "conformance IconLabel.iconPosition (bottom)",
+    "description": "Conformance fixture for 'iconPosition' on IconLabel (section: IconLabel, class: visual). Value under test: \"Bottom\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "IconLabel"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "iconPosition__bottom",
+      "description": "Conformance fixture for 'iconPosition' on IconLabel (section: IconLabel, class: visual). Value under test: \"Bottom\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "IconLabel_iconPosition__bottom"
+        }
+      ]
+    }
+  ]
+}

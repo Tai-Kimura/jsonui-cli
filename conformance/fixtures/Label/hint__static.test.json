@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/hint__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.hint (static)",
+    "description": "Conformance fixture for 'hint' on Label (section: Label, class: visual). Value under test: \"Conformance Hint\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "hint__static",
+      "description": "Conformance fixture for 'hint' on Label (section: Label, class: visual). Value under test: \"Conformance Hint\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_hint__static"
+        }
+      ]
+    }
+  ]
+}

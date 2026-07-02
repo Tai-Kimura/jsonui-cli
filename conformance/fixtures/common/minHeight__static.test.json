@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/minHeight__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.minHeight (static)",
+    "description": "Conformance fixture for 'minHeight' on View (section: common, class: visual). Value under test: 50.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "minHeight__static",
+      "description": "Conformance fixture for 'minHeight' on View (section: common, class: visual). Value under test: 50.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_minHeight__static"
+        }
+      ]
+    }
+  ]
+}
