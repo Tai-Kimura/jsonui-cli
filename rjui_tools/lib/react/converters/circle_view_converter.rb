@@ -43,7 +43,7 @@ module RjuiTools
           classes << 'flex items-center justify-center' if json['child'] || json['children']
 
           # Cursor pointer for clickable items
-          classes << 'cursor-pointer' if json['onClick'] || json['onclick']
+          classes << 'cursor-pointer' if attributes['onClick'] || attributes['onclick']
 
           classes.compact.reject(&:empty?).join(' ')
         end
@@ -52,7 +52,7 @@ module RjuiTools
           style_parts = []
 
           # Fill color (takes precedence over background for circle)
-          fill_color = json['fillColor'] || json['background'] || json['backgroundColor']
+          fill_color = attributes['fillColor'] || attributes['background'] || attributes['backgroundColor']
           if fill_color
             if has_binding?(fill_color)
               binding_expr = convert_binding(fill_color).gsub(/^\{|\}$/, '')
@@ -63,9 +63,9 @@ module RjuiTools
           end
 
           # Border/Stroke
-          stroke_color = json['strokeColor'] || json['borderColor']
-          stroke_width = json['strokeWidth'] || json['borderWidth']
-          stroke_style = json['borderStyle'] || 'solid'
+          stroke_color = attributes['strokeColor'] || attributes['borderColor']
+          stroke_width = attributes['strokeWidth'] || attributes['borderWidth']
+          stroke_style = attributes['borderStyle'] || 'solid'
 
           if stroke_color || stroke_width
             stroke_width ||= 1
@@ -74,7 +74,7 @@ module RjuiTools
           end
 
           # Shadow
-          shadow = json['shadow']
+          shadow = attributes['shadow']
           if shadow.is_a?(Hash)
             shadow_color = shadow['color'] || 'rgba(0,0,0,0.25)'
             shadow_x = shadow['x'] || shadow['offsetX'] || 0
