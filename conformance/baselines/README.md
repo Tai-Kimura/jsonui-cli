@@ -60,6 +60,43 @@ stored in each baseline manifest, so recalibration is per-platform when the
 iOS/Android hosts land (expect more anti-aliasing variance on device
 renderers; measure before changing).
 
+### Android calibration (2026-07-03)
+
+Pixel_Tablet emulator (API 35, 2560x1600), Compose dynamic host,
+`UiDevice.takeScreenshot`, 467 visual screenshots per run.
+
+Naive repeat-run variance (two independent full runs, no host stabilization):
+
+| distance | screenshots |
+|---|---|
+| 0 | 403 (1 byte-identical PNG) |
+| 1 | 61 |
+| 3 | 1 |
+| 10 / 24 | 1 each — host races, see below |
+
+The 61x distance-1 population was the **live status-bar clock** (full-screen
+captures). The 10/24 outliers were **frame-settle races after the host's
+in-place fixture swap** (a stale drop shadow from the previous fixture; a
+`flexible` TextView captured mid-height-settle) — host bugs, not renderer
+noise. Both sources were fixed in `conformance-host` (SystemUI demo-mode
+clock freeze in `run_conformance.sh`; 150ms compositor settle before visual
+steps in the suite).
+
+Stabilized repeat-run variance (two independent full runs):
+
+| distance | screenshots |
+|---|---|
+| 0 | **467 of 467** (all byte-identical PNGs) |
+
+Measured noise ceiling = **0**. Threshold stays at the cross-platform **8**
+(any nonzero distance on this host is already signal; 8 keeps headroom for
+emulator image / GPU driver drift between machines while remaining ~4x below
+the smallest genuine change measured on the 64x64 grid).
+
+The committed `android.hashes.json` was recorded from a verified-good run:
+511 pass / 132 skipped (not android-applicable) / 0 fail / 0 error on the
+v2 manifest (643 fixtures, 19 interactive).
+
 ## File format
 
 ```json
