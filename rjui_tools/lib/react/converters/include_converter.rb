@@ -20,7 +20,7 @@ module RjuiTools
 
           # Merge shared_data and data
           merged_data = {}
-          merged_data.merge!(json['shared_data']) if json['shared_data'].is_a?(Hash)
+          merged_data.merge!(attributes['shared_data']) if attributes['shared_data'].is_a?(Hash)
           merged_data.merge!(json['data']) if json['data'].is_a?(Hash)
 
           # Build props
