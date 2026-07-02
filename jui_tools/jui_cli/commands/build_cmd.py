@@ -194,12 +194,24 @@ def _distribute_layouts(config_mgr: ConfigManager, platforms: dict, args) -> Non
     if _normalize_layouts_enabled(config_mgr):
         # Lazy import — the normalizer is never loaded on flag-off builds.
         from ..core.normalizer import Canonicalizer
+        from ..core.normalizer.alias_table import AliasTable
 
-        canonicalizer = Canonicalizer()
-        print(
-            "normalizeLayouts enabled (experimental): distributing "
-            "L1-canonicalized layouts"
-        )
+        alias_table = AliasTable.from_file()
+        if alias_table.is_empty():
+            # Stamping L1 markers WITHOUT alias rewriting corrupts
+            # consumers on the canonical-only path (they skip alias
+            # fallbacks trusting the marker) — refuse to normalize.
+            print(
+                "  WARNING [normalize]: attribute_definitions.json not "
+                "found near the installed jui_tools — distributing RAW "
+                "(L0) layouts instead of a marker-only pass"
+            )
+        else:
+            canonicalizer = Canonicalizer(alias_table)
+            print(
+                "normalizeLayouts enabled (experimental): distributing "
+                "L1-canonicalized layouts"
+            )
 
     for platform, pconfig in platforms.items():
         if args.ios_only and platform != "ios":

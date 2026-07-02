@@ -31,6 +31,7 @@ SCHEMA_VERSION = 1
 # attributes (e.g. ``data`` entries, ``partialAttributes``) are NOT
 # rewritten, since their keys are not component attributes.
 _CHILD_KEYS = ("child", "children")
+_SECTION_NODE_KEYS = ("header", "footer", "cell")
 
 
 class Canonicalizer:
@@ -137,7 +138,33 @@ class Canonicalizer:
                     value, warnings, source=source, path=f"{path}.{child_key}"
                 )
 
+        # Collection/Table `sections` carry full component nodes under
+        # header/footer/cell — the platform validators and renderers treat
+        # them as ordinary nodes, so canonicalize them too.
+        sections = rebuilt.get("sections")
+        if isinstance(sections, list):
+            rebuilt["sections"] = [
+                self._canonicalize_section(
+                    sec, warnings, source=source, path=f"{path}.sections[{i}]"
+                )
+                for i, sec in enumerate(sections)
+            ]
+
         return rebuilt
+
+    def _canonicalize_section(
+        self, section: Any, warnings: list[str], *, source: str, path: str
+    ) -> Any:
+        if not isinstance(section, dict):
+            return section
+        out = dict(section)
+        for key in _SECTION_NODE_KEYS:
+            node = out.get(key)
+            if isinstance(node, dict):
+                out[key] = self._canonicalize_node(
+                    node, warnings, source=source, path=f"{path}.{key}"
+                )
+        return out
 
     @staticmethod
     def _node_label(node: dict, node_type: str | None, path: str) -> str:

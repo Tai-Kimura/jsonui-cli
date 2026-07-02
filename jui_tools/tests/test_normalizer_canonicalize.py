@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from jui_cli.core.normalizer import (
     MARKER_KEY,
@@ -88,6 +89,35 @@ class AliasTableTest(unittest.TestCase):
     def test_missing_file_degrades_to_empty_table(self):
         table = AliasTable.from_file("/nonexistent/attribute_definitions.json")
         self.assertEqual(table.aliases_for("View"), {})
+        self.assertTrue(table.is_empty())
+
+    def test_loaded_table_is_not_empty(self):
+        self.assertFalse(AliasTable(SYNTH_DEFS).is_empty())
+
+    def test_default_path_falls_back_to_tool_copies(self):
+        # Simulate a project-local install: jui_tools synced next to
+        # kjui_tools, no shared/ tree.
+        import shutil
+        import tempfile
+        real = default_definitions_path()
+        self.assertIsNotNone(real)
+        with tempfile.TemporaryDirectory() as tmp:
+            tool_copy = (
+                Path(tmp) / "kjui_tools" / "lib" / "core" / "attribute_definitions.json"
+            )
+            tool_copy.parent.mkdir(parents=True)
+            shutil.copy(real, tool_copy)
+            # Resolution is anchored on jui_cli's __file__, so exercise the
+            # relpath list directly against the simulated root.
+            from jui_cli.core.normalizer.alias_table import _DEFINITIONS_RELPATHS
+
+            found = None
+            for rel in _DEFINITIONS_RELPATHS:
+                candidate = Path(tmp) / rel
+                if candidate.exists():
+                    found = candidate
+                    break
+            self.assertEqual(found, tool_copy)
 
 
 class CanonicalizerTest(unittest.TestCase):
@@ -160,6 +190,22 @@ class CanonicalizerTest(unittest.TestCase):
         self.assertEqual(tree["child"][1]["children"][0]["opacity"], 1)
         # Marker stays top-level only
         self.assertNotIn(MARKER_KEY, tree["child"][0])
+
+    def test_sections_nodes_recursed(self):
+        tree, _ = self.canon.canonicalize(
+            {
+                "type": "Collection",
+                "sections": [
+                    {
+                        "header": {"type": "View", "alpha": 0.5},
+                        "cell": {"type": "Slider", "minimumValue": 2},
+                        "footer": {"type": "View"},
+                    }
+                ],
+            }
+        )
+        self.assertEqual(tree["sections"][0]["header"]["opacity"], 0.5)
+        self.assertEqual(tree["sections"][0]["cell"]["minimum"], 2)
 
     def test_style_include_platform_untouched(self):
         src = {

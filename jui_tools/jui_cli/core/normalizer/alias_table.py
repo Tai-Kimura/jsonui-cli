@@ -58,7 +58,16 @@ _TYPE_SYNONYMS = {
     "WebView": "Web",
 }
 
-_DEFINITIONS_RELPATH = Path("shared") / "core" / "attribute_definitions.json"
+# The SSoT definitions file, in preference order: the shared/ tree of a
+# full jsonui-cli checkout, then the per-platform tool copies (project-local
+# installs sync {k,s,r}jui_tools/ next to jui_tools/ WITHOUT shared/ — the
+# tool copies dereference the same shared/core file at sync time).
+_DEFINITIONS_RELPATHS = (
+    Path("shared") / "core" / "attribute_definitions.json",
+    Path("kjui_tools") / "lib" / "core" / "attribute_definitions.json",
+    Path("sjui_tools") / "lib" / "core" / "attribute_definitions.json",
+    Path("rjui_tools") / "lib" / "core" / "attribute_definitions.json",
+)
 
 
 @dataclass(frozen=True)
@@ -77,12 +86,15 @@ class DeprecationInfo:
 
 
 def default_definitions_path() -> Path | None:
-    """Locate ``shared/core/attribute_definitions.json`` relative to the
-    installed tool tree (jui_tools/ and shared/ are siblings)."""
+    """Locate ``attribute_definitions.json`` relative to the installed
+    tool tree: ``shared/core/`` in a full jsonui-cli checkout, or a
+    per-platform tool copy (``{k,s,r}jui_tools/lib/core/``) in a
+    project-local install where only the tool directories are synced."""
     for parent in Path(__file__).resolve().parents:
-        candidate = parent / _DEFINITIONS_RELPATH
-        if candidate.exists():
-            return candidate
+        for relpath in _DEFINITIONS_RELPATHS:
+            candidate = parent / relpath
+            if candidate.exists():
+                return candidate
     return None
 
 
@@ -106,6 +118,9 @@ class AliasTable:
 
         Missing / unreadable file degrades to an empty table (normalizer
         becomes a marker-only pass) rather than failing the build.
+        Callers that stamp the L1 marker should check :meth:`is_empty`
+        and warn — consumers on the canonical-only path assume aliases
+        were actually rewritten.
         """
         resolved = Path(path) if path else default_definitions_path()
         if resolved is None or not resolved.exists():
@@ -115,6 +130,10 @@ class AliasTable:
                 return cls(json.load(f))
         except (OSError, json.JSONDecodeError):
             return cls({})
+
+    def is_empty(self) -> bool:
+        """True when no definitions were loaded (marker-only pass)."""
+        return not self._definitions
 
     # ------------------------------------------------------------------
     # Lookup
