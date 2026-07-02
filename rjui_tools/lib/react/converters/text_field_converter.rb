@@ -31,10 +31,10 @@ module RjuiTools
           return if text_field_defaults.empty?
 
           @json = json.dup
-          @json['fontColor'] ||= text_field_defaults['fontColor']
-          @json['padding'] ||= text_field_defaults['padding']
-          @json['background'] ||= text_field_defaults['background']
-          @json['cornerRadius'] ||= text_field_defaults['cornerRadius']
+          @attributes['fontColor'] ||= text_field_defaults['fontColor']
+          @attributes['padding'] ||= text_field_defaults['padding']
+          @attributes['background'] ||= text_field_defaults['background']
+          @attributes['cornerRadius'] ||= text_field_defaults['cornerRadius']
         end
 
         def build_class_name
@@ -45,8 +45,8 @@ module RjuiTools
           classes << 'focus:ring-2 focus:ring-blue-500'
 
           # Border style (only when borderWidth is set)
-          if json['borderWidth'] || json['borderStyle']
-            case json['borderStyle']&.downcase
+          if attributes['borderWidth'] || attributes['borderStyle']
+            case attributes['borderStyle']&.downcase
             when 'roundedrect'
               classes << 'rounded-md'
             when 'line'
@@ -57,15 +57,15 @@ module RjuiTools
           end
 
           # Placeholder color using Tailwind
-          if json['hintColor'] || json['placeholderColor']
-            color = json['hintColor'] || json['placeholderColor']
+          if attributes['hintColor'] || attributes['placeholderColor']
+            color = attributes['hintColor'] || attributes['placeholderColor']
             classes << "placeholder-#{color}"
           end
 
           # Disabled state
-          if json['enabled'] == false || json['enabled'].is_a?(String)
-            if json['disabledBackground']
-              classes << "disabled:#{TailwindMapper.map_color(json['disabledBackground'], 'bg')}"
+          if attributes['enabled'] == false || attributes['enabled'].is_a?(String)
+            if attributes['disabledBackground']
+              classes << "disabled:#{TailwindMapper.map_color(attributes['disabledBackground'], 'bg')}"
             else
               classes << 'disabled:bg-gray-100'
             end
@@ -79,29 +79,29 @@ module RjuiTools
           super
 
           # Corner radius
-          if json['cornerRadius']
-            @dynamic_styles['borderRadius'] = "'#{json['cornerRadius']}px'"
+          if attributes['cornerRadius']
+            @dynamic_styles['borderRadius'] = "'#{attributes['cornerRadius']}px'"
           end
 
           # Hint/placeholder color is now handled via Tailwind class in build_class_name
 
           # Caret (cursor) color
-          if json['caretAttributes'] && json['caretAttributes']['fontColor']
-            @dynamic_styles['caretColor'] = "'#{json['caretAttributes']['fontColor']}'"
+          if attributes['caretAttributes'] && attributes['caretAttributes']['fontColor']
+            @dynamic_styles['caretColor'] = "'#{attributes['caretAttributes']['fontColor']}'"
           end
 
           # Text padding left
-          if json['textPaddingLeft']
-            @dynamic_styles['paddingLeft'] = "'#{json['textPaddingLeft']}px'"
+          if attributes['textPaddingLeft']
+            @dynamic_styles['paddingLeft'] = "'#{attributes['textPaddingLeft']}px'"
           end
 
           # Shadow
-          if json['shadow']
-            if json['shadow'].is_a?(Hash)
-              radius = json['shadow']['radius'] || 5
-              x = json['shadow']['offsetX'] || 0
-              y = json['shadow']['offsetY'] || 0
-              color = json['shadow']['color'] || 'rgba(0,0,0,0.2)'
+          if attributes['shadow']
+            if attributes['shadow'].is_a?(Hash)
+              radius = attributes['shadow']['radius'] || 5
+              x = attributes['shadow']['offsetX'] || 0
+              y = attributes['shadow']['offsetY'] || 0
+              color = attributes['shadow']['color'] || 'rgba(0,0,0,0.2)'
               @dynamic_styles['boxShadow'] = "'#{x}px #{y}px #{radius}px #{color}'"
             else
               @dynamic_styles['boxShadow'] = "'0 2px 4px rgba(0,0,0,0.1)'"
@@ -128,10 +128,10 @@ module RjuiTools
           attrs << " type=\"#{input_type}\""
 
           # Name attribute
-          attrs << " name=\"#{json['name']}\"" if json['name']
+          attrs << " name=\"#{attributes['name']}\"" if attributes['name']
 
           # Placeholder (hint in SwiftJsonUI terminology)
-          placeholder = json['hint'] || json['placeholder']
+          placeholder = attributes['hint'] || attributes['placeholder']
           if placeholder
             resolved = convert_binding(placeholder)
             if resolved != placeholder && resolved.include?('{')
@@ -142,52 +142,52 @@ module RjuiTools
           end
 
           # Value handling depends on binding presence
-          if json['text']
-            if has_binding?(json['text'])
+          if attributes['text']
+            if has_binding?(attributes['text'])
               # Binding present: use controlled component (value + onChange)
-              value = convert_binding(json['text'])
+              value = convert_binding(attributes['text'])
               attrs << " value={#{value.gsub(/[{}]/, '')}}"
             else
               # No binding: use uncontrolled component (defaultValue only)
-              attrs << " defaultValue=\"#{json['text']}\""
+              attrs << " defaultValue=\"#{attributes['text']}\""
             end
           end
 
           # Max length
-          attrs << " maxLength={#{json['maxLength']}}" if json['maxLength']
+          attrs << " maxLength={#{attributes['maxLength']}}" if attributes['maxLength']
 
           # Auto complete / content type
-          if json['contentType']
-            autocomplete = map_content_type(json['contentType'])
+          if attributes['contentType']
+            autocomplete = map_content_type(attributes['contentType'])
             attrs << " autoComplete=\"#{autocomplete}\"" if autocomplete
           end
 
           # Input mode (for mobile keyboards)
-          if json['input']
-            inputmode = map_input_mode(json['input'])
+          if attributes['input']
+            inputmode = map_input_mode(attributes['input'])
             attrs << " inputMode=\"#{inputmode}\"" if inputmode
           end
 
           # Return key type (for form submission)
-          if json['returnKeyType']
-            enter_key_hint = map_return_key(json['returnKeyType'])
+          if attributes['returnKeyType']
+            enter_key_hint = map_return_key(attributes['returnKeyType'])
             attrs << " enterKeyHint=\"#{enter_key_hint}\"" if enter_key_hint
           end
 
           # Auto focus
-          attrs << ' autoFocus' if json['autoFocus'] || json['becomeFirstResponder']
+          attrs << ' autoFocus' if attributes['autoFocus'] || attributes['becomeFirstResponder']
 
           # Read only
-          attrs << ' readOnly' if json['readOnly'] || json['editable'] == false
+          attrs << ' readOnly' if attributes['readOnly'] || attributes['editable'] == false
 
           attrs.join
         end
 
         def determine_input_type
           # Secure field takes precedence
-          return 'password' if json['secure'] || json['input']&.downcase == 'password'
+          return 'password' if attributes['secure'] || attributes['input']&.downcase == 'password'
 
-          case json['input']&.downcase
+          case attributes['input']&.downcase
           when 'email'
             'email'
           when 'number', 'decimal', 'numberpad', 'decimalpad'
@@ -274,7 +274,7 @@ module RjuiTools
 
         def build_on_change
           # If custom handler is defined, use it (passing the event object)
-          handler = json['onTextChange'] || json['onChange']
+          handler = attributes['onTextChange'] || attributes['onChange']
           if handler
             if has_binding?(handler)
               prop = extract_binding_property(handler)
@@ -286,9 +286,9 @@ module RjuiTools
 
           # Auto-generate onChange from text binding property
           # e.g., text: "@{email}" -> onChange={(e) => data.onEmailChange?.(e.target.value)}
-          if json['text'] && has_binding?(json['text'])
+          if attributes['text'] && has_binding?(attributes['text'])
             # Use raw property name without data. prefix
-            property_name = extract_raw_binding_property(json['text'])
+            property_name = extract_raw_binding_property(attributes['text'])
             # Convert property name to onChange handler name (e.g., email -> onEmailChange)
             handler_name = "on#{capitalize_first(property_name)}Change"
             return " onChange={(e) => data.#{handler_name}?.(e.target.value)}"
@@ -303,7 +303,7 @@ module RjuiTools
         end
 
         def build_disabled_attr
-          enabled = json['enabled']
+          enabled = attributes['enabled']
           return '' if enabled.nil?
 
           if enabled.is_a?(String) && enabled.start_with?('@{') && enabled.end_with?('}')
