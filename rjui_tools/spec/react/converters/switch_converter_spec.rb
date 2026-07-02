@@ -19,6 +19,16 @@ RSpec.describe RjuiTools::React::Converters::SwitchConverter do
         expect(result).to include('h-[31px]')
         expect(result).to include('peer-checked:translate-x-[20px]')
       end
+
+      it 'wraps the sr-only input in a <label> so clicks toggle it (no-text switch)' do
+        # Regression: a <div> wrapper renders fine but the visually hidden
+        # checkbox never receives clicks — the switch cannot be toggled.
+        converter = create_converter({ 'class' => 'Switch', 'id' => 'target' })
+        result = converter.convert
+        expect(result).to include('<label id="target"')
+        expect(result).to include('cursor-pointer')
+        expect(result).not_to include('<div')
+      end
     end
 
     context 'with label text' do

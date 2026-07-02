@@ -31,8 +31,12 @@ module RjuiTools
           # accessibility / testability (mirrors the native `disabled` attr).
           aria_disabled_attr = build_aria_disabled_attr
 
+          # Both branches must render a <label>: the real <input> is visually
+          # hidden (sr-only) behind the styled track/knob spans, and only a
+          # wrapping <label> forwards clicks to it — with a bare <div> a
+          # text-less Switch renders fine but can never be toggled.
           jsx = if text.empty?
-            "#{indent_str(indent)}<div#{id_attr} className=\"#{class_name}\"#{style_attr}#{testid_attr}#{tag_attr}#{aria_disabled_attr}>#{switch_html}</div>"
+            "#{indent_str(indent)}<label#{id_attr} className=\"#{class_name} cursor-pointer\"#{style_attr}#{testid_attr}#{tag_attr}#{aria_disabled_attr}>#{switch_html}</label>"
           else
             <<~JSX.chomp
               #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center gap-3 cursor-pointer"#{style_attr}#{testid_attr}#{tag_attr}#{aria_disabled_attr}>
