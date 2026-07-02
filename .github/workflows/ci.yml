@@ -73,9 +73,9 @@ jobs:
           working-directory: ${{ matrix.bundler && matrix.tool || '' }}
       - name: Install gems (no Gemfile)
         # sjui_tools has no Gemfile; its specs need rspec + simplecov and the
-        # xcodeproj gem (lib/core/xcode_project_manager.rb).
+        # non-default gems its lib requires (xcodeproj, listen).
         if: ${{ !matrix.bundler }}
-        run: gem install rspec simplecov xcodeproj --no-document
+        run: gem install rspec simplecov xcodeproj listen --no-document
       - name: rspec (bundle)
         if: ${{ matrix.bundler }}
         working-directory: ${{ matrix.tool }}
