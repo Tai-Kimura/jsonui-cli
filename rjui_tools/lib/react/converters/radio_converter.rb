@@ -55,9 +55,10 @@ module RjuiTools
           items_jsx = items.map do |item|
             escaped_item = item.gsub('"', '&quot;')
             input_style = tint_color ? " style={{ accentColor: '#{tint_color}' }}" : ''
+            state_attrs = build_state_attrs(selected_binding, on_change, escaped_item)
             <<~JSX.chomp
               #{indent_str(indent + 2)}<label className="flex items-center gap-2 cursor-pointer">
-              #{indent_str(indent + 4)}<input type="radio" name="#{group}" value="#{escaped_item}" checked={#{selected_binding} === "#{escaped_item}"} onChange={() => #{on_change}("#{escaped_item}")}#{disabled_attr}#{input_style} />
+              #{indent_str(indent + 4)}<input type="radio" name="#{group}" value="#{escaped_item}"#{state_attrs}#{disabled_attr}#{input_style} />
               #{indent_str(indent + 4)}<span>#{item}</span>
               #{indent_str(indent + 2)}</label>
             JSX
@@ -70,7 +71,7 @@ module RjuiTools
                       end
 
           <<~JSX.chomp
-            #{indent_str(indent)}<div#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}>
+            #{indent_str(indent)}<div#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
             #{label_jsx}#{items_jsx}
             #{indent_str(indent)}</div>
           JSX
@@ -84,24 +85,35 @@ module RjuiTools
           tint_color = json['tintColor']
           input_style = tint_color ? " style={{ accentColor: '#{tint_color}' }}" : ''
 
+          state_attrs = build_state_attrs(selected_binding, on_change, radio_value)
+
           <<~JSX.chomp
-            #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center gap-2"#{style_attr}#{testid_attr}#{tag_attr}>
-            #{indent_str(indent + 2)}<input type="radio" name="#{group}" value="#{radio_value}" checked={#{selected_binding} === "#{radio_value}"} onChange={() => #{on_change}("#{radio_value}")}#{disabled_attr}#{input_style} />
+            #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center gap-2"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
+            #{indent_str(indent + 2)}<input type="radio" name="#{group}" value="#{radio_value}"#{state_attrs}#{disabled_attr}#{input_style} />
             #{indent_str(indent + 2)}<span>#{convert_binding(text)}</span>
             #{indent_str(indent)}</label>
           JSX
         end
 
+        # Selected-state expression for the radio input.
+        # - `selectedValue: "@{prop}"`  -> JS expression (data-prefixed property)
+        # - `selectedValue: "Static"`  -> quoted string literal
+        # - absent                      -> nil (uncontrolled input; the old code
+        #   emitted a bare `selectedValue` identifier which is undefined at
+        #   runtime and crashed the component on render)
         def build_selected_binding
           selected = json['selectedValue']
+          return nil unless selected
 
-          if selected && has_binding?(selected)
+          if has_binding?(selected)
             extract_binding_property(selected)
           else
-            'selectedValue'
+            "\"#{selected.to_s.gsub('"', '&quot;')}\""
           end
         end
 
+        # onChange handler expression, or nil when neither onValueChange nor a
+        # selectedValue binding provides one (static/uncontrolled radio).
         def build_on_change
           handler = json['onValueChange']
 
@@ -110,13 +122,28 @@ module RjuiTools
           else
             # Generate setter from the raw binding name (without viewModel.data. prefix)
             selected = json['selectedValue']
-            raw_binding = if selected && has_binding?(selected)
-                            extract_raw_binding_property(selected)
-                          else
-                            'selectedValue'
-                          end
+            return nil unless selected && has_binding?(selected)
+
+            raw_binding = extract_raw_binding_property(selected)
             setter_name = "set#{raw_binding[0].upcase}#{raw_binding[1..]}"
             add_viewmodel_data_prefix(setter_name)
+          end
+        end
+
+        # checked / onChange attribute pair. Controlled inputs need onChange
+        # (or readOnly) to satisfy React; static selections emit readOnly.
+        def build_state_attrs(selected_binding, on_change, value_literal)
+          if selected_binding
+            checked = " checked={#{selected_binding} === \"#{value_literal}\"}"
+            if on_change
+              "#{checked} onChange={() => #{on_change}(\"#{value_literal}\")}"
+            else
+              "#{checked} readOnly"
+            end
+          elsif on_change
+            " onChange={() => #{on_change}(\"#{value_literal}\")}"
+          else
+            ''
           end
         end
 

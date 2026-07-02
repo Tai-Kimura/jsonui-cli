@@ -29,9 +29,11 @@ module RjuiTools
               #{indent_str(indent)}<input#{id_attr} type="checkbox" className="#{class_name}"#{checked_attr}#{on_change}#{disabled_attr}#{checkbox_style}#{style_attr}#{testid_attr}#{tag_attr} />
             JSX
           else
-            # Checkbox with label
+            # Checkbox with label. The layout `id` lands on the <label>
+            # wrapper, so reflect the disabled state there too (the native
+            # `disabled` attr only exists on the inner <input>).
             <<~JSX.chomp
-              #{indent_str(indent)}<label#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}>
+              #{indent_str(indent)}<label#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
               #{indent_str(indent + 2)}<input type="checkbox"#{checked_attr}#{on_change}#{disabled_attr}#{checkbox_style} />
               #{indent_str(indent + 2)}<span>#{convert_binding(text)}</span>
               #{indent_str(indent)}</label>
