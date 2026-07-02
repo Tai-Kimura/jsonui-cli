@@ -17,17 +17,17 @@ module RjuiTools
     module Converters
       class EmbedConverter < BaseConverter
         def convert(indent = 2)
-          screen = json['screen']
+          screen = attributes['screen']
           if screen.nil? || screen.to_s.empty?
             return "#{indent_str(indent)}{/* Embed: missing required `screen` attribute */}"
           end
 
-          embed_id = json['id'] || 'embed'
-          navigation_mode = json['navigationMode'] || 'delegate'
+          embed_id = attributes['id'] || 'embed'
+          navigation_mode = attributes['navigationMode'] || 'delegate'
           class_name = build_class_name
           embedded_component = embedded_component_name(screen)
-          params_attr = build_params_attr(json['params'])
-          event_bridge_attr = build_event_bridge_attr(json['events'])
+          params_attr = build_params_attr(attributes['params'])
+          event_bridge_attr = build_event_bridge_attr(attributes['events'])
 
           class_attr = class_name.empty? ? '' : %( className="#{class_name}")
 

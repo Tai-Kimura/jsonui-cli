@@ -107,6 +107,8 @@ module RjuiTools
       # - resize (TextView): definitions declare a CSS-style enum
       #   ('none'/'both'/...) but the web converter historically accepts
       #   boolean truthiness; keep raw until the converter maps the enum.
+      # - navigationMode (Embed): definitions only declare 'delegate' but
+      #   the converter forwards future values ('isolated', v1.5) as-is.
       #
       # (Candidates for a definitions/emitter revision — see the 06 plan
       # feedback.)
@@ -119,6 +121,7 @@ module RjuiTools
         input
         contentMode
         resize
+        navigationMode
       ].freeze
 
       def initialize(json, component_type: nil, normalized: false)
