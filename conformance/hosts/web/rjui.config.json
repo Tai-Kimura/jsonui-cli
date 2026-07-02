@@ -1,0 +1,17 @@
+{
+  "layouts_directory": "src/Layouts",
+  "generated_directory": "src/generated",
+  "components_directory": "src/generated/components",
+  "data_directory": "src/generated/data",
+  "hooks_directory": "src/generated/hooks",
+  "generated_viewmodels_directory": "src/generated/viewmodels",
+  "viewmodels_directory": "src/viewmodels",
+  "styles_directory": "src/Styles",
+  "strings_directory": "src/Strings",
+  "languages": ["en"],
+  "default_language": "en",
+  "use_tailwind": true,
+  "typescript": true,
+  "generate_viewmodels": false,
+  "generate_hooks": false
+}

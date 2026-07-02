@@ -1,0 +1,15 @@
+# dependencies / build output
+node_modules/
+dist/
+
+# @generated build artifacts (produced by scripts/generate.mjs + rjui build)
+src/Layouts/
+src/generated/
+src/components/
+src/lib/
+src/hooks/
+src/viewmodels/
+rjui-build.log
+
+# local playwright traces / screenshots
+screenshots/
