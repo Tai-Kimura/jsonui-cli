@@ -149,7 +149,9 @@ include JsonUI::Generated
 warnings = []
 AttrWarnings.handler = ->(msg) { warnings << msg }
 
-out = LabelAttributes.extract(
+# NOTE: braces are required — a braceless trailing hash is interpreted as
+# keyword arguments on Ruby >= 3.0 (extract takes the hash positionally).
+out = LabelAttributes.extract({
   'text' => '@{title}',
   'alpha' => 0.5,
   'width' => 'matchParent',
@@ -157,7 +159,7 @@ out = LabelAttributes.extract(
   'visibility' => 'bogus',
   'onClick' => '@{save}',
   'fontColor' => '#FF0000'
-)
+})
 
 raise 'alias failed' unless out['opacity'].is_a?(AttrValue) && out['opacity'].value == 0.5
 raise 'binding failed' unless out['text'].binding? && out['text'].binding_expression == 'title'
@@ -175,19 +177,19 @@ raise 'color failed' unless out['fontColor'].is_a?(AttrValue) && out['fontColor'
 
 # Binding-only Hash action objects are preserved, not dropped.
 handler = { 'action' => 'link', 'url' => 'https://example.com' }
-out = LabelAttributes.extract('onClick' => handler)
+out = LabelAttributes.extract({ 'onClick' => handler })
 raise 'action object dropped' unless out['onClick'].value == handler
 
 # Lenient enums match case-insensitively without warning.
 warnings.clear
-out = LabelAttributes.extract('textAlign' => 'left')
+out = LabelAttributes.extract({ 'textAlign' => 'left' })
 raise 'ci enum failed' unless out['textAlign'].value == 'left'
 raise 'ci enum warned' unless warnings.empty?
 
 # canonical_only disables alias fallback (L1-normalized input).
 out = SliderAttributes.extract({ 'minimumValue' => 5 }, canonical_only: true)
 raise 'canonical_only failed' if out.key?('minimum')
-out = SliderAttributes.extract('minimumValue' => 5)
+out = SliderAttributes.extract({ 'minimumValue' => 5 })
 raise 'alias fallback failed' unless out['minimum'].value == 5
 
 # Metadata API: rows / declared? / alias_map.
