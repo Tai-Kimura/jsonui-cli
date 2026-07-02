@@ -1,0 +1,70 @@
+{
+  "platform": "web",
+  "manifestHash": "8f5452dda116273d44d16d834d57506666ed752e6148cd8eb03676d9c0a43a57",
+  "runner": {
+    "name": "playwright",
+    "version": "1.44.0"
+  },
+  "results": [
+    {
+      "id": "Label/text__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": null
+    },
+    {
+      "id": "Button/text__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": null
+    },
+    {
+      "id": "common/visibility__visible",
+      "status": "pass",
+      "detail": "",
+      "screenshot": null
+    },
+    {
+      "id": "common/visibility__gone",
+      "status": "pass",
+      "detail": "",
+      "screenshot": null
+    },
+    {
+      "id": "common/hidden__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": null
+    },
+    {
+      "id": "common/enabled__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": null
+    },
+    {
+      "id": "common/opacity__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_opacity__static.png"
+    },
+    {
+      "id": "common/opacity__alias_alpha",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_opacity__alias_alpha.png"
+    },
+    {
+      "id": "Label/fontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_fontColor__static.png"
+    },
+    {
+      "id": "Slider/minimum__alias_minValue",
+      "status": "skipped",
+      "detail": "minValue alias not implemented in web driver",
+      "screenshot": null
+    }
+  ]
+}
