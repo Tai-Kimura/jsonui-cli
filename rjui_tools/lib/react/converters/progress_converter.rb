@@ -14,7 +14,7 @@ module RjuiTools
           tag_attr = build_tag_attr
 
           value_attr = build_value_attr
-          max_attr = " max={#{json['maximumValue'] || 100}}"
+          max_attr = " max={#{attributes['maximumValue'] || 100}}"
 
           jsx = <<~JSX.chomp
             #{indent_str(indent)}<progress#{id_attr} className="#{class_name}"#{value_attr}#{max_attr}#{base_style_attr}#{testid_attr}#{tag_attr} />
@@ -31,7 +31,7 @@ module RjuiTools
           classes << 'w-full'
 
           # Height
-          height = json['progressHeight'] || json['barHeight']
+          height = attributes['progressHeight'] || attributes['barHeight']
           if height
             classes << "h-[#{height}px]"
           else
@@ -45,7 +45,7 @@ module RjuiTools
           classes << '[&::-webkit-progress-bar]:rounded-full'
 
           # Track color
-          track_color = json['trackTintColor'] || json['trackColor']
+          track_color = attributes['trackTintColor'] || attributes['trackColor']
           if track_color
             classes << "[&::-webkit-progress-bar]:bg-[#{track_color}]"
           else
@@ -55,7 +55,7 @@ module RjuiTools
           classes << '[&::-webkit-progress-value]:rounded-full'
 
           # Progress color
-          tint_color = json['tintColor'] || json['progressTintColor']
+          tint_color = attributes['tintColor'] || attributes['progressTintColor']
           if tint_color
             classes << "[&::-webkit-progress-value]:bg-[#{tint_color}]"
             classes << "[&::-moz-progress-bar]:bg-[#{tint_color}]"
@@ -68,7 +68,7 @@ module RjuiTools
         end
 
         def build_value_attr
-          value = json['value'] || json['progress'] || 0
+          value = attributes['value'] || attributes['progress'] || 0
 
           if has_binding?(value)
             prop = extract_binding_property(value)
