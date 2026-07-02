@@ -42,26 +42,27 @@ module RjuiTools
           classes << 'cursor-pointer'
           classes << 'transition-colors'
 
-          # Hover state (tapBackground)
-          if json['tapBackground']
-            hover_color = TailwindMapper.map_color(json['tapBackground'], 'hover:bg')
-            classes << hover_color
-          elsif json['highlightBackground']
-            hover_color = TailwindMapper.map_color(json['highlightBackground'], 'hover:bg')
+          # Hover state (tapBackground; highlightBackground is the
+          # definitions alias of tapBackground for Button)
+          tap_background = attr_lookup('tapBackground', 'highlightBackground')
+          if tap_background
+            hover_color = TailwindMapper.map_color(tap_background, 'hover:bg')
             classes << hover_color
           else
             classes << 'hover:opacity-80'
           end
 
           # Active/pressed state
-          if json['tapBackground']
-            active_color = TailwindMapper.map_color(json['tapBackground'], 'active:bg')
+          if tap_background
+            active_color = TailwindMapper.map_color(tap_background, 'active:bg')
             classes << active_color
           end
 
-          # Highlight text color on hover
-          if json['highlightColor']
-            hover_text = TailwindMapper.map_color(json['highlightColor'], 'hover:text')
+          # Highlight text color on hover (hilightColor is the legacy
+          # definitions alias of highlightColor)
+          highlight_color = attr_lookup('highlightColor', 'hilightColor')
+          if highlight_color
+            hover_text = TailwindMapper.map_color(highlight_color, 'hover:text')
             classes << hover_text
           end
 

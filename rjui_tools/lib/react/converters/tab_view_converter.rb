@@ -218,7 +218,8 @@ module RjuiTools
         end
 
         def build_selected_binding
-          selected = json['selectedIndex']
+          # selectedTabIndex is the definitions alias of selectedIndex
+          selected = attr_lookup('selectedIndex', 'selectedTabIndex')
 
           if selected && has_binding?(selected)
             extract_binding_property(selected)
@@ -228,13 +229,15 @@ module RjuiTools
         end
 
         def build_on_change
-          handler = json['onTabChange']
+          # Canonical name is onValueChange; onTabChange / onPageChanged
+          # are the definitions aliases for TabView.
+          handler = attr_lookup('onValueChange', 'onTabChange', 'onPageChanged')
 
           if handler && has_binding?(handler)
             extract_binding_property(handler)
           else
             # Generate setter from the binding
-            selected = json['selectedIndex']
+            selected = attr_lookup('selectedIndex', 'selectedTabIndex')
             raw_binding = if selected && has_binding?(selected)
                             extract_raw_binding_property(selected)
                           else

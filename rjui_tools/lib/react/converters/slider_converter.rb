@@ -13,8 +13,10 @@ module RjuiTools
           testid_attr = build_testid_attr
           tag_attr = build_tag_attr
 
-          min_value = json['minimumValue'] || 0
-          max_value = json['maximumValue'] || 100
+          # Canonical names are minimum/maximum; minimumValue/minValue and
+          # maximumValue/maxValue are the definitions aliases.
+          min_value = attr_lookup('minimum', 'minimumValue', 'minValue') || 0
+          max_value = attr_lookup('maximum', 'maximumValue', 'maxValue') || 100
           step_value = json['step']
 
           # Handle range array format: [min, max]
@@ -71,8 +73,9 @@ module RjuiTools
         end
 
         def build_on_change
-          # If custom handler is defined, use it (passing the event object)
-          handler = json['onValueChange']
+          # If custom handler is defined, use it (passing the event object).
+          # onValueChanged is the definitions alias of onValueChange.
+          handler = attr_lookup('onValueChange', 'onValueChanged')
           if handler && has_binding?(handler)
             prop = extract_binding_property(handler)
             return " onChange={(e) => #{prop}?.(Number(e.target.value))}"
