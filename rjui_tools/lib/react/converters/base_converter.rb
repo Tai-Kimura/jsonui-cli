@@ -277,9 +277,18 @@ module RjuiTools
           classes << TailwindMapper.map_visibility(json['hidden']) if json['hidden']
 
           # Visibility attribute (supports data binding)
-          # If it's a binding, we'll handle it with conditional class
+          # If it's a binding, we'll handle it with conditional render/class
+          # (see wrap_with_visibility). Static values map to Tailwind:
+          #   "gone"      -> hidden    (display:none, removed from layout)
+          #   "invisible" -> invisible (visibility:hidden, keeps its space)
+          #   "visible"   -> no class
           if json['visibility'] && !has_binding?(json['visibility'])
-            classes << 'hidden' unless json['visibility']
+            case json['visibility']
+            when 'gone'
+              classes << 'hidden'
+            when 'invisible'
+              classes << 'invisible'
+            end
           end
 
           # Disabled state
@@ -526,6 +535,10 @@ module RjuiTools
             'CircleImage' => ImageConverter,
             'NetworkImage' => NetworkImageConverter,
             'TextField' => TextFieldConverter,
+            # EditText / Input are aliases for TextField (attribute_definitions
+            # `_alias_of: TextField`)
+            'EditText' => TextFieldConverter,
+            'Input' => TextFieldConverter,
             'TextView' => TextViewConverter,
             'Scroll' => ScrollViewConverter,
             'ScrollView' => ScrollViewConverter,
@@ -664,6 +677,23 @@ module RjuiTools
             " id={String(#{add_viewmodel_data_prefix(prop)})}"
           else
             " id=\"#{id_value}\""
+          end
+        end
+
+        # Build aria-disabled for wrapper elements (div/label) whose inner
+        # <input> carries the real `disabled` attribute. The layout `id` is
+        # emitted on the wrapper, so the wrapper must reflect the disabled
+        # state for accessibility and element-level testability.
+        def build_aria_disabled_attr
+          enabled = json['enabled']
+          return '' if enabled.nil?
+
+          if has_binding?(enabled)
+            " aria-disabled={!#{extract_binding_property(enabled)}}"
+          elsif enabled == false
+            ' aria-disabled="true"'
+          else
+            ''
           end
         end
 

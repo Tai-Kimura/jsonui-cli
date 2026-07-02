@@ -21,11 +21,14 @@ module RjuiTools
           items_jsx = items.each_with_index.map do |item, index|
             button_class = build_button_class(index)
             button_disabled = json['enabled'] == false ? ' disabled' : ''
-            "#{indent_str(indent + 2)}<button key={#{index}} className={`#{button_class}`} onClick={() => #{on_change}(#{index})}#{button_disabled}>#{item}</button>"
+            on_click_attr = on_change ? " onClick={() => #{on_change}(#{index})}" : ''
+            "#{indent_str(indent + 2)}<button key={#{index}} className={`#{button_class}`}#{on_click_attr}#{button_disabled}>#{item}</button>"
           end.join("\n")
 
+          # `disabled` is not a valid attribute on <div>; reflect the state via
+          # aria-disabled (each inner <button> carries the real disabled attr).
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<div#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}#{disabled_attr}>
+            #{indent_str(indent)}<div#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
             #{items_jsx}
             #{indent_str(indent)}</div>
           JSX
@@ -74,7 +77,9 @@ module RjuiTools
           end
 
           # Build padding class
-          padding_class = if json['height']
+          # height may be a keyword ("wrapContent" / "matchParent") — only a
+          # numeric height can be translated into vertical padding.
+          padding_class = if json['height'].is_a?(Numeric)
             "py-#{TailwindMapper::PADDING_MAP[json['height'] / 4] || (json['height'] / 4)}"
           else
             'py-2'
@@ -95,7 +100,15 @@ module RjuiTools
             prop = extract_binding_property(selected_index)
             "#{base_classes}#{disabled_class} ${#{prop} === #{index} ? '#{selected_bg} #{selected_text} shadow' : 'text-gray-500 hover:text-gray-700'}"
           else
-            "#{base_classes}#{disabled_class} ${selectedIndex === #{index} ? '#{selected_bg} #{selected_text} shadow' : 'text-gray-500 hover:text-gray-700'}"
+            # Static selectedIndex — resolve the selected state at generation
+            # time (the old code emitted a bare `selectedIndex` identifier,
+            # which is undefined at runtime and crashed the component).
+            selected_classes = if selected_index.to_i == index
+                                 "#{selected_bg} #{selected_text} shadow"
+                               else
+                                 'text-gray-500 hover:text-gray-700'
+                               end
+            "#{base_classes}#{disabled_class} #{selected_classes}"
           end
         end
 
@@ -105,10 +118,12 @@ module RjuiTools
           if selected && has_binding?(selected)
             extract_binding_property(selected)
           else
-            'selectedIndex'
+            selected || 0
           end
         end
 
+        # onChange handler expression, or nil when neither onValueChange nor a
+        # selectedIndex binding provides one (static segment).
         def build_on_change
           handler = json['onValueChange']
 
@@ -117,11 +132,9 @@ module RjuiTools
           else
             # Generate setter from the raw binding name (without viewModel.data. prefix)
             selected = json['selectedIndex'] || json['selectedTabIndex']
-            raw_binding = if selected && has_binding?(selected)
-                            extract_raw_binding_property(selected)
-                          else
-                            'selectedIndex'
-                          end
+            return nil unless selected && has_binding?(selected)
+
+            raw_binding = extract_raw_binding_property(selected)
             setter_name = "set#{raw_binding[0].upcase}#{raw_binding[1..]}"
             add_viewmodel_data_prefix(setter_name)
           end
