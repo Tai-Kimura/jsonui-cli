@@ -34,8 +34,8 @@ module RjuiTools
           classes = [super]
 
           # Scroll direction
-          orientation = json['orientation']
-          horizontal_scroll = json['horizontalScroll']
+          orientation = attributes['orientation']
+          horizontal_scroll = attributes['horizontalScroll']
 
           # scrollMode: "window" opts out of emitting `overflow-y-auto` /
           # `overflow-x-auto`. Rationale: on web, an inner-scroll container
@@ -45,27 +45,27 @@ module RjuiTools
           # that never scrolls. Setting `scrollMode: "window"` lets authors
           # keep the ScrollView node for iOS/Android semantics while letting
           # the browser's window scroll naturally on web.
-          window_mode = json['scrollMode'] == 'window'
+          window_mode = attributes['scrollMode'] == 'window'
 
           if horizontal_scroll || orientation == 'horizontal'
             classes << 'overflow-x-auto' unless window_mode
-            classes << 'flex flex-row' unless json['orientation']
+            classes << 'flex flex-row' unless attributes['orientation']
           else
             classes << 'overflow-y-auto' unless window_mode
-            classes << 'flex flex-col' unless json['orientation']
+            classes << 'flex flex-col' unless attributes['orientation']
           end
 
           # Hide scrollbar options
-          if json['showsHorizontalScrollIndicator'] == false
+          if attributes['showsHorizontalScrollIndicator'] == false
             classes << 'scrollbar-hide'
           end
-          if json['showsVerticalScrollIndicator'] == false
+          if attributes['showsVerticalScrollIndicator'] == false
             classes << 'scrollbar-hide'
           end
 
           # Scroll snap (paging) — only meaningful when this div actually
           # scrolls, so skip for window-mode.
-          if json['paging'] && !window_mode
+          if attributes['paging'] && !window_mode
             if horizontal_scroll || orientation == 'horizontal'
               classes << 'snap-x snap-mandatory'
             else
@@ -76,18 +76,18 @@ module RjuiTools
           # Scroll enabled — same gate as above; window-mode lets the page
           # scroll regardless, and emitting overflow-hidden would actively
           # clip the rail.
-          if json['scrollEnabled'] == false && !window_mode
+          if attributes['scrollEnabled'] == false && !window_mode
             classes << 'overflow-hidden'
             classes.reject! { |c| c.start_with?('overflow-x-auto', 'overflow-y-auto') }
           end
 
           # Bounces (overscroll behavior)
-          if json['bounces'] == false
+          if attributes['bounces'] == false
             classes << 'overscroll-none'
           end
 
           # Content inset adjustment behavior
-          if json['contentInsetAdjustmentBehavior'] == 'never'
+          if attributes['contentInsetAdjustmentBehavior'] == 'never'
             classes << 'scroll-p-0'
           end
 
@@ -98,8 +98,8 @@ module RjuiTools
           super
 
           # Content inset
-          if json['contentInset']
-            inset = json['contentInset']
+          if attributes['contentInset']
+            inset = attributes['contentInset']
             if inset.is_a?(Array)
               case inset.length
               when 1
@@ -121,7 +121,7 @@ module RjuiTools
           end
 
           # Max zoom (for zoomable content)
-          if json['maxZoom']
+          if attributes['maxZoom']
             @dynamic_styles['touchAction'] = "'pan-x pan-y pinch-zoom'"
           end
 
