@@ -557,9 +557,13 @@ module KjuiTools
           modifiers
         end
 
-        # Build .clickable modifier for non-Button components with onClick/onclick
+        # Build .clickable modifier for non-Button components with onClick/onclick.
+        # onLongPress rides the same sink: its detector is emitted BEFORE
+        # .clickable (mirrors dynamic ModifierBuilder.applyClickable) so a
+        # fired long press consumes the gesture and the click never fires.
         def self.build_clickable(json_data, required_imports = nil)
           modifiers = []
+          modifiers.concat(build_long_pressable(json_data, required_imports))
           handler = json_data['onclick'] || json_data['onClick']
           if handler
             required_imports&.add(:clickable)
@@ -574,6 +578,68 @@ module KjuiTools
             modifiers << ".clickable { #{handler_call} }"
           end
           modifiers
+        end
+
+        # onLongPress (common attribute, platform swift/kotlin) → long-press
+        # gesture modifier. Mirrors the dynamic fix
+        # (ModifierBuilder.applyLongPressable, KotlinJsonUI 2.9.2):
+        #
+        # `Modifier.pointerInput { detectTapGestures(onLongPress) }` does NOT
+        # work on components with an inner clickable (Button's own .clickable,
+        # or the .clickable emitted after this modifier) — the inner handler
+        # consumes the down event in the Main pass and awaitFirstDown
+        # (requireUnconsumed = true) starves. combinedClickable on Button's
+        # modifier races the same way. Instead the detector watches the
+        # Initial pass, which sees every gesture before any inner handler;
+        # when the press outlives the long-press timeout it fires the handler
+        # and consumes the remaining events so the inner onClick is cancelled.
+        #
+        # `pointerInput(data)` keys the gesture coroutine on the data holder
+        # so a rebuilt handler set restarts it with fresh closures — same
+        # contract as the dynamic pointerInput(handler, data) keys.
+        #
+        # Handler resolution follows camelCase onClick conventions:
+        # @{binding} → get_event_handler_invocation (data-definition aware),
+        # plain name → data.<name>?.invoke().
+        def self.build_long_pressable(json_data, required_imports = nil)
+          handler = json_data['onLongPress']
+          return [] unless handler
+
+          required_imports&.add(:long_press_gesture)
+          view_id = json_data['id']
+          handler_call = if is_binding?(handler)
+                           get_event_handler_invocation(handler, view_id, nil)
+                         else
+                           get_event_handler_call(handler, is_camel_case: true)
+                         end
+
+          gesture = <<~KOTLIN.rstrip
+            .pointerInput(data) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    val longPressed = try {
+                        withTimeout(viewConfiguration.longPressTimeoutMillis) {
+                            var event: PointerEvent
+                            do {
+                                event = awaitPointerEvent(PointerEventPass.Initial)
+                            } while (event.changes.any { it.pressed })
+                        }
+                        false
+                    } catch (_: PointerEventTimeoutCancellationException) {
+                        true
+                    }
+                    if (longPressed) {
+                        #{handler_call}
+                        var event: PointerEvent
+                        do {
+                            event = awaitPointerEvent(PointerEventPass.Initial)
+                            event.changes.forEach { it.consume() }
+                        } while (event.changes.any { it.pressed })
+                    }
+                }
+            }
+          KOTLIN
+          [gesture]
         end
 
         def self.build_alignment(json_data, required_imports = nil, parent_type = nil)
@@ -872,16 +938,23 @@ module KjuiTools
             code = "\n" + indent(base, depth + 1)
             # Skip the first "Modifier" and process the rest
             modifiers[1..-1].each do |mod|
-              code += "\n" + indent("    #{mod}", depth + 1)
+              # indent(mod, 1) first so continuation lines of multi-line
+              # modifiers (e.g. the onLongPress pointerInput block) keep
+              # their relative indentation; identical output for the
+              # single-line case.
+              code += "\n" + indent(indent(mod, 1), depth + 1)
             end
           else
             code = "\n" + indent(base, depth + 1)
 
-            if modifiers.length == 1 && modifiers[0].start_with?('.')
+            # The inline shortcut is only valid for single-line modifiers;
+            # a multi-line modifier appended inline would lose the base
+            # indentation on its continuation lines.
+            if modifiers.length == 1 && modifiers[0].start_with?('.') && !modifiers[0].include?("\n")
               code += modifiers[0]
             else
               modifiers.each do |mod|
-                code += "\n" + indent("    #{mod}", depth + 1)
+                code += "\n" + indent(indent(mod, 1), depth + 1)
               end
             end
           end

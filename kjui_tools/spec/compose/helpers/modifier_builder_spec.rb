@@ -790,4 +790,98 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
       ])
     end
   end
+
+  describe '.build_long_pressable' do
+    before do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+    end
+
+    it 'emits an Initial-pass pointerInput long-press detector for a binding handler' do
+      imports = Set.new
+      json_data = { 'onLongPress' => '@{onCellLongPress}' }
+      result = described_class.build_long_pressable(json_data, imports)
+
+      expect(result.length).to eq(1)
+      gesture = result.first
+      expect(gesture).to include('.pointerInput(data) {')
+      expect(gesture).to include('awaitEachGesture {')
+      # Initial pass so inner clickables (Button etc.) cannot starve the detector
+      expect(gesture).to include('awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)')
+      expect(gesture).to include('withTimeout(viewConfiguration.longPressTimeoutMillis)')
+      expect(gesture).to include('PointerEventTimeoutCancellationException')
+      expect(gesture).to include('data.onCellLongPress?.invoke()')
+      # Remaining events consumed so the inner onClick does not also fire
+      expect(gesture).to include('it.consume()')
+      expect(imports).to include(:long_press_gesture)
+    end
+
+    it 'returns no modifiers without onLongPress' do
+      result = described_class.build_long_pressable({ 'onClick' => '@{onTap}' }, Set.new)
+      expect(result).to be_empty
+    end
+
+    it 'resolves binding handlers with viewId argument via data definitions' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onRowLongPress' => { 'class' => '((String) -> Unit)?' }
+      }
+      json_data = { 'id' => 'row_item', 'onLongPress' => '@{onRowLongPress}' }
+      result = described_class.build_long_pressable(json_data, Set.new)
+      expect(result.first).to include('data.onRowLongPress?.invoke("row_item")')
+    end
+
+    it 'resolves plain method-name handlers like camelCase onClick' do
+      json_data = { 'onLongPress' => 'handleLongPress' }
+      result = described_class.build_long_pressable(json_data, Set.new)
+      expect(result.first).to include('data.handleLongPress?.invoke()')
+    end
+  end
+
+  describe '.build_clickable with onLongPress' do
+    before do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+    end
+
+    it 'emits the long-press detector before .clickable so long press cancels click' do
+      imports = Set.new
+      json_data = { 'onClick' => '@{onTap}', 'onLongPress' => '@{onHold}' }
+      result = described_class.build_clickable(json_data, imports)
+
+      expect(result.length).to eq(2)
+      expect(result.first).to include('.pointerInput(data) {')
+      expect(result.first).to include('data.onHold?.invoke()')
+      expect(result.last).to include('.clickable { data.onTap?.invoke() }')
+      expect(imports).to include(:clickable)
+      expect(imports).to include(:long_press_gesture)
+    end
+
+    it 'emits only the long-press detector when no onClick is present' do
+      imports = Set.new
+      json_data = { 'onLongPress' => '@{onHold}' }
+      result = described_class.build_clickable(json_data, imports)
+
+      expect(result.length).to eq(1)
+      expect(result.first).to include('.pointerInput(data) {')
+      expect(result.join).not_to include('.clickable')
+      expect(imports).not_to include(:clickable)
+    end
+
+    it 'keeps plain .clickable output unchanged without onLongPress' do
+      imports = Set.new
+      json_data = { 'onClick' => '@{onTap}' }
+      result = described_class.build_clickable(json_data, imports)
+      expect(result).to eq(['.clickable { data.onTap?.invoke() }'])
+    end
+  end
+
+  describe '.format with multi-line modifiers' do
+    it 'indents every line of a single multi-line modifier' do
+      gesture = ".pointerInput(data) {\n    awaitEachGesture {\n    }\n}"
+      result = described_class.format([gesture], 0)
+      lines = result.split("\n")
+      expect(lines).to include('    modifier = Modifier')
+      expect(lines).to include('        .pointerInput(data) {')
+      expect(lines).to include('            awaitEachGesture {')
+      expect(lines).to include('        }')
+    end
+  end
 end

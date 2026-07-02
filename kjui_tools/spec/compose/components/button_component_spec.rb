@@ -282,4 +282,52 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
       expect(result).to include('camelCase events require binding format')
     end
   end
+
+  describe 'onLongPress (inner-clickable trap)' do
+    # Button has its own inner clickable that consumes the down event in the
+    # Main pass, so plain detectTapGestures on the outer modifier is starved.
+    # The emit must watch the Initial pass (mirrors dynamic
+    # ModifierBuilder.applyLongPressable) instead of combinedClickable.
+    it 'emits an Initial-pass pointerInput long-press detector on the Button modifier' do
+      json_data = {
+        'type' => 'Button',
+        'id' => 'submit_button',
+        'text' => 'Submit',
+        'onClick' => '@{onSubmit}',
+        'onLongPress' => '@{onSubmitLongPress}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      # Native onClick stays on the Button parameter
+      expect(result).to include('onClick = { data.onSubmit?.invoke() }')
+      # Long press rides the modifier chain with Initial-pass detection
+      expect(result).to include('.pointerInput(data) {')
+      expect(result).to include('awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)')
+      expect(result).to include('withTimeout(viewConfiguration.longPressTimeoutMillis)')
+      expect(result).to include('data.onSubmitLongPress?.invoke()')
+      expect(result).to include('it.consume()')
+      expect(required_imports).to include(:long_press_gesture)
+    end
+
+    it 'emits the long-press detector even without onClick' do
+      json_data = {
+        'type' => 'Button',
+        'text' => 'Hold',
+        'onLongPress' => '@{onHold}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      expect(result).to include('onClick = { }')
+      expect(result).to include('.pointerInput(data) {')
+      expect(result).to include('data.onHold?.invoke()')
+    end
+
+    it 'does not emit pointerInput without onLongPress' do
+      json_data = { 'type' => 'Button', 'text' => 'Plain', 'onClick' => '@{onTap}' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).not_to include('.pointerInput')
+    end
+  end
 end

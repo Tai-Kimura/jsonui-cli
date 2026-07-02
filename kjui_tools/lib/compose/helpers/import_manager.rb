@@ -67,6 +67,15 @@ module KjuiTools
             icons: ["import androidx.compose.ui.res.painterResource"],
             icon_button: "import androidx.compose.material3.IconButton",
             clickable: "import androidx.compose.foundation.clickable",
+            # onLongPress Initial-pass detector (ModifierBuilder.build_long_pressable).
+            # withTimeout / viewConfiguration / awaitPointerEvent are
+            # AwaitPointerEventScope members — no import needed.
+            long_press_gesture: ["import androidx.compose.foundation.gestures.awaitEachGesture",
+                                 "import androidx.compose.foundation.gestures.awaitFirstDown",
+                                 "import androidx.compose.ui.input.pointer.PointerEvent",
+                                 "import androidx.compose.ui.input.pointer.PointerEventPass",
+                                 "import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException",
+                                 "import androidx.compose.ui.input.pointer.pointerInput"],
             radio_colors: "import androidx.compose.material3.RadioButtonDefaults",
             tab_row: ["import androidx.compose.material3.TabRow",
                       "import androidx.compose.material3.Tab"],

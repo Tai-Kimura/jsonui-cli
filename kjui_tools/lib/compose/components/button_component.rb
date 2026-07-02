@@ -49,6 +49,11 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          # onLongPress: Button's own inner .clickable consumes the down event
+          # in the Main pass, so the detector must watch the Initial pass
+          # (see ModifierBuilder.build_long_pressable). combinedClickable on
+          # this modifier would race the inner clickable the same way.
+          modifiers.concat(Helpers::ModifierBuilder.build_long_pressable(json_data, required_imports))
 
           # Format modifiers only if there are modifiers
           if modifiers.any?

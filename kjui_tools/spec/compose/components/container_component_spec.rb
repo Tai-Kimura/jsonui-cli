@@ -57,6 +57,25 @@ RSpec.describe KjuiTools::Compose::Components::ContainerComponent do
       expect(required_imports).to include(:arrangement)
     end
 
+    it 'emits an Initial-pass long-press detector for a plain View with onLongPress' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+      json_data = { 'type' => 'View', 'onLongPress' => '@{onCardLongPress}' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result[:code]).to include('.pointerInput(data) {')
+      expect(result[:code]).to include('awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)')
+      expect(result[:code]).to include('data.onCardLongPress?.invoke()')
+      expect(required_imports).to include(:long_press_gesture)
+    end
+
+    it 'emits long-press before clickable when a View has both onClick and onLongPress' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+      json_data = { 'type' => 'View', 'onClick' => '@{onTap}', 'onLongPress' => '@{onHold}' }
+      result = described_class.generate(json_data, 0, required_imports)
+      code = result[:code]
+      expect(code).to include('.clickable { data.onTap?.invoke() }')
+      expect(code.index('.pointerInput(data)')).to be < code.index('.clickable')
+    end
+
     it 'adds spacing arrangement for Row' do
       json_data = { 'type' => 'View', 'orientation' => 'horizontal', 'spacing' => 16 }
       result = described_class.generate(json_data, 0, required_imports)
