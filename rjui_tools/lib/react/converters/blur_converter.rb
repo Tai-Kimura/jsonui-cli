@@ -34,14 +34,14 @@ module RjuiTools
           classes = [super]
 
           # Corner radius
-          corner_radius = json['cornerRadius']
+          corner_radius = attributes['cornerRadius']
           classes << "rounded-[#{corner_radius}px]" if corner_radius
 
           # Overflow hidden for corner radius
           classes << 'overflow-hidden' if corner_radius
 
           # Cursor pointer for clickable items
-          classes << 'cursor-pointer' if json['onClick'] || json['onclick']
+          classes << 'cursor-pointer' if attributes['onClick'] || attributes['onclick']
 
           classes.compact.reject(&:empty?).join(' ')
         end
@@ -55,7 +55,7 @@ module RjuiTools
           style_parts << "WebkitBackdropFilter: 'blur(#{blur_amount}px)'" # Safari support
 
           # Get background color based on effect style
-          bg_color = json['backgroundColor'] || get_background_color
+          bg_color = attributes['backgroundColor'] || get_background_color
           style_parts << "backgroundColor: '#{bg_color}'" if bg_color
 
           existing_style = build_style_attr
@@ -68,11 +68,11 @@ module RjuiTools
 
         def get_blur_amount
           # Use blurRadius if provided directly
-          return json['blurRadius'] if json['blurRadius']
+          return attributes['blurRadius'] if attributes['blurRadius']
 
           # Use intensity if provided (0.0 to 1.0 mapped to 0 to 20px)
-          if json['intensity']
-            (json['intensity'] * 20).round
+          if attributes['intensity']
+            (attributes['intensity'] * 20).round
           else
             # Default blur based on effect style
             case get_effect_style
@@ -118,7 +118,7 @@ module RjuiTools
         end
 
         def get_effect_style
-          (json['effectStyle'] || json['style'] || 'regular').downcase.gsub(/\s+/, '')
+          (attributes['effectStyle'] || json['style'] || 'regular').downcase.gsub(/\s+/, '')
         end
       end
     end
