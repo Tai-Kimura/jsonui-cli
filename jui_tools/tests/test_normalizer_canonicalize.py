@@ -68,9 +68,11 @@ class AliasTableTest(unittest.TestCase):
         self.assertIsNotNone(path, "shared/core/attribute_definitions.json not found")
         table = AliasTable.from_file(path)
         self.assertEqual(table.aliases_for("View").get("alpha"), "opacity")
-        self.assertEqual(
-            table.aliases_for("View").get("alignTopView"), "alignTopOfView"
-        )
+        # alignTopView is NOT an alias of alignTopOfView: they are distinct
+        # attributes (align top edges vs position relative to the target
+        # view) on every platform renderer, so the definitions must not
+        # alias them (rewriting would silently change layout semantics).
+        self.assertNotIn("alignTopView", table.aliases_for("View"))
         self.assertEqual(table.aliases_for("Button").get("hilightColor"), "highlightColor")
         self.assertEqual(
             table.aliases_for("Button").get("highlightBackground"), "tapBackground"
