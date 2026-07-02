@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'resource_resolver'
+require_relative '../../core/normalization'
 
 module KjuiTools
   module Compose
@@ -523,8 +524,9 @@ module KjuiTools
           end
           
           # Handle alpha/opacity attribute separately (not part of visibility wrapper)
-          # Support both 'alpha' and 'opacity' for compatibility
-          alpha_value = json_data['alpha'] || json_data['opacity']
+          # Canonical spelling is 'opacity' ('alpha' is its alias; alias
+          # fallback is skipped for L1-normalized layouts).
+          alpha_value = Core::Normalization.attr_lookup(json_data, 'opacity', 'alpha')
           if alpha_value
             required_imports&.add(:alpha)
             if alpha_value.is_a?(String) && alpha_value.match?(/@\{([^}]+)\}/)
@@ -542,7 +544,7 @@ module KjuiTools
         # Build alpha/opacity modifier separately (can be used independently of visibility)
         def self.build_alpha(json_data, required_imports = nil)
           modifiers = []
-          alpha_value = json_data['alpha'] || json_data['opacity']
+          alpha_value = Core::Normalization.attr_lookup(json_data, 'opacity', 'alpha')
           if alpha_value
             required_imports&.add(:alpha)
             if alpha_value.is_a?(String) && alpha_value.match?(/@\{([^}]+)\}/)

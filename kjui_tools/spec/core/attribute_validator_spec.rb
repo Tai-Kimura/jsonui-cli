@@ -1635,4 +1635,65 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       end
     end
   end
+  describe 'normalized (L1) layouts' do
+    let(:validator) { described_class.new }
+
+    # `minimumValue` exists ONLY as an alias of Slider `minimum` in the
+    # definitions (unlike e.g. `alpha`, which also has a standalone
+    # entry), so it is the observable difference between the alias-
+    # expanding L0 path and the canonical-only L1 path.
+    let(:alias_component) do
+      {
+        'type' => 'Slider',
+        'width' => 'matchParent',
+        'height' => 20,
+        'minimumValue' => 5
+      }
+    end
+
+    it 'accepts alias-only spellings on the L0 path' do
+      warnings = validator.validate(alias_component)
+      expect(warnings.any? { |w| w.include?("Unknown attribute 'minimumValue'") }).to be false
+    end
+
+    it 'reports leftover alias-only spellings as unknown on the canonical-only path' do
+      validator.normalized = true
+      warnings = validator.validate(alias_component)
+      expect(warnings.any? { |w| w.include?("Unknown attribute 'minimumValue'") }).to be true
+    end
+
+    it 'still accepts canonical spellings on the canonical-only path' do
+      validator.normalized = true
+      component = {
+        'type' => 'View',
+        'width' => 'matchParent',
+        'height' => 100,
+        'opacity' => 0.5
+      }
+      expect(validator.validate(component)).to be_empty
+    end
+
+    it 'accepts standalone attributes that share an alias spelling' do
+      validator.normalized = true
+      component = {
+        'type' => 'View',
+        'width' => 'matchParent',
+        'height' => 100,
+        'alignTopView' => 'anchor'
+      }
+      expect(validator.validate(component)).to be_empty
+    end
+
+    it 'still skips the $jui marker key itself' do
+      validator.normalized = true
+      component = {
+        'type' => 'View',
+        'width' => 'matchParent',
+        'height' => 100,
+        '$jui' => { 'normalized' => 'L1', 'schemaVersion' => 1 }
+      }
+      warnings = validator.validate(component)
+      expect(warnings.any? { |w| w.include?('$jui') }).to be false
+    end
+  end
 end

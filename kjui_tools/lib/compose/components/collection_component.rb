@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/modifier_builder'
+require_relative '../../core/normalization'
 
 module KjuiTools
   module Compose
@@ -617,8 +618,10 @@ module KjuiTools
           current_page_raw = json_data['currentPage']
           page_prop = current_page_raw&.match(/@\{([^}]+)\}/)&.captures&.first
 
-          # onPageChanged callback
-          on_page_raw = json_data['onPageChanged']
+          # Page-change callback: canonical 'onValueChange' with the
+          # 'onValueChanged' / 'onPageChanged' alias fallbacks (skipped on
+          # L1-normalized layouts).
+          on_page_raw = Core::Normalization.attr_lookup(json_data, 'onValueChange', 'onValueChanged', 'onPageChanged')
           page_callback_prop = on_page_raw&.match(/@\{([^}]+)\}/)&.captures&.first
 
           # Build modifiers

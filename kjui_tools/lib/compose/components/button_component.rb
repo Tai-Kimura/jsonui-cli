@@ -3,6 +3,7 @@
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/font_spec_helper'
+require_relative '../../core/normalization'
 
 module KjuiTools
   module Compose
@@ -161,10 +162,14 @@ module KjuiTools
             color_params << "disabledContentColor = #{disabled_font_color}"
           end
 
-          # Note: hilightColor (pressed state) isn't directly supported in Material3 ButtonDefaults
+          # Note: highlightColor (pressed state) isn't directly supported in Material3 ButtonDefaults
           # We'd need a custom button implementation or InteractionSource for true pressed state
-          if json_data['hilightColor']
-            color_params << "// hilightColor: #{json_data['hilightColor']} - Use InteractionSource for pressed state"
+          # (canonical 'highlightColor'; 'hilightColor' is its typo alias,
+          # skipped on L1-normalized layouts). Comment text keeps the
+          # legacy spelling so L0/L1 output stays byte-identical.
+          highlight_color_value = Core::Normalization.attr_lookup(json_data, 'highlightColor', 'hilightColor')
+          if highlight_color_value
+            color_params << "// hilightColor: #{highlight_color_value} - Use InteractionSource for pressed state"
           end
 
           colors_code += "\n" + color_params.map { |param| indent(param, depth + 2) }.join(",\n")
