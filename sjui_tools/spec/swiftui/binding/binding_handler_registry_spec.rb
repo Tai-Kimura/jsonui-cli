@@ -15,6 +15,9 @@ RSpec.describe SjuiTools::SwiftUI::Binding::BindingHandlerRegistry do
       expect(registry.get_handler('TextField')).to be_a(SjuiTools::SwiftUI::Binding::TextFieldBindingHandler)
       expect(registry.get_handler('SecureField')).to be_a(SjuiTools::SwiftUI::Binding::TextFieldBindingHandler)
       expect(registry.get_handler('TextView')).to be_a(SjuiTools::SwiftUI::Binding::TextFieldBindingHandler)
+      # EditText / Input are aliases for TextField (attribute_definitions `_alias_of: TextField`)
+      expect(registry.get_handler('EditText')).to be_a(SjuiTools::SwiftUI::Binding::TextFieldBindingHandler)
+      expect(registry.get_handler('Input')).to be_a(SjuiTools::SwiftUI::Binding::TextFieldBindingHandler)
 
       # Button
       expect(registry.get_handler('Button')).to be_a(SjuiTools::SwiftUI::Binding::ButtonBindingHandler)

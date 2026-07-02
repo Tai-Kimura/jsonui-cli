@@ -235,6 +235,15 @@ module SjuiTools
           @indent_level -= 1
         end
 
+        # Component types whose SwiftUI representation is a plain layout
+        # container (HStack/VStack/ZStack/ScrollView wrapper) that does not
+        # become an accessibility element on its own. Keep in sync with
+        # SwiftJsonUI DynamicModifierHelper.accessibilityContainerTypes.
+        ACCESSIBILITY_CONTAINER_TYPES = %w[
+          view safeareaview scrollview scroll
+          blur blurview gradientview gradient
+        ].freeze
+
         def generated_code
           # Emit all modifiers from the bag in correct order
           @modifier_bag.emit_all(self)
@@ -242,10 +251,48 @@ module SjuiTools
           # accessibilityIdentifier for UI testing - auto-added for all components with id
           # ID prefixes from includes are already applied during JSON processing
           if @component['id'] && !@accessibility_identifier_added
-            add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}\")"
+            apply_accessibility_identifier
             @accessibility_identifier_added = true
           end
           @generated_code.join("\n")
+        end
+
+        # Emit the accessibilityIdentifier for this component, matching the
+        # Dynamic-mode semantics of DynamicModifierHelper.applyAccessibilityId:
+        #
+        # - Statically invisible components must not become accessibility
+        #   elements at all — explicit accessibility containers ignore an
+        #   ancestor's .accessibilityHidden(true), so emitting one here would
+        #   leave an invisible view findable by VoiceOver / UI tests.
+        #   (The library VisibilityWrapper collapses + hides the subtree.)
+        # - Plain SwiftUI containers are not accessibility elements, so a bare
+        #   .accessibilityIdentifier is pushed down onto the nearest descendant
+        #   element — it never surfaces for the container itself and can
+        #   clobber a child's own identifier (e.g. a screen root "root" View
+        #   overwriting the id of the single control inside it). Make the
+        #   container an explicit accessibility container first; this matches
+        #   the UIKit path, where every UIView with an id is queryable by
+        #   XCUITest, and keeps all descendant elements accessible.
+        # - The invisible 0.5pt anchor overlay prevents SwiftUI from merging
+        #   two nested containers when the outer one has exactly one
+        #   accessibility child (the merge drops the inner container's
+        #   identifier): with the anchor the container always has at least two
+        #   children, so it is never collapsed into its single child.
+        def apply_accessibility_identifier
+          return if @component['visibility'] == 'invisible'
+
+          type_name = (@component['type'] || '').downcase
+          if ACCESSIBILITY_CONTAINER_TYPES.include?(type_name)
+            add_modifier_line ".overlay(alignment: .topLeading) {"
+            indent do
+              add_modifier_line "Color.clear"
+              add_modifier_line "    .frame(width: 0.5, height: 0.5)"
+              add_modifier_line "    .accessibilityElement(children: .ignore)"
+            end
+            add_modifier_line "}"
+            add_modifier_line ".accessibilityElement(children: .contain)"
+          end
+          add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}\")"
         end
 
         # 共通のモディファイア適用メソッド

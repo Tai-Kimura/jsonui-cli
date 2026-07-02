@@ -156,7 +156,9 @@ module SjuiTools
           Views::GradientViewConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
         when 'Blur', 'BlurView'
           Views::BlurConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
-        when 'TextField'
+        # EditText / Input are aliases for TextField (attribute_definitions
+        # `_alias_of: TextField`; kept for Android / HTML naming compatibility)
+        when 'TextField', 'EditText', 'Input'
           Views::TextFieldConverter.new(component, indent_level, action_manager, @binding_registry)
         when 'Image', 'CircleImage'
           Views::ImageConverter.new(component, indent_level, action_manager, @binding_registry)

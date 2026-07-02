@@ -68,6 +68,26 @@ RSpec.describe SjuiTools::SwiftUI::ConverterFactory do
       end
     end
 
+    # EditText / Input are aliases for TextField
+    # (attribute_definitions.json `_alias_of: TextField`)
+    context 'with EditText component (TextField alias)' do
+      let(:component) { { 'type' => 'EditText' } }
+
+      it 'returns TextFieldConverter' do
+        converter = factory.create_converter(component)
+        expect(converter).to be_a(SjuiTools::SwiftUI::Views::TextFieldConverter)
+      end
+    end
+
+    context 'with Input component (TextField alias)' do
+      let(:component) { { 'type' => 'Input' } }
+
+      it 'returns TextFieldConverter' do
+        converter = factory.create_converter(component)
+        expect(converter).to be_a(SjuiTools::SwiftUI::Views::TextFieldConverter)
+      end
+    end
+
     context 'with Image component' do
       let(:component) { { 'type' => 'Image' } }
 

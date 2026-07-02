@@ -73,6 +73,20 @@ RSpec.describe SjuiTools::SwiftUI::DataModelUpdater do
     it 'returns empty for non-hash' do
       expect(updater.send(:extract_data_properties, 'string')).to eq([])
     end
+
+    # EditText / Input are aliases for TextField (attribute_definitions
+    # `_alias_of: TextField`); TextFieldConverter emits data.<id>IsFocused
+    # references for every routed component with an id, so the auto-generated
+    # focus property must cover the aliases too or generated code won't compile.
+    it 'auto-generates isFocused property for TextField and its aliases' do
+      %w[TextField EditText Input].each do |type|
+        json_data = { 'type' => type, 'id' => 'email_field' }
+        result = updater.send(:extract_data_properties, json_data)
+        names = result.map { |p| p['name'] }
+        expect(names).to include('emailFieldIsFocused'),
+                         "expected #{type} to auto-generate emailFieldIsFocused, got #{names.inspect}"
+      end
+    end
   end
 
   describe '#extract_onclick_actions' do
