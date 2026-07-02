@@ -1,0 +1,3627 @@
+{
+  "platform": "android",
+  "manifestHash": "4f679408f1028dcaa83afc8dbccc7ea72716b67c3e55bd46a4bc200c9c78d577",
+  "runner": {
+    "name": "uiautomator",
+    "version": "2.3.0"
+  },
+  "results": [
+    {
+      "id": "common/width__matchparent",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_width__matchparent.png"
+    },
+    {
+      "id": "common/width__wrapcontent",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_width__wrapcontent.png"
+    },
+    {
+      "id": "common/width__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_width__static.png"
+    },
+    {
+      "id": "common/height__matchparent",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_height__matchparent.png"
+    },
+    {
+      "id": "common/height__wrapcontent",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_height__wrapcontent.png"
+    },
+    {
+      "id": "common/height__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_height__static.png"
+    },
+    {
+      "id": "common/minWidth__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_minWidth__static.png"
+    },
+    {
+      "id": "common/maxWidth__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_maxWidth__static.png"
+    },
+    {
+      "id": "common/minHeight__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_minHeight__static.png"
+    },
+    {
+      "id": "common/maxHeight__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_maxHeight__static.png"
+    },
+    {
+      "id": "common/widthWeight__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/heightWeight__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/maxWidthWeight__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/maxHeightWeight__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/minWidthWeight__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/minHeightWeight__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/aspectWidth__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/aspectHeight__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/weight__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_weight__static.png"
+    },
+    {
+      "id": "common/background__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_background__static.png"
+    },
+    {
+      "id": "common/tapBackground__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_tapBackground__static.png"
+    },
+    {
+      "id": "common/highlightBackground__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_highlightBackground__static.png"
+    },
+    {
+      "id": "common/disabledBackground__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_disabledBackground__static.png"
+    },
+    {
+      "id": "common/defaultBackground__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/cornerRadius__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_cornerRadius__static.png"
+    },
+    {
+      "id": "common/borderWidth__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_borderWidth__static.png"
+    },
+    {
+      "id": "common/borderColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_borderColor__static.png"
+    },
+    {
+      "id": "common/borderStyle__solid",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_borderStyle__solid.png"
+    },
+    {
+      "id": "common/borderStyle__dashed",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_borderStyle__dashed.png"
+    },
+    {
+      "id": "common/borderStyle__dotted",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_borderStyle__dotted.png"
+    },
+    {
+      "id": "common/alpha__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alpha__static.png"
+    },
+    {
+      "id": "common/opacity__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_opacity__static.png"
+    },
+    {
+      "id": "common/opacity__alias_alpha",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_opacity__alias_alpha.png"
+    },
+    {
+      "id": "common/visibility__visible",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/visibility__invisible",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/visibility__gone",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/hidden__true",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/hidden__false",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/padding__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_padding__static.png"
+    },
+    {
+      "id": "common/paddings__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_paddings__static.png"
+    },
+    {
+      "id": "common/paddingTop__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_paddingTop__static.png"
+    },
+    {
+      "id": "common/paddingBottom__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_paddingBottom__static.png"
+    },
+    {
+      "id": "common/paddingLeft__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_paddingLeft__static.png"
+    },
+    {
+      "id": "common/paddingRight__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_paddingRight__static.png"
+    },
+    {
+      "id": "common/paddingStart__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_paddingStart__static.png"
+    },
+    {
+      "id": "common/paddingEnd__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_paddingEnd__static.png"
+    },
+    {
+      "id": "common/rightPadding__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_rightPadding__static.png"
+    },
+    {
+      "id": "common/leftPadding__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_leftPadding__static.png"
+    },
+    {
+      "id": "common/topPadding__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_topPadding__static.png"
+    },
+    {
+      "id": "common/bottomPadding__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_bottomPadding__static.png"
+    },
+    {
+      "id": "common/minTopPadding__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/minBottomPadding__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/minLeftPadding__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/minRightPadding__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/maxTopPadding__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/maxBottomPadding__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/maxLeftPadding__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/maxRightPadding__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/margins__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_margins__static.png"
+    },
+    {
+      "id": "common/topMargin__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_topMargin__static.png"
+    },
+    {
+      "id": "common/bottomMargin__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_bottomMargin__static.png"
+    },
+    {
+      "id": "common/leftMargin__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_leftMargin__static.png"
+    },
+    {
+      "id": "common/rightMargin__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_rightMargin__static.png"
+    },
+    {
+      "id": "common/startMargin__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_startMargin__static.png"
+    },
+    {
+      "id": "common/endMargin__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_endMargin__static.png"
+    },
+    {
+      "id": "common/minTopMargin__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/minBottomMargin__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/minLeftMargin__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/minRightMargin__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/maxTopMargin__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/maxBottomMargin__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/maxLeftMargin__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/maxRightMargin__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/centerInParent__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_centerInParent__true.png"
+    },
+    {
+      "id": "common/centerVertical__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_centerVertical__true.png"
+    },
+    {
+      "id": "common/centerHorizontal__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_centerHorizontal__true.png"
+    },
+    {
+      "id": "common/alignTop__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignTop__true.png"
+    },
+    {
+      "id": "common/alignBottom__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignBottom__true.png"
+    },
+    {
+      "id": "common/alignLeft__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignLeft__true.png"
+    },
+    {
+      "id": "common/alignRight__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignRight__true.png"
+    },
+    {
+      "id": "common/alignTopOfView__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignTopOfView__static.png"
+    },
+    {
+      "id": "common/alignTopOfView__alias_alignTopView",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignTopOfView__alias_alignTopView.png"
+    },
+    {
+      "id": "common/alignBottomOfView__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignBottomOfView__static.png"
+    },
+    {
+      "id": "common/alignBottomOfView__alias_alignBottomView",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignBottomOfView__alias_alignBottomView.png"
+    },
+    {
+      "id": "common/alignLeftOfView__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignLeftOfView__static.png"
+    },
+    {
+      "id": "common/alignLeftOfView__alias_alignLeftView",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignLeftOfView__alias_alignLeftView.png"
+    },
+    {
+      "id": "common/alignRightOfView__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignRightOfView__static.png"
+    },
+    {
+      "id": "common/alignRightOfView__alias_alignRightView",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignRightOfView__alias_alignRightView.png"
+    },
+    {
+      "id": "common/alignTopView__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignTopView__static.png"
+    },
+    {
+      "id": "common/alignBottomView__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignBottomView__static.png"
+    },
+    {
+      "id": "common/alignLeftView__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignLeftView__static.png"
+    },
+    {
+      "id": "common/alignRightView__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignRightView__static.png"
+    },
+    {
+      "id": "common/alignCenterVerticalView__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignCenterVerticalView__static.png"
+    },
+    {
+      "id": "common/alignCenterHorizontalView__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignCenterHorizontalView__static.png"
+    },
+    {
+      "id": "common/toView__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/shadow__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_shadow__static.png"
+    },
+    {
+      "id": "common/clipToBounds__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_clipToBounds__true.png"
+    },
+    {
+      "id": "common/tintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_tintColor__static.png"
+    },
+    {
+      "id": "common/compressHorizontal__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/compressVertical__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/hugHorizontal__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/hugVertical__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/wrapContent__true",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/innerPadding__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/effectStyle__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/enabled__true",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/enabled__false",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/indexBelow__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_indexBelow__static.png"
+    },
+    {
+      "id": "common/indexAbove__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_indexAbove__static.png"
+    },
+    {
+      "id": "common/gravity__top",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_gravity__top.png"
+    },
+    {
+      "id": "common/gravity__bottom",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_gravity__bottom.png"
+    },
+    {
+      "id": "common/gravity__centervertical",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_gravity__centervertical.png"
+    },
+    {
+      "id": "common/gravity__left",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_gravity__left.png"
+    },
+    {
+      "id": "common/gravity__right",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_gravity__right.png"
+    },
+    {
+      "id": "common/gravity__centerhorizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_gravity__centerhorizontal.png"
+    },
+    {
+      "id": "common/gravity__center",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_gravity__center.png"
+    },
+    {
+      "id": "common/alignment__topleading",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignment__topleading.png"
+    },
+    {
+      "id": "common/alignment__top",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignment__top.png"
+    },
+    {
+      "id": "common/alignment__toptrailing",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignment__toptrailing.png"
+    },
+    {
+      "id": "common/alignment__leading",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignment__leading.png"
+    },
+    {
+      "id": "common/alignment__center",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignment__center.png"
+    },
+    {
+      "id": "common/alignment__trailing",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignment__trailing.png"
+    },
+    {
+      "id": "common/alignment__bottomleading",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignment__bottomleading.png"
+    },
+    {
+      "id": "common/alignment__bottom",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignment__bottom.png"
+    },
+    {
+      "id": "common/alignment__bottomtrailing",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignment__bottomtrailing.png"
+    },
+    {
+      "id": "common/distribution__fill",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_distribution__fill.png"
+    },
+    {
+      "id": "common/distribution__fillequally",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_distribution__fillequally.png"
+    },
+    {
+      "id": "common/distribution__equalspacing",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_distribution__equalspacing.png"
+    },
+    {
+      "id": "common/distribution__equalcentering",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_distribution__equalcentering.png"
+    },
+    {
+      "id": "common/minStartMargin__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/maxStartMargin__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/minEndMargin__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/maxEndMargin__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/idealWidth__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/idealHeight__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Label/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/hint__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_hint__static.png"
+    },
+    {
+      "id": "Label/placeholder__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_placeholder__static.png"
+    },
+    {
+      "id": "Label/font__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_font__static.png"
+    },
+    {
+      "id": "Label/fontSize__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_fontSize__static.png"
+    },
+    {
+      "id": "Label/fontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_fontColor__static.png"
+    },
+    {
+      "id": "Label/fontFamily__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_fontFamily__static.png"
+    },
+    {
+      "id": "Label/lineHeight__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Label/textTransform__none",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Label/textTransform__capitalize",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Label/textTransform__uppercase",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Label/textTransform__lowercase",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Label/selected__true",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Label/textAlign__left",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_textAlign__left.png"
+    },
+    {
+      "id": "Label/textAlign__center",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_textAlign__center.png"
+    },
+    {
+      "id": "Label/textAlign__right",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_textAlign__right.png"
+    },
+    {
+      "id": "Label/textAlign__left_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_textAlign__left_2.png"
+    },
+    {
+      "id": "Label/textAlign__center_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_textAlign__center_2.png"
+    },
+    {
+      "id": "Label/textAlign__right_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_textAlign__right_2.png"
+    },
+    {
+      "id": "Label/lines__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_lines__static.png"
+    },
+    {
+      "id": "Label/lineBreakMode__char",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_lineBreakMode__char.png"
+    },
+    {
+      "id": "Label/lineBreakMode__clip",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_lineBreakMode__clip.png"
+    },
+    {
+      "id": "Label/lineBreakMode__word",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_lineBreakMode__word.png"
+    },
+    {
+      "id": "Label/lineBreakMode__head",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_lineBreakMode__head.png"
+    },
+    {
+      "id": "Label/lineBreakMode__middle",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_lineBreakMode__middle.png"
+    },
+    {
+      "id": "Label/lineBreakMode__tail",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_lineBreakMode__tail.png"
+    },
+    {
+      "id": "Label/lineHeightMultiple__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_lineHeightMultiple__static.png"
+    },
+    {
+      "id": "Label/lineSpacing__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_lineSpacing__static.png"
+    },
+    {
+      "id": "Label/edgeInset__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_edgeInset__static.png"
+    },
+    {
+      "id": "Label/underline__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_underline__true.png"
+    },
+    {
+      "id": "Label/strikethrough__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_strikethrough__true.png"
+    },
+    {
+      "id": "Label/autoShrink__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_autoShrink__true.png"
+    },
+    {
+      "id": "Label/minimumScaleFactor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_minimumScaleFactor__static.png"
+    },
+    {
+      "id": "Label/linkable__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_linkable__true.png"
+    },
+    {
+      "id": "Label/textShadow__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_textShadow__static.png"
+    },
+    {
+      "id": "Label/hintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_hintColor__static.png"
+    },
+    {
+      "id": "Label/highlightColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_highlightColor__static.png"
+    },
+    {
+      "id": "Label/fontWeight__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_fontWeight__static.png"
+    },
+    {
+      "id": "TextField/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "TextField/hint__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_hint__static.png"
+    },
+    {
+      "id": "TextField/placeholder__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_placeholder__static.png"
+    },
+    {
+      "id": "TextField/hintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_hintColor__static.png"
+    },
+    {
+      "id": "TextField/hintFont__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_hintFont__static.png"
+    },
+    {
+      "id": "TextField/hintFontSize__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_hintFontSize__static.png"
+    },
+    {
+      "id": "TextField/font__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_font__static.png"
+    },
+    {
+      "id": "TextField/fontSize__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_fontSize__static.png"
+    },
+    {
+      "id": "TextField/fontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_fontColor__static.png"
+    },
+    {
+      "id": "TextField/textAlign__left",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_textAlign__left.png"
+    },
+    {
+      "id": "TextField/textAlign__center",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_textAlign__center.png"
+    },
+    {
+      "id": "TextField/textAlign__right",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_textAlign__right.png"
+    },
+    {
+      "id": "TextField/textAlign__left_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_textAlign__left_2.png"
+    },
+    {
+      "id": "TextField/textAlign__center_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_textAlign__center_2.png"
+    },
+    {
+      "id": "TextField/textAlign__right_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_textAlign__right_2.png"
+    },
+    {
+      "id": "TextField/borderStyle__none",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_borderStyle__none.png"
+    },
+    {
+      "id": "TextField/borderStyle__line",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_borderStyle__line.png"
+    },
+    {
+      "id": "TextField/borderStyle__bezel",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_borderStyle__bezel.png"
+    },
+    {
+      "id": "TextField/borderStyle__roundedrect",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_borderStyle__roundedrect.png"
+    },
+    {
+      "id": "TextField/borderStyle__roundedrect_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_borderStyle__roundedrect_2.png"
+    },
+    {
+      "id": "TextField/borderStyle__line_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_borderStyle__line_2.png"
+    },
+    {
+      "id": "TextField/borderStyle__bezel_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_borderStyle__bezel_2.png"
+    },
+    {
+      "id": "TextField/input__default",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_input__default.png"
+    },
+    {
+      "id": "TextField/input__alphabet",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_input__alphabet.png"
+    },
+    {
+      "id": "TextField/input__allphabet",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_input__allphabet.png"
+    },
+    {
+      "id": "TextField/input__email",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_input__email.png"
+    },
+    {
+      "id": "TextField/input__number",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_input__number.png"
+    },
+    {
+      "id": "TextField/input__phone",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_input__phone.png"
+    },
+    {
+      "id": "TextField/input__url",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_input__url.png"
+    },
+    {
+      "id": "TextField/input__password",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_input__password.png"
+    },
+    {
+      "id": "TextField/input__decimal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_input__decimal.png"
+    },
+    {
+      "id": "TextField/returnKeyType__done",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_returnKeyType__done.png"
+    },
+    {
+      "id": "TextField/returnKeyType__go",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_returnKeyType__go.png"
+    },
+    {
+      "id": "TextField/returnKeyType__next",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_returnKeyType__next.png"
+    },
+    {
+      "id": "TextField/returnKeyType__return",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_returnKeyType__return.png"
+    },
+    {
+      "id": "TextField/returnKeyType__search",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_returnKeyType__search.png"
+    },
+    {
+      "id": "TextField/returnKeyType__send",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_returnKeyType__send.png"
+    },
+    {
+      "id": "TextField/returnKeyType__continue",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_returnKeyType__continue.png"
+    },
+    {
+      "id": "TextField/returnKeyType__join",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_returnKeyType__join.png"
+    },
+    {
+      "id": "TextField/returnKeyType__route",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_returnKeyType__route.png"
+    },
+    {
+      "id": "TextField/returnKeyType__yahoo",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_returnKeyType__yahoo.png"
+    },
+    {
+      "id": "TextField/returnKeyType__google",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_returnKeyType__google.png"
+    },
+    {
+      "id": "TextField/contentType__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_contentType__static.png"
+    },
+    {
+      "id": "TextField/secure__true",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/fieldPadding__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/textPaddingLeft__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_textPaddingLeft__static.png"
+    },
+    {
+      "id": "TextField/textPaddingRight__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/hasContainer__true",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/textVerticalAlign__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/applyLiquidGlass__true",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/accessoryCornerRadius__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/glassEffectStyle__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/accessoryBackground__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/accessoryTextColor__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/doneText__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/tintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_tintColor__static.png"
+    },
+    {
+      "id": "TextField/autocapitalizationType__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_autocapitalizationType__static.png"
+    },
+    {
+      "id": "TextField/autocorrectionType__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_autocorrectionType__static.png"
+    },
+    {
+      "id": "TextField/spellCheckingType__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/keyboardAppearance__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_keyboardAppearance__static.png"
+    },
+    {
+      "id": "TextField/clearButtonMode__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/leftViewMode__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/rightViewMode__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/maxLength__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_maxLength__static.png"
+    },
+    {
+      "id": "TextField/pattern__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/required__true",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/fontFamily__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_fontFamily__static.png"
+    },
+    {
+      "id": "TextField/disabledBackground__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextField/placeholderColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_placeholderColor__static.png"
+    },
+    {
+      "id": "TextView/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "TextView/hint__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_hint__static.png"
+    },
+    {
+      "id": "TextView/placeholder__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_placeholder__static.png"
+    },
+    {
+      "id": "TextView/hintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_hintColor__static.png"
+    },
+    {
+      "id": "TextView/hintFont__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_hintFont__static.png"
+    },
+    {
+      "id": "TextView/hintFontSize__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_hintFontSize__static.png"
+    },
+    {
+      "id": "TextView/hintLineHeightMultiple__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_hintLineHeightMultiple__static.png"
+    },
+    {
+      "id": "TextView/font__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_font__static.png"
+    },
+    {
+      "id": "TextView/fontSize__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_fontSize__static.png"
+    },
+    {
+      "id": "TextView/fontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_fontColor__static.png"
+    },
+    {
+      "id": "TextView/textAlign__left",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_textAlign__left.png"
+    },
+    {
+      "id": "TextView/textAlign__center",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_textAlign__center.png"
+    },
+    {
+      "id": "TextView/textAlign__right",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_textAlign__right.png"
+    },
+    {
+      "id": "TextView/textAlign__left_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_textAlign__left_2.png"
+    },
+    {
+      "id": "TextView/textAlign__center_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_textAlign__center_2.png"
+    },
+    {
+      "id": "TextView/textAlign__right_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_textAlign__right_2.png"
+    },
+    {
+      "id": "TextView/containerInset__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_containerInset__static.png"
+    },
+    {
+      "id": "TextView/flexible__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_flexible__true.png"
+    },
+    {
+      "id": "TextView/input__default",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_input__default.png"
+    },
+    {
+      "id": "TextView/input__alphabet",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_input__alphabet.png"
+    },
+    {
+      "id": "TextView/input__allphabet",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_input__allphabet.png"
+    },
+    {
+      "id": "TextView/input__email",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_input__email.png"
+    },
+    {
+      "id": "TextView/input__number",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_input__number.png"
+    },
+    {
+      "id": "TextView/input__phone",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_input__phone.png"
+    },
+    {
+      "id": "TextView/input__url",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_input__url.png"
+    },
+    {
+      "id": "TextView/input__password",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_input__password.png"
+    },
+    {
+      "id": "TextView/input__decimal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_input__decimal.png"
+    },
+    {
+      "id": "TextView/returnKeyType__done",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_returnKeyType__done.png"
+    },
+    {
+      "id": "TextView/returnKeyType__go",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_returnKeyType__go.png"
+    },
+    {
+      "id": "TextView/returnKeyType__next",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_returnKeyType__next.png"
+    },
+    {
+      "id": "TextView/returnKeyType__return",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_returnKeyType__return.png"
+    },
+    {
+      "id": "TextView/returnKeyType__search",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_returnKeyType__search.png"
+    },
+    {
+      "id": "TextView/returnKeyType__send",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_returnKeyType__send.png"
+    },
+    {
+      "id": "TextView/returnKeyType__continue",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_returnKeyType__continue.png"
+    },
+    {
+      "id": "TextView/returnKeyType__join",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_returnKeyType__join.png"
+    },
+    {
+      "id": "TextView/returnKeyType__route",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_returnKeyType__route.png"
+    },
+    {
+      "id": "TextView/returnKeyType__yahoo",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_returnKeyType__yahoo.png"
+    },
+    {
+      "id": "TextView/returnKeyType__google",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_returnKeyType__google.png"
+    },
+    {
+      "id": "TextView/editable__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_editable__true.png"
+    },
+    {
+      "id": "TextView/lineBreakMode__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_lineBreakMode__static.png"
+    },
+    {
+      "id": "TextView/keyboardType__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_keyboardType__static.png"
+    },
+    {
+      "id": "TextView/maxLength__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextView/pattern__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextView/required__true",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextView/selectable__true",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextView/rows__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextView/cols__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextView/resize__none",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextView/resize__both",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextView/resize__horizontal",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextView/resize__vertical",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextView/fontFamily__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_fontFamily__static.png"
+    },
+    {
+      "id": "TextView/disabledBackground__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "TextView/edgeInset__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_edgeInset__static.png"
+    },
+    {
+      "id": "EditText/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "EditText/hint__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/EditText_hint__static.png"
+    },
+    {
+      "id": "EditText/placeholder__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/EditText_placeholder__static.png"
+    },
+    {
+      "id": "EditText/hintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/EditText_hintColor__static.png"
+    },
+    {
+      "id": "EditText/inputType__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/EditText_inputType__static.png"
+    },
+    {
+      "id": "Input/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Input/hint__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Input_hint__static.png"
+    },
+    {
+      "id": "Input/placeholder__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Input_placeholder__static.png"
+    },
+    {
+      "id": "Input/hintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Input_hintColor__static.png"
+    },
+    {
+      "id": "Button/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Button/font__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Button_font__static.png"
+    },
+    {
+      "id": "Button/fontSize__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Button_fontSize__static.png"
+    },
+    {
+      "id": "Button/fontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Button_fontColor__static.png"
+    },
+    {
+      "id": "Button/disabledFontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Button_disabledFontColor__static.png"
+    },
+    {
+      "id": "Button/highlightColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Button_highlightColor__static.png"
+    },
+    {
+      "id": "Button/highlightColor__alias_hilightColor",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Button_highlightColor__alias_hilightColor.png"
+    },
+    {
+      "id": "Button/hilightColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Button_hilightColor__static.png"
+    },
+    {
+      "id": "Button/tapBackground__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Button_tapBackground__static.png"
+    },
+    {
+      "id": "Button/tapBackground__alias_highlightBackground",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Button_tapBackground__alias_highlightBackground.png"
+    },
+    {
+      "id": "Button/highlightBackground__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Button_highlightBackground__static.png"
+    },
+    {
+      "id": "Button/image__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Button_image__static.png"
+    },
+    {
+      "id": "Button/textAlign__left",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Button_textAlign__left.png"
+    },
+    {
+      "id": "Button/textAlign__center",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Button_textAlign__center.png"
+    },
+    {
+      "id": "Button/textAlign__right",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Button_textAlign__right.png"
+    },
+    {
+      "id": "Button/buttonType__button",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Button/buttonType__submit",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Button/buttonType__reset",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Button/fontWeight__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Button_fontWeight__static.png"
+    },
+    {
+      "id": "Image/src__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_src__static.png"
+    },
+    {
+      "id": "Image/srcName__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_srcName__static.png"
+    },
+    {
+      "id": "Image/highlightSrc__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Image/highlightSrcName__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Image/contentMode__fit",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_contentMode__fit.png"
+    },
+    {
+      "id": "Image/contentMode__fill",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_contentMode__fill.png"
+    },
+    {
+      "id": "Image/contentMode__center",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_contentMode__center.png"
+    },
+    {
+      "id": "Image/contentMode__top",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_contentMode__top.png"
+    },
+    {
+      "id": "Image/contentMode__bottom",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_contentMode__bottom.png"
+    },
+    {
+      "id": "Image/contentMode__left",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_contentMode__left.png"
+    },
+    {
+      "id": "Image/contentMode__right",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_contentMode__right.png"
+    },
+    {
+      "id": "Image/contentMode__aspectfill",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_contentMode__aspectfill.png"
+    },
+    {
+      "id": "Image/contentMode__aspectfit",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_contentMode__aspectfit.png"
+    },
+    {
+      "id": "Image/contentMode__center_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_contentMode__center_2.png"
+    },
+    {
+      "id": "Image/contentMode__scaletofill",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_contentMode__scaletofill.png"
+    },
+    {
+      "id": "Image/contentMode__top_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_contentMode__top_2.png"
+    },
+    {
+      "id": "Image/contentMode__bottom_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_contentMode__bottom_2.png"
+    },
+    {
+      "id": "Image/contentMode__left_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_contentMode__left_2.png"
+    },
+    {
+      "id": "Image/contentMode__right_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_contentMode__right_2.png"
+    },
+    {
+      "id": "Image/renderingMode__original",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_renderingMode__original.png"
+    },
+    {
+      "id": "Image/renderingMode__template",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_renderingMode__template.png"
+    },
+    {
+      "id": "Image/alt__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Image/loading__lazy",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Image/loading__eager",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Image/loadingImage__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_loadingImage__static.png"
+    },
+    {
+      "id": "Image/errorImage__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Image_errorImage__static.png"
+    },
+    {
+      "id": "Image/systemIcon__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "NetworkImage/hint__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/NetworkImage_hint__static.png"
+    },
+    {
+      "id": "NetworkImage/placeholder__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/NetworkImage_placeholder__static.png"
+    },
+    {
+      "id": "NetworkImage/defaultImage__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/NetworkImage_defaultImage__static.png"
+    },
+    {
+      "id": "NetworkImage/errorImage__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/NetworkImage_errorImage__static.png"
+    },
+    {
+      "id": "NetworkImage/loadingImage__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/NetworkImage_loadingImage__static.png"
+    },
+    {
+      "id": "NetworkImage/contentMode__fit",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/NetworkImage_contentMode__fit.png"
+    },
+    {
+      "id": "NetworkImage/contentMode__fill",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/NetworkImage_contentMode__fill.png"
+    },
+    {
+      "id": "NetworkImage/contentMode__center",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/NetworkImage_contentMode__center.png"
+    },
+    {
+      "id": "NetworkImage/contentMode__top",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/NetworkImage_contentMode__top.png"
+    },
+    {
+      "id": "NetworkImage/contentMode__bottom",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/NetworkImage_contentMode__bottom.png"
+    },
+    {
+      "id": "NetworkImage/contentMode__left",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/NetworkImage_contentMode__left.png"
+    },
+    {
+      "id": "NetworkImage/contentMode__right",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/NetworkImage_contentMode__right.png"
+    },
+    {
+      "id": "NetworkImage/contentMode__aspectfill",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/NetworkImage_contentMode__aspectfill.png"
+    },
+    {
+      "id": "NetworkImage/contentMode__aspectfit",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/NetworkImage_contentMode__aspectfit.png"
+    },
+    {
+      "id": "NetworkImage/contentMode__center_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/NetworkImage_contentMode__center_2.png"
+    },
+    {
+      "id": "NetworkImage/alt__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "NetworkImage/loading__lazy",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "NetworkImage/loading__eager",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "SelectBox/prompt__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_prompt__static.png"
+    },
+    {
+      "id": "SelectBox/hint__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_hint__static.png"
+    },
+    {
+      "id": "SelectBox/placeholder__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_placeholder__static.png"
+    },
+    {
+      "id": "SelectBox/hintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_hintColor__static.png"
+    },
+    {
+      "id": "SelectBox/text__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "SelectBox/items__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_items__static.png"
+    },
+    {
+      "id": "SelectBox/selectItemType__normal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_selectItemType__normal.png"
+    },
+    {
+      "id": "SelectBox/selectItemType__date",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_selectItemType__date.png"
+    },
+    {
+      "id": "SelectBox/selectedIndex__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_selectedIndex__static.png"
+    },
+    {
+      "id": "SelectBox/selectedItem__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "SelectBox/datePickerMode__date",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_datePickerMode__date.png"
+    },
+    {
+      "id": "SelectBox/datePickerMode__time",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_datePickerMode__time.png"
+    },
+    {
+      "id": "SelectBox/datePickerMode__datetime",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_datePickerMode__datetime.png"
+    },
+    {
+      "id": "SelectBox/datePickerMode__dateandtime",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_datePickerMode__dateandtime.png"
+    },
+    {
+      "id": "SelectBox/datePickerMode__countdown",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_datePickerMode__countdown.png"
+    },
+    {
+      "id": "SelectBox/datePickerStyle__automatic",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_datePickerStyle__automatic.png"
+    },
+    {
+      "id": "SelectBox/datePickerStyle__wheel",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_datePickerStyle__wheel.png"
+    },
+    {
+      "id": "SelectBox/datePickerStyle__wheels",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_datePickerStyle__wheels.png"
+    },
+    {
+      "id": "SelectBox/datePickerStyle__compact",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_datePickerStyle__compact.png"
+    },
+    {
+      "id": "SelectBox/datePickerStyle__graphical",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_datePickerStyle__graphical.png"
+    },
+    {
+      "id": "SelectBox/datePickerStyle__inline",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_datePickerStyle__inline.png"
+    },
+    {
+      "id": "SelectBox/dateStringFormat__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_dateStringFormat__static.png"
+    },
+    {
+      "id": "SelectBox/minimumDate__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_minimumDate__static.png"
+    },
+    {
+      "id": "SelectBox/maximumDate__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_maximumDate__static.png"
+    },
+    {
+      "id": "SelectBox/minuteInterval__1",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_minuteInterval__1.png"
+    },
+    {
+      "id": "SelectBox/minuteInterval__2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_minuteInterval__2.png"
+    },
+    {
+      "id": "SelectBox/minuteInterval__3",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_minuteInterval__3.png"
+    },
+    {
+      "id": "SelectBox/minuteInterval__4",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_minuteInterval__4.png"
+    },
+    {
+      "id": "SelectBox/minuteInterval__5",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_minuteInterval__5.png"
+    },
+    {
+      "id": "SelectBox/minuteInterval__6",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_minuteInterval__6.png"
+    },
+    {
+      "id": "SelectBox/minuteInterval__10",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_minuteInterval__10.png"
+    },
+    {
+      "id": "SelectBox/minuteInterval__12",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_minuteInterval__12.png"
+    },
+    {
+      "id": "SelectBox/minuteInterval__15",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_minuteInterval__15.png"
+    },
+    {
+      "id": "SelectBox/minuteInterval__20",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_minuteInterval__20.png"
+    },
+    {
+      "id": "SelectBox/minuteInterval__30",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_minuteInterval__30.png"
+    },
+    {
+      "id": "SelectBox/minuteInterval__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_minuteInterval__static.png"
+    },
+    {
+      "id": "SelectBox/font__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_font__static.png"
+    },
+    {
+      "id": "SelectBox/fontSize__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_fontSize__static.png"
+    },
+    {
+      "id": "SelectBox/fontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_fontColor__static.png"
+    },
+    {
+      "id": "SelectBox/inView__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "SelectBox/referenceView__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "SelectBox/colorScheme__light",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "SelectBox/colorScheme__dark",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "SelectBox/multiple__true",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "SelectBox/size__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "SelectBox/selectedValue__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_selectedValue__static.png"
+    },
+    {
+      "id": "Switch/isOn__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Switch_isOn__true.png"
+    },
+    {
+      "id": "Switch/value__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Switch_value__static.png"
+    },
+    {
+      "id": "Switch/checked__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Switch_checked__true.png"
+    },
+    {
+      "id": "Switch/enabled__true",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Switch/enabled__false",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Switch/tint__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Switch_tint__static.png"
+    },
+    {
+      "id": "Switch/tintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Switch_tintColor__static.png"
+    },
+    {
+      "id": "Switch/onTintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Switch_onTintColor__static.png"
+    },
+    {
+      "id": "Switch/thumbTintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Switch_thumbTintColor__static.png"
+    },
+    {
+      "id": "Switch/offTintColor__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Switch/labelPosition__leading",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Switch_labelPosition__leading.png"
+    },
+    {
+      "id": "Switch/labelPosition__trailing",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Switch_labelPosition__trailing.png"
+    },
+    {
+      "id": "Switch/trackTintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Switch_trackTintColor__static.png"
+    },
+    {
+      "id": "Toggle/isOn__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Toggle_isOn__true.png"
+    },
+    {
+      "id": "Toggle/value__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Toggle_value__static.png"
+    },
+    {
+      "id": "Toggle/checked__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Toggle_checked__true.png"
+    },
+    {
+      "id": "Toggle/enabled__true",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Toggle/enabled__false",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Toggle/tint__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Toggle_tint__static.png"
+    },
+    {
+      "id": "Toggle/tintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Toggle_tintColor__static.png"
+    },
+    {
+      "id": "Toggle/onTintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Toggle_onTintColor__static.png"
+    },
+    {
+      "id": "Toggle/thumbTintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Toggle_thumbTintColor__static.png"
+    },
+    {
+      "id": "Toggle/offTintColor__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Toggle/labelPosition__leading",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Toggle_labelPosition__leading.png"
+    },
+    {
+      "id": "Toggle/labelPosition__trailing",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Toggle_labelPosition__trailing.png"
+    },
+    {
+      "id": "Toggle/trackTintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Toggle_trackTintColor__static.png"
+    },
+    {
+      "id": "Segment/items__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Segment_items__static.png"
+    },
+    {
+      "id": "Segment/selectedIndex__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Segment_selectedIndex__static.png"
+    },
+    {
+      "id": "Segment/tintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Segment_tintColor__static.png"
+    },
+    {
+      "id": "Segment/normalColor__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Segment/selectedColor__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Segment/apportionsSegmentWidthsByContent__true",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Slider/value__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Slider_value__static.png"
+    },
+    {
+      "id": "Slider/minValue__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Slider_minValue__static.png"
+    },
+    {
+      "id": "Slider/minimum__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Slider_minimum__static.png"
+    },
+    {
+      "id": "Slider/minimum__alias_minimumValue",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Slider_minimum__alias_minimumValue.png"
+    },
+    {
+      "id": "Slider/minimum__alias_minValue",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Slider_minimum__alias_minValue.png"
+    },
+    {
+      "id": "Slider/maxValue__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Slider_maxValue__static.png"
+    },
+    {
+      "id": "Slider/maximum__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Slider_maximum__static.png"
+    },
+    {
+      "id": "Slider/maximum__alias_maximumValue",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Slider_maximum__alias_maximumValue.png"
+    },
+    {
+      "id": "Slider/maximum__alias_maxValue",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Slider_maximum__alias_maxValue.png"
+    },
+    {
+      "id": "Slider/tintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Slider_tintColor__static.png"
+    },
+    {
+      "id": "Slider/minimumValueImage__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Slider/maximumValueImage__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Slider/step__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Slider/progressTintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Slider_progressTintColor__static.png"
+    },
+    {
+      "id": "Slider/trackTintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Slider_trackTintColor__static.png"
+    },
+    {
+      "id": "Progress/progress__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Progress_progress__static.png"
+    },
+    {
+      "id": "Progress/tintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Progress_tintColor__static.png"
+    },
+    {
+      "id": "Progress/progressTintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Progress_progressTintColor__static.png"
+    },
+    {
+      "id": "Progress/trackTintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Progress_trackTintColor__static.png"
+    },
+    {
+      "id": "Progress/progressViewStyle__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Progress/progressImage__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Progress/trackImage__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Progress/hidesWhenStopped__true",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Progress/indicatorStyle__medium",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Progress/indicatorStyle__large",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Progress/color__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "View/orientation__horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/View_orientation__horizontal.png"
+    },
+    {
+      "id": "View/orientation__vertical",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/View_orientation__vertical.png"
+    },
+    {
+      "id": "View/direction__toptobottom",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/View_direction__toptobottom.png"
+    },
+    {
+      "id": "View/direction__bottomtotop",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/View_direction__bottomtotop.png"
+    },
+    {
+      "id": "View/direction__lefttoright",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/View_direction__lefttoright.png"
+    },
+    {
+      "id": "View/direction__righttoleft",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/View_direction__righttoleft.png"
+    },
+    {
+      "id": "View/direction__none",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/View_direction__none.png"
+    },
+    {
+      "id": "View/alignment__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/View_alignment__static.png"
+    },
+    {
+      "id": "View/distribution__fill",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/View_distribution__fill.png"
+    },
+    {
+      "id": "View/distribution__fillequally",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/View_distribution__fillequally.png"
+    },
+    {
+      "id": "View/distribution__equalspacing",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/View_distribution__equalspacing.png"
+    },
+    {
+      "id": "View/distribution__equalcentering",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/View_distribution__equalcentering.png"
+    },
+    {
+      "id": "View/spacing__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/View_spacing__static.png"
+    },
+    {
+      "id": "View/gradient__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "View/gradientDirection__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "View/locations__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "View/highlighted__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/View_highlighted__true.png"
+    },
+    {
+      "id": "View/flexWrap__nowrap",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "View/flexWrap__wrap",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "View/flexWrap__wrap-reverse",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "View/draggable__true",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "ScrollView/orientation__horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/ScrollView_orientation__horizontal.png"
+    },
+    {
+      "id": "ScrollView/orientation__vertical",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/ScrollView_orientation__vertical.png"
+    },
+    {
+      "id": "ScrollView/scrollMode__inner",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/ScrollView_scrollMode__inner.png"
+    },
+    {
+      "id": "ScrollView/scrollMode__window",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/ScrollView_scrollMode__window.png"
+    },
+    {
+      "id": "ScrollView/showsHorizontalScrollIndicator__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/ScrollView_showsHorizontalScrollIndicator__true.png"
+    },
+    {
+      "id": "ScrollView/showsVerticalScrollIndicator__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/ScrollView_showsVerticalScrollIndicator__true.png"
+    },
+    {
+      "id": "ScrollView/contentSize__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "ScrollView/contentOffset__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "ScrollView/indicatorStyle__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "ScrollView/scrollBehavior__auto",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "ScrollView/scrollBehavior__smooth",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Collection/lazy__lazy",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_lazy__lazy.png"
+    },
+    {
+      "id": "Collection/lazy__eager",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_lazy__eager.png"
+    },
+    {
+      "id": "Collection/lazy__none",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_lazy__none.png"
+    },
+    {
+      "id": "Collection/columns__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_columns__static.png"
+    },
+    {
+      "id": "Collection/columnSpacing__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_columnSpacing__static.png"
+    },
+    {
+      "id": "Collection/itemSpacing__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_itemSpacing__static.png"
+    },
+    {
+      "id": "Collection/lineSpacing__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_lineSpacing__static.png"
+    },
+    {
+      "id": "Collection/horizontalScroll__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_horizontalScroll__true.png"
+    },
+    {
+      "id": "Collection/orientation__horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_orientation__horizontal.png"
+    },
+    {
+      "id": "Collection/orientation__vertical",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_orientation__vertical.png"
+    },
+    {
+      "id": "Collection/layout__vertical",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_layout__vertical.png"
+    },
+    {
+      "id": "Collection/layout__horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_layout__horizontal.png"
+    },
+    {
+      "id": "Collection/layout__flow",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_layout__flow.png"
+    },
+    {
+      "id": "Collection/layout__flow_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_layout__flow_2.png"
+    },
+    {
+      "id": "Collection/layout__leftaligned",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_layout__leftaligned.png"
+    },
+    {
+      "id": "Collection/layout__leftaligned_2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_layout__leftaligned_2.png"
+    },
+    {
+      "id": "Collection/insets__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_insets__static.png"
+    },
+    {
+      "id": "Collection/insetHorizontal__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_insetHorizontal__static.png"
+    },
+    {
+      "id": "Collection/insetVertical__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_insetVertical__static.png"
+    },
+    {
+      "id": "Collection/contentInsets__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Collection/itemWeight__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Collection/showsHorizontalScrollIndicator__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_showsHorizontalScrollIndicator__true.png"
+    },
+    {
+      "id": "Collection/showsVerticalScrollIndicator__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_showsVerticalScrollIndicator__true.png"
+    },
+    {
+      "id": "Collection/columnCount__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Collection/scrollAnchor__top",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_scrollAnchor__top.png"
+    },
+    {
+      "id": "Collection/scrollAnchor__center",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_scrollAnchor__center.png"
+    },
+    {
+      "id": "Collection/scrollAnchor__bottom",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_scrollAnchor__bottom.png"
+    },
+    {
+      "id": "Collection/defaultScrollAnchor__top",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_defaultScrollAnchor__top.png"
+    },
+    {
+      "id": "Collection/defaultScrollAnchor__center",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_defaultScrollAnchor__center.png"
+    },
+    {
+      "id": "Collection/defaultScrollAnchor__bottom",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_defaultScrollAnchor__bottom.png"
+    },
+    {
+      "id": "Collection/reverseLayout__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_reverseLayout__true.png"
+    },
+    {
+      "id": "Collection/containerInset__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Collection/sectionSticky__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_sectionSticky__true.png"
+    },
+    {
+      "id": "Radio/label__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_label__static.png"
+    },
+    {
+      "id": "Radio/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Radio/group__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_group__static.png"
+    },
+    {
+      "id": "Radio/icon__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_icon__static.png"
+    },
+    {
+      "id": "Radio/selectedIcon__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_selectedIcon__static.png"
+    },
+    {
+      "id": "Radio/selected_icon__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_selected_icon__static.png"
+    },
+    {
+      "id": "Radio/checked__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_checked__true.png"
+    },
+    {
+      "id": "Radio/value__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_value__static.png"
+    },
+    {
+      "id": "Radio/font__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_font__static.png"
+    },
+    {
+      "id": "Radio/fontSize__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_fontSize__static.png"
+    },
+    {
+      "id": "Radio/fontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_fontColor__static.png"
+    },
+    {
+      "id": "Radio/spacing__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_spacing__static.png"
+    },
+    {
+      "id": "Radio/checkedColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_checkedColor__static.png"
+    },
+    {
+      "id": "Radio/uncheckedColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_uncheckedColor__static.png"
+    },
+    {
+      "id": "Radio/iconSize__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_iconSize__static.png"
+    },
+    {
+      "id": "Radio/iconColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_iconColor__static.png"
+    },
+    {
+      "id": "CheckBox/label__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_label__static.png"
+    },
+    {
+      "id": "CheckBox/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "CheckBox/isOn__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_isOn__true.png"
+    },
+    {
+      "id": "CheckBox/checked__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_checked__true.png"
+    },
+    {
+      "id": "CheckBox/icon__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_icon__static.png"
+    },
+    {
+      "id": "CheckBox/src__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_src__static.png"
+    },
+    {
+      "id": "CheckBox/selectedIcon__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_selectedIcon__static.png"
+    },
+    {
+      "id": "CheckBox/onSrc__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_onSrc__static.png"
+    },
+    {
+      "id": "CheckBox/value__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_value__static.png"
+    },
+    {
+      "id": "CheckBox/enabled__true",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "CheckBox/enabled__false",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "CheckBox/font__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_font__static.png"
+    },
+    {
+      "id": "CheckBox/fontSize__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_fontSize__static.png"
+    },
+    {
+      "id": "CheckBox/fontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_fontColor__static.png"
+    },
+    {
+      "id": "CheckBox/spacing__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_spacing__static.png"
+    },
+    {
+      "id": "CheckBox/checkedColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_checkedColor__static.png"
+    },
+    {
+      "id": "CheckBox/uncheckedColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_uncheckedColor__static.png"
+    },
+    {
+      "id": "CheckBox/iconSize__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_iconSize__static.png"
+    },
+    {
+      "id": "CheckBox/iconColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_iconColor__static.png"
+    },
+    {
+      "id": "Check/checked__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Check_checked__true.png"
+    },
+    {
+      "id": "Check/isOn__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Check_isOn__true.png"
+    },
+    {
+      "id": "Check/label__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Check_label__static.png"
+    },
+    {
+      "id": "Check/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Check/icon__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Check_icon__static.png"
+    },
+    {
+      "id": "Check/src__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Check_src__static.png"
+    },
+    {
+      "id": "Check/selectedIcon__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Check_selectedIcon__static.png"
+    },
+    {
+      "id": "Check/onSrc__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Check_onSrc__static.png"
+    },
+    {
+      "id": "Check/enabled__true",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Check/enabled__false",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Check/font__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Check_font__static.png"
+    },
+    {
+      "id": "Check/fontSize__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Check_fontSize__static.png"
+    },
+    {
+      "id": "Check/fontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Check_fontColor__static.png"
+    },
+    {
+      "id": "Check/spacing__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Check_spacing__static.png"
+    },
+    {
+      "id": "Check/checkedColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Check_checkedColor__static.png"
+    },
+    {
+      "id": "Check/uncheckedColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Check_uncheckedColor__static.png"
+    },
+    {
+      "id": "Check/iconSize__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Check_iconSize__static.png"
+    },
+    {
+      "id": "Check/iconColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Check_iconColor__static.png"
+    },
+    {
+      "id": "Indicator/indicatorStyle__medium",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Indicator/indicatorStyle__large",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Indicator/color__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Indicator/hidesWhenStopped__true",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "GradientView/gradient__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/GradientView_gradient__static.png"
+    },
+    {
+      "id": "GradientView/gradientDirection__vertical",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/GradientView_gradientDirection__vertical.png"
+    },
+    {
+      "id": "GradientView/gradientDirection__horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/GradientView_gradientDirection__horizontal.png"
+    },
+    {
+      "id": "GradientView/gradientDirection__oblique",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/GradientView_gradientDirection__oblique.png"
+    },
+    {
+      "id": "GradientView/locations__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/GradientView_locations__static.png"
+    },
+    {
+      "id": "Blur/effectStyle__light",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Blur_effectStyle__light.png"
+    },
+    {
+      "id": "Blur/effectStyle__dark",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Blur_effectStyle__dark.png"
+    },
+    {
+      "id": "Blur/effectStyle__extralight",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Blur_effectStyle__extralight.png"
+    },
+    {
+      "id": "IconLabel/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "IconLabel/selected__true",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "IconLabel/font__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/IconLabel_font__static.png"
+    },
+    {
+      "id": "IconLabel/fontSize__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/IconLabel_fontSize__static.png"
+    },
+    {
+      "id": "IconLabel/fontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/IconLabel_fontColor__static.png"
+    },
+    {
+      "id": "IconLabel/textShadow__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/IconLabel_textShadow__static.png"
+    },
+    {
+      "id": "IconLabel/selectedFontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/IconLabel_selectedFontColor__static.png"
+    },
+    {
+      "id": "IconLabel/icon_on__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/IconLabel_icon_on__static.png"
+    },
+    {
+      "id": "IconLabel/icon_off__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/IconLabel_icon_off__static.png"
+    },
+    {
+      "id": "IconLabel/iconPosition__left",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/IconLabel_iconPosition__left.png"
+    },
+    {
+      "id": "IconLabel/iconPosition__right",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/IconLabel_iconPosition__right.png"
+    },
+    {
+      "id": "IconLabel/iconPosition__top",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/IconLabel_iconPosition__top.png"
+    },
+    {
+      "id": "IconLabel/iconPosition__bottom",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/IconLabel_iconPosition__bottom.png"
+    },
+    {
+      "id": "IconLabel/iconMargin__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/IconLabel_iconMargin__static.png"
+    },
+    {
+      "id": "Web/html__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Web_html__static.png"
+    },
+    {
+      "id": "Web/sandbox__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Web/allow__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "SafeAreaView/orientation__horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SafeAreaView_orientation__horizontal.png"
+    },
+    {
+      "id": "SafeAreaView/orientation__vertical",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SafeAreaView_orientation__vertical.png"
+    },
+    {
+      "id": "TabView/selectedIndex__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TabView_selectedIndex__static.png"
+    },
+    {
+      "id": "TabView/selectedIndex__alias_selectedTabIndex",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TabView_selectedIndex__alias_selectedTabIndex.png"
+    },
+    {
+      "id": "TabView/tabs__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TabView_tabs__static.png"
+    },
+    {
+      "id": "TabView/tintColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TabView_tintColor__static.png"
+    },
+    {
+      "id": "TabView/unselectedColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TabView_unselectedColor__static.png"
+    },
+    {
+      "id": "TabView/tabBarBackground__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TabView_tabBarBackground__static.png"
+    },
+    {
+      "id": "TabView/showLabels__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TabView_showLabels__true.png"
+    }
+  ]
+}
