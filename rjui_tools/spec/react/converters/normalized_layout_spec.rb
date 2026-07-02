@@ -43,7 +43,12 @@ RSpec.describe 'L1-normalized layout consumption' do
   end
 
   describe RjuiTools::React::Converters::ButtonConverter do
-    it 'maps the highlightBackground alias to hover/active classes on L0' do
+    # highlightBackground is a standalone attribute (highlighted state),
+    # NOT a definitions alias of tapBackground — the runtimes keep the
+    # two states distinct. On the web both map onto the single
+    # hover/active affordance, identically on L0 and L1 (the normalizer
+    # does not rewrite it).
+    it 'maps standalone highlightBackground to hover/active classes on L0' do
       jsx = described_class.new(
         { 'type' => 'Button', 'text' => 'Tap', 'highlightBackground' => '#FF0000' }, l0_config
       ).convert
@@ -51,12 +56,20 @@ RSpec.describe 'L1-normalized layout consumption' do
       expect(jsx).to include('active:bg-[#FF0000]')
     end
 
-    it 'ignores the highlightBackground alias on L1 (canonical tapBackground only)' do
+    it 'maps standalone highlightBackground on L1 as well (not an alias)' do
       jsx = described_class.new(
         { 'type' => 'Button', 'text' => 'Tap', 'highlightBackground' => '#FF0000' }, l1_config
       ).convert
+      expect(jsx).to include('hover:bg-[#FF0000]')
+    end
+
+    it 'prefers tapBackground when both tap and highlight backgrounds are set' do
+      jsx = described_class.new(
+        { 'type' => 'Button', 'text' => 'Tap',
+          'tapBackground' => '#0000FF', 'highlightBackground' => '#FF0000' }, l0_config
+      ).convert
+      expect(jsx).to include('hover:bg-[#0000FF]')
       expect(jsx).not_to include('hover:bg-[#FF0000]')
-      expect(jsx).to include('hover:opacity-80')
     end
 
     it 'maps the hilightColor alias on L0 and ignores it on L1' do

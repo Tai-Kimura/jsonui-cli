@@ -68,13 +68,16 @@ class AliasTableTest(unittest.TestCase):
         self.assertIsNotNone(path, "shared/core/attribute_definitions.json not found")
         table = AliasTable.from_file(path)
         self.assertEqual(table.aliases_for("View").get("alpha"), "opacity")
-        self.assertEqual(
-            table.aliases_for("View").get("alignTopView"), "alignTopOfView"
-        )
+        # alignTopView (edge-align) and alignTopOfView (relative
+        # positioning) are DISTINCT attributes in the runtimes
+        # (UIViewDisposure keeps separate constraint kinds) — they must
+        # NOT form an alias pair, or L1 canonicalization silently
+        # changes layout semantics.
+        self.assertIsNone(table.aliases_for("View").get("alignTopView"))
         self.assertEqual(table.aliases_for("Button").get("hilightColor"), "highlightColor")
-        self.assertEqual(
-            table.aliases_for("Button").get("highlightBackground"), "tapBackground"
-        )
+        # highlightBackground (highlighted state) is distinct from
+        # tapBackground (tap state) in the runtimes — not an alias.
+        self.assertIsNone(table.aliases_for("Button").get("highlightBackground"))
         self.assertEqual(table.aliases_for("Slider").get("maxValue"), "maximum")
         self.assertEqual(
             table.aliases_for("Collection").get("onPageChanged"), "onValueChange"
