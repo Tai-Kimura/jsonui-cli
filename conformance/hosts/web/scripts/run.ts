@@ -55,7 +55,7 @@ const only = arg('--only');
 
 interface ManifestFixture {
   id: string;
-  class: 'assertable' | 'visual';
+  class: 'assertable' | 'visual' | 'interactive';
   platforms: string[];
   mode: string | string[] | null;
   test: string;
