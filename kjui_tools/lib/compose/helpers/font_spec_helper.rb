@@ -192,19 +192,51 @@ module KjuiTools
           "#{json_data['fontSize']}.sp"
         end
 
+        # Candidate paths for the shared weight mapping, tried in order.
+        # Unified with sjui/rjui resolution:
+        #   1. `<tool_dir>/shared/core/...` — the per-tool copy distributed by
+        #      `jui sync_tool` into project-local installs.
+        #   2. repo-root `shared/core/...` — the library-repo layout, where
+        #      `shared/` sits as a sibling of `kjui_tools/`.
+        #   3. `~/.jsonui-cli/shared/core/...` — the global install location.
+        # If none resolve, fall back to the built-in table below.
+        def self.weight_mapping_candidates
+          @weight_mapping_candidates || [
+            # <tool_dir>/shared/core: helpers → compose → lib → kjui_tools
+            File.expand_path('../../../shared/core/font_weight_mapping.json', __FILE__),
+            # repo-root shared/core: one level above kjui_tools (library layout)
+            File.expand_path('../../../../shared/core/font_weight_mapping.json', __FILE__),
+            # global install
+            File.expand_path('~/.jsonui-cli/shared/core/font_weight_mapping.json')
+          ]
+        end
+
+        # Test-only seam: inject candidate paths (highest priority first).
+        def self.weight_mapping_candidates=(paths)
+          @weight_mapping_candidates = paths
+          @weight_mapping = nil
+        end
+
+        # Test-only seam: drop the cached mapping.
+        def self.reset_weight_mapping_cache!
+          @weight_mapping = nil
+        end
+
         def self.load_weight_mapping
-          # Resolve relative to this file: kjui_tools/lib/compose/helpers/ → ../../../../shared/core/
-          path = File.expand_path('../../../../shared/core/font_weight_mapping.json', __FILE__)
-          unless File.exist?(path)
-            warn "[kjui] font_weight_mapping.json not found at #{path}; using built-in fallback."
+          path = weight_mapping_candidates.find { |p| p && File.exist?(p) }
+          unless path
+            warn '[kjui] font_weight_mapping.json not found on any candidate path; using built-in fallback.'
             return fallback_weight_mapping
           end
           parsed = JSON.parse(File.read(path))
           weights = parsed['weights'] || {}
-          weights.each_with_object({}) do |(name, platforms), acc|
+          mapped = weights.each_with_object({}) do |(name, platforms), acc|
             kotlin = platforms['kotlin']
             acc[name.downcase] = kotlin if kotlin
           end
+          mapped.empty? ? fallback_weight_mapping : mapped
+        rescue JSON::ParserError
+          fallback_weight_mapping
         end
 
         def self.fallback_weight_mapping

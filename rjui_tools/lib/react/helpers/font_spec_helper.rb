@@ -75,24 +75,60 @@ module RjuiTools
           @weight_mapping ||= load_weight_mapping
         end
 
-        # File layout reminder:
-        # - this file:    .../jsonui-cli/rjui_tools/lib/react/helpers/font_spec_helper.rb
-        # - shared copy:  .../jsonui-cli/shared/core/font_weight_mapping.json
-        # - mirror copy:  .../jsonui-cli/rjui_tools/lib/core/font_weight_mapping.json (deployed)
-        def load_weight_mapping
-          # File.expand_path treats a base file path as if it were a
-          # directory, so each `..` jumps one level up. Five levels lifts us
-          # from `helpers/font_spec_helper.rb` to the jsonui-cli repo root.
-          candidates = [
-            File.join(File.dirname(__FILE__), '..', '..', 'core', 'font_weight_mapping.json'),
-            File.expand_path('../../../../../shared/core/font_weight_mapping.json', __FILE__)
-          ]
-          path = candidates.find { |p| File.exist?(p) }
-          return { 'weights' => {}, 'default_on_unknown' => 'regular' } unless path
+        # Built-in fallback mapping, mirroring shared/core/font_weight_mapping.json
+        # (css column). Used only when no candidate file resolves, so a missing
+        # distributed file degrades to the correct CSS weights instead of an
+        # empty mapping that passes every weight through verbatim.
+        BUILTIN_WEIGHT_MAPPING = {
+          'weights' => {
+            'ultralight' => { 'css' => '200' },
+            'thin' => { 'css' => '100' },
+            'light' => { 'css' => '300' },
+            'regular' => { 'css' => 'normal' },
+            'medium' => { 'css' => '500' },
+            'semibold' => { 'css' => '600' },
+            'bold' => { 'css' => 'bold' },
+            'heavy' => { 'css' => '900' },
+            'black' => { 'css' => '900' }
+          },
+          'default_on_unknown' => 'regular'
+        }.freeze
 
-          JSON.parse(File.read(path, encoding: 'UTF-8'))
+        # File layout reminder (resolution unified with sjui/kjui):
+        # - this file:      .../jsonui-cli/rjui_tools/lib/react/helpers/font_spec_helper.rb
+        # - per-tool copy:  .../rjui_tools/shared/core/font_weight_mapping.json (synced by jui sync_tool)
+        # - repo-root copy: .../jsonui-cli/shared/core/font_weight_mapping.json (library layout)
+        # - global copy:    ~/.jsonui-cli/shared/core/font_weight_mapping.json
+        # - legacy mirror:  .../rjui_tools/lib/core/font_weight_mapping.json
+        def weight_mapping_candidates
+          [
+            # <tool_dir>/shared/core: helpers → react → lib → rjui_tools
+            File.expand_path('../../../shared/core/font_weight_mapping.json', __FILE__),
+            # repo-root shared/core: one level above rjui_tools (library layout)
+            File.expand_path('../../../../shared/core/font_weight_mapping.json', __FILE__),
+            # global install
+            File.expand_path('~/.jsonui-cli/shared/core/font_weight_mapping.json'),
+            # legacy in-tool mirror
+            File.expand_path('../../core/font_weight_mapping.json', __FILE__)
+          ]
+        end
+
+        def load_weight_mapping
+          path = weight_mapping_candidates.find { |p| p && File.exist?(p) }
+          return builtin_weight_mapping unless path
+
+          parsed = JSON.parse(File.read(path, encoding: 'UTF-8'))
+          weights = parsed['weights'] || {}
+          weights.empty? ? builtin_weight_mapping : parsed
         rescue JSON::ParserError
-          { 'weights' => {}, 'default_on_unknown' => 'regular' }
+          builtin_weight_mapping
+        end
+
+        def builtin_weight_mapping
+          weights = BUILTIN_WEIGHT_MAPPING['weights'].each_with_object({}) do |(k, v), acc|
+            acc[k.to_s.downcase] = v.dup
+          end
+          { 'weights' => weights, 'default_on_unknown' => BUILTIN_WEIGHT_MAPPING['default_on_unknown'] }
         end
 
         def js_string(value)

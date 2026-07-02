@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'json'
+require 'tmpdir'
 require 'compose/helpers/font_spec_helper'
 
 RSpec.describe KjuiTools::Compose::Helpers::FontSpecHelper do
@@ -10,6 +12,61 @@ RSpec.describe KjuiTools::Compose::Helpers::FontSpecHelper do
       expect(mapping['regular']).to eq('FontWeight.Normal')
       expect(mapping['semibold']).to eq('FontWeight.SemiBold')
       expect(mapping['heavy']).to eq('FontWeight.Black')
+    end
+  end
+
+  describe '.weight_mapping resolution chain' do
+    after { described_class.weight_mapping_candidates = nil }
+
+    it 'loads the kotlin column from the first existing candidate path' do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'font_weight_mapping.json')
+        File.write(path, JSON.generate('weights' => { 'bold' => { 'kotlin' => 'FontWeight.CustomBold' } }))
+        described_class.weight_mapping_candidates = [path]
+
+        expect(described_class.weight_mapping['bold']).to eq('FontWeight.CustomBold')
+      end
+    end
+
+    it 'prefers an earlier candidate over a later one' do
+      Dir.mktmpdir do |dir|
+        first = File.join(dir, 'first.json')
+        second = File.join(dir, 'second.json')
+        File.write(first, JSON.generate('weights' => { 'bold' => { 'kotlin' => 'FontWeight.First' } }))
+        File.write(second, JSON.generate('weights' => { 'bold' => { 'kotlin' => 'FontWeight.Second' } }))
+        described_class.weight_mapping_candidates = [first, second]
+
+        expect(described_class.weight_mapping['bold']).to eq('FontWeight.First')
+      end
+    end
+
+    it 'falls back to the built-in full table (medium included) when no file resolves' do
+      described_class.weight_mapping_candidates = ['/nonexistent/font_weight_mapping.json']
+
+      mapping = described_class.weight_mapping
+      expect(mapping['medium']).to eq('FontWeight.Medium')
+      expect(mapping['semibold']).to eq('FontWeight.SemiBold')
+      expect(mapping['bold']).to eq('FontWeight.Bold')
+    end
+
+    it 'falls back to the built-in table when the file has an empty weights map' do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'font_weight_mapping.json')
+        File.write(path, JSON.generate('weights' => {}))
+        described_class.weight_mapping_candidates = [path]
+
+        expect(described_class.weight_mapping['bold']).to eq('FontWeight.Bold')
+      end
+    end
+
+    it 'falls back to the built-in table when the file is malformed JSON' do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'font_weight_mapping.json')
+        File.write(path, 'not json {')
+        described_class.weight_mapping_candidates = [path]
+
+        expect(described_class.weight_mapping['bold']).to eq('FontWeight.Bold')
+      end
     end
   end
 

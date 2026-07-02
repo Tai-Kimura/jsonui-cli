@@ -45,6 +45,20 @@ PLATFORM_TO_TOOL = {
     "web": "rjui_tools",
 }
 
+# Files that live at the CLI-root ``shared/core/`` (a SIBLING of each tool
+# dir) but are read at runtime by the tools via a ``<tool_dir>/shared/core/``
+# path. ``jui sync_tool`` mirrors only the tool tree, so these would never
+# reach a project-local install without explicit distribution. Each entry is
+# a path relative to ``shared/core/`` in the source root; it is copied to the
+# same relative path under ``<target_tool_dir>/shared/core/``.
+#
+# font_weight_mapping.json: the weight-name → platform-enum table shared by
+# sjui/kjui/rjui font helpers. Missing it used to make sjui round every
+# looked-up weight to ``.regular`` in consumers (see bug report).
+SHARED_CORE_PAYLOADS = (
+    "font_weight_mapping.json",
+)
+
 # Dirs never synced. Anything install/build-derived that each project
 # regenerates via its own toolchain stays out of the copy.
 SKIP_DIR_NAMES = {
@@ -142,6 +156,40 @@ def _iter_source_files(source: Path):
             yield rel, abs_path
 
 
+def _distribute_shared_core(
+    source_root: Path,
+    target_tool_dir: Path,
+    *,
+    dry_run: bool,
+) -> int:
+    """Copy CLI-root ``shared/core/`` payloads into ``<tool>/shared/core/``.
+
+    The tool font helpers resolve ``<tool_dir>/shared/core/font_weight_mapping.json``
+    as their first candidate. That path only exists in a project-local install
+    if we place it there — the sibling ``shared/`` tree is not part of the tool
+    dir that :func:`_sync_one_tool` mirrors. Returns the number of files
+    copied or updated.
+    """
+    changed = 0
+    src_core = source_root / "shared" / "core"
+    for rel in SHARED_CORE_PAYLOADS:
+        src_file = src_core / rel
+        if not src_file.exists():
+            # Nothing to distribute (e.g. minimal source tree) — skip quietly.
+            continue
+        dst_file = target_tool_dir / "shared" / "core" / rel
+        if dst_file.exists() and _files_equal(src_file, dst_file):
+            continue
+        if dry_run:
+            action = "update" if dst_file.exists() else "copy"
+            print(f"  would {action}: shared/core/{rel}")
+        else:
+            dst_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_file, dst_file)
+        changed += 1
+    return changed
+
+
 def _sync_one_tool(
     source_tool_dir: Path,
     target_tool_dir: Path,
@@ -149,6 +197,7 @@ def _sync_one_tool(
     *,
     prune: bool,
     dry_run: bool,
+    source_root: Path | None = None,
 ) -> dict[str, int]:
     """Mirror source_tool_dir into target_tool_dir, preserving extensions/.
 
@@ -157,9 +206,13 @@ def _sync_one_tool(
     ``jui build`` with its RBENV_VERSION injection) pick up the correct Ruby
     when rbenv walks up from the user's CWD.
 
-    Returns a counters dict: copied / updated / preserved / pruned / ruby_pin.
+    When ``source_root`` is given, CLI-root ``shared/core/`` payloads (see
+    :data:`SHARED_CORE_PAYLOADS`) are distributed into ``<tool>/shared/core/``.
+
+    Returns a counters dict: copied / updated / preserved / pruned / ruby_pin /
+    shared_core.
     """
-    counters = {"copied": 0, "updated": 0, "preserved": 0, "pruned": 0, "ruby_pin": 0}
+    counters = {"copied": 0, "updated": 0, "preserved": 0, "pruned": 0, "ruby_pin": 0, "shared_core": 0}
 
     if not source_tool_dir.exists():
         raise FileNotFoundError(f"Source tool directory not found: {source_tool_dir}")
@@ -216,6 +269,17 @@ def _sync_one_tool(
             else:
                 target_ruby_version_file.write_text(f"{want}\n")
             counters["ruby_pin"] += 1
+
+    # Distribute CLI-root shared/core payloads into <tool>/shared/core/ so the
+    # tool font helpers resolve their first candidate path in project-local
+    # installs. These paths are registered in source_rels below so --prune does
+    # not delete them (they are legitimately absent from the tool-dir mirror).
+    if source_root is not None:
+        counters["shared_core"] += _distribute_shared_core(
+            source_root, target_tool_dir, dry_run=dry_run
+        )
+        for rel in SHARED_CORE_PAYLOADS:
+            source_rels.add(Path("shared") / "core" / rel)
 
     # Prune target files not present in source (but never inside extensions/).
     if prune and target_tool_dir.exists():
@@ -296,7 +360,7 @@ def cmd_sync_tool(args: argparse.Namespace) -> int:
             return 1
         targets = [(args.platform, platforms[args.platform])]
 
-    totals = {"copied": 0, "updated": 0, "preserved": 0, "pruned": 0, "ruby_pin": 0}
+    totals = {"copied": 0, "updated": 0, "preserved": 0, "pruned": 0, "ruby_pin": 0, "shared_core": 0}
     had_error = False
 
     for platform_name, pconfig in targets:
@@ -331,6 +395,7 @@ def cmd_sync_tool(args: argparse.Namespace) -> int:
                 src, dst, platform_root,
                 prune=args.prune,
                 dry_run=args.dry_run,
+                source_root=source_root,
             )
         except Exception as exc:
             print(f"  ERROR: {exc}")
@@ -343,6 +408,7 @@ def cmd_sync_tool(args: argparse.Namespace) -> int:
             f"  copied: {counters['copied']}  updated: {counters['updated']}"
             f"  preserved-in-extensions: {counters['preserved']}"
             f"  ruby-pin: {counters['ruby_pin']}"
+            f"  shared-core: {counters['shared_core']}"
             + (f"  pruned: {counters['pruned']}" if args.prune else "")
         )
 
@@ -351,6 +417,7 @@ def cmd_sync_tool(args: argparse.Namespace) -> int:
         f"  copied: {totals['copied']}  updated: {totals['updated']}"
         f"  preserved-in-extensions: {totals['preserved']}"
         f"  ruby-pin: {totals['ruby_pin']}"
+        f"  shared-core: {totals['shared_core']}"
         + (f"  pruned: {totals['pruned']}" if args.prune else "")
     )
     if args.dry_run:
