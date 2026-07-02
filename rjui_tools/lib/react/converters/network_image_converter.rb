@@ -14,10 +14,10 @@ module RjuiTools
           tag_attr = build_tag_attr
 
           src = build_src_attr
-          alt = json['alt'] || json['accessibilityLabel'] || ''
+          alt = attributes['alt'] || attributes['accessibilityLabel'] || ''
           content_mode = build_content_mode_attr
           placeholder_attr = build_placeholder_attr
-          error_image = json['errorImage'] ? " errorImage=\"#{json['errorImage']}\"" : ''
+          error_image = attributes['errorImage'] ? " errorImage=\"#{attributes['errorImage']}\"" : ''
 
           # Build event handlers
           on_load = build_event_handler('onLoad')
@@ -40,7 +40,7 @@ module RjuiTools
           classes = [super]
 
           # Content mode to object-fit
-          content_mode = json['contentMode'] || json['scaleType']
+          content_mode = attributes['contentMode'] || attributes['scaleType']
           if content_mode
             mode_map = {
               'scaleAspectFill' => 'object-cover',
@@ -57,22 +57,22 @@ module RjuiTools
           end
 
           # Circle image
-          classes << 'rounded-full' if json['circle'] || json['circleImage']
+          classes << 'rounded-full' if attributes['circle'] || attributes['circleImage']
 
           # Corner radius class (if using Tailwind standard values)
-          corner_radius = json['cornerRadius']
-          if corner_radius && !json['circle'] && !json['circleImage']
+          corner_radius = attributes['cornerRadius']
+          if corner_radius && !attributes['circle'] && !attributes['circleImage']
             classes << "rounded-[#{corner_radius}px]"
           end
 
           # Clickable
-          classes << 'cursor-pointer' if json['canTap'] || json['onClick'] || json['onclick']
+          classes << 'cursor-pointer' if attributes['canTap'] || attributes['onClick'] || attributes['onclick']
 
           classes.compact.reject(&:empty?).join(' ')
         end
 
         def build_src_attr
-          src = json['src'] || json['url'] || json['imageUrl']
+          src = attributes['src'] || attributes['url'] || attributes['imageUrl']
           return '' unless src
 
           if has_binding?(src)
@@ -83,7 +83,7 @@ module RjuiTools
         end
 
         def build_content_mode_attr
-          content_mode = json['contentMode'] || json['scaleType']
+          content_mode = attributes['contentMode'] || attributes['scaleType']
           return '' unless content_mode
 
           mode_map = {
@@ -103,7 +103,7 @@ module RjuiTools
         end
 
         def build_placeholder_attr
-          placeholder = json['placeholder'] || json['defaultImage']
+          placeholder = attributes['placeholder'] || attributes['defaultImage']
           return '' unless placeholder
 
           if has_binding?(placeholder)
@@ -125,8 +125,8 @@ module RjuiTools
         end
 
         def build_corner_radius_style
-          corner_radius = json['cornerRadius']
-          return '' unless corner_radius && !json['circle'] && !json['circleImage']
+          corner_radius = attributes['cornerRadius']
+          return '' unless corner_radius && !attributes['circle'] && !attributes['circleImage']
 
           # Already handled in className
           ''
