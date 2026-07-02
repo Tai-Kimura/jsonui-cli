@@ -14,14 +14,14 @@ module RjuiTools
           id_attr = build_id_attr
           testid_attr = build_testid_attr
           tag_attr = build_tag_attr
-          text = json['text'] || json['label'] || ''
+          text = attributes['text'] || attributes['label'] || ''
 
           checked_attr = build_checked_attr
           on_change = build_on_change
           disabled_attr = build_disabled_attr
-          tint_color = json['tintColor'] || json['onTintColor'] || '#34C759'
-          thumb_color = json['thumbTintColor'] || '#FFFFFF'
-          off_tint_color = json['offTintColor'] || '#E5E7EB'
+          tint_color = attributes['tintColor'] || attributes['onTintColor'] || '#34C759'
+          thumb_color = attributes['thumbTintColor'] || '#FFFFFF'
+          off_tint_color = attributes['offTintColor'] || '#E5E7EB'
 
           # iOS-style toggle switch using pure CSS
           switch_html = build_switch_element(checked_attr, on_change, disabled_attr, tint_color, thumb_color, off_tint_color)
@@ -52,10 +52,10 @@ module RjuiTools
           classes << 'inline-flex'
 
           # Disabled state
-          if json['enabled'] == false
+          if attributes['enabled'] == false
             classes << 'opacity-50 cursor-not-allowed'
-          elsif has_binding?(json['enabled'])
-            binding_expr = extract_binding_property(json['enabled'])
+          elsif has_binding?(attributes['enabled'])
+            binding_expr = extract_binding_property(attributes['enabled'])
             classes << "${!#{binding_expr} ? 'opacity-50 cursor-not-allowed' : ''}"
           end
 
@@ -74,7 +74,7 @@ module RjuiTools
         end
 
         def build_checked_attr
-          is_on = json['isOn'] || json['checked'] || json['value']
+          is_on = attributes['isOn'] || attributes['checked'] || attributes['value']
 
           if is_on && has_binding?(is_on)
             prop = extract_binding_property(is_on)
@@ -88,7 +88,7 @@ module RjuiTools
 
         def build_on_change
           # If custom handler is defined, use it (passing the event object)
-          handler = json['onValueChange']
+          handler = attributes['onValueChange']
           if handler && has_binding?(handler)
             prop = extract_binding_property(handler)
             return " onChange={(e) => #{prop}?.(e.target.checked)}"
@@ -96,7 +96,7 @@ module RjuiTools
 
           # Auto-generate onChange from isOn/checked/value binding property
           # e.g., isOn: "@{isEnabled}" -> onChange={(e) => data.onIsEnabledChange?.(e.target.checked)}
-          is_on = json['isOn'] || json['checked'] || json['value']
+          is_on = attributes['isOn'] || attributes['checked'] || attributes['value']
           if is_on && has_binding?(is_on)
             property_name = extract_raw_binding_property(is_on)
             handler_name = "on#{capitalize_first(property_name)}Change"
@@ -113,7 +113,7 @@ module RjuiTools
         end
 
         def build_disabled_attr
-          enabled = json['enabled']
+          enabled = attributes['enabled']
           return '' if enabled.nil?
 
           if has_binding?(enabled)
