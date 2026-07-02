@@ -18,6 +18,8 @@ on:
     # 18:00 UTC = 03:00 JST — after the workday, before the next one.
     - cron: "0 18 * * *"
   workflow_dispatch:
+  push:
+    branches: [ssot/11-conformance-ci] # temporary verification trigger (revert before merge)
 
 concurrency:
   group: conformance-mobile-${{ github.ref }}
