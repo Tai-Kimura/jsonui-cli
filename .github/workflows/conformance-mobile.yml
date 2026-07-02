@@ -118,7 +118,12 @@ jobs:
   # ------------------------------------------------------------------ #
   android:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Green baseline is ~11 min suite + ~5 min boot/gradle. 40 min job timeout
+    # backstops an emulator wedge (observed: the `am instrument` step can hang
+    # for the full window after a clean BUILD SUCCESSFUL — infra, not a fixture
+    # deadlock, since the committed android.hashes.json proves the suite goes
+    # green). The step-level timeout below is the primary fast-fail.
+    timeout-minutes: 40
     env:
       CONFORMANCE_DIR: ${{ github.workspace }}/conformance
     steps:
@@ -138,6 +143,10 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Run Android conformance suite (emulator)
+        # Boot + gradle build/install + 11-min green suite ≈ 20 min; 28 min
+        # fast-fails an emulator wedge (the instrumentation hanging with no
+        # per-fixture output) instead of letting it ride the job timeout.
+        timeout-minutes: 28
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
