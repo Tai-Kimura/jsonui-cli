@@ -14,8 +14,8 @@ module RjuiTools
           tag_attr = build_tag_attr
           onclick_attr = build_onclick_attr
 
-          text = convert_binding(json['text'] || '')
-          icon_position = (json['iconPosition'] || 'Left').downcase
+          text = convert_binding(attributes['text'] || '')
+          icon_position = (attributes['iconPosition'] || 'Left').downcase
           icon_src = get_icon_src
           icon_style = build_icon_style
 
@@ -52,7 +52,7 @@ module RjuiTools
           classes = [super]
 
           # Cursor pointer for clickable items
-          classes << 'cursor-pointer' if json['onClick'] || json['onclick']
+          classes << 'cursor-pointer' if attributes['onClick'] || attributes['onclick']
 
           classes.compact.reject(&:empty?).join(' ')
         end
@@ -61,19 +61,19 @@ module RjuiTools
           classes = []
 
           # Font size
-          classes << TailwindMapper.map_font_size(json['fontSize']) if json['fontSize']
+          classes << TailwindMapper.map_font_size(attributes['fontSize']) if attributes['fontSize']
 
           # Font weight
-          classes << TailwindMapper.map_font_weight(json['fontWeight']) if json['fontWeight']
+          classes << TailwindMapper.map_font_weight(attributes['fontWeight']) if attributes['fontWeight']
 
           # Font color
-          if json['fontColor'] && !has_binding?(json['fontColor'])
-            classes << TailwindMapper.map_color(json['fontColor'], 'text')
+          if attributes['fontColor'] && !has_binding?(attributes['fontColor'])
+            classes << TailwindMapper.map_color(attributes['fontColor'], 'text')
           end
 
           # Text decoration
-          classes << 'underline' if json['underline']
-          classes << 'line-through' if json['strikethrough']
+          classes << 'underline' if attributes['underline']
+          classes << 'line-through' if attributes['strikethrough']
 
           classes.compact.reject(&:empty?).join(' ')
         end
@@ -82,8 +82,8 @@ module RjuiTools
           style_parts = []
 
           # Dynamic font color
-          if json['fontColor'] && has_binding?(json['fontColor'])
-            binding_expr = convert_binding(json['fontColor']).gsub(/^\{|\}$/, '')
+          if attributes['fontColor'] && has_binding?(attributes['fontColor'])
+            binding_expr = convert_binding(attributes['fontColor']).gsub(/^\{|\}$/, '')
             style_parts << "color: #{binding_expr}"
           end
 
@@ -94,13 +94,13 @@ module RjuiTools
 
         def get_icon_src
           # Support selected state with icon_on/icon_off
-          if json['selected'] && has_binding?(json['selected'])
-            binding_expr = extract_binding_property(json['selected'])
-            icon_on = json['icon_on'] || json['iconOn'] || ''
-            icon_off = json['icon_off'] || json['iconOff'] || ''
+          if attributes['selected'] && has_binding?(attributes['selected'])
+            binding_expr = extract_binding_property(attributes['selected'])
+            icon_on = attributes['icon_on'] || attributes['iconOn'] || ''
+            icon_off = attributes['icon_off'] || attributes['iconOff'] || ''
             "{#{binding_expr} ? '#{icon_on}' : '#{icon_off}'}"
           else
-            json['icon_off'] || json['iconOff'] || json['icon_on'] || json['iconOn'] || json['icon'] || ''
+            attributes['icon_off'] || attributes['iconOff'] || attributes['icon_on'] || attributes['iconOn'] || attributes['icon'] || ''
           end
         end
 
@@ -108,7 +108,7 @@ module RjuiTools
           classes = []
 
           # Icon size
-          icon_size = json['iconSize']
+          icon_size = attributes['iconSize']
           if icon_size.is_a?(Array) && icon_size.length >= 2
             width = icon_size[0]
             height = icon_size[1]
@@ -120,8 +120,8 @@ module RjuiTools
           end
 
           # Icon margin
-          icon_position = (json['iconPosition'] || 'Left').downcase
-          margin = json['iconMargin'] || json['spacing'] || 4
+          icon_position = (attributes['iconPosition'] || 'Left').downcase
+          margin = attributes['iconMargin'] || attributes['spacing'] || 4
           margin_class = case icon_position
                         when 'top' then "mb-[#{margin}px]"
                         when 'bottom' then "mt-[#{margin}px]"
@@ -131,7 +131,7 @@ module RjuiTools
           classes << margin_class
 
           # Icon tint color (for SVG)
-          tint_color = json['iconTintColor'] || json['tintColor']
+          tint_color = attributes['iconTintColor'] || attributes['tintColor']
           # Note: CSS filter or mix-blend-mode would be needed for actual color tinting
 
           classes.compact.reject(&:empty?).join(' ')
