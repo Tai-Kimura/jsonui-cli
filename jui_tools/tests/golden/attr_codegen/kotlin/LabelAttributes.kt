@@ -12,7 +12,7 @@ data class LabelAttributes(
     /** Attributes shared across all components. */
     val common: CommonAttributes,
     /** Two-way binding @{variable} [binding: two-way] */
-    val bind: String? = null,
+    val bind: AttrValue<Any>? = null,
     /** Label internal padding [DEPRECATED: Compose Text has no edgeInset; use padding* instead.] */
     val edgeInset: Double? = null,
     /** Highlight color - hex string or color name from colors.json [aliases: hilightColor] */
@@ -24,7 +24,7 @@ data class LabelAttributes(
     /** Text content (supports data binding) */
     val text: AttrValue<String>? = null,
     /** Text transformation (legacy spellings kept for compat) [default: none] */
-    val textTransform: TextTransform? = null,
+    val textTransform: AttrEnum<TextTransform>? = null,
     /** Associated value */
     val value: Any? = null,
 ) {
@@ -34,21 +34,55 @@ data class LabelAttributes(
         FLOW("Flow");
 
         companion object {
-            fun from(raw: String): TextTransform? = when (raw) {
+            /** Case-insensitive match against the declared values. */
+            fun from(raw: String): TextTransform? = when (raw.lowercase()) {
                 "none" -> NONE
                 "wrap-reverse" -> WRAP_REVERSE
-                "Flow", "flow" -> FLOW
+                "flow" -> FLOW
                 else -> null
             }
         }
     }
 
     companion object {
-        fun parse(json: Map<String, Any?>): LabelAttributes = LabelAttributes(
-            common = CommonAttributes.parse(json),
-            bind = AttrCoerce.bindingExprOrName(AttrCoerce.lookup(json, "bind")),
+        /**
+         * Canonical attribute names declared for this component, including
+         * the shared `common` set (public metadata contract).
+         */
+        val declaredAttributes: Set<String> = CommonAttributes.declaredAttributes + setOf(
+            "bind",
+            "edgeInset",
+            "highlightColor",
+            "partialAttributes",
+            "shadow",
+            "text",
+            "textTransform",
+            "value",
+        )
+
+        /**
+         * Alias spelling → canonical attribute name (merged with common).
+         * Alias spellings that are also declared attributes keep
+         * their own entry and are not redirected.
+         */
+        val aliasMap: Map<String, String> = mapOf(
+            "alpha" to "opacity",
+            "hilightColor" to "highlightColor",
+        )
+
+        /** True when `key` is a declared canonical name or alias spelling. */
+        fun isDeclared(key: String): Boolean =
+            key in declaredAttributes || key in aliasMap
+
+        /**
+         * Pass `canonicalOnly = true` for L1-normalized input —
+         * alias fallback is then disabled.
+         */
+        fun parse(json: Map<String, Any?>, canonicalOnly: Boolean = false): LabelAttributes = LabelAttributes(
+            common = CommonAttributes.parse(json, canonicalOnly),
+            bind = AttrCoerce.bindingValue(AttrCoerce.lookup(json, "bind")),
             edgeInset = AttrCoerce.number(AttrCoerce.lookup(json, "edgeInset")),
-            highlightColor = AttrCoerce.string(AttrCoerce.lookup(json, "highlightColor", listOf("hilightColor"))),
+            highlightColor = AttrCoerce.string(AttrCoerce.lookup(json, "highlightColor", listOf("hilightColor"), canonicalOnly)),
             partialAttributes = AttrCoerce.array(AttrCoerce.lookup(json, "partialAttributes")),
             shadow = AttrCoerce.obj(AttrCoerce.lookup(json, "shadow")),
             text = AttrCoerce.attrValue(AttrCoerce.lookup(json, "text")) { AttrCoerce.string(it) },
@@ -56,13 +90,13 @@ data class LabelAttributes(
             value = AttrCoerce.lookup(json, "value"),
         )
 
-        private fun parseTextTransform(raw: Any?): TextTransform? {
-            val s = raw as? String ?: return null
-            val v = TextTransform.from(s)
-            if (v == null) {
-                AttrWarnings.emit("Label.textTransform: unknown enum value '$s'")
+        private fun parseTextTransform(raw: Any?): AttrEnum<TextTransform>? {
+            if (raw == null) return null
+            (raw as? String)?.let { s ->
+                TextTransform.from(s)?.let { return AttrEnum.Known(it) }
             }
-            return v
+            AttrWarnings.emit("Label.textTransform: unknown enum value '$raw'")
+            return AttrEnum.Unknown(raw)
         }
     }
 }

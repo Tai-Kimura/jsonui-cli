@@ -19,11 +19,42 @@ public enum AttrValue<T> {
         if case .binding(let e) = self { return e }
         return nil
     }
+
+    /// The original layout representation: `"@{expr}"` for `.binding`,
+    /// the static value for `.value` (the `@{}` wrapper is always
+    /// recoverable).
+    public var rawRepresentation: Any {
+        switch self {
+        case .value(let v): return v
+        case .binding(let e): return "@{\(e)}"
+        }
+    }
+}
+
+/// Open-enum parse result for a declared enum attribute. Matching is
+/// case-insensitive; undeclared values are reported through
+/// `AttrCodegenWarnings` and passed through as `.unknown` — author input
+/// is never silently dropped.
+public enum AttrEnum<T> {
+    case known(T)
+    /// Undeclared raw value (warned, passed through).
+    case unknown(Any)
+
+    public var knownValue: T? {
+        if case .known(let v) = self { return v }
+        return nil
+    }
+
+    public var unknownValue: Any? {
+        if case .unknown(let v) = self { return v }
+        return nil
+    }
 }
 
 /// Warning hook — generated parsers never crash on malformed input.
-/// Unknown enum values / dimension keywords are reported here and parsed
-/// as `nil`.
+/// Unknown enum values / dimension keywords are reported here (enum
+/// values are then passed through as `AttrEnum.unknown`, dimension
+/// keywords parse as `nil`).
 public enum AttrCodegenWarnings {
     public static var handler: ((String) -> Void)?
 
@@ -35,11 +66,15 @@ public enum AttrCodegenWarnings {
 /// Coercion helpers used by the generated `init(json:)` implementations.
 public enum AttrCoerce {
     /// Canonical-name lookup with alias fallback (aliases are resolved in
-    /// generated code so raw / non-normalized JSON keeps working).
+    /// generated code so raw / non-normalized JSON keeps working). Pass
+    /// `canonicalOnly: true` for L1-normalized input — aliases are then
+    /// never consulted.
     public static func lookup(
-        _ json: [String: Any], _ canonical: String, _ aliases: [String] = []
+        _ json: [String: Any], _ canonical: String, _ aliases: [String] = [],
+        canonicalOnly: Bool = false
     ) -> Any? {
         if let v = json[canonical], !(v is NSNull) { return v }
+        if canonicalOnly { return nil }
         for alias in aliases {
             if let v = json[alias], !(v is NSNull) { return v }
         }
@@ -55,9 +90,14 @@ public enum AttrCoerce {
         return String(s.dropFirst(2).dropLast(1))
     }
 
-    /// Binding-only attributes accept `@{fn}` (canonical) or a bare name.
-    public static func bindingExprOrName(_ raw: Any?) -> String? {
-        return bindingExpression(raw) ?? string(raw)
+    /// Binding-only attribute (`type: "binding"`): `@{expr}` becomes
+    /// `.binding`; anything else (bare handler name `String`, action-object
+    /// dictionary, ...) is preserved raw as `.value` — never de-wrapped to
+    /// a bare string, never dropped.
+    public static func bindingValue(_ raw: Any?) -> AttrValue<Any>? {
+        guard let raw = raw, !(raw is NSNull) else { return nil }
+        if let expr = bindingExpression(raw) { return .binding(expr) }
+        return .value(raw)
     }
 
     public static func string(_ raw: Any?) -> String? {

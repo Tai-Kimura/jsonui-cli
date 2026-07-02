@@ -138,10 +138,12 @@ class SmokeCheckTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("ruby"), "ruby not installed")
     def test_ruby_runtime_extraction_semantics(self):
         """Load the generated modules and assert alias resolution,
-        AttrValue wrapping, enum unknown → nil + warning, dimension."""
+        AttrValue wrapping (including :binding raw preservation), lenient
+        enum matching, canonical_only, dimension, and the metadata API."""
         model = load_model()
         script = r"""
 require_relative 'label_attributes'
+require_relative 'slider_attributes'
 include JsonUI::Generated
 
 warnings = []
@@ -159,12 +161,44 @@ out = LabelAttributes.extract(
 
 raise 'alias failed' unless out['opacity'].is_a?(AttrValue) && out['opacity'].value == 0.5
 raise 'binding failed' unless out['text'].binding? && out['text'].binding_expression == 'title'
+raise 'binding raw recover failed' unless out['text'].raw == '@{title}'
 raise 'dimension keyword failed' unless out['width'].value == 'matchParent'
 raise 'dimension number failed' unless out['height'].value == 120
-raise 'enum unknown should be dropped' if out.key?('visibility')
+# Lenient enums: unknown values warn but PASS THROUGH raw (never dropped).
+raise 'enum unknown should pass through' unless out['visibility'].value == 'bogus'
 raise 'warning hook not called' unless warnings.any? { |w| w.include?('common.visibility') }
-raise 'binding-only failed' unless out['onClick'] == 'save'
+# Binding-only: AttrValue with the @{} wrapper information preserved.
+raise 'binding-only failed' unless out['onClick'].is_a?(AttrValue)
+raise 'binding-only expr failed' unless out['onClick'].binding_expression == 'save'
+raise 'binding-only raw failed' unless out['onClick'].raw == '@{save}'
 raise 'color failed' unless out['fontColor'].is_a?(AttrValue) && out['fontColor'].value == '#FF0000'
+
+# Binding-only Hash action objects are preserved, not dropped.
+handler = { 'action' => 'link', 'url' => 'https://example.com' }
+out = LabelAttributes.extract('onClick' => handler)
+raise 'action object dropped' unless out['onClick'].value == handler
+
+# Lenient enums match case-insensitively without warning.
+warnings.clear
+out = LabelAttributes.extract('textAlign' => 'left')
+raise 'ci enum failed' unless out['textAlign'].value == 'left'
+raise 'ci enum warned' unless warnings.empty?
+
+# canonical_only disables alias fallback (L1-normalized input).
+out = SliderAttributes.extract({ 'minimumValue' => 5 }, canonical_only: true)
+raise 'canonical_only failed' if out.key?('minimum')
+out = SliderAttributes.extract('minimumValue' => 5)
+raise 'alias fallback failed' unless out['minimum'].value == 5
+
+# Metadata API: rows / declared? / alias_map.
+raise 'declared? canonical failed' unless SliderAttributes.declared?('minimum')
+raise 'declared? alias failed' unless SliderAttributes.declared?('minimumValue')
+raise 'declared? common failed' unless SliderAttributes.declared?('opacity')
+raise 'declared? undeclared failed' if SliderAttributes.declared?('customProp')
+raise 'alias_map failed' unless SliderAttributes.alias_map['minimumValue'] == 'minimum'
+raise 'rows failed' unless SliderAttributes.rows['minimum'][:kind] == :number
+# `alpha` is an alias of opacity AND its own row — never redirected.
+raise 'standalone alias row failed' if SliderAttributes.alias_map.key?('alpha')
 puts 'RUBY_RUNTIME_OK'
 """
         with tempfile.TemporaryDirectory() as tmp:

@@ -14,11 +14,36 @@ public struct LabelAttributes {
         case flow = "Flow"
     }
 
+    /// Canonical attribute names declared for this component, including the shared `common` set (public metadata contract).
+    public static let declaredAttributes: Set<String> = CommonAttributes.declaredAttributes.union([
+        "bind",
+        "edgeInset",
+        "highlightColor",
+        "partialAttributes",
+        "shadow",
+        "text",
+        "textTransform",
+        "value",
+    ])
+
+    /// Alias spelling → canonical attribute name (merged with common). Alias
+    /// spellings that are also declared attributes keep their own
+    /// entry and are not redirected.
+    public static let aliasMap: [String: String] = [
+        "alpha": "opacity",
+        "hilightColor": "highlightColor",
+    ]
+
+    /// True when `key` is a declared canonical name or alias spelling.
+    public static func isDeclared(_ key: String) -> Bool {
+        return declaredAttributes.contains(key) || aliasMap[key] != nil
+    }
+
     /// Attributes shared across all components.
     public let common: CommonAttributes
 
     /// Two-way binding @{variable} [binding: two-way]
-    public let bind: String?
+    public let bind: AttrValue<Any>?
 
     /// Label internal padding [DEPRECATED: Compose Text has no edgeInset; use padding* instead.]
     public let edgeInset: Double?
@@ -36,16 +61,18 @@ public struct LabelAttributes {
     public let text: AttrValue<String>?
 
     /// Text transformation (legacy spellings kept for compat) [default: none]
-    public let textTransform: TextTransform?
+    public let textTransform: AttrEnum<TextTransform>?
 
     /// Associated value
     public let value: Any?
 
-    public init(json: [String: Any]) {
-        self.common = CommonAttributes(json: json)
-        self.bind = AttrCoerce.bindingExprOrName(AttrCoerce.lookup(json, "bind"))
+    /// Pass `canonicalOnly: true` for L1-normalized input —
+    /// alias fallback is then disabled.
+    public init(json: [String: Any], canonicalOnly: Bool = false) {
+        self.common = CommonAttributes(json: json, canonicalOnly: canonicalOnly)
+        self.bind = AttrCoerce.bindingValue(AttrCoerce.lookup(json, "bind"))
         self.edgeInset = AttrCoerce.number(AttrCoerce.lookup(json, "edgeInset"))
-        self.highlightColor = AttrCoerce.string(AttrCoerce.lookup(json, "highlightColor", ["hilightColor"]))
+        self.highlightColor = AttrCoerce.string(AttrCoerce.lookup(json, "highlightColor", ["hilightColor"], canonicalOnly: canonicalOnly))
         self.partialAttributes = AttrCoerce.array(AttrCoerce.lookup(json, "partialAttributes"))
         self.shadow = AttrCoerce.object(AttrCoerce.lookup(json, "shadow"))
         self.text = AttrCoerce.attrValue(AttrCoerce.lookup(json, "text"), AttrCoerce.string)
@@ -53,15 +80,17 @@ public struct LabelAttributes {
         self.value = AttrCoerce.any(AttrCoerce.lookup(json, "value"))
     }
 
-    private static func parseTextTransform(_ raw: Any?) -> TextTransform? {
-        guard let s = raw as? String else { return nil }
-        switch s {
-        case "none": return TextTransform.none
-        case "wrap-reverse": return TextTransform.wrapReverse
-        case "Flow", "flow": return TextTransform.flow
-        default:
-            AttrCodegenWarnings.emit("Label.textTransform: unknown enum value '\(s)'")
-            return nil
+    private static func parseTextTransform(_ raw: Any?) -> AttrEnum<TextTransform>? {
+        guard let raw = raw, !(raw is NSNull) else { return nil }
+        if let s = raw as? String {
+            switch s.lowercased() {
+            case "none": return .known(TextTransform.none)
+            case "wrap-reverse": return .known(TextTransform.wrapReverse)
+            case "flow": return .known(TextTransform.flow)
+            default: break
+            }
         }
+        AttrCodegenWarnings.emit("Label.textTransform: unknown enum value '\(raw)'")
+        return .unknown(raw)
     }
 }

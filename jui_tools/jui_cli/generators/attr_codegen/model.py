@@ -294,6 +294,29 @@ def _resolve_kind(
     return AttrKind.RAW, (), (), tuple(raw_kinds)
 
 
+def merged_alias_map(
+    comp: Component, common: Component | None = None
+) -> dict[str, str]:
+    """Public metadata contract: alias spelling → canonical name (sorted).
+
+    Rows are merged common-first (component rows override on name
+    collision — same precedence as the generated extract/parse methods).
+    Alias spellings that are ALSO declared canonical names (e.g. ``alpha``
+    next to ``opacity``) keep their own row and are not redirected.
+    """
+    rows: dict[str, Attribute] = {}
+    sources = [common, comp] if common is not None and comp is not common else [comp]
+    for source in sources:
+        for attr in source.attrs:
+            rows[attr.name] = attr
+    out: dict[str, str] = {}
+    for attr in rows.values():
+        for alias in attr.aliases:
+            if alias not in rows:
+                out[alias] = attr.name
+    return dict(sorted(out.items()))
+
+
 def skipped_payload(model: AttrModel) -> dict[str, Any]:
     """JSON payload of the skip list, emitted into every language dir."""
     return {
