@@ -52,7 +52,7 @@ jobs:
   # ------------------------------------------------------------------ #
   ruby-suites:
     name: rspec (${{ matrix.tool }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -60,10 +60,13 @@ jobs:
         include:
           - tool: sjui_tools
             bundler: false
+            os: macos-15 # specs compile emitted Swift against the SwiftUI SDK
           - tool: kjui_tools
             bundler: true
+            os: ubuntu-latest
           - tool: rjui_tools
             bundler: true
+            os: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1
