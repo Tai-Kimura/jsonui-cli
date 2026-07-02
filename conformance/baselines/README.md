@@ -97,6 +97,36 @@ The committed `android.hashes.json` was recorded from a verified-good run:
 511 pass / 132 skipped (not android-applicable) / 0 fail / 0 error on the
 v2 manifest (643 fixtures, 19 interactive).
 
+### iOS calibration (2026-07-03)
+
+SwiftJsonUI SwiftUI dynamic host (ConformanceHost), iPhone 16 Pro simulator,
+490 visual screenshots, two independent full suite runs.
+
+**The dominant iOS noise source is NOT the renderer — it is the simulator
+status-bar clock.** A first calibration pair with a live clock measured
+distances up to 31 across ~490 screenshots (the full-page captures include
+the status bar; changing clock digits flip a band of 64x64 cells). Freezing
+the status bar first (`xcrun simctl status_bar <udid> override --time 9:41
+--batteryLevel 100 --cellularBars 4 --wifiBars 3`) collapses that entirely:
+
+| distance | screenshots |
+|---|---|
+| 0 | 486 (440 byte-identical PNGs) |
+| 1 | 3 (Indicator activity-spinner frames) |
+| 6 | 1 (`SelectBox_selectedValue` — anti-aliasing on a near-full-frame card edge + thin chevron) |
+
+Measured max noise = **6** (frozen clock), still below the committed
+threshold **8**, so iOS keeps the shared threshold — no per-platform value
+needed. The two distance-1 outliers are `Indicator` fixtures (an animated
+`UIActivityIndicatorView` spinner has no fixed frame); the distance-6
+`SelectBox` outlier is sub-pixel AA on a card that fills most of the frame,
+not a rendering regression (verified by eye). The committed
+`ios.hashes.json` was recorded from a verified-good run (533 pass / 110
+skipped / 0 fail) with the status bar frozen.
+
+Runner prerequisite: freeze the status bar before `run_conformance.sh`, or
+per-run clock drift will exceed the threshold on the status-bar band.
+
 ## File format
 
 ```json
