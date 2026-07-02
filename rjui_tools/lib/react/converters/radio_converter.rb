@@ -12,9 +12,9 @@ module RjuiTools
           id_attr = build_id_attr
           testid_attr = build_testid_attr
           tag_attr = build_tag_attr
-          items = json['items'] || []
-          text = json['text'] || ''
-          group = json['group'] || extract_id || 'radioGroup'
+          items = attributes['items'] || []
+          text = attributes['text'] || ''
+          group = attributes['group'] || extract_id || 'radioGroup'
 
           jsx = if items.any?
             generate_radio_group(indent, id_attr, class_name, style_attr, testid_attr, tag_attr, items, group, text)
@@ -30,14 +30,14 @@ module RjuiTools
         def build_class_name
           classes = [super]
 
-          classes << 'flex flex-col gap-2' if (json['items'] || []).any?
+          classes << 'flex flex-col gap-2' if (attributes['items'] || []).any?
           classes << 'cursor-pointer'
 
           # Disabled state
-          if json['enabled'] == false
+          if attributes['enabled'] == false
             classes << 'opacity-50 cursor-not-allowed'
-          elsif has_binding?(json['enabled'])
-            binding_expr = extract_binding_property(json['enabled'])
+          elsif has_binding?(attributes['enabled'])
+            binding_expr = extract_binding_property(attributes['enabled'])
             classes << "${!#{binding_expr} ? 'opacity-50 cursor-not-allowed' : ''}"
           end
 
@@ -50,7 +50,7 @@ module RjuiTools
           selected_binding = build_selected_binding
           on_change = build_on_change
           disabled_attr = build_disabled_attr
-          tint_color = json['tintColor']
+          tint_color = attributes['tintColor']
 
           items_jsx = items.map do |item|
             escaped_item = item.gsub('"', '&quot;')
@@ -82,7 +82,7 @@ module RjuiTools
           on_change = build_on_change
           disabled_attr = build_disabled_attr
           radio_value = extract_id || 'option'
-          tint_color = json['tintColor']
+          tint_color = attributes['tintColor']
           input_style = tint_color ? " style={{ accentColor: '#{tint_color}' }}" : ''
 
           state_attrs = build_state_attrs(selected_binding, on_change, radio_value)
@@ -102,7 +102,7 @@ module RjuiTools
         #   emitted a bare `selectedValue` identifier which is undefined at
         #   runtime and crashed the component on render)
         def build_selected_binding
-          selected = json['selectedValue']
+          selected = attributes['selectedValue']
           return nil unless selected
 
           if has_binding?(selected)
@@ -115,13 +115,13 @@ module RjuiTools
         # onChange handler expression, or nil when neither onValueChange nor a
         # selectedValue binding provides one (static/uncontrolled radio).
         def build_on_change
-          handler = json['onValueChange']
+          handler = attributes['onValueChange']
 
           if handler && has_binding?(handler)
             extract_binding_property(handler)
           else
             # Generate setter from the raw binding name (without viewModel.data. prefix)
-            selected = json['selectedValue']
+            selected = attributes['selectedValue']
             return nil unless selected && has_binding?(selected)
 
             raw_binding = extract_raw_binding_property(selected)
@@ -148,7 +148,7 @@ module RjuiTools
         end
 
         def build_disabled_attr
-          enabled = json['enabled']
+          enabled = attributes['enabled']
           return '' if enabled.nil?
 
           if has_binding?(enabled)
