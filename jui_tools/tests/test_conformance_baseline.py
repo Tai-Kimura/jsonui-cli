@@ -1,0 +1,221 @@
+"""Tests for screenshot baseline hashing (`jui conformance baseline`).
+
+Covers the plan-12 §3 acceptance criteria on the baseline side:
+
+- hash stability (same image -> same hash; deterministic across calls)
+- sensitivity (a small localized change must exceed the threshold — this is
+  the regression that motivated the 64x64 grid: a 16x16 dHash missed it)
+- noise tolerance (distance <= threshold for near-identical renders)
+- baseline update determinism (sorted keys, no timestamps, @generated)
+- comparison buckets: match / regression / no-baseline / missing-artifact
+  (a screenshot without a baseline is *reported*, never a silent pass)
+
+Pillow is an optional dependency (`jui-tools[conformance]`); the whole
+module is skipped when it is unavailable.
+"""
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+try:
+    from PIL import Image, ImageDraw
+
+    HAVE_PILLOW = True
+except ImportError:  # pragma: no cover - environment dependent
+    HAVE_PILLOW = False
+
+from jui_cli.conformance import baseline
+
+
+def _write_png(path: Path, *, box: tuple[int, int, int, int] | None = None,
+               gradient_horizontal: bool | None = None, size=(512, 384)) -> Path:
+    """Deterministic synthetic screenshot: white page + optional content."""
+    img = Image.new("RGB", size, "white")
+    draw = ImageDraw.Draw(img)
+    if gradient_horizontal is not None:
+        # 100x100 gradient box at a fixed position (mimics a fixture target
+        # occupying a small fraction of the page).
+        for i in range(100):
+            shade = int(255 * i / 99)
+            if gradient_horizontal:
+                draw.line([(50 + i, 50), (50 + i, 149)], fill=(shade, 0, 255 - shade))
+            else:
+                draw.line([(50, 50 + i), (149, 50 + i)], fill=(shade, 0, 255 - shade))
+    if box:
+        draw.rectangle(box, fill="black")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(path)
+    return path
+
+
+@unittest.skipUnless(HAVE_PILLOW, "Pillow not installed (jui-tools[conformance])")
+class DhashTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_hash_is_stable_and_hex_encoded(self):
+        png = _write_png(self.tmp / "a.png")
+        h1 = baseline.dhash_file(png)
+        h2 = baseline.dhash_file(png)
+        self.assertEqual(h1, h2)
+        self.assertEqual(len(h1), baseline.HASH_SIZE * baseline.HASH_SIZE // 4)
+        int(h1, 16)  # must be valid hex
+
+    def test_identical_content_different_files_match(self):
+        a = _write_png(self.tmp / "a.png")
+        b = _write_png(self.tmp / "b.png")
+        self.assertEqual(baseline.dhash_file(a), baseline.dhash_file(b))
+
+    def test_small_localized_change_exceeds_threshold(self):
+        """A gradient-direction flip inside a 100x100 box on a mostly white
+        page — the exact change class a 16x16 global hash failed to see."""
+        a = _write_png(self.tmp / "a.png", gradient_horizontal=False)
+        b = _write_png(self.tmp / "b.png", gradient_horizontal=True)
+        distance = baseline.hamming(baseline.dhash_file(a), baseline.dhash_file(b))
+        self.assertGreater(distance, baseline.DEFAULT_THRESHOLD)
+
+    def test_hamming_rejects_length_mismatch(self):
+        with self.assertRaises(ValueError):
+            baseline.hamming("00", "0000")
+
+
+@unittest.skipUnless(HAVE_PILLOW, "Pillow not installed (jui-tools[conformance])")
+class BaselineUpdateTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.conf = Path(self._tmp.name)
+        self.artifacts = self.conf / "artifacts" / "web"
+        _write_png(self.artifacts / "B_fixture.png")
+        _write_png(self.artifacts / "A_fixture.png", box=(10, 10, 40, 40))
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_update_writes_deterministic_manifest(self):
+        summary = baseline.update_baseline(self.conf, "web")
+        self.assertEqual(summary.hashed, 2)
+        content1 = summary.out_path.read_text(encoding="utf-8")
+        baseline.update_baseline(self.conf, "web")
+        self.assertEqual(content1, summary.out_path.read_text(encoding="utf-8"))
+
+        payload = json.loads(content1)
+        self.assertEqual(payload["_generated"]["sentinel"], "@generated")
+        self.assertEqual(payload["algorithm"], baseline.ALGORITHM)
+        self.assertEqual(payload["threshold"], baseline.DEFAULT_THRESHOLD)
+        self.assertEqual(list(payload["hashes"]), ["A_fixture.png", "B_fixture.png"])
+        self.assertNotIn("generatedAt", content1)
+
+    def test_update_without_artifacts_errors(self):
+        with self.assertRaises(baseline.BaselineError):
+            baseline.update_baseline(self.conf, "ios")
+
+
+@unittest.skipUnless(HAVE_PILLOW, "Pillow not installed (jui-tools[conformance])")
+class ComparePlatformTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.conf = Path(self._tmp.name)
+        self.artifacts = self.conf / "artifacts" / "web"
+        _write_png(self.artifacts / "stable.png")
+        _write_png(self.artifacts / "changed.png", gradient_horizontal=False)
+        baseline.update_baseline(self.conf, "web")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_no_baseline_recorded_reports_every_screenshot(self):
+        comparison = baseline.compare_platform(self.conf, "android", ["x.png"])
+        self.assertFalse(comparison.baseline_exists)
+        self.assertEqual(comparison.no_baseline, ["x.png"])
+        self.assertEqual(comparison.compared, 0)
+
+    def test_clean_rerun_has_no_regressions(self):
+        comparison = baseline.compare_platform(
+            self.conf, "web", ["stable.png", "changed.png"]
+        )
+        self.assertTrue(comparison.baseline_exists)
+        self.assertEqual(comparison.compared, 2)
+        self.assertEqual(comparison.regressions, [])
+        self.assertEqual(comparison.no_baseline, [])
+        self.assertEqual(comparison.missing_artifact, [])
+
+    def test_visual_change_is_detected_as_regression(self):
+        _write_png(self.artifacts / "changed.png", gradient_horizontal=True)
+        comparison = baseline.compare_platform(
+            self.conf, "web", ["stable.png", "changed.png"]
+        )
+        self.assertEqual(len(comparison.regressions), 1)
+        name, distance = comparison.regressions[0]
+        self.assertEqual(name, "changed.png")
+        self.assertGreater(distance, comparison.threshold)
+
+    def test_new_screenshot_without_baseline_is_reported_not_passed(self):
+        _write_png(self.artifacts / "brand_new.png")
+        comparison = baseline.compare_platform(
+            self.conf, "web", ["stable.png", "changed.png", "brand_new.png"]
+        )
+        self.assertEqual(comparison.no_baseline, ["brand_new.png"])
+        self.assertEqual(comparison.regressions, [])
+
+    def test_missing_artifact_and_stale_baseline_entries_are_reported(self):
+        (self.artifacts / "changed.png").unlink()
+        comparison = baseline.compare_platform(
+            self.conf, "web", ["stable.png", "changed.png"]
+        )
+        self.assertEqual(comparison.missing_artifact, ["changed.png"])
+        # baseline-only entries (fixture removed) surface too
+        comparison2 = baseline.compare_platform(self.conf, "web", ["stable.png"])
+        self.assertIn("changed.png", comparison2.missing_artifact)
+
+    def test_algorithm_mismatch_marks_baseline_stale(self):
+        path = baseline.baseline_path(self.conf, "web")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["algorithm"] = "dhash-8"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        comparison = baseline.compare_platform(self.conf, "web", ["stable.png"])
+        self.assertEqual(comparison.algorithm_mismatch, "dhash-8")
+        self.assertEqual(comparison.compared, 0)
+
+
+class BaselineCommandTest(unittest.TestCase):
+    """`jui conformance baseline` argparse dispatch."""
+
+    @unittest.skipUnless(HAVE_PILLOW, "Pillow not installed (jui-tools[conformance])")
+    def test_update_subcommand_returns_zero(self):
+        import argparse
+
+        from jui_cli.commands.conformance_cmd import cmd_conformance
+
+        with tempfile.TemporaryDirectory() as tmp:
+            conf = Path(tmp)
+            _write_png(conf / "artifacts" / "web" / "one.png")
+            args = argparse.Namespace(
+                conformance_target="baseline",
+                baseline_action="update",
+                platform="web",
+                conformance_dir=str(conf),
+                artifacts=None,
+            )
+            self.assertEqual(cmd_conformance(args), 0)
+            self.assertTrue((conf / "baselines" / "web.hashes.json").is_file())
+
+    def test_missing_action_prints_usage(self):
+        import argparse
+
+        from jui_cli.commands.conformance_cmd import cmd_conformance
+
+        args = argparse.Namespace(
+            conformance_target="baseline", baseline_action=None
+        )
+        self.assertEqual(cmd_conformance(args), 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

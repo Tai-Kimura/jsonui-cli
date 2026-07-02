@@ -9,6 +9,8 @@ Covers the plan-01 acceptance criteria on the generator side:
 - zero silent drops (every attribute is a fixture or a reasoned skip)
 - @generated markers on every emitted file
 - generated tests conform to the jsonui-test-runner screen-test shape
+- v2: interactive fixtures (binding/callback promotion, conformanceState
+  contract in the manifest, case-insensitive path dedup)
 """
 from __future__ import annotations
 
@@ -21,7 +23,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from jui_cli.conformance import rules
+from jui_cli.conformance import interactive_rules, rules
 from jui_cli.conformance.fixture_generator import generate_conformance
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -144,7 +146,9 @@ class ConformanceGeneratorTest(unittest.TestCase):
         self.assertNotIn("assert", [k for s in steps for k in s])
 
     def test_untestable_attributes_are_skipped_with_reasons(self):
-        self.assertEqual(self.skips[("common", "onclick")], rules.REASON_CALLBACK)
+        # common/onclick has an interactive rule -> promoted, NOT skipped.
+        self.assertNotIn(("common", "onclick"), self.skips)
+        # Label/onTextChange has no interactive rule (only TextField/TextView do).
         self.assertEqual(self.skips[("Label", "onTextChange")], rules.REASON_CALLBACK)
         self.assertEqual(self.skips[("common", "someBinding")], rules.REASON_BINDING_ONLY)
         self.assertEqual(self.skips[("common", "type")], rules.REASON_METADATA)
@@ -267,6 +271,176 @@ class ConformanceGeneratorTest(unittest.TestCase):
                     )
 
 
+class ConformanceInteractiveTest(unittest.TestCase):
+    """v2 interactive fixtures on the synthetic definition set."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory()
+        tmp = Path(cls._tmp.name)
+        cls.defs_path = _write_defs(tmp, SYNTHETIC_DEFS)
+        cls.out_dir = tmp / "conformance"
+        cls.summary = generate_conformance(cls.defs_path, cls.out_dir)
+        cls.manifest = json.loads((cls.out_dir / "manifest.json").read_text(encoding="utf-8"))
+        cls.by_id = {f["id"]: f for f in cls.manifest["fixtures"]}
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def _load(self, fixture: dict, kind: str) -> dict:
+        return json.loads((self.out_dir / fixture[kind]).read_text(encoding="utf-8"))
+
+    # ---------------- promotion out of the skip list ---------------- #
+
+    def test_callback_attribute_is_promoted_to_interactive(self):
+        fixture = self.by_id["common/onclick__callback_fire"]
+        self.assertEqual(fixture["class"], "interactive")
+        self.assertEqual(fixture["promotedFrom"], rules.REASON_CALLBACK)
+        self.assertEqual(self.manifest["counts"]["promoted"], {"callback": 1})
+        self.assertEqual(
+            self.manifest["counts"]["interactive"], self.summary.interactive_count
+        )
+
+    def test_static_fixture_entries_carry_null_state(self):
+        fixture = self.by_id["Label/text__static"]
+        self.assertIsNone(fixture["state"])
+        self.assertIsNone(fixture["promotedFrom"])
+
+    # ---------------- conformanceState contract in the manifest ---------------- #
+
+    def test_callback_fire_state_contract(self):
+        fixture = self.by_id["common/onclick__callback_fire"]
+        self.assertEqual(
+            fixture["state"],
+            {
+                "vars": [
+                    {
+                        "name": interactive_rules.RESULT_VAR,
+                        "class": "String",
+                        "defaultValue": interactive_rules.RESULT_BEFORE,
+                    }
+                ],
+                "handlers": [
+                    {
+                        "name": interactive_rules.FIRE_HANDLER,
+                        "set": {
+                            "var": interactive_rules.RESULT_VAR,
+                            "value": interactive_rules.RESULT_AFTER,
+                        },
+                    }
+                ],
+            },
+        )
+
+    def test_interactive_layout_declares_data_section_and_mirror(self):
+        fixture = self.by_id["common/onclick__callback_fire"]
+        layout = self._load(fixture, "layout")
+        self.assertEqual(layout["orientation"], "vertical")
+        self.assertEqual(
+            layout["data"],
+            [
+                {
+                    "name": interactive_rules.RESULT_VAR,
+                    "class": "String",
+                    "defaultValue": interactive_rules.RESULT_BEFORE,
+                }
+            ],
+        )
+        by_node_id = {c["id"]: c for c in layout["child"]}
+        self.assertEqual(
+            by_node_id["target"]["onclick"], interactive_rules.FIRE_HANDLER
+        )
+        self.assertEqual(
+            by_node_id["mirror"]["text"], f"@{{{interactive_rules.RESULT_VAR}}}"
+        )
+
+    def test_callback_fire_test_steps(self):
+        fixture = self.by_id["common/onclick__callback_fire"]
+        steps = self._load(fixture, "test")["cases"][0]["steps"]
+        self.assertEqual(
+            steps,
+            [
+                {"action": "waitFor", "id": "root"},
+                {"assert": "text", "id": "mirror", "equals": interactive_rules.RESULT_BEFORE},
+                {"action": "tap", "id": "target"},
+                {"assert": "text", "id": "mirror", "equals": interactive_rules.RESULT_AFTER},
+            ],
+        )
+
+    # ---------------- binding fixture types ---------------- #
+
+    def test_binding_initial_asserts_data_default_on_target(self):
+        fixture = self.by_id["Label/text__binding_initial"]
+        self.assertEqual(fixture["class"], "interactive")
+        self.assertIsNone(fixture["promotedFrom"])  # text was already testable
+        steps = self._load(fixture, "test")["cases"][0]["steps"]
+        self.assertIn(
+            {"assert": "text", "id": "target", "equals": interactive_rules.BOUND_INITIAL},
+            steps,
+        )
+        layout = self._load(fixture, "layout")
+        target = next(c for c in layout["child"] if c["id"] == "target")
+        self.assertEqual(target["text"], f"@{{{interactive_rules.TEXT_VAR}}}")
+
+    def test_visibility_binding_sweep_covers_all_enum_values(self):
+        expectations = {
+            "common/visibility__binding_visible": "visible",
+            "common/visibility__binding_invisible": "notVisible",
+            "common/visibility__binding_gone": "notVisible",
+        }
+        for fixture_id, expected_assert in expectations.items():
+            fixture = self.by_id[fixture_id]
+            self.assertEqual(fixture["class"], "interactive", fixture_id)
+            steps = self._load(fixture, "test")["cases"][0]["steps"]
+            asserts = [s["assert"] for s in steps if "assert" in s]
+            self.assertEqual(asserts, [expected_assert], fixture_id)
+            # the swept enum value is the data default
+            layout = self._load(fixture, "layout")
+            self.assertEqual(
+                layout["data"][0]["defaultValue"], fixture_id.rsplit("_", 1)[-1]
+            )
+
+    # ---------------- case-insensitive path dedup ---------------- #
+
+    def test_case_colliding_attributes_get_distinct_file_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            defs = {
+                "common": {
+                    "onclick": {"type": ["string", "array"], "description": "selector"},
+                    "onClick": {"type": "binding", "description": "binding"},
+                }
+            }
+            defs_path = _write_defs(Path(tmp), defs)
+            out_dir = Path(tmp) / "out"
+            generate_conformance(defs_path, out_dir)
+            manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+            layouts = [f["layout"].lower() for f in manifest["fixtures"]]
+            self.assertEqual(len(layouts), len(set(layouts)))
+            for fixture in manifest["fixtures"]:
+                self.assertTrue((out_dir / fixture["layout"]).is_file(), fixture["id"])
+                self.assertTrue((out_dir / fixture["test"]).is_file(), fixture["id"])
+
+    # ---------------- rule table hygiene ---------------- #
+
+    def test_interactive_rule_table_matches_real_definitions(self):
+        """Every rule-table key must exist in the real SSoT (no dead rules)."""
+        defs = json.loads(REAL_DEFINITIONS.read_text(encoding="utf-8"))
+        for section, attribute in interactive_rules.INTERACTIVE_SPECS:
+            self.assertIn(attribute, defs.get(section, {}), f"{section}.{attribute}")
+
+    def test_interactive_steps_stay_inside_runner_vocabulary(self):
+        allowed_actions = {"waitFor", "tap", "input", "longPress", "selectOption"}
+        allowed_asserts = {"text", "visible", "notVisible"}
+        for specs in interactive_rules.INTERACTIVE_SPECS.values():
+            for spec in specs:
+                for step in spec.steps:
+                    if "action" in step:
+                        self.assertIn(step["action"], allowed_actions, step)
+                    else:
+                        self.assertIn(step["assert"], allowed_asserts, step)
+
+
 class ConformanceGeneratorRealDefinitionsTest(unittest.TestCase):
     """Smoke tests against the repo's real attribute_definitions.json."""
 
@@ -295,6 +469,17 @@ class ConformanceGeneratorRealDefinitionsTest(unittest.TestCase):
         self.assertGreater(self.summary.fixture_count, 500)
         self.assertGreater(self.summary.assertable_count, 20)
         self.assertGreater(self.summary.skipped_count, 100)
+
+    def test_interactive_volume_and_promotions(self):
+        # 12 attributes promoted out of `callback` (v1 had 50); every
+        # interactive fixture carries a state contract.
+        self.assertEqual(self.summary.promoted, {"callback": 12})
+        self.assertGreaterEqual(self.summary.interactive_count, 19)
+        for fixture in self.manifest["fixtures"]:
+            if fixture["class"] == "interactive":
+                self.assertIsInstance(fixture["state"], dict, fixture["id"])
+                self.assertIn("vars", fixture["state"], fixture["id"])
+                self.assertIn("handlers", fixture["state"], fixture["id"])
 
     def test_unique_ids_and_case_insensitive_paths(self):
         ids = [f["id"] for f in self.manifest["fixtures"]]

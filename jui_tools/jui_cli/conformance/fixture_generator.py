@@ -28,7 +28,8 @@ from pathlib import Path
 from typing import Any
 
 from ..core.generated_marker import json_marker
-from . import rules
+from . import interactive_rules, rules
+from .interactive_rules import InteractivePlan, InteractiveSpec
 from .rules import AttributePlan, CasePlan, SkippedAttribute
 
 GENERATOR_NAME = "jui conformance generate"
@@ -38,7 +39,7 @@ GENERATOR_NAME = "jui conformance generate"
 #: zero warnings while staying greppable via ``@generated``).
 TEST_GENERATED_BY = "@generated jui conformance generate — DO NOT EDIT"
 
-MANIFEST_SCHEMA_VERSION = 1
+MANIFEST_SCHEMA_VERSION = 2
 
 #: Anchor sibling emitted for view-reference attributes.
 ANCHOR_NODE: dict[str, Any] = {
@@ -59,9 +60,11 @@ class GenerationSummary:
     fixture_count: int = 0
     assertable_count: int = 0
     visual_count: int = 0
+    interactive_count: int = 0
     skipped_count: int = 0
     files_written: int = 0
     skipped: list[dict] = field(default_factory=list)
+    promoted: dict = field(default_factory=dict)  # skip reason -> promoted attr count
 
 
 # --------------------------------------------------------------------------- #
@@ -69,9 +72,17 @@ class GenerationSummary:
 # --------------------------------------------------------------------------- #
 
 
-def plan_definitions(definitions: dict) -> tuple[list[AttributePlan], list[SkippedAttribute]]:
-    """Classify every attribute of every section, in definition-file order."""
-    plans: list[AttributePlan] = []
+def plan_definitions(
+    definitions: dict,
+) -> tuple[list[AttributePlan | InteractivePlan], list[SkippedAttribute]]:
+    """Classify every attribute of every section, in definition-file order.
+
+    v2: attributes with an interactive rule are additionally planned as
+    ``interactive`` fixtures. When the static classification skipped the
+    attribute as ``callback`` / ``binding-only``, the interactive plan
+    *promotes* it out of the skip list (``promoted_from`` records the reason).
+    """
+    plans: list[AttributePlan | InteractivePlan] = []
     skipped: list[SkippedAttribute] = []
     for section, attrs in definitions.items():
         if section == "_comment" or not isinstance(attrs, dict):
@@ -79,9 +90,25 @@ def plan_definitions(definitions: dict) -> tuple[list[AttributePlan], list[Skipp
         for attribute, defn in attrs.items():
             result = rules.plan_attribute(section, attribute, defn)
             if isinstance(result, SkippedAttribute):
-                skipped.append(result)
+                promotable = result.reason in interactive_rules.PROMOTABLE_REASONS
+                interactive = (
+                    interactive_rules.plan_interactive(
+                        section, attribute, defn, promoted_from=result.reason
+                    )
+                    if promotable and isinstance(defn, dict)
+                    else None
+                )
+                if interactive is not None:
+                    plans.append(interactive)
+                else:
+                    skipped.append(result)
             else:
                 plans.append(result)
+                interactive = interactive_rules.plan_interactive(
+                    section, attribute, defn, promoted_from=None
+                )
+                if interactive is not None:
+                    plans.append(interactive)
     return plans, skipped
 
 
@@ -168,6 +195,97 @@ def build_test(plan: AttributePlan, case: CasePlan, layout_rel: str) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# Interactive layout / test JSON builders (v2)
+# --------------------------------------------------------------------------- #
+
+
+def build_interactive_layout(
+    plan: InteractivePlan, spec: InteractiveSpec, *, source_label: str
+) -> dict:
+    """Root View + standard ``data`` section + target (+ mirror Label).
+
+    The ``data`` section is the cross-runtime initial-value mechanism;
+    handlers are *not* declared here — they are injected by the host per the
+    manifest ``state.handlers`` contract (INTERACTIVE_HOST_CONTRACT.md).
+    """
+    base = rules.BASE_ATTRS.get(spec.host, {})
+
+    target: dict[str, Any] = {"type": spec.host, "id": rules.TARGET_ID}
+    target["width"] = base.get("width", "wrapContent")
+    target["height"] = base.get("height", "wrapContent")
+    for key, value in base.items():
+        if key in ("width", "height"):
+            continue
+        target[key] = value
+    for key, value in spec.target_attrs:
+        target[key] = value
+
+    children: list[dict] = [target]
+    if spec.mirror_var is not None:
+        children.append(
+            {
+                "type": "Label",
+                "id": interactive_rules.MIRROR_ID,
+                "text": f"@{{{spec.mirror_var}}}",
+            }
+        )
+
+    return {
+        "_generated": json_marker(source=source_label, generator=GENERATOR_NAME),
+        "type": "View",
+        "id": "root",
+        "width": "matchParent",
+        "height": "matchParent",
+        # A View without orientation overlays its children on every platform
+        # (frame semantics) — the mirror Label would intercept taps on the
+        # target. Interactive fixtures therefore stack vertically.
+        "orientation": "vertical",
+        "data": [
+            {"name": v.name, "class": v.cls, "defaultValue": v.default} for v in spec.vars
+        ],
+        "child": children,
+    }
+
+
+def build_interactive_test(plan: InteractivePlan, spec: InteractiveSpec, layout_rel: str) -> dict:
+    """Screen-test JSON for one interactive fixture (schema-native steps)."""
+    case_id = f"{plan.attribute}__{spec.case}"
+    steps: list[dict] = [{"action": "waitFor", "id": "root"}]
+    steps.extend(dict(s) for s in spec.steps)
+
+    platform: Any
+    if plan.platforms == rules.ALL_PLATFORMS:
+        platform = "all"
+    else:
+        platform = list(plan.platforms)
+
+    description = (
+        f"Interactive conformance fixture for '{plan.attribute}' on {spec.host} "
+        f"(section: {plan.section}, case: {spec.case}). "
+        "State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md."
+    )
+
+    return {
+        "type": "screen",
+        "source": {"layout": layout_rel},
+        "metadata": {
+            "name": f"conformance {plan.section}.{plan.attribute} ({spec.case})",
+            "description": description,
+            "generatedBy": TEST_GENERATED_BY,
+            "tags": ["conformance", "interactive", plan.section],
+        },
+        "platform": platform,
+        "cases": [
+            {
+                "name": case_id,
+                "description": description,
+                "steps": steps,
+            }
+        ],
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Manifest
 # --------------------------------------------------------------------------- #
 
@@ -190,6 +308,32 @@ def build_manifest_entry(
         "deprecated": plan.deprecated,
         "layout": layout_rel,
         "test": test_rel,
+        "state": None,
+        "promotedFrom": None,
+    }
+
+
+def build_interactive_manifest_entry(
+    plan: InteractivePlan, spec: InteractiveSpec, layout_rel: str, test_rel: str
+) -> dict:
+    written_key, written_value = spec.target_attrs[0]
+    return {
+        "id": f"{plan.section}/{plan.attribute}__{spec.case}",
+        "component": plan.section,
+        "attribute": plan.attribute,
+        "case": spec.case,
+        "class": interactive_rules.CLASS_INTERACTIVE,
+        "host": spec.host,
+        "writtenKey": written_key,
+        "aliasOf": None,
+        "value": written_value,
+        "platforms": list(plan.platforms),
+        "mode": plan.mode,
+        "deprecated": plan.deprecated,
+        "layout": layout_rel,
+        "test": test_rel,
+        "state": interactive_rules.state_payload(spec),
+        "promotedFrom": plan.promoted_from,
     }
 
 
@@ -242,11 +386,44 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     summary = GenerationSummary(out_dir=out_dir, manifest_path=out_dir / "manifest.json")
     fixture_entries: list[dict] = []
 
+    promoted: dict[str, int] = {}
+    # macOS filesystems are case-insensitive; attribute names differing only
+    # by case (onclick / onClick) must not share a fixture file path. The
+    # suffix assignment follows definition order — fully deterministic.
+    used_stems: dict[str, int] = {}
+
+    def _unique_stem(section: str, stem: str) -> str:
+        key = f"{section}/{stem}".lower()
+        count = used_stems.get(key, 0) + 1
+        used_stems[key] = count
+        return stem if count == 1 else f"{stem}_{count}"
+
     for plan in plans:
         section_dir = fixtures_dir / plan.section
         section_dir.mkdir(exist_ok=True)
+        if isinstance(plan, InteractivePlan):
+            if plan.promoted_from is not None:
+                promoted[plan.promoted_from] = promoted.get(plan.promoted_from, 0) + 1
+            for spec in plan.specs:
+                stem = _unique_stem(plan.section, f"{plan.attribute}__{spec.case}")
+                layout_rel = f"fixtures/{plan.section}/{stem}.layout.json"
+                test_rel = f"fixtures/{plan.section}/{stem}.test.json"
+
+                layout = build_interactive_layout(plan, spec, source_label=source_label)
+                test = build_interactive_test(plan, spec, layout_rel)
+
+                (out_dir / layout_rel).write_text(_dump_json(layout), encoding="utf-8")
+                (out_dir / test_rel).write_text(_dump_json(test), encoding="utf-8")
+                summary.files_written += 2
+
+                fixture_entries.append(
+                    build_interactive_manifest_entry(plan, spec, layout_rel, test_rel)
+                )
+                summary.fixture_count += 1
+                summary.interactive_count += 1
+            continue
         for case in plan.cases:
-            stem = f"{plan.attribute}__{case.name}"
+            stem = _unique_stem(plan.section, f"{plan.attribute}__{case.name}")
             layout_rel = f"fixtures/{plan.section}/{stem}.layout.json"
             test_rel = f"fixtures/{plan.section}/{stem}.test.json"
 
@@ -270,6 +447,7 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     ]
     summary.skipped_count = len(skipped_entries)
     summary.skipped = skipped_entries
+    summary.promoted = promoted
 
     manifest = {
         "_generated": json_marker(source=source_label, generator=GENERATOR_NAME),
@@ -279,7 +457,9 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
             "fixtures": summary.fixture_count,
             "assertable": summary.assertable_count,
             "visual": summary.visual_count,
+            "interactive": summary.interactive_count,
             "skipped": summary.skipped_count,
+            "promoted": {k: promoted[k] for k in sorted(promoted)},
         },
         "fixtures": fixture_entries,
         "skipped": skipped_entries,

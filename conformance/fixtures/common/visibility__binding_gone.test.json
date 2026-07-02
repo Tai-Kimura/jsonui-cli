@@ -1,0 +1,33 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/visibility__binding_gone.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.visibility (binding_gone)",
+    "description": "Interactive conformance fixture for 'visibility' on View (section: common, case: binding_gone). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "interactive",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "visibility__binding_gone",
+      "description": "Interactive conformance fixture for 'visibility' on View (section: common, case: binding_gone). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "notVisible",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

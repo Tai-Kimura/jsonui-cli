@@ -2,9 +2,9 @@
 
 # JsonUI Conformance Report
 
-- Manifest: `61e027eb4e9c898d9fa1a57f6de2eee9e86d7a79c7aa114afe964c3c689021d9` (sha256)
+- Manifest: `18edf3354224d62bca07d35cb2b014ee2308e6375a623dd125aec35cfa334f56` (sha256)
 - Definitions: `bfebdac10d8e897fa6a08ac8c89e511420a6e0d4b6235b1638c9322baf943194` (sha256)
-- Fixtures: 624 (assertable: 25, visual: 599) / skipped attributes: 177
+- Fixtures: 643 (assertable: 25, visual: 599, interactive: 19) / skipped attributes: 165
 
 Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
 
@@ -12,13 +12,57 @@ Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
 
 _No cross-platform mismatches._
 
+## Interactive fixtures
+
+- Interactive fixtures: 19 · attributes promoted out of skip reasons: callback: 12 · still skipped: binding-only: 9, callback: 38
+
+| Fixture | Case | Promoted from | android | ios | web | Detail |
+|---|---|---|---|---|---|---|
+| `common/visibility__binding_visible` | `binding_visible` | — |  |  | ✅ |  |
+| `common/visibility__binding_invisible` | `binding_invisible` | — |  |  | ✅ |  |
+| `common/visibility__binding_gone` | `binding_gone` | — |  |  | ✅ |  |
+| `common/onclick__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
+| `common/onClick__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
+| `common/onLongPress__callback_fire` | `callback_fire` | callback |  |  | – | web: not applicable to web |
+| `common/onAppear__callback_fire` | `callback_fire` | callback |  |  | – | web: mode: compose (host renders react mode) |
+| `Label/text__binding_initial` | `binding_initial` | — |  |  | ✅ |  |
+| `TextField/text__binding_twoway` | `binding_twoway` | — |  |  | ✅ |  |
+| `TextField/onTextChange__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
+| `TextView/text__binding_twoway` | `binding_twoway` | — |  |  | ✅ |  |
+| `TextView/onTextChange__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
+| `Button/text__binding_initial` | `binding_initial` | — |  |  | ✅ |  |
+| `SelectBox/onValueChange__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
+| `SelectBox/onValueChanged__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
+| `Switch/onValueChange__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
+| `Toggle/onValueChange__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
+| `CheckBox/onValueChange__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
+| `Check/onValueChange__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
+
+## Visual regression (same-platform baselines)
+
+Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `dhash-64`, Hamming distance > threshold ⇒ regression). Cross-platform pixel comparison is out of scope by design.
+
+| Platform | Baseline | Compared | Regressions | No baseline | Missing artifact |
+|---|---|---|---|---|---|
+| android | threshold 8 | 472 | 0 | 0 | 0 |
+| ios | threshold 8 | 495 | 0 | 0 | 0 |
+| web | threshold 8 | 466 | 0 | 0 | 0 |
+
 ## Platforms
 
 | Platform | Runner | Results | pass | fail | error | skipped | Manifest |
 |---|---|---|---|---|---|---|---|
-| android | uiautomator 2.3.0 | 624 | 492 | 0 | 0 | 132 | current |
-| ios | xcuitest ios-18.6 | 624 | 515 | 0 | 0 | 109 | current |
-| web | playwright 1.61.1 | 624 | 491 | 0 | 0 | 133 | current |
+| android | uiautomator 2.3.0 | 629 | 497 | 0 | 0 | 132 | ⚠️ STALE |
+| ios | xcuitest ios-18.6 | 629 | 520 | 0 | 0 | 109 | ⚠️ STALE |
+| web | playwright 1.61.1 | 643 | 508 | 0 | 0 | 135 | current |
+
+> ⚠️ `android.results.json` was produced against manifest `4f679408f1028dcaa83afc8dbccc7ea72716b67c3e55bd46a4bc200c9c78d577` but the current manifest is `18edf3354224d62bca07d35cb2b014ee2308e6375a623dd125aec35cfa334f56` — results are stale; re-run the android suite.
+
+> ⚠️ `android.results.json` contains 5 fixture id(s) not present in the manifest: `Button/tapBackground__alias_highlightBackground`, `common/alignBottomOfView__alias_alignBottomView`, `common/alignLeftOfView__alias_alignLeftView`, `common/alignRightOfView__alias_alignRightView`, `common/alignTopOfView__alias_alignTopView`
+
+> ⚠️ `ios.results.json` was produced against manifest `4f679408f1028dcaa83afc8dbccc7ea72716b67c3e55bd46a4bc200c9c78d577` but the current manifest is `18edf3354224d62bca07d35cb2b014ee2308e6375a623dd125aec35cfa334f56` — results are stale; re-run the ios suite.
+
+> ⚠️ `ios.results.json` contains 5 fixture id(s) not present in the manifest: `Button/tapBackground__alias_highlightBackground`, `common/alignBottomOfView__alias_alignBottomView`, `common/alignLeftOfView__alias_alignLeftView`, `common/alignRightOfView__alias_alignRightView`, `common/alignTopOfView__alias_alignTopView`
 
 ## Matrix
 
@@ -62,6 +106,9 @@ _No cross-platform mismatches._
 | `visibility` | `visible` | assertable | ✅ | ✅ | ✅ |
 | `visibility` | `invisible` | assertable | ✅ | ✅ | ✅ |
 | `visibility` | `gone` | assertable | ✅ | ✅ | ✅ |
+| `visibility` | `binding_visible` | interactive |  |  | ✅ |
+| `visibility` | `binding_invisible` | interactive |  |  | ✅ |
+| `visibility` | `binding_gone` | interactive |  |  | ✅ |
 | `hidden` | `true` | assertable | ✅ | ✅ | ✅ |
 | `hidden` | `false` | assertable | ✅ | ✅ | ✅ |
 | `padding` | `static` | visual | ✅ | ✅ | ✅ |
@@ -119,6 +166,9 @@ _No cross-platform mismatches._
 | `toView` | `static` | visual | – | – | – |
 | `shadow` | `static` | visual | ✅ | ✅ | ✅ |
 | `clipToBounds` | `true` | visual | ✅ | ✅ | ✅ |
+| `onclick` | `callback_fire` | interactive |  |  | ✅ |
+| `onClick` | `callback_fire` | interactive |  |  | ✅ |
+| `onLongPress` | `callback_fire` | interactive |  |  | – |
 | `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `compressHorizontal` | `static` | visual | – | – | – |
 | `compressVertical` | `static` | visual | – | – | – |
@@ -138,6 +188,7 @@ _No cross-platform mismatches._
 | `gravity` | `right` | visual | ✅ | ✅ | ✅ |
 | `gravity` | `centerhorizontal` | visual | ✅ | ✅ | ✅ |
 | `gravity` | `center` | visual | ✅ | ✅ | ✅ |
+| `onAppear` | `callback_fire` | interactive |  |  | – |
 | `alignment` | `topleading` | visual | ✅ | ✅ | – |
 | `alignment` | `top` | visual | ✅ | ✅ | – |
 | `alignment` | `toptrailing` | visual | ✅ | ✅ | – |
@@ -163,6 +214,7 @@ _No cross-platform mismatches._
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `text` | `binding_initial` | interactive |  |  | ✅ |
 | `hint` | `static` | visual | ✅ | ✅ | ✅ |
 | `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
 | `font` | `static` | visual | ✅ | ✅ | ✅ |
@@ -206,6 +258,7 @@ _No cross-platform mismatches._
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `text` | `binding_twoway` | interactive |  |  | ✅ |
 | `hint` | `static` | visual | ✅ | ✅ | ✅ |
 | `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
 | `hintColor` | `static` | visual | ✅ | ✅ | ✅ |
@@ -261,6 +314,7 @@ _No cross-platform mismatches._
 | `accessoryTextColor` | `static` | visual | – | ✅ | – |
 | `doneText` | `static` | visual | – | ✅ | – |
 | `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `onTextChange` | `callback_fire` | interactive |  |  | ✅ |
 | `autocapitalizationType` | `static` | visual | ✅ | ✅ | ✅ |
 | `autocorrectionType` | `static` | visual | ✅ | ✅ | ✅ |
 | `spellCheckingType` | `static` | visual | – | ✅ | – |
@@ -280,6 +334,7 @@ _No cross-platform mismatches._
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `text` | `binding_twoway` | interactive |  |  | ✅ |
 | `hint` | `static` | visual | ✅ | ✅ | ✅ |
 | `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
 | `hintColor` | `static` | visual | ✅ | ✅ | ✅ |
@@ -320,6 +375,7 @@ _No cross-platform mismatches._
 | `editable` | `true` | visual | ✅ | ✅ | ✅ |
 | `lineBreakMode` | `static` | visual | ✅ | ✅ | ✅ |
 | `keyboardType` | `static` | visual | ✅ | ✅ | ✅ |
+| `onTextChange` | `callback_fire` | interactive |  |  | ✅ |
 | `maxLength` | `static` | visual | – | – | ✅ |
 | `pattern` | `static` | visual | – | – | ✅ |
 | `required` | `true` | visual | – | – | ✅ |
@@ -358,6 +414,7 @@ _No cross-platform mismatches._
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `text` | `binding_initial` | interactive |  |  | ✅ |
 | `font` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
@@ -476,6 +533,8 @@ _No cross-platform mismatches._
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `inView` | `static` | visual | – | – | – |
 | `referenceView` | `static` | visual | – | – | – |
+| `onValueChange` | `callback_fire` | interactive |  |  | ✅ |
+| `onValueChanged` | `callback_fire` | interactive |  |  | ✅ |
 | `colorScheme` | `light` | visual | – | – | ✅ |
 | `colorScheme` | `dark` | visual | – | – | ✅ |
 | `multiple` | `true` | visual | – | – | ✅ |
@@ -496,6 +555,7 @@ _No cross-platform mismatches._
 | `onTintColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `thumbTintColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `offTintColor` | `static` | visual | – | – | – |
+| `onValueChange` | `callback_fire` | interactive |  |  | ✅ |
 | `labelPosition` | `leading` | visual | ✅ | – | – |
 | `labelPosition` | `trailing` | visual | ✅ | – | – |
 | `trackTintColor` | `static` | visual | ✅ | ✅ | ✅ |
@@ -514,6 +574,7 @@ _No cross-platform mismatches._
 | `onTintColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `thumbTintColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `offTintColor` | `static` | visual | – | – | – |
+| `onValueChange` | `callback_fire` | interactive |  |  | ✅ |
 | `labelPosition` | `leading` | visual | ✅ | – | – |
 | `labelPosition` | `trailing` | visual | ✅ | – | – |
 | `trackTintColor` | `static` | visual | ✅ | ✅ | ✅ |
@@ -685,6 +746,7 @@ _No cross-platform mismatches._
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `spacing` | `static` | visual | ✅ | ✅ | ✅ |
+| `onValueChange` | `callback_fire` | interactive |  |  | ✅ |
 | `checkedColor` | `static` | visual | ✅ | ✅ | – |
 | `uncheckedColor` | `static` | visual | ✅ | ✅ | – |
 | `iconSize` | `static` | visual | ✅ | ✅ | – |
@@ -708,6 +770,7 @@ _No cross-platform mismatches._
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `spacing` | `static` | visual | ✅ | ✅ | ✅ |
+| `onValueChange` | `callback_fire` | interactive |  |  | ✅ |
 | `checkedColor` | `static` | visual | ✅ | ✅ | – |
 | `uncheckedColor` | `static` | visual | ✅ | ✅ | – |
 | `iconSize` | `static` | visual | ✅ | ✅ | – |
@@ -797,9 +860,6 @@ _No cross-platform mismatches._
 | common | `partial` | metadata (not rendered) |
 | common | `type` | metadata (not rendered) |
 | common | `responsive` | metadata (not rendered) |
-| common | `onclick` | callback |
-| common | `onClick` | callback |
-| common | `onLongPress` | callback |
 | common | `onPan` | callback |
 | common | `onPinch` | callback |
 | common | `canTap` | behavioral (no visual or assertable effect in v1) |
@@ -826,7 +886,6 @@ _No cross-platform mismatches._
 | common | `touchEnabledViewIds` | behavioral (no visual or assertable effect in v1) |
 | common | `data` | metadata (not rendered) |
 | common | `bindingScript` | binding-only |
-| common | `onAppear` | callback |
 | common | `onDisappear` | callback |
 | common | `className` | metadata (not rendered) |
 | common | `testId` | metadata (not rendered) |
@@ -838,7 +897,6 @@ _No cross-platform mismatches._
 | Label | `hintAttributes` | composite value (no representative static value in v1) |
 | TextField | `hintAttributes` | composite value (no representative static value in v1) |
 | TextField | `caretAttributes` | composite value (no representative static value in v1) |
-| TextField | `onTextChange` | callback |
 | TextField | `onFocus` | callback |
 | TextField | `onBlur` | callback |
 | TextField | `onBeginEditing` | callback |
@@ -860,7 +918,6 @@ _No cross-platform mismatches._
 | TextView | `scrollEnabled` | behavioral (no visual or assertable effect in v1) |
 | TextView | `dataDetectorTypes` | behavioral (no visual or assertable effect in v1) |
 | TextView | `allowsEditingTextAttributes` | behavioral (no visual or assertable effect in v1) |
-| TextView | `onTextChange` | callback |
 | TextView | `onBeginEditing` | callback |
 | TextView | `onEndEditing` | callback |
 | TextView | `onChangeSelection` | callback |
@@ -886,19 +943,15 @@ _No cross-platform mismatches._
 | SelectBox | `dividerAttributes` | composite value (no representative static value in v1) |
 | SelectBox | `canBack` | behavioral (no visual or assertable effect in v1) |
 | SelectBox | `includePromptWhenDataBinding` | behavioral (no visual or assertable effect in v1) |
-| SelectBox | `onValueChange` | callback |
-| SelectBox | `onValueChanged` | callback |
 | Switch | `_alias` | definition metadata, not an attribute |
 | Switch | `_comment` | definition metadata, not an attribute |
 | Switch | `bind` | binding-only |
 | Switch | `onToggle` | callback |
-| Switch | `onValueChange` | callback |
 | Switch | `labelAttributes` | composite value (no representative static value in v1) |
 | Toggle | `_alias_of` | definition metadata, not an attribute |
 | Toggle | `_comment` | definition metadata, not an attribute |
 | Toggle | `bind` | binding-only |
 | Toggle | `onToggle` | callback |
-| Toggle | `onValueChange` | callback |
 | Toggle | `labelAttributes` | composite value (no representative static value in v1) |
 | Segment | `valueChange` | callback |
 | Segment | `momentary` | behavioral (no visual or assertable effect in v1) |
@@ -949,11 +1002,9 @@ _No cross-platform mismatches._
 | CheckBox | `_alias` | definition metadata, not an attribute |
 | CheckBox | `_comment` | definition metadata, not an attribute |
 | CheckBox | `bind` | binding-only |
-| CheckBox | `onValueChange` | callback |
 | Check | `_alias_of` | definition metadata, not an attribute |
 | Check | `_comment` | definition metadata, not an attribute |
 | Check | `bind` | binding-only |
-| Check | `onValueChange` | callback |
 | Web | `url` | network resource (v1 fixtures are offline) |
 | Web | `allowsBackForwardNavigationGestures` | behavioral (no visual or assertable effect in v1) |
 | Web | `allowsLinkPreview` | behavioral (no visual or assertable effect in v1) |

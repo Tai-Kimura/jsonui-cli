@@ -1,0 +1,43 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/onClick__callback_fire_2.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.onClick (callback_fire)",
+    "description": "Interactive conformance fixture for 'onClick' on Button (section: common, case: callback_fire). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "interactive",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "onClick__callback_fire",
+      "description": "Interactive conformance fixture for 'onClick' on Button (section: common, case: callback_fire). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "mirror",
+          "equals": "ready"
+        },
+        {
+          "action": "tap",
+          "id": "target"
+        },
+        {
+          "assert": "text",
+          "id": "mirror",
+          "equals": "fired"
+        }
+      ]
+    }
+  ]
+}

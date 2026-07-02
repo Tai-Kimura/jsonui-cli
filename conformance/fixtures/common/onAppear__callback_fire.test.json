@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/onAppear__callback_fire.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.onAppear (callback_fire)",
+    "description": "Interactive conformance fixture for 'onAppear' on View (section: common, case: callback_fire). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "interactive",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "onAppear__callback_fire",
+      "description": "Interactive conformance fixture for 'onAppear' on View (section: common, case: callback_fire). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "mirror",
+          "equals": "fired"
+        }
+      ]
+    }
+  ]
+}

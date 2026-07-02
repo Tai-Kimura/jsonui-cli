@@ -176,6 +176,144 @@ class ConformanceReportTest(unittest.TestCase):
         self.assertTrue((self.out_dir / "REPORT.md").is_file())
 
 
+class InteractiveSectionTest(unittest.TestCase):
+    """v2: the report surfaces interactive fixtures + promotion accounting."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        tmp = Path(self._tmp.name)
+        defs_path = _write_defs(tmp, SYNTHETIC_DEFS)
+        self.out_dir = tmp / "conformance"
+        generate_conformance(defs_path, self.out_dir)
+        self.manifest = json.loads((self.out_dir / "manifest.json").read_text(encoding="utf-8"))
+        self.all_ids = [f["id"] for f in self.manifest["fixtures"]]
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_interactive_section_shows_promotions_and_statuses(self):
+        statuses = {fid: "pass" for fid in self.all_ids}
+        statuses["common/onclick__callback_fire"] = "fail"
+        _write_results(
+            self.out_dir,
+            "web",
+            statuses,
+            details={"common/onclick__callback_fire": "mirror stayed 'ready'"},
+        )
+        generate_report(self.out_dir)
+        content = (self.out_dir / "REPORT.md").read_text(encoding="utf-8")
+
+        self.assertIn("## Interactive fixtures", content)
+        section = content.split("## Interactive fixtures")[1].split("## ")[0]
+        # promoted accounting: 1 promoted out of `callback`, the
+        # non-promotable callback (Label/onTextChange) still counted as skipped.
+        self.assertIn("callback: 1", section)
+        self.assertIn("still skipped", section)
+        self.assertIn("`common/onclick__callback_fire`", section)
+        self.assertIn("mirror stayed 'ready'", section)
+        self.assertIn("❌", section)
+        # non-promoted interactive fixtures render with an em-dash origin
+        self.assertIn("`Label/text__binding_initial`", section)
+
+    def test_interactive_section_precedes_platforms(self):
+        _write_results(self.out_dir, "web", {fid: "pass" for fid in self.all_ids})
+        generate_report(self.out_dir)
+        content = (self.out_dir / "REPORT.md").read_text(encoding="utf-8")
+        self.assertLess(
+            content.index("## Interactive fixtures"), content.index("## Platforms")
+        )
+
+
+class VisualRegressionSectionTest(unittest.TestCase):
+    """v2: baseline comparison surfaces in the report (regression + no-baseline)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        tmp = Path(self._tmp.name)
+        defs_path = _write_defs(tmp, SYNTHETIC_DEFS)
+        self.out_dir = tmp / "conformance"
+        generate_conformance(defs_path, self.out_dir)
+        self.manifest = json.loads((self.out_dir / "manifest.json").read_text(encoding="utf-8"))
+        self.all_ids = [f["id"] for f in self.manifest["fixtures"]]
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _write_results_with_screenshots(self, screenshots: dict[str, str]) -> None:
+        payload = {
+            "platform": "web",
+            "manifestHash": _manifest_hash(self.out_dir),
+            "runner": {"name": "dummy-web", "version": "0.0.1"},
+            "results": [
+                {"id": fid, "status": "pass", "detail": ""}
+                | ({"screenshot": screenshots[fid]} if fid in screenshots else {})
+                for fid in self.all_ids
+            ],
+        }
+        results_dir = self.out_dir / "results"
+        results_dir.mkdir(exist_ok=True)
+        (results_dir / "web.results.json").write_text(
+            json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+        )
+
+    def test_no_baseline_recorded_is_reported_not_silent(self):
+        self._write_results_with_screenshots(
+            {self.all_ids[0]: "artifacts/web/shot_one.png"}
+        )
+        summary = generate_report(self.out_dir)
+        content = (self.out_dir / "REPORT.md").read_text(encoding="utf-8")
+        self.assertIn("## Visual regression", content)
+        self.assertIn("none recorded", content)
+        self.assertEqual(summary.no_baseline.get("web"), 1)
+        self.assertEqual(summary.visual_regressions.get("web"), 0)
+
+    def test_regression_detected_end_to_end(self):
+        try:
+            from test_conformance_baseline import HAVE_PILLOW, _write_png
+        except ImportError:
+            from .test_conformance_baseline import HAVE_PILLOW, _write_png
+        if not HAVE_PILLOW:
+            self.skipTest("Pillow not installed (jui-tools[conformance])")
+
+        from jui_cli.conformance import baseline
+
+        artifacts = self.out_dir / "artifacts" / "web"
+        _write_png(artifacts / "stable.png")
+        _write_png(artifacts / "changed.png", gradient_horizontal=False)
+        baseline.update_baseline(self.out_dir, "web")
+
+        # deliberate visual change + one screenshot that has no baseline
+        _write_png(artifacts / "changed.png", gradient_horizontal=True)
+        _write_png(artifacts / "brand_new.png")
+        self._write_results_with_screenshots(
+            {
+                self.all_ids[0]: "artifacts/web/stable.png",
+                self.all_ids[1]: "artifacts/web/changed.png",
+                self.all_ids[2]: "artifacts/web/brand_new.png",
+            }
+        )
+
+        summary = generate_report(self.out_dir)
+        content = (self.out_dir / "REPORT.md").read_text(encoding="utf-8")
+        self.assertEqual(summary.visual_regressions.get("web"), 1)
+        self.assertEqual(summary.no_baseline.get("web"), 1)
+        self.assertIn("### web: regressions", content)
+        self.assertIn("`changed.png`", content)
+        self.assertIn("`brand_new.png`", content)
+        self.assertIn("NOT a pass", content)
+
+        # revert the deliberate change -> clean report again
+        _write_png(artifacts / "changed.png", gradient_horizontal=False)
+        self._write_results_with_screenshots(
+            {
+                self.all_ids[0]: "artifacts/web/stable.png",
+                self.all_ids[1]: "artifacts/web/changed.png",
+            }
+        )
+        summary = generate_report(self.out_dir)
+        self.assertEqual(summary.visual_regressions.get("web"), 0)
+
+
 class CommittedDummyResultsTest(unittest.TestCase):
     """The hand-written dummy results under tests/fixtures/ obey the contract."""
 
