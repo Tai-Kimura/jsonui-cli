@@ -1,0 +1,185 @@
+name: ci
+
+# Per-push / PR quality gate for the renderer-SSoT verification assets:
+#   1. unit suites   — jui_tools (unittest discovery) + rspec x3 (sjui/kjui/rjui)
+#   2. SSoT guards   — fixture freshness + attr-bindings determinism + vendored
+#                      ruby attr tables freshness
+#   3. web conformance — full fixture suite through rjui codegen + React +
+#                      headless Chromium (gate: 0 fail / 0 error)
+#
+# The former protocol-sync workflow is folded into the python-suite job here
+# (see .github/workflows/README.md). Mobile (iOS/Android) conformance is too
+# slow for per-push: see conformance-mobile.yml (nightly + manual dispatch).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ------------------------------------------------------------------ #
+  # jui_tools unit suite + protocol-sync idempotency (folded from the
+  # old protocol-sync.yml — CI intentionally uses unittest discovery).
+  # ------------------------------------------------------------------ #
+  python-suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install jui_tools
+        working-directory: jui_tools
+        run: python -m pip install --upgrade pip && python -m pip install -e .
+      - name: Run unit tests
+        working-directory: jui_tools
+        run: python -m unittest discover -s tests -v
+      - name: Protocol sync idempotency (e2e)
+        # Runs the protocol sync twice against the fixture project and ensures
+        # no files change the second time — the structural guard against
+        # non-deterministic generation.
+        working-directory: jui_tools
+        run: python -m unittest tests.test_build_sync_e2e.SyncProtocolE2ETests.test_idempotency
+
+  # ------------------------------------------------------------------ #
+  # Ruby codegen unit suites. sjui_tools has no Gemfile (plain rspec);
+  # kjui/rjui use their committed Gemfile.lock via bundler-cache.
+  # ------------------------------------------------------------------ #
+  ruby-suites:
+    name: rspec (${{ matrix.tool }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tool: sjui_tools
+            bundler: false
+          - tool: kjui_tools
+            bundler: true
+          - tool: rjui_tools
+            bundler: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: ${{ matrix.bundler }}
+          working-directory: ${{ matrix.bundler && matrix.tool || '' }}
+      - name: Install rspec (no Gemfile)
+        if: ${{ !matrix.bundler }}
+        run: gem install rspec simplecov --no-document
+      - name: rspec (bundle)
+        if: ${{ matrix.bundler }}
+        working-directory: ${{ matrix.tool }}
+        run: bundle exec rspec
+      - name: rspec
+        if: ${{ !matrix.bundler }}
+        working-directory: ${{ matrix.tool }}
+        run: rspec
+
+  # ------------------------------------------------------------------ #
+  # Drift guards between shared/core/attribute_definitions.json and the
+  # committed generated assets.
+  # ------------------------------------------------------------------ #
+  ssot-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install jui_tools
+        working-directory: jui_tools
+        run: python -m pip install --upgrade pip && python -m pip install -e .
+      - name: Fixture freshness (jui conformance generate produces zero diff)
+        run: |
+          python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','generate']))"
+          git diff --exit-code -- conformance/
+          if [ -n "$(git status --porcelain -- conformance/)" ]; then
+            echo "::error::jui conformance generate left new/untracked files under conformance/"
+            git status --porcelain -- conformance/
+            exit 1
+          fi
+      - name: attr-bindings determinism (two runs emit identical output)
+        run: |
+          python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['generate','attr-bindings','--lang','all']))"
+          mv build/attr_codegen build/attr_codegen.run1
+          python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['generate','attr-bindings','--lang','all']))"
+          diff -r build/attr_codegen.run1 build/attr_codegen
+      - name: Vendored ruby attr tables match fresh emit
+        # rjui_tools vendors the generated ruby extraction tables; README.md
+        # is the (hand-written) provenance note and is excluded.
+        run: diff -r -x README.md build/attr_codegen/ruby rjui_tools/lib/core/generated/attributes
+
+  # ------------------------------------------------------------------ #
+  # Web conformance: the full generated fixture suite through the real
+  # production path (rjui codegen -> React -> Playwright, headless).
+  # Gate: zero fail / zero error in web.results.json.
+  # ------------------------------------------------------------------ #
+  web-conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24" # scripts/run.ts relies on native TS type stripping (Node >= 23)
+          cache: npm
+          cache-dependency-path: conformance/hosts/web/package-lock.json
+      - uses: ruby/setup-ruby@v1 # rjui_tools codegen inside generate.sh
+        with:
+          ruby-version: "3.3"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install jui_tools
+        working-directory: jui_tools
+        run: python -m pip install --upgrade pip && python -m pip install -e .
+      - name: npm ci
+        working-directory: conformance/hosts/web
+        run: npm ci
+      - name: Install Playwright Chromium
+        working-directory: conformance/hosts/web
+        run: npx playwright install --with-deps chromium
+      - name: Generate fixtures into the host (rjui codegen)
+        working-directory: conformance/hosts/web
+        run: ./generate.sh
+      - name: Run web conformance suite
+        working-directory: conformance/hosts/web
+        run: npm run conformance
+      - name: Gate — zero fail / zero error
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+          from collections import Counter
+          data = json.load(open("conformance/results/web.results.json"))
+          tally = Counter(r["status"] for r in data["results"])
+          print(f"web results: {dict(tally)}")
+          bad = [r for r in data["results"] if r["status"] in ("fail", "error")]
+          for r in bad[:50]:
+              print(f"  {r['status']:5} {r['id']} — {r.get('detail', '')}")
+          if bad:
+              print(f"::error::web conformance has {len(bad)} fail/error result(s)")
+              sys.exit(1)
+          EOF
+      - name: Render conformance report
+        # Fresh web results merged with the committed iOS/Android results —
+        # the authoritative 3-platform gate runs in conformance-mobile.yml.
+        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','report']))"
+      - name: Upload results + report + screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-conformance
+          if-no-files-found: error
+          path: |
+            conformance/REPORT.md
+            conformance/results/web.results.json
+            conformance/artifacts/web/
