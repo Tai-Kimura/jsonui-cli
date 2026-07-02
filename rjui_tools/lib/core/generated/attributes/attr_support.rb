@@ -22,6 +22,13 @@ module JsonUI
         !@binding_expression.nil?
       end
 
+      # The original layout representation: `"@{expr}"` for a binding,
+      # the static value otherwise (the `@{}` wrapper is always
+      # recoverable).
+      def raw
+        binding? ? "@{#{@binding_expression}}" : @value
+      end
+
       def ==(other)
         other.is_a?(AttrValue) &&
           other.value == value &&
@@ -42,12 +49,42 @@ module JsonUI
       end
     end
 
+    # Declared-attribute metadata helpers — every generated module
+    # exposes `rows` / `declared?` / `alias_map` built on these (public
+    # metadata contract, see the directory README).
+    module AttrTable
+      # Canonical name => row. Earlier tables first; later tables
+      # override on name collision (component rows override common —
+      # same precedence as the generated `extract` methods).
+      def self.build_rows(*tables)
+        rows = {}
+        tables.each { |table| table.each { |row| rows[row[:name]] = row } }
+        rows.freeze
+      end
+
+      # Alias spelling => canonical name. Alias spellings that are ALSO
+      # declared rows (e.g. `alpha` next to `opacity`) keep their own
+      # row and are not redirected.
+      def self.build_alias_map(rows)
+        map = {}
+        rows.each_value do |row|
+          Array(row[:aliases]).each do |alias_name|
+            map[alias_name] = row[:name] unless rows.key?(alias_name)
+          end
+        end
+        map.freeze
+      end
+    end
+
     # Coercion engine shared by all generated `extract` methods.
     module AttrCoerce
       # Canonical-name lookup with alias fallback (aliases are resolved in
-      # generated code so raw / non-normalized JSON keeps working).
-      def self.lookup(hash, canonical, aliases)
+      # generated code so raw / non-normalized JSON keeps working). Pass
+      # `canonical_only: true` for L1-normalized input — aliases are then
+      # never consulted.
+      def self.lookup(hash, canonical, aliases, canonical_only: false)
         return hash[canonical] unless hash[canonical].nil?
+        return nil if canonical_only
 
         aliases.each do |alias_name|
           return hash[alias_name] unless hash[alias_name].nil?
@@ -61,6 +98,17 @@ module JsonUI
 
         match = BINDING_PATTERN.match(raw)
         match && match[1]
+      end
+
+      # Binding-only attribute (`type: "binding"`): an AttrValue is
+      # ALWAYS returned — `@{expr}` becomes a binding_expression,
+      # anything else (bare handler name, action-object Hash, ...) is
+      # preserved raw as `value`. Never de-wrapped, never dropped.
+      def self.binding_value(raw)
+        expr = binding_expression(raw)
+        return AttrValue.new(binding_expression: expr) if expr
+
+        AttrValue.new(value: raw)
       end
 
       def self.string(raw)
@@ -83,13 +131,17 @@ module JsonUI
         raw.is_a?(Array) ? raw : nil
       end
 
+      # Lenient enum matching: values match the declared set
+      # case-insensitively; unknown values (including non-strings) are
+      # reported through AttrWarnings and PASSED THROUGH raw — codegen
+      # consumers must never lose author input to a definitions gap.
+      # The raw value is Ruby's open-enum representation.
       def self.enum(raw, allowed, context)
-        s = string(raw)
-        return nil if s.nil?
-        return s if allowed.include?(s)
+        return raw if raw.is_a?(String) && allowed.any? { |v| v.casecmp?(raw) }
 
-        AttrWarnings.emit("#{context}: unknown enum value '#{s}'")
-        nil
+        shown = raw.is_a?(String) ? raw : raw.inspect
+        AttrWarnings.emit("#{context}: unknown enum value '#{shown}'")
+        raw
       end
 
       # number | keyword union (width / height): numbers and known keyword
@@ -106,10 +158,11 @@ module JsonUI
       end
 
       # Row table interpreter — rows are generated per component module.
-      def self.extract_table(hash, attrs, component)
+      def self.extract_table(hash, attrs, component, canonical_only: false)
         out = {}
         attrs.each do |row|
-          raw = lookup(hash, row[:name], row[:aliases] || [])
+          raw = lookup(hash, row[:name], row[:aliases] || [],
+                       canonical_only: canonical_only)
           next if raw.nil?
 
           value = coerce_row(raw, row, component)
@@ -134,7 +187,7 @@ module JsonUI
           when :array then array(raw)
           when :enum then enum(raw, row[:values], context)
           when :dimension then dimension(raw, row[:keywords], context)
-          when :binding then binding_expression(raw) || string(raw)
+          when :binding then binding_value(raw)
           else raw # :any / :raw — accepted as-is
           end
         return nil if value.nil?
