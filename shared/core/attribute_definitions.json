@@ -2,6 +2,10 @@
   "_comment": "Unified attribute definitions for JsonUI (Swift/Kotlin/React). Binding format: @{propertyName}. When `type` includes \"binding\", an optional `binding_direction` field declares how the MCP should label the binding: \"two-way\" means the component writes back to the binding (e.g. TextField.text); omit the field (or set \"read-only\") for values that only flow view ← model. Optional extended fields per attribute: `aliases` (array of alternate names treated as synonyms for this canonical attribute; validator expands these at load time), `deprecated` (boolean; validator emits a warning when the attribute is used), `deprecation_note` (string appended to the warning to explain the replacement or limitation).",
   "common": {
     "_comment": "Common attributes shared across all components",
+    "$jui": {
+      "type": "object",
+      "description": "Normalization marker injected by `jui build` when build.normalizeLayouts is enabled (experimental). Metadata only, not rendered. Shape: {\"normalized\": \"L1\"|\"L2\", \"schemaVersion\": 1, \"platform\"?: string}"
+    },
     "id": {
       "type": "string",
       "description": "Unique identifier for the component"

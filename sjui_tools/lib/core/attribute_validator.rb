@@ -60,8 +60,9 @@ module SjuiTools
 
         # Check each attribute in the merged component
         merged_component.each do |key, value|
-          # Skip internal/structural attributes
-          next if key == 'type' || key == 'mode' || key == 'parent_orientation' || key.start_with?('_')
+          # Skip internal/structural attributes (including the `$jui`
+          # normalization marker added by `jui build` normalizeLayouts)
+          next if key == 'type' || key == 'mode' || key == 'parent_orientation' || key == '$jui' || key.start_with?('_')
 
           # Skip child/children if all items are data-only definitions (no type)
           if (key == 'child' || key == 'children') && !valid_attrs.key?(key)
