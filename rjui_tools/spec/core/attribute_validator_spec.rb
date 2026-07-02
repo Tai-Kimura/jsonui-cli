@@ -829,5 +829,53 @@ RSpec.describe RjuiTools::Core::AttributeValidator do
         expect(warnings).to be_empty
       end
     end
+
+    context 'with normalized (L1) layouts' do
+      # `minimumValue` exists ONLY as an alias of Slider `minimum` in the
+      # definitions (unlike e.g. `alpha`, which also has a standalone
+      # entry), so it is the observable difference between the alias-
+      # expanding L0 path and the canonical-only L1 path.
+      let(:alias_component) do
+        {
+          'type' => 'Slider',
+          'width' => 'matchParent',
+          'height' => 20,
+          'minimumValue' => 5
+        }
+      end
+
+      it 'accepts alias-only spellings on the L0 path' do
+        warnings = validator.validate(alias_component)
+        expect(warnings.any? { |w| w.include?("Unknown attribute 'minimumValue'") }).to be false
+      end
+
+      it 'reports leftover alias-only spellings as unknown on the canonical-only path' do
+        validator.normalized = true
+        warnings = validator.validate(alias_component)
+        expect(warnings.any? { |w| w.include?("Unknown attribute 'minimumValue'") }).to be true
+      end
+
+      it 'still accepts canonical spellings on the canonical-only path' do
+        validator.normalized = true
+        component = {
+          'type' => 'View',
+          'width' => 'matchParent',
+          'height' => 100,
+          'opacity' => 0.5
+        }
+        expect(validator.validate(component)).to be_empty
+      end
+
+      it 'still skips the $jui marker key itself' do
+        validator.normalized = true
+        component = {
+          'type' => 'View',
+          'width' => 'matchParent',
+          'height' => 100,
+          '$jui' => { 'normalized' => 'L1', 'schemaVersion' => 1 }
+        }
+        expect(validator.validate(component)).to be_empty
+      end
+    end
   end
 end

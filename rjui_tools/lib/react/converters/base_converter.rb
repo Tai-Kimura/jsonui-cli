@@ -263,8 +263,8 @@ module RjuiTools
             end
           end
 
-          # Opacity/Alpha
-          opacity = json['opacity'] || json['alpha']
+          # Opacity/Alpha (alpha is the definitions alias of opacity)
+          opacity = attr_lookup('opacity', 'alpha')
           if opacity
             if has_binding?(opacity.to_s)
               @dynamic_styles['opacity'] = convert_binding(opacity.to_s)
@@ -352,6 +352,32 @@ module RjuiTools
 
         def has_binding?(value)
           value.is_a?(String) && value.include?('@{')
+        end
+
+        # True when the layout being generated carried the `$jui` L1
+        # normalization marker (see Core::Normalization). Set per file by
+        # ReactGenerator#generate through the shared config hash.
+        def layout_normalized?
+          @config['_layout_normalized'] == true
+        end
+
+        # Canonical-first attribute lookup with alias fallback.
+        #
+        # - The canonical spelling always wins when present (matches the
+        #   jui build normalizer semantics).
+        # - Alias spellings are consulted only for raw (L0) layouts; an
+        #   L1-normalized layout already had aliases rewritten, so the
+        #   canonical-only path is taken (aliases are NOT read).
+        def attr_lookup(canonical, *aliases)
+          value = json[canonical]
+          return value unless value.nil?
+          return nil if layout_normalized?
+
+          aliases.each do |alias_name|
+            value = json[alias_name]
+            return value unless value.nil?
+          end
+          nil
         end
 
         # Keys that BaseConverter#build_class_name may emit as Tailwind

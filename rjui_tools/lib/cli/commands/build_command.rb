@@ -7,6 +7,7 @@ require_relative '../../core/config_manager'
 require_relative '../../core/generated_marker'
 require_relative '../../core/logger'
 require_relative '../../core/attribute_validator'
+require_relative '../../core/normalization'
 require_relative '../../core/binding_validator'
 require_relative '../../core/resources/color_manager'
 require_relative '../../react/react_generator'
@@ -96,6 +97,11 @@ module RjuiTools
 
               # Apply styles before conversion
               json_content = React::StyleLoader.load_and_merge(json_content)
+
+              # L1-normalized layouts (`$jui` marker from `jui build`)
+              # take the canonical-only validation path; raw layouts keep
+              # the alias-tolerant L0 path.
+              @validator.normalized = Core::Normalization.canonicalized?(json_content)
 
               # Validate JSON attributes
               validate_component(json_content, json_file)
