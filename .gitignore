@@ -23,3 +23,7 @@ coverage/
 # Local-only docs — bug reports / plans / design notes often quote
 # consumer-app names and local paths; keep them off the public repo.
 docs/
+
+# Conformance screenshot artifacts — PNGs stay local / CI artifacts; the
+# committed regression signal is baselines/<platform>.hashes.json (plan 12).
+conformance/artifacts/

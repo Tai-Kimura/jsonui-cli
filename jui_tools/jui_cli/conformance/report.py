@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import baseline as baseline_mod
+
 REPORT_GENERATOR = "jui conformance report"
 
 STATUS_SYMBOLS = {
@@ -56,6 +58,8 @@ class ReportSummary:
     mismatch_count: int = 0
     stale_platforms: list[str] = field(default_factory=list)
     unknown_ids: dict[str, list[str]] = field(default_factory=dict)
+    visual_regressions: dict[str, int] = field(default_factory=dict)  # platform -> count
+    no_baseline: dict[str, int] = field(default_factory=dict)  # platform -> count
 
 
 class ReportError(RuntimeError):
@@ -141,13 +145,24 @@ def _escape_cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
 
 
-def render_report(manifest: dict, manifest_hash: str, platforms: list[PlatformResults]) -> tuple[str, ReportSummary]:
-    """Render REPORT.md content. Pure function of its inputs (deterministic)."""
+def render_report(
+    manifest: dict,
+    manifest_hash: str,
+    platforms: list[PlatformResults],
+    visual: dict[str, "baseline_mod.VisualComparison"] | None = None,
+) -> tuple[str, ReportSummary]:
+    """Render REPORT.md content. Pure function of its inputs (deterministic).
+
+    ``visual`` carries the per-platform baseline comparisons computed by
+    :func:`generate_report` (kept out of this function so rendering stays
+    filesystem-free and unit-testable).
+    """
     fixtures: list[dict] = manifest.get("fixtures", [])
     skipped: list[dict] = manifest.get("skipped", [])
     counts: dict = manifest.get("counts", {})
     platform_names = [p.platform for p in platforms]
     known_ids = {f["id"] for f in fixtures}
+    visual = visual or {}
 
     summary = ReportSummary(out_path=Path("REPORT.md"), platforms=platform_names)
 
@@ -160,7 +175,8 @@ def render_report(manifest: dict, manifest_hash: str, platforms: list[PlatformRe
     lines.append(f"- Definitions: `{manifest.get('generatedFrom', 'unknown')}` (sha256)")
     lines.append(
         f"- Fixtures: {counts.get('fixtures', len(fixtures))} "
-        f"(assertable: {counts.get('assertable', '?')}, visual: {counts.get('visual', '?')}) / "
+        f"(assertable: {counts.get('assertable', '?')}, visual: {counts.get('visual', '?')}, "
+        f"interactive: {counts.get('interactive', 0)}) / "
         f"skipped attributes: {counts.get('skipped', len(skipped))}"
     )
     lines.append("")
@@ -185,6 +201,117 @@ def render_report(manifest: dict, manifest_hash: str, platforms: list[PlatformRe
             cells += [_symbol(statuses.get(name)) for name in platform_names]
             cells.append(_detail_cell(platforms, fixture["id"]))
             lines.append("| " + " | ".join(cells) + " |")
+    lines.append("")
+
+    # --- 1b. Interactive fixtures (v2: binding / callback promotions) --- #
+    lines.append("## Interactive fixtures")
+    lines.append("")
+    interactive_fixtures = [f for f in fixtures if f.get("class") == "interactive"]
+    promoted = counts.get("promoted", {}) or {}
+    if not interactive_fixtures:
+        lines.append("_No interactive fixtures in the manifest (regenerate with v2)._")
+    else:
+        promoted_label = (
+            ", ".join(f"{reason}: {count}" for reason, count in sorted(promoted.items()))
+            if promoted
+            else "none"
+        )
+        remaining = {}
+        for entry in skipped:
+            reason = entry.get("reason", "")
+            if reason in ("callback", "binding-only"):
+                remaining[reason] = remaining.get(reason, 0) + 1
+        remaining_label = (
+            ", ".join(f"{reason}: {count}" for reason, count in sorted(remaining.items()))
+            if remaining
+            else "none"
+        )
+        lines.append(
+            f"- Interactive fixtures: {len(interactive_fixtures)} · "
+            f"attributes promoted out of skip reasons: {promoted_label} · "
+            f"still skipped: {remaining_label}"
+        )
+        lines.append("")
+        header = ["Fixture", "Case", "Promoted from"] + platform_names + ["Detail"]
+        lines.append("| " + " | ".join(header) + " |")
+        lines.append("|" + "---|" * len(header))
+        for fixture in interactive_fixtures:
+            cells = [
+                f"`{fixture['id']}`",
+                f"`{fixture.get('case', '')}`",
+                fixture.get("promotedFrom") or "—",
+            ]
+            cells += [_symbol(_status_of(p, fixture["id"])) for p in platforms]
+            cells.append(_detail_cell(platforms, fixture["id"]))
+            lines.append("| " + " | ".join(cells) + " |")
+    lines.append("")
+
+    # --- 1c. Visual regression (same-platform screenshot baselines) --- #
+    lines.append("## Visual regression (same-platform baselines)")
+    lines.append("")
+    lines.append(
+        "Screenshots are compared against `baselines/<platform>.hashes.json` "
+        f"(algorithm `{baseline_mod.ALGORITHM}`, Hamming distance > threshold ⇒ regression). "
+        "Cross-platform pixel comparison is out of scope by design."
+    )
+    lines.append("")
+    if not platforms:
+        lines.append("_No platform results loaded._")
+    else:
+        lines.append("| Platform | Baseline | Compared | Regressions | No baseline | Missing artifact |")
+        lines.append("|---|---|---|---|---|---|")
+        for p in platforms:
+            comparison = visual.get(p.platform)
+            if comparison is None:
+                lines.append(f"| {p.platform} | (not evaluated) | | | | |")
+                continue
+            summary.visual_regressions[p.platform] = len(comparison.regressions)
+            summary.no_baseline[p.platform] = len(comparison.no_baseline)
+            if comparison.error:
+                lines.append(
+                    f"| {p.platform} | ⚠️ {_escape_cell(comparison.error)} | | | | |"
+                )
+                continue
+            if not comparison.baseline_exists:
+                lines.append(
+                    f"| {p.platform} | none recorded — run `jui conformance baseline update "
+                    f"--platform {p.platform}` | 0 | 0 | {len(comparison.no_baseline)} | 0 |"
+                )
+                continue
+            if comparison.algorithm_mismatch is not None:
+                lines.append(
+                    f"| {p.platform} | ⚠️ STALE algorithm `{comparison.algorithm_mismatch}` "
+                    f"(current `{baseline_mod.ALGORITHM}`) — re-run baseline update | | | | |"
+                )
+                continue
+            regression_label = (
+                f"❌ {len(comparison.regressions)}" if comparison.regressions else "0"
+            )
+            lines.append(
+                f"| {p.platform} | threshold {comparison.threshold} | {comparison.compared} "
+                f"| {regression_label} | {len(comparison.no_baseline)} "
+                f"| {len(comparison.missing_artifact)} |"
+            )
+        for p in platforms:
+            comparison = visual.get(p.platform)
+            if comparison is None or comparison.error or not comparison.baseline_exists:
+                continue
+            if comparison.regressions:
+                lines.append("")
+                lines.append(f"### {p.platform}: regressions")
+                lines.append("")
+                lines.append("| Screenshot | Distance | Threshold |")
+                lines.append("|---|---|---|")
+                for name, distance in comparison.regressions:
+                    lines.append(f"| `{name}` | {distance} | {comparison.threshold} |")
+            if comparison.no_baseline:
+                lines.append("")
+                shown = ", ".join(f"`{n}`" for n in comparison.no_baseline[:10])
+                more = " …" if len(comparison.no_baseline) > 10 else ""
+                lines.append(
+                    f"> {p.platform}: {len(comparison.no_baseline)} screenshot(s) without a "
+                    f"baseline hash (not compared — NOT a pass): {shown}{more}"
+                )
     lines.append("")
 
     # --- 2. Platform summaries + staleness --- #
@@ -300,7 +427,20 @@ def generate_report(
         results_dir = conformance_dir / "results"
     platforms = load_platform_results(Path(results_dir), manifest_hash)
 
-    content, summary = render_report(manifest, manifest_hash, platforms)
+    # Same-platform screenshot baseline comparison (plan 12 §3). The names
+    # come from the `screenshot` fields the platform runner recorded.
+    visual: dict[str, baseline_mod.VisualComparison] = {}
+    for p in platforms:
+        screenshot_names = [
+            Path(entry["screenshot"]).name
+            for entry in p.results.values()
+            if isinstance(entry.get("screenshot"), str)
+        ]
+        visual[p.platform] = baseline_mod.compare_platform(
+            conformance_dir, p.platform, screenshot_names
+        )
+
+    content, summary = render_report(manifest, manifest_hash, platforms, visual=visual)
 
     if out_path is None:
         out_path = conformance_dir / "REPORT.md"
