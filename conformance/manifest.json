@@ -8,12 +8,12 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 1,
-  "generatedFrom": "3285fa86e5e83295c45d1e0042403d726144497c8257d036d10d828e62ab295c",
+  "generatedFrom": "cb25fd48a33e7101f199ab578b6d60c58dfbc0bef6bddea62df30abeeccfd64c",
   "counts": {
     "fixtures": 629,
     "assertable": 25,
     "visual": 604,
-    "skipped": 176
+    "skipped": 177
   },
   "fixtures": [
     {
@@ -12372,6 +12372,11 @@
       "component": "common",
       "attribute": "_comment",
       "reason": "definition metadata, not an attribute"
+    },
+    {
+      "component": "common",
+      "attribute": "$jui",
+      "reason": "metadata (not rendered)"
     },
     {
       "component": "common",

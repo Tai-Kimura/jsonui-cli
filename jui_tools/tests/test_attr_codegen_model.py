@@ -107,6 +107,12 @@ class ClassifyAttrTests(unittest.TestCase):
         self.assertIsInstance(result, SkippedAttr)
         self.assertIn("metadata", result.reason)
 
+    def test_dollar_prefixed_marker_is_skipped(self):
+        # $jui is the normalizer marker; $ is not a valid Swift/Kotlin identifier.
+        result = classify_attr("common", "$jui", {"type": "object"})
+        self.assertIsInstance(result, SkippedAttr)
+        self.assertIn("metadata", result.reason)
+
     def test_color_kind(self):
         attr = classify_attr("common", "background", {"type": "color"})
         self.assertEqual(attr.kind, AttrKind.COLOR)

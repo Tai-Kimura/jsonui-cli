@@ -152,6 +152,11 @@ class ConformanceGeneratorTest(unittest.TestCase):
             self.skips[("Label", "highlightAttributes")], rules.REASON_COMPOSITE
         )
         self.assertIn(("Embed", "screen"), self.skips)
+        # $-prefixed harness/normalizer markers (e.g. $jui) are metadata.
+        self.assertEqual(
+            rules._untestable_reason("common", "$jui", {"type": "object"}),
+            rules.REASON_METADATA,
+        )
 
     def test_no_silent_drops(self):
         covered = set(self.by_id and {(f["component"], f["attribute"]) for f in self.manifest["fixtures"]})

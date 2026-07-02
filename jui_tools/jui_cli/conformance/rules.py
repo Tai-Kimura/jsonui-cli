@@ -643,7 +643,8 @@ def _untestable_reason(section: str, attribute: str, defn: dict) -> str | None:
         return REASON_BINDING_ONLY
     if base_types == {"binding"}:
         return REASON_BINDING_ONLY
-    if attribute in METADATA_ATTRS:
+    if attribute in METADATA_ATTRS or attribute.startswith("$"):
+        # $-prefixed names are harness/normalizer markers (e.g. $jui).
         return REASON_METADATA
     if attribute in STRUCTURAL_ATTRS:
         return REASON_STRUCTURAL

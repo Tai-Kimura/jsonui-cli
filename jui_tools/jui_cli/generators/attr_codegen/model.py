@@ -205,7 +205,9 @@ def classify_attr(
             reason="callback type — function-valued, not extractable from JSON",
             type_repr=type_repr,
         )
-    if name in METADATA_ATTRS:
+    if name in METADATA_ATTRS or name.startswith("$"):
+        # ``$``-prefixed names are harness/normalizer markers (e.g. ``$jui``)
+        # and are invalid identifiers in Swift/Kotlin — never emit them.
         return SkippedAttr(
             component=component,
             name=name,
