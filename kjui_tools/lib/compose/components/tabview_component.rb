@@ -2,6 +2,7 @@
 
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../../core/normalization'
 
 module KjuiTools
   module Compose
@@ -35,7 +36,7 @@ module KjuiTools
 
           # Generate state variable for selected tab
           state_var = "selectedTab"
-          selected_binding = json_data['selectedIndex']
+          selected_binding = Core::Normalization.attr_lookup(json_data, 'selectedIndex', 'selectedTabIndex')
 
           code = indent("// TabView with NavigationBar", depth)
 

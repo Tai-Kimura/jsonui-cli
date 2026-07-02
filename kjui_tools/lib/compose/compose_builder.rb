@@ -8,6 +8,7 @@ require_relative '../core/project_finder'
 require_relative '../core/logger'
 require_relative '../core/type_converter'
 require_relative '../core/layout_validator'
+require_relative '../core/normalization'
 require_relative 'style_loader'
 require_relative 'include_expander'
 require_relative 'data_model_updater'
@@ -91,6 +92,14 @@ module KjuiTools
           if json_data['partial'] == true
             return nil
           end
+
+          # Per-file normalization state: an L1-normalized layout (`$jui`
+          # marker from `jui build`) takes the canonical-only attribute
+          # lookup path in the component emitters; raw (L0) layouts keep
+          # the alias fallbacks. The marker itself is build metadata, not
+          # a renderable attribute — drop it before generation.
+          Core::Normalization.layout_canonicalized = Core::Normalization.canonicalized?(json_data)
+          json_data.delete(Core::Normalization::MARKER_KEY)
 
           json_data = StyleLoader.load_and_merge(json_data)
 

@@ -2,6 +2,7 @@
 
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../../core/normalization'
 
 module KjuiTools
   module Compose
@@ -24,9 +25,11 @@ module KjuiTools
             '0f'
           end
           
-          # Support both naming conventions for min/max
-          min_value = json_data['minimumValue'] || json_data['min'] || 0
-          max_value = json_data['maximumValue'] || json_data['max'] || 100
+          # Canonical minimum/maximum with alias fallbacks (skipped on
+          # L1-normalized layouts); 'min'/'max' are undeclared legacy
+          # spellings, always honored last.
+          min_value = Core::Normalization.attr_lookup(json_data, 'minimum', 'minimumValue', 'minValue') || json_data['min'] || 0
+          max_value = Core::Normalization.attr_lookup(json_data, 'maximum', 'maximumValue', 'maxValue') || json_data['max'] || 100
           
           code = indent("Slider(", depth)
           code += "\n" + indent("value = #{value},", depth + 1)
@@ -40,10 +43,11 @@ module KjuiTools
           end
           
           view_id = json_data['id'] || 'slider'
-          if json_data['onValueChange']
+          on_value_change = Core::Normalization.attr_lookup(json_data, 'onValueChange', 'onValueChanged')
+          if on_value_change
             # onValueChange (camelCase) -> binding format only (@{functionName})
-            if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
-              handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, 'it')
+            if Helpers::ModifierBuilder.is_binding?(on_value_change)
+              handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(on_value_change, view_id, 'it')
               if binding_variable
                 # Both data binding and event handler
                 code += "\n" + indent("onValueChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue.toDouble())); #{handler_call} },", depth + 1)
@@ -52,7 +56,7 @@ module KjuiTools
                 code += "\n" + indent("onValueChange = { #{handler_call} },", depth + 1)
               end
             else
-              code += "\n" + indent("onValueChange = { // ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName} },", depth + 1)
+              code += "\n" + indent("onValueChange = { // ERROR: #{on_value_change} - camelCase events require binding format @{functionName} },", depth + 1)
             end
           elsif binding_variable
             # Update the bound variable only
