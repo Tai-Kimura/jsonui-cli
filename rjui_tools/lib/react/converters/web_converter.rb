@@ -34,15 +34,15 @@ module RjuiTools
           classes << 'border-0'
 
           # Scrolling behavior
-          scrolling = json['scrollEnabled']
+          scrolling = attributes['scrollEnabled']
           classes << 'overflow-hidden' if scrolling == false
 
           classes.compact.reject(&:empty?).join(' ')
         end
 
         def build_src_attr
-          url = json['url'] || json['src']
-          html = json['html'] || json['htmlContent']
+          url = attributes['url'] || attributes['src']
+          html = attributes['html'] || attributes['htmlContent']
 
           if url
             if has_binding?(url)
@@ -65,31 +65,31 @@ module RjuiTools
 
         def build_sandbox_attr
           # Check if sandbox should be disabled entirely
-          return '' if json['sandbox'] == false
+          return '' if attributes['sandbox'] == false
 
           # Build sandbox permissions based on JSON config
           permissions = []
 
           # JavaScript enabled
-          permissions << 'allow-scripts' if json['javaScriptEnabled'] != false
+          permissions << 'allow-scripts' if attributes['javaScriptEnabled'] != false
 
           # Allow same origin for most functionality
           permissions << 'allow-same-origin'
 
           # Allow popups if JavaScript can open windows
-          permissions << 'allow-popups' if json['javaScriptCanOpenWindowsAutomatically']
+          permissions << 'allow-popups' if attributes['javaScriptCanOpenWindowsAutomatically']
 
           # Allow popups to escape sandbox
-          permissions << 'allow-popups-to-escape-sandbox' if json['allowPopupsToEscapeSandbox']
+          permissions << 'allow-popups-to-escape-sandbox' if attributes['allowPopupsToEscapeSandbox']
 
           # Allow forms
           permissions << 'allow-forms'
 
           # Allow modals
-          permissions << 'allow-modals' if json['allowModals']
+          permissions << 'allow-modals' if attributes['allowModals']
 
           # Allow downloads
-          permissions << 'allow-downloads' if json['allowDownloads']
+          permissions << 'allow-downloads' if attributes['allowDownloads']
 
           return '' if permissions.empty?
 
@@ -100,17 +100,17 @@ module RjuiTools
           allows = []
 
           # Inline media playback
-          allows << 'autoplay' if json['allowsInlineMediaPlayback']
+          allows << 'autoplay' if attributes['allowsInlineMediaPlayback']
 
           # Fullscreen
-          allows << 'fullscreen' if json['allowsFullScreen'] != false
+          allows << 'fullscreen' if attributes['allowsFullScreen'] != false
 
           # Camera/Microphone
-          allows << 'camera' if json['allowCamera']
-          allows << 'microphone' if json['allowMicrophone']
+          allows << 'camera' if attributes['allowCamera']
+          allows << 'microphone' if attributes['allowMicrophone']
 
           # Geolocation
-          allows << 'geolocation' if json['allowGeolocation']
+          allows << 'geolocation' if attributes['allowGeolocation']
 
           return '' if allows.empty?
 
@@ -118,14 +118,14 @@ module RjuiTools
         end
 
         def build_title_attr
-          title = json['title'] || json['accessibilityLabel']
+          title = attributes['title'] || attributes['accessibilityLabel']
           return '' unless title
 
           " title=\"#{title}\""
         end
 
         def build_loading_attr
-          lazy = json['lazyLoad'] || json['loading']
+          lazy = attributes['lazyLoad'] || attributes['loading']
           return '' unless lazy
 
           ' loading="lazy"'
