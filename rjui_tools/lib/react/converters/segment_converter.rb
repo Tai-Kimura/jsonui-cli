@@ -12,7 +12,7 @@ module RjuiTools
           id_attr = build_id_attr
           testid_attr = build_testid_attr
           tag_attr = build_tag_attr
-          items = json['items'] || []
+          items = attributes['items'] || []
 
           selected_binding = build_selected_binding
           on_change = build_on_change
@@ -20,7 +20,7 @@ module RjuiTools
 
           items_jsx = items.each_with_index.map do |item, index|
             button_class = build_button_class(index)
-            button_disabled = json['enabled'] == false ? ' disabled' : ''
+            button_disabled = attributes['enabled'] == false ? ' disabled' : ''
             on_click_attr = on_change ? " onClick={() => #{on_change}(#{index})}" : ''
             "#{indent_str(indent + 2)}<button key={#{index}} className={`#{button_class}`}#{on_click_attr}#{button_disabled}>#{item}</button>"
           end.join("\n")
@@ -46,7 +46,7 @@ module RjuiTools
           classes << 'rounded-lg'
 
           # Background color
-          bg_color = json['backgroundColor']
+          bg_color = attributes['backgroundColor']
           if bg_color
             classes << TailwindMapper.map_color(bg_color, 'bg')
           else
@@ -56,10 +56,10 @@ module RjuiTools
           classes << 'p-1'
 
           # Disabled state
-          if json['enabled'] == false
+          if attributes['enabled'] == false
             classes << 'opacity-50'
-          elsif has_binding?(json['enabled'])
-            binding_expr = extract_binding_property(json['enabled'])
+          elsif has_binding?(attributes['enabled'])
+            binding_expr = extract_binding_property(attributes['enabled'])
             classes << "${!#{binding_expr} ? 'opacity-50' : ''}"
           end
 
@@ -67,11 +67,11 @@ module RjuiTools
         end
 
         def build_button_class(index)
-          selected_index = json['selectedIndex'] || json['selectedTabIndex'] || 0
+          selected_index = attributes['selectedIndex'] || attributes['selectedTabIndex'] || 0
 
           # Build font size class
-          font_size_class = if json['fontSize']
-            TailwindMapper.map_font_size(json['fontSize'])
+          font_size_class = if attributes['fontSize']
+            TailwindMapper.map_font_size(attributes['fontSize'])
           else
             'text-sm'
           end
@@ -79,22 +79,22 @@ module RjuiTools
           # Build padding class
           # height may be a keyword ("wrapContent" / "matchParent") — only a
           # numeric height can be translated into vertical padding.
-          padding_class = if json['height'].is_a?(Numeric)
-            "py-#{TailwindMapper::PADDING_MAP[json['height'] / 4] || (json['height'] / 4)}"
+          padding_class = if attributes['height'].is_a?(Numeric)
+            "py-#{TailwindMapper::PADDING_MAP[attributes['height'] / 4] || (attributes['height'] / 4)}"
           else
             'py-2'
           end
 
           # Font color
-          font_color = json['fontColor']
+          font_color = attributes['fontColor']
           font_color_class = font_color ? TailwindMapper.map_color(font_color, 'text') : 'text-gray-900'
 
           # Selected colors
-          selected_bg = json['selectedBackground'] || 'bg-white'
-          selected_text = json['selectedFontColor'] ? TailwindMapper.map_color(json['selectedFontColor'], 'text') : font_color_class
+          selected_bg = attributes['selectedBackground'] || 'bg-white'
+          selected_text = attributes['selectedFontColor'] ? TailwindMapper.map_color(attributes['selectedFontColor'], 'text') : font_color_class
 
           base_classes = "flex-1 px-4 #{padding_class} #{font_size_class} font-medium rounded-md transition-colors cursor-pointer"
-          disabled_class = json['enabled'] == false ? ' cursor-not-allowed' : ''
+          disabled_class = attributes['enabled'] == false ? ' cursor-not-allowed' : ''
 
           if has_binding?(selected_index)
             prop = extract_binding_property(selected_index)
@@ -113,7 +113,7 @@ module RjuiTools
         end
 
         def build_selected_binding
-          selected = json['selectedIndex'] || json['selectedTabIndex']
+          selected = attributes['selectedIndex'] || attributes['selectedTabIndex']
 
           if selected && has_binding?(selected)
             extract_binding_property(selected)
@@ -125,13 +125,13 @@ module RjuiTools
         # onChange handler expression, or nil when neither onValueChange nor a
         # selectedIndex binding provides one (static segment).
         def build_on_change
-          handler = json['onValueChange']
+          handler = attributes['onValueChange']
 
           if handler && has_binding?(handler)
             extract_binding_property(handler)
           else
             # Generate setter from the raw binding name (without viewModel.data. prefix)
-            selected = json['selectedIndex'] || json['selectedTabIndex']
+            selected = attributes['selectedIndex'] || attributes['selectedTabIndex']
             return nil unless selected && has_binding?(selected)
 
             raw_binding = extract_raw_binding_property(selected)
@@ -141,7 +141,7 @@ module RjuiTools
         end
 
         def build_disabled_attr
-          enabled = json['enabled']
+          enabled = attributes['enabled']
           return '' if enabled.nil?
 
           if has_binding?(enabled)
