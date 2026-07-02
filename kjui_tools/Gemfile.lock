@@ -15,7 +15,6 @@ GEM
     nokogiri (1.18.9-x86_64-linux-gnu)
       racc (~> 1.4)
     optparse (0.6.0)
-    pathname (0.4.0)
     racc (1.8.1)
     rexml (3.4.4)
     rspec (3.13.2)
@@ -50,7 +49,6 @@ DEPENDENCIES
   json
   nokogiri
   optparse
-  pathname
   rexml
   rspec (~> 3.12)
   simplecov
