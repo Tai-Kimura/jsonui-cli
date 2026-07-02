@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/GradientView/gradient__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance GradientView.gradient (static)",
+    "description": "Conformance fixture for 'gradient' on GradientView (section: GradientView, class: visual). Value under test: [\"#FF0000\", \"#0000FF\"].",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "GradientView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "gradient__static",
+      "description": "Conformance fixture for 'gradient' on GradientView (section: GradientView, class: visual). Value under test: [\"#FF0000\", \"#0000FF\"].",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "GradientView_gradient__static"
+        }
+      ]
+    }
+  ]
+}

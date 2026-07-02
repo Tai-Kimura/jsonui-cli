@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/selectedIcon__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.selectedIcon (static)",
+    "description": "Conformance fixture for 'selectedIcon' on Radio (section: Radio, class: visual). Value under test: \"conformance_sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "selectedIcon__static",
+      "description": "Conformance fixture for 'selectedIcon' on Radio (section: Radio, class: visual). Value under test: \"conformance_sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_selectedIcon__static"
+        }
+      ]
+    }
+  ]
+}

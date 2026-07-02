@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/image__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.image (static)",
+    "description": "Conformance fixture for 'image' on Button (section: Button, class: visual). Value under test: \"conformance_sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "image__static",
+      "description": "Conformance fixture for 'image' on Button (section: Button, class: visual). Value under test: \"conformance_sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_image__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/maxWidthWeight__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.maxWidthWeight (static)",
+    "description": "Conformance fixture for 'maxWidthWeight' on View (section: common, class: visual). Value under test: 0.75.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "maxWidthWeight__static",
+      "description": "Conformance fixture for 'maxWidthWeight' on View (section: common, class: visual). Value under test: 0.75.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_maxWidthWeight__static"
+        }
+      ]
+    }
+  ]
+}

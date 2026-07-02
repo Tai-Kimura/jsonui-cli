@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/lineSpacing__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.lineSpacing (static)",
+    "description": "Conformance fixture for 'lineSpacing' on Label (section: Label, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "lineSpacing__static",
+      "description": "Conformance fixture for 'lineSpacing' on Label (section: Label, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_lineSpacing__static"
+        }
+      ]
+    }
+  ]
+}

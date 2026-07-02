@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/keyboardAppearance__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.keyboardAppearance (static)",
+    "description": "Conformance fixture for 'keyboardAppearance' on TextField (section: TextField, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "keyboardAppearance__static",
+      "description": "Conformance fixture for 'keyboardAppearance' on TextField (section: TextField, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_keyboardAppearance__static"
+        }
+      ]
+    }
+  ]
+}

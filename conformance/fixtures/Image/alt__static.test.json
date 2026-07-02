@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Image/alt__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Image.alt (static)",
+    "description": "Conformance fixture for 'alt' on Image (section: Image, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Image"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "alt__static",
+      "description": "Conformance fixture for 'alt' on Image (section: Image, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Image_alt__static"
+        }
+      ]
+    }
+  ]
+}

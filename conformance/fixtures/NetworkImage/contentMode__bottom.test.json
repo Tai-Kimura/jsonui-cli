@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/NetworkImage/contentMode__bottom.layout.json"
+  },
+  "metadata": {
+    "name": "conformance NetworkImage.contentMode (bottom)",
+    "description": "Conformance fixture for 'contentMode' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"bottom\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "NetworkImage"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "contentMode__bottom",
+      "description": "Conformance fixture for 'contentMode' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"bottom\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "NetworkImage_contentMode__bottom"
+        }
+      ]
+    }
+  ]
+}

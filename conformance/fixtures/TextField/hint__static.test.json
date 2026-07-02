@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/hint__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.hint (static)",
+    "description": "Conformance fixture for 'hint' on TextField (section: TextField, class: visual). Value under test: \"Conformance Hint\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "hint__static",
+      "description": "Conformance fixture for 'hint' on TextField (section: TextField, class: visual). Value under test: \"Conformance Hint\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_hint__static"
+        }
+      ]
+    }
+  ]
+}

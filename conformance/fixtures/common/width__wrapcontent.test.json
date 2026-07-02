@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/width__wrapcontent.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.width (wrapcontent)",
+    "description": "Conformance fixture for 'width' on View (section: common, class: visual). Value under test: \"wrapContent\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "width__wrapcontent",
+      "description": "Conformance fixture for 'width' on View (section: common, class: visual). Value under test: \"wrapContent\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_width__wrapcontent"
+        }
+      ]
+    }
+  ]
+}

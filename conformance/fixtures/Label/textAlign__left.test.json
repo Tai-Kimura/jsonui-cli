@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/textAlign__left.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.textAlign (left)",
+    "description": "Conformance fixture for 'textAlign' on Label (section: Label, class: visual). Value under test: \"Left\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "textAlign__left",
+      "description": "Conformance fixture for 'textAlign' on Label (section: Label, class: visual). Value under test: \"Left\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_textAlign__left"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Toggle/labelPosition__trailing.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Toggle.labelPosition (trailing)",
+    "description": "Conformance fixture for 'labelPosition' on Toggle (section: Toggle, class: visual). Value under test: \"trailing\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Toggle"
+    ]
+  },
+  "platform": [
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "labelPosition__trailing",
+      "description": "Conformance fixture for 'labelPosition' on Toggle (section: Toggle, class: visual). Value under test: \"trailing\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Toggle_labelPosition__trailing"
+        }
+      ]
+    }
+  ]
+}

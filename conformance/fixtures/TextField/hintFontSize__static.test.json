@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/hintFontSize__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.hintFontSize (static)",
+    "description": "Conformance fixture for 'hintFontSize' on TextField (section: TextField, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "hintFontSize__static",
+      "description": "Conformance fixture for 'hintFontSize' on TextField (section: TextField, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_hintFontSize__static"
+        }
+      ]
+    }
+  ]
+}

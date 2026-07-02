@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/columns__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.columns (static)",
+    "description": "Conformance fixture for 'columns' on Collection (section: Collection, class: visual). Value under test: 2.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "columns__static",
+      "description": "Conformance fixture for 'columns' on Collection (section: Collection, class: visual). Value under test: 2.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_columns__static"
+        }
+      ]
+    }
+  ]
+}

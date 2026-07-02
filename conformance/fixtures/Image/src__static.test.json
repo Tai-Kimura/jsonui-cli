@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Image/src__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Image.src (static)",
+    "description": "Conformance fixture for 'src' on Image (section: Image, class: visual). Value under test: \"conformance_sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Image"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "src__static",
+      "description": "Conformance fixture for 'src' on Image (section: Image, class: visual). Value under test: \"conformance_sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Image_src__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Image/loading__lazy.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Image.loading (lazy)",
+    "description": "Conformance fixture for 'loading' on Image (section: Image, class: visual). Value under test: \"lazy\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Image"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "loading__lazy",
+      "description": "Conformance fixture for 'loading' on Image (section: Image, class: visual). Value under test: \"lazy\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Image_loading__lazy"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/distribution__equalcentering.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.distribution (equalcentering)",
+    "description": "Conformance fixture for 'distribution' on View (section: common, class: visual). Value under test: \"equalCentering\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "distribution__equalcentering",
+      "description": "Conformance fixture for 'distribution' on View (section: common, class: visual). Value under test: \"equalCentering\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_distribution__equalcentering"
+        }
+      ]
+    }
+  ]
+}

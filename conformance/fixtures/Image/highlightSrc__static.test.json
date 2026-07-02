@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Image/highlightSrc__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Image.highlightSrc (static)",
+    "description": "Conformance fixture for 'highlightSrc' on Image (section: Image, class: visual). Value under test: \"conformance_sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Image"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "highlightSrc__static",
+      "description": "Conformance fixture for 'highlightSrc' on Image (section: Image, class: visual). Value under test: \"conformance_sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Image_highlightSrc__static"
+        }
+      ]
+    }
+  ]
+}

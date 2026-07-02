@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Segment/apportionsSegmentWidthsByContent__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Segment.apportionsSegmentWidthsByContent (true)",
+    "description": "Conformance fixture for 'apportionsSegmentWidthsByContent' on Segment (section: Segment, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Segment"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "apportionsSegmentWidthsByContent__true",
+      "description": "Conformance fixture for 'apportionsSegmentWidthsByContent' on Segment (section: Segment, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Segment_apportionsSegmentWidthsByContent__true"
+        }
+      ]
+    }
+  ]
+}

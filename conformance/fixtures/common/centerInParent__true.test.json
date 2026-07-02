@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/centerInParent__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.centerInParent (true)",
+    "description": "Conformance fixture for 'centerInParent' on View (section: common, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "centerInParent__true",
+      "description": "Conformance fixture for 'centerInParent' on View (section: common, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_centerInParent__true"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/resize__none.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.resize (none)",
+    "description": "Conformance fixture for 'resize' on TextView (section: TextView, class: visual). Value under test: \"none\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "resize__none",
+      "description": "Conformance fixture for 'resize' on TextView (section: TextView, class: visual). Value under test: \"none\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_resize__none"
+        }
+      ]
+    }
+  ]
+}

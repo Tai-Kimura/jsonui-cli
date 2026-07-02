@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/returnKeyType__go.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.returnKeyType (go)",
+    "description": "Conformance fixture for 'returnKeyType' on TextView (section: TextView, class: visual). Value under test: \"Go\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "returnKeyType__go",
+      "description": "Conformance fixture for 'returnKeyType' on TextView (section: TextView, class: visual). Value under test: \"Go\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_returnKeyType__go"
+        }
+      ]
+    }
+  ]
+}

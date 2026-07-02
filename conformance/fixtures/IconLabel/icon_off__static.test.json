@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/IconLabel/icon_off__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance IconLabel.icon_off (static)",
+    "description": "Conformance fixture for 'icon_off' on IconLabel (section: IconLabel, class: visual). Value under test: \"conformance_sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "IconLabel"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "icon_off__static",
+      "description": "Conformance fixture for 'icon_off' on IconLabel (section: IconLabel, class: visual). Value under test: \"conformance_sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "IconLabel_icon_off__static"
+        }
+      ]
+    }
+  ]
+}

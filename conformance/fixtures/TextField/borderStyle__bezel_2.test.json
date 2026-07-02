@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/borderStyle__bezel_2.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.borderStyle (bezel_2)",
+    "description": "Conformance fixture for 'borderStyle' on TextField (section: TextField, class: visual). Value under test: \"Bezel\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "borderStyle__bezel_2",
+      "description": "Conformance fixture for 'borderStyle' on TextField (section: TextField, class: visual). Value under test: \"Bezel\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_borderStyle__bezel_2"
+        }
+      ]
+    }
+  ]
+}

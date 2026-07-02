@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/group__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.group (static)",
+    "description": "Conformance fixture for 'group' on Radio (section: Radio, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "group__static",
+      "description": "Conformance fixture for 'group' on Radio (section: Radio, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_group__static"
+        }
+      ]
+    }
+  ]
+}

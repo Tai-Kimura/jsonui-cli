@@ -1,0 +1,37 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/CheckBox/text__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance CheckBox.text (static)",
+    "description": "Conformance fixture for 'text' on CheckBox (section: CheckBox, class: assertable). Value under test: \"Conformance Text\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "CheckBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "text__static",
+      "description": "Conformance fixture for 'text' on CheckBox (section: CheckBox, class: assertable). Value under test: \"Conformance Text\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        },
+        {
+          "assert": "text",
+          "id": "target",
+          "equals": "Conformance Text"
+        }
+      ]
+    }
+  ]
+}

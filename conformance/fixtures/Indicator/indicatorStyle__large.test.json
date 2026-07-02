@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Indicator/indicatorStyle__large.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Indicator.indicatorStyle (large)",
+    "description": "Conformance fixture for 'indicatorStyle' on Indicator (section: Indicator, class: visual). Value under test: \"large\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Indicator"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "indicatorStyle__large",
+      "description": "Conformance fixture for 'indicatorStyle' on Indicator (section: Indicator, class: visual). Value under test: \"large\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Indicator_indicatorStyle__large"
+        }
+      ]
+    }
+  ]
+}

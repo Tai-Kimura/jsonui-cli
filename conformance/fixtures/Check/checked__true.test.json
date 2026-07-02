@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Check/checked__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Check.checked (true)",
+    "description": "Conformance fixture for 'checked' on Check (section: Check, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Check"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "checked__true",
+      "description": "Conformance fixture for 'checked' on Check (section: Check, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Check_checked__true"
+        }
+      ]
+    }
+  ]
+}

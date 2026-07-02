@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/compressHorizontal__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.compressHorizontal (static)",
+    "description": "Conformance fixture for 'compressHorizontal' on View (section: common, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "compressHorizontal__static",
+      "description": "Conformance fixture for 'compressHorizontal' on View (section: common, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_compressHorizontal__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Toggle/tintColor__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Toggle.tintColor (static)",
+    "description": "Conformance fixture for 'tintColor' on Toggle (section: Toggle, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Toggle"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "tintColor__static",
+      "description": "Conformance fixture for 'tintColor' on Toggle (section: Toggle, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Toggle_tintColor__static"
+        }
+      ]
+    }
+  ]
+}

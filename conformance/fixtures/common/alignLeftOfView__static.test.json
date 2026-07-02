@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/alignLeftOfView__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.alignLeftOfView (static)",
+    "description": "Conformance fixture for 'alignLeftOfView' on View (section: common, class: visual). Value under test: \"anchor\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "alignLeftOfView__static",
+      "description": "Conformance fixture for 'alignLeftOfView' on View (section: common, class: visual). Value under test: \"anchor\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_alignLeftOfView__static"
+        }
+      ]
+    }
+  ]
+}

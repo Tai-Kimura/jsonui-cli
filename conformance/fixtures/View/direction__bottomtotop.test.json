@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/direction__bottomtotop.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.direction (bottomtotop)",
+    "description": "Conformance fixture for 'direction' on View (section: View, class: visual). Value under test: \"bottomToTop\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "direction__bottomtotop",
+      "description": "Conformance fixture for 'direction' on View (section: View, class: visual). Value under test: \"bottomToTop\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_direction__bottomtotop"
+        }
+      ]
+    }
+  ]
+}

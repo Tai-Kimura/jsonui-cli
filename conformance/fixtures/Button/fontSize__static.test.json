@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/fontSize__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.fontSize (static)",
+    "description": "Conformance fixture for 'fontSize' on Button (section: Button, class: visual). Value under test: 20.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontSize__static",
+      "description": "Conformance fixture for 'fontSize' on Button (section: Button, class: visual). Value under test: 20.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_fontSize__static"
+        }
+      ]
+    }
+  ]
+}

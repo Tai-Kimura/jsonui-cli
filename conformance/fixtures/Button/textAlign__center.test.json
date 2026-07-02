@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/textAlign__center.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.textAlign (center)",
+    "description": "Conformance fixture for 'textAlign' on Button (section: Button, class: visual). Value under test: \"Center\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "textAlign__center",
+      "description": "Conformance fixture for 'textAlign' on Button (section: Button, class: visual). Value under test: \"Center\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_textAlign__center"
+        }
+      ]
+    }
+  ]
+}

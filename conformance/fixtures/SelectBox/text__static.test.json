@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/text__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.text (static)",
+    "description": "Conformance fixture for 'text' on SelectBox (section: SelectBox, class: visual). Value under test: \"Conformance Text\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "text__static",
+      "description": "Conformance fixture for 'text' on SelectBox (section: SelectBox, class: visual). Value under test: \"Conformance Text\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_text__static"
+        }
+      ]
+    }
+  ]
+}

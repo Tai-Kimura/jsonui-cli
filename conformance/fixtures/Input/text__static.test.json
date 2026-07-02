@@ -1,0 +1,37 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Input/text__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Input.text (static)",
+    "description": "Conformance fixture for 'text' on Input (section: Input, class: assertable). Value under test: \"Conformance Text\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Input"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "text__static",
+      "description": "Conformance fixture for 'text' on Input (section: Input, class: assertable). Value under test: \"Conformance Text\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        },
+        {
+          "assert": "text",
+          "id": "target",
+          "equals": "Conformance Text"
+        }
+      ]
+    }
+  ]
+}

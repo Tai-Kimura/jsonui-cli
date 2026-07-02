@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Progress/progress__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Progress.progress (static)",
+    "description": "Conformance fixture for 'progress' on Progress (section: Progress, class: visual). Value under test: 0.5.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Progress"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "progress__static",
+      "description": "Conformance fixture for 'progress' on Progress (section: Progress, class: visual). Value under test: 0.5.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Progress_progress__static"
+        }
+      ]
+    }
+  ]
+}

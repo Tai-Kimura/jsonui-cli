@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/EditText/placeholder__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance EditText.placeholder (static)",
+    "description": "Conformance fixture for 'placeholder' on EditText (section: EditText, class: visual). Value under test: \"Conformance Hint\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "EditText"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "placeholder__static",
+      "description": "Conformance fixture for 'placeholder' on EditText (section: EditText, class: visual). Value under test: \"Conformance Hint\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "EditText_placeholder__static"
+        }
+      ]
+    }
+  ]
+}

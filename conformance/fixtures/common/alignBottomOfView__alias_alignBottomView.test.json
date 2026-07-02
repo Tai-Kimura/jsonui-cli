@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/alignBottomOfView__alias_alignBottomView.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.alignBottomOfView (alias_alignBottomView)",
+    "description": "Conformance fixture for 'alignBottomOfView' on View (section: common, class: visual). Value under test: \"anchor\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "alignBottomOfView__alias_alignBottomView",
+      "description": "Conformance fixture for 'alignBottomOfView' on View (section: common, class: visual). Value under test: \"anchor\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_alignBottomOfView__alias_alignBottomView"
+        }
+      ]
+    }
+  ]
+}

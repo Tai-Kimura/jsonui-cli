@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/colorScheme__light.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.colorScheme (light)",
+    "description": "Conformance fixture for 'colorScheme' on SelectBox (section: SelectBox, class: visual). Value under test: \"light\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "colorScheme__light",
+      "description": "Conformance fixture for 'colorScheme' on SelectBox (section: SelectBox, class: visual). Value under test: \"light\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_colorScheme__light"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/idealWidth__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.idealWidth (static)",
+    "description": "Conformance fixture for 'idealWidth' on View (section: common, class: visual). Value under test: 120.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "idealWidth__static",
+      "description": "Conformance fixture for 'idealWidth' on View (section: common, class: visual). Value under test: 120.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_idealWidth__static"
+        }
+      ]
+    }
+  ]
+}

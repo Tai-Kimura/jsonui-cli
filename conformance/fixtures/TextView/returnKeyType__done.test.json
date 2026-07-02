@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/returnKeyType__done.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.returnKeyType (done)",
+    "description": "Conformance fixture for 'returnKeyType' on TextView (section: TextView, class: visual). Value under test: \"Done\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "returnKeyType__done",
+      "description": "Conformance fixture for 'returnKeyType' on TextView (section: TextView, class: visual). Value under test: \"Done\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_returnKeyType__done"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/CheckBox/iconSize__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance CheckBox.iconSize (static)",
+    "description": "Conformance fixture for 'iconSize' on CheckBox (section: CheckBox, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "CheckBox"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "iconSize__static",
+      "description": "Conformance fixture for 'iconSize' on CheckBox (section: CheckBox, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "CheckBox_iconSize__static"
+        }
+      ]
+    }
+  ]
+}

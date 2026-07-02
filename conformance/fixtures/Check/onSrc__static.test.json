@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Check/onSrc__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Check.onSrc (static)",
+    "description": "Conformance fixture for 'onSrc' on Check (section: Check, class: visual). Value under test: \"conformance_sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Check"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "onSrc__static",
+      "description": "Conformance fixture for 'onSrc' on Check (section: Check, class: visual). Value under test: \"conformance_sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Check_onSrc__static"
+        }
+      ]
+    }
+  ]
+}

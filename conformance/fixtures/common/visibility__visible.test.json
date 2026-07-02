@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/visibility__visible.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.visibility (visible)",
+    "description": "Conformance fixture for 'visibility' on View (section: common, class: assertable). Value under test: \"visible\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "visibility__visible",
+      "description": "Conformance fixture for 'visibility' on View (section: common, class: assertable). Value under test: \"visible\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

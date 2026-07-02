@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/NetworkImage/loadingImage__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance NetworkImage.loadingImage (static)",
+    "description": "Conformance fixture for 'loadingImage' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"conformance_sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "NetworkImage"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "loadingImage__static",
+      "description": "Conformance fixture for 'loadingImage' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"conformance_sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "NetworkImage_loadingImage__static"
+        }
+      ]
+    }
+  ]
+}

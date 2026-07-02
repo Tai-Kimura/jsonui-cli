@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/buttonType__reset.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.buttonType (reset)",
+    "description": "Conformance fixture for 'buttonType' on Button (section: Button, class: visual). Value under test: \"reset\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "buttonType__reset",
+      "description": "Conformance fixture for 'buttonType' on Button (section: Button, class: visual). Value under test: \"reset\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_buttonType__reset"
+        }
+      ]
+    }
+  ]
+}

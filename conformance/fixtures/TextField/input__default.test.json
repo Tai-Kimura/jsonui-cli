@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/input__default.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.input (default)",
+    "description": "Conformance fixture for 'input' on TextField (section: TextField, class: visual). Value under test: \"default\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "input__default",
+      "description": "Conformance fixture for 'input' on TextField (section: TextField, class: visual). Value under test: \"default\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_input__default"
+        }
+      ]
+    }
+  ]
+}

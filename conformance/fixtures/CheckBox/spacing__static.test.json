@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/CheckBox/spacing__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance CheckBox.spacing (static)",
+    "description": "Conformance fixture for 'spacing' on CheckBox (section: CheckBox, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "CheckBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "spacing__static",
+      "description": "Conformance fixture for 'spacing' on CheckBox (section: CheckBox, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "CheckBox_spacing__static"
+        }
+      ]
+    }
+  ]
+}

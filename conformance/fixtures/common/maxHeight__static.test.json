@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/maxHeight__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.maxHeight (static)",
+    "description": "Conformance fixture for 'maxHeight' on View (section: common, class: visual). Value under test: 150.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "maxHeight__static",
+      "description": "Conformance fixture for 'maxHeight' on View (section: common, class: visual). Value under test: 150.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_maxHeight__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/alignLeftView__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.alignLeftView (static)",
+    "description": "Conformance fixture for 'alignLeftView' on View (section: common, class: visual). Value under test: \"anchor\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "alignLeftView__static",
+      "description": "Conformance fixture for 'alignLeftView' on View (section: common, class: visual). Value under test: \"anchor\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_alignLeftView__static"
+        }
+      ]
+    }
+  ]
+}

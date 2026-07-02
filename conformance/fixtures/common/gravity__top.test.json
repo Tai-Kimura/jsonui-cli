@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/gravity__top.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.gravity (top)",
+    "description": "Conformance fixture for 'gravity' on View (section: common, class: visual). Value under test: \"top\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "gravity__top",
+      "description": "Conformance fixture for 'gravity' on View (section: common, class: visual). Value under test: \"top\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_gravity__top"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/indexBelow__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.indexBelow (static)",
+    "description": "Conformance fixture for 'indexBelow' on View (section: common, class: visual). Value under test: \"anchor\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "indexBelow__static",
+      "description": "Conformance fixture for 'indexBelow' on View (section: common, class: visual). Value under test: \"anchor\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_indexBelow__static"
+        }
+      ]
+    }
+  ]
+}

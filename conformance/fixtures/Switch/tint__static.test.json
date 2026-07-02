@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Switch/tint__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Switch.tint (static)",
+    "description": "Conformance fixture for 'tint' on Switch (section: Switch, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Switch"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "tint__static",
+      "description": "Conformance fixture for 'tint' on Switch (section: Switch, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Switch_tint__static"
+        }
+      ]
+    }
+  ]
+}

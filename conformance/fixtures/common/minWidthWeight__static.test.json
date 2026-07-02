@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/minWidthWeight__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.minWidthWeight (static)",
+    "description": "Conformance fixture for 'minWidthWeight' on View (section: common, class: visual). Value under test: 0.25.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "minWidthWeight__static",
+      "description": "Conformance fixture for 'minWidthWeight' on View (section: common, class: visual). Value under test: 0.25.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_minWidthWeight__static"
+        }
+      ]
+    }
+  ]
+}

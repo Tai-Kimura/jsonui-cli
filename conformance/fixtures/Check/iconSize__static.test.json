@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Check/iconSize__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Check.iconSize (static)",
+    "description": "Conformance fixture for 'iconSize' on Check (section: Check, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Check"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "iconSize__static",
+      "description": "Conformance fixture for 'iconSize' on Check (section: Check, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Check_iconSize__static"
+        }
+      ]
+    }
+  ]
+}

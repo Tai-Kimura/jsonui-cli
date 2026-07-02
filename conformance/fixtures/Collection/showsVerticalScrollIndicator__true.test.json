@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/showsVerticalScrollIndicator__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.showsVerticalScrollIndicator (true)",
+    "description": "Conformance fixture for 'showsVerticalScrollIndicator' on Collection (section: Collection, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "showsVerticalScrollIndicator__true",
+      "description": "Conformance fixture for 'showsVerticalScrollIndicator' on Collection (section: Collection, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_showsVerticalScrollIndicator__true"
+        }
+      ]
+    }
+  ]
+}

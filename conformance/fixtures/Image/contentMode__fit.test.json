@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Image/contentMode__fit.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Image.contentMode (fit)",
+    "description": "Conformance fixture for 'contentMode' on Image (section: Image, class: visual). Value under test: \"fit\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Image"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "contentMode__fit",
+      "description": "Conformance fixture for 'contentMode' on Image (section: Image, class: visual). Value under test: \"fit\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Image_contentMode__fit"
+        }
+      ]
+    }
+  ]
+}

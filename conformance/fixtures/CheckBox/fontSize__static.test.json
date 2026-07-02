@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/CheckBox/fontSize__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance CheckBox.fontSize (static)",
+    "description": "Conformance fixture for 'fontSize' on CheckBox (section: CheckBox, class: visual). Value under test: 20.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "CheckBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontSize__static",
+      "description": "Conformance fixture for 'fontSize' on CheckBox (section: CheckBox, class: visual). Value under test: 20.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "CheckBox_fontSize__static"
+        }
+      ]
+    }
+  ]
+}

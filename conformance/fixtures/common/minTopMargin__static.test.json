@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/minTopMargin__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.minTopMargin (static)",
+    "description": "Conformance fixture for 'minTopMargin' on View (section: common, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "minTopMargin__static",
+      "description": "Conformance fixture for 'minTopMargin' on View (section: common, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_minTopMargin__static"
+        }
+      ]
+    }
+  ]
+}

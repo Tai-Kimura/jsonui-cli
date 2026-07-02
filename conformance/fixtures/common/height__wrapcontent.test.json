@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/height__wrapcontent.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.height (wrapcontent)",
+    "description": "Conformance fixture for 'height' on View (section: common, class: visual). Value under test: \"wrapContent\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "height__wrapcontent",
+      "description": "Conformance fixture for 'height' on View (section: common, class: visual). Value under test: \"wrapContent\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_height__wrapcontent"
+        }
+      ]
+    }
+  ]
+}

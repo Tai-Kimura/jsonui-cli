@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/fontWeight__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.fontWeight (static)",
+    "description": "Conformance fixture for 'fontWeight' on Button (section: Button, class: visual). Value under test: \"bold\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontWeight__static",
+      "description": "Conformance fixture for 'fontWeight' on Button (section: Button, class: visual). Value under test: \"bold\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_fontWeight__static"
+        }
+      ]
+    }
+  ]
+}

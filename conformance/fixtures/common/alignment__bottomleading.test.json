@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/alignment__bottomleading.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.alignment (bottomleading)",
+    "description": "Conformance fixture for 'alignment' on View (section: common, class: visual). Value under test: \"bottomLeading\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "alignment__bottomleading",
+      "description": "Conformance fixture for 'alignment' on View (section: common, class: visual). Value under test: \"bottomLeading\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_alignment__bottomleading"
+        }
+      ]
+    }
+  ]
+}

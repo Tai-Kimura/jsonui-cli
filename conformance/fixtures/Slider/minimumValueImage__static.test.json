@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Slider/minimumValueImage__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Slider.minimumValueImage (static)",
+    "description": "Conformance fixture for 'minimumValueImage' on Slider (section: Slider, class: visual). Value under test: \"conformance_sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Slider"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "minimumValueImage__static",
+      "description": "Conformance fixture for 'minimumValueImage' on Slider (section: Slider, class: visual). Value under test: \"conformance_sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Slider_minimumValueImage__static"
+        }
+      ]
+    }
+  ]
+}

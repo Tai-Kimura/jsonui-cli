@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Switch/thumbTintColor__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Switch.thumbTintColor (static)",
+    "description": "Conformance fixture for 'thumbTintColor' on Switch (section: Switch, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Switch"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "thumbTintColor__static",
+      "description": "Conformance fixture for 'thumbTintColor' on Switch (section: Switch, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Switch_thumbTintColor__static"
+        }
+      ]
+    }
+  ]
+}

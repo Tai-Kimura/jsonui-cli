@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/label__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.label (static)",
+    "description": "Conformance fixture for 'label' on Radio (section: Radio, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "label__static",
+      "description": "Conformance fixture for 'label' on Radio (section: Radio, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_label__static"
+        }
+      ]
+    }
+  ]
+}

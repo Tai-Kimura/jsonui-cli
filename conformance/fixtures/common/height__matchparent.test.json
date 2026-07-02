@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/height__matchparent.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.height (matchparent)",
+    "description": "Conformance fixture for 'height' on View (section: common, class: visual). Value under test: \"matchParent\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "height__matchparent",
+      "description": "Conformance fixture for 'height' on View (section: common, class: visual). Value under test: \"matchParent\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_height__matchparent"
+        }
+      ]
+    }
+  ]
+}

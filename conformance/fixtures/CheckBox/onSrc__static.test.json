@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/CheckBox/onSrc__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance CheckBox.onSrc (static)",
+    "description": "Conformance fixture for 'onSrc' on CheckBox (section: CheckBox, class: visual). Value under test: \"conformance_sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "CheckBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "onSrc__static",
+      "description": "Conformance fixture for 'onSrc' on CheckBox (section: CheckBox, class: visual). Value under test: \"conformance_sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "CheckBox_onSrc__static"
+        }
+      ]
+    }
+  ]
+}
