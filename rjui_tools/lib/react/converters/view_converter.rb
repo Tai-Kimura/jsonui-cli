@@ -39,13 +39,13 @@ module RjuiTools
           classes = [super]
 
           # Root view with matchParent should fill its parent container (not viewport)
-          if @indent == 2 && json['height'] == 'matchParent'
+          if @indent == 2 && attributes['height'] == 'matchParent'
             classes << 'h-full'
           end
 
           # Layout mode for View with children
           if child_array.is_a?(Array)
-            if json['orientation']
+            if attributes['orientation']
               # orientation specified - handled by base_converter's map_orientation
             elsif ui_children_count > 1
               # No orientation + multiple UI children = overlay (FrameLayout)
@@ -57,19 +57,19 @@ module RjuiTools
           end
 
           # Center alignment
-          classes << 'items-center' if json['centerHorizontal']
-          classes << 'justify-center' if json['centerVertical']
-          classes << 'items-center justify-center' if json['centerInParent']
+          classes << 'items-center' if attributes['centerHorizontal']
+          classes << 'justify-center' if attributes['centerVertical']
+          classes << 'items-center justify-center' if attributes['centerInParent']
 
           # Gap/Spacing
-          if json['spacing']
-            spacing = TailwindMapper::PADDING_MAP[json['spacing']] || json['spacing']
+          if attributes['spacing']
+            spacing = TailwindMapper::PADDING_MAP[attributes['spacing']] || attributes['spacing']
             classes << "gap-#{spacing}"
           end
 
           # Distribution (justify-content for flex containers)
-          if json['distribution']
-            case json['distribution']
+          if attributes['distribution']
+            case attributes['distribution']
             when 'fill'
               classes << 'justify-between'
             when 'fillEqually'
@@ -82,22 +82,22 @@ module RjuiTools
           end
 
           # Cursor pointer for clickable items
-          classes << 'cursor-pointer' if json['onClick'] || json['onclick']
+          classes << 'cursor-pointer' if attributes['onClick'] || attributes['onclick']
 
           # Highlight/Tap background effects (using hover/active states)
-          if json['tapBackground'] || json['highlightBackground']
-            tap_bg = json['tapBackground'] || json['highlightBackground']
+          if attributes['tapBackground'] || attributes['highlightBackground']
+            tap_bg = attributes['tapBackground'] || attributes['highlightBackground']
             classes << "active:#{TailwindMapper.map_color(tap_bg, 'bg')}" if tap_bg.is_a?(String)
           end
 
           # Highlighted state (initial highlight)
-          if json['highlighted']
-            highlight_bg = json['highlightBackground'] || '#E5E7EB'
+          if attributes['highlighted']
+            highlight_bg = attributes['highlightBackground'] || '#E5E7EB'
             classes << TailwindMapper.map_color(highlight_bg, 'bg')
           end
 
           # Transition for smooth effects
-          classes << 'transition-colors' if json['tapBackground'] || json['highlightBackground']
+          classes << 'transition-colors' if attributes['tapBackground'] || attributes['highlightBackground']
 
           classes.compact.reject(&:empty?).join(' ')
         end
@@ -116,7 +116,7 @@ module RjuiTools
 
         # No orientation + multiple UI children = overlay (FrameLayout)
         def overlay_layout?
-          child_array.is_a?(Array) && ui_children_count > 1 && !json['orientation']
+          child_array.is_a?(Array) && ui_children_count > 1 && !attributes['orientation']
         end
 
         def convert_children(indent)
@@ -143,8 +143,8 @@ module RjuiTools
           attrs << build_onclick_attr
 
           # onLongPress (using onContextMenu as fallback, or custom implementation)
-          if json['onLongPress']
-            handler = json['onLongPress']
+          if attributes['onLongPress']
+            handler = attributes['onLongPress']
             if handler.start_with?('@{')
               attrs << " onContextMenu={(e) => { e.preventDefault(); #{handler.gsub(/@\{|\}/, '')}(e); }}"
             else
@@ -153,8 +153,8 @@ module RjuiTools
           end
 
           # onPan (using pointer events for drag)
-          if json['onPan']
-            handler = json['onPan']
+          if attributes['onPan']
+            handler = attributes['onPan']
             handler_name = handler.start_with?('@{') ? handler.gsub(/@\{|\}/, '') : handler
             attrs << " onPointerDown={(e) => #{handler_name}?.onStart?.(e)}"
             attrs << " onPointerMove={(e) => #{handler_name}?.onMove?.(e)}"
@@ -162,8 +162,8 @@ module RjuiTools
           end
 
           # onPinch (using touch events)
-          if json['onPinch']
-            handler = json['onPinch']
+          if attributes['onPinch']
+            handler = attributes['onPinch']
             handler_name = handler.start_with?('@{') ? handler.gsub(/@\{|\}/, '') : handler
             attrs << " onTouchStart={(e) => #{handler_name}?.onStart?.(e)}"
             attrs << " onTouchMove={(e) => #{handler_name}?.onMove?.(e)}"
@@ -171,30 +171,30 @@ module RjuiTools
           end
 
           # Drag and Drop
-          attrs << ' draggable' if json['draggable']
+          attrs << ' draggable' if attributes['draggable']
 
-          if json['onDragStart']
-            prop = extract_binding_property(json['onDragStart'])
+          if attributes['onDragStart']
+            prop = extract_binding_property(attributes['onDragStart'])
             attrs << " onDragStart={(e) => #{prop}?.(e)}"
           end
 
-          if json['onDrop']
-            prop = extract_binding_property(json['onDrop'])
+          if attributes['onDrop']
+            prop = extract_binding_property(attributes['onDrop'])
             attrs << " onDrop={(e) => { e.preventDefault(); #{prop}?.(e); }}"
           end
 
-          if json['onDragOver']
-            prop = extract_binding_property(json['onDragOver'])
+          if attributes['onDragOver']
+            prop = extract_binding_property(attributes['onDragOver'])
             attrs << " onDragOver={(e) => { e.preventDefault(); #{prop}?.(e); }}"
           end
 
-          if json['onDragEnter']
-            prop = extract_binding_property(json['onDragEnter'])
+          if attributes['onDragEnter']
+            prop = extract_binding_property(attributes['onDragEnter'])
             attrs << " onDragEnter={(e) => #{prop}?.(e)}"
           end
 
-          if json['onDragLeave']
-            prop = extract_binding_property(json['onDragLeave'])
+          if attributes['onDragLeave']
+            prop = extract_binding_property(attributes['onDragLeave'])
             attrs << " onDragLeave={(e) => #{prop}?.(e)}"
           end
 
