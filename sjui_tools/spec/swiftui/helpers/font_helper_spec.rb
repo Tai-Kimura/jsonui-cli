@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'json'
+require 'tmpdir'
 require 'swiftui/helpers/font_helper'
 
 RSpec.describe SjuiTools::SwiftUI::Helpers::FontHelper do
@@ -179,6 +181,63 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::FontHelper do
           '.font(SwiftJsonUIConfiguration.shared.resolveFont(' \
             'FontSpec(family: nil, weight: .regular, size: CGFloat(12), italic: false)))'
         ])
+      end
+    end
+  end
+
+  describe '.weight_mapping resolution chain' do
+    after { described_class.weight_mapping_candidates = nil }
+
+    it 'loads the mapping from the first existing candidate path' do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'font_weight_mapping.json')
+        File.write(path, JSON.generate('weights' => { 'bold' => { 'swift' => '.customBold' } }))
+        described_class.weight_mapping_candidates = [path]
+
+        expect(described_class.font_weight_to_swiftui('bold')).to eq('.customBold')
+      end
+    end
+
+    it 'prefers an earlier candidate over a later one' do
+      Dir.mktmpdir do |dir|
+        first = File.join(dir, 'first.json')
+        second = File.join(dir, 'second.json')
+        File.write(first, JSON.generate('weights' => { 'bold' => { 'swift' => '.firstBold' } }))
+        File.write(second, JSON.generate('weights' => { 'bold' => { 'swift' => '.secondBold' } }))
+        described_class.weight_mapping_candidates = [first, second]
+
+        expect(described_class.font_weight_to_swiftui('bold')).to eq('.firstBold')
+      end
+    end
+
+    it 'falls back to the built-in full table (NOT empty) when no file resolves' do
+      described_class.weight_mapping_candidates = ['/nonexistent/font_weight_mapping.json']
+
+      # Every weight still maps correctly — a missing file must never silently
+      # round weights to .regular.
+      expect { expect(described_class.font_weight_to_swiftui('medium')).to eq('.medium') }
+        .not_to output.to_stderr
+      expect(described_class.font_weight_to_swiftui('semibold')).to eq('.semibold')
+      expect(described_class.font_weight_to_swiftui('black')).to eq('.black')
+    end
+
+    it 'falls back to the built-in table when the file has an empty weights map' do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'font_weight_mapping.json')
+        File.write(path, JSON.generate('weights' => {}))
+        described_class.weight_mapping_candidates = [path]
+
+        expect(described_class.font_weight_to_swiftui('bold')).to eq('.bold')
+      end
+    end
+
+    it 'falls back to the built-in table when the file is malformed JSON' do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'font_weight_mapping.json')
+        File.write(path, 'not json {')
+        described_class.weight_mapping_candidates = [path]
+
+        expect(described_class.font_weight_to_swiftui('bold')).to eq('.bold')
       end
     end
   end

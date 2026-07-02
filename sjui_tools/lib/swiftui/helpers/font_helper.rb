@@ -14,11 +14,43 @@ module SjuiTools
       # need one provider closure to control all weight × family × size
       # combinations.
       module FontHelper
-        # Path to the shared weight-name → platform-enum mapping. Loaded once.
-        WEIGHT_MAPPING_PATH = File.expand_path(
-          '../../../../../shared/core/font_weight_mapping.json',
-          __FILE__
-        )
+        # Candidate paths for the shared weight-name → platform-enum mapping,
+        # tried in order. Resolution is unified with kjui/rjui:
+        #   1. `<tool_dir>/shared/core/...` — the per-tool copy that
+        #      `jui sync_tool` distributes into project-local installs.
+        #   2. repo-root `shared/core/...` — the library-repo layout, where
+        #      `shared/` sits as a sibling of `sjui_tools/`.
+        #   3. `~/.jsonui-cli/shared/core/...` — the global install location.
+        # If none resolve, `load_weight_mapping` falls back to the built-in
+        # table below (defensive parity with kjui): a missing file must never
+        # silently change generated output.
+        WEIGHT_MAPPING_CANDIDATES = [
+          # <tool_dir>/shared/core: helpers → swiftui → lib → sjui_tools
+          File.expand_path('../../../../shared/core/font_weight_mapping.json', __FILE__),
+          # repo-root shared/core: one level above sjui_tools (library layout)
+          File.expand_path('../../../../../shared/core/font_weight_mapping.json', __FILE__),
+          # global install
+          File.expand_path('~/.jsonui-cli/shared/core/font_weight_mapping.json')
+        ].freeze
+
+        # Built-in fallback mapping, mirroring shared/core/font_weight_mapping.json
+        # (swift column). Used only when no candidate file resolves, so that a
+        # missing distributed file degrades to correct output instead of an
+        # empty mapping that rounds every weight to `.regular`.
+        BUILTIN_WEIGHT_MAPPING = {
+          'weights' => {
+            'ultralight' => { 'swift' => '.ultraLight' },
+            'thin' => { 'swift' => '.thin' },
+            'light' => { 'swift' => '.light' },
+            'regular' => { 'swift' => '.regular' },
+            'medium' => { 'swift' => '.medium' },
+            'semibold' => { 'swift' => '.semibold' },
+            'bold' => { 'swift' => '.bold' },
+            'heavy' => { 'swift' => '.heavy' },
+            'black' => { 'swift' => '.black' }
+          },
+          'default_on_unknown' => 'regular'
+        }.freeze
 
         # Weight keywords recognised in the `font` attribute. Anything else in
         # `font` is treated as a family name. Compared case-insensitively.
@@ -27,8 +59,9 @@ module SjuiTools
         ].freeze
 
         # Lazy-load the shared mapping so we read the file at most once per
-        # process. Falls back to an empty mapping if the file is missing —
-        # callers will then warn + emit `.regular` for every weight.
+        # process. Falls back to the built-in table (BUILTIN_WEIGHT_MAPPING)
+        # when no candidate file resolves, so a missing distributed file never
+        # silently rounds every weight to `.regular`.
         # The keys are normalised to lowercase so JSON-side `ultraLight` matches
         # generator-side `ultralight` lookups transparently.
         def self.weight_mapping
@@ -40,18 +73,41 @@ module SjuiTools
           @weight_mapping = nil
         end
 
+        # Allow tests to inject custom candidate paths (highest priority first).
+        # Passing nil restores the default WEIGHT_MAPPING_CANDIDATES chain.
+        def self.weight_mapping_candidates
+          @weight_mapping_candidates || WEIGHT_MAPPING_CANDIDATES
+        end
+
+        def self.weight_mapping_candidates=(paths)
+          @weight_mapping_candidates = paths
+          reset_weight_mapping_cache!
+        end
+
         def self.load_weight_mapping
-          if File.exist?(WEIGHT_MAPPING_PATH)
-            raw = JSON.parse(File.read(WEIGHT_MAPPING_PATH))
-            weights = (raw['weights'] || {}).each_with_object({}) do |(k, v), acc|
-              acc[k.to_s.downcase] = v
-            end
-            { 'weights' => weights, 'default_on_unknown' => raw['default_on_unknown'] || 'regular' }
-          else
-            { 'weights' => {}, 'default_on_unknown' => 'regular' }
+          path = weight_mapping_candidates.find { |p| p && File.exist?(p) }
+          return builtin_weight_mapping unless path
+
+          raw = JSON.parse(File.read(path))
+          weights = (raw['weights'] || {}).each_with_object({}) do |(k, v), acc|
+            acc[k.to_s.downcase] = v
           end
+          return builtin_weight_mapping if weights.empty?
+
+          { 'weights' => weights, 'default_on_unknown' => raw['default_on_unknown'] || 'regular' }
+        rescue JSON::ParserError
+          builtin_weight_mapping
         end
         private_class_method :load_weight_mapping
+
+        # Deep copy of the frozen built-in table with lowercased keys.
+        def self.builtin_weight_mapping
+          weights = BUILTIN_WEIGHT_MAPPING['weights'].each_with_object({}) do |(k, v), acc|
+            acc[k.to_s.downcase] = v.dup
+          end
+          { 'weights' => weights, 'default_on_unknown' => BUILTIN_WEIGHT_MAPPING['default_on_unknown'] }
+        end
+        private_class_method :builtin_weight_mapping
 
         # Apply font modifiers based on component attributes.
         #

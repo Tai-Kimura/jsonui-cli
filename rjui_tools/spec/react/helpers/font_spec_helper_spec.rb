@@ -66,6 +66,29 @@ RSpec.describe RjuiTools::React::Helpers::FontSpecHelper do
     end
   end
 
+  describe '.builtin_weight_mapping (defensive fallback)' do
+    it 'provides the full css table so a missing file never degrades output' do
+      mapping = described_class.builtin_weight_mapping
+      expect(mapping['weights']['medium']['css']).to eq('500')
+      expect(mapping['weights']['semibold']['css']).to eq('600')
+      expect(mapping['weights']['bold']['css']).to eq('bold')
+      expect(mapping['weights']['regular']['css']).to eq('normal')
+      expect(mapping['default_on_unknown']).to eq('regular')
+    end
+
+    it 'matches map_weight_for_css when the built-in mapping is the active source' do
+      # Simulate the no-file path by stubbing the loader onto the built-in table.
+      allow(described_class).to receive(:load_weight_mapping)
+        .and_return(described_class.builtin_weight_mapping)
+      described_class.instance_variable_set(:@weight_mapping, nil)
+
+      expect(described_class.map_weight_for_css('semibold')).to eq('600')
+      expect(described_class.map_weight_for_css('bold')).to eq('bold')
+    ensure
+      described_class.instance_variable_set(:@weight_mapping, nil)
+    end
+  end
+
   describe 'SPREAD_KEY_PREFIX' do
     it 'is a non-empty constant the BaseConverter key namespacing relies on' do
       expect(described_class::SPREAD_KEY_PREFIX).to be_a(String)

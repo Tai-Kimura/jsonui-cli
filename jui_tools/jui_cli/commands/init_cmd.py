@@ -152,6 +152,7 @@ def cmd_init(args: argparse.Namespace) -> int:
                         src, dst, platform_root,
                         prune=False,
                         dry_run=False,
+                        source_root=source_root,
                     )
                 except Exception as exc:
                     print(f"  [{platform_name}] ERROR: {exc}")
@@ -159,7 +160,8 @@ def cmd_init(args: argparse.Namespace) -> int:
                 print(
                     f"  [{platform_name}] copied={counters['copied']} "
                     f"updated={counters['updated']} "
-                    f"ruby-pin={counters['ruby_pin']}"
+                    f"ruby-pin={counters['ruby_pin']} "
+                    f"shared-core={counters['shared_core']}"
                 )
 
     print("\nProject initialized successfully!")
