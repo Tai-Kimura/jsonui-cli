@@ -98,6 +98,12 @@ module RjuiTools
       # - textAlign: enum casing differs per component (Label declares
       #   'Left'..'right', Button only 'Left'/'Center'/'Right'), while
       #   TailwindMapper.map_text_align is case-insensitive.
+      # - input (TextField): the web converter accepts spellings the enum
+      #   doesn't declare ('URL', 'tel', 'webSearch', 'numberPad', ...)
+      #   and matches case-insensitively.
+      # - contentMode (Image/NetworkImage): converter accepts lowerCamel
+      #   spellings ('aspectFit', 'scaleToFill', 'aspect_fit') that the
+      #   enum doesn't declare.
       #
       # (Candidates for a definitions/emitter revision — see the 06 plan
       # feedback.)
@@ -107,6 +113,8 @@ module RjuiTools
         padding
         tag
         textAlign
+        input
+        contentMode
       ].freeze
 
       def initialize(json, component_type: nil, normalized: false)
