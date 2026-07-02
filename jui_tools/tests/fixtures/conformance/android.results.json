@@ -1,0 +1,70 @@
+{
+  "platform": "android",
+  "manifestHash": "8f5452dda116273d44d16d834d57506666ed752e6148cd8eb03676d9c0a43a57",
+  "runner": {
+    "name": "uiautomator",
+    "version": "2.3.0"
+  },
+  "results": [
+    {
+      "id": "Label/text__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": null
+    },
+    {
+      "id": "Button/text__static",
+      "status": "fail",
+      "detail": "expected 'Conformance Text', got 'Sample'",
+      "screenshot": null
+    },
+    {
+      "id": "common/visibility__visible",
+      "status": "pass",
+      "detail": "",
+      "screenshot": null
+    },
+    {
+      "id": "common/visibility__gone",
+      "status": "fail",
+      "detail": "element still visible (gone not collapsing)",
+      "screenshot": null
+    },
+    {
+      "id": "common/hidden__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": null
+    },
+    {
+      "id": "common/enabled__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": null
+    },
+    {
+      "id": "common/opacity__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_opacity__static.png"
+    },
+    {
+      "id": "common/opacity__alias_alpha",
+      "status": "error",
+      "detail": "render exception: unknown attribute alpha",
+      "screenshot": null
+    },
+    {
+      "id": "Label/fontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_fontColor__static.png"
+    },
+    {
+      "id": "Slider/minimum__alias_minValue",
+      "status": "pass",
+      "detail": "",
+      "screenshot": null
+    }
+  ]
+}
