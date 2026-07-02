@@ -11,13 +11,13 @@ data class CommonAttributes(
     /** Unique identifier for the component */
     val id: String? = null,
     /** Click handler (camelCase) - binding only (@{functionName}) */
-    val onClick: String? = null,
+    val onClick: AttrValue<Any>? = null,
     /** Opacity/alpha value (0-1) [aliases: alpha] */
     val opacity: AttrValue<Double>? = null,
     /** Shadow configuration (string or object) [accepts: string | object] */
     val shadow: Any? = null,
     /** View visibility state (can be data binding) */
-    val visibility: AttrValue<Visibility>? = null,
+    val visibility: AttrValue<AttrEnum<Visibility>>? = null,
     /** Width (number, 'matchParent', 'wrapContent') - binding supported [required] */
     val width: AttrValue<DimensionValue>? = null,
 ) {
@@ -27,7 +27,8 @@ data class CommonAttributes(
         GONE("gone");
 
         companion object {
-            fun from(raw: String): Visibility? = when (raw) {
+            /** Case-insensitive match against the declared values. */
+            fun from(raw: String): Visibility? = when (raw.lowercase()) {
                 "visible" -> VISIBLE
                 "invisible" -> INVISIBLE
                 "gone" -> GONE
@@ -37,23 +38,54 @@ data class CommonAttributes(
     }
 
     companion object {
-        fun parse(json: Map<String, Any?>): CommonAttributes = CommonAttributes(
+        /**
+         * Canonical attribute names declared for this component
+         * (public metadata contract).
+         */
+        val declaredAttributes: Set<String> = setOf(
+            "hidden",
+            "id",
+            "onClick",
+            "opacity",
+            "shadow",
+            "visibility",
+            "width",
+        )
+
+        /**
+         * Alias spelling → canonical attribute name.
+         * Alias spellings that are also declared attributes keep
+         * their own entry and are not redirected.
+         */
+        val aliasMap: Map<String, String> = mapOf(
+            "alpha" to "opacity",
+        )
+
+        /** True when `key` is a declared canonical name or alias spelling. */
+        fun isDeclared(key: String): Boolean =
+            key in declaredAttributes || key in aliasMap
+
+        /**
+         * Pass `canonicalOnly = true` for L1-normalized input —
+         * alias fallback is then disabled.
+         */
+        fun parse(json: Map<String, Any?>, canonicalOnly: Boolean = false): CommonAttributes = CommonAttributes(
             hidden = AttrCoerce.attrValue(AttrCoerce.lookup(json, "hidden")) { AttrCoerce.boolean(it) },
             id = AttrCoerce.string(AttrCoerce.lookup(json, "id")),
-            onClick = AttrCoerce.bindingExprOrName(AttrCoerce.lookup(json, "onClick")),
-            opacity = AttrCoerce.attrValue(AttrCoerce.lookup(json, "opacity", listOf("alpha"))) { AttrCoerce.number(it) },
+            onClick = AttrCoerce.bindingValue(AttrCoerce.lookup(json, "onClick")),
+            opacity = AttrCoerce.attrValue(AttrCoerce.lookup(json, "opacity", listOf("alpha"), canonicalOnly)) { AttrCoerce.number(it) },
             shadow = AttrCoerce.lookup(json, "shadow"),
             visibility = AttrCoerce.attrValue(AttrCoerce.lookup(json, "visibility")) { parseVisibility(it) },
             width = AttrCoerce.attrValue(AttrCoerce.lookup(json, "width")) { DimensionValue.parse(it, "common.width") },
         )
 
-        private fun parseVisibility(raw: Any?): Visibility? {
-            val s = raw as? String ?: return null
-            val v = Visibility.from(s)
-            if (v == null) {
-                AttrWarnings.emit("common.visibility: unknown enum value '$s'")
+        private fun parseVisibility(raw: Any?): AttrEnum<Visibility>? {
+            if (raw == null) return null
+            (raw as? String)?.let { s ->
+                Visibility.from(s)?.let { return AttrEnum.Known(it) }
             }
-            return v
+            AttrWarnings.emit("common.visibility: unknown enum value '$raw'")
+            return AttrEnum.Unknown(raw)
         }
     }
 }

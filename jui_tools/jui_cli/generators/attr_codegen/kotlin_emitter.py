@@ -15,13 +15,24 @@ but ``kotlinc``.
 
 Emitted files mirror the Swift emitter: ``AttrCodegenSupport.kt``,
 ``CommonAttributes.kt`` (shared base, emitted once), and per-component
-``<Component>Attributes.kt`` diffs embedding ``common``.
+``<Component>Attributes.kt`` diffs embedding ``common``. Semantics also
+mirror Swift: lenient case-insensitive enums (unknown values warn and pass
+through as ``AttrEnum.Unknown``), binding-only attributes preserved raw in
+``AttrValue<Any>``, ``parse(json, canonicalOnly)`` for L1-normalized
+input, and ``declaredAttributes`` / ``aliasMap`` / ``isDeclared`` as the
+public metadata contract.
 """
 from __future__ import annotations
 
 from ...core.type_mapper import TypeMapper
-from .model import Attribute, AttrKind, AttrModel, Component
-from .swift_emitter import _pascal, _split_words, dimension_type_name, enum_cases
+from .model import Attribute, AttrKind, AttrModel, Component, merged_alias_map
+from .swift_emitter import (
+    _pascal,
+    _split_words,
+    dimension_type_name,
+    enum_cases,
+    enum_ci_cases,
+)
 
 PACKAGE = "com.kotlinjsonui.dynamic.generated"
 
@@ -75,12 +86,44 @@ sealed class AttrValue<out T> {
         is Value -> null
         is Binding -> expression
     }
+
+    /**
+     * The original layout representation: `"@{expr}"` for a binding, the
+     * static value otherwise (the `@{}` wrapper is always recoverable).
+     */
+    fun rawRepresentation(): Any? = when (this) {
+        is Value -> value
+        is Binding -> "@{$expression}"
+    }
+}
+
+/**
+ * Open-enum parse result for a declared enum attribute. Matching is
+ * case-insensitive; undeclared values are reported through [AttrWarnings]
+ * and passed through as [Unknown] — author input is never silently
+ * dropped.
+ */
+sealed class AttrEnum<out T> {
+    data class Known<T>(val value: T) : AttrEnum<T>()
+
+    /** Undeclared raw value (warned, passed through). */
+    data class Unknown(val value: Any) : AttrEnum<Nothing>()
+
+    fun knownOrNull(): T? = when (this) {
+        is Known -> value
+        is Unknown -> null
+    }
+
+    fun unknownOrNull(): Any? = when (this) {
+        is Known -> null
+        is Unknown -> value
+    }
 }
 
 /**
  * Warning hook — generated parsers never crash on malformed input.
- * Unknown enum values / dimension keywords are reported here and parsed
- * as null.
+ * Unknown enum values are reported here and passed through as
+ * [AttrEnum.Unknown]; unknown dimension keywords parse as null.
  */
 object AttrWarnings {
     var handler: ((String) -> Unit)? = null
@@ -94,14 +137,18 @@ object AttrWarnings {
 object AttrCoerce {
     /**
      * Canonical-name lookup with alias fallback (aliases are resolved in
-     * generated code so raw / non-normalized JSON keeps working).
+     * generated code so raw / non-normalized JSON keeps working). Pass
+     * `canonicalOnly = true` for L1-normalized input — aliases are then
+     * never consulted.
      */
     fun lookup(
         json: Map<String, Any?>,
         canonical: String,
-        aliases: List<String> = emptyList()
+        aliases: List<String> = emptyList(),
+        canonicalOnly: Boolean = false
     ): Any? {
         json[canonical]?.let { return it }
+        if (canonicalOnly) return null
         for (alias in aliases) {
             json[alias]?.let { return it }
         }
@@ -115,9 +162,17 @@ object AttrCoerce {
         return s.substring(2, s.length - 1)
     }
 
-    /** Binding-only attributes accept `@{fn}` (canonical) or a bare name. */
-    fun bindingExprOrName(raw: Any?): String? =
-        bindingExpression(raw) ?: string(raw)
+    /**
+     * Binding-only attribute (`type: "binding"`): `@{expr}` becomes
+     * [AttrValue.Binding]; anything else (bare handler name, action-object
+     * map, ...) is preserved raw as [AttrValue.Value] — never de-wrapped
+     * to a bare string, never dropped.
+     */
+    fun bindingValue(raw: Any?): AttrValue<Any>? {
+        if (raw == null) return null
+        bindingExpression(raw)?.let { return AttrValue.Binding(it) }
+        return AttrValue.Value(raw)
+    }
 
     fun string(raw: Any?): String? = raw as? String
 
@@ -229,9 +284,18 @@ def _component_file(comp: Component, model: AttrModel, mapper: TypeMapper) -> st
         parts.append("")
 
     parts.append("    companion object {")
-    parts.append(f"        fun parse(json: Map<String, Any?>): {class_name} = {class_name}(")
+    parts.extend(_metadata_decls(comp, model))
+    parts.append("")
+    parts.append("        /**")
+    parts.append("         * Pass `canonicalOnly = true` for L1-normalized input —")
+    parts.append("         * alias fallback is then disabled.")
+    parts.append("         */")
+    parts.append(
+        "        fun parse(json: Map<String, Any?>, "
+        f"canonicalOnly: Boolean = false): {class_name} = {class_name}("
+    )
     if not is_common:
-        parts.append("            common = CommonAttributes.parse(json),")
+        parts.append("            common = CommonAttributes.parse(json, canonicalOnly),")
     for attr in comp.attrs:
         parts.append(
             f"            {_escape_ident(attr.name)} = {_parse_expr(attr)},"
@@ -245,8 +309,61 @@ def _component_file(comp: Component, model: AttrModel, mapper: TypeMapper) -> st
     return "\n".join(parts) + "\n"
 
 
+def _metadata_decls(comp: Component, model: AttrModel) -> list[str]:
+    """`declaredAttributes` / `aliasMap` / `isDeclared` — the public
+    metadata contract (mirrors the Ruby `rows`/`declared?`/`alias_map`
+    helpers)."""
+    is_common = comp.name == "common"
+    own = sorted(a.name for a in comp.attrs)
+    alias_map = merged_alias_map(comp, None if is_common else model.common)
+
+    lines = [
+        "        /**",
+        "         * Canonical attribute names declared for this component"
+        + ("" if is_common else ", including"),
+        ("         * (public metadata contract)."
+         if is_common
+         else "         * the shared `common` set (public metadata contract)."),
+        "         */",
+    ]
+    if own:
+        head = "        val declaredAttributes: Set<String> = " + (
+            "setOf(" if is_common else "CommonAttributes.declaredAttributes + setOf("
+        )
+        lines.append(head)
+        for name in own:
+            lines.append(f"            {_kotlin_str(name)},")
+        lines.append("        )")
+    else:
+        lines.append(
+            "        val declaredAttributes: Set<String> = "
+            + ("emptySet()" if is_common else "CommonAttributes.declaredAttributes")
+        )
+    lines.append("")
+    lines.append("        /**")
+    lines.append("         * Alias spelling → canonical attribute name"
+                 + ("." if is_common else " (merged with common)."))
+    lines.append("         * Alias spellings that are also declared attributes keep")
+    lines.append("         * their own entry and are not redirected.")
+    lines.append("         */")
+    if alias_map:
+        lines.append("        val aliasMap: Map<String, String> = mapOf(")
+        for alias, canonical in alias_map.items():
+            lines.append(
+                f"            {_kotlin_str(alias)} to {_kotlin_str(canonical)},"
+            )
+        lines.append("        )")
+    else:
+        lines.append("        val aliasMap: Map<String, String> = emptyMap()")
+    lines.append("")
+    lines.append("        /** True when `key` is a declared canonical name or alias spelling. */")
+    lines.append("        fun isDeclared(key: String): Boolean =")
+    lines.append("            key in declaredAttributes || key in aliasMap")
+    return lines
+
+
 def _enum_decl(attr: Attribute) -> list[str]:
-    """Kotlin enum with a `from(raw)` mapping.
+    """Kotlin enum with a case-insensitive `from(raw)` mapping.
 
     Legacy value spellings that merge into one entry after identifier
     derivation (e.g. `"flow"` / `"Flow"`) all map to the same entry in
@@ -263,10 +380,11 @@ def _enum_decl(attr: Attribute) -> list[str]:
     lines += [
         "",
         "        companion object {",
-        f"            fun from(raw: String): {type_name}? = when (raw) {{",
+        "            /** Case-insensitive match against the declared values. */",
+        f"            fun from(raw: String): {type_name}? = when (raw.lowercase()) {{",
     ]
-    for name, _, accepted in cases:
-        rendered = ", ".join(_kotlin_str(v) for v in accepted)
+    for name, lowered in enum_ci_cases(attr.enum_values, _entry_name):
+        rendered = ", ".join(_kotlin_str(v) for v in lowered)
         lines.append(f"                {rendered} -> {name}")
     lines += [
         "                else -> null",
@@ -278,20 +396,26 @@ def _enum_decl(attr: Attribute) -> list[str]:
 
 
 def _enum_parse_func(attr: Attribute) -> list[str]:
+    """Lenient enum parse: case-insensitive match; unknown values warn and
+    pass through as [AttrEnum.Unknown] (never dropped)."""
     type_name = _pascal(attr.name)
     return [
-        f"        private fun parse{type_name}(raw: Any?): {type_name}? {{",
-        "            val s = raw as? String ?: return null",
-        f"            val v = {type_name}.from(s)",
-        "            if (v == null) {",
-        f"                AttrWarnings.emit(\"{attr.context}: unknown enum value '$s'\")",
+        f"        private fun parse{type_name}(raw: Any?): AttrEnum<{type_name}>? {{",
+        "            if (raw == null) return null",
+        "            (raw as? String)?.let { s ->",
+        f"                {type_name}.from(s)?.let {{ return AttrEnum.Known(it) }}",
         "            }",
-        "            return v",
+        f"            AttrWarnings.emit(\"{attr.context}: unknown enum value '$raw'\")",
+        "            return AttrEnum.Unknown(raw)",
         "        }",
     ]
 
 
 def _prop_type(attr: Attribute, mapper: TypeMapper) -> str:
+    if attr.kind is AttrKind.BINDING:
+        # Binding-only: `@{expr}` or the raw value (bare name / action
+        # object) — the wrapper information is preserved.
+        return "AttrValue<Any>"
     base = _base_type(attr, mapper)
     if attr.bindable:
         return f"AttrValue<{base}>"
@@ -300,7 +424,7 @@ def _prop_type(attr: Attribute, mapper: TypeMapper) -> str:
 
 def _base_type(attr: Attribute, mapper: TypeMapper) -> str:
     kind = attr.kind
-    if kind in (AttrKind.STRING, AttrKind.COLOR, AttrKind.BINDING):
+    if kind in (AttrKind.STRING, AttrKind.COLOR):
         return mapper.resolve_class("String", "android")
     if kind is AttrKind.NUMBER:
         return mapper.resolve_class("Double", "android")
@@ -311,22 +435,26 @@ def _base_type(attr: Attribute, mapper: TypeMapper) -> str:
     if kind is AttrKind.ARRAY:
         return "List<Any?>"
     if kind is AttrKind.ENUM:
-        return _pascal(attr.name)
+        return f"AttrEnum<{_pascal(attr.name)}>"
     if kind is AttrKind.DIMENSION:
         return dimension_type_name(attr.dimension_keywords)
     return "Any"  # ANY / RAW
 
 
 def _parse_expr(attr: Attribute) -> str:
-    aliases = ""
     if attr.aliases:
         rendered = ", ".join(_kotlin_str(a) for a in attr.aliases)
-        aliases = f", listOf({rendered})"
-    lookup = f"AttrCoerce.lookup(json, {_kotlin_str(attr.name)}{aliases})"
+        lookup = (
+            f"AttrCoerce.lookup(json, {_kotlin_str(attr.name)}, "
+            f"listOf({rendered}), canonicalOnly)"
+        )
+    else:
+        # No aliases declared — canonicalOnly is a no-op for this attr.
+        lookup = f"AttrCoerce.lookup(json, {_kotlin_str(attr.name)})"
 
     kind = attr.kind
     if kind is AttrKind.BINDING:
-        return f"AttrCoerce.bindingExprOrName({lookup})"
+        return f"AttrCoerce.bindingValue({lookup})"
 
     coercers = {
         AttrKind.STRING: "AttrCoerce.string(it)",

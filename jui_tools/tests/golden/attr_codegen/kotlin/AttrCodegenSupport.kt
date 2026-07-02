@@ -22,12 +22,44 @@ sealed class AttrValue<out T> {
         is Value -> null
         is Binding -> expression
     }
+
+    /**
+     * The original layout representation: `"@{expr}"` for a binding, the
+     * static value otherwise (the `@{}` wrapper is always recoverable).
+     */
+    fun rawRepresentation(): Any? = when (this) {
+        is Value -> value
+        is Binding -> "@{$expression}"
+    }
+}
+
+/**
+ * Open-enum parse result for a declared enum attribute. Matching is
+ * case-insensitive; undeclared values are reported through [AttrWarnings]
+ * and passed through as [Unknown] — author input is never silently
+ * dropped.
+ */
+sealed class AttrEnum<out T> {
+    data class Known<T>(val value: T) : AttrEnum<T>()
+
+    /** Undeclared raw value (warned, passed through). */
+    data class Unknown(val value: Any) : AttrEnum<Nothing>()
+
+    fun knownOrNull(): T? = when (this) {
+        is Known -> value
+        is Unknown -> null
+    }
+
+    fun unknownOrNull(): Any? = when (this) {
+        is Known -> null
+        is Unknown -> value
+    }
 }
 
 /**
  * Warning hook — generated parsers never crash on malformed input.
- * Unknown enum values / dimension keywords are reported here and parsed
- * as null.
+ * Unknown enum values are reported here and passed through as
+ * [AttrEnum.Unknown]; unknown dimension keywords parse as null.
  */
 object AttrWarnings {
     var handler: ((String) -> Unit)? = null
@@ -41,14 +73,18 @@ object AttrWarnings {
 object AttrCoerce {
     /**
      * Canonical-name lookup with alias fallback (aliases are resolved in
-     * generated code so raw / non-normalized JSON keeps working).
+     * generated code so raw / non-normalized JSON keeps working). Pass
+     * `canonicalOnly = true` for L1-normalized input — aliases are then
+     * never consulted.
      */
     fun lookup(
         json: Map<String, Any?>,
         canonical: String,
-        aliases: List<String> = emptyList()
+        aliases: List<String> = emptyList(),
+        canonicalOnly: Boolean = false
     ): Any? {
         json[canonical]?.let { return it }
+        if (canonicalOnly) return null
         for (alias in aliases) {
             json[alias]?.let { return it }
         }
@@ -62,9 +98,17 @@ object AttrCoerce {
         return s.substring(2, s.length - 1)
     }
 
-    /** Binding-only attributes accept `@{fn}` (canonical) or a bare name. */
-    fun bindingExprOrName(raw: Any?): String? =
-        bindingExpression(raw) ?: string(raw)
+    /**
+     * Binding-only attribute (`type: "binding"`): `@{expr}` becomes
+     * [AttrValue.Binding]; anything else (bare handler name, action-object
+     * map, ...) is preserved raw as [AttrValue.Value] — never de-wrapped
+     * to a bare string, never dropped.
+     */
+    fun bindingValue(raw: Any?): AttrValue<Any>? {
+        if (raw == null) return null
+        bindingExpression(raw)?.let { return AttrValue.Binding(it) }
+        return AttrValue.Value(raw)
+    }
 
     fun string(raw: Any?): String? = raw as? String
 

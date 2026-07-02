@@ -12,6 +12,29 @@ public struct CommonAttributes {
         case gone = "gone"
     }
 
+    /// Canonical attribute names declared for this component (public metadata contract).
+    public static let declaredAttributes: Set<String> = [
+        "hidden",
+        "id",
+        "onClick",
+        "opacity",
+        "shadow",
+        "visibility",
+        "width",
+    ]
+
+    /// Alias spelling → canonical attribute name. Alias
+    /// spellings that are also declared attributes keep their own
+    /// entry and are not redirected.
+    public static let aliasMap: [String: String] = [
+        "alpha": "opacity",
+    ]
+
+    /// True when `key` is a declared canonical name or alias spelling.
+    public static func isDeclared(_ key: String) -> Bool {
+        return declaredAttributes.contains(key) || aliasMap[key] != nil
+    }
+
     /// Hide view
     public let hidden: AttrValue<Bool>?
 
@@ -19,7 +42,7 @@ public struct CommonAttributes {
     public let id: String?
 
     /// Click handler (camelCase) - binding only (@{functionName})
-    public let onClick: String?
+    public let onClick: AttrValue<Any>?
 
     /// Opacity/alpha value (0-1) [aliases: alpha]
     public let opacity: AttrValue<Double>?
@@ -28,30 +51,34 @@ public struct CommonAttributes {
     public let shadow: Any?
 
     /// View visibility state (can be data binding)
-    public let visibility: AttrValue<Visibility>?
+    public let visibility: AttrValue<AttrEnum<Visibility>>?
 
     /// Width (number, 'matchParent', 'wrapContent') - binding supported [required]
     public let width: AttrValue<DimensionValue>?
 
-    public init(json: [String: Any]) {
+    /// Pass `canonicalOnly: true` for L1-normalized input —
+    /// alias fallback is then disabled.
+    public init(json: [String: Any], canonicalOnly: Bool = false) {
         self.hidden = AttrCoerce.attrValue(AttrCoerce.lookup(json, "hidden"), AttrCoerce.boolean)
         self.id = AttrCoerce.string(AttrCoerce.lookup(json, "id"))
-        self.onClick = AttrCoerce.bindingExprOrName(AttrCoerce.lookup(json, "onClick"))
-        self.opacity = AttrCoerce.attrValue(AttrCoerce.lookup(json, "opacity", ["alpha"]), AttrCoerce.number)
+        self.onClick = AttrCoerce.bindingValue(AttrCoerce.lookup(json, "onClick"))
+        self.opacity = AttrCoerce.attrValue(AttrCoerce.lookup(json, "opacity", ["alpha"], canonicalOnly: canonicalOnly), AttrCoerce.number)
         self.shadow = AttrCoerce.any(AttrCoerce.lookup(json, "shadow"))
         self.visibility = AttrCoerce.attrValue(AttrCoerce.lookup(json, "visibility"), { Self.parseVisibility($0) })
         self.width = AttrCoerce.attrValue(AttrCoerce.lookup(json, "width"), { DimensionValue.parse($0, "common.width") })
     }
 
-    private static func parseVisibility(_ raw: Any?) -> Visibility? {
-        guard let s = raw as? String else { return nil }
-        switch s {
-        case "visible": return Visibility.visible
-        case "invisible": return Visibility.invisible
-        case "gone": return Visibility.gone
-        default:
-            AttrCodegenWarnings.emit("common.visibility: unknown enum value '\(s)'")
-            return nil
+    private static func parseVisibility(_ raw: Any?) -> AttrEnum<Visibility>? {
+        guard let raw = raw, !(raw is NSNull) else { return nil }
+        if let s = raw as? String {
+            switch s.lowercased() {
+            case "visible": return .known(Visibility.visible)
+            case "invisible": return .known(Visibility.invisible)
+            case "gone": return .known(Visibility.gone)
+            default: break
+            }
         }
+        AttrCodegenWarnings.emit("common.visibility: unknown enum value '\(raw)'")
+        return .unknown(raw)
     }
 }
