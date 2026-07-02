@@ -157,8 +157,9 @@ module SjuiTools
             if @component['tapBackground']
               add_line "tapBackground: #{get_swiftui_color(@component['tapBackground'])},"
             end
-            if @component['highlightColor']
-              add_line "highlightColor: #{get_swiftui_color(@component['highlightColor'])},"
+            highlight_color = attr_with_alias('highlightColor', 'hilightColor')
+            if highlight_color
+              add_line "highlightColor: #{get_swiftui_color(highlight_color)},"
             end
             if @component['highlightBackground']
               add_line "highlightBackground: #{get_swiftui_color(@component['highlightBackground'])},"

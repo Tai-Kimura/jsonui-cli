@@ -8,8 +8,8 @@ module SjuiTools
       class SliderConverter < BaseViewConverter
         def convert
           # Slider properties
-          min_value = @component['minimumValue'] || 0
-          max_value = @component['maximumValue'] || 1
+          min_value = attr_with_alias('minimum', 'minimumValue', 'minValue') || 0
+          max_value = attr_with_alias('maximum', 'maximumValue', 'maxValue') || 1
           value_prop = @component['value'] || min_value
           
           # range プロパティの処理（配列形式: [min, max]）
@@ -50,7 +50,7 @@ module SjuiTools
           # Value change handler
           # onValueChange (camelCase) -> binding format only (@{functionName})
           # Also support legacy onValueChanged for backward compatibility
-          handler = @component['onValueChange'] || @component['onValueChanged']
+          handler = attr_with_alias('onValueChange', 'onValueChanged')
           if handler && is_binding?(handler)
             id = @component['id'] || 'slider'
             binding_prop = if @component['value'] && is_binding?(@component['value'])

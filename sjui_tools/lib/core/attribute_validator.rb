@@ -9,6 +9,12 @@ module SjuiTools
     class AttributeValidator
       attr_reader :definitions, :warnings, :infos
       attr_accessor :mode, :styles_dir
+      # When true the layout under validation carried the `$jui` L1
+      # normalization marker: alias spellings were already rewritten to
+      # canonical names by `jui build`, so aliases are not accepted (an
+      # alias in normalized input is stale data, not author input).
+      # Default (false) keeps the alias-tolerant L0 behavior.
+      attr_accessor :normalized
 
       # Valid modes for this platform
       MODES = [:uikit, :swiftui, :all].freeze
@@ -24,6 +30,7 @@ module SjuiTools
         @definitions = load_definitions
         @warnings = []
         @infos = []
+        @normalized = false
         @styles_dir = styles_dir
         @styles_cache = {}
         @current_file = nil
@@ -221,6 +228,10 @@ module SjuiTools
         if @definitions[def_key]
           attrs.merge!(@definitions[def_key])
         end
+
+        # Canonical-only path for L1-normalized layouts: aliases were
+        # already rewritten by `jui build`, so don't accept them here.
+        return attrs if @normalized
 
         expand_aliases(attrs)
       end

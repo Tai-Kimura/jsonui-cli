@@ -7,6 +7,7 @@ require_relative '../../core/project_finder'
 require_relative '../../core/logger'
 require_relative '../../core/resources_manager'
 require_relative '../../core/attribute_validator'
+require_relative '../../core/normalization'
 require_relative '../../core/binding_validator'
 
 module SjuiTools
@@ -310,6 +311,9 @@ module SjuiTools
 
               # Validate attributes if enabled
               if validator
+                # L1-normalized layouts (`$jui` marker) take the
+                # canonical-only validation path
+                validator.normalized = Core::Normalization.canonicalized?(json_data)
                 warnings = validate_json(json_data, validator, file_name)
                 if warnings.any?
                   @validation_warnings.concat(warnings.map { |w| "[#{relative_path}] #{w}" })
