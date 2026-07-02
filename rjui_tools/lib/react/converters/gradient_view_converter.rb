@@ -43,11 +43,11 @@ module RjuiTools
         end
 
         def build_gradient_css
-          colors = json['gradient'] || json['colors']
+          colors = attributes['gradient'] || attributes['colors']
           return nil unless colors.is_a?(Array) && colors.length >= 2
 
           direction = get_gradient_direction
-          locations = json['locations']
+          locations = attributes['locations']
 
           color_stops = if locations.is_a?(Array) && locations.length == colors.length
             colors.each_with_index.map do |color, i|
@@ -57,7 +57,7 @@ module RjuiTools
             colors.join(', ')
           end
 
-          gradient_type = json['gradientType']&.downcase
+          gradient_type = attributes['gradientType']&.downcase
 
           if gradient_type == 'radial'
             "radial-gradient(circle, #{color_stops})"
@@ -68,9 +68,9 @@ module RjuiTools
 
         def get_gradient_direction
           # Check for startPoint/endPoint first
-          if json['startPoint'] && json['endPoint']
-            start_x, start_y = json['startPoint']
-            end_x, end_y = json['endPoint']
+          if attributes['startPoint'] && attributes['endPoint']
+            start_x, start_y = attributes['startPoint']
+            end_x, end_y = attributes['endPoint']
 
             # Calculate angle from points
             angle = Math.atan2(end_y - start_y, end_x - start_x) * (180 / Math::PI) + 90
@@ -78,10 +78,10 @@ module RjuiTools
           end
 
           # Check for angle directly
-          return "#{json['angle']}deg" if json['angle']
+          return "#{attributes['angle']}deg" if attributes['angle']
 
           # Fall back to gradientDirection
-          direction = (json['gradientDirection'] || json['direction'] || 'Vertical').downcase
+          direction = (attributes['gradientDirection'] || attributes['direction'] || 'Vertical').downcase
           case direction
           when 'horizontal', 'lefttoright'
             'to right'
@@ -102,19 +102,19 @@ module RjuiTools
           classes = [super]
 
           # Default flex column for View with children
-          if json['child'].is_a?(Array) && !json['orientation']
+          if json['child'].is_a?(Array) && !attributes['orientation']
             classes.unshift('flex flex-col')
           end
 
           # Corner radius
-          corner_radius = json['cornerRadius']
+          corner_radius = attributes['cornerRadius']
           classes << "rounded-[#{corner_radius}px]" if corner_radius
 
           # Overflow hidden for corner radius
           classes << 'overflow-hidden' if corner_radius
 
           # Cursor pointer for clickable items
-          classes << 'cursor-pointer' if json['onClick'] || json['onclick']
+          classes << 'cursor-pointer' if attributes['onClick'] || attributes['onclick']
 
           classes.compact.reject(&:empty?).join(' ')
         end
