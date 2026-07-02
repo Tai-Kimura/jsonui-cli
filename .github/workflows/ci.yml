@@ -13,7 +13,7 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [main, ssot/11-conformance-ci]
   pull_request:
 
 concurrency:
