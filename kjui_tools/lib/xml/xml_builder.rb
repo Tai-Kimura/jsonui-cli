@@ -6,6 +6,7 @@ require_relative '../core/config_manager'
 require_relative '../core/project_finder'
 require_relative '../core/attribute_validator'
 require_relative '../core/binding_validator'
+require_relative '../core/normalization'
 require_relative 'xml_generator'
 
 module KjuiTools
@@ -172,6 +173,10 @@ module KjuiTools
           if @validation_enabled && @validator
             json_content = File.read(json_file)
             json_data = JSON.parse(json_content)
+            # L1-normalized layouts (`$jui` marker from `jui build`) take
+            # the canonical-only validation path; raw layouts keep the
+            # alias-tolerant L0 path.
+            @validator.normalized = Core::Normalization.canonicalized?(json_data)
             warnings = validate_json(json_data)
 
             if warnings.any?

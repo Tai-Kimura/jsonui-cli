@@ -10,6 +10,15 @@ module KjuiTools
       attr_reader :definitions, :warnings, :infos
       attr_accessor :mode, :styles_dir
 
+      # When true, the layout being validated carries the `$jui` L1
+      # normalization marker: alias spellings were already rewritten to
+      # canonical names by `jui build`, so alias entries are NOT expanded
+      # into the valid-attribute table (canonical-only path). Leftover
+      # alias spellings then surface as unknown-attribute warnings, which
+      # is the desired signal for a normalized layout. Default (false)
+      # keeps the legacy L0 alias-tolerant behavior.
+      attr_accessor :normalized
+
       # Valid modes for this platform
       MODES = [:xml, :compose, :dynamic, :all].freeze
 
@@ -26,6 +35,7 @@ module KjuiTools
         @mode = mode
         @styles_dir = styles_dir
         @styles_cache = {}
+        @normalized = false
       end
 
       # Validate a component and return warnings
@@ -203,6 +213,10 @@ module KjuiTools
         if @definitions[def_key]
           attrs.merge!(@definitions[def_key])
         end
+
+        # Canonical-only path for L1-normalized layouts: aliases were
+        # already rewritten by `jui build`, so don't accept them here.
+        return attrs if @normalized
 
         expand_aliases(attrs)
       end
