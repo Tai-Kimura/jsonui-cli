@@ -166,10 +166,10 @@ def _write_layout_fixtures(root: Path) -> None:
     }, indent=2) + "\n")
 
 
-def _enable_normalize(root: Path) -> None:
+def _set_normalize(root: Path, enabled: bool) -> None:
     config_path = root / "jui.config.json"
     config = json.loads(config_path.read_text())
-    config["build"] = {"normalizeLayouts": True}
+    config["build"] = {"normalizeLayouts": enabled}
     config_path.write_text(json.dumps(config, indent=2))
 
 
@@ -190,13 +190,15 @@ def _read_distributed(root: Path) -> dict[str, str]:
 
 class DistributeLayoutsNormalizeE2ETests(unittest.TestCase):
     def test_flag_off_is_byte_stable_and_unnormalized(self):
-        """Default (no build.normalizeLayouts): no $jui marker, aliases
-        pass through untouched, and a second distribution is a byte-level
+        """Explicit opt-out (build.normalizeLayouts: false — the escape
+        hatch now that the default is on): no $jui marker, aliases pass
+        through untouched, and a second distribution is a byte-level
         no-op."""
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             _build_fixture_project(root)
             _write_layout_fixtures(root)
+            _set_normalize(root, False)
             config_mgr, config = _load_config(root)
             platforms = config["platforms"]
 
@@ -217,12 +219,31 @@ class DistributeLayoutsNormalizeE2ETests(unittest.TestCase):
             _distribute_layouts(config_mgr, platforms, _make_args())
             self.assertEqual(_read_distributed(root), first)
 
+    def test_default_is_normalized(self):
+        """No build key at all → normalizeLayouts defaults ON (SSoT phase
+        14): distributed layouts carry the $jui L1 marker and aliases are
+        canonicalized."""
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            _build_fixture_project(root)
+            _write_layout_fixtures(root)
+            config_mgr, config = _load_config(root)
+            platforms = config["platforms"]
+
+            _distribute_layouts(config_mgr, platforms, _make_args())
+            distributed = _read_distributed(root)
+            self.assertTrue(distributed)
+            home_ios = json.loads(distributed["ios/Layouts/home.json"])
+            self.assertIn("$jui", home_ios)
+            self.assertNotIn("alpha", home_ios)
+            self.assertEqual(home_ios["opacity"], 0.5)
+
     def test_flag_on_distributes_l1_and_is_idempotent(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             _build_fixture_project(root)
             _write_layout_fixtures(root)
-            _enable_normalize(root)
+            _set_normalize(root, True)
             config_mgr, config = _load_config(root)
             platforms = config["platforms"]
 

@@ -163,15 +163,19 @@ def _prune_orphans(
 
 
 def _normalize_layouts_enabled(config_mgr: ConfigManager) -> bool:
-    """``jui.config.json`` → ``"build": {"normalizeLayouts": true}``.
+    """``jui.config.json`` → ``"build": {"normalizeLayouts": ...}``.
 
-    Default is false — distribution is byte-identical to previous
-    releases unless the project explicitly opts in. Experimental until
-    the conformance suite gates it (renderer SSoT plan, phase 05).
+    Default is TRUE (L1-canonicalized distribution) since renderer SSoT
+    phase 14: verified against a real consumer (byte-identical generated
+    code, intended layout diffs only) and the conformance suite (L0 vs L1
+    status-identical). ``"normalizeLayouts": false`` is the escape hatch
+    for byte-identical-to-legacy distribution.
     """
     config = config_mgr.load()
     build_cfg = config.get("build") or {}
-    return bool(isinstance(build_cfg, dict) and build_cfg.get("normalizeLayouts"))
+    if isinstance(build_cfg, dict) and "normalizeLayouts" in build_cfg:
+        return bool(build_cfg.get("normalizeLayouts"))
+    return True
 
 
 def _distribute_layouts(config_mgr: ConfigManager, platforms: dict, args) -> None:
@@ -180,8 +184,8 @@ def _distribute_layouts(config_mgr: ConfigManager, platforms: dict, args) -> Non
     If a Layout file contains ``platform`` overrides they are resolved
     for the target platform before writing.
 
-    When ``"build": {"normalizeLayouts": true}`` (experimental) is set in
-    ``jui.config.json``, the distributed copies are L1-canonicalized
+    When normalizeLayouts is enabled (default since SSoT phase 14; set
+    ``"build": {"normalizeLayouts": false}`` in ``jui.config.json`` to opt out), the distributed copies are L1-canonicalized
     (alias → canonical attribute rewrite + ``$jui`` marker). The shared
     source files under ``layouts_directory`` are NEVER rewritten — the
     authoring surface stays L0.
@@ -209,7 +213,7 @@ def _distribute_layouts(config_mgr: ConfigManager, platforms: dict, args) -> Non
         else:
             canonicalizer = Canonicalizer(alias_table)
             print(
-                "normalizeLayouts enabled (experimental): distributing "
+                "normalizeLayouts enabled: distributing "
                 "L1-canonicalized layouts"
             )
 
