@@ -7,7 +7,7 @@ A unified repository for JsonUI CLI tools across all platforms.
 | Tool | Platform | Language | Command | Description |
 |------|----------|----------|---------|-------------|
 | **sjui_tools** | iOS (SwiftUI/UIKit) | Ruby | `sjui` | CLI for SwiftJsonUI development |
-| **kjui_tools** | Android (Compose/XML) | Ruby | `kjui` | CLI for KotlinJsonUI development |
+| **kjui_tools** | Android (Compose; XML frozen) | Ruby | `kjui` | CLI for KotlinJsonUI development. The XML (Android Views) codegen path is maintenance-frozen — new features are Compose-only |
 | **rjui_tools** | Web (React/Next.js) | Ruby | `rjui` | CLI for ReactJsonUI development |
 | **jui_tools** | Cross-platform | Python | `jui` | Unified cross-platform generator/verifier |
 | **test_tools** | Cross-platform | Python | `jsonui-test` | Test file validation and generation |
