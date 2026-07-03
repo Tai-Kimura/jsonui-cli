@@ -158,6 +158,11 @@ jobs:
           target: google_apis
           profile: pixel_tablet
           disable-animations: true
+          # Pinpoint boot cutoff: a healthy emulator boots in ~1-2 min, so a
+          # 5-min boot-timeout fast-fails a boot-phase wedge (the action kills
+          # the emulator and the step fails) — the fresh-emulator retry then
+          # recovers, instead of a boot hang riding the whole step timeout.
+          emulator-boot-timeout: 300
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
           script: |
             KotlinJsonUI/conformance-host/scripts/run_conformance.sh --fresh
@@ -174,6 +179,11 @@ jobs:
           target: google_apis
           profile: pixel_tablet
           disable-animations: true
+          # Pinpoint boot cutoff: a healthy emulator boots in ~1-2 min, so a
+          # 5-min boot-timeout fast-fails a boot-phase wedge (the action kills
+          # the emulator and the step fails) — the fresh-emulator retry then
+          # recovers, instead of a boot hang riding the whole step timeout.
+          emulator-boot-timeout: 300
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
           script: |
             KotlinJsonUI/conformance-host/scripts/run_conformance.sh --fresh
