@@ -244,6 +244,13 @@ jobs:
               problems.append(f"stale results (manifestHash != committed manifest): {', '.join(summary.stale_platforms)}")
           for platform, ids in summary.unknown_ids.items():
               problems.append(f"{platform}: {len(ids)} fixture id(s) not in manifest")
+          # Screenshot-hash drift vs the committed baseline. Job-green alone
+          # does not catch a visual change; if the change is intended,
+          # re-baseline with `jui conformance baseline update --platform <p>`
+          # and commit the regenerated baselines/<p>.hashes.json.
+          for platform, count in summary.visual_regressions.items():
+              if count:
+                  problems.append(f"{platform}: {count} visual regression(s) vs committed baseline — see REPORT.md")
 
           for platform in sorted(expected - missing):
               data = json.loads(Path(f"conformance/results/{platform}.results.json").read_text())
