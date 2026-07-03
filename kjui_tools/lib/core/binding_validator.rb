@@ -508,10 +508,14 @@ module KjuiTools
           attr_def = component_defs[attr_name]
           next unless attr_def.is_a?(Hash)
 
-          if attr_def['platform'] && attr_def['platform'] != @my_platform
+          # platform / mode may be a String or an Array of platforms —
+          # Array(x) normalizes both. The old `!= @my_platform` comparison
+          # was always true for Array values, silently excluding the
+          # attribute (and its @{...} binding) from validation.
+          if attr_def['platform'] && !Array(attr_def['platform']).include?(@my_platform)
             return true
           end
-          if attr_def['mode'] && attr_def['mode'] != @my_mode
+          if attr_def['mode'] && !Array(attr_def['mode']).include?(@my_mode)
             return true
           end
           # Found a matching definition without exclusion

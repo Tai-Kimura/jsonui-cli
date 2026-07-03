@@ -1547,4 +1547,30 @@ RSpec.describe SjuiTools::Core::BindingValidator do
       end
     end
   end
+  describe 'array-valued platform in attribute_definitions (regression)' do
+    # Collection.onValueChange has platform: [swift, kotlin, react]. The old
+    # `attr_def['platform'] != @my_platform` string comparison was always
+    # true for Array values, silently excluding the attribute from binding
+    # validation — its @{handler} usage was never collected and the data
+    # property was wrongly reported as unused (surfaced by L1-normalized
+    # layouts renaming onPageChanged -> onValueChange).
+    it 'collects @{...} usage from attributes whose platform is an Array' do
+      json_data = {
+        'type' => 'View',
+        'data' => [
+          { 'name' => 'onPageChanged', 'class' => '((Int) -> Void)?' }
+        ],
+        'child' => [
+          {
+            'type' => 'Collection',
+            'id' => 'pager',
+            'onValueChange' => '@{onPageChanged}'
+          }
+        ]
+      }
+      warnings = validator.validate(json_data)
+      expect(warnings.none? { |w| w.include?("'onPageChanged' is defined but never used") }).to be(true), warnings.inspect
+    end
+  end
+
 end
