@@ -65,6 +65,29 @@ RSpec.describe KjuiTools::Compose::Helpers::ImportManager do
       )
     end
 
+    # Regression: radio_component custom icons emit `Icons.Filled.<Name>` /
+    # `Icons.Outlined.<Name>` under the :icons key. Icons.* icons are extension
+    # properties, so the Icons object AND the filled/outlined wildcard
+    # extension imports are all required — painterResource alone left the
+    # generated view with Unresolved reference 'Icons'.
+    it 'maps :icons to Icons object plus filled/outlined extension imports' do
+      result = described_class.get_imports_map
+      expect(result[:icons]).to include('import androidx.compose.material.icons.Icons')
+      expect(result[:icons]).to include('import androidx.compose.material.icons.filled.*')
+      expect(result[:icons]).to include('import androidx.compose.material.icons.outlined.*')
+      expect(result[:icons]).to include('import androidx.compose.ui.res.painterResource')
+    end
+
+    # Regression: tabview_component registers :material_icons for tab icons
+    # (`Icons.Filled.<Name>`), but the key had no IMPORTS_MAP entry, so the
+    # add was silently dropped and TabView screens failed to compile.
+    it 'maps :material_icons to Icons object plus filled extension imports' do
+      result = described_class.get_imports_map
+      expect(result).to have_key(:material_icons)
+      expect(result[:material_icons]).to include('import androidx.compose.material.icons.Icons')
+      expect(result[:material_icons]).to include('import androidx.compose.material.icons.filled.*')
+    end
+
     # Regression: kjui-keyboardactions-import-missing (focus chain refactor).
     # `textfield_component` now emits `val focusRequester_<id> = remember {
     # FocusRequester() }` + `.focusRequester(focusRequester_<id>)`. Both

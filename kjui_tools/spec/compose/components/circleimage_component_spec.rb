@@ -120,6 +120,9 @@ RSpec.describe KjuiTools::Compose::Components::CircleImageComponent do
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('.clip(CircleShape)')
         expect(required_imports).to include(:shape)
+        # Regression: CircleShape needs its own import key — :shape only maps
+        # to RoundedCornerShape/clip helpers.
+        expect(required_imports).to include(:circle_shape)
       end
     end
 

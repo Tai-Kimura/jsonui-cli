@@ -64,7 +64,17 @@ module KjuiTools
                             "import androidx.compose.ui.res.painterResource",
                             "import androidx.compose.foundation.clickable"],
             outlined_text_field: "import androidx.compose.material3.OutlinedTextField",
-            icons: ["import androidx.compose.ui.res.painterResource"],
+            # `Icons.Filled.*` / `Icons.Outlined.*` are extension properties on
+            # `Icons.Filled` / `Icons.Outlined`, so both the `Icons` object and the
+            # per-style wildcard extension imports are required. painterResource
+            # stays for the drawable-resource fallback path.
+            icons: ["import androidx.compose.ui.res.painterResource",
+                    "import androidx.compose.material.icons.Icons",
+                    "import androidx.compose.material.icons.filled.*",
+                    "import androidx.compose.material.icons.outlined.*"],
+            # TabView tab icons (tabview_component) emit Icons.Filled.<Name> only.
+            material_icons: ["import androidx.compose.material.icons.Icons",
+                             "import androidx.compose.material.icons.filled.*"],
             icon_button: "import androidx.compose.material3.IconButton",
             clickable: "import androidx.compose.foundation.clickable",
             # onLongPress Initial-pass detector (ModifierBuilder.build_long_pressable).

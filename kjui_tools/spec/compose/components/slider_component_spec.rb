@@ -212,7 +212,7 @@ RSpec.describe KjuiTools::Compose::Components::SliderComponent do
 
       result = described_class.generate(json_data, 0, required_imports)
 
-      expect(result).to include('data.onSliderChange?.invoke("volumeSlider", it)')
+      expect(result).to include('data.onSliderChange?.invoke("volumeSlider", newValue)')
     end
 
     it 'generates invoke(viewId, value) when handler type is (String, Float) -> Unit' do
@@ -246,7 +246,11 @@ RSpec.describe KjuiTools::Compose::Components::SliderComponent do
       result = described_class.generate(json_data, 0, required_imports)
 
       expect(result).to include('viewModel.updateData')
-      expect(result).to include('data.onSliderChange?.invoke("volumeSlider", it)')
+      # Regression: the combined lambda names its parameter `newValue`, so the
+      # handler invocation must use `newValue` — an `it` reference does not
+      # compile inside a named-parameter lambda.
+      expect(result).to include('data.onSliderChange?.invoke("volumeSlider", newValue)')
+      expect(result).not_to include('invoke("volumeSlider", it)')
     end
 
     it 'uses default slider id when no id specified' do

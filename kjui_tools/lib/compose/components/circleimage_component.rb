@@ -44,8 +44,10 @@ module KjuiTools
           size = json_data['size'] || 48
           modifiers << ".size(#{size}.dp)"
           
-          # Circular clip
+          # Circular clip: CircleShape lives in foundation.shape (registered under
+          # :circle_shape); :shape only brings RoundedCornerShape + clip helpers.
           required_imports&.add(:shape)
+          required_imports&.add(:circle_shape)
           modifiers << ".clip(CircleShape)"
           
           # Border for circle
