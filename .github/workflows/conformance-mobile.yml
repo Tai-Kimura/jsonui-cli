@@ -123,8 +123,13 @@ jobs:
     # deadlock, since the committed android.hashes.json proves the suite goes
     # green). run_conformance now fast-fails a wedge (adb-shell timeouts +
     # liveness gate), and the step is retried once with a FRESH emulator below.
-    # 50 min job timeout accommodates a fast-failed attempt 1 + a healthy retry.
-    timeout-minutes: 50
+    # Job budget must fit the WORST case, not the fast-fail case: a wedge that
+    # slips past the liveness gate rides attempt 1's full 28-min step timeout
+    # (observed 2026-07-03: silent hang between fixture sync and the first
+    # instrumentation marker), and the retry then needs its own full 28 min
+    # (boot + gradle + suite incl. internal instrumentation re-attempts).
+    # setup ~5 + 28 + 28 + upload ≈ 65 → 75 with slack.
+    timeout-minutes: 75
     env:
       CONFORMANCE_DIR: ${{ github.workspace }}/conformance
     steps:
