@@ -64,6 +64,34 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         help="Report output path (default: <dir>/REPORT.md)",
     )
 
+    compat = sub.add_parser(
+        "compat-doc",
+        help="Generate the @generated attribute-compatibility markdown",
+    )
+    compat.add_argument(
+        "--platform",
+        required=True,
+        choices=["ios", "android", "web"],
+        help="Platform whose conformance results feed the coverage column",
+    )
+    compat.add_argument(
+        "--definitions",
+        default=None,
+        help=f"Path to attribute_definitions.json (default: {_DEFAULT_DEFINITIONS})",
+    )
+    compat.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory (default: {_DEFAULT_OUT})",
+    )
+    compat.add_argument(
+        "-o",
+        "--out",
+        required=True,
+        help="Output markdown path (e.g. Docs/attribute_compatibility.md)",
+    )
+
     baseline = sub.add_parser(
         "baseline",
         help="Screenshot baseline management (perceptual-hash manifests)",
@@ -99,6 +127,8 @@ def cmd_conformance(args: argparse.Namespace) -> int:
         return _cmd_generate(args)
     if target == "report":
         return _cmd_report(args)
+    if target == "compat-doc":
+        return _cmd_compat_doc(args)
     if target == "baseline":
         return _cmd_baseline(args)
     print("Usage: jui conformance <generate|report|baseline> [options]")
@@ -128,6 +158,28 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         promoted = ", ".join(f"{k}: {v}" for k, v in sorted(summary.promoted.items()))
         print(f"  promoted out of skip reasons: {promoted}")
     print(f"  files written: {summary.files_written} (incl. manifest.json)")
+    return 0
+
+
+def _cmd_compat_doc(args: argparse.Namespace) -> int:
+    from ..conformance.compat_doc import generate_compat_doc
+
+    definitions = Path(args.definitions) if args.definitions else _DEFAULT_DEFINITIONS
+    conformance_dir = Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    out_path = Path(args.out)
+
+    if not definitions.is_file():
+        print(f"ERROR: attribute definitions not found: {definitions}")
+        return 1
+
+    summary = generate_compat_doc(definitions, conformance_dir, args.platform, out_path)
+    for warning in summary.warnings:
+        print(f"WARNING: {warning}")
+    print(
+        f"compat doc written to {summary.out_path} "
+        f"({summary.components} components, {summary.attributes} attributes, "
+        f"{summary.covered} with {args.platform} conformance coverage)"
+    )
     return 0
 
 
