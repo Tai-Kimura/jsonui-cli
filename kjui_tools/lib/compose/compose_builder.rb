@@ -1069,13 +1069,15 @@ module KjuiTools
       def generate_update_data_function(data_properties, view_name)
         code = "    // Auto-generated updateData function - updated by 'kjui build'\n"
 
-        # Add @Suppress("UNCHECKED_CAST") if there are callback properties
-        has_callback_properties = data_properties.any? { |prop|
+        # Add @Suppress("UNCHECKED_CAST") when any property needs an
+        # erasure-unchecked cast: callbacks AND generic List/Map types.
+        has_unchecked_cast = data_properties.any? { |prop|
           class_type = prop['class'].to_s
-          class_type.include?('-> Unit') || class_type.include?('-> Void')
+          class_type.include?('-> Unit') || class_type.include?('-> Void') ||
+            class_type.match?(/^(List|Map)<.*>$/)
         }
         code += "    private var _lastUpdateData: Map<String, Any>? = null\n"
-        if has_callback_properties
+        if has_unchecked_cast
           code += "    @Suppress(\"UNCHECKED_CAST\")\n"
         end
         code += "    fun updateData(updates: Map<String, Any>) {\n"
@@ -1441,8 +1443,15 @@ module KjuiTools
         }.join("\n")
       end
 
+      # Case-preserving: snake/kebab-case parts get their first letter
+      # upcased WITHOUT downcasing the rest, so an already-PascalCase input
+      # ("BasicCell") survives instead of degrading to "Basiccell". Matches
+      # CollectionComponent.to_pascal_case — the two must agree or cell
+      # import and class names diverge.
       def to_pascal_case(str)
-        str.split(/[_\-]/).map(&:capitalize).join
+        return str if str.nil? || str.empty?
+
+        str.split(/[_\-]/).map { |x| x.empty? ? x : x[0].upcase + x[1..].to_s }.join
       end
 
       # Formats a plain Ruby value as a Kotlin literal suitable for use in

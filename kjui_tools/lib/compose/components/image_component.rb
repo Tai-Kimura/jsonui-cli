@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/modifier_builder'
+require_relative '../helpers/resource_resolver'
 
 module KjuiTools
   module Compose
@@ -26,13 +27,13 @@ module KjuiTools
             required_imports&.add(:local_context)
             code += "\n" + indent("painter = LocalContext.current.let { ctx ->", depth + 1)
             code += "\n" + indent("val resId = ctx.resources.getIdentifier(data.#{camel_case_name}, \"drawable\", ctx.packageName)", depth + 2)
-            code += "\n" + indent("if (resId != 0) painterResource(id = resId) else painterResource(id = R.drawable.#{json_data['defaultImage'] || 'placeholder'})", depth + 2)
+            code += "\n" + indent("if (resId != 0) painterResource(id = resId) else painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(json_data['defaultImage'] || 'placeholder')})", depth + 2)
             code += "\n" + indent("},", depth + 1)
           else
             # Static resource name needs painterResource
             required_imports&.add(:painter_resource)
             required_imports&.add(:r_class)
-            code += "\n" + indent("painter = painterResource(id = R.drawable.#{raw_src}),", depth + 1)
+            code += "\n" + indent("painter = painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(raw_src)}),", depth + 1)
           end
           
           # Content description for accessibility

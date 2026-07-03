@@ -42,7 +42,7 @@ module KjuiTools
           if placeholder
             required_imports&.add(:painter_resource)
             required_imports&.add(:r_class)
-            code += "\n" + indent("placeholder = painterResource(R.drawable.#{placeholder.gsub('.png', '').gsub('.jpg', '')}),", depth + 1)
+            code += "\n" + indent("placeholder = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(placeholder)}),", depth + 1)
           end
 
           # Build modifiers
@@ -85,8 +85,8 @@ module KjuiTools
             required_imports&.add(:painter_resource)
             required_imports&.add(:r_class)
             drawable_name = error_image.gsub('.png', '').gsub('.jpg', '')
-            code += ",\n" + indent("error = painterResource(R.drawable.#{drawable_name}),", depth + 1)
-            code += "\n" + indent("fallback = painterResource(R.drawable.#{drawable_name})", depth + 1)
+            code += ",\n" + indent("error = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(drawable_name)}),", depth + 1)
+            code += "\n" + indent("fallback = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(drawable_name)})", depth + 1)
           end
 
           code += "\n" + indent(")", depth)

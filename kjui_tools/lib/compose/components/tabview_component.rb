@@ -83,12 +83,12 @@ module KjuiTools
               if icon != selected_icon
                 # Different icons for selected/unselected
                 code += "\n" + indent("Icon(", depth + 5)
-                code += "\n" + indent("painter = if (#{state_expr} == #{index}) painterResource(R.drawable.#{selected_icon}) else painterResource(R.drawable.#{icon}),", depth + 6)
+                code += "\n" + indent("painter = if (#{state_expr} == #{index}) painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(selected_icon)}) else painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(icon)}),", depth + 6)
                 code += "\n" + indent("contentDescription = \"#{title}\"", depth + 6)
                 code += "\n" + indent(")", depth + 5)
               else
                 code += "\n" + indent("Icon(", depth + 5)
-                code += "\n" + indent("painter = painterResource(R.drawable.#{icon}),", depth + 6)
+                code += "\n" + indent("painter = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(icon)}),", depth + 6)
                 code += "\n" + indent("contentDescription = \"#{title}\"", depth + 6)
                 code += "\n" + indent(")", depth + 5)
               end

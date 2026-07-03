@@ -269,6 +269,7 @@ module KjuiTools
             ) {
                 companion object {
                     // Update properties from map
+                    @Suppress("UNCHECKED_CAST")
                     fun fromMap(map: Map<String, Any>): #{class_name}Data {
                         return #{class_name}Data(
                             item = map["item"] as? Map<String, Any> ?: emptyMap()

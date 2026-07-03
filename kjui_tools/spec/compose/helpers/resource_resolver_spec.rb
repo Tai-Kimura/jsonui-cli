@@ -157,4 +157,22 @@ RSpec.describe KjuiTools::Compose::Helpers::ResourceResolver do
       end
     end
   end
+
+  describe '.drawable_name' do
+    it 'strips image extensions' do
+      expect(described_class.drawable_name('photo.png')).to eq('photo')
+    end
+
+    it 'sanitizes SF-Symbol style dotted names' do
+      expect(described_class.drawable_name('star.fill')).to eq('star_fill')
+    end
+
+    it 'lowercases and replaces invalid identifier chars' do
+      expect(described_class.drawable_name('My Image-2')).to eq('my_image_2')
+    end
+
+    it 'prefixes names that do not start with a letter' do
+      expect(described_class.drawable_name('9patch')).to eq('img_9patch')
+    end
+  end
 end

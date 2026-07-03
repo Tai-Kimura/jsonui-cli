@@ -10,6 +10,18 @@ module KjuiTools
     module Helpers
       class ResourceResolver
         class << self
+          # Android drawable resource names must match [a-z][a-z0-9_.]* with
+          # no dots in the generated R reference. Strip common image
+          # extensions and sanitize everything else (e.g. iOS SF-Symbol
+          # names like "star.fill" -> "star_fill") so the emitted
+          # `R.drawable.<name>` always compiles.
+          def drawable_name(raw)
+            name = raw.to_s.sub(/\.(png|jpg|jpeg|webp)\z/i, '')
+            name = name.downcase.gsub(/[^a-z0-9_]/, '_')
+            name = "img_#{name}" if name.empty? || name !~ /\A[a-z]/
+            name
+          end
+
           # Thread-local storage for data definitions during build
           def data_definitions
             Thread.current[:kjui_data_definitions] || {}

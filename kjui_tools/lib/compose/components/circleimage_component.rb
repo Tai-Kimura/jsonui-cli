@@ -24,7 +24,7 @@ module KjuiTools
             resource_name = image_name.gsub('.png', '').gsub('.jpg', '').gsub('-', '_').downcase
             
             code = indent("Image(", depth)
-            code += "\n" + indent("painter = painterResource(id = R.drawable.#{resource_name}),", depth + 1)
+            code += "\n" + indent("painter = painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(resource_name)}),", depth + 1)
           end
           
           content_description = json_data['contentDescription'] || 'Profile Image'
@@ -73,7 +73,7 @@ module KjuiTools
           
           # Error handling for network images
           if is_network && json_data['errorImage']
-            code += ",\n" + indent("error = painterResource(R.drawable.#{json_data['errorImage'].gsub('.png', '').gsub('.jpg', '')})", depth + 1)
+            code += ",\n" + indent("error = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(json_data['errorImage'])})", depth + 1)
           end
           
           code += "\n" + indent(")", depth)

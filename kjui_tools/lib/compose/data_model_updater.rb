@@ -422,12 +422,15 @@ module KjuiTools
         content += "    companion object {\n"
         content += "        // Update properties from map\n"
 
-        # Add @Suppress("UNCHECKED_CAST") if there are callback properties
-        has_callback_properties = data_properties.any? { |prop|
+        # Add @Suppress("UNCHECKED_CAST") when any property needs an
+        # erasure-unchecked cast: callbacks AND generic List/Map types
+        # (their `as? List<...>` / `as? Map<...>` casts are unchecked too).
+        has_unchecked_cast = data_properties.any? { |prop|
           class_type = prop['class'].to_s
-          class_type.include?('-> Unit') || class_type.include?('-> Void')
+          class_type.include?('-> Unit') || class_type.include?('-> Void') ||
+            class_type.match?(/^(List|Map)<.*>$/)
         }
-        if has_callback_properties
+        if has_unchecked_cast
           content += "        @Suppress(\"UNCHECKED_CAST\")\n"
         end
 

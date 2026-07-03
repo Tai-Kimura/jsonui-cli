@@ -269,7 +269,7 @@ module KjuiTools
           source = data['src'] || data['source'] || 'placeholder'
           
           code = indent("Image(", depth)
-          code += "\n" + indent("painter = painterResource(R.drawable.#{source.gsub('.png', '').gsub('.jpg', '')}),", depth + 1)
+          code += "\n" + indent("painter = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(source)}),", depth + 1)
           code += "\n" + indent("contentDescription = \"Image\"", depth + 1)
           code += "\n" + indent(")", depth)
           code

@@ -55,7 +55,14 @@ module KjuiTools
           # TextFieldState-based API (Compose BOM 2026.03.00+)
           required_imports&.add(:text_field_state)
           required_imports&.add(:launched_effect)
-          state_var = "textFieldState_#{json_data['id'] || 'field'}"
+          # id-less TextFields get a counter suffix — a bare shared "field"
+          # name produced conflicting `val` declarations when one scope held
+          # more than one id-less TextField.
+          state_var = if json_data['id']
+            "textFieldState_#{json_data['id']}"
+          else
+            "textFieldState_#{next_resolved_var.sub('resolved_textfield', 'field')}"
+          end
           code += indent("val #{state_var} = rememberTextFieldState(initialText = #{value})", depth) + "\n"
 
           if has_data_binding

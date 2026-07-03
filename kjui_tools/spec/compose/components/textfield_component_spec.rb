@@ -610,4 +610,24 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       expect(result).to include('data.onTextChange?.invoke("textfield", newValue)')
     end
   end
+
+  describe 'id-less state var uniquing' do
+    it 'gives two id-less TextFields distinct state vars' do
+      json1 = { 'type' => 'TextField', 'text' => 'a' }
+      json2 = { 'type' => 'TextField', 'text' => 'b' }
+      code1 = described_class.generate(json1, 0, Set.new)
+      code2 = described_class.generate(json2, 0, Set.new)
+      var1 = code1[/val (textFieldState_\w+)/, 1]
+      var2 = code2[/val (textFieldState_\w+)/, 1]
+      expect(var1).not_to be_nil
+      expect(var2).not_to be_nil
+      expect(var1).not_to eq(var2)
+    end
+
+    it 'keeps the id-based name when an id is present' do
+      json = { 'type' => 'TextField', 'id' => 'email_field', 'text' => 'a' }
+      code = described_class.generate(json, 0, Set.new)
+      expect(code).to include('val textFieldState_email_field')
+    end
+  end
 end
