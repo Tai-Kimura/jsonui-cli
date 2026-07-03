@@ -338,7 +338,7 @@ module KjuiTools
       # expanded >=840dp.
       def generate_embed_responsive_inline(json_data, depth, parent_type)
         branches = JsonUIShared::ResponsiveResolver.build_branches(json_data)
-        @required_imports&.add(:local_configuration)
+        @required_imports&.add(:local_window_info)
 
         lines = []
         first = true
@@ -376,7 +376,7 @@ module KjuiTools
       # generated condition shape is identical across Collection / Embed.
       def generate_collection_responsive_inline(json_data, depth, parent_type)
         branches = JsonUIShared::ResponsiveResolver.build_branches(json_data)
-        @required_imports&.add(:local_configuration)
+        @required_imports&.add(:local_window_info)
 
         lines = []
         first = true
@@ -404,20 +404,27 @@ module KjuiTools
         lines.join("\n")
       end
 
+      # Window width in dp from LocalWindowInfo.containerSize (pixels →
+      # LocalDensity conversion, truncated to Int so `in 600..839` stays an
+      # Int range check). Replaces the deprecated
+      # `LocalConfiguration.current.screenWidthDp`. Kept as a self-contained
+      # expression (no hoisted `val`) so sibling responsive chains emitted
+      # into the same block can't produce conflicting declarations.
+      INLINE_WIDTH_DP_EXPR =
+        'with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() }'
       INLINE_WIDTH_CONDITIONS = {
-        'compact' => 'LocalConfiguration.current.screenWidthDp < 600',
-        'medium'  => 'LocalConfiguration.current.screenWidthDp in 600..839',
-        'regular' => 'LocalConfiguration.current.screenWidthDp >= 840'
+        'compact' => "#{INLINE_WIDTH_DP_EXPR} < 600",
+        'medium'  => "#{INLINE_WIDTH_DP_EXPR} in 600..839",
+        'regular' => "#{INLINE_WIDTH_DP_EXPR} >= 840"
       }.freeze
-      # Full-qualify `android.content.res.Configuration` so the inline
-      # condition can sit at any call site without forcing an `import
-      # android.content.res.Configuration` line — that import would clash
-      # with kjui's `com.kotlinjsonui.core.Configuration` whenever a
-      # component (Button/TextField/font helper) needs both.
-      INLINE_LANDSCAPE_CONDITION = 'LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE'
+      # Landscape = window wider than tall, from the same containerSize.
+      # Replaces the deprecated `LocalConfiguration.current.orientation` read
+      # (and drops the full-qualified android Configuration reference that was
+      # previously needed to avoid clashing with kjui's core Configuration).
+      INLINE_LANDSCAPE_CONDITION = 'LocalWindowInfo.current.containerSize.let { it.width > it.height }'
 
       # Build a standalone Kotlin boolean expression for a size class key,
-      # using only LocalConfiguration so the call site doesn't need to have
+      # using only LocalWindowInfo/LocalDensity so the call site doesn't need
       # a `windowSizeClass` variable in scope. Returns nil for the default
       # (else) branch.
       def build_embed_inline_condition(size_class)
@@ -468,7 +475,7 @@ module KjuiTools
       # with merged attrs. No file-scope helper is registered.
       def generate_view_responsive_inline(json_data, depth, parent_type, is_root: false)
         branches = JsonUIShared::ResponsiveResolver.build_branches(json_data)
-        @required_imports&.add(:local_configuration)
+        @required_imports&.add(:local_window_info)
 
         lines = []
         first = true

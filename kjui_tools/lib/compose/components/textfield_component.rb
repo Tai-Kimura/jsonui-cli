@@ -500,7 +500,7 @@ module KjuiTools
             else
               'true'
             end
-            keyboard_options << "autoCorrect = #{auto_correct}"
+            keyboard_options << "autoCorrectEnabled = #{auto_correct}"
           end
 
           if keyboard_options.any?

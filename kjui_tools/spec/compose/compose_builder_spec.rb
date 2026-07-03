@@ -136,7 +136,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         expect(content).not_to match(/private fun Responsive\w+\(/)
 
         # Inline if/else lands inside the static-mode branch.
-        expect(content).to include('LocalConfiguration.current.screenWidthDp >= 840')
+        expect(content).to include('with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } >= 840')
 
         # No windowSizeClass plumbing anywhere — the inline path doesn't
         # need a `windowSizeClass: WindowSizeClass` parameter.
@@ -146,7 +146,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         # The landscape branch references the full-qualified Configuration
         # constant directly (no `import android.content.res.Configuration`).
         expect(content).not_to include("\nimport android.content.res.Configuration\n")
-        expect(content).to include('android.content.res.Configuration.ORIENTATION_LANDSCAPE')
+        expect(content).to include('LocalWindowInfo.current.containerSize.let { it.width > it.height }')
 
         # No leftover material3-window-size-class import either.
         expect(content).not_to include('androidx.compose.material3.windowsizeclass')
@@ -303,7 +303,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       expect(result).to include('VisibilityWrapper(')
       expect(result).to include('visibility = data.gridVisibility')
       # The responsive branch condition still lives inside the wrapper body.
-      expect(result).to include('LocalConfiguration.current.screenWidthDp')
+      expect(result).to include('with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() }')
       # VisibilityWrapper must open before the inline `if (` branch.
       expect(result.index('VisibilityWrapper(')).to be < result.index('if (')
     end
@@ -335,7 +335,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       }
       result = builder.send(:generate_component, json, 0, nil)
       expect(result).not_to include('VisibilityWrapper')
-      expect(result).to include('LocalConfiguration.current.screenWidthDp')
+      expect(result).to include('with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() }')
     end
   end
 
@@ -957,11 +957,11 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         expect(result).not_to include('private fun Responsive')
       end
 
-      it 'uses standalone LocalConfiguration condition (regression: jui-embed-responsive-block-codegen-broken)' do
+      it 'uses standalone LocalWindowInfo condition (regression: jui-embed-responsive-block-codegen-broken)' do
         # The inline path runs in the GeneratedView body where `windowSizeClass`
-        # is not declared. We must use LocalConfiguration directly instead.
+        # is not declared. We must use LocalWindowInfo directly instead.
         result = builder.send(:generate_component, embed_json, 0, nil)
-        expect(result).to include('LocalConfiguration.current.screenWidthDp >= 840')
+        expect(result).to include('with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } >= 840')
         expect(result).not_to include('windowSizeClass.widthSizeClass')
         expect(result).not_to include('WindowWidthSizeClass.Expanded')
       end
@@ -970,7 +970,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         builder.send(:generate_component, embed_json, 0, nil)
         imports = builder.instance_variable_get(:@required_imports)
         expect(imports).not_to include(:window_size_class)
-        expect(imports).to include(:local_configuration)
+        expect(imports).to include(:local_window_info)
       end
 
       it 'does not register a responsive helper function' do
@@ -1021,7 +1021,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
 
       it 'emits inline if/else for the Collection (not a private composable)' do
         result = builder.send(:generate_component, collection_json, 0, nil)
-        expect(result).to include('if (LocalConfiguration.current.screenWidthDp >= 840)')
+        expect(result).to include('if (with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } >= 840)')
         # No file-scope helper registered for the Collection.
         funcs = builder.instance_variable_get(:@responsive_functions)
         expect(funcs).to be_empty
@@ -1032,7 +1032,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       it 'pulls in local_configuration but not window_size_class' do
         builder.send(:generate_component, collection_json, 0, nil)
         imports = builder.instance_variable_get(:@required_imports)
-        expect(imports).to include(:local_configuration)
+        expect(imports).to include(:local_window_info)
         expect(imports).not_to include(:window_size_class)
       end
 
@@ -1074,7 +1074,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
 
       it 'emits inline if/else (not a private composable)' do
         call_code = builder.send(:generate_component, view_json, 0, nil)
-        expect(call_code).to include('if (LocalConfiguration.current.screenWidthDp >= 840)')
+        expect(call_code).to include('if (with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } >= 840)')
         expect(call_code).not_to match(/Responsive\w+\s*\{/)
         expect(call_code).not_to include('windowSizeClass = windowSizeClass')
       end
@@ -1085,9 +1085,9 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         expect(funcs).to be_empty
       end
 
-      it 'uses LocalConfiguration.current.screenWidthDp not WindowWidthSizeClass' do
+      it 'uses with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } not WindowWidthSizeClass' do
         call_code = builder.send(:generate_component, view_json, 0, nil)
-        expect(call_code).to include('LocalConfiguration.current.screenWidthDp')
+        expect(call_code).to include('with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() }')
         expect(call_code).not_to include('WindowWidthSizeClass')
       end
 
@@ -1095,7 +1095,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         builder.send(:generate_component, view_json, 0, nil)
         imports = builder.instance_variable_get(:@required_imports)
         expect(imports).not_to include(:window_size_class)
-        expect(imports).to include(:local_configuration)
+        expect(imports).to include(:local_window_info)
       end
 
       it 'fully qualifies android.content.res.Configuration when a landscape branch is present' do
@@ -1113,7 +1113,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
           'child' => [{ 'type' => 'Text', 'text' => 'Hello' }]
         }
         call_code = builder.send(:generate_component, landscape_json, 0, nil)
-        expect(call_code).to include('android.content.res.Configuration.ORIENTATION_LANDSCAPE')
+        expect(call_code).to include('LocalWindowInfo.current.containerSize.let { it.width > it.height }')
       end
 
       it 'preserves the caller parent scope so child Modifier.weight resolves' do

@@ -63,7 +63,7 @@ module KjuiTools
             # Divider after header
             if json_data['separatorStyle'] != 'none'
               code += "\n" + indent("item {", depth + 1)
-              code += "\n" + indent("Divider(", depth + 2)
+              code += "\n" + indent("HorizontalDivider(", depth + 2)
               code += "\n" + indent("color = Color.LightGray,", depth + 3)
               code += "\n" + indent("thickness = 1.dp", depth + 3)
               code += "\n" + indent(")", depth + 2)
@@ -86,7 +86,7 @@ module KjuiTools
           
           # Separator between rows
           if json_data['separatorStyle'] != 'none'
-            code += "\n" + indent("Divider(", depth + 2)
+            code += "\n" + indent("HorizontalDivider(", depth + 2)
             
             # Separator inset
             if json_data['separatorInset']

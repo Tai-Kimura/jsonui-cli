@@ -484,7 +484,7 @@ module KjuiTools
         # the ones routed from `.generate`.
         def self.generate_with_partial_attributes(json_data, depth, required_imports, parent_type)
           required_imports&.add(:annotated_string)
-          required_imports&.add(:clickable_text)
+          required_imports&.add(:link_annotation)
           required_imports&.add(:remember_state)
 
           text = json_data['text'] || ''
@@ -551,9 +551,11 @@ module KjuiTools
               else
                 click_handler.gsub(':', '')
               end
-              code += "\n" + indent("addStringAnnotation(", depth + 1)
-              code += "\n" + indent("tag = \"CLICKABLE\",", depth + 2)
-              code += "\n" + indent("annotation = \"#{method_name}\",", depth + 2)
+              code += "\n" + indent("addLink(", depth + 1)
+              code += "\n" + indent("LinkAnnotation.Clickable(", depth + 2)
+              code += "\n" + indent("tag = \"CLICKABLE\",", depth + 3)
+              code += "\n" + indent("linkInteractionListener = { viewModel.handlePartialClick(\"#{method_name}\") }", depth + 3)
+              code += "\n" + indent("),", depth + 2)
               code += "\n" + indent("start = #{start_idx},", depth + 2)
               code += "\n" + indent("end = #{end_idx}", depth + 2)
               code += "\n" + indent(")", depth + 1)
@@ -563,23 +565,13 @@ module KjuiTools
           code += "\n" + indent("}", depth)
           code += "\n"
 
-          # Now use ClickableText with the annotatedString
-          code += indent("ClickableText(", depth)
-          code += "\n" + indent("text = annotatedText,", depth + 1)
+          # Render with Text — clicks are handled by the LinkAnnotations above
+          # (ClickableText is deprecated).
+          code += indent("Text(", depth)
+          code += "\n" + indent("text = annotatedText", depth + 1)
 
-          # Add onClick handler for clickable ranges
-          if partial_attrs.any? { |attr| attr['onclick'] }
-            code += "\n" + indent("onClick = { offset ->", depth + 1)
-            code += "\n" + indent("annotatedText.getStringAnnotations(\"CLICKABLE\", offset, offset)", depth + 2)
-            code += "\n" + indent(".firstOrNull()?.let { annotation ->", depth + 3)
-            code += "\n" + indent("viewModel.handlePartialClick(annotation.item)", depth + 4)
-            code += "\n" + indent("}", depth + 3)
-            code += "\n" + indent("},", depth + 1)
-          else
-            code += "\n" + indent("onClick = { },", depth + 1)
-          end
-
-          # Add style (fontSize, color, etc. for the whole text)
+          # Add style (fontSize, color, etc. for the whole text) — the return
+          # value carries its own leading comma.
           style_code = build_text_style(json_data, depth + 1, required_imports)
           if style_code
             code += style_code
@@ -592,6 +584,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
 
+          code += ","
           if modifiers.any?
             code += Helpers::ModifierBuilder.format(modifiers, depth)
           else
@@ -604,7 +597,7 @@ module KjuiTools
           Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, required_imports)
         end
 
-        # Build a TextStyle(...) literal for callers (e.g. ClickableText) that
+        # Build a TextStyle(...) literal for callers (e.g. the partial-attributes Text) that
         # need a TextStyle expression rather than separate Text(...) args.
         # Routes font fields through Configuration.Font.resolve(FontSpec(...)).
         def self.build_text_style(json_data, depth, required_imports)
@@ -622,7 +615,7 @@ module KjuiTools
             # expression isn't possible in TextStyle args; instead, callers that consume
             # this method should emit the resolve block themselves. To keep
             # backward-compat we emit a flat TextStyle(...) without resolved font here.
-            # Concrete callers (PartialAttributesText, ClickableText) construct their
+            # Concrete callers (PartialAttributesText, partial-attributes Text) construct their
             # own resolve block.
             style_parts << "fontSize = #{json_data['fontSize']}.sp" if json_data['fontSize']
             if json_data['fontFamily']

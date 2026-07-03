@@ -77,8 +77,6 @@ module KjuiTools
                                  "import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException",
                                  "import androidx.compose.ui.input.pointer.pointerInput"],
             radio_colors: "import androidx.compose.material3.RadioButtonDefaults",
-            tab_row: ["import androidx.compose.material3.TabRow",
-                      "import androidx.compose.material3.Tab"],
             async_image: "import coil3.compose.AsyncImage",
             content_scale: "import androidx.compose.ui.layout.ContentScale",
             lazy_grid: ["import androidx.compose.foundation.lazy.grid.LazyVerticalGrid",
@@ -137,7 +135,7 @@ module KjuiTools
                                "import androidx.compose.ui.text.buildAnnotatedString",
                                "import androidx.compose.ui.text.SpanStyle",
                                "import androidx.compose.ui.text.withStyle"],
-            clickable_text: "import androidx.compose.foundation.text.ClickableText",
+            link_annotation: "import androidx.compose.ui.text.LinkAnnotation",
             partial_attributes_text: ["import com.kotlinjsonui.components.PartialAttributesText",
                                       "import com.kotlinjsonui.components.PartialAttribute"],
             segment: "import com.kotlinjsonui.components.Segment",
@@ -177,14 +175,11 @@ module KjuiTools
             # NoSuchMethodException on missing no-arg ctor.
             hilt_viewmodel: "import androidx.hilt.navigation.compose.hiltViewModel",
             composition_local_provider: "import androidx.compose.runtime.CompositionLocalProvider",
-            window_size_class: ["import androidx.compose.material3.windowsizeclass.WindowSizeClass",
-                                "import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass"],
-            # `Configuration.ORIENTATION_LANDSCAPE` is referenced with the
-            # full `android.content.res.Configuration.ORIENTATION_LANDSCAPE`
-            # path at the call site so we don't pull `Configuration` into the
-            # unqualified namespace — that would clash with kjui's own
-            # `com.kotlinjsonui.core.Configuration` (`:configuration` key).
-            local_configuration: ["import androidx.compose.ui.platform.LocalConfiguration"]
+            # Responsive branches read LocalWindowInfo.containerSize (pixels)
+            # and convert to dp via LocalDensity — replaces the deprecated
+            # LocalConfiguration.screenWidthDp / .orientation reads.
+            local_window_info: ["import androidx.compose.ui.platform.LocalWindowInfo",
+                                "import androidx.compose.ui.platform.LocalDensity"]
           }
         end
 

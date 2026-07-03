@@ -62,7 +62,7 @@ RSpec.describe KjuiTools::Compose::Helpers::VisibilityHelper do
     context 'weight strip across all branches of an inline chain' do
       let(:chain_code) do
         <<~KOTLIN.chomp
-          if (LocalConfiguration.current.screenWidthDp >= 840) {
+          if (with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } >= 840) {
               LazyVerticalGrid(
                   modifier = Modifier
                       .testTag("bar_list_collection")

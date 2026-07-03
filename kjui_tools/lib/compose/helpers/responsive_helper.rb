@@ -13,26 +13,32 @@ module KjuiTools
       # For leaf components (no children): generates a @Composable that renders
       # the full view per branch.
       class ResponsiveHelper
-        # Width thresholds match Material3's WindowWidthSizeClass boundaries
-        # (compact <600dp, medium 600..839dp, expanded >=840dp). Phrased as
-        # LocalConfiguration.current.screenWidthDp comparisons so the helper
-        # doesn't need a `windowSizeClass: WindowSizeClass` parameter — that
-        # parameter, when present, requires the call site to also have a
-        # `windowSizeClass` in scope, which generated screens don't.
+        # Width thresholds match Material3's window-size-class boundaries
+        # (compact <600dp, medium 600..839dp, expanded >=840dp). Width in dp
+        # comes from LocalWindowInfo.containerSize (pixels → LocalDensity
+        # conversion, truncated to Int so the range check stays Int) — the
+        # deprecated LocalConfiguration.screenWidthDp read is gone. Kept as a
+        # self-contained expression so the helper doesn't need a
+        # `windowSizeClass` variable in scope, which generated screens don't
+        # have.
+        WIDTH_DP_EXPR =
+          'with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() }'
         WIDTH_CONDITIONS = {
-          'compact'  => 'LocalConfiguration.current.screenWidthDp < 600',
-          'medium'   => 'LocalConfiguration.current.screenWidthDp in 600..839',
-          'regular'  => 'LocalConfiguration.current.screenWidthDp >= 840'
+          'compact'  => "#{WIDTH_DP_EXPR} < 600",
+          'medium'   => "#{WIDTH_DP_EXPR} in 600..839",
+          'regular'  => "#{WIDTH_DP_EXPR} >= 840"
         }.freeze
 
         # Resolved against a local `isLandscape` val that each generator emits
-        # at the top of its function body. `Configuration` is full-qualified
-        # at the emit site to avoid clashing with kjui's core Configuration.
+        # at the top of its function body.
         LANDSCAPE_CONDITION = 'isLandscape'.freeze
 
+        # Landscape = window wider than tall from LocalWindowInfo.containerSize
+        # (replaces the deprecated LocalConfiguration.orientation read; also
+        # drops the full-qualified android Configuration reference previously
+        # needed to avoid clashing with kjui's core Configuration).
         ISLANDSCAPE_DECLARATION =
-          'val isLandscape = LocalConfiguration.current.orientation == ' \
-          'android.content.res.Configuration.ORIENTATION_LANDSCAPE'.freeze
+          'val isLandscape = LocalWindowInfo.current.containerSize.let { it.width > it.height }'.freeze
 
         # Check if a component has responsive overrides
         def self.responsive?(component)
@@ -216,16 +222,14 @@ module KjuiTools
           lines.join("\n")
         end
 
-        # Add required imports for responsive code. `:local_configuration`
-        # is the only entry needed now — width branches reference
-        # `LocalConfiguration.current.screenWidthDp` directly and the
-        # `isLandscape` val full-qualifies `android.content.res.Configuration`.
-        # The `:window_size_class` import (material3-window-size-class) is no
-        # longer pulled in; that artifact is no longer a required dep.
+        # Add required imports for responsive code. `:local_window_info`
+        # (LocalWindowInfo + LocalDensity) is the only entry needed now —
+        # width branches and the `isLandscape` val both read
+        # `LocalWindowInfo.current.containerSize`.
         def self.add_responsive_imports(required_imports)
           return unless required_imports
 
-          required_imports.add(:local_configuration)
+          required_imports.add(:local_window_info)
         end
 
         # Helper: indent text

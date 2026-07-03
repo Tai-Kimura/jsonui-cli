@@ -27,7 +27,7 @@ RSpec.describe KjuiTools::Compose::Helpers::ResponsiveHelper do
 
   # Regression: kjui-view-responsive-block-codegen-broken.
   # The width branches must resolve at the call site against
-  # `LocalConfiguration.current.screenWidthDp` alone — no `windowSizeClass`
+  # `with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() }` alone — no `windowSizeClass`
   # parameter, no material3-window-size-class dep.
   describe '.build_condition' do
     it 'returns nil for nil size class (default)' do
@@ -36,17 +36,17 @@ RSpec.describe KjuiTools::Compose::Helpers::ResponsiveHelper do
 
     it 'returns screenWidthDp < 600 for compact' do
       result = described_class.build_condition('compact')
-      expect(result).to eq('LocalConfiguration.current.screenWidthDp < 600')
+      expect(result).to eq('with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } < 600')
     end
 
     it 'returns screenWidthDp in 600..839 for medium' do
       result = described_class.build_condition('medium')
-      expect(result).to eq('LocalConfiguration.current.screenWidthDp in 600..839')
+      expect(result).to eq('with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } in 600..839')
     end
 
     it 'returns screenWidthDp >= 840 for regular' do
       result = described_class.build_condition('regular')
-      expect(result).to eq('LocalConfiguration.current.screenWidthDp >= 840')
+      expect(result).to eq('with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } >= 840')
     end
 
     it 'returns landscape condition for landscape' do
@@ -56,17 +56,17 @@ RSpec.describe KjuiTools::Compose::Helpers::ResponsiveHelper do
 
     it 'returns compound condition for regular-landscape' do
       result = described_class.build_condition('regular-landscape')
-      expect(result).to eq('LocalConfiguration.current.screenWidthDp >= 840 && isLandscape')
+      expect(result).to eq('with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } >= 840 && isLandscape')
     end
 
     it 'returns compound condition for compact-landscape' do
       result = described_class.build_condition('compact-landscape')
-      expect(result).to eq('LocalConfiguration.current.screenWidthDp < 600 && isLandscape')
+      expect(result).to eq('with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } < 600 && isLandscape')
     end
 
     it 'returns compound condition for medium-landscape' do
       result = described_class.build_condition('medium-landscape')
-      expect(result).to eq('LocalConfiguration.current.screenWidthDp in 600..839 && isLandscape')
+      expect(result).to eq('with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } in 600..839 && isLandscape')
     end
   end
 
@@ -74,7 +74,7 @@ RSpec.describe KjuiTools::Compose::Helpers::ResponsiveHelper do
     it 'adds local_configuration import only (no window_size_class)' do
       imports = Set.new
       described_class.add_responsive_imports(imports)
-      expect(imports).to include(:local_configuration)
+      expect(imports).to include(:local_window_info)
       # Regression: material3-window-size-class is no longer a required dep.
       expect(imports).not_to include(:window_size_class)
     end
@@ -104,10 +104,10 @@ RSpec.describe KjuiTools::Compose::Helpers::ResponsiveHelper do
       end
 
       expect(result).to include('isLandscape')
-      expect(result).to include('LocalConfiguration.current.screenWidthDp >= 840')
+      expect(result).to include('with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } >= 840')
       expect(result).to include('} else if')
       expect(result).to include('} else {')
-      expect(required_imports).to include(:local_configuration)
+      expect(required_imports).to include(:local_window_info)
       expect(required_imports).not_to include(:window_size_class)
     end
 
@@ -172,8 +172,8 @@ RSpec.describe KjuiTools::Compose::Helpers::ResponsiveHelper do
       # Regression: no windowSizeClass param.
       expect(func_code).not_to include('windowSizeClass: WindowSizeClass')
       expect(func_code).not_to include('WindowWidthSizeClass.')
-      expect(func_code).to include('val isLandscape = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE')
-      expect(func_code).to include('LocalConfiguration.current.screenWidthDp >= 840')
+      expect(func_code).to include('val isLandscape = LocalWindowInfo.current.containerSize.let { it.width > it.height }')
+      expect(func_code).to include('with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } >= 840')
       expect(func_code).to include('Row() { content() }')
       expect(func_code).to include('Column() { content() }')
     end
@@ -188,7 +188,7 @@ RSpec.describe KjuiTools::Compose::Helpers::ResponsiveHelper do
         'Test', component, 0, required_imports
       ) { |_attrs, _depth, _imports| '// code' }
 
-      expect(required_imports).to include(:local_configuration)
+      expect(required_imports).to include(:local_window_info)
       expect(required_imports).not_to include(:window_size_class)
     end
   end
@@ -261,7 +261,7 @@ RSpec.describe KjuiTools::Compose::Helpers::ResponsiveHelper do
   end
 
   describe 'full integration scenario' do
-    it 'handles the example from the task description with LocalConfiguration conditions' do
+    it 'handles the example from the task description with LocalWindowInfo conditions' do
       component = {
         'type' => 'View',
         'orientation' => 'vertical',

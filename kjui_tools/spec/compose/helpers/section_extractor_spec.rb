@@ -554,7 +554,7 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
       body = <<~KOTLIN
         Column(modifier = Modifier.fillMaxSize()) {
             Text(text = data.title)
-            if (LocalConfiguration.current.screenWidthDp >= 840) {
+            if (with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } >= 840) {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(5),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -618,7 +618,7 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
       # the bytecode cost of the duplicated branch drops to N function-call
       # opcodes regardless of how large each section body is.
       body = <<~KOTLIN
-        if (LocalConfiguration.current.screenWidthDp >= 840) {
+        if (with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } >= 840) {
             Row(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(text = data.line1)
