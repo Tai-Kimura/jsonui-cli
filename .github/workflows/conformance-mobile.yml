@@ -118,18 +118,20 @@ jobs:
   # ------------------------------------------------------------------ #
   android:
     runs-on: ubuntu-latest
-    # Suite duration (full 643-fixture set incl. interactive + screenshots):
-    # ~4 min on a local arm64 emulator, ~25-30 min on hosted swiftshader
-    # (measured 2026-07-04 — the interactive-fixture expansion outgrew the old
-    # "~11 min suite" sizing). run_conformance's internal attempt loop RESUMES
-    # via on-device progress.jsonl, so the step budget must cover the total
-    # suite time across attempts, not one attempt: boot ~2 + gradle ~5 +
-    # ~30 min accumulated instrumentation → 45-min step timeout.
-    # The hosted emulator also wedges intermittently (frozen qemu / lost adb);
-    # the liveness gate fast-fails that and the step is retried once with a
-    # FRESH emulator. Job budget fits the worst case:
-    # setup ~5 + 45 + 45 + upload ≈ 97 → 100.
-    timeout-minutes: 100
+    # Suite duration (full 643-fixture set incl. interactive + screenshots)
+    # varies WILDLY with the hosted runner drawn: ~7 min on a good runner
+    # (401s, one attempt, run 28683440355) vs 6x slower on a bad one
+    # (progress.jsonl: 330 outcomes after a full 20-min attempt, run
+    # 28687476052) — same commit, same config. Budgets must fit the bad
+    # runner: run_conformance's attempt loop RESUMES via on-device
+    # progress.jsonl (chop-safe: a fixture chopped by the per-attempt
+    # timeout re-runs once before counting as an error), so a slow runner
+    # needs boot ~2 + gradle ~5 + up to ~3x 20-min attempts → 70-min step.
+    # The liveness probe (adb + screencap) fast-fails a truly wedged
+    # emulator and the step is retried once FRESH. Job budget:
+    # setup ~5 + 70 + 70 + upload ≈ 147 → 150. Nightly on a public repo —
+    # runner minutes are free; wall-clock only gates the nightly report.
+    timeout-minutes: 150
     env:
       CONFORMANCE_DIR: ${{ github.workspace }}/conformance
     steps:
@@ -151,11 +153,11 @@ jobs:
       # Attempt 1: continue-on-error so a wedge (now fast-failed by the script,
       # ~2 min via the liveness gate, not a full-step hang) doesn't fail the job —
       # the retry below runs on a FRESH emulator, which is the only way to
-      # recover a frozen one. 45-min step timeout is a backstop.
+      # recover a frozen one. 70-min step timeout is a backstop.
       - name: Run Android conformance suite (emulator)
         id: android_emu
         continue-on-error: true
-        timeout-minutes: 45
+        timeout-minutes: 70
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -176,7 +178,7 @@ jobs:
       # NOT continue-on-error, so a second failure correctly fails the job.
       - name: Retry Android conformance suite (fresh emulator)
         if: steps.android_emu.outcome == 'failure'
-        timeout-minutes: 45
+        timeout-minutes: 70
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
