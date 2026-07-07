@@ -315,6 +315,17 @@ def _cmd_generate_api(args: argparse.Namespace) -> int:
     return 0
 
 
+def _spec_matches_file(sf, spec_dir, requested: str) -> bool:
+    """--file accepts either the bare filename (login.spec.json) or a path
+    relative to spec_directory (learn/installation.spec.json). The bare-name
+    form is kept for backward compatibility with flat spec directories."""
+    try:
+        rel = sf.resolve().relative_to(spec_dir.resolve()).as_posix()
+    except ValueError:
+        rel = sf.name
+    return rel == requested or sf.name == requested
+
+
 def _cmd_generate_project(args: argparse.Namespace) -> int:
     """Execute jui g project."""
     from ..core.config_manager import ConfigManager
@@ -340,19 +351,29 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
     config = config_mgr.load()
     spec_dir = config_mgr.spec_directory
 
-    # Collect spec files
+    # Collect spec files. --file scopes PER-SCREEN artifacts only (the
+    # generation loop below filters on args.file); the aggregated
+    # Repository / UseCase protocols are built from every spec in the
+    # project, so all specs are always collected and parsed — otherwise a
+    # single-spec run would silently rewrite the aggregated protocols with
+    # just that spec's methods.
     if args.file:
-        spec_files = [spec_dir / args.file]
-        if not spec_files[0].exists():
-            print(f"ERROR: Spec file not found: {spec_files[0]}")
+        requested = spec_dir / args.file
+        if not requested.exists():
+            print(f"ERROR: Spec file not found: {requested}")
             return 1
+        spec_files = sorted(spec_dir.glob("*.spec.json"))
+        if requested not in spec_files:
+            # --file may point into a subdirectory of spec_directory
+            spec_files.append(requested)
+        print(f"Found {len(spec_files)} spec file(s) "
+              f"(generating {args.file}; aggregation uses all)")
     else:
         spec_files = sorted(spec_dir.glob("*.spec.json"))
         if not spec_files:
             print(f"No spec files found in {spec_dir}")
             return 1
-
-    print(f"Found {len(spec_files)} spec file(s)")
+        print(f"Found {len(spec_files)} spec file(s)")
 
     # Validate specs
     config_mgr.ensure_document_tools_importable()
@@ -420,6 +441,19 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
         screen_spec = extract_screen_spec(spec_data)
         all_specs.append((sf, screen_spec))
 
+    if args.file:
+        # The generation loop scopes on args.file — fail loudly here if the
+        # requested spec won't match anything (e.g. it is a sub-spec that
+        # was folded into its parent) instead of silently generating nothing.
+        if not any(_spec_matches_file(sf, spec_dir, args.file)
+                   for sf, _ in all_specs):
+            if (spec_dir / args.file).resolve() in sub_spec_paths:
+                print(f"ERROR: {args.file} is a sub-spec of a parent_spec — "
+                      f"generate the parent spec instead.")
+            else:
+                print(f"ERROR: {args.file} did not yield a screen spec.")
+            return 1
+
     # Aggregate repositories / use cases across all specs
     aggregator = RepositoryAggregator()
     for sf, screen_spec in all_specs:
@@ -456,16 +490,8 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
 
     # Per-screen generation (Layout + ViewModel)
     for sf, screen_spec in all_specs:
-        if args.file:
-            # --file accepts either the bare filename (login.spec.json) or a path
-            # relative to spec_directory (learn/installation.spec.json). The bare-name
-            # form is kept for backward compatibility with flat spec directories.
-            try:
-                rel = sf.resolve().relative_to(spec_dir.resolve()).as_posix()
-            except ValueError:
-                rel = sf.name
-            if rel != args.file and sf.name != args.file:
-                continue
+        if args.file and not _spec_matches_file(sf, spec_dir, args.file):
+            continue
 
         print(f"\nProcessing: {sf.name} ({screen_spec.name})")
 
