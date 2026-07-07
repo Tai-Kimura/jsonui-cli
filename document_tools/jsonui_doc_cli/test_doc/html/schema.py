@@ -161,6 +161,11 @@ def _render_schema(schema_name: str, schema_def: dict) -> list[str]:
     if custom_validations:
         parts.extend(_render_custom_validations(custom_validations))
 
+    # Composite indexes / composite UNIQUE (x-indexes, plan 04 §3)
+    indexes = schema_def.get('x-indexes', [])
+    if indexes:
+        parts.extend(_render_indexes(indexes))
+
     # Properties table
     properties = schema_def.get('properties', {})
     if properties:
@@ -262,6 +267,35 @@ def _render_custom_validations(validations: list[dict]) -> list[str]:
     return parts
 
 
+def _render_indexes(indexes: list) -> list[str]:
+    """Render the composite index / composite UNIQUE table (x-indexes)."""
+    parts = [
+        "      <div class='composite-indexes'>",
+        "        <h4>Indexes</h4>",
+        "        <table class='properties-table'>",
+        "          <thead><tr><th>Name</th><th>Columns</th><th>Unique</th>"
+        "</tr></thead>",
+        "          <tbody>",
+    ]
+    for idx in indexes:
+        if not isinstance(idx, dict):
+            continue
+        columns = idx.get('columns', [])
+        cols = ', '.join(escape_html(str(c)) for c in columns)
+        name = idx.get('name') or '-'
+        unique = 'UNIQUE' if idx.get('unique') else '-'
+        parts.append(
+            f"            <tr><td>{escape_html(str(name))}</td>"
+            f"<td><code>({cols})</code></td><td>{unique}</td></tr>"
+        )
+    parts.extend([
+        "          </tbody>",
+        "        </table>",
+        "      </div>",
+    ])
+    return parts
+
+
 def _render_property_row(prop_name: str, prop_def: dict, is_required: bool) -> list[str]:
     """Render a single property row in the table."""
     parts = []
@@ -277,6 +311,10 @@ def _render_property_row(prop_name: str, prop_def: dict, is_required: bool) -> l
         type_str = f"{prop_type} ({prop_format})"
     if nullable:
         type_str += " | null"
+    # Exact dialect type opt-in (x-db-type) — also switches the DB schema
+    # checker to exact-match comparison for this column
+    if prop_def.get('x-db-type'):
+        type_str += f" = {prop_def['x-db-type']}"
 
     # Build default value
     default_str = '-'
@@ -306,6 +344,11 @@ def _render_property_row(prop_name: str, prop_def: dict, is_required: bool) -> l
             key_parts.append(f"<span class='key-fk'>FK</span> <span class='fk-ref'>{escape_html(str(fk))}</span>")
     if prop_def.get('x-index'):
         key_parts.append("<span class='key-idx'>IDX</span>")
+    if prop_def.get('x-external-ref'):
+        # Cross-database reference note ({db}.{table}.{column}) — not a FK
+        key_parts.append(
+            f"<span class='key-fk'>EXT</span> <span class='fk-ref'>"
+            f"{escape_html(str(prop_def['x-external-ref']))}</span>")
     key_str = ' '.join(key_parts) if key_parts else '-'
 
     # Build constraints

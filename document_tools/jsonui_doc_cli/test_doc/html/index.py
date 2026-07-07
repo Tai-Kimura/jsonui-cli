@@ -179,9 +179,13 @@ def generate_index_html(
     # API Docs categories (one section per directory, collapsible, starts collapsed)
     if api_doc_categories:
         for category_name, category_docs in api_doc_categories.items():
-            # Format category name for display (e.g., "api" -> "API", "db" -> "DB")
-            display_name = category_name.upper() if len(category_name) <= 3 else category_name.title()
-            category_id = f"api-{category_name}"
+            # Format category name for display (e.g., "api" -> "API", "db" -> "DB",
+            # multi-DB "db/main" -> "DB: main")
+            if category_name.startswith('db/'):
+                display_name = f"DB: {category_name[3:]}"
+            else:
+                display_name = category_name.upper() if len(category_name) <= 3 else category_name.title()
+            category_id = f"api-{category_name.replace('/', '-')}"
 
             # Check if this category has schema-only files (for ER diagram link)
             has_schema_files = any(
@@ -196,8 +200,9 @@ def generate_index_html(
                 f"      <div class='category-content collapsed' id='{category_id}-content'>",
             ])
 
-            # Add ER Diagram link for DB-like categories (schema-only)
-            if category_name.lower() == 'db':
+            # Add ER Diagram link for DB categories (per-database when the
+            # multi-DB layout is in use)
+            if category_name.lower() == 'db' or category_name.startswith('db/'):
                 html_parts.extend([
                     "        <div class='erd-link-container'>",
                     f"          <a href='{category_name}/erd.html' class='erd-link'>",

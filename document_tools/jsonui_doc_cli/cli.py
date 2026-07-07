@@ -128,6 +128,17 @@ def cmd_generate_html(args):
     output_dir = Path(args.output) if args.output else Path("html")
     title = args.title or "JsonUI Test Documentation"
 
+    # --with-checks: explicit sugar for `check` then `generate html`.
+    # Generation must succeed even when checks fail — the drift page is most
+    # useful exactly when things drifted (plan 01 §4).
+    if getattr(args, "with_checks", False):
+        import argparse as _argparse
+        check_args = _argparse.Namespace(filter=None, list=False, project=None)
+        check_exit = cmd_check(check_args)
+        if check_exit != 0:
+            print(f"  Note: checks exited {check_exit} "
+                  "(mismatch or error) — continuing with generation.")
+
     # Process multiple --docs options
     docs_dirs = []
     if args.docs:
@@ -1008,6 +1019,45 @@ def _fetch_specific_nodes(file_key, token, node_ids, output_path, depth):
     return 0, data
 
 
+def cmd_check(args):
+    """Run declared contract checks (docs ⇔ implementation).
+
+    Exit codes: 0 = clean / 1 = mismatch / 2 = execution error.
+    This is the ONLY command that executes project-declared code; it never
+    runs implicitly from generate (doc-contract-check plan 01 §6).
+    """
+    from .project_config import (
+        ProjectConfigError,
+        find_jui_config,
+        load_checks,
+        load_config_dict,
+        load_databases,
+    )
+    from .check.runner import EXIT_ERROR, run_checks
+
+    start = Path(args.project).resolve() if args.project else Path.cwd()
+    config_path = find_jui_config(start)
+    if config_path is None:
+        print("Error: jui.config.json not found (checks are declared there).",
+              file=sys.stderr)
+        return EXIT_ERROR
+    project_root = config_path.parent
+    try:
+        config = load_config_dict(config_path)
+        decls = load_checks(config, project_root)
+        databases = load_databases(config)
+    except ProjectConfigError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    return run_checks(
+        decls,
+        project_root,
+        databases,
+        filter_expr=args.filter,
+        list_only=args.list,
+    )
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -1211,6 +1261,16 @@ def main():
         "--layouts-dir",
         help="Override layouts directory for layoutFile import (default: auto-detect per spec via jui.config.json)"
     )
+    gen_html_parser.add_argument(
+        "--with-checks",
+        action="store_true",
+        dest="with_checks",
+        help=(
+            "Run `jsonui-doc check` first, then generate (sugar for the "
+            "explicit two-step). Generation succeeds even when checks find "
+            "mismatches — gating on drift is the check command's exit code."
+        ),
+    )
 
     # Generate mermaid subcommand
     gen_mermaid_parser = generate_subparsers.add_parser(
@@ -1382,6 +1442,32 @@ def main():
         help="Figma plan for API rate limit throttling (default: starter)"
     )
 
+    # Check command (contract checks: docs ⇔ implementation)
+    check_parser = subparsers.add_parser(
+        "check",
+        help=(
+            "Run declared contract checks (real DB / implementation OpenAPI "
+            "vs docs). Executes only commands declared in jui.config.json."
+        ),
+    )
+    check_parser.add_argument(
+        "filter",
+        nargs="?",
+        help=(
+            "Restrict which checks run: 'db' / 'api' / 'db:<name>' / "
+            "a declared check name (default: all)"
+        ),
+    )
+    check_parser.add_argument(
+        "--list",
+        action="store_true",
+        help="Show what would run (name, type, exact command) without running",
+    )
+    check_parser.add_argument(
+        "-p", "--project",
+        help="Project directory (default: walk up from cwd to jui.config.json)",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -1441,6 +1527,8 @@ def main():
         else:
             figma_parser.print_help()
             return 0
+    elif args.command == "check":
+        return cmd_check(args)
     else:
         parser.print_help()
         return 1

@@ -6,6 +6,9 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 include = ["jsonui_doc_cli*"]
 
+[tool.setuptools.package-data]
+"jsonui_doc_cli.check.db_schema" = ["type_families.json"]
+
 [project]
 name = "jsonui-doc-cli"
 version = "1.0.0"
@@ -34,6 +37,19 @@ jsonui-doc = "jsonui_doc_cli.cli:main"
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+]
+# `jsonui-doc check` DB live connection (the comparator itself and the
+# dump_command path need NO extras — base install stays dependency-free)
+db = [
+    "sqlalchemy>=2.0",
+]
+mysql = [
+    "sqlalchemy>=2.0",
+    "pymysql>=1.0",
+]
+postgres = [
+    "sqlalchemy>=2.0",
+    "psycopg2-binary>=2.9",
 ]
 
 [tool.pytest.ini_options]

@@ -755,7 +755,7 @@ def generate_html_directory(
             # Use directory name as category (e.g., "api", "db")
             category_name = docs_path.name
 
-            category_files = []
+            used_html_paths: set[str] = set()
             for json_file in sorted(docs_path.rglob("*.json")):
                 if is_swagger_file(json_file):
                     swagger_data = parse_swagger_file(json_file)
@@ -763,25 +763,57 @@ def generate_html_directory(
                         info = swagger_data.get('info', {})
                         api_name = info.get('title', json_file.stem)
                         api_desc = info.get('description', '')
-                        # Output path: <category>/<filename>.html
-                        html_rel_path = f"{category_name}/{json_file.stem}.html"
                         # Track subdirectory relative to the docs_path
                         rel_parent = json_file.parent.relative_to(docs_path)
                         subdir = str(rel_parent) if str(rel_parent) != '.' else ''
+
+                        # Multi-database layout (docs/db/{db_name}/*.json):
+                        # the first-level directory under docs/db is a
+                        # database name — it becomes its own category with
+                        # its own output directory and per-DB ERD.
+                        # Flat docs/db/*.json stays the single "db" category
+                        # (existing single-DB projects are unchanged).
+                        if category_name == 'db' and subdir:
+                            db_name = rel_parent.parts[0]
+                            category = f"db/{db_name}"
+                            nav_subdir = '/'.join(rel_parent.parts[1:])
+                            html_rel_path = f"db/{db_name}/{json_file.stem}.html"
+                        else:
+                            category = category_name
+                            nav_subdir = subdir
+                            html_rel_path = f"{category_name}/{json_file.stem}.html"
+
+                        # Collision guard: two source files must never
+                        # silently overwrite one output page (same stem in
+                        # different subdirs used to do exactly that).
+                        if html_rel_path in used_html_paths:
+                            safe = nav_subdir.replace('/', '_') or 'dup'
+                            html_rel_path = (
+                                f"{category}/{safe}_{json_file.stem}.html"
+                            )
+                            print(
+                                f"  Warning: output name collision for "
+                                f"{json_file} — writing {html_rel_path}"
+                            )
+                        used_html_paths.add(html_rel_path)
+
                         doc_info = {
                             'name': api_name,
                             'description': api_desc[:100] + '...' if len(api_desc) > 100 else api_desc,
                             'path': html_rel_path,
                             'source_file': json_file,
                             'swagger_data': swagger_data,
-                            'category': category_name,
-                            'subdir': subdir,
+                            'category': category,
+                            'subdir': nav_subdir,
                         }
-                        category_files.append(doc_info)
+                        api_doc_categories.setdefault(category, []).append(doc_info)
                         all_api_doc_files.append(doc_info)
 
-            if category_files:
-                api_doc_categories[category_name] = category_files
+    # Discover contract-check reports (.check-report.json written by
+    # `jsonui-doc check`). Pure rendering: reports are optional, and their
+    # absence changes nothing (doc-contract-check plan 01 §4).
+    check_report_pages = _discover_check_reports(
+        unique_docs_dirs, api_doc_categories)
 
     # Build navigation data for sidebar
     all_tests_nav = {
@@ -851,6 +883,9 @@ def generate_html_directory(
 
     # Generate Swagger/OpenAPI documentation pages
     _generate_swagger_pages(output_path, all_api_doc_files, all_tests_nav, api_doc_categories)
+
+    # Contract-check pages (rendered only when a report artifact exists)
+    _generate_check_report_pages(output_path, check_report_pages, api_doc_categories)
 
     # Generate screen specification HTML pages from docs directories
     spec_files_info = []
@@ -1156,7 +1191,8 @@ def _generate_swagger_pages(
 
             erd_html = generate_erd_html(
                 schema_files=schema_files,
-                title=f"{category.upper()} ER Diagram",
+                title=(f"{category[3:]} ER Diagram" if category.startswith('db/')
+                       else f"{category.upper()} ER Diagram"),
                 current_doc_path=erd_path,
                 category_docs=category_docs
             )
@@ -1168,6 +1204,87 @@ def _generate_swagger_pages(
 
         except Exception as e:
             print(f"    Error generating ER diagram for {category}: {e}")
+
+
+def _discover_check_reports(
+    docs_dirs: list,
+    api_doc_categories: dict[str, list[dict]],
+) -> list[dict]:
+    """Find .check-report.json artifacts and register their pages in the
+    category navigation. Reading only — never runs checks."""
+    from ..check.report import REPORT_BASENAME, is_stale, load_report
+
+    pages: list[dict] = []
+    candidates: list[tuple[str, Path, Path]] = []
+    for docs_dir in docs_dirs:
+        docs_path = Path(docs_dir)
+        if not docs_path.is_dir():
+            continue
+        # input_hashes in a report are relative to the project root, which
+        # for a report at <root>/docs/<kind>/ is two levels up from the
+        # kind dir — derive it per candidate rather than trusting docs_base
+        # (explicit -d dirs can live anywhere).
+        root = docs_path.parent.parent
+        if docs_path.name in ("api", "db"):
+            candidates.append((docs_path.name, docs_path / REPORT_BASENAME,
+                               root))
+        if docs_path.name == "db":
+            for sub in sorted(p for p in docs_path.iterdir() if p.is_dir()):
+                candidates.append((f"db/{sub.name}", sub / REPORT_BASENAME,
+                                   root))
+
+    for category, report_path, project_root in candidates:
+        if not report_path.is_file():
+            continue
+        try:
+            report = load_report(report_path)
+        except Exception as e:  # noqa: BLE001 — a broken artifact must not kill generation
+            print(f"  Warning: invalid check report {report_path}: {e}")
+            continue
+        if report is None:
+            continue
+        stale = is_stale(report, project_root)
+        page_path = f"{category}/contract-check.html"
+        status = "✗" if report.has_mismatch else ("⚠" if stale else "✓")
+        api_doc_categories.setdefault(category, []).append({
+            "name": f"Contract Check {status}",
+            "path": page_path,
+            "subdir": "",
+            "check_report": True,
+        })
+        pages.append({
+            "category": category,
+            "report": report,
+            "stale": stale,
+            "path": page_path,
+        })
+    return pages
+
+
+def _generate_check_report_pages(
+    output_path: Path,
+    check_report_pages: list[dict],
+    api_doc_categories: dict[str, list[dict]] | None = None,
+) -> None:
+    if not check_report_pages:
+        return
+    from .html.check_report_page import generate_check_report_html
+
+    print("  Generating contract-check pages...")
+    for page in check_report_pages:
+        category_docs = (api_doc_categories or {}).get(page["category"], [])
+        html = generate_check_report_html(
+            report=page["report"],
+            title=f"Contract Check — {page['category']}",
+            current_doc_path=page["path"],
+            category_docs=category_docs,
+            stale=page["stale"],
+        )
+        out_file = output_path / page["path"]
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_file, "w", encoding="utf-8") as f:
+            f.write(html)
+        print(f"    Generated: {out_file}")
 
 
 def _generate_spec_pages(

@@ -731,13 +731,21 @@ def generate_index_sidebar(
     # Sidebar - API Doc categories (one section per directory, with subdir grouping)
     if api_doc_categories:
         for category_name, category_docs in api_doc_categories.items():
-            display_name = category_name.upper() if len(category_name) <= 3 else category_name.title()
-            sidebar_id = f"sidebar-api-{category_name}"
+            # Multi-DB categories are keyed "db/{db_name}" (one section per
+            # database — plan 04). Display as "DB: name"; ids must not
+            # contain '/'.
+            if category_name.startswith('db/'):
+                display_name = f"DB: {category_name[3:]}"
+            else:
+                display_name = category_name.upper() if len(category_name) <= 3 else category_name.title()
+            category_slug = category_name.replace('/', '-')
+            sidebar_id = f"sidebar-api-{category_slug}"
             parts.append("    <div class='sidebar-section'>")
-            parts.append(f"      <div class='sidebar-title api collapsed' id='{sidebar_id}-title' onclick=\"toggleSidebar('api-{category_name}')\"><span class='arrow'>▼</span>{display_name} <span class='count'>{len(category_docs)}</span></div>")
+            parts.append(f"      <div class='sidebar-title api collapsed' id='{sidebar_id}-title' onclick=\"toggleSidebar('api-{category_slug}')\"><span class='arrow'>▼</span>{display_name} <span class='count'>{len(category_docs)}</span></div>")
             parts.append(f"      <div class='sidebar-list collapsed' id='{sidebar_id}-list'>")
-            # Add ER Diagram link for DB category
-            if category_name.lower() == 'db':
+            # Add ER Diagram link for DB categories (per-database when
+            # the multi-DB layout is in use)
+            if category_name.lower() == 'db' or category_name.startswith('db/'):
                 parts.append(f"        <div class='sidebar-erd-link'><a href='{category_name}/erd.html'>ER Diagram</a></div>")
             has_subdirs = any(d.get('subdir') for d in category_docs)
             if has_subdirs:
