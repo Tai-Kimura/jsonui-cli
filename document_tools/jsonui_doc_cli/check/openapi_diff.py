@@ -306,8 +306,12 @@ def diff_specs(doc: NormSpec, impl: NormSpec,
     doc_keys = set(doc.operations)
     impl_keys = set(impl.operations)
 
+    # ignore_paths excludes an endpoint from the contract check in every
+    # direction: doc-only, impl-only, and present-on-both-sides comparison.
     for key in sorted(doc_keys - impl_keys):
         op = doc.operations[key]
+        if _path_ignored(op.path, ignore_paths):
+            continue
         results.append(ResultItem(f"{op.method} {op.path}",
                                   "missing_in_impl", "proof",
                                   message="endpoint declared in docs/api but "
@@ -323,6 +327,9 @@ def diff_specs(doc: NormSpec, impl: NormSpec,
 
     for key in sorted(doc_keys & impl_keys):
         doc_op, impl_op = doc.operations[key], impl.operations[key]
+        if (_path_ignored(doc_op.path, ignore_paths)
+                or _path_ignored(impl_op.path, ignore_paths)):
+            continue
         if _compare_operation(doc_op, impl_op, ignore_codes, results, warnings):
             results.append(ResultItem(f"{doc_op.method} {doc_op.path}",
                                       "ok", "proof"))

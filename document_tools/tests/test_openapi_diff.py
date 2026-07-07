@@ -334,5 +334,40 @@ class FastApiNoiseClassTests(unittest.TestCase):
         self.assertEqual([r.target for r in results if r.status != "ok"], [])
 
 
+class IgnorePathsAllDirectionsTests(unittest.TestCase):
+    """ignore_paths must exclude an endpoint in every direction: doc-only
+    (missing_in_impl), impl-only (missing_in_doc), and both-sides compare.
+    Use case: internal APIs kept in docs but hidden from the impl OpenAPI
+    via include_in_schema=False."""
+
+    @classmethod
+    def setUpClass(cls):
+        doc = normalize_spec(DOC_SPEC, "doc")
+        impl = normalize_spec(IMPL_SPEC, "impl")
+        cls.results, cls.warnings = diff_specs(
+            doc, impl,
+            ignore_paths=["/api/only-in-doc", "/api/impl-only",
+                          "/api/ping", "/api/users*", "/health"],
+            ignore_codes=set(DEFAULT_IGNORE_RESPONSE_CODES),
+        )
+
+    def test_doc_only_endpoint_is_excluded(self):
+        self.assertFalse(any("only-in-doc" in r.target for r in self.results),
+                         [f"{r.status}: {r.target}" for r in self.results])
+
+    def test_impl_only_endpoint_is_excluded(self):
+        self.assertFalse(any("impl-only" in r.target for r in self.results))
+
+    def test_both_sides_endpoints_are_excluded_from_compare(self):
+        # /api/ping would be "ok", /api/users* would produce mismatches —
+        # ignored paths must yield no result items at all
+        self.assertFalse(any("/api/ping" in r.target or "/api/users" in r.target
+                             for r in self.results),
+                         [f"{r.status}: {r.target}" for r in self.results])
+
+    def test_nothing_remains(self):
+        self.assertEqual(self.results, [])
+
+
 if __name__ == "__main__":
     unittest.main()
