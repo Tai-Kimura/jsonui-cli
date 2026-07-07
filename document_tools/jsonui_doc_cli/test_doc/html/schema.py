@@ -339,6 +339,9 @@ def _render_property_row(prop_name: str, prop_def: dict, is_required: bool) -> l
         fk = prop_def['x-foreign-key']
         if isinstance(fk, dict):
             fk_ref = f"{fk.get('table', '')}.{fk.get('column', '')}"
+            if fk.get('enforced') is False:
+                # logical reference — documented relation without a DB constraint
+                fk_ref += " (logical)"
             key_parts.append(f"<span class='key-fk'>FK</span> <span class='fk-ref'>{escape_html(fk_ref)}</span>")
         else:
             key_parts.append(f"<span class='key-fk'>FK</span> <span class='fk-ref'>{escape_html(str(fk))}</span>")

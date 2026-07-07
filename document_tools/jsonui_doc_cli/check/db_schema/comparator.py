@@ -128,12 +128,13 @@ def _column_uniques(actual_table: dict) -> set[str]:
 
 
 def _fk_map(actual_table: dict) -> dict[str, tuple[str, str]]:
+    """Column → (ref_table, ref_column). Composite FKs are decomposed
+    positionally so per-column x-foreign-key declarations still match."""
     fks: dict[str, tuple[str, str]] = {}
     for fk in actual_table.get("foreign_keys", []):
-        cols = fk.get("columns", [])
-        refs = fk.get("ref_columns", [])
-        if len(cols) == 1 and refs:
-            fks[cols[0]] = (fk.get("ref_table", ""), refs[0])
+        ref_table = fk.get("ref_table", "")
+        for col, ref in zip(fk.get("columns", []), fk.get("ref_columns", [])):
+            fks[col] = (ref_table, ref)
     return fks
 
 
@@ -194,7 +195,7 @@ def _compare_table(doc: DocTable, actual_table: dict, dialect: str,
                 expected="UNIQUE", actual="no unique constraint"))
             clean = False
 
-        if col.foreign_key:
+        if col.foreign_key and col.fk_enforced:
             act_fk = fk_map.get(col_name)
             if act_fk is None:
                 results.append(ResultItem(

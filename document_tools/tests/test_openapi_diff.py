@@ -333,6 +333,81 @@ class FastApiNoiseClassTests(unittest.TestCase):
         results, _ = self._diff(doc, impl)
         self.assertEqual([r.target for r in results if r.status != "ok"], [])
 
+    def test_untyped_request_body_is_one_skipped(self):
+        # FastAPI `body: dict` — impl declares no field-level shape;
+        # per-field diff against the documented contract is impossible.
+        doc = {"openapi": "3.0.3", "paths": {"/x": {"post": {
+            "requestBody": {"required": True, "content": {
+                "application/json": {"schema": {
+                    "type": "object", "required": ["title"],
+                    "properties": {"title": {"type": "string"},
+                                   "note": {"type": "string"}}}}}},
+            "responses": {"200": {"description": "ok"}}}}}}
+        impl = {"openapi": "3.1.0", "paths": {"/x": {"post": {
+            "requestBody": {"required": True, "content": {
+                "application/json": {"schema": {"type": "object",
+                                                "title": "Body"}}}},
+            "responses": {"200": {"description": "ok"}}}}}}
+        results, _ = self._diff(doc, impl)
+        skipped = [r for r in results if r.status == "skipped"]
+        self.assertEqual(len(skipped), 1, results)
+        self.assertIn("untyped request body", skipped[0].message)
+        self.assertEqual([r for r in results if r.status == "mismatch"], [])
+
+    def test_nested_untyped_dict_field_is_one_skipped(self):
+        # `changes: dict = Field(...)` inside a typed model: only that
+        # subtree is unverifiable — siblings still get compared.
+        doc = {"openapi": "3.0.3", "paths": {"/x": {"post": {
+            "requestBody": {"required": True, "content": {
+                "application/json": {"schema": {
+                    "type": "object",
+                    "properties": {
+                        "reason": {"type": "string"},
+                        "changes": {"type": "object", "properties": {
+                            "name": {"type": "string"},
+                            "abv": {"type": "number"},
+                            "age": {"type": "integer"}}}}}}}},
+            "responses": {"200": {"description": "ok"}}}}}}
+        impl = {"openapi": "3.1.0", "paths": {"/x": {"post": {
+            "requestBody": {"required": True, "content": {
+                "application/json": {"schema": {
+                    "type": "object",
+                    "properties": {
+                        "reason": {"type": "integer"},        # real drift
+                        "changes": {"type": "object"}}}}}},   # untyped
+            "responses": {"200": {"description": "ok"}}}}}}
+        results, _ = self._diff(doc, impl)
+        skipped = [r for r in results if r.status == "skipped"]
+        mismatches = [r for r in results if r.status == "mismatch"]
+        self.assertEqual([r.target for r in skipped],
+                         ["POST /x requestBody body.changes"])
+        self.assertEqual(len(mismatches), 1, mismatches)
+        self.assertIn("body.reason", mismatches[0].target)
+
+    def test_untyped_array_items_is_one_skipped(self):
+        # `crates: list[dict]` — array of bare objects.
+        doc = {"openapi": "3.0.3", "paths": {"/x": {"post": {
+            "requestBody": {"required": True, "content": {
+                "application/json": {"schema": {
+                    "type": "object", "properties": {
+                        "crates": {"type": "array", "items": {
+                            "type": "object", "properties": {
+                                "crate_type": {"type": "string"},
+                                "ratio": {"type": "number"}}}}}}}}},
+            "responses": {"200": {"description": "ok"}}}}}}
+        impl = {"openapi": "3.1.0", "paths": {"/x": {"post": {
+            "requestBody": {"required": True, "content": {
+                "application/json": {"schema": {
+                    "type": "object", "properties": {
+                        "crates": {"type": "array",
+                                  "items": {"type": "object"}}}}}}},
+            "responses": {"200": {"description": "ok"}}}}}}
+        results, _ = self._diff(doc, impl)
+        skipped = [r for r in results if r.status == "skipped"]
+        self.assertEqual([r.target for r in skipped],
+                         ["POST /x requestBody body.crates[]"])
+        self.assertEqual([r for r in results if r.status == "mismatch"], [])
+
 
 class IgnorePathsAllDirectionsTests(unittest.TestCase):
     """ignore_paths must exclude an endpoint in every direction: doc-only

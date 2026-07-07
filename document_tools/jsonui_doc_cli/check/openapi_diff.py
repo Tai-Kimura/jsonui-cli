@@ -100,13 +100,32 @@ def _in_generated_scope(path: str, include_globs: list[str],
     return not any(fnmatch.fnmatch(path, g) for g in exclude_globs)
 
 
-def _schema_diffs(expected, actual, at: str) -> list[tuple[str, str, str]]:
+def _untyped_vs_typed(expected, actual) -> bool:
+    """True when the doc declares field-level shape (properties) but the
+    impl side is an untyped object (FastAPI `body: dict` etc.) — no
+    properties and no conflicting type. Field-by-field diff is impossible."""
+    if not isinstance(expected, dict) or not isinstance(actual, dict):
+        return False
+    if not expected.get("properties") or actual.get("properties"):
+        return False
+    return actual.get("type") in (None, "object")
+
+
+def _schema_diffs(expected, actual, at: str,
+                  skips: list[tuple[str, str]] | None = None
+                  ) -> list[tuple[str, str, str]]:
     """Recursive structural diff of two normalized schemas.
-    Returns (location, expected-summary, actual-summary) triples."""
+    Returns (location, expected-summary, actual-summary) triples.
+    With a `skips` accumulator, nodes where the impl is untyped while the
+    doc is typed are collected as (location, expected-summary) instead of
+    flooding one mismatch per documented field."""
     if expected == actual:
         return []
     if not isinstance(expected, dict) or not isinstance(actual, dict):
         return [(at, _summ(expected), _summ(actual))]
+    if skips is not None and _untyped_vs_typed(expected, actual):
+        skips.append((at, _summ(expected)))
+        return []
 
     diffs: list[tuple[str, str, str]] = []
     e_type, a_type = expected.get("type"), actual.get("type")
@@ -144,11 +163,12 @@ def _schema_diffs(expected, actual, at: str) -> list[tuple[str, str, str]]:
         elif name not in e_props:
             diffs.append((loc, "(not in doc)", _summ(a_props[name])))
         else:
-            diffs.extend(_schema_diffs(e_props[name], a_props[name], loc))
+            diffs.extend(_schema_diffs(e_props[name], a_props[name], loc,
+                                       skips))
 
     if "items" in expected or "items" in actual:
         diffs.extend(_schema_diffs(expected.get("items", {}),
-                                   actual.get("items", {}), f"{at}[]"))
+                                   actual.get("items", {}), f"{at}[]", skips))
 
     # string format matters (date-time / uuid / binary drive DTO types)
     if expected.get("format") != actual.get("format"):
@@ -238,11 +258,18 @@ def _compare_operation(doc_op: NormOperation, impl_op: NormOperation,
                     expected=f"required={d['required']}",
                     actual=f"required={i['required']}"))
                 clean = False
+            body_skips: list[tuple[str, str]] = []
             for loc, exp, act in _schema_diffs(
-                    d["schema"] or {}, i["schema"] or {}, "body"):
+                    d["schema"] or {}, i["schema"] or {}, "body", body_skips):
                 results.append(ResultItem(f"{t} {loc}", "mismatch", "proof",
                                           expected=exp, actual=act))
                 clean = False
+            for loc, exp in body_skips:
+                results.append(ResultItem(
+                    f"{t} {loc}", "skipped", "proof", expected=exp,
+                    message="implementation declares an untyped request "
+                            "body (e.g. FastAPI dict) — cannot verify "
+                            "field-level contract"))
 
     # responses
     doc_2xx = {c for c in doc_op.responses if c.startswith("2")}
@@ -280,10 +307,17 @@ def _compare_operation(doc_op: NormOperation, impl_op: NormOperation,
                 actual=_summ(impl_s),
                 message="doc does not declare a response schema — cannot verify"))
             continue
-        for loc, exp, act in _schema_diffs(doc_s, impl_s, "body"):
+        resp_skips: list[tuple[str, str]] = []
+        for loc, exp, act in _schema_diffs(doc_s, impl_s, "body", resp_skips):
             results.append(ResultItem(f"{t} {loc}", "mismatch", "proof",
                                       expected=exp, actual=act))
             clean = False
+        for loc, exp in resp_skips:
+            results.append(ResultItem(
+                f"{t} {loc}", "skipped", "proof", expected=exp,
+                message="implementation declares an untyped schema (e.g. "
+                        "FastAPI dict field) — cannot verify field-level "
+                        "contract"))
 
     # 4xx/5xx: doc → impl presence only (impl extras like auto-422 ignored)
     for code in sorted(c for c in doc_op.responses

@@ -28,6 +28,8 @@ class DocColumn:
     enum_values: list | None = None
     enum_as_int: bool = False    # x-enum-values present → stored as int code
     foreign_key: tuple[str, str] | None = None   # (table, column)
+    fk_enforced: bool = True     # x-foreign-key {enforced: false} = logical
+                                 # reference only — no DB constraint expected
     db_type: str | None = None   # x-db-type → exact-match comparison
     max_length: int | None = None
     external_ref: str | None = None
@@ -63,6 +65,14 @@ def _parse_fk(raw) -> tuple[str, str] | None:
         table, column = raw.split(".")
         return (table, column)
     return None
+
+
+def _fk_enforced(raw) -> bool:
+    """The dict form may declare {"enforced": false}: the reference is
+    documentation/ERD-only and the DB is not expected to hold a constraint."""
+    if isinstance(raw, dict):
+        return raw.get("enforced") is not False
+    return True
 
 
 def _first_object_schema(schemas: dict) -> tuple[str, dict] | None:
@@ -135,6 +145,7 @@ def parse_table_file(path: Path) -> DocTable | None:
             enum_values=list(enum_values) if enum_values else None,
             enum_as_int=enum_as_int,
             foreign_key=_parse_fk(resolved.get("x-foreign-key")),
+            fk_enforced=_fk_enforced(resolved.get("x-foreign-key")),
             db_type=resolved.get("x-db-type"),
             max_length=resolved.get("maxLength"),
             external_ref=resolved.get("x-external-ref"),

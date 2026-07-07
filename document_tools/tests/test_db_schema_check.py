@@ -209,6 +209,44 @@ class ComparatorTests(unittest.TestCase):
         hits = [r for r in results if r.target == "users.team_id"]
         self.assertEqual(hits[0].actual, "FK → organizations.id")
 
+    def test_composite_fk_matches_per_column_declarations(self):
+        # A composite FK in the DB must satisfy per-column x-foreign-key
+        # declarations positionally (bug: composite FKs were dropped from
+        # the map, reporting 'no foreign key' for every member column).
+        doc = users_doc()
+        props = doc["components"]["schemas"]["User"]["properties"]
+        props["email"]["x-foreign-key"] = {"table": "teams",
+                                           "column": "email"}
+        actual = actual_users()
+        actual["tables"]["users"]["foreign_keys"] = [{
+            "columns": ["team_id", "email"], "ref_table": "teams",
+            "ref_columns": ["id", "email"]}]
+        results = compare_schemas(self._doc_tables(doc), actual, "mysql")
+        fk_hits = [r for r in results if r.status == "mismatch"
+                   and "foreign key" in (r.actual or "")]
+        self.assertEqual(fk_hits, [],
+                         [f"{r.target}: {r.expected} -> {r.actual}"
+                          for r in fk_hits])
+
+    def test_unenforced_fk_skips_constraint_check(self):
+        # x-foreign-key {enforced: false} declares a logical reference —
+        # the DB is not expected to hold a constraint.
+        doc = users_doc()
+        doc["components"]["schemas"]["User"]["properties"]["team_id"][
+            "x-foreign-key"] = {"table": "teams", "column": "id",
+                                "enforced": False}
+        actual = actual_users()
+        actual["tables"]["users"]["foreign_keys"] = []
+        results = compare_schemas(self._doc_tables(doc), actual, "mysql")
+        hits = [r for r in results if r.target == "users.team_id"
+                and r.status == "mismatch"]
+        self.assertEqual(hits, [])
+        # …while the default (enforced) declaration still requires one
+        strict = compare_schemas(self._doc_tables(), actual, "mysql")
+        self.assertTrue(any(r.target == "users.team_id"
+                            and r.actual == "no foreign key"
+                            for r in strict))
+
     def test_missing_table_bidirectional(self):
         actual = actual_users()
         actual["tables"]["surprises"] = {"columns": {}, "primary_key": [],
