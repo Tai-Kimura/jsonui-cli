@@ -54,6 +54,49 @@ RSpec.describe KjuiTools::Core::Resources::StringManager do
     end
   end
 
+  describe '#update_strings_xml' do
+    let(:res_values_dir) { File.join(temp_dir, 'src/main/res/values') }
+    let(:strings_xml) { File.join(res_values_dir, 'strings.xml') }
+
+    def xml_names
+      doc = REXML::Document.new(File.read(strings_xml))
+      doc.root.elements.to_a('string').map { |e| e.attributes['name'] }
+    end
+
+    before do
+      File.write(File.join(resources_dir, 'strings.json'),
+                 JSON.generate({ 'login' => { 'title' => 'Login' } }))
+      FileUtils.mkdir_p(res_values_dir)
+      File.write(strings_xml, <<~XML)
+        <?xml version="1.0" encoding="utf-8"?>
+        <resources>
+            <string name="app_name">My App</string>
+            <string name="login_title">Old Login</string>
+            <string name="login_removed_key">Gone from strings.json</string>
+        </resources>
+      XML
+      allow(KjuiTools::Core::Logger).to receive(:info)
+      allow(KjuiTools::Core::Logger).to receive(:debug)
+      manager.send(:update_strings_xml, 'values')
+    end
+
+    it 'prunes keys removed from strings.json within managed prefixes' do
+      expect(xml_names).not_to include('login_removed_key')
+    end
+
+    it 'keeps and updates keys still declared in strings.json' do
+      expect(xml_names).to include('login_title')
+      doc = REXML::Document.new(File.read(strings_xml))
+      title = doc.root.elements.to_a('string')
+                 .find { |e| e.attributes['name'] == 'login_title' }
+      expect(title.text).to eq('Login')
+    end
+
+    it 'never touches hand-written keys outside managed prefixes' do
+      expect(xml_names).to include('app_name')
+    end
+  end
+
   describe 'private methods' do
     describe '#is_string_property?' do
       it 'returns true for text property' do

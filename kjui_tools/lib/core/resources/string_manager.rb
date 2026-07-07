@@ -369,7 +369,30 @@ module KjuiTools
               end
             end
           end
-          
+
+          # Prune stale keys: a key inside a JsonUI-managed namespace
+          # (`<file_prefix>_...` for a prefix present in strings.json) that
+          # strings.json no longer declares was removed from the SSoT and
+          # must not survive here (same semantics as iOS Localizable.strings).
+          # Hand-written keys outside the managed prefixes are never touched.
+          expected_keys = {}
+          managed_prefixes = []
+          @strings_data.each do |file_prefix, file_strings|
+            next unless file_strings.is_a?(Hash)
+            managed_prefixes << "#{file_prefix}_"
+            file_strings.each_key { |key| expected_keys["#{file_prefix}_#{key}"] = true }
+          end
+          pruned_count = 0
+          existing_strings.each do |name, elem|
+            next if expected_keys[name]
+            next unless managed_prefixes.any? { |prefix| name.start_with?(prefix) }
+            resources.delete_element(elem)
+            pruned_count += 1
+            Core::Logger.debug "Pruned stale string '#{name}' from #{lang_dir}/strings.xml"
+          end
+          Core::Logger.info "Pruned #{pruned_count} stale strings from #{lang_dir}/strings.xml" if pruned_count > 0
+
+
           # Write updated XML with custom formatting to prevent multiline strings
           File.open(strings_xml_file, 'w') do |file|
             # Use a custom formatter that doesn't wrap text content
