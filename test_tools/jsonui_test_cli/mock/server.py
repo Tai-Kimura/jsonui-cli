@@ -278,7 +278,11 @@ class RunManager:
 def _panel_html(token: str) -> bytes:
     """Serve the packaged control panel, injecting the admin token.
 
-    Phase 1 ships a placeholder; Phase 2 replaces static/panel.html.
+    static/panel.html ships as package-data (pyproject: jsonui_test_cli =
+    ["static/*"]) and is read via importlib.resources — never a repo-relative
+    path — so it resolves from an installed wheel/editable install regardless of
+    cwd. The fallback below only fires on a genuinely broken install (missing
+    package-data); it is a degraded stub, not the normal path.
     """
     try:
         from importlib.resources import files
