@@ -45,6 +45,14 @@ jobs:
         # non-deterministic generation.
         working-directory: jui_tools
         run: python -m unittest tests.test_build_sync_e2e.SyncProtocolE2ETests.test_idempotency
+      # test_tools installs BEFORE document_tools: jsonui_doc_cli imports the
+      # validator + schema constants from jsonui_test_cli (single in-repo copy).
+      - name: Install test_tools (dev)
+        working-directory: test_tools
+        run: python -m pip install -e ".[dev]"
+      - name: Run test_tools tests
+        working-directory: test_tools
+        run: python -m pytest
       - name: Install document_tools (dev)
         working-directory: document_tools
         run: python -m pip install -e ".[dev]"

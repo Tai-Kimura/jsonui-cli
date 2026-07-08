@@ -7,7 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ..schema import (
+# Schema constants come from the single in-repo test validator (plan D3).
+from jsonui_test_cli.schema import (
     SUPPORTED_ACTIONS,
     SUPPORTED_ASSERTIONS,
     PARAMETER_DESCRIPTIONS,

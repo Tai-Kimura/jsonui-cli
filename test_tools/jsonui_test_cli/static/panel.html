@@ -1,0 +1,216 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JsonUI Mock Server</title>
+<!--
+  Control panel for the JsonUI mock server. Self-contained (no build, no CDN).
+  The admin token is injected server-side into __JSONUI_TOKEN__ and sent on
+  every /__jsonui__/ request. Three tabs: Endpoints, Run, Requests.
+-->
+<style>
+  :root { --bg:#fff; --fg:#1a1a1a; --mut:#6b7280; --line:#e5e7eb; --accent:#2563eb;
+          --ok:#16a34a; --err:#dc2626; --warn:#d97706; --code:#f6f7f9; }
+  * { box-sizing: border-box; }
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 0; color: var(--fg); background: var(--bg); }
+  header { padding: .8rem 1.2rem; border-bottom: 1px solid var(--line); display: flex;
+           align-items: baseline; gap: 1rem; position: sticky; top: 0; background: var(--bg); z-index: 5; }
+  header h1 { font-size: 1rem; margin: 0; }
+  header .muted { color: var(--mut); font-size: .8rem; }
+  nav { display: flex; gap: .3rem; padding: 0 1.2rem; border-bottom: 1px solid var(--line); }
+  nav button { border: 0; background: none; padding: .6rem .9rem; cursor: pointer; font: inherit;
+               color: var(--mut); border-bottom: 2px solid transparent; }
+  nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+  main { padding: 1.2rem; }
+  .tab { display: none; } .tab.active { display: block; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border-bottom: 1px solid var(--line); padding: .45rem .6rem; text-align: left; vertical-align: top; }
+  th { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--mut); }
+  code, .mono { font-family: ui-monospace, Menlo, monospace; font-size: .85em; }
+  .method { font-weight: 600; font-size: .8rem; }
+  .m-GET{color:#0369a1} .m-POST{color:#15803d} .m-PUT{color:#a16207} .m-DELETE{color:#b91c1c} .m-PATCH{color:#7c3aed}
+  select, button.act { font: inherit; padding: .25rem .4rem; border: 1px solid var(--line); border-radius: 5px; background: #fff; }
+  button.act { cursor: pointer; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tag-group { margin-bottom: 1.4rem; }
+  .tag-group h3 { font-size: .8rem; text-transform: uppercase; color: var(--mut); margin: 0 0 .3rem; }
+  .editor { background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: .6rem; margin: .4rem 0; }
+  .editor textarea { width: 100%; min-height: 160px; font-family: ui-monospace, Menlo, monospace;
+                     font-size: .8rem; border: 1px solid var(--line); border-radius: 5px; padding: .5rem; }
+  .row { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+  #log { background: #0b1020; color: #d6e0ff; font-family: ui-monospace, Menlo, monospace; font-size: .8rem;
+         padding: .7rem; border-radius: 6px; height: 300px; overflow: auto; white-space: pre-wrap; }
+  .badge { display: inline-block; padding: .05rem .4rem; border-radius: 4px; font-size: .75rem; }
+  .b-pass{background:#dcfce7;color:var(--ok)} .b-fail{background:#fee2e2;color:var(--err)}
+  .b-skip{background:#f3f4f6;color:var(--mut)} .b-warn{background:#fef3c7;color:var(--warn)}
+  .unmatched { background: #fef2f2; }
+  .toast { position: fixed; bottom: 1rem; right: 1rem; background: var(--fg); color: #fff;
+           padding: .5rem .9rem; border-radius: 6px; opacity: 0; transition: opacity .2s; }
+  .toast.show { opacity: 1; }
+  .empty { color: var(--mut); padding: 1rem 0; }
+</style>
+
+<header>
+  <h1>JsonUI Mock Server</h1>
+  <span class="muted" id="summary">loading…</span>
+</header>
+<nav>
+  <button data-tab="endpoints" class="active">Endpoints</button>
+  <button data-tab="run">Run</button>
+  <button data-tab="requests">Requests</button>
+</nav>
+<main>
+  <section id="tab-endpoints" class="tab active"><div id="endpoints" class="empty">loading…</div></section>
+  <section id="tab-run" class="tab">
+    <div class="row" id="run-targets"></div>
+    <p class="muted" id="run-status"></p>
+    <div id="log"></div>
+    <h3>Results</h3>
+    <div id="results" class="empty">Run a target to see structured results.</div>
+  </section>
+  <section id="tab-requests" class="tab">
+    <div class="row"><button class="act" onclick="loadRequests()">Refresh</button>
+      <span class="muted">Unmatched (404) rows are highlighted.</span></div>
+    <div id="requests" class="empty">loading…</div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const TOKEN = "__JSONUI_TOKEN__";
+const H = { "X-JsonUI-Token": TOKEN, "Content-Type": "application/json" };
+const api = (p, opts = {}) => fetch("/__jsonui__" + p, { headers: H, ...opts });
+const esc = s => String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg;
+  t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 1800); }
+
+// ---- tabs -----------------------------------------------------------
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+  b.classList.add("active");
+  document.getElementById("tab-" + b.dataset.tab).classList.add("active");
+  if (b.dataset.tab === "requests") loadRequests();
+});
+
+// ---- Endpoints ------------------------------------------------------
+let MOCKS = [];
+async function loadEndpoints() {
+  MOCKS = await (await api("/mocks")).json();
+  document.getElementById("summary").textContent =
+    `${MOCKS.length} endpoints · token ${TOKEN.slice(0, 6)}…`;
+  const groups = {};
+  for (const m of MOCKS) { const tag = m.path.split("/").filter(Boolean)[0] || "root";
+    (groups[tag] = groups[tag] || []).push(m); }
+  const el = document.getElementById("endpoints");
+  if (!MOCKS.length) { el.innerHTML = '<p class="empty">No mocks loaded.</p>'; return; }
+  el.className = "";
+  el.innerHTML = Object.keys(groups).sort().map(tag => `
+    <div class="tag-group"><h3>${esc(tag)}</h3>
+      <table><tbody>${groups[tag].map(rowFor).join("")}</tbody></table></div>`).join("");
+}
+function rowFor(m) {
+  const opts = m.scenarios.map(s =>
+    `<option ${s === m.activeScenario ? "selected" : ""}>${esc(s)}</option>`).join("");
+  return `<tr>
+    <td class="method m-${m.method}">${m.method}</td>
+    <td class="mono">${esc(m.path)}</td>
+    <td><select onchange="activate('${esc(m.operationId)}', this.value)">${opts}</select></td>
+    <td><button class="act" onclick="edit('${esc(m.operationId)}')">Edit</button></td>
+  </tr><tr id="ed-${esc(m.operationId)}"><td colspan="4" style="border:0;padding:0"></td></tr>`;
+}
+async function activate(id, scenario) {
+  await api(`/mocks/${encodeURIComponent(id)}/activate`, { method: "POST",
+    body: JSON.stringify({ scenario }) });
+  toast(`${id} → ${scenario}`);
+}
+async function edit(id) {
+  const cell = document.querySelector(`#ed-${CSS.escape(id)} td`);
+  if (cell.dataset.open) { cell.innerHTML = ""; cell.dataset.open = ""; return; }
+  const def = await (await api("/mocks/" + encodeURIComponent(id))).json();
+  const scenSel = Object.keys(def.scenarios).map(s => `<option>${esc(s)}</option>`).join("");
+  cell.dataset.open = "1";
+  cell.innerHTML = `<div class="editor">
+    <div class="row"><label>Scenario <select id="sc-${esc(id)}" onchange="showScenario('${esc(id)}')">${scenSel}</select></label></div>
+    <textarea id="ta-${esc(id)}"></textarea>
+    <div class="row" style="margin-top:.4rem">
+      <button class="act primary" onclick="save('${esc(id)}')">Save to file</button>
+      <span class="muted">Writes the scenario body back to its .mock.json</span></div></div>`;
+  cell._def = def;
+  showScenario(id);
+}
+function showScenario(id) {
+  const cell = document.querySelector(`#ed-${CSS.escape(id)} td`);
+  const scen = document.getElementById("sc-" + id).value;
+  document.getElementById("ta-" + id).value = JSON.stringify(cell._def.scenarios[scen], null, 2);
+}
+async function save(id) {
+  const scenario = document.getElementById("sc-" + id).value;
+  let payload;
+  try { payload = JSON.parse(document.getElementById("ta-" + id).value); }
+  catch (e) { toast("Invalid JSON: " + e.message); return; }
+  const r = await api("/mocks/" + encodeURIComponent(id), { method: "PUT",
+    body: JSON.stringify({ scenario, payload }) });
+  const ok = (await r.json()).ok;
+  toast(ok ? "Saved" : "Save failed");
+  const cell = document.querySelector(`#ed-${CSS.escape(id)} td`);
+  if (ok && cell._def) cell._def.scenarios[scenario] = payload;
+}
+
+// ---- Run ------------------------------------------------------------
+async function initRun() {
+  const st = await (await api("/run/status")).json();
+  const el = document.getElementById("run-targets");
+  el.innerHTML = st.targets.length
+    ? st.targets.map(t => `<button class="act primary" onclick="run('${esc(t)}')">▶ ${esc(t)}</button>`).join("")
+    : '<span class="empty">No runTargets configured in jui.config.json (mock.runTargets).</span>';
+}
+async function run(target) {
+  document.getElementById("log").textContent = "";
+  document.getElementById("results").innerHTML = "";
+  const r = await api("/run", { method: "POST", body: JSON.stringify({ target }) });
+  const res = await r.json();
+  if (!res.ok) { toast(res.message); return; }
+  document.getElementById("run-status").textContent = `running ${target}…`;
+  const es = new EventSource("/__jsonui__/run/stream?token=" + encodeURIComponent(TOKEN));
+  const log = document.getElementById("log");
+  es.onmessage = e => { log.textContent += e.data + "\n"; log.scrollTop = log.scrollHeight; };
+  es.addEventListener("done", e => { es.close();
+    document.getElementById("run-status").textContent = `${target} finished (exit ${e.data})`;
+    loadResults(); });
+}
+async function loadResults() {
+  const r = await api("/run/results");
+  const el = document.getElementById("results");
+  if (r.status !== 200) { el.className = "empty"; el.textContent = "No results JSON found for this target."; return; }
+  const data = await r.json();
+  el.className = "";
+  el.innerHTML = (data.suites || []).map(s => `
+    <h4>${esc(s.suiteName || "suite")} <span class="muted">${s.totalDurationMs || 0}ms</span></h4>
+    <table><thead><tr><th>case</th><th>status</th><th>detail</th></tr></thead><tbody>
+    ${(s.results || []).map(c => `<tr>
+      <td>${esc(c.caseName || c.testName || "")}</td>
+      <td><span class="badge b-${c.status}">${esc(c.status)}</span></td>
+      <td>${c.error ? `<span class="mono">${esc(c.error)}</span>` : ""}
+          ${(c.warnings || []).map(w => `<div class="badge b-warn">${esc(w)}</div>`).join("")}</td>
+    </tr>`).join("")}</tbody></table>`).join("") || '<p class="empty">Empty results.</p>';
+}
+
+// ---- Requests -------------------------------------------------------
+async function loadRequests() {
+  const rows = await (await api("/requests")).json();
+  const el = document.getElementById("requests");
+  el.className = rows.length ? "" : "empty";
+  if (!rows.length) { el.textContent = "No requests recorded yet."; return; }
+  el.innerHTML = `<table><thead><tr><th>method</th><th>path</th><th>matched</th><th>body</th></tr></thead>
+    <tbody>${rows.slice().reverse().map(r => `
+      <tr class="${r.matched ? "" : "unmatched"}">
+        <td class="method m-${r.method}">${r.method}</td>
+        <td class="mono">${esc(r.path)}</td>
+        <td>${r.matched ? esc(r.matched) : '<span class="badge b-fail">unmatched</span>'}</td>
+        <td class="mono">${r.body ? esc(JSON.stringify(r.body)).slice(0, 120) : ""}</td>
+      </tr>`).join("")}</tbody></table>`;
+}
+
+loadEndpoints();
+initRun();
+</script>

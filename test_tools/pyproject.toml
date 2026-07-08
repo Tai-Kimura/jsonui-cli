@@ -6,10 +6,19 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 include = ["jsonui_test_cli*"]
 
+[tool.setuptools.package-data]
+# Non-.py assets shipped inside the package so they survive `pip install -e .`.
+# Read at runtime via importlib.resources, never by repo-relative path.
+# Only static/ ships: the sole runtime-read asset is static/panel.html
+# (mock/server.py). The mock editor/doc schema (mock.schema.json) is NOT read at
+# runtime and belongs with the other editor schemas in the jsonui-test-runner
+# top-level schemas/ (plan D5), so it is not packaged here.
+jsonui_test_cli = ["static/*"]
+
 [project]
 name = "jsonui-test-cli"
 version = "1.0.0"
-description = "CLI tool for validating and generating documentation from JsonUI test files"
+description = "CLI tool for validating JsonUI test files and generating test templates"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [
