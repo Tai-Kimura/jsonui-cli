@@ -1,4 +1,16 @@
-"""Re-export TestValidator from validation module."""
-from .validation import TestValidator, ValidationResult
+"""Validator for JsonUI test files.
 
-__all__ = ["TestValidator", "ValidationResult"]
+This module re-exports from the validation package for backwards compatibility.
+"""
+
+from .validation import (
+    ValidationMessage,
+    ValidationResult,
+    TestValidator,
+)
+
+__all__ = [
+    "ValidationMessage",
+    "ValidationResult",
+    "TestValidator",
+]

@@ -1,0 +1,1285 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://jsonui.dev/schemas/actions.schema.json",
+  "title": "JsonUI Test Actions and Assertions",
+  "description": "Definitions for test actions and assertions used in JsonUI test cases",
+  "definitions": {
+    "elementId": {
+      "type": "string",
+      "description": "The id attribute of the target element in JsonUI layout",
+      "minLength": 1
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "up",
+        "down",
+        "left",
+        "right"
+      ],
+      "description": "Direction for scroll/swipe actions"
+    },
+    "label": {
+      "type": "string",
+      "description": "Human-readable step name used in logs and reports"
+    },
+    "optional": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, a failure of this step is recorded as a warning and execution continues"
+    },
+    "condition": {
+      "type": "object",
+      "description": "Condition object for 'when' (step pre-condition) and 'repeat.while'. Multiple keys are ANDed.",
+      "properties": {
+        "visible": {
+          "$ref": "#/definitions/elementId",
+          "description": "Instant check: element is currently visible"
+        },
+        "notVisible": {
+          "$ref": "#/definitions/elementId",
+          "description": "Instant check: element is currently absent or invisible"
+        },
+        "platform": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "ios",
+                "android",
+                "web",
+                "all"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "ios",
+                  "android",
+                  "web"
+                ]
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          ],
+          "description": "Current platform matches"
+        },
+        "state": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Dot-notation path to ViewModel property"
+            },
+            "equals": {
+              "description": "Expected value (any type)"
+            }
+          },
+          "required": [
+            "path",
+            "equals"
+          ],
+          "additionalProperties": false,
+          "description": "ViewModel state matches (requires a state provider)"
+        }
+      },
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "launch": {
+      "type": "object",
+      "description": "App launch configuration applied before the app under test starts",
+      "properties": {
+        "clearState": {
+          "type": "boolean",
+          "default": false,
+          "description": "Clear app data before launch (iOS: JSONUI_TEST_CLEAR_STATE env contract; Android: pm clear; Web: cookies + storage)"
+        },
+        "permissions": {
+          "type": "object",
+          "description": "Permission grants applied before launch",
+          "propertyNames": {
+            "enum": [
+              "camera",
+              "microphone",
+              "location",
+              "notifications",
+              "photos",
+              "contacts",
+              "calendar",
+              "bluetooth"
+            ]
+          },
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny",
+              "unset"
+            ]
+          }
+        },
+        "arguments": {
+          "type": "object",
+          "description": "Launch arguments passed to the app (iOS: launchEnvironment JSONUI_TEST_ARGS; Android: intent extras; Web: sessionStorage)",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "action": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/tapAction"
+        },
+        {
+          "$ref": "#/definitions/doubleTapAction"
+        },
+        {
+          "$ref": "#/definitions/longPressAction"
+        },
+        {
+          "$ref": "#/definitions/inputAction"
+        },
+        {
+          "$ref": "#/definitions/clearAction"
+        },
+        {
+          "$ref": "#/definitions/scrollAction"
+        },
+        {
+          "$ref": "#/definitions/scrollUntilVisibleAction"
+        },
+        {
+          "$ref": "#/definitions/swipeAction"
+        },
+        {
+          "$ref": "#/definitions/waitForAction"
+        },
+        {
+          "$ref": "#/definitions/waitForAnyAction"
+        },
+        {
+          "$ref": "#/definitions/waitAction"
+        },
+        {
+          "$ref": "#/definitions/backAction"
+        },
+        {
+          "$ref": "#/definitions/screenshotAction"
+        },
+        {
+          "$ref": "#/definitions/alertTapAction"
+        },
+        {
+          "$ref": "#/definitions/selectOptionAction"
+        },
+        {
+          "$ref": "#/definitions/tapItemAction"
+        },
+        {
+          "$ref": "#/definitions/selectTabAction"
+        },
+        {
+          "$ref": "#/definitions/readTextAction"
+        },
+        {
+          "$ref": "#/definitions/repeatAction"
+        },
+        {
+          "$ref": "#/definitions/retryAction"
+        },
+        {
+          "$ref": "#/definitions/setLocationAction"
+        },
+        {
+          "$ref": "#/definitions/addMediaAction"
+        },
+        {
+          "$ref": "#/definitions/setMocksAction"
+        }
+      ]
+    },
+    "tapAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "tap"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "text": {
+          "type": "string",
+          "description": "Specific text portion to tap within the element (e.g., tap '利用規約' within '利用規約に同意する')"
+        },
+        "retryTapIfNoChange": {
+          "type": "boolean",
+          "default": false,
+          "description": "Re-tap once when the UI did not change after the tap (ghost-tap mitigation; no-op on web)"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "doubleTapAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "doubleTap"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "longPressAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "longPress"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "duration": {
+          "type": "integer",
+          "minimum": 100,
+          "default": 500,
+          "description": "Duration in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "inputAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "input"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "value": {
+          "type": "string",
+          "description": "Text to input"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "clearAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "clear"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "scrollAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "scroll"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "direction": {
+          "$ref": "#/definitions/direction"
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Scroll amount in pixels (optional)"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "direction"
+      ],
+      "additionalProperties": false
+    },
+    "scrollUntilVisibleAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "scrollUntilVisible"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId",
+          "description": "Target element to bring into view"
+        },
+        "container": {
+          "$ref": "#/definitions/elementId",
+          "description": "Scrollable container to scroll (default: window / first scrollable view)"
+        },
+        "direction": {
+          "$ref": "#/definitions/direction",
+          "default": "down",
+          "description": "Direction the content moves toward (down reveals content below)"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 20000,
+          "description": "Timeout in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "swipeAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "swipe"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "direction": {
+          "$ref": "#/definitions/direction"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "direction"
+      ],
+      "additionalProperties": false
+    },
+    "waitForAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "waitFor"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "waitForAnyAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "waitForAny"
+        },
+        "ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/elementId"
+          },
+          "minItems": 1,
+          "description": "Element ids; the step succeeds when any of them appears"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "ids"
+      ],
+      "additionalProperties": false
+    },
+    "waitAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "wait"
+        },
+        "ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Wait duration in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "ms"
+      ],
+      "additionalProperties": false
+    },
+    "backAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "back"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "screenshotAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "screenshot"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Screenshot file name (without extension)"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "alertTapAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "alertTap"
+        },
+        "button": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Button text to tap in the alert dialog (e.g., 'OK', 'Cancel', 'Delete')"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds to wait for alert to appear"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "button"
+      ],
+      "additionalProperties": false
+    },
+    "selectOptionAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "selectOption"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "value": {
+          "type": "string",
+          "description": "Option value to select"
+        },
+        "label": {
+          "type": "string",
+          "description": "Option label (visible text) to select. NOTE: for selectOption, 'label' keeps its original meaning (option text), NOT the universal step-name attribute"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Option index to select (0-based)"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "tapItemAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "tapItem"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId",
+          "description": "Collection element id; item is resolved as {id}_item_{index}"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Item index to tap (0-based)"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "index"
+      ],
+      "additionalProperties": false
+    },
+    "selectTabAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "selectTab"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId",
+          "description": "Tab view element id; tab is resolved as {id}_tab_{index}"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Tab index to select (0-based)"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "index"
+      ],
+      "additionalProperties": false
+    },
+    "readTextAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "readText"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "variable": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Runtime variable name; later steps reference it as @{name}"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "variable"
+      ],
+      "additionalProperties": false
+    },
+    "repeatAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "repeat"
+        },
+        "times": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Iteration count (with 'while': acts as the cap)"
+        },
+        "while": {
+          "$ref": "#/definitions/condition",
+          "description": "Loop while this condition holds (checked before each iteration; safety cap 100 when used alone)"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/step"
+          },
+          "minItems": 1
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "steps"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "times"
+          ]
+        },
+        {
+          "required": [
+            "while"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "retryAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "retry"
+        },
+        "maxRetries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "default": 1,
+          "description": "Number of retries after the first attempt (capped at 3 by design)"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/step"
+          },
+          "minItems": 1
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "steps"
+      ],
+      "additionalProperties": false
+    },
+    "setLocationAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "setLocation"
+        },
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "latitude",
+        "longitude"
+      ],
+      "additionalProperties": false
+    },
+    "addMediaAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "addMedia"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "description": "Media file paths (relative to test file). Android only; iOS/Web fail with 'not supported'"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "paths"
+      ],
+      "additionalProperties": false
+    },
+    "assertion": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/visibleAssertion"
+        },
+        {
+          "$ref": "#/definitions/notVisibleAssertion"
+        },
+        {
+          "$ref": "#/definitions/enabledAssertion"
+        },
+        {
+          "$ref": "#/definitions/disabledAssertion"
+        },
+        {
+          "$ref": "#/definitions/textAssertion"
+        },
+        {
+          "$ref": "#/definitions/countAssertion"
+        },
+        {
+          "$ref": "#/definitions/stateAssertion"
+        },
+        {
+          "$ref": "#/definitions/screenshotAssertion"
+        }
+      ]
+    },
+    "assertionTimeout": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Auto-wait timeout in milliseconds (default: runner defaultTimeout, 5000ms). Assertions poll every 100ms until the condition holds."
+    },
+    "visibleAssertion": {
+      "type": "object",
+      "properties": {
+        "assert": {
+          "const": "visible"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "assert",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "notVisibleAssertion": {
+      "type": "object",
+      "properties": {
+        "assert": {
+          "const": "notVisible"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "assert",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "enabledAssertion": {
+      "type": "object",
+      "properties": {
+        "assert": {
+          "const": "enabled"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "assert",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "disabledAssertion": {
+      "type": "object",
+      "properties": {
+        "assert": {
+          "const": "disabled"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "assert",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "textAssertion": {
+      "type": "object",
+      "properties": {
+        "assert": {
+          "const": "text"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "equals": {
+          "type": "string",
+          "description": "Exact text match"
+        },
+        "contains": {
+          "type": "string",
+          "description": "Partial text match"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "assert",
+        "id"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "equals"
+          ]
+        },
+        {
+          "required": [
+            "contains"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "countAssertion": {
+      "type": "object",
+      "properties": {
+        "assert": {
+          "const": "count"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "equals": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Expected element count"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "assert",
+        "id",
+        "equals"
+      ],
+      "additionalProperties": false
+    },
+    "stateAssertion": {
+      "type": "object",
+      "properties": {
+        "assert": {
+          "const": "state"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Dot-notation path to ViewModel property (e.g., 'user.isLoggedIn')"
+        },
+        "equals": {
+          "description": "Expected value (any type)"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "assert",
+        "path",
+        "equals"
+      ],
+      "additionalProperties": false
+    },
+    "screenshotAssertion": {
+      "type": "object",
+      "properties": {
+        "assert": {
+          "const": "screenshot"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Baseline name; compared against <baselineDir>/<platform>/<name>.png. Missing baseline is created and the step passes with a warning."
+        },
+        "cropId": {
+          "$ref": "#/definitions/elementId",
+          "description": "Crop the capture to this element's bounding box before comparing"
+        },
+        "threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 98.0,
+          "description": "Required similarity percentage (100 = pixel-perfect)"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "assert",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "step": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/action"
+        },
+        {
+          "$ref": "#/definitions/assertion"
+        }
+      ]
+    },
+    "mocksScenarioMap": {
+      "type": "object",
+      "description": "Map of OpenAPI operationId -> mock scenario name",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "setMocksAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "setMocks"
+        },
+        "mocks": {
+          "$ref": "#/definitions/mocksScenarioMap"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "mocks"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

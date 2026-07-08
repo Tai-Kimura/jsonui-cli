@@ -176,33 +176,14 @@ if [ -f "$ATTR_DEF" ]; then
     success "Copied attribute_definitions.json to all tools"
 fi
 
-# Copy shared validation module to Python tools
-copy_shared_validation() {
-    local target_dir="$1"
-    local pkg_name="$2"
-
-    if [ -d "shared/validation" ] && [ -d "$target_dir/$pkg_name" ]; then
-        rm -rf "$target_dir/$pkg_name/validation"
-        cp -r "shared/validation" "$target_dir/$pkg_name/"
-        rm -rf "$target_dir/$pkg_name/validation/__pycache__"
-
-        # validation module imports from ..schema
-        if [ -f "shared/schema.py" ]; then
-            cp "shared/schema.py" "$target_dir/$pkg_name/"
-        fi
-    fi
-}
-
-if [ -d "shared/validation" ]; then
-    copy_shared_validation "test_tools" "jsonui_test_cli"
-    copy_shared_validation "document_tools" "jsonui_doc_cli"
-    success "Copied shared validation module to Python tools"
-fi
-
-# Copy schema.py to test_doc subdirectory (required for document_tools imports)
-if [ -f "shared/schema.py" ] && [ -d "document_tools/jsonui_doc_cli/test_doc" ]; then
-    cp "shared/schema.py" "document_tools/jsonui_doc_cli/test_doc/"
-fi
+# NOTE: The old copy_shared_validation() step (which injected shared/validation
+# + shared/schema.py into the Python packages) was removed. test_tools
+# (jsonui_test_cli) is now self-contained — it ships its own validation/ (incl.
+# launch.py + mock.py) and schema.py — and document_tools (jsonui_doc_cli)
+# imports the validator + schema constants from jsonui_test_cli. Injecting the
+# old shared/ generation silently clobbered mock/launch/setMocks validation, so
+# neither package is fed by shared/ anymore. shared/core/*.json (Ruby tools'
+# copy target below) is unaffected. DO NOT reintroduce a shared/ copy here.
 
 # Remove unnecessary files for production
 # Keep shared/core/ — jsonui-mcp-server's 4-layer fallback reads
@@ -211,8 +192,6 @@ info "Cleaning up development files..."
 rm -rf .git
 rm -rf .github
 rm -rf installer
-rm -rf shared/validation
-rm -f  shared/schema.py
 rm -f  README.md
 rm -f  install.sh
 rm -rf */spec

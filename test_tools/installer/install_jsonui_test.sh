@@ -6,7 +6,10 @@
 set -e
 
 # Default values
-GITHUB_REPO="Tai-Kimura/jsonui-test-runner"
+# The jsonui-test CLI is self-contained and lives in the jsonui-cli monorepo
+# (test_tools/). This standalone installer downloads jsonui-cli and pip-installs
+# test_tools without needing the rest of the monorepo at runtime.
+GITHUB_REPO="Tai-Kimura/jsonui-cli"
 DEFAULT_BRANCH="main"
 INSTALL_DIR="."
 
@@ -183,7 +186,7 @@ else
     print_info "Detected: branch"
 fi
 
-if ! curl -L -f -o "$TEMP_DIR/jsonui-test-runner.tar.gz" "$DOWNLOAD_URL"; then
+if ! curl -L -f -o "$TEMP_DIR/jsonui-cli.tar.gz" "$DOWNLOAD_URL"; then
     print_error "Failed to download from $DOWNLOAD_URL"
     print_error "Please check if the version/branch '$VERSION' exists."
     exit 1
@@ -191,10 +194,10 @@ fi
 
 # Extract the archive
 print_info "Extracting archive..."
-tar -xzf "$TEMP_DIR/jsonui-test-runner.tar.gz" -C "$TEMP_DIR"
+tar -xzf "$TEMP_DIR/jsonui-cli.tar.gz" -C "$TEMP_DIR"
 
 # Find the extracted directory
-EXTRACT_DIR=$(find "$TEMP_DIR" -maxdepth 1 -type d -name "jsonui-test-runner-*" | head -1)
+EXTRACT_DIR=$(find "$TEMP_DIR" -maxdepth 1 -type d -name "jsonui-cli-*" | head -1)
 
 if [ -z "$EXTRACT_DIR" ]; then
     print_error "Failed to find extracted directory"

@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://jsonui.dev/schemas/description.schema.json",
+  "title": "JsonUI Test Case Description",
+  "description": "Schema for detailed test case documentation",
+  "type": "object",
+
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Reference to this schema"
+    },
+
+    "case_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Name of the test case this description belongs to"
+    },
+
+    "summary": {
+      "type": "string",
+      "description": "Brief summary of what this test case verifies"
+    },
+
+    "preconditions": {
+      "type": "array",
+      "description": "Conditions that must be met before running this test",
+      "items": {
+        "type": "string"
+      }
+    },
+
+    "test_procedure": {
+      "type": "array",
+      "description": "Step-by-step test procedure",
+      "items": {
+        "type": "string"
+      }
+    },
+
+    "expected_results": {
+      "type": "array",
+      "description": "Expected outcomes after test execution",
+      "items": {
+        "type": "string"
+      }
+    },
+
+    "notes": {
+      "type": "string",
+      "description": "Additional notes or comments about this test case"
+    },
+
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when this description was created"
+    },
+
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when this description was last updated"
+    }
+  },
+
+  "required": ["case_name"],
+  "additionalProperties": false
+}

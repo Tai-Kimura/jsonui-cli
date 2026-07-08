@@ -54,25 +54,17 @@ echo ""
 echo "Installing tools..."
 echo ""
 
-# Copy shared modules to Python tools
-copy_shared_modules() {
-    local target_dir="$1"
-    local pkg_name="$2"
-
-    if [ -d "$SCRIPT_DIR/shared/validation" ] && [ -d "$target_dir/$pkg_name" ]; then
-        rm -rf "$target_dir/$pkg_name/validation"
-        cp -r "$SCRIPT_DIR/shared/validation" "$target_dir/$pkg_name/"
-        rm -rf "$target_dir/$pkg_name/validation/__pycache__"
-
-        if [ -f "$SCRIPT_DIR/shared/schema.py" ]; then
-            cp "$SCRIPT_DIR/shared/schema.py" "$target_dir/$pkg_name/"
-            # Also copy to test_doc/ for document_tools (markdown imports from ..schema)
-            if [ -d "$target_dir/$pkg_name/test_doc" ]; then
-                cp "$SCRIPT_DIR/shared/schema.py" "$target_dir/$pkg_name/test_doc/"
-            fi
-        fi
-    fi
-}
+# NOTE: The old copy_shared_modules() helper (which injected shared/schema.py +
+# shared/validation/ into the Python packages at install time) was removed.
+# Rationale (plan Phase 1 / D3):
+#   - test_tools (jsonui_test_cli) is now self-contained: it ships its own
+#     validation/ (incl. launch.py + mock.py) and schema.py. Injecting the old
+#     shared/ generation silently clobbered mock/launch/setMocks validation.
+#   - document_tools (jsonui_doc_cli) no longer carries its own validator either;
+#     it imports the validator + schema constants from jsonui_test_cli.
+# So there is exactly one generation of the test validator in this repo, and
+# neither package is fed by shared/. shared/core/*.json (Ruby tools' symlink
+# target) is unaffected. DO NOT reintroduce a shared/ copy into these packages.
 
 # Install sjui_tools
 echo "--- sjui_tools ---"
@@ -137,10 +129,11 @@ else
 fi
 
 # Install test_tools
+# Self-contained: NOT fed by copy_shared_modules (see note above). Installed
+# BEFORE document_tools because jsonui_doc_cli imports from jsonui_test_cli.
 echo "--- test_tools ---"
 if [ -d "$SCRIPT_DIR/test_tools" ]; then
     if command -v python3 &> /dev/null; then
-        copy_shared_modules "$SCRIPT_DIR/test_tools" "jsonui_test_cli"
         cd "$SCRIPT_DIR/test_tools"
         pip3 install -e . --quiet 2>/dev/null || pip3 install -e .
         cd "$SCRIPT_DIR"
@@ -153,10 +146,11 @@ else
 fi
 
 # Install document_tools
+# Depends on jsonui_test_cli (installed above) for the validator + schema
+# constants. NOT fed by copy_shared_modules (see note above).
 echo "--- document_tools ---"
 if [ -d "$SCRIPT_DIR/document_tools" ]; then
     if command -v python3 &> /dev/null; then
-        copy_shared_modules "$SCRIPT_DIR/document_tools" "jsonui_doc_cli"
         cd "$SCRIPT_DIR/document_tools"
         pip3 install -e . --quiet 2>/dev/null || pip3 install -e .
         cd "$SCRIPT_DIR"
