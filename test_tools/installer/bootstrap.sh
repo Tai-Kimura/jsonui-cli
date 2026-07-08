@@ -4,15 +4,15 @@
 # This script downloads the installer and runs it with automatic Python setup
 #
 # Usage examples:
-#   curl -fsSL https://raw.githubusercontent.com/Tai-Kimura/jsonui-test-runner/main/test_tools/installer/bootstrap.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/Tai-Kimura/jsonui-test-runner/main/test_tools/installer/bootstrap.sh | bash -s -- -v v1.0.0
-#   curl -fsSL https://raw.githubusercontent.com/Tai-Kimura/jsonui-test-runner/main/test_tools/installer/bootstrap.sh | bash -s -- -d ./my-project
-#   curl -fsSL https://raw.githubusercontent.com/Tai-Kimura/jsonui-test-runner/main/test_tools/installer/bootstrap.sh | bash -s -- --dev
+#   curl -fsSL https://raw.githubusercontent.com/Tai-Kimura/jsonui-cli/main/test_tools/installer/bootstrap.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Tai-Kimura/jsonui-cli/main/test_tools/installer/bootstrap.sh | bash -s -- -v v1.0.0
+#   curl -fsSL https://raw.githubusercontent.com/Tai-Kimura/jsonui-cli/main/test_tools/installer/bootstrap.sh | bash -s -- -d ./my-project
+#   curl -fsSL https://raw.githubusercontent.com/Tai-Kimura/jsonui-cli/main/test_tools/installer/bootstrap.sh | bash -s -- --dev
 
 set -e
 
 # Configuration
-GITHUB_REPO="Tai-Kimura/jsonui-test-runner"
+GITHUB_REPO="Tai-Kimura/jsonui-cli"
 INSTALLER_PATH="test_tools/installer/install_jsonui_test.sh"
 REQUIRED_PYTHON_VERSION="3.11"
 MINIMUM_PYTHON_VERSION="3.10"

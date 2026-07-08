@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://jsonui.dev/schemas/results.schema.json",
+  "title": "JsonUI Test Results",
+  "description": "Standardized test-run results emitted by all platform drivers; consumed by `jsonui-test report`",
+  "type": "object",
+
+  "properties": {
+    "format": { "const": "jsonui-test-results" },
+    "version": { "const": 1 },
+    "platform": {
+      "type": "string",
+      "enum": ["ios", "android", "web"]
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "suites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "suiteName": { "type": "string" },
+          "totalDurationMs": { "type": "number", "minimum": 0 },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "testName": { "type": "string" },
+                "caseName": { "type": "string" },
+                "status": {
+                  "type": "string",
+                  "enum": ["passed", "failed", "skipped"]
+                },
+                "error": { "type": "string" },
+                "warnings": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "durationMs": { "type": "number", "minimum": 0 }
+              },
+              "required": ["testName", "caseName", "status", "durationMs"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["suiteName", "results"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["format", "version", "platform", "suites"],
+  "additionalProperties": false
+}
