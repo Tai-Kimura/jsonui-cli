@@ -23,6 +23,7 @@ def cmd_validate(args):
     total_errors = 0
     total_warnings = 0
     files_checked = 0
+    valid_test_files = []
 
     # Collect files
     files_to_validate = []
@@ -67,13 +68,76 @@ def cmd_validate(args):
         if result.is_valid and not result.warnings and args.verbose:
             print("  OK")
 
+        if result.is_valid and Path(file_path).name.endswith(".test.json"):
+            valid_test_files.append(Path(file_path))
+
     # Summary
     print(f"\n{'='*50}")
     status = "PASSED" if total_errors == 0 else "FAILED"
     print(f"Result: {status}")
     print(f"Files: {files_checked}, Errors: {total_errors}, Warnings: {total_warnings}")
 
-    return 1 if total_errors > 0 else 0
+    if total_errors > 0:
+        return 1
+
+    # Success-gated flatten-install: distribute validated tests to the platform
+    # locations declared in config (no-op when nothing is configured).
+    if not getattr(args, "no_install", False):
+        install_rc = _install_validated_tests(valid_test_files, getattr(args, "config", None))
+        if install_rc != 0:
+            return install_rc
+
+    return 0
+
+
+def _load_test_config(explicit_path=None):
+    """Read the 'test' section from jui.config.json (or an explicit config path).
+
+    Returns (test_config_dict, config_path_or_None).
+    """
+    candidates = [Path(explicit_path)] if explicit_path else [
+        Path("jui.config.json"), Path("jsonui-test.config.json")]
+    for c in candidates:
+        if c.exists():
+            try:
+                with open(c, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return data.get("test", {}), c
+            except (OSError, json.JSONDecodeError):
+                pass
+    return {}, None
+
+
+def _install_validated_tests(valid_test_files, config_path):
+    """Flatten-install valid .test.json files per config. Returns exit code."""
+    from .install import resolve_targets, flatten_install
+
+    test_config, cfg_path = _load_test_config(config_path)
+    if not cfg_path:
+        return 0  # no config → validate-only
+
+    project_root = cfg_path.parent
+    targets = resolve_targets(test_config, project_root)
+    if not targets:
+        return 0  # no install destinations declared → validate-only
+
+    report = flatten_install(valid_test_files, targets)
+
+    if report.has_collision:
+        print(f"\n{'='*50}")
+        print("Install ABORTED: duplicate test file names (flat layout needs unique names):")
+        for name, srcs in report.collisions:
+            print(f"  [COLLISION] {name}")
+            for src in srcs:
+                print(f"              {src}")
+        return 1
+
+    print(f"\n{'='*50}")
+    print(f"Installed {len(valid_test_files)} test file(s) → {len(targets)} target(s)"
+          f" (cleaned {report.removed} stale):")
+    for platform, dest in report.targets:
+        print(f"  {platform}: {dest}")
+    return 0
 
 
 def cmd_generate_test_screen(args):
@@ -357,6 +421,15 @@ def main():
         "-q", "--quiet",
         action="store_true",
         help="Hide warnings, show only errors"
+    )
+    validate_parser.add_argument(
+        "--no-install",
+        action="store_true",
+        help="Validate only; skip flatten-install even if test.install is configured"
+    )
+    validate_parser.add_argument(
+        "--config",
+        help="Config file for test.install destinations (default: jui.config.json)"
     )
 
     # Generate command with subcommands
