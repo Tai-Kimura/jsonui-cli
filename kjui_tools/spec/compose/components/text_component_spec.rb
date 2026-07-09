@@ -330,6 +330,16 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       expect(result).to match(/val resolved_text\d+ = Configuration\.Font\.resolve\(FontSpec\(/)
       expect(result).to include('fontSize = (resolved_text1.size ?: TextUnit.Unspecified)')
     end
+
+    # kjui-partialattributes-label-missing-testtag: a linkable Label with an id
+    # must carry the shared id testTag so it is findable by By.res(id).
+    it 'emits testTag(id) on a linkable Label' do
+      json_data = { 'type' => 'Label', 'id' => 'link_label', 'text' => 'Terms', 'linkable' => true }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('PartialAttributesText(')
+      expect(result).to include('.testTag("link_label")')
+      expect(result).to include('.semantics { testTagsAsResourceId = true }')
+    end
   end
 
   describe '.generate_with_partial_attributes_component' do
@@ -379,6 +389,28 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('onClick = { data.handleClick?.invoke() }')
+    end
+
+    # kjui-partialattributes-label-missing-testtag: parity with every other
+    # component + iOS accessibilityIdentifier.
+    it 'emits testTag(id) on a partialAttributes Label so it is findable by id' do
+      json_data = {
+        'type' => 'Label', 'id' => 'sign_up_label', 'text' => 'Apply for membership',
+        'partialAttributes' => [{ 'range' => [0, 5], 'fontColor' => '#FF0000' }]
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('PartialAttributesText(')
+      expect(result).to include('.testTag("sign_up_label")')
+      expect(result).to include('.semantics { testTagsAsResourceId = true }')
+    end
+
+    it 'omits testTag when a partialAttributes Label has no id' do
+      json_data = {
+        'type' => 'Label', 'text' => 'No id',
+        'partialAttributes' => [{ 'range' => [0, 2], 'fontColor' => '#FF0000' }]
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).not_to include('.testTag(')
     end
   end
 

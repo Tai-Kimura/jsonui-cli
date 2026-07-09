@@ -313,6 +313,10 @@ module KjuiTools
 
           # Build modifiers
           modifiers = []
+          # id testTag first, via the shared ModifierBuilder (single source of
+          # truth every other component uses) so a partial-attributes node is
+          # findable by By.res(id) — parity with iOS accessibilityIdentifier.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
@@ -432,6 +436,10 @@ module KjuiTools
 
           # Build modifiers
           modifiers = []
+          # id testTag first, via the shared ModifierBuilder (single source of
+          # truth every other component uses) so a partial-attributes node is
+          # findable by By.res(id) — parity with iOS accessibilityIdentifier.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
@@ -579,6 +587,10 @@ module KjuiTools
 
           # Build modifiers
           modifiers = []
+          # id testTag first, via the shared ModifierBuilder (single source of
+          # truth every other component uses) so a partial-attributes node is
+          # findable by By.res(id) — parity with iOS accessibilityIdentifier.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
