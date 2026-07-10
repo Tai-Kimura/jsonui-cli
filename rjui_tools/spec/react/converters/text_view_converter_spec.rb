@@ -363,4 +363,15 @@ RSpec.describe RjuiTools::React::Converters::TextViewConverter do
       expect(result).to include('data-tag="comment-field"')
     end
   end
+  # Focus-state binding — cross-platform parity with sjui/kjui data.<id>IsFocused.
+  describe 'focus-state binding attrs' do
+    it 'attaches ref + focus report-back handlers for an id-bearing textarea' do
+      converter = described_class.new({ 'type' => 'TextView', 'id' => 'note_input' }, { 'use_tailwind' => true })
+      result = converter.convert
+      expect(result).to include('ref={noteInputRef}')
+      expect(result).to include('onFocus={() => data.onNoteInputIsFocusedChange?.(true)}')
+      expect(result).to include('onBlur={() => data.onNoteInputIsFocusedChange?.(false)}')
+    end
+  end
 end
+

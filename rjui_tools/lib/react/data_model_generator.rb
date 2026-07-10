@@ -199,6 +199,7 @@ module RjuiTools
             extract_handler_binding(json_data, handler_key, 'string', handlers) if json_data[handler_key]
           end
 
+
           # Process children
           child = json_data['child'] || json_data['children']
           if child
@@ -262,6 +263,20 @@ module RjuiTools
             if value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
               property_name = value[2...-1]
               bindings[property_name] = { type: 'string', defaultValue: '""' }
+            end
+          end
+
+          # Focus-state binding (cross-platform parity with sjui/kjui
+          # data.<id>IsFocused): every editable field with a literal id gets a
+          # boolean prop the ViewModel can set to drive focus (the generated
+          # component hoists a ref + effect). The paired optional
+          # on<Camel>IsFocusedChange report-back handler is derived from this
+          # binding by the value-binding handler loop in update_data_file.
+          if %w[TextField EditText Input TextView].include?(component_type)
+            field_id = json_data['id']
+            if field_id.is_a?(String) && !field_id.empty? && !field_id.include?('@{')
+              camel = snake_to_camel_id(field_id)
+              bindings["#{camel}IsFocused"] ||= { type: 'boolean', defaultValue: false }
             end
           end
 
@@ -553,6 +568,12 @@ module RjuiTools
         content += Core::GeneratedMarker.comment_footer + "\n"
 
         content
+      end
+
+      # snake_case id -> lowerCamel stem (sync: BaseConverter#snake_to_camel_id)
+      def snake_to_camel_id(str)
+        parts = str.split('_')
+        parts[0] + parts[1..].map(&:capitalize).join
       end
 
       def capitalize_first(str)

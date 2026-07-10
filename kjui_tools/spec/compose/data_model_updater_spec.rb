@@ -649,13 +649,15 @@ RSpec.describe KjuiTools::Compose::DataModelUpdater do
           { 'type' => 'TextField', 'id' => 'two_fa_hidden_input' },
           { 'type' => 'TextField', 'id' => 'email_field' },
           { 'type' => 'TextField' },                      # id-less: nothing
+          { 'type' => 'TextView', 'id' => 'note_input' },  # multiline editor: included
           { 'type' => 'Text', 'id' => 'some_label' }      # non-field: nothing
         ]
       })
       names = props.map { |p| p['name'] }
       expect(names).to include('twoFaHiddenInputIsFocused')
       expect(names).to include('emailFieldIsFocused')
-      expect(names.grep(/IsFocused/).size).to eq(2)
+      expect(names).to include('noteInputIsFocused')
+      expect(names.grep(/IsFocused/).size).to eq(3)
       focus = props.find { |p| p['name'] == 'twoFaHiddenInputIsFocused' }
       expect(focus['class']).to eq('Boolean')
       expect(focus['defaultValue']).to eq(false)

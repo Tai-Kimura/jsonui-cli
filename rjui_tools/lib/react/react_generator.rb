@@ -211,6 +211,7 @@ module RjuiTools
 
       def generate_component_file(name, jsx_content, json)
         state_vars = extract_state_variables(json)
+        focus_fields = extract_focus_fields(json)
         included_component_map = extract_included_components(json)  # { CompName => subdir_or_nil }
         included_components = included_component_map.keys
         extension_components = extract_extension_components(json)
@@ -242,12 +243,17 @@ module RjuiTools
         # Determine if we need useState or "use client"
         needs_state = !state_vars.empty?
         uses_extensions = !extension_components.empty?
-        needs_client = needs_state || uses_string_manager || uses_extensions || needs_landscape
+        needs_focus = !focus_fields.empty?
+        needs_client = needs_state || uses_string_manager || uses_extensions || needs_landscape || needs_focus
         use_client = needs_client ? "\"use client\";\n\n" : ''
 
         # Build React import
         react_hooks = []
         react_hooks << 'useState' if needs_state
+        if needs_focus
+          react_hooks << 'useRef'
+          react_hooks << 'useEffect'
+        end
         react_import = react_hooks.empty? ? "import React from 'react';" : "import React, { #{react_hooks.join(', ')} } from 'react';"
 
         # Generate useMediaQuery import for landscape responsive support
@@ -314,6 +320,17 @@ module RjuiTools
         end.join("\n")
         state_declarations = "\n#{state_declarations}\n" unless state_declarations.empty?
 
+        # Focus-state binding (cross-platform parity with sjui/kjui
+        # data.<id>IsFocused): a ref per editable field plus an effect that
+        # drives DOM focus from the data prop. The converters attach the ref
+        # and report focus changes back via on<Camel>IsFocusedChange.
+        focus_declarations = focus_fields.map do |field|
+          ref_type = field[:element] == 'textarea' ? 'HTMLTextAreaElement' : 'HTMLInputElement'
+          "  const #{field[:camel]}Ref = useRef<#{ref_type} | null>(null);\n" \
+            "  useEffect(() => { if (data.#{field[:camel]}IsFocused) { #{field[:camel]}Ref.current?.focus(); } }, [data.#{field[:camel]}IsFocused]);"
+        end.join("\n")
+        focus_declarations = "\n#{focus_declarations}\n" unless focus_declarations.empty?
+
         # Generate landscape hook declaration
         landscape_declaration = needs_landscape ? "\n  #{ResponsiveHelper.landscape_hook_declaration}\n" : ''
 
@@ -344,7 +361,7 @@ module RjuiTools
           #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{configuration_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}
 
           #{props_interface if @config['typescript']}
-          export const #{name} = (#{props_sig}) => {#{state_declarations}#{landscape_declaration}#{string_manager_declaration}
+          export const #{name} = (#{props_sig}) => {#{state_declarations}#{focus_declarations}#{landscape_declaration}#{string_manager_declaration}
             return (
           #{jsx_content}
             );
@@ -367,6 +384,44 @@ module RjuiTools
 
       def capitalize_first(str)
         str[0].upcase + str[1..]
+      end
+
+      # Editable fields (TextField / TextView + aliases) with a literal id —
+      # each gets a hoisted ref + focus effect (focus_declarations) matching
+      # the ref/handlers the converters attach. MUST stay in sync with
+      # BaseConverter#build_focus_binding_attrs and the DataModelGenerator
+      # focus bindings.
+      def extract_focus_fields(json, fields = [])
+        return fields unless json.is_a?(Hash) || json.is_a?(Array)
+
+        if json.is_a?(Hash)
+          type = json['type']
+          id = json['id']
+          if id.is_a?(String) && !id.empty? && !id.include?('@{')
+            if %w[TextField EditText Input].include?(type)
+              fields << { id: id, camel: snake_to_camel_id(id), element: 'input' }
+            elsif type == 'TextView'
+              fields << { id: id, camel: snake_to_camel_id(id), element: 'textarea' }
+            end
+          end
+
+          child = json['child'] || json['children']
+          if child.is_a?(Array)
+            child.each { |c| extract_focus_fields(c, fields) }
+          elsif child
+            extract_focus_fields(child, fields)
+          end
+        else
+          json.each { |item| extract_focus_fields(item, fields) }
+        end
+
+        fields.uniq { |f| f[:camel] }
+      end
+
+      # snake_case id -> lowerCamel stem (sync: BaseConverter#snake_to_camel_id)
+      def snake_to_camel_id(str)
+        parts = str.split('_')
+        parts[0] + parts[1..].map(&:capitalize).join
       end
 
       def extract_state_variables(json, vars = [])

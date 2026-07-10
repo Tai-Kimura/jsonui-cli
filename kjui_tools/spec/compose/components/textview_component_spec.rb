@@ -478,4 +478,35 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent do
       expect(result).to include('data.onTextChange?.invoke("textview", newValue)')
     end
   end
+  # Focus-state binding — same contract as TextFieldComponent
+  # (kjui-textfield-isfocused-focus-binding-not-generated, extended to TextView).
+  describe 'focus-state binding (data.<id>IsFocused)' do
+    it 'emits FocusRequester + LaunchedEffect + onFocusChanged for an id-bearing TextView' do
+      json_data = { 'type' => 'TextView', 'id' => 'note_input' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('val focusRequester_note_input = remember { FocusRequester() }')
+      expect(result).to include('LaunchedEffect(data.noteInputIsFocused) { if (data.noteInputIsFocused) { focusRequester_note_input.requestFocus(); keyboardController_note_input?.show() } }')
+      expect(result).to include('.focusRequester(focusRequester_note_input)')
+      expect(result).to include('.onFocusChanged { if (it.isFocused != data.noteInputIsFocused) viewModel.updateData(mapOf("noteInputIsFocused" to it.isFocused)) }')
+      expect(required_imports).to include(:focus_requester)
+      expect(required_imports).to include(:focus_changed)
+      expect(required_imports).to include(:software_keyboard_controller)
+    end
+
+    it 'wires the focus binding on the margins (Box-wrapped) variant too' do
+      json_data = { 'type' => 'TextView', 'id' => 'memo_area', 'topMargin' => 8 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('CustomTextFieldWithMargins(')
+      expect(result).to include('.focusRequester(focusRequester_memo_area)')
+      expect(result).to include('.onFocusChanged { if (it.isFocused != data.memoAreaIsFocused)')
+    end
+
+    it 'emits no focus binding for an id-less TextView' do
+      json_data = { 'type' => 'TextView' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).not_to include('IsFocused')
+      expect(result).not_to include('FocusRequester()')
+    end
+  end
 end
+

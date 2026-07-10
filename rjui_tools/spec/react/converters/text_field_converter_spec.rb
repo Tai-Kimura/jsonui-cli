@@ -426,4 +426,22 @@ RSpec.describe RjuiTools::React::Converters::TextFieldConverter do
       expect(result).to include('data-tag="login-field"')
     end
   end
+  # Focus-state binding — cross-platform parity with sjui/kjui data.<id>IsFocused.
+  describe 'focus-state binding attrs' do
+    it 'attaches ref + focus report-back handlers for an id-bearing field' do
+      converter = create_converter({ 'type' => 'TextField', 'id' => 'email_field' })
+      result = converter.convert
+      expect(result).to include('ref={emailFieldRef}')
+      expect(result).to include('onFocus={() => data.onEmailFieldIsFocusedChange?.(true)}')
+      expect(result).to include('onBlur={() => data.onEmailFieldIsFocusedChange?.(false)}')
+    end
+
+    it 'emits no focus attrs for an id-less field' do
+      converter = create_converter({ 'type' => 'TextField' })
+      result = converter.convert
+      expect(result).not_to include('ref={')
+      expect(result).not_to include('IsFocusedChange')
+    end
+  end
 end
+

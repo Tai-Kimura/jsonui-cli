@@ -18,7 +18,9 @@ module RjuiTools
           on_change = build_on_change
           disabled_attr = build_disabled_attr
 
-          jsx = "#{indent_str(indent)}<textarea#{id_attr} className=\"#{class_name}\"#{style_attr}#{attrs}#{on_change}#{disabled_attr}#{testid_attr}#{tag_attr}></textarea>"
+          focus_attrs = build_focus_binding_attrs
+
+          jsx = "#{indent_str(indent)}<textarea#{id_attr} className=\"#{class_name}\"#{style_attr}#{attrs}#{on_change}#{focus_attrs}#{disabled_attr}#{testid_attr}#{tag_attr}></textarea>"
 
           wrap_with_visibility(jsx, indent)
         end

@@ -77,6 +77,22 @@ module KjuiTools
             code += Helpers::FontSpecHelper.emit_resolve_block(tv_resolved_var, tv_font_args, depth, required_imports) + "\n"
           end
 
+          # ViewModel-driven focus binding — same wiring as TextFieldComponent
+          # (kjui-textfield-isfocused-focus-binding-not-generated, extended to
+          # TextView): every TextView with an `id` gets a FocusRequester plus
+          # data.<id>IsFocused wiring. The Data property is auto-added by
+          # DataModelUpdater. (TextView has no fieldId focus chain.)
+          focus_prop = json_data['id'] ? "#{snake_to_camel(json_data['id'])}IsFocused" : nil
+          if focus_prop
+            required_imports&.add(:focus_requester)
+            required_imports&.add(:remember)
+            required_imports&.add(:launched_effect)
+            required_imports&.add(:software_keyboard_controller)
+            code += indent("val focusRequester_#{json_data['id']} = remember { FocusRequester() }", depth) + "\n"
+            code += indent("val keyboardController_#{json_data['id']} = LocalSoftwareKeyboardController.current", depth) + "\n"
+            code += indent("LaunchedEffect(data.#{focus_prop}) { if (data.#{focus_prop}) { focusRequester_#{json_data['id']}.requestFocus(); keyboardController_#{json_data['id']}?.show() } }", depth) + "\n"
+          end
+
           if has_margins
             required_imports&.add(:box)
             code += indent("CustomTextFieldWithMargins(", depth)
@@ -136,6 +152,11 @@ module KjuiTools
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+            if focus_prop
+              required_imports&.add(:focus_changed)
+              textfield_modifiers << ".onFocusChanged { if (it.isFocused != data.#{focus_prop}) viewModel.updateData(mapOf(\"#{focus_prop}\" to it.isFocused)) }"
+              textfield_modifiers << ".focusRequester(focusRequester_#{json_data['id']})"
+            end
 
             if textfield_modifiers.any?
               code += "\n" + indent("textFieldModifier = Modifier", depth + 1)
@@ -182,6 +203,11 @@ module KjuiTools
             modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
             modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
+            if focus_prop
+              required_imports&.add(:focus_changed)
+              modifiers << ".onFocusChanged { if (it.isFocused != data.#{focus_prop}) viewModel.updateData(mapOf(\"#{focus_prop}\" to it.isFocused)) }"
+              modifiers << ".focusRequester(focusRequester_#{json_data['id']})"
+            end
 
             if modifiers.any?
               code += "\n" + indent("modifier = Modifier", depth + 1)
@@ -400,6 +426,13 @@ module KjuiTools
           else
             'value'
           end
+        end
+
+        # snake_case id -> lowerCamel property stem. MUST stay in sync with
+        # DataModelUpdater#snake_to_camel — both derive the <id>IsFocused name.
+        def self.snake_to_camel(str)
+          parts = str.split('_')
+          parts[0] + parts[1..].map(&:capitalize).join
         end
 
         def self.quote(text)

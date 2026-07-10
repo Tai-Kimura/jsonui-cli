@@ -177,3 +177,28 @@ RSpec.describe RjuiTools::React::ReactGenerator do
     end
   end
 end
+RSpec.describe RjuiTools::React::ReactGenerator, 'focus-state declarations' do
+  let(:generator) do
+    described_class.new({ 'use_tailwind' => true, 'layouts_directory' => '/tmp/x', 'generated_directory' => '/tmp/x/out' })
+  end
+
+  it 'hoists a ref + effect per id-bearing editable field and imports the hooks' do
+    json = { 'type' => 'View', 'child' => [
+      { 'type' => 'TextField', 'id' => 'email_field' },
+      { 'type' => 'TextView', 'id' => 'note_input' }
+    ] }
+    out = generator.generate('FocusScreen', json)
+    expect(out).to include("import React, { useRef, useEffect } from 'react';")
+    expect(out).to include('const emailFieldRef = useRef<HTMLInputElement | null>(null);')
+    expect(out).to include('const noteInputRef = useRef<HTMLTextAreaElement | null>(null);')
+    expect(out).to include('useEffect(() => { if (data.emailFieldIsFocused) { emailFieldRef.current?.focus(); } }, [data.emailFieldIsFocused]);')
+    expect(out).to include('"use client"')
+  end
+
+  it 'emits nothing focus-related without editable ids' do
+    json = { 'type' => 'View', 'child' => [{ 'type' => 'Text', 'text' => 'hi' }] }
+    out = generator.generate('PlainScreen', json)
+    expect(out).not_to include('useRef')
+    expect(out).not_to include('IsFocused')
+  end
+end

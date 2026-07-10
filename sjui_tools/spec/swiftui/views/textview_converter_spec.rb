@@ -342,4 +342,21 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextViewConverter do
       end
     end
   end
+  # Focus-state binding — TextField parity: an id-bearing TextView binds
+  # data.<id>IsFocused into TextViewWithPlaceholder (isFocused: param,
+  # SwiftJsonUI v10.3.0+) so a ViewModel can drive focus.
+  describe 'focus-state binding (data.<id>IsFocused)' do
+    it 'passes the isFocused binding for an id-bearing TextView' do
+      converter = described_class.new({ 'type' => 'TextView', 'id' => 'note_input', 'text' => '@{note}' })
+      code = converter.convert
+      expect(code).to include('isFocused: $data.noteInputIsFocused')
+    end
+
+    it 'emits no isFocused binding for an id-less TextView' do
+      converter = described_class.new({ 'type' => 'TextView', 'text' => '@{note}' })
+      code = converter.convert
+      expect(code).not_to include('isFocused:')
+    end
+  end
 end
+

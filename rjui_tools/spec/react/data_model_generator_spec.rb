@@ -307,3 +307,18 @@ RSpec.describe RjuiTools::React::DataModelGenerator do
     end
   end
 end
+RSpec.describe RjuiTools::React::DataModelGenerator, 'focus-state value bindings' do
+  let(:generator) { described_class.new }
+
+  it 'adds a boolean <camel>IsFocused binding per id-bearing editable field' do
+    json = { 'type' => 'View', 'child' => [
+      { 'type' => 'TextField', 'id' => 'email_field' },
+      { 'type' => 'TextView', 'id' => 'note_input' },
+      { 'type' => 'TextField' }
+    ] }
+    bindings = generator.send(:extract_value_bindings, json)
+    expect(bindings['emailFieldIsFocused']).to eq({ type: 'boolean', defaultValue: false })
+    expect(bindings['noteInputIsFocused']).to eq({ type: 'boolean', defaultValue: false })
+    expect(bindings.keys.grep(/IsFocused/).size).to eq(2)
+  end
+end

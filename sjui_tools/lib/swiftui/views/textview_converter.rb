@@ -30,6 +30,16 @@ module SjuiTools
           indent do
             add_line "text: $#{binding_path},"
 
+            # Focus-state binding — TextField parity: every TextView with an id
+            # binds data.<id>IsFocused (auto-added to Data by the updater) into
+            # the component, so a ViewModel can drive focus. The component keeps
+            # it in two-way sync with its internal FocusState (SwiftJsonUI
+            # TextViewWithPlaceholder `isFocused:` param, v10.3.0+).
+            if @component['id']
+              focus_var = "#{to_camel_case(@component['id'])}IsFocused"
+              add_line "isFocused: $data.#{focus_var},"
+            end
+
             # hint (placeholder) - hint takes priority, fallback to placeholder
             hint_value = @component['hint'] || @component['placeholder']
             if hint_value

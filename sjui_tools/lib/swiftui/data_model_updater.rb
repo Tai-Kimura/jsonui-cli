@@ -286,11 +286,12 @@ module SjuiTools
             end
           end
 
-          # Auto-generate isFocused property for TextField components
+          # Auto-generate isFocused property for TextField / TextView components
           # (EditText / Input are aliases for TextField — attribute_definitions
           # `_alias_of: TextField` — and route to TextFieldConverter, which
-          # emits data.<id>IsFocused references for every component with an id)
-          if %w[TextField EditText Input].include?(json_data['type']) && json_data['id']
+          # emits data.<id>IsFocused references for every component with an id;
+          # TextViewConverter binds it into TextViewWithPlaceholder `isFocused:`)
+          if %w[TextField EditText Input TextView].include?(json_data['type']) && json_data['id']
             focus_prop_name = to_camel_case_id(json_data['id']) + 'IsFocused'
             unless properties.any? { |p| p['name'] == focus_prop_name }
               properties << { 'name' => focus_prop_name, 'class' => 'Bool', 'defaultValue' => false }
