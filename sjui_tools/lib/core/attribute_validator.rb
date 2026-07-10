@@ -561,15 +561,29 @@ module SjuiTools
         add_warning("Attribute '#{path}' in '#{component_type}' has invalid binding syntax (starts with '@{' but doesn't end with '}')")
       end
 
-      # Check for conflicting spacing and gravity attributes
-      # Using both spacing and gravity together can cause unexpected layout behavior
+      # Check for conflicting distribution and gravity attributes.
+      # Only a real axis conflict warns: `distribution` arranges children
+      # along the main axis, so a main-axis gravity value is overridden.
+      # `spacing` (gap) composes with any gravity on every platform
+      # (gap + items-*/justify-* in flexbox, HStack(alignment:, spacing:)
+      # in SwiftUI, Arrangement.spacedBy(x, alignment) in Compose) and a
+      # cross-axis gravity never conflicts.
       def check_spacing_gravity_conflict(component, component_type)
-        has_spacing = component.key?('spacing') || component.key?('distribution')
-        has_gravity = component.key?('gravity')
+        return unless component.key?('distribution') && component.key?('gravity')
 
-        if has_spacing && has_gravity
-          add_warning("Component '#{component_type}' has both 'spacing'/'distribution' and 'gravity' set. This combination may cause unexpected layout behavior. Consider using only one of these attributes.")
-        end
+        main_axis_values =
+          case component['orientation'].to_s.downcase
+          when 'horizontal' then %w[left right centerHorizontal]
+          when 'vertical' then %w[top bottom centerVertical]
+          else return # no linear axis — no main-axis conflict possible
+          end
+
+        gravity = component['gravity']
+        gravity_values = gravity.is_a?(Array) ? gravity.map(&:to_s) : gravity.to_s.split('|')
+        conflicting = gravity_values & (main_axis_values + ['center'])
+        return if conflicting.empty?
+
+        add_warning("Component '#{component_type}' has 'distribution' and main-axis gravity #{conflicting.join(', ')}. 'distribution' controls the main-axis arrangement, so this gravity value is overridden. Consider using only one of these attributes.")
       end
 
       # Check for weight + dimension conflict in the same direction as parent orientation

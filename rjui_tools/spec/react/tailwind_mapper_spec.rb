@@ -254,6 +254,25 @@ RSpec.describe RjuiTools::React::TailwindMapper do
     it 'returns empty string for nil' do
       expect(described_class.map_flex_grow(nil)).to eq('')
     end
+
+    # Regression: rjui-map-flex-grow-truncates-fractional-weights —
+    # `to_i` collapsed 0.8 to flex-none and 1.2 to flex-1, destroying
+    # ratio layouts like 1.2 : 1.4 : 0.8.
+    it 'keeps fractional weights below 1 growing' do
+      expect(described_class.map_flex_grow(0.8)).to eq('flex-[0.8] min-w-0 min-h-0')
+    end
+
+    it 'keeps fractional weights above 1 as arbitrary values' do
+      expect(described_class.map_flex_grow(1.2)).to eq('flex-[1.2] min-w-0 min-h-0')
+    end
+
+    it 'renders integer-valued floats without a trailing .0' do
+      expect(described_class.map_flex_grow(2.0)).to eq('flex-[2] min-w-0 min-h-0')
+    end
+
+    it 'still maps 1.0 to flex-1' do
+      expect(described_class.map_flex_grow(1.0)).to eq('flex-1 min-w-0 min-h-0')
+    end
   end
 
   describe '.map_font' do

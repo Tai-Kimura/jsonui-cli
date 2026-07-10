@@ -1696,4 +1696,56 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       expect(warnings.any? { |w| w.include?('$jui') }).to be false
     end
   end
+
+  describe '#check_spacing_gravity_conflict (regression: jui-validator-spacing-gravity-conflict-fires-on-cross-axis-gravity)' do
+    def spacing_gravity_warnings(component)
+      v = described_class.new(:all)
+      v.send(:check_spacing_gravity_conflict, component, component['type'])
+      v.instance_variable_get(:@warnings)
+    end
+
+    it 'stays silent for spacing + cross-axis gravity (horizontal row idiom)' do
+      component = { 'type' => 'View', 'orientation' => 'horizontal',
+                    'spacing' => 12, 'gravity' => 'centerVertical' }
+      expect(spacing_gravity_warnings(component)).to be_empty
+    end
+
+    it 'stays silent for spacing + main-axis gravity (gap composes with justify)' do
+      component = { 'type' => 'View', 'orientation' => 'horizontal',
+                    'spacing' => 12, 'gravity' => 'right' }
+      expect(spacing_gravity_warnings(component)).to be_empty
+    end
+
+    it 'warns for distribution + main-axis gravity' do
+      component = { 'type' => 'View', 'orientation' => 'horizontal',
+                    'distribution' => 'equalSpacing', 'gravity' => 'right' }
+      warnings = spacing_gravity_warnings(component)
+      expect(warnings.size).to eq(1)
+      expect(warnings.first).to include("'distribution' and main-axis gravity right")
+    end
+
+    it 'stays silent for distribution + cross-axis gravity' do
+      component = { 'type' => 'View', 'orientation' => 'horizontal',
+                    'distribution' => 'equalSpacing', 'gravity' => ['centerVertical'] }
+      expect(spacing_gravity_warnings(component)).to be_empty
+    end
+
+    it 'detects the main-axis value inside pipe-joined gravity strings' do
+      component = { 'type' => 'View', 'orientation' => 'vertical',
+                    'distribution' => 'equalSpacing', 'gravity' => 'centerHorizontal|bottom' }
+      expect(spacing_gravity_warnings(component).size).to eq(1)
+    end
+
+    it 'treats bare center as a main-axis conflict with distribution' do
+      component = { 'type' => 'View', 'orientation' => 'horizontal',
+                    'distribution' => 'equalSpacing', 'gravity' => 'center' }
+      expect(spacing_gravity_warnings(component).size).to eq(1)
+    end
+
+    it 'stays silent without a linear orientation (no main axis)' do
+      component = { 'type' => 'View',
+                    'distribution' => 'equalSpacing', 'gravity' => 'center' }
+      expect(spacing_gravity_warnings(component)).to be_empty
+    end
+  end
 end

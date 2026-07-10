@@ -461,11 +461,17 @@ module RjuiTools
         def map_flex_grow(weight)
           return '' unless weight
 
-          w = weight.to_i
-          base = case w
-                 when 0 then 'flex-none'
-                 when 1 then 'flex-1'
-                 else "flex-[#{w}]"
+          # Fractional weights (0.8, 1.2) are legal — Tailwind arbitrary
+          # values accept decimals — so keep the number as-is instead of
+          # truncating (0.8.to_i == 0 collapsed ratio layouts to flex-none).
+          w = weight.to_f
+          w_str = w == w.to_i ? w.to_i.to_s : w.to_s
+          base = if w == 0
+                   'flex-none'
+                 elsif w == 1
+                   'flex-1'
+                 else
+                   "flex-[#{w_str}]"
                  end
           # `flex-1` / `flex-[N]` children need `min-w-0 min-h-0` so the
           # CSS default `min-*-size: auto` doesn't let long descendants
