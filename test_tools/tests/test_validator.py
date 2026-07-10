@@ -1310,5 +1310,352 @@ class TestSourceValidation:
         assert any("Unknown source key: baz" in str(w) for w in result.warnings)
 
 
+class TestPlatformFieldValidation:
+    """Tests for test-level and case-level 'platform' enum validation.
+
+    The schema set is scalar ios|android|web|all or an array of ios|android|web
+    ("all" is not a legal array item). Not SUPPORTED_PLATFORMS: ios-swiftui /
+    ios-uikit are forbidden at test/case level.
+    """
+
+    def setup_method(self):
+        self.validator = TestValidator()
+
+    def _screen(self, platform=None, case_platform=None):
+        case = {"name": "case1", "description": "d", "steps": [{"action": "back"}]}
+        if case_platform is not None:
+            case["platform"] = case_platform
+        data = {
+            "type": "screen",
+            "metadata": {"name": "test", "description": "Test"},
+            "cases": [case],
+        }
+        if platform is not None:
+            data["platform"] = platform
+        return data
+
+    def _flow(self, platform):
+        return {
+            "type": "flow",
+            "metadata": {"name": "test", "description": "Test"},
+            "platform": platform,
+            "steps": [{"action": "back"}],
+        }
+
+    # --- test-level, screen ---
+
+    def test_screen_valid_scalar_platforms(self):
+        for platform in ["ios", "android", "web", "all"]:
+            result = self.validator.validate_data(self._screen(platform=platform))
+            assert result.is_valid, platform
+
+    def test_screen_valid_array_platform(self):
+        result = self.validator.validate_data(self._screen(platform=["ios", "web"]))
+        assert result.is_valid
+
+    def test_screen_invalid_scalar_platform(self):
+        result = self.validator.validate_data(self._screen(platform="ios-swiftui"))
+        assert not result.is_valid
+        assert any("Invalid platform: ios-swiftui" in str(e) for e in result.errors)
+
+    def test_screen_all_not_allowed_in_array(self):
+        result = self.validator.validate_data(self._screen(platform=["all"]))
+        assert not result.is_valid
+        assert any("Invalid platform: all" in str(e) for e in result.errors)
+
+    def test_screen_empty_platform_array(self):
+        result = self.validator.validate_data(self._screen(platform=[]))
+        assert not result.is_valid
+        assert any("must not be empty" in str(e) for e in result.errors)
+
+    def test_screen_platform_wrong_type(self):
+        result = self.validator.validate_data(self._screen(platform=123))
+        assert not result.is_valid
+        assert any("must be a string or array" in str(e) for e in result.errors)
+
+    # --- case-level, screen only ---
+
+    def test_case_valid_platform(self):
+        result = self.validator.validate_data(self._screen(case_platform="android"))
+        assert result.is_valid
+        result = self.validator.validate_data(self._screen(case_platform=["android", "web"]))
+        assert result.is_valid
+
+    def test_case_invalid_platform(self):
+        result = self.validator.validate_data(self._screen(case_platform="ios-uikit"))
+        assert not result.is_valid
+        assert any("Invalid platform: ios-uikit" in str(e) for e in result.errors)
+
+    def test_case_all_not_allowed_in_array(self):
+        result = self.validator.validate_data(self._screen(case_platform=["all"]))
+        assert not result.is_valid
+        assert any("Invalid platform: all" in str(e) for e in result.errors)
+
+    # --- test-level, flow ---
+
+    def test_flow_valid_platforms(self):
+        for platform in ["ios", "all", ["android", "web"]]:
+            result = self.validator.validate_data(self._flow(platform))
+            assert result.is_valid, platform
+
+    def test_flow_invalid_scalar_platform(self):
+        result = self.validator.validate_data(self._flow("ios-swiftui"))
+        assert not result.is_valid
+        assert any("Invalid platform: ios-swiftui" in str(e) for e in result.errors)
+
+    def test_flow_all_not_allowed_in_array(self):
+        result = self.validator.validate_data(self._flow(["all"]))
+        assert not result.is_valid
+        assert any("Invalid platform: all" in str(e) for e in result.errors)
+
+
+class TestResponsiveConditionValidation:
+    """Tests for the 'responsive' condition key (when / repeat.while).
+
+    Value is a named size-class bucket from the render-side canonical
+    vocabulary (compact/medium/regular/landscape + hyphenated combos) or a
+    constraint object (minWidth/maxWidth/minHeight/maxHeight/orientation).
+    """
+
+    def setup_method(self):
+        self.validator = TestValidator()
+
+    def _screen_with_when(self, responsive):
+        return {
+            "type": "screen",
+            "metadata": {"name": "test", "description": "Test"},
+            "cases": [{
+                "name": "case1",
+                "description": "d",
+                "steps": [{"assert": "visible", "id": "sidebar", "when": {"responsive": responsive}}],
+            }],
+        }
+
+    # --- valid ---
+
+    def test_valid_named_buckets(self):
+        for bucket in ["compact", "medium", "regular", "landscape",
+                       "compact-landscape", "medium-landscape", "regular-landscape"]:
+            result = self.validator.validate_data(self._screen_with_when(bucket))
+            assert result.is_valid, bucket
+
+    def test_valid_constraint_object(self):
+        result = self.validator.validate_data(self._screen_with_when(
+            {"minWidth": 768, "maxWidth": 1024, "orientation": "portrait"}))
+        assert result.is_valid
+
+    def test_valid_single_key_constraint(self):
+        for constraint in [{"minWidth": 600}, {"maxHeight": 900.5}, {"orientation": "landscape"}]:
+            result = self.validator.validate_data(self._screen_with_when(constraint))
+            assert result.is_valid, constraint
+
+    def test_valid_responsive_in_repeat_while(self):
+        data = {
+            "type": "screen",
+            "metadata": {"name": "test", "description": "Test"},
+            "cases": [{
+                "name": "case1",
+                "description": "d",
+                "steps": [{
+                    "action": "repeat",
+                    "while": {"responsive": "regular"},
+                    "times": 3,
+                    "steps": [{"action": "back"}],
+                }],
+            }],
+        }
+        result = self.validator.validate_data(data)
+        assert result.is_valid
+
+    def test_valid_responsive_anded_with_platform(self):
+        result = self.validator.validate_data(self._screen_with_when("regular"))
+        assert result.is_valid
+        data = self._screen_with_when("regular")
+        data["cases"][0]["steps"][0]["when"]["platform"] = "web"
+        result = self.validator.validate_data(data)
+        assert result.is_valid
+
+    # --- malformed ---
+
+    def test_unknown_bucket_expanded(self):
+        # 'expanded' is Material-3 vocabulary the renderer never emits
+        result = self.validator.validate_data(self._screen_with_when("expanded"))
+        assert not result.is_valid
+        assert any("Invalid responsive bucket: expanded" in str(e) for e in result.errors)
+
+    def test_empty_constraint_object(self):
+        result = self.validator.validate_data(self._screen_with_when({}))
+        assert not result.is_valid
+        assert any("at least one key" in str(e) for e in result.errors)
+
+    def test_non_numeric_width(self):
+        result = self.validator.validate_data(self._screen_with_when({"minWidth": "big"}))
+        assert not result.is_valid
+        assert any("'minWidth' must be a number >= 0" in str(e) for e in result.errors)
+
+    def test_boolean_width_rejected(self):
+        result = self.validator.validate_data(self._screen_with_when({"minWidth": True}))
+        assert not result.is_valid
+        assert any("'minWidth' must be a number >= 0" in str(e) for e in result.errors)
+
+    def test_negative_height(self):
+        result = self.validator.validate_data(self._screen_with_when({"maxHeight": -1}))
+        assert not result.is_valid
+        assert any("'maxHeight' must be a number >= 0" in str(e) for e in result.errors)
+
+    def test_min_width_greater_than_max_width(self):
+        result = self.validator.validate_data(self._screen_with_when({"minWidth": 1024, "maxWidth": 768}))
+        assert not result.is_valid
+        assert any("'minWidth' (1024) must not exceed 'maxWidth' (768)" in str(e) for e in result.errors)
+
+    def test_min_height_greater_than_max_height(self):
+        result = self.validator.validate_data(self._screen_with_when({"minHeight": 900, "maxHeight": 400}))
+        assert not result.is_valid
+        assert any("'minHeight' (900) must not exceed 'maxHeight' (400)" in str(e) for e in result.errors)
+
+    def test_bad_orientation(self):
+        result = self.validator.validate_data(self._screen_with_when({"orientation": "upside-down"}))
+        assert not result.is_valid
+        assert any("Invalid responsive orientation" in str(e) for e in result.errors)
+
+    def test_unknown_constraint_key(self):
+        result = self.validator.validate_data(self._screen_with_when({"minDepth": 3}))
+        assert not result.is_valid
+        assert any("Unknown responsive constraint key: minDepth" in str(e) for e in result.errors)
+
+    def test_wrong_type(self):
+        result = self.validator.validate_data(self._screen_with_when(768))
+        assert not result.is_valid
+        assert any("must be a bucket name string or constraint object" in str(e) for e in result.errors)
+
+
+class TestCaseLevelResponsiveValidation:
+    """Tests for case-level 'responsive' (screen tests only, parity with
+    case-level 'platform'; flow tests have no case objects)."""
+
+    def setup_method(self):
+        self.validator = TestValidator()
+
+    def _screen(self, case_responsive):
+        return {
+            "type": "screen",
+            "metadata": {"name": "test", "description": "Test"},
+            "cases": [{
+                "name": "case1",
+                "description": "d",
+                "responsive": case_responsive,
+                "steps": [{"action": "back"}],
+            }],
+        }
+
+    def test_case_valid_named_bucket(self):
+        result = self.validator.validate_data(self._screen("regular-landscape"))
+        assert result.is_valid
+
+    def test_case_valid_constraint(self):
+        result = self.validator.validate_data(self._screen({"minWidth": 840}))
+        assert result.is_valid
+
+    def test_case_valid_with_platform(self):
+        data = self._screen("regular")
+        data["cases"][0]["platform"] = "web"
+        result = self.validator.validate_data(data)
+        assert result.is_valid
+
+    def test_case_unknown_bucket(self):
+        result = self.validator.validate_data(self._screen("expanded"))
+        assert not result.is_valid
+        assert any("Invalid responsive bucket: expanded" in str(e) for e in result.errors)
+
+    def test_case_empty_constraint(self):
+        result = self.validator.validate_data(self._screen({}))
+        assert not result.is_valid
+        assert any("at least one key" in str(e) for e in result.errors)
+
+    def test_case_contradictory_constraint(self):
+        result = self.validator.validate_data(self._screen({"minWidth": 1000, "maxWidth": 10}))
+        assert not result.is_valid
+        assert any("must not exceed" in str(e) for e in result.errors)
+
+    def test_case_responsive_path_in_error(self):
+        result = self.validator.validate_data(self._screen("expanded"))
+        assert any("cases[0].responsive" in str(e) for e in result.errors)
+
+
+class TestSetViewportSetOrientationValidation:
+    """Tests for the setViewport / setOrientation actions."""
+
+    def setup_method(self):
+        self.validator = TestValidator()
+
+    def _make_test(self, steps: list) -> dict:
+        return {
+            "type": "screen",
+            "metadata": {"name": "test", "description": "Test"},
+            "cases": [{"name": "case1", "description": "d", "steps": steps}],
+        }
+
+    # --- setViewport ---
+
+    def test_valid_set_viewport(self):
+        data = self._make_test([{"action": "setViewport", "width": 375, "height": 812}])
+        result = self.validator.validate_data(data)
+        assert result.is_valid
+
+    def test_set_viewport_missing_width(self):
+        data = self._make_test([{"action": "setViewport", "height": 812}])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("Missing required parameter 'width'" in str(e) for e in result.errors)
+
+    def test_set_viewport_missing_height(self):
+        data = self._make_test([{"action": "setViewport", "width": 375}])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("Missing required parameter 'height'" in str(e) for e in result.errors)
+
+    def test_set_viewport_zero_width(self):
+        data = self._make_test([{"action": "setViewport", "width": 0, "height": 812}])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("'width' must be a positive integer" in str(e) for e in result.errors)
+
+    def test_set_viewport_non_integer_height(self):
+        for bad in ["812", 812.5, True]:
+            data = self._make_test([{"action": "setViewport", "width": 375, "height": bad}])
+            result = self.validator.validate_data(data)
+            assert not result.is_valid, bad
+            assert any("'height' must be a positive integer" in str(e) for e in result.errors)
+
+    def test_set_viewport_with_when_responsive(self):
+        # Sweep segments self-gate with a matching when.responsive (plan §4 rule)
+        data = self._make_test([
+            {"action": "setViewport", "width": 1280, "height": 800, "when": {"platform": "web"}},
+            {"assert": "visible", "id": "sidebar", "when": {"responsive": "regular"}},
+        ])
+        result = self.validator.validate_data(data)
+        assert result.is_valid
+
+    # --- setOrientation ---
+
+    def test_valid_set_orientation(self):
+        for orientation in ["portrait", "landscape"]:
+            data = self._make_test([{"action": "setOrientation", "orientation": orientation}])
+            result = self.validator.validate_data(data)
+            assert result.is_valid, orientation
+
+    def test_set_orientation_missing_orientation(self):
+        data = self._make_test([{"action": "setOrientation"}])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("Missing required parameter 'orientation'" in str(e) for e in result.errors)
+
+    def test_set_orientation_invalid_value(self):
+        data = self._make_test([{"action": "setOrientation", "orientation": "sideways"}])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("Invalid orientation: 'sideways'" in str(e) for e in result.errors)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

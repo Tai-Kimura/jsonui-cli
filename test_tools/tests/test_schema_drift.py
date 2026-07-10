@@ -41,6 +41,14 @@ def _top_props(schema):
     return set((schema.get("properties") or {}).keys())
 
 
+def _responsive_variants(actions_schema):
+    """Split #/definitions/responsive oneOf into (bucket-enum variant, constraint-object variant)."""
+    one_of = actions_schema["definitions"]["responsive"]["oneOf"]
+    named = next(v for v in one_of if v.get("type") == "string")
+    constraint = next(v for v in one_of if v.get("type") == "object")
+    return named, constraint
+
+
 def _result_item_props(results_schema):
     return (
         results_schema["properties"]["suites"]["items"]["properties"]["results"]
@@ -77,6 +85,57 @@ def test_launch_keys_match():
     )
 
 
+# --- condition + responsive <-> schema.py -----------------------------------
+
+def test_condition_keys_match():
+    props = set(_load("actions")["definitions"]["condition"]["properties"].keys())
+    assert props == set(sc.VALID_CONDITION_KEYS), (
+        "actions.schema.json condition props drifted from VALID_CONDITION_KEYS.\n"
+        f"  only in schema: {sorted(props - set(sc.VALID_CONDITION_KEYS))}\n"
+        f"  only in const : {sorted(set(sc.VALID_CONDITION_KEYS) - props)}"
+    )
+
+
+def test_responsive_bucket_enum_matches():
+    named, _ = _responsive_variants(_load("actions"))
+    buckets = set(named["enum"])
+    assert buckets == set(sc.RESPONSIVE_BUCKETS), (
+        "actions.schema.json responsive bucket enum drifted from RESPONSIVE_BUCKETS.\n"
+        f"  only in schema: {sorted(buckets - set(sc.RESPONSIVE_BUCKETS))}\n"
+        f"  only in const : {sorted(set(sc.RESPONSIVE_BUCKETS) - buckets)}"
+    )
+
+
+def test_responsive_constraint_keys_match():
+    _, constraint = _responsive_variants(_load("actions"))
+    keys = set(constraint["properties"].keys())
+    assert keys == set(sc.RESPONSIVE_CONSTRAINT_KEYS), (
+        "actions.schema.json responsive constraint props drifted from RESPONSIVE_CONSTRAINT_KEYS.\n"
+        f"  only in schema: {sorted(keys - set(sc.RESPONSIVE_CONSTRAINT_KEYS))}\n"
+        f"  only in const : {sorted(set(sc.RESPONSIVE_CONSTRAINT_KEYS) - keys)}"
+    )
+
+
+def test_responsive_orientation_enum_matches():
+    _, constraint = _responsive_variants(_load("actions"))
+    orientation = set(constraint["properties"]["orientation"]["enum"])
+    assert orientation == set(sc.RESPONSIVE_ORIENTATIONS), (
+        "actions.schema.json responsive orientation enum drifted from RESPONSIVE_ORIENTATIONS"
+    )
+
+
+def test_set_orientation_action_enum_matches():
+    schema = _load("actions")
+    action = next(
+        d for d in schema["definitions"].values()
+        if (d.get("properties") or {}).get("action", {}).get("const") == "setOrientation"
+    )
+    orientation = set(action["properties"]["orientation"]["enum"])
+    assert orientation == set(sc.RESPONSIVE_ORIENTATIONS), (
+        "actions.schema.json setOrientation orientation enum drifted from RESPONSIVE_ORIENTATIONS"
+    )
+
+
 # --- screen-test + flow-test top-level <-> VALID_TOP_LEVEL_KEYS -------------
 
 def test_top_level_keys_match_union_of_screen_and_flow():
@@ -85,6 +144,17 @@ def test_top_level_keys_match_union_of_screen_and_flow():
         "screen-test + flow-test top-level props drifted from VALID_TOP_LEVEL_KEYS.\n"
         f"  only in schemas: {sorted(union - set(sc.VALID_TOP_LEVEL_KEYS))}\n"
         f"  only in const  : {sorted(set(sc.VALID_TOP_LEVEL_KEYS) - union)}"
+    )
+
+
+# --- screen-test case objects <-> VALID_CASE_KEYS ---------------------------
+
+def test_screen_case_keys_match():
+    props = set(_load("screen-test")["properties"]["cases"]["items"]["properties"].keys())
+    assert props == set(sc.VALID_CASE_KEYS), (
+        "screen-test.schema.json case props drifted from VALID_CASE_KEYS.\n"
+        f"  only in schema: {sorted(props - set(sc.VALID_CASE_KEYS))}\n"
+        f"  only in const : {sorted(set(sc.VALID_CASE_KEYS) - props)}"
     )
 
 
@@ -125,6 +195,25 @@ def test_results_top_level_keys_match():
         f"  only in schema: {sorted(top - set(rp.VALID_RESULTS_TOP_LEVEL_KEYS))}\n"
         f"  only in const : {sorted(set(rp.VALID_RESULTS_TOP_LEVEL_KEYS) - top)}"
     )
+
+
+def test_results_skip_reason_enum_matches():
+    schema = _load("results")
+    reasons = set(_result_item_props(schema)["skipReason"]["enum"])
+    assert reasons == set(rp.VALID_SKIP_REASONS), (
+        "results.schema.json skipReason enum drifted from report.VALID_SKIP_REASONS.\n"
+        f"  only in schema: {sorted(reasons - set(rp.VALID_SKIP_REASONS))}\n"
+        f"  only in const : {sorted(set(rp.VALID_SKIP_REASONS) - reasons)}"
+    )
+
+
+def test_results_version_is_const_1():
+    schema = _load("results")
+    assert schema["properties"]["version"] == {"const": 1}, (
+        "results.schema.json version const drifted (skipReason landed as an "
+        "optional field on version 1; a bump must be encoded in report.RESULTS_VERSION)"
+    )
+    assert rp.RESULTS_VERSION == 1
 
 
 def test_results_item_keys_match():

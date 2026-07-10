@@ -28,6 +28,60 @@
       "default": false,
       "description": "When true, a failure of this step is recorded as a warning and execution continues"
     },
+    "responsive": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "compact",
+            "medium",
+            "regular",
+            "landscape",
+            "compact-landscape",
+            "medium-landscape",
+            "regular-landscape"
+          ],
+          "description": "Named size-class bucket from the render-side canonical vocabulary; each driver resolves it the way its platform's renderer does"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "minWidth": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Minimum window width (inclusive). Units: dp (Android) / pt (iOS) / logical px (web)"
+            },
+            "maxWidth": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Maximum window width (inclusive). Units: dp (Android) / pt (iOS) / logical px (web)"
+            },
+            "minHeight": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Minimum window height (inclusive). Units: dp (Android) / pt (iOS) / logical px (web)"
+            },
+            "maxHeight": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Maximum window height (inclusive). Units: dp (Android) / pt (iOS) / logical px (web)"
+            },
+            "orientation": {
+              "type": "string",
+              "enum": [
+                "portrait",
+                "landscape"
+              ],
+              "description": "Current device/viewport orientation matches"
+            }
+          },
+          "additionalProperties": false,
+          "minProperties": 1,
+          "description": "Explicit size constraint; keys are ANDed. Uniform numeric evaluation on all platforms (does NOT track iOS size classes — use a named bucket for renderer-faithful gating there)"
+        }
+      ],
+      "description": "Current size matches: a named size-class bucket or an explicit size constraint, resolved at run time on the device"
+    },
     "condition": {
       "type": "object",
       "description": "Condition object for 'when' (step pre-condition) and 'repeat.while'. Multiple keys are ANDed.",
@@ -66,6 +120,10 @@
             }
           ],
           "description": "Current platform matches"
+        },
+        "responsive": {
+          "$ref": "#/definitions/responsive",
+          "description": "Current size class / window size matches (resolved at runtime from the live device/viewport size)"
         },
         "state": {
           "type": "object",
@@ -210,6 +268,12 @@
         },
         {
           "$ref": "#/definitions/setMocksAction"
+        },
+        {
+          "$ref": "#/definitions/setViewportAction"
+        },
+        {
+          "$ref": "#/definitions/setOrientationAction"
         }
       ]
     },
@@ -1313,6 +1377,71 @@
       "required": [
         "action",
         "mocks"
+      ],
+      "additionalProperties": false
+    },
+    "setViewportAction": {
+      "type": "object",
+      "description": "Resize the viewport to sweep responsive breakpoints. Web only (page.setViewportSize); iOS/Android cannot freely resize a running app, so the action is a no-op with a warning there — pair dependent asserts with a matching 'when.responsive' so they skip cleanly on platforms that cannot honor the resize",
+      "properties": {
+        "action": {
+          "const": "setViewport"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Viewport width in logical pixels"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Viewport height in logical pixels"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "width",
+        "height"
+      ],
+      "additionalProperties": false
+    },
+    "setOrientationAction": {
+      "type": "object",
+      "description": "Rotate to the given orientation (iOS: XCUIDevice; Android: UiDevice; Web: swaps viewport width/height in mobile-emulation contexts, otherwise a no-op with a warning)",
+      "properties": {
+        "action": {
+          "const": "setOrientation"
+        },
+        "orientation": {
+          "type": "string",
+          "enum": [
+            "portrait",
+            "landscape"
+          ],
+          "description": "Target orientation"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "orientation"
       ],
       "additionalProperties": false
     }

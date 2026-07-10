@@ -35,6 +35,11 @@
                   "enum": ["passed", "failed", "skipped"]
                 },
                 "error": { "type": "string" },
+                "skipReason": {
+                  "type": "string",
+                  "enum": ["platform", "responsive"],
+                  "description": "Why a skipped result was skipped (platform gate vs responsive gate); only meaningful when status is 'skipped'"
+                },
                 "warnings": {
                   "type": "array",
                   "items": { "type": "string" }

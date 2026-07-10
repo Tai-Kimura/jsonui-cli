@@ -14,6 +14,23 @@ CONDITION_PLATFORMS = ["ios", "android", "web", "all"]
 # Platform values allowed inside a condition platform array (no "all")
 CONDITION_PLATFORM_ARRAY_ITEMS = ["ios", "android", "web"]
 
+# Named responsive size-class buckets (condition 'responsive' / case-level 'responsive').
+# Canonical vocabulary is the render-side SSoT — shared/core/responsive_resolver.rb
+# (jsonui-cli) / attribute_definitions.json 'responsive' attribute: compact / medium /
+# regular / landscape + hyphenated orientation combos. Each driver resolves a named
+# bucket the way its platform's renderer does; do NOT add names the renderer never emits.
+RESPONSIVE_BUCKETS = [
+    "compact", "medium", "regular", "landscape",
+    "compact-landscape", "medium-landscape", "regular-landscape"
+]
+
+# Keys allowed in a responsive constraint object (the width-based escape hatch).
+# Widths/heights are numbers >= 0 in dp (Android) / pt (iOS) / logical px (web).
+RESPONSIVE_CONSTRAINT_KEYS = ["minWidth", "maxWidth", "minHeight", "maxHeight", "orientation"]
+
+# Valid orientation values (responsive constraint 'orientation' / setOrientation action)
+RESPONSIVE_ORIENTATIONS = ["portrait", "landscape"]
+
 # Cross-platform supported actions and their required/optional parameters
 SUPPORTED_ACTIONS = {
     "tap": {
@@ -138,6 +155,19 @@ SUPPORTED_ACTIONS = {
                        "In flow tests, call before navigating so the next screen fetches the new response.",
         "required": ["mocks"],
         "optional": []
+    },
+    "setViewport": {
+        "description": "Resize the viewport to sweep responsive breakpoints (Web only; "
+                       "iOS/Android no-op with a warning — pair dependent asserts with "
+                       "a matching 'when.responsive' so they skip cleanly)",
+        "required": ["width", "height"],
+        "optional": []
+    },
+    "setOrientation": {
+        "description": "Rotate to the given orientation (iOS: XCUIDevice, Android: UiDevice, "
+                       "Web: swaps viewport width/height in mobile-emulation contexts, else no-op with a warning)",
+        "required": ["orientation"],
+        "optional": []
     }
 }
 
@@ -194,7 +224,7 @@ VALID_DIRECTIONS = ["up", "down", "left", "right"]
 COMMON_STEP_ATTRIBUTES = ["label", "optional", "when"]
 
 # Valid keys in a condition object (when / repeat.while). Unknown keys are errors.
-VALID_CONDITION_KEYS = ["visible", "notVisible", "platform", "state"]
+VALID_CONDITION_KEYS = ["visible", "notVisible", "platform", "responsive", "state"]
 
 # Valid keys in a condition 'state' object
 VALID_CONDITION_STATE_KEYS = ["path", "equals"]
@@ -229,7 +259,7 @@ VALID_SOURCE_KEYS = ["layout", "document"]
 #   Supports .md (Markdown) and .txt files.
 # - args: Default argument values for variable substitution (@{varName} syntax)
 #   Can be overridden when called from flow tests
-VALID_CASE_KEYS = ["name", "description", "descriptionFile", "skip", "platform", "initialState", "steps", "args"]
+VALID_CASE_KEYS = ["name", "description", "descriptionFile", "skip", "platform", "responsive", "initialState", "steps", "args"]
 
 # Valid keys in test step
 VALID_STEP_KEYS = [
@@ -242,6 +272,8 @@ VALID_STEP_KEYS = [
     "container", "retryTapIfNoChange", "variable",
     "times", "while", "maxRetries",
     "latitude", "longitude", "paths",
+    # setViewport / setOrientation parameters
+    "width", "height", "orientation",
     # setMocks: switch mock scenarios mid-flow (map of operationId -> scenario)
     "mocks",
     # Screenshot assertion parameters
@@ -290,6 +322,9 @@ PARAMETER_DESCRIPTIONS = {
     "maxRetries": "Number of retries after the first attempt (0-3, default 1)",
     "latitude": "Latitude for setLocation (-90 to 90)",
     "longitude": "Longitude for setLocation (-180 to 180)",
+    "width": "Viewport width in logical pixels for setViewport (positive integer)",
+    "height": "Viewport height in logical pixels for setViewport (positive integer)",
+    "orientation": "Target orientation for setOrientation: portrait or landscape",
     "paths": "Media file paths for addMedia (relative to test file)",
     "cropId": "Element id whose bounding box crops the screenshot before comparing",
     "threshold": "Required similarity percentage for screenshot assertion (0-100, default 98.0)"

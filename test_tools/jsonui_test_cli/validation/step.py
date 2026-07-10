@@ -8,9 +8,11 @@ from pathlib import Path
 
 from .models import ValidationMessage, ValidationResult
 from .mock import find_mock_index, validate_mock_reference
+from .responsive import validate_responsive_field
 from ..schema import (
     CONDITION_PLATFORMS,
     CONDITION_PLATFORM_ARRAY_ITEMS,
+    RESPONSIVE_ORIENTATIONS,
     SUPPORTED_ACTIONS,
     SUPPORTED_ASSERTIONS,
     VALID_CONDITION_KEYS,
@@ -117,7 +119,7 @@ class StepValidator:
         if len(condition) == 0:
             result.errors.append(ValidationMessage(
                 path=path,
-                message="Condition object must have at least one key (visible/notVisible/platform/state)"
+                message="Condition object must have at least one key (visible/notVisible/platform/responsive/state)"
             ))
             return
 
@@ -162,6 +164,9 @@ class StepValidator:
                     path=path,
                     message=f"Condition 'platform' must be a string or array, got: {type(platform).__name__}"
                 ))
+
+        if "responsive" in condition:
+            validate_responsive_field(condition["responsive"], f"{path}.responsive", result)
 
         if "state" in condition:
             state = condition["state"]
@@ -557,6 +562,10 @@ class StepValidator:
         elif action == "setMocks":
             index = find_mock_index(self._test_file_path)
             validate_mock_reference(step.get("mocks"), f"{path}.mocks", result, index)
+        elif action == "setViewport":
+            self._validate_set_viewport_action(step, path, result)
+        elif action == "setOrientation":
+            self._validate_set_orientation_action(step, path, result)
 
     def _validate_repeat_action(self, step: dict, path: str, result: ValidationResult):
         """Validate a repeat control step."""
@@ -633,6 +642,31 @@ class StepValidator:
                     path=path,
                     message=f"'{param}' must be a number between {low} and {high}, got: {value}"
                 ))
+
+    def _validate_set_viewport_action(self, step: dict, path: str, result: ValidationResult):
+        """Validate a setViewport action (web only at runtime; no-op+warn elsewhere)."""
+        for param in ("width", "height"):
+            if param not in step:
+                # Missing width/height is already reported as a missing required parameter
+                continue
+            value = step[param]
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"'{param}' must be a positive integer (logical pixels), got: {value!r}"
+                ))
+
+    def _validate_set_orientation_action(self, step: dict, path: str, result: ValidationResult):
+        """Validate a setOrientation action."""
+        if "orientation" not in step:
+            # Missing 'orientation' is already reported as a missing required parameter
+            return
+        orientation = step["orientation"]
+        if orientation not in RESPONSIVE_ORIENTATIONS:
+            result.errors.append(ValidationMessage(
+                path=path,
+                message=f"Invalid orientation: {orientation!r}. Must be one of: {RESPONSIVE_ORIENTATIONS}"
+            ))
 
     def _validate_add_media_action(self, step: dict, path: str, result: ValidationResult):
         """Validate an addMedia action."""

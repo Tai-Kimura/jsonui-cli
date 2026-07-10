@@ -9,6 +9,8 @@ from .models import ValidationMessage, ValidationResult
 from .step import StepValidator
 from .launch import validate_launch
 from .mock import find_mock_index, validate_mock_reference
+from .platform import validate_platform_field
+from .responsive import validate_responsive_field
 from ..schema import VALID_TOP_LEVEL_KEYS, VALID_CASE_KEYS, VALID_SOURCE_KEYS
 
 # Pattern to match @{varName} placeholders
@@ -56,6 +58,10 @@ class ScreenTestValidator:
                 message="Missing 'metadata' field",
                 level="warning"
             ))
+
+        # Validate test-level platform if present
+        if "platform" in data:
+            validate_platform_field(data["platform"], f"{path}.platform", result)
 
         # Validate launch configuration if present
         if "launch" in data:
@@ -112,6 +118,15 @@ class ScreenTestValidator:
                     message=f"Unknown case key: {key}",
                     level="warning"
                 ))
+
+        # Validate case-level platform override if present
+        if "platform" in case:
+            validate_platform_field(case["platform"], f"{path}.platform", result)
+
+        # Validate case-level responsive gate if present (screen tests only;
+        # resolved at runtime — unmet gates skip the case, ANDs with platform)
+        if "responsive" in case:
+            validate_responsive_field(case["responsive"], f"{path}.responsive", result)
 
         # Validate descriptionFile if present
         if "descriptionFile" in case and self._test_file_path:

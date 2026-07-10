@@ -16,9 +16,12 @@ RESULTS_FORMAT = "jsonui-test-results"
 RESULTS_VERSION = 1
 VALID_RESULT_PLATFORMS = ["ios", "android", "web"]
 VALID_RESULT_STATUSES = ["passed", "failed", "skipped"]
+# Why a skipped result was skipped (platform gate vs responsive gate).
+# Only meaningful when status == "skipped"; a reason on any other status is an error.
+VALID_SKIP_REASONS = ["platform", "responsive"]
 VALID_RESULTS_TOP_LEVEL_KEYS = ["format", "version", "platform", "generatedAt", "suites"]
 VALID_SUITE_KEYS = ["suiteName", "totalDurationMs", "results"]
-VALID_RESULT_KEYS = ["testName", "caseName", "status", "error", "warnings", "durationMs"]
+VALID_RESULT_KEYS = ["testName", "caseName", "status", "skipReason", "error", "warnings", "durationMs"]
 
 
 def validate_results_data(data, source: str) -> list[str]:
@@ -77,6 +80,15 @@ def validate_results_data(data, source: str) -> list[str]:
                     errors.append(f"{case_path}: '{required}' must be a string")
             if case.get("status") not in VALID_RESULT_STATUSES:
                 errors.append(f"{case_path}: 'status' must be one of {VALID_RESULT_STATUSES}, got: {case.get('status')!r}")
+            if "skipReason" in case:
+                reason = case["skipReason"]
+                if reason not in VALID_SKIP_REASONS:
+                    errors.append(f"{case_path}: 'skipReason' must be one of {VALID_SKIP_REASONS}, got: {reason!r}")
+                if case.get("status") != "skipped":
+                    errors.append(
+                        f"{case_path}: 'skipReason' is only meaningful when status is 'skipped', "
+                        f"got status: {case.get('status')!r}"
+                    )
             duration = case.get("durationMs")
             if not isinstance(duration, (int, float)) or isinstance(duration, bool) or duration < 0:
                 errors.append(f"{case_path}: 'durationMs' must be a non-negative number")
@@ -117,6 +129,36 @@ def _suite_time_seconds(suite: dict) -> float:
     return total_ms / 1000.0
 
 
+def summarize_skips(runs: list[dict]) -> dict:
+    """Aggregate skip accounting across all runs (guard against write-only tests).
+
+    Returns a dict with:
+    - "reasonCounts": skip counts keyed by reason ("platform" / "responsive" /
+      "unspecified" for skips without a skipReason).
+    - "permanentlySkipped": sorted "testName :: caseName" entries whose every
+      result across all runs is skipped (any reason). A gate no run's device
+      satisfies (e.g. tablet-only responsive on phone-only CI) never exercises
+      the test; surface it in the summary instead of hiding it as green.
+    """
+    reason_counts: dict[str, int] = {}
+    statuses: dict[tuple[str, str], list[str]] = {}
+    for run in runs:
+        for suite in run.get("suites", []):
+            for case in suite.get("results", []):
+                key = (case.get("testName", ""), case.get("caseName", ""))
+                status = case.get("status")
+                statuses.setdefault(key, []).append(status)
+                if status == "skipped":
+                    reason = case.get("skipReason") or "unspecified"
+                    reason_counts[reason] = reason_counts.get(reason, 0) + 1
+    permanently_skipped = sorted(
+        f"{test_name} :: {case_name}"
+        for (test_name, case_name), case_statuses in statuses.items()
+        if case_statuses and all(s == "skipped" for s in case_statuses)
+    )
+    return {"reasonCounts": reason_counts, "permanentlySkipped": permanently_skipped}
+
+
 def generate_junit(runs: list[dict]) -> str:
     """Generate JUnit XML from validated results data (one dict per input file)."""
     root = ET.Element("testsuites")
@@ -154,7 +196,10 @@ def generate_junit(runs: list[dict]) -> str:
                     })
                     failure_el.text = case.get("error", "")
                 elif status == "skipped":
-                    ET.SubElement(case_el, "skipped")
+                    skipped_attrs = {}
+                    if case.get("skipReason") in VALID_SKIP_REASONS:
+                        skipped_attrs["message"] = f"skipped-{case['skipReason']}"
+                    ET.SubElement(case_el, "skipped", skipped_attrs)
                 warnings = case.get("warnings") or []
                 if warnings:
                     system_out = ET.SubElement(case_el, "system-out")
@@ -169,6 +214,15 @@ def generate_junit(runs: list[dict]) -> str:
     root.set("failures", str(total_failures))
     root.set("skipped", str(total_skipped))
     root.set("time", f"{total_time:.3f}")
+
+    # Surface permanently-skipped tests (skipped in every result across the
+    # run) so they don't hide as green in CI.
+    skip_summary = summarize_skips(runs)
+    if skip_summary["permanentlySkipped"]:
+        lines = "\n".join(f"  {entry}" for entry in skip_summary["permanentlySkipped"])
+        root.append(ET.Comment(
+            f" permanently skipped (skipped in every result across this report):\n{lines}\n"
+        ))
 
     ET.indent(root)
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode") + "\n"
@@ -198,6 +252,11 @@ _HTML_STYLES = """
     .count-passed { color: #1e7a34; }
     .count-failed { color: #b02a30; }
     .count-skipped { color: #5b6472; }
+    .skip-reasons { color: #5b6472; font-size: 12px; }
+    .perm-skipped { background: #fdf6e3; border: 1px solid #ecdfb8; border-radius: 8px;
+                    padding: 12px 16px; margin: 16px 0; }
+    .perm-skipped .title { font-weight: 600; color: #8a6d1a; margin-bottom: 6px; }
+    .perm-skipped ul { margin: 0; padding-left: 20px; font-size: 13px; }
     details { margin: 4px 0; }
     details summary { cursor: pointer; font-size: 12px; color: #4a5261; }
     details pre { background: #f7f8fa; border: 1px solid #e2e5ea; border-radius: 6px;
@@ -211,17 +270,24 @@ def generate_html(runs: list[dict]) -> str:
     """Generate a standalone single-file HTML report from validated results data."""
     esc = html_module.escape
 
-    # Per-platform summary
+    # Per-platform summary (skips broken down by reason — §5 coverage accounting)
     platform_stats: dict[str, dict[str, int]] = {}
+    platform_skip_reasons: dict[str, dict[str, int]] = {}
     for run in runs:
         platform = run.get("platform", "")
         stats = platform_stats.setdefault(platform, {"total": 0, "passed": 0, "failed": 0, "skipped": 0})
+        reasons = platform_skip_reasons.setdefault(platform, {})
         for suite in run.get("suites", []):
             for case in suite.get("results", []):
                 stats["total"] += 1
                 status = case.get("status", "failed")
                 if status in ("passed", "failed", "skipped"):
                     stats[status] += 1
+                if status == "skipped" and case.get("skipReason") in VALID_SKIP_REASONS:
+                    reason = case["skipReason"]
+                    reasons[reason] = reasons.get(reason, 0) + 1
+
+    skip_summary = summarize_skips(runs)
 
     parts: list[str] = []
     parts.append("<!DOCTYPE html>")
@@ -238,6 +304,13 @@ def generate_html(runs: list[dict]) -> str:
     # Summary header
     parts.append('<div class="summary">')
     for platform, stats in platform_stats.items():
+        reasons = platform_skip_reasons.get(platform, {})
+        skip_breakdown = ", ".join(
+            f"{reason} {reasons[reason]}" for reason in VALID_SKIP_REASONS if reason in reasons
+        )
+        skipped_label = f'skipped {stats["skipped"]}'
+        if skip_breakdown:
+            skipped_label += f' <span class="skip-reasons">({esc(skip_breakdown)})</span>'
         parts.append('<div class="summary-card">')
         parts.append(f'<div class="platform">{esc(platform)}</div>')
         parts.append(
@@ -245,11 +318,25 @@ def generate_html(runs: list[dict]) -> str:
             f'<span>total {stats["total"]}</span>'
             f'<span class="count-passed">passed {stats["passed"]}</span>'
             f'<span class="count-failed">failed {stats["failed"]}</span>'
-            f'<span class="count-skipped">skipped {stats["skipped"]}</span>'
+            f'<span class="count-skipped">{skipped_label}</span>'
             "</div>"
         )
         parts.append("</div>")
     parts.append("</div>")
+
+    # Permanently-skipped tests: skipped in every result across this report —
+    # never exercised (e.g. a responsive/platform gate no run's device satisfies).
+    if skip_summary["permanentlySkipped"]:
+        parts.append('<div class="perm-skipped">')
+        parts.append(
+            f'<div class="title">Permanently skipped '
+            f'({len(skip_summary["permanentlySkipped"])}) — skipped in every result, never exercised</div>'
+        )
+        parts.append("<ul>")
+        for entry in skip_summary["permanentlySkipped"]:
+            parts.append(f"<li>{esc(entry)}</li>")
+        parts.append("</ul>")
+        parts.append("</div>")
 
     # Suite tables
     for run in runs:
@@ -260,6 +347,9 @@ def generate_html(runs: list[dict]) -> str:
             parts.append("<tr><th>Test</th><th>Case</th><th>Status</th><th>Duration</th><th>Details</th></tr>")
             for case in suite.get("results", []):
                 status = case.get("status", "failed")
+                status_label = status
+                if status == "skipped" and case.get("skipReason") in VALID_SKIP_REASONS:
+                    status_label = f"{status} ({case['skipReason']})"
                 details_parts = []
                 error = case.get("error")
                 if error:
@@ -278,7 +368,7 @@ def generate_html(runs: list[dict]) -> str:
                     "<tr>"
                     f"<td>{esc(case.get('testName', ''))}</td>"
                     f"<td>{esc(case.get('caseName', ''))}</td>"
-                    f'<td><span class="status status-{esc(status)}">{esc(status)}</span></td>'
+                    f'<td><span class="status status-{esc(status)}">{esc(status_label)}</span></td>'
                     f'<td class="duration">{case.get("durationMs", 0) / 1000.0:.3f}s</td>'
                     f"<td>{details_html}</td>"
                     "</tr>"

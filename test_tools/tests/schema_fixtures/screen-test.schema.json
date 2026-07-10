@@ -200,6 +200,10 @@
             ],
             "description": "Override platform for this specific case"
           },
+          "responsive": {
+            "$ref": "actions.schema.json#/definitions/responsive",
+            "description": "Run this case only when the current size matches (named size-class bucket or size constraint, resolved at runtime; unmet gates skip the case). ANDs with case-level platform"
+          },
           "initialState": {
             "type": "object",
             "description": "Override initial state for this specific case",

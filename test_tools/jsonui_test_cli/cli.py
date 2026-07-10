@@ -125,18 +125,30 @@ def _install_validated_tests(valid_test_files, config_path):
 
     if report.has_collision:
         print(f"\n{'='*50}")
-        print("Install ABORTED: duplicate test file names (flat layout needs unique names):")
-        for name, srcs in report.collisions:
-            print(f"  [COLLISION] {name}")
+        print("Install ABORTED: duplicate test file names (flat layout needs unique names per target):")
+        for platform, name, srcs in report.collisions:
+            print(f"  [COLLISION] {name} ({platform})")
             for src in srcs:
                 print(f"              {src}")
         return 1
 
     print(f"\n{'='*50}")
-    print(f"Installed {len(valid_test_files)} test file(s) → {len(targets)} target(s)"
+    print(f"Installed {len(report.copied)} test file(s) → {len(targets)} target(s)"
           f" (cleaned {report.removed} stale):")
     for platform, dest in report.targets:
-        print(f"  {platform}: {dest}")
+        installed = len(report.installed.get(platform, []))
+        details = []
+        skipped = len(report.skipped_files.get(platform, []))
+        if skipped:
+            details.append(f"{skipped} skipped")
+        pruned = len(report.pruned_cases.get(platform, []))
+        if pruned:
+            details.append(f"{pruned} case(s) pruned")
+        flows = report.skipped_flows.get(platform, [])
+        if flows:
+            details.append(f"{len(flows)} flow(s) dropped: {', '.join(flows)}")
+        detail = f" ({', '.join(details)})" if details else ""
+        print(f"  {platform}: {installed} test(s){detail} → {dest}")
     return 0
 
 
@@ -463,7 +475,7 @@ def main():
     )
     gen_test_screen_parser.add_argument(
         "-p", "--platform",
-        choices=["ios", "ios-swiftui", "ios-uikit", "android", "web", "all"],
+        choices=["ios", "android", "web", "all"],
         help="Target platform"
     )
 
@@ -482,7 +494,7 @@ def main():
     )
     gen_test_flow_parser.add_argument(
         "-p", "--platform",
-        choices=["ios", "ios-swiftui", "ios-uikit", "android", "web", "all"],
+        choices=["ios", "android", "web", "all"],
         help="Target platform"
     )
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from .models import ValidationMessage, ValidationResult
 from .step import StepValidator
 from .launch import validate_launch
+from .platform import validate_platform_field
 
 
 class FlowTestValidator:
@@ -25,6 +26,10 @@ class FlowTestValidator:
         """Validate flow test structure."""
         # Warn if file references use subdirectories
         self._check_subdirectory_references(data, path, result)
+
+        # Validate test-level platform if present (flow tests have no case objects)
+        if "platform" in data:
+            validate_platform_field(data["platform"], f"{path}.platform", result)
 
         # Validate launch configuration if present
         if "launch" in data:
