@@ -62,6 +62,29 @@ RSpec.describe RjuiTools::React::Generators::ConverterGenerator do
     it 'falls through to binding-only for truly custom types' do
       expect(generator.send(:map_type_to_json_type, 'MyCustomType?')).to eq('binding')
     end
+
+    it 'maps Callback (exposedEvents) to binding-only' do
+      expect(generator.send(:map_type_to_json_type, 'Callback')).to eq('binding')
+    end
+  end
+
+  describe 'ReactComponentGenerator#ruby_type_to_typescript' do
+    let(:component_generator) do
+      RjuiTools::React::Generators::ReactComponentGenerator.new('Card', { attributes: {} }, {})
+    end
+
+    it 'maps Callback (exposedEvents) to a void function type' do
+      expect(component_generator.send(:ruby_type_to_typescript, 'Callback'))
+        .to eq('(...args: any[]) => void')
+    end
+
+    it 'emits the function type into the props interface' do
+      gen = RjuiTools::React::Generators::ReactComponentGenerator.new(
+        'Card', { attributes: { 'onDateSelected' => 'Callback' }, is_container: false }, {}
+      )
+      interface = gen.send(:generate_props_interface)
+      expect(interface).to include('onDateSelected?: (...args: any[]) => void;')
+    end
   end
 
   describe '#emit_literal_branch' do

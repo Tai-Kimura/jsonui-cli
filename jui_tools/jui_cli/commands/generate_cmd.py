@@ -974,10 +974,23 @@ def _run_converters_from_specs(
         seen_names.add(comp_name)
 
         props = spec_data.get("props", {}).get("items", [])
-        attrs = ",".join(
-            f"{p['name']}:{p['type']}" for p in props
+        attr_pairs = [
+            (p["name"], p["type"]) for p in props
             if "name" in p and "type" in p
-        )
+        ]
+        # stateManagement.exposedEvents are callback props — merge them into
+        # the attribute list as Callback-typed attrs so the platform
+        # generators wire `"onFoo": "@{handler}"` bindings (unknown types
+        # fall through to binding-only in every generator, which is exactly
+        # what an event needs).
+        seen_attrs = {name for name, _ in attr_pairs}
+        events = (spec_data.get("stateManagement") or {}).get("exposedEvents") or []
+        for event in events:
+            event_name = event.get("name") if isinstance(event, dict) else None
+            if event_name and event_name not in seen_attrs:
+                seen_attrs.add(event_name)
+                attr_pairs.append((event_name, "Callback"))
+        attrs = ",".join(f"{name}:{type_}" for name, type_ in attr_pairs)
         has_slots = bool(spec_data.get("slots", {}).get("items", []))
 
         print(f"\nGenerating converter: {comp_name}")

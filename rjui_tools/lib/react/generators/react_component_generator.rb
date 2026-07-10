@@ -126,6 +126,11 @@ module RjuiTools
             'any[]'
           when 'object', 'hash'
             'Record<string, any>'
+          when 'callback'
+            # Exposed events from the component spec — param types live in
+            # the spec's stateManagement.exposedEvents; refine when filling
+            # in the scaffold.
+            '(...args: any[]) => void'
           else
             'any'
           end

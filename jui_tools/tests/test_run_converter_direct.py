@@ -217,6 +217,43 @@ class CmdGenerateConverterTest(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertEqual(len(calls), 1)
 
+    def test_from_spec_merges_exposed_events_as_callback_attrs(self):
+        # Regression of `jui-generate-converter-from-spec-drops-exposed-events`:
+        # stateManagement.exposedEvents must reach the platform tool as
+        # Callback-typed attributes alongside props.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._project(root, {"web": {"root": "web"}})
+            spec_dir = root / "docs" / "components" / "json"
+            (spec_dir / "calendar.component.json").write_text(json.dumps({
+                "metadata": {"name": "AvailabilityCalendar"},
+                "props": {"items": [
+                    {"name": "selectionMode", "type": "String"},
+                    {"name": "isLoading", "type": "Bool"},
+                ]},
+                "stateManagement": {"exposedEvents": [
+                    {"name": "onDateSelected", "params": [{"name": "date", "type": "String"}]},
+                    {"name": "onRangeSelected", "params": []},
+                    {"name": "isLoading"},  # name clash with a prop — must not duplicate
+                ]},
+            }))
+            calls = []
+
+            def fake_run(cmd, cwd=None, env=None):
+                calls.append(list(cmd))
+                return _StubCompletedProcess(0)
+
+            with _chdir(root), patch("subprocess.run", side_effect=fake_run):
+                rc = _cmd_generate_converter(_converter_args(
+                    from_spec="calendar.component.json"))
+            self.assertEqual(rc, 0)
+            attrs = calls[0][calls[0].index("--attributes") + 1]
+            self.assertEqual(
+                attrs,
+                "selectionMode:String,isLoading:Bool,"
+                "onDateSelected:Callback,onRangeSelected:Callback",
+            )
+
     def test_from_spec_bare_filename_still_resolves_in_spec_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
