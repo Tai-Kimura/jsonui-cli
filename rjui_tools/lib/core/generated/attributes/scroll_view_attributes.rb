@@ -32,8 +32,8 @@ module JsonUI
         { name: 'indicatorStyle', kind: :string }.freeze,
         # Enable keyboard avoidance
         { name: 'keyboardAvoidance', kind: :boolean }.freeze,
-        # Keyboard dismiss mode
-        { name: 'keyboardDismissMode', kind: :string }.freeze,
+        # How scrolling dismisses the soft keyboard. Default 'none': scrolling never dismisses (keyboard stays). 'interactive': dragging down over the keyboard dismisses it interactively. 'onDrag': any scroll dismisses immediately. Value names follow UIKit UIScrollView.keyboardDismissMode; SwiftUI mode maps to scrollDismissesKeyboard(.never/.interactively/.immediately). iOS-effective; other platforms currently ignore it.
+        { name: 'keyboardDismissMode', kind: :enum, values: ['none', 'onDrag', 'interactive'].freeze }.freeze,
         # Maximum zoom scale (binding supported)
         { name: 'maxZoom', kind: :number, bindable: true }.freeze,
         # Minimum zoom scale (binding supported)
