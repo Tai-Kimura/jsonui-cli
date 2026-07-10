@@ -22,7 +22,11 @@ import argparse
 import contextlib
 import os
 
-from jui_cli.commands.generate_cmd import _cmd_generate_converter, _run_converter_direct
+from jui_cli.commands.generate_cmd import (
+    _cmd_generate_converter,
+    _run_converter_direct,
+    split_top_level_commas,
+)
 from jui_cli.core.config_manager import ConfigManager
 
 
@@ -254,6 +258,38 @@ class CmdGenerateConverterTest(unittest.TestCase):
                 "onDateSelected:Callback,onRangeSelected:Callback",
             )
 
+    def test_comma_in_closure_type_survives_the_attr_protocol(self):
+        # Regression of `jui-generate-converter-comma-in-prop-type-breaks-attributes`:
+        # a multi-arg closure type contains a comma; the android branch used
+        # to split the joined string on every comma, tearing the type apart.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._project(root, {"android": {"root": "android"}})
+            spec_dir = root / "docs" / "components" / "json"
+            (spec_dir / "picker.component.json").write_text(json.dumps({
+                "metadata": {"name": "DateRangePicker"},
+                "props": {"items": [
+                    {"name": "onRangeChange", "type": "((String, String) -> Void)?"},
+                    {"name": "title", "type": "String"},
+                ]},
+            }))
+            calls = []
+
+            def fake_run(cmd, cwd=None, env=None):
+                calls.append(list(cmd))
+                return _StubCompletedProcess(0)
+
+            with _chdir(root), patch("subprocess.run", side_effect=fake_run):
+                rc = _cmd_generate_converter(_converter_args(
+                    from_spec="picker.component.json"))
+            self.assertEqual(rc, 0)
+            cmd = calls[0]
+            attr_values = [cmd[i + 1] for i, a in enumerate(cmd) if a == "--attr"]
+            self.assertEqual(attr_values, [
+                "onRangeChange:((String, String) -> Void)?",
+                "title:String",
+            ])
+
     def test_from_spec_bare_filename_still_resolves_in_spec_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -269,6 +305,27 @@ class CmdGenerateConverterTest(unittest.TestCase):
                     from_spec="mycard.component.json"))
             self.assertEqual(rc, 0)
             self.assertEqual(len(calls), 1)
+
+
+class SplitTopLevelCommasTest(unittest.TestCase):
+    def test_plain_list(self):
+        self.assertEqual(
+            split_top_level_commas("a:String,b:Int"), ["a:String", "b:Int"])
+
+    def test_comma_inside_closure_type_is_preserved(self):
+        self.assertEqual(
+            split_top_level_commas(
+                "onRangeChange:((String, String) -> Void)?,title:String"),
+            ["onRangeChange:((String, String) -> Void)?", "title:String"])
+
+    def test_comma_inside_brackets_is_preserved(self):
+        self.assertEqual(
+            split_top_level_commas("pair:[String, Int],flag:Bool"),
+            ["pair:[String, Int]", "flag:Bool"])
+
+    def test_single_item_and_empty(self):
+        self.assertEqual(split_top_level_commas("a:String"), ["a:String"])
+        self.assertEqual(split_top_level_commas(""), [])
 
 
 if __name__ == "__main__":

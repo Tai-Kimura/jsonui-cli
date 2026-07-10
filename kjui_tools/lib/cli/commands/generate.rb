@@ -243,7 +243,9 @@ module KjuiTools
             end
             
             opts.on('--attr KEY:TYPE', 'Add attribute') do |attr|
-              key, type = attr.split(':')
+              # limit 2: the type itself may contain ':' or ',' (closure /
+              # dictionary types from component specs)
+              key, type = attr.split(':', 2)
               if key && type
                 options[:attributes][key] = type
               else
@@ -251,9 +253,9 @@ module KjuiTools
                 exit 1
               end
             end
-            
+
             opts.on('--binding KEY:TYPE', 'Add binding attribute') do |attr|
-              key, type = attr.split(':')
+              key, type = attr.split(':', 2)
               if key && type
                 # Prefix with @ to indicate binding
                 options[:attributes]["@#{key}"] = type

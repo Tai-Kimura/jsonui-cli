@@ -1007,6 +1007,32 @@ def _run_converters_from_specs(
     return 0
 
 
+def split_top_level_commas(value: str) -> list[str]:
+    """Split a comma-joined attribute list on top-level commas only.
+
+    Spec prop types may themselves contain commas — e.g. the multi-arg
+    closure type ``((String, String) -> Void)?`` — so a plain split(',')
+    tears one attribute into invalid ``key:type`` fragments. Commas nested
+    inside parentheses or brackets belong to the type, not the list.
+    """
+    parts: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for ch in value:
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            parts.append("".join(current))
+            current = []
+            continue
+        current.append(ch)
+    if current:
+        parts.append("".join(current))
+    return parts
+
+
 def _run_converter_direct(
     name: str,
     attributes: str | None,
@@ -1044,7 +1070,7 @@ def _run_converter_direct(
             tool_name = "kjui"
             cmd = [tool_name, "g", "converter", name]
             if attributes:
-                for attr in attributes.split(","):
+                for attr in split_top_level_commas(attributes):
                     cmd += ["--attr", attr]
             if container:
                 cmd.append("--container")

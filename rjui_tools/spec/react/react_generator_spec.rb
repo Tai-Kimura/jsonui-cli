@@ -211,6 +211,26 @@ RSpec.describe RjuiTools::React::ReactGenerator do
       expect(result).to include('data?: ListHostData;')
     end
   end
+
+  describe '#generate_component_file root visibility wrapper (regression: rjui-root-visibility-binding-emits-bare-jsx-expression-container)' do
+    # A root element with a visibility binding arrives as a bare JSX
+    # expression container (`{cond && (...)}`), which is not legal directly
+    # under `return (` — it must be wrapped in a fragment.
+    let(:minimal_json) { { 'type' => 'View' } }
+
+    it 'wraps a root-level expression container in a fragment' do
+      jsx = "    {data.drawerVisibility !== \"gone\" && (\n    <div id=\"adminDrawerView\">x</div>\n    )}"
+      result = generator.send(:generate_component_file, 'AdminDrawer', jsx, minimal_json)
+      expect(result).to match(/return \(\s*\n\s*<>\s*\n\s*\{data\.drawerVisibility/)
+      expect(result).to include('</>')
+    end
+
+    it 'leaves element-rooted JSX unwrapped' do
+      jsx = '      <div>plain</div>'
+      result = generator.send(:generate_component_file, 'Plain2', jsx, minimal_json)
+      expect(result).not_to include('<>')
+    end
+  end
 end
 RSpec.describe RjuiTools::React::ReactGenerator, 'focus-state declarations' do
   let(:generator) do

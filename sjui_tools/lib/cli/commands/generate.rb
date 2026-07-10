@@ -240,7 +240,7 @@ module SjuiTools
 
             opts.on('--attributes KEY:TYPE', 'Add custom attribute (can be used multiple times or comma-separated)') do |attr|
               # Handle comma-separated attributes
-              attr.split(',').each do |single_attr|
+              split_top_level_commas(attr).each do |single_attr|
                 key, type = single_attr.strip.split(':', 2)
                 if key && type
                   options[:attributes][key] = type
@@ -253,6 +253,31 @@ module SjuiTools
           end.parse!(args)
 
           options
+        end
+
+        # Split an --attributes list on top-level commas only. Spec prop
+        # types can contain commas themselves (multi-arg closure types like
+        # `((String, String) -> Void)?`) — commas nested in parens/brackets
+        # belong to the type, not the list.
+        def split_top_level_commas(str)
+          parts = []
+          depth = 0
+          current = +''
+          str.each_char do |ch|
+            case ch
+            when '(', '[' then depth += 1
+            when ')', ']' then depth -= 1
+            when ','
+              if depth.zero?
+                parts << current
+                current = +''
+                next
+              end
+            end
+            current << ch
+          end
+          parts << current unless current.empty?
+          parts
         end
 
         def generate_adapter(args, mode)

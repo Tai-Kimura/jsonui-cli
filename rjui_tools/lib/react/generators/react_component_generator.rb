@@ -132,7 +132,8 @@ module RjuiTools
             # in the scaffold.
             '(...args: any[]) => void'
           else
-            'any'
+            # Closure types from props.items (e.g. `((String, String) -> Void)?`)
+            type.include?('->') ? '(...args: any[]) => void' : 'any'
           end
         end
 

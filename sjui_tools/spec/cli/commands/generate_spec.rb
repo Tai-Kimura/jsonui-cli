@@ -192,6 +192,15 @@ RSpec.describe SjuiTools::CLI::Commands::Generate do
       expect(options[:attributes]).to eq({ 'text' => 'String', 'count' => 'Int' })
     end
 
+    it 'keeps a comma-bearing closure type as one attribute (regression: jui-generate-converter-comma-in-prop-type-breaks-attributes)' do
+      options = command.send(:parse_converter_options,
+                             ['--attributes', 'onRangeChange:((String, String) -> Void)?,title:String'])
+      expect(options[:attributes]).to eq(
+        'onRangeChange' => '((String, String) -> Void)?',
+        'title' => 'String'
+      )
+    end
+
     it 'parses --container option' do
       options = command.send(:parse_converter_options, ['--container'])
       expect(options[:is_container]).to be true

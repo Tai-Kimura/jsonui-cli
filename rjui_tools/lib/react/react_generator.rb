@@ -343,6 +343,15 @@ module RjuiTools
           jsx_content = jsx_content.gsub('StringManager.currentLanguage.', '$s.')
         end
 
+        # A root element with a visibility binding arrives here as a bare
+        # JSX expression container (`{cond && (...)}` from
+        # BaseConverter#wrap_with_visibility). That form is only legal as a
+        # child of a JSX element — directly under `return (` it parses as a
+        # block/object literal (TS1005). Wrap it in a fragment.
+        if jsx_content.lstrip.start_with?('{')
+          jsx_content = "    <>\n#{jsx_content}\n    </>"
+        end
+
         # Generate data-based props interface and signature.
         # A layout with no bindings (static partials like a logo header)
         # never reads `data` — include sites render it as `<Name />` with no

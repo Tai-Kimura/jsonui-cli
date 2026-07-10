@@ -340,8 +340,8 @@ module SjuiTools
           elsif @options[:attributes].is_a?(String)
             # Parse attributes string like "text:String,@isEnabled:Bool"
             attributes = {}
-            @options[:attributes].split(',').each do |attr|
-              parts = attr.strip.split(':')
+            split_top_level_commas(@options[:attributes]).each do |attr|
+              parts = attr.strip.split(':', 2)
               if parts.size == 2
                 name = parts[0].strip
                 is_binding = name.start_with?('@')
@@ -357,6 +357,30 @@ module SjuiTools
           else
             return {}
           end
+        end
+
+        # Split an attributes list on top-level commas only — prop types can
+        # contain commas themselves (multi-arg closure types like
+        # `((String, String) -> Void)?`).
+        def split_top_level_commas(str)
+          parts = []
+          depth = 0
+          current = +''
+          str.each_char do |ch|
+            case ch
+            when '(', '[' then depth += 1
+            when ')', ']' then depth -= 1
+            when ','
+              if depth.zero?
+                parts << current
+                current = +''
+                next
+              end
+            end
+            current << ch
+          end
+          parts << current unless current.empty?
+          parts
         end
         
         def generate_binding_extraction(name, type)
