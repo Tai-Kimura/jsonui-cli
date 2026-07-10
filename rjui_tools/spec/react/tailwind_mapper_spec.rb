@@ -311,3 +311,42 @@ RSpec.describe RjuiTools::React::TailwindMapper do
     end
   end
 end
+
+# rjui-offpalette-hex-dead-tailwind-class: only theme-safe (mode-complete)
+# names may become `bg-<name>` classes; everything else resolves to its hex.
+RSpec.describe RjuiTools::React::TailwindMapper, '.map_color (theme-safe policy)' do
+  after { described_class.reset_palette! }
+
+  it 'emits arbitrary value for hex' do
+    expect(described_class.map_color('#DBEAFE')).to eq('bg-[#DBEAFE]')
+  end
+
+  it 'keeps legacy name behavior when no palette is configured' do
+    expect(described_class.map_color('surface', 'text')).to eq('text-surface')
+  end
+
+  context 'with a configured palette' do
+    before do
+      described_class.configure_palette(
+        theme_safe: ['surface'],
+        fallbacks: { 'surface' => '#FFFFFF', 'white_2' => '#FFFBEB' }
+      )
+    end
+
+    it 'emits the class for a theme-safe name' do
+      expect(described_class.map_color('surface')).to eq('bg-surface')
+    end
+
+    it 'resolves an off-palette name back to its hex (visible, not dead)' do
+      expect(described_class.map_color('white_2')).to eq('bg-[#FFFBEB]')
+    end
+
+    it 'resolves with the requested prefix' do
+      expect(described_class.map_color('white_2', 'border')).to eq('border-[#FFFBEB]')
+    end
+
+    it 'passes through a name absent from colors.json entirely' do
+      expect(described_class.map_color('some-custom-class')).to eq('bg-some-custom-class')
+    end
+  end
+end

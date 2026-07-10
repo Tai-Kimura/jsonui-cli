@@ -245,6 +245,47 @@ RSpec.describe RjuiTools::Core::Resources::ColorManager do
         key = manager.send(:generate_color_key, '#808080')
         expect(key).to include('gray')
       end
+
+      # rjui-offpalette-hex-dead-tailwind-class: hue-carrying pales must not
+      # collapse to bare `white`/`black` (Tailwind builtins, hue discarded).
+      it 'keeps the hue for a near-white tinted color instead of bare white' do
+        key = manager.send(:generate_color_key, '#DBEAFE') # pale blue-ish
+        expect(key).not_to match(/^white(_\d+)?$/)
+        expect(key).to start_with('pale_') # hue suffix preserved
+      end
+
+      it 'keeps the hue for a near-black tinted color instead of bare black' do
+        key = manager.send(:generate_color_key, '#0A1030') # very dark blue
+        expect(key).not_to match(/^black(_\d+)?$/)
+      end
+
+      it 'still names true neutrals white/black' do
+        expect(manager.send(:generate_color_key, '#FFFFFF')).to eq('white')
+        expect(manager.send(:generate_color_key, '#FDFDFC')).to eq('white')
+        expect(manager.send(:generate_color_key, '#000000')).to eq('black')
+      end
+    end
+
+    describe '#mode_complete_keys / #fallback_hexes' do
+      it 'returns only names defined in every mode' do
+        colors_file = File.join(resources_dir, 'colors.json')
+        File.write(colors_file, JSON.pretty_generate(
+          'modes' => %w[light dark],
+          'fallback_mode' => 'light',
+          'light' => { 'surface' => '#FFFFFF', 'white_2' => '#FFFBEB' },
+          'dark' => { 'surface' => '#0B1220' }
+        ))
+        m = described_class.new(config, source_path, resources_dir)
+        expect(m.mode_complete_keys).to eq(['surface'])
+        expect(m.fallback_hexes).to include('white_2' => '#FFFBEB')
+      end
+
+      it 'treats every key as complete in a single-mode project' do
+        colors_file = File.join(resources_dir, 'colors.json')
+        File.write(colors_file, JSON.pretty_generate('light' => { 'a' => '#111111', 'b' => '#222222' }))
+        m = described_class.new(config, source_path, resources_dir)
+        expect(m.mode_complete_keys.sort).to eq(%w[a b])
+      end
     end
 
     describe '#snake_to_camel' do

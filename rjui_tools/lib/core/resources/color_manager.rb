@@ -60,6 +60,23 @@ module RjuiTools
         # Public API for other components that need to know about themes.
         attr_reader :modes, :palettes, :fallback_mode, :system_mode_mapping
 
+        # Names registered in EVERY mode — the curated vocabulary the web
+        # @theme mirrors. Machine-extracted colors land in one mode only, so
+        # they are never mode-complete until a human promotes them (adds the
+        # other modes' values), which is exactly when `bg-<name>` becomes safe.
+        def mode_complete_keys
+          return [] if @modes.empty?
+
+          @modes.map { |m| (@palettes[m] || {}).keys }.reduce(:&)
+        end
+
+        # name => hex in the fallback mode, for resolving a non-theme-safe
+        # name back to a displayable arbitrary value.
+        def fallback_hexes
+          mode = @fallback_mode || DEFAULT_MODE_NAME
+          (@palettes[mode] || @palettes.values.first || {}).dup
+        end
+
         private
 
         def any_extracted?
@@ -463,7 +480,14 @@ module RjuiTools
               color_suffix = ''
             end
 
-            base_name = base_name + color_suffix unless base_name == 'white' || base_name == 'black'
+            # Hue-carrying colors must never collapse to bare `white`/`black`:
+            # those collide with Tailwind's fixed builtins (bg-white never
+            # follows dark mode) and discard the hue (#DBEAFE is a blue, not a
+            # white). Demote to pale/deep and keep the suffix; bare white/black
+            # remain reserved for true neutrals below.
+            base_name = 'pale' if base_name == 'white'
+            base_name = 'deep' if base_name == 'black'
+            base_name = base_name + color_suffix if color_suffix
           elsif base_name != 'white' && base_name != 'black'
             base_name = base_name + '_gray'
           end

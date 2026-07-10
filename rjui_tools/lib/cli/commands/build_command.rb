@@ -409,6 +409,15 @@ module RjuiTools
           manager = Core::Resources::ColorManager.new(config, source_path, resources_dir)
           manager.process_colors(json_files, json_files.size, 0, config)
 
+          # Tell the Tailwind mapper which color names are theme-safe
+          # (mode-complete in colors.json = mirrored in the web @theme) so an
+          # off-palette name resolves back to its hex instead of emitting a
+          # dead `bg-<name>` class (rjui-offpalette-hex-dead-tailwind-class).
+          React::TailwindMapper.configure_palette(
+            theme_safe: manager.mode_complete_keys,
+            fallbacks: manager.fallback_hexes
+          )
+
           ensure_use_color_mode_hook
         rescue StandardError => e
           Core::Logger.error("Error processing colors: #{e.message}")
