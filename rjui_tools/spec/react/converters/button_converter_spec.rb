@@ -207,7 +207,7 @@ RSpec.describe RjuiTools::React::Converters::ButtonConverter do
           'enabled' => '@{isEnabled}'
         })
         result = converter.convert
-        expect(result).to include(%q(disabled={data.isEnabled !== "true"}))
+        expect(result).to include(%q(disabled={!data.isEnabled}))
       end
     end
   end

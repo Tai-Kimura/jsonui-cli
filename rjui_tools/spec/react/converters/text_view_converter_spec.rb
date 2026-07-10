@@ -340,7 +340,7 @@ RSpec.describe RjuiTools::React::Converters::TextViewConverter do
         'enabled' => '@{canEdit}'
       })
       result = converter.convert
-      expect(result).to include(%q(disabled={data.canEdit !== "true"}))
+      expect(result).to include(%q(disabled={!data.canEdit}))
     end
   end
 

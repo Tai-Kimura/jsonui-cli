@@ -365,7 +365,7 @@ RSpec.describe RjuiTools::React::Converters::TextFieldConverter do
         'enabled' => '@{isEditable}'
       })
       result = converter.convert
-      expect(result).to include(%q(disabled={data.isEditable !== "true"}))
+      expect(result).to include(%q(disabled={!data.isEditable}))
     end
   end
 

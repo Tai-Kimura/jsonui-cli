@@ -190,7 +190,7 @@ module RjuiTools
           return '' if enabled.nil?
 
           if has_binding?(enabled)
-            " disabled={#{extract_binding_property(enabled)} !== \"true\"}"
+            " disabled={!#{extract_binding_property(enabled)}}"
           elsif enabled == false
             ' disabled'
           else

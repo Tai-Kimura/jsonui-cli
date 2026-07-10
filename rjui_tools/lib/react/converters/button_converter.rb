@@ -116,9 +116,10 @@ module RjuiTools
           return '' if enabled.nil?
 
           if enabled.is_a?(String) && enabled.start_with?('@{') && enabled.end_with?('}')
-            # Binding expression: @{isEnabled} -> disabled={data.isEnabled !== "true"}
-            property_name = enabled[2...-1]
-            " disabled={data.#{property_name} !== \"true\"}"
+            # Binding expression: @{isEnabled} -> disabled={!data.isEnabled}
+            # (Bool data props generate as TS boolean — a string comparison
+            # would be always-true and leave the control permanently disabled.)
+            " disabled={!#{extract_binding_property(enabled)}}"
           elsif enabled == false
             ' disabled'
           else

@@ -860,7 +860,11 @@ def _sync_viewmodel_protocols(
     from ..core.type_mapper import TypeMapper
     from ..generators.android_generator import AndroidGenerator
     from ..generators.ios_generator import IosGenerator
-    from ..generators.web_generator import WebGenerator
+    from ..generators.web_generator import (
+        WebGenerator,
+        collect_layout_event_names,
+        resolve_layout_path,
+    )
 
     specs = _load_all_specs(config_mgr)
     if not specs:
@@ -1023,7 +1027,15 @@ def _sync_viewmodel_protocols(
 
             # Protocol / Base file.
             if platform == "web":
-                content = generator.generate_viewmodel_protocol(spec)
+                # Restrict initializeEventHandlers to members that actually
+                # exist in the rjui-generated <Name>Data (layout-derived) —
+                # spec-only methods in the updateData literal are a TS2353.
+                layout_event_names = collect_layout_event_names(
+                    resolve_layout_path(config_mgr.layouts_directory, spec)
+                )
+                content = generator.generate_viewmodel_protocol(
+                    spec, layout_event_names=layout_event_names
+                )
             else:
                 content = generator.generate_viewmodel_protocol(
                     spec,

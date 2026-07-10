@@ -254,8 +254,8 @@ module RjuiTools
             # Generate binding-aware prop handling
             lines << "            if #{key}_value"
             lines << "              if #{key}_value.is_a?(String) && #{key}_value.start_with?('@{') && #{key}_value.end_with?('}')"
-            lines << "                # Handle binding - extract property name"
-            lines << "                prop_name = #{key}_value[2..-2]"
+            lines << "                # Handle binding - resolve to data.xxx like built-in converters"
+            lines << "                prop_name = add_viewmodel_data_prefix(#{key}_value[2..-2])"
             lines << "                props << \"#{key}={\#{prop_name}}\""
             lines << "              else"
             lines.concat(emit_literal_branch(key, t))

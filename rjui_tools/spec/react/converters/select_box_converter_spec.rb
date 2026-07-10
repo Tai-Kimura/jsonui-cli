@@ -121,6 +121,15 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
       end
     end
 
+    context 'with enabled binding (regression: rjui-button-enabled-binding-compares-bool-to-string)' do
+      it 'negates the boolean binding instead of comparing to "true"' do
+        converter = create_converter({ 'class' => 'SelectBox', 'items' => ['A'], 'enabled' => '@{isEditable}' })
+        result = converter.convert
+        expect(result).to include('disabled={!data.isEditable}')
+        expect(result).not_to include('!== "true"')
+      end
+    end
+
     context 'with testId' do
       it 'generates data-testid attribute' do
         converter = create_converter({ 'class' => 'SelectBox', 'items' => ['A'], 'testId' => 'country-select' })

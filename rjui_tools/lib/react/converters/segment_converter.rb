@@ -21,7 +21,9 @@ module RjuiTools
           items_jsx = items.each_with_index.map do |item, index|
             button_class = build_button_class(index)
             button_disabled = attributes['enabled'] == false ? ' disabled' : ''
-            on_click_attr = on_change ? " onClick={() => #{on_change}(#{index})}" : ''
+            # Data closure props are always optional (type_converter makes all
+            # function types `| undefined`), so the call must be optional-chained.
+            on_click_attr = on_change ? " onClick={() => #{on_change}?.(#{index})}" : ''
             "#{indent_str(indent + 2)}<button key={#{index}} className={`#{button_class}`}#{on_click_attr}#{button_disabled}>#{item}</button>"
           end.join("\n")
 

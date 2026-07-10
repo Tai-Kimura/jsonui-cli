@@ -87,6 +87,15 @@ RSpec.describe RjuiTools::React::Generators::ConverterGenerator do
     end
   end
 
+  describe '#generate_props_lines binding branch (regression: rjui-converter-scaffold-binding-props-missing-data-prefix)' do
+    it 'resolves @{} bindings through add_viewmodel_data_prefix like built-in converters' do
+      gen = described_class.new('Card', { attributes: { 'selectionMode' => 'String?' } }, {})
+      out = gen.send(:generate_props_lines).join("\n")
+      expect(out).to include('add_viewmodel_data_prefix(selectionMode_value[2..-2])')
+      expect(out).not_to include('prop_name = selectionMode_value[2..-2]')
+    end
+  end
+
   describe '#emit_literal_branch' do
     def lines_for(type_str)
       t = generator.send(:normalize_type, type_str)

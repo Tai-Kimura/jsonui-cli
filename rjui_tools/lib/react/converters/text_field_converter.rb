@@ -309,8 +309,7 @@ module RjuiTools
           return '' if enabled.nil?
 
           if enabled.is_a?(String) && enabled.start_with?('@{') && enabled.end_with?('}')
-            property_name = enabled[2...-1]
-            " disabled={data.#{property_name} !== \"true\"}"
+            " disabled={!#{extract_binding_property(enabled)}}"
           elsif enabled == false
             ' disabled'
           else

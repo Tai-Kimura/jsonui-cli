@@ -588,7 +588,23 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
 
             # ViewModel declaration (auto-update)
             decl_path = generator.viewmodel_protocol_path(screen_spec.name, vm_subdir)
-            decl_content = generator.generate_viewmodel_protocol(screen_spec)
+            if platform == "web":
+                # Same filter as jui build: only <Name>Data members may be
+                # initialized in the Base's updateData literal (TS2353).
+                from ..generators.web_generator import (
+                    collect_layout_event_names,
+                    resolve_layout_path,
+                )
+                decl_content = generator.generate_viewmodel_protocol(
+                    screen_spec,
+                    layout_event_names=collect_layout_event_names(
+                        resolve_layout_path(
+                            config_mgr.layouts_directory, screen_spec
+                        )
+                    ),
+                )
+            else:
+                decl_content = generator.generate_viewmodel_protocol(screen_spec)
 
             if decl_path.exists() and not args.force:
                 diff = diff_checker.check(decl_path, decl_content)

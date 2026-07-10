@@ -132,16 +132,18 @@ module RjuiTools
 
         # checked / onChange attribute pair. Controlled inputs need onChange
         # (or readOnly) to satisfy React; static selections emit readOnly.
+        # Data closure props are always optional (type_converter makes all
+        # function types `| undefined`), so calls must be optional-chained.
         def build_state_attrs(selected_binding, on_change, value_literal)
           if selected_binding
             checked = " checked={#{selected_binding} === \"#{value_literal}\"}"
             if on_change
-              "#{checked} onChange={() => #{on_change}(\"#{value_literal}\")}"
+              "#{checked} onChange={() => #{on_change}?.(\"#{value_literal}\")}"
             else
               "#{checked} readOnly"
             end
           elsif on_change
-            " onChange={() => #{on_change}(\"#{value_literal}\")}"
+            " onChange={() => #{on_change}?.(\"#{value_literal}\")}"
           else
             ''
           end

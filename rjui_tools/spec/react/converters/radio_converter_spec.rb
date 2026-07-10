@@ -54,8 +54,8 @@ RSpec.describe RjuiTools::React::Converters::RadioConverter do
       it 'uses handler for onChange' do
         converter = create_converter({ 'class' => 'Radio', 'items' => ['A', 'B'], 'onValueChange' => '@{handleSelect}' })
         result = converter.convert
-        expect(result).to include('onChange={() => data.handleSelect("A")}')
-        expect(result).to include('onChange={() => data.handleSelect("B")}')
+        expect(result).to include('onChange={() => data.handleSelect?.("A")}')
+        expect(result).to include('onChange={() => data.handleSelect?.("B")}')
       end
     end
 
