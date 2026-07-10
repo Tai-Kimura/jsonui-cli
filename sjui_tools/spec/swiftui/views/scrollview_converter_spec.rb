@@ -34,6 +34,30 @@ RSpec.describe SjuiTools::SwiftUI::Views::ScrollViewConverter do
       end
     end
 
+    # keyboardDismissMode is opt-in: unset must emit nothing (keyboard stays
+    # on scroll — user-confirmed default), a valid value passes through.
+    context 'with keyboardDismissMode' do
+      it 'emits nothing when unset' do
+        code = described_class.new({ 'type' => 'ScrollView' }).convert
+        expect(code).not_to include('keyboardDismissMode')
+      end
+
+      it 'passes interactive through' do
+        code = described_class.new({ 'type' => 'ScrollView', 'keyboardDismissMode' => 'interactive' }).convert
+        expect(code).to include('keyboardDismissMode: "interactive"')
+      end
+
+      it 'passes onDrag through' do
+        code = described_class.new({ 'type' => 'ScrollView', 'keyboardDismissMode' => 'onDrag' }).convert
+        expect(code).to include('keyboardDismissMode: "onDrag"')
+      end
+
+      it 'emits nothing for none (the default)' do
+        code = described_class.new({ 'type' => 'ScrollView', 'keyboardDismissMode' => 'none' }).convert
+        expect(code).not_to include('keyboardDismissMode')
+      end
+    end
+
     context 'with horizontal scroll' do
       let(:component) do
         {

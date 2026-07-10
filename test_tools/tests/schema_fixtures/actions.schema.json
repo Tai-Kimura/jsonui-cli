@@ -237,6 +237,9 @@
           "$ref": "#/definitions/backAction"
         },
         {
+          "$ref": "#/definitions/hideKeyboardAction"
+        },
+        {
           "$ref": "#/definitions/screenshotAction"
         },
         {
@@ -657,6 +660,28 @@
       "properties": {
         "action": {
           "const": "back"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "hideKeyboardAction": {
+      "type": "object",
+      "description": "Dismiss the soft keyboard if one is visible (no-op when none). Needed when the keyboard covers the tap target and the field type has no return key (e.g. number-pad).",
+      "properties": {
+        "action": {
+          "const": "hideKeyboard"
         },
         "label": {
           "$ref": "#/definitions/label"

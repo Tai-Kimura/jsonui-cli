@@ -24,7 +24,7 @@ turning drift into a CI failure.
 
 - Source repo: `Tai-Kimura/jsonui-test-runner`
 - Source path: `schemas/{actions,screen-test,flow-test,results,description}.schema.json`
-- Vendored at commit: `322a227d05c929f98c4d2d0119b5d8f5c113df0d`
+- Vendored at commit: `76a006a0fac4228c0625accf7b4efbbcbeed9ca9`
 
 ## Re-vendor procedure
 

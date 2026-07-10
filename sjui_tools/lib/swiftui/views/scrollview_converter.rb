@@ -64,12 +64,18 @@ module SjuiTools
           # keyboardAvoidance属性の確認（デフォルトはtrue）
           keyboard_avoidance = @component['keyboardAvoidance'] != false
 
+          # keyboardDismissMode (none|onDrag|interactive, UIKit value names) —
+          # opt-in only: unset emits nothing and the component defaults to
+          # .never (scrolling does not dismiss the keyboard).
+          dismiss_mode = @component['keyboardDismissMode']
+          dismiss_arg = %w[onDrag interactive].include?(dismiss_mode) ? ", keyboardDismissMode: \"#{dismiss_mode}\"" : ''
+
           # AdvancedKeyboardAvoidingScrollViewを使用
           # keyboardAvoidance: falseの場合はconfigurationでisEnabled: falseを指定
           if keyboard_avoidance
-            add_line "AdvancedKeyboardAvoidingScrollView(#{axes}, showsIndicators: #{show_indicators}) {"
+            add_line "AdvancedKeyboardAvoidingScrollView(#{axes}, showsIndicators: #{show_indicators}#{dismiss_arg}) {"
           else
-            add_line "AdvancedKeyboardAvoidingScrollView(#{axes}, showsIndicators: #{show_indicators}, configuration: KeyboardAvoidanceConfiguration(isEnabled: false)) {"
+            add_line "AdvancedKeyboardAvoidingScrollView(#{axes}, showsIndicators: #{show_indicators}, configuration: KeyboardAvoidanceConfiguration(isEnabled: false)#{dismiss_arg}) {"
           end
           
           indent do

@@ -100,6 +100,13 @@ SUPPORTED_ACTIONS = {
         "required": [],
         "optional": []
     },
+    "hideKeyboard": {
+        "description": "Dismiss the soft keyboard if one is visible (no-op when none). "
+                       "Needed when the keyboard covers the tap target and the field type "
+                       "has no return key (e.g. number-pad).",
+        "required": [],
+        "optional": []
+    },
     "screenshot": {
         "description": "Take a screenshot",
         "required": ["name"],
