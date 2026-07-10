@@ -98,6 +98,19 @@ class TestActionValidation:
         result = self.validator.validate_data(data)
         assert not result.is_valid
 
+    def test_valid_typetext_action(self):
+        """typeText types into the focused field — valid with only 'value' (no id)."""
+        data = self._make_test([{"action": "typeText", "value": "123456"}])
+        result = self.validator.validate_data(data)
+        assert result.is_valid
+
+    def test_typetext_missing_value(self):
+        """typeText without value fails."""
+        data = self._make_test([{"action": "typeText"}])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("Missing required parameter 'value'" in str(e) for e in result.errors)
+
     def test_valid_scroll_action(self):
         """Test valid scroll action."""
         data = self._make_test([{"action": "scroll", "id": "list_view", "direction": "down"}])

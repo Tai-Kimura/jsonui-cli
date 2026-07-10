@@ -36,6 +36,13 @@ SUPPORTED_ACTIONS = {
         "required": ["id", "value"],
         "optional": ["timeout"]
     },
+    "typeText": {
+        "description": "Type text into the currently-focused field via the keyboard "
+                       "(no element id; for focused-but-untargetable fields such as "
+                       "invisible code-entry inputs)",
+        "required": ["value"],
+        "optional": ["timeout"]
+    },
     "clear": {
         "description": "Clear text from an input field",
         "required": ["id"],

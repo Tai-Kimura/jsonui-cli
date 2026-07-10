@@ -152,6 +152,9 @@
           "$ref": "#/definitions/inputAction"
         },
         {
+          "$ref": "#/definitions/typeTextAction"
+        },
+        {
           "$ref": "#/definitions/clearAction"
         },
         {
@@ -326,6 +329,38 @@
       "required": [
         "action",
         "id",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "typeTextAction": {
+      "type": "object",
+      "description": "Type text into the currently-focused field via the keyboard, without targeting an element id. For fields that hold keyboard focus but are not directly targetable (e.g. an invisible code-entry TextField behind visible slots): focus is established app-side (auto-focus or a prior tap on a visible container), then typeText sends the characters.",
+      "properties": {
+        "action": {
+          "const": "typeText"
+        },
+        "value": {
+          "type": "string",
+          "description": "Text to type into the focused field"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Timeout in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
         "value"
       ],
       "additionalProperties": false
