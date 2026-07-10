@@ -120,10 +120,28 @@ module KjuiTools
           # emit referenced a non-existent `FocusManager.requestFocus(...)`
           # helper. Refactored to use Compose stdlib `FocusRequester` only.
           focus_field_id = json_data['fieldId']
-          if focus_field_id
+
+          # ViewModel-driven focus binding — sjui parity
+          # (kjui-textfield-isfocused-focus-binding-not-generated): every
+          # TextField with an `id` gets a FocusRequester plus data.<id>IsFocused
+          # wiring, so `data.xIsFocused = true` from a ViewModel focuses the
+          # field and opens the keyboard (the invisible code-entry pattern —
+          # e.g. a 2FA hidden input — has no tappable surface and relies on
+          # this). The Data property is auto-added by DataModelUpdater.
+          # The requester is shared with the fieldId/nextFocusId focus chain:
+          # `fieldId` keeps naming priority so nextFocusId lookups still work.
+          focus_requester_name = focus_field_id || json_data['id']
+          focus_prop = json_data['id'] ? "#{snake_to_camel(json_data['id'])}IsFocused" : nil
+          if focus_requester_name
             required_imports&.add(:focus_requester)
             required_imports&.add(:remember)
-            code += indent("val focusRequester_#{focus_field_id} = remember { FocusRequester() }", depth) + "\n"
+            code += indent("val focusRequester_#{focus_requester_name} = remember { FocusRequester() }", depth) + "\n"
+          end
+          if focus_prop
+            required_imports&.add(:launched_effect)
+            required_imports&.add(:software_keyboard_controller)
+            code += indent("val keyboardController_#{json_data['id']} = LocalSoftwareKeyboardController.current", depth) + "\n"
+            code += indent("LaunchedEffect(data.#{focus_prop}) { if (data.#{focus_prop}) { focusRequester_#{focus_requester_name}.requestFocus(); keyboardController_#{json_data['id']}?.show() } }", depth) + "\n"
           end
 
           if has_margins
@@ -181,7 +199,11 @@ module KjuiTools
                 textfield_modifiers << fill_modifier
               end
             end
-            textfield_modifiers << ".focusRequester(focusRequester_#{focus_field_id})" if focus_field_id
+            if focus_prop
+              required_imports&.add(:focus_changed)
+              textfield_modifiers << ".onFocusChanged { if (it.isFocused != data.#{focus_prop}) viewModel.updateData(mapOf(\"#{focus_prop}\" to it.isFocused)) }"
+            end
+            textfield_modifiers << ".focusRequester(focusRequester_#{focus_requester_name})" if focus_requester_name
             if textfield_modifiers.any?
               code += "\n" + indent("textFieldModifier = Modifier", depth + 1)
               textfield_modifiers.each do |mod|
@@ -203,7 +225,11 @@ module KjuiTools
               modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             end
             modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
-            modifiers << ".focusRequester(focusRequester_#{focus_field_id})" if focus_field_id
+            if focus_prop
+              required_imports&.add(:focus_changed)
+              modifiers << ".onFocusChanged { if (it.isFocused != data.#{focus_prop}) viewModel.updateData(mapOf(\"#{focus_prop}\" to it.isFocused)) }"
+            end
+            modifiers << ".focusRequester(focusRequester_#{focus_requester_name})" if focus_requester_name
 
             if modifiers.any?
               code += "\n" + indent("modifier = Modifier", depth + 1)
@@ -533,6 +559,13 @@ module KjuiTools
           else
             'value'
           end
+        end
+
+        # snake_case id -> lowerCamel property stem. MUST stay in sync with
+        # DataModelUpdater#snake_to_camel — both derive the <id>IsFocused name.
+        def self.snake_to_camel(str)
+          parts = str.split('_')
+          parts[0] + parts[1..].map(&:capitalize).join
         end
 
         # Strip @{} binding syntax from a value and return the property name

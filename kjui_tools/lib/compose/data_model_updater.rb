@@ -267,6 +267,18 @@ module KjuiTools
             end
           end
 
+          # Auto-generate the <id>IsFocused property for TextField components —
+          # sjui parity (kjui-textfield-isfocused-focus-binding-not-generated):
+          # TextFieldComponent emits data.<id>IsFocused focus wiring for every
+          # field with an id, so the Data class must carry the property
+          # (EditText / Input are `_alias_of: TextField` in the shared defs).
+          if %w[TextField EditText Input].include?(json_data['type']) && json_data['id']
+            focus_prop_name = snake_to_camel(json_data['id']) + 'IsFocused'
+            unless properties.any? { |p| p['name'] == focus_prop_name }
+              properties << { 'name' => focus_prop_name, 'class' => 'Boolean', 'defaultValue' => false }
+            end
+          end
+
           # Continue searching in children (collect all data, not just the first)
           if json_data['child']
             if json_data['child'].is_a?(Array)

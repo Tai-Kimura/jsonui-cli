@@ -637,4 +637,41 @@ RSpec.describe KjuiTools::Compose::DataModelUpdater do
       end
     end
   end
+  # kjui-textfield-isfocused-focus-binding-not-generated: the Data class must
+  # carry <id>IsFocused for every TextField id (sjui parity) — the generated
+  # view's focus wiring references it.
+  describe 'auto-generated <id>IsFocused property' do
+    it 'adds a Boolean IsFocused property for each TextField with an id' do
+      updater = described_class.new
+      props = updater.send(:extract_data_properties, {
+        'type' => 'View',
+        'child' => [
+          { 'type' => 'TextField', 'id' => 'two_fa_hidden_input' },
+          { 'type' => 'TextField', 'id' => 'email_field' },
+          { 'type' => 'TextField' },                      # id-less: nothing
+          { 'type' => 'Text', 'id' => 'some_label' }      # non-field: nothing
+        ]
+      })
+      names = props.map { |p| p['name'] }
+      expect(names).to include('twoFaHiddenInputIsFocused')
+      expect(names).to include('emailFieldIsFocused')
+      expect(names.grep(/IsFocused/).size).to eq(2)
+      focus = props.find { |p| p['name'] == 'twoFaHiddenInputIsFocused' }
+      expect(focus['class']).to eq('Boolean')
+      expect(focus['defaultValue']).to eq(false)
+    end
+
+    it 'does not duplicate an explicitly declared IsFocused property' do
+      updater = described_class.new
+      props = updater.send(:extract_data_properties, {
+        'type' => 'View',
+        'data' => [{ 'name' => 'emailFieldIsFocused', 'class' => 'Boolean', 'defaultValue' => true }],
+        'child' => [{ 'type' => 'TextField', 'id' => 'email_field' }]
+      })
+      focused = props.select { |p| p['name'] == 'emailFieldIsFocused' }
+      expect(focused.size).to eq(1)
+      expect(focused.first['defaultValue']).to eq(true) # explicit wins
+    end
+  end
 end
+

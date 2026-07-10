@@ -630,4 +630,49 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       expect(code).to include('val textFieldState_email_field')
     end
   end
+  # kjui-textfield-isfocused-focus-binding-not-generated: sjui parity —
+  # every TextField with an id gets ViewModel-driven focus wiring.
+  describe 'focus-state binding (data.<id>IsFocused)' do
+    it 'emits FocusRequester + LaunchedEffect + keyboard show for an id-bearing field' do
+      json_data = { 'type' => 'TextField', 'id' => 'two_fa_hidden_input' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('val focusRequester_two_fa_hidden_input = remember { FocusRequester() }')
+      expect(result).to include('val keyboardController_two_fa_hidden_input = LocalSoftwareKeyboardController.current')
+      expect(result).to include('LaunchedEffect(data.twoFaHiddenInputIsFocused) { if (data.twoFaHiddenInputIsFocused) { focusRequester_two_fa_hidden_input.requestFocus(); keyboardController_two_fa_hidden_input?.show() } }')
+      expect(result).to include('.focusRequester(focusRequester_two_fa_hidden_input)')
+      expect(required_imports).to include(:focus_requester)
+      expect(required_imports).to include(:software_keyboard_controller)
+    end
+
+    it 'reports focus changes back into data via viewModel.updateData (two-way)' do
+      json_data = { 'type' => 'TextField', 'id' => 'email_field' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('.onFocusChanged { if (it.isFocused != data.emailFieldIsFocused) viewModel.updateData(mapOf("emailFieldIsFocused" to it.isFocused)) }')
+      expect(required_imports).to include(:focus_changed)
+    end
+
+    it 'wires the focus binding on the margins (Box-wrapped) variant too' do
+      json_data = { 'type' => 'TextField', 'id' => 'code_field', 'topMargin' => 8 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('CustomTextFieldWithMargins(')
+      expect(result).to include('.focusRequester(focusRequester_code_field)')
+      expect(result).to include('.onFocusChanged { if (it.isFocused != data.codeFieldIsFocused)')
+    end
+
+    it 'shares the requester with the fieldId focus chain (fieldId keeps naming priority)' do
+      json_data = { 'type' => 'TextField', 'id' => 'email_field', 'fieldId' => 'email' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('val focusRequester_email = remember { FocusRequester() }')
+      expect(result.scan('remember { FocusRequester() }').size).to eq(1)
+      expect(result).to include('LaunchedEffect(data.emailFieldIsFocused) { if (data.emailFieldIsFocused) { focusRequester_email.requestFocus()')
+    end
+
+    it 'emits no focus binding for an id-less TextField' do
+      json_data = { 'type' => 'TextField' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).not_to include('IsFocused')
+      expect(result).not_to include('FocusRequester()')
+    end
+  end
 end
+

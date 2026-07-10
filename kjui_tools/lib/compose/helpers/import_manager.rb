@@ -47,6 +47,8 @@ module KjuiTools
             keyboard_actions: "import androidx.compose.foundation.text.KeyboardActions",
             focus_requester: ["import androidx.compose.ui.focus.FocusRequester",
                               "import androidx.compose.ui.focus.focusRequester"],
+            focus_changed: "import androidx.compose.ui.focus.onFocusChanged",
+            software_keyboard_controller: "import androidx.compose.ui.platform.LocalSoftwareKeyboardController",
             ime_action: "import androidx.compose.ui.text.input.ImeAction",
             ime_padding: "import androidx.compose.foundation.layout.imePadding",
             button_colors: "import androidx.compose.material3.ButtonDefaults",
