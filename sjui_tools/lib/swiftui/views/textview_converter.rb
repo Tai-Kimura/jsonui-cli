@@ -30,16 +30,6 @@ module SjuiTools
           indent do
             add_line "text: $#{binding_path},"
 
-            # Focus-state binding — TextField parity: every TextView with an id
-            # binds data.<id>IsFocused (auto-added to Data by the updater) into
-            # the component, so a ViewModel can drive focus. The component keeps
-            # it in two-way sync with its internal FocusState (SwiftJsonUI
-            # TextViewWithPlaceholder `isFocused:` param, v10.3.0+).
-            if @component['id']
-              focus_var = "#{to_camel_case(@component['id'])}IsFocused"
-              add_line "isFocused: $data.#{focus_var},"
-            end
-
             # hint (placeholder) - hint takes priority, fallback to placeholder
             hint_value = @component['hint'] || @component['placeholder']
             if hint_value
@@ -175,12 +165,24 @@ module SjuiTools
 
             # maxHeight
             if @component['maxHeight']
-              add_line "maxHeight: #{@component['maxHeight']}"
-            else
-              # 最後のカンマを削除
-              if @generated_code.last.end_with?(',')
-                @generated_code[-1] = @generated_code.last.chomp(',')
-              end
+              add_line "maxHeight: #{@component['maxHeight']},"
+            end
+
+            # Focus-state binding — TextField parity: every TextView with an id
+            # binds data.<id>IsFocused (auto-added to Data by the updater) into
+            # the component, so a ViewModel can drive focus. The component keeps
+            # it in two-way sync with its internal FocusState (SwiftJsonUI
+            # TextViewWithPlaceholder `isFocused:` param, v10.3.0+).
+            # Declared LAST in the library init — Swift requires call-site
+            # argument order to match the declaration, so emit it last.
+            if @component['id']
+              focus_var = "#{to_camel_case(@component['id'])}IsFocused"
+              add_line "isFocused: $data.#{focus_var},"
+            end
+
+            # 最後のカンマを削除
+            if @generated_code.last.end_with?(',')
+              @generated_code[-1] = @generated_code.last.chomp(',')
             end
           end
           add_line ")"

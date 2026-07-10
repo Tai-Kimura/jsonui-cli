@@ -357,6 +357,28 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextViewConverter do
       code = converter.convert
       expect(code).not_to include('isFocused:')
     end
+
+    # Regression: isFocused is the LAST init parameter in the library, and
+    # Swift requires call-site argument order to match the declaration.
+    # Emitting it right after text: broke compilation whenever hint etc.
+    # followed ("argument 'hint' must precede argument 'isFocused'").
+    it 'emits isFocused after hint (declaration order)' do
+      converter = described_class.new({
+        'type' => 'TextView', 'id' => 'note_input', 'text' => '@{note}', 'hint' => 'placeholder'
+      })
+      code = converter.convert
+      expect(code.index('hint:')).to be < code.index('isFocused:')
+    end
+
+    it 'emits isFocused as the last argument, after maxHeight, without a trailing comma' do
+      converter = described_class.new({
+        'type' => 'TextView', 'id' => 'note_input', 'text' => '@{note}',
+        'hint' => 'placeholder', 'fontSize' => 15, 'minHeight' => 24, 'maxHeight' => 100
+      })
+      code = converter.convert
+      expect(code.index('maxHeight: 100,')).to be < code.index('isFocused:')
+      expect(code).to match(/isFocused: \$data\.noteInputIsFocused\s*\)/)
+    end
   end
 end
 
