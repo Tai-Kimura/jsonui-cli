@@ -339,6 +339,47 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
     end
   end
 
+  # Regression (kjui-updatedata-drops-isfocused-writeback-key): the view emits
+  # viewModel.updateData(mapOf("<id>IsFocused" to ...)) writebacks, so the
+  # builder's extract_data_properties must synthesize the same <id>IsFocused
+  # property as DataModelUpdater, or the updateData when-block drops the key.
+  describe 'IsFocused writeback branch in updateData' do
+    let(:builder) { described_class.new }
+    let(:json) do
+      {
+        'type' => 'View',
+        'child' => [
+          { 'type' => 'TextField', 'id' => 'two_fa_hidden_input' },
+          { 'type' => 'TextView', 'id' => 'note_input' },
+          { 'type' => 'TextField' }
+        ]
+      }
+    end
+
+    it 'synthesizes <id>IsFocused for id-bearing TextField/TextView only' do
+      names = builder.send(:extract_data_properties, json).map { |p| p['name'] }
+      expect(names).to include('twoFaHiddenInputIsFocused', 'noteInputIsFocused')
+      expect(names.grep(/IsFocused/).length).to eq(2)
+    end
+
+    it 'generates the matching updateData when-branch' do
+      props = builder.send(:extract_data_properties, json)
+      code = builder.send(:generate_update_data_function, props, 'Test')
+      expect(code).to include('"twoFaHiddenInputIsFocused" -> updated.copy(twoFaHiddenInputIsFocused = value as? Boolean ?: updated.twoFaHiddenInputIsFocused)')
+      expect(code).to include('"noteInputIsFocused" -> updated.copy(noteInputIsFocused = value as? Boolean ?: updated.noteInputIsFocused)')
+    end
+
+    it 'does not duplicate an authored property of the same name' do
+      authored = {
+        'type' => 'TextField',
+        'id' => 'two_fa_hidden_input',
+        'data' => [{ 'name' => 'twoFaHiddenInputIsFocused', 'class' => 'Boolean', 'defaultValue' => true }]
+      }
+      props = builder.send(:extract_data_properties, authored)
+      expect(props.count { |p| p['name'] == 'twoFaHiddenInputIsFocused' }).to eq(1)
+    end
+  end
+
   describe 'private helper methods' do
     let(:builder) { described_class.new }
 

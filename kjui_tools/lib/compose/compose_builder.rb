@@ -1047,6 +1047,18 @@ module KjuiTools
             end
           end
 
+          # Synthesized <id>IsFocused — keep in sync with
+          # DataModelUpdater#extract_data_properties: the generated view emits
+          # viewModel.updateData(mapOf("<id>IsFocused" to it.isFocused)) focus
+          # writebacks, so updateData's when-block must carry a matching branch
+          # or the key silently falls through to `else -> updated`.
+          if %w[TextField EditText Input TextView].include?(json_data['type']) && json_data['id']
+            focus_prop_name = to_camel_case(json_data['id']) + 'IsFocused'
+            unless properties.any? { |p| p['name'] == focus_prop_name }
+              properties << { 'name' => focus_prop_name, 'class' => 'Boolean', 'defaultValue' => false }
+            end
+          end
+
           # Continue searching in children (collect all data, not just the first)
           if json_data['child']
             if json_data['child'].is_a?(Array)
