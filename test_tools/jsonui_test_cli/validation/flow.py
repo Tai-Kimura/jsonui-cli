@@ -27,6 +27,10 @@ class FlowTestValidator:
         # Warn if file references use subdirectories
         self._check_subdirectory_references(data, path, result)
 
+        # Validate sources if present (drivers require an array of {layout, alias?, spec?})
+        if "sources" in data:
+            self._validate_sources(data["sources"], f"{path}.sources", result)
+
         # Validate test-level platform if present (flow tests have no case objects)
         if "platform" in data:
             validate_platform_field(data["platform"], f"{path}.platform", result)
@@ -54,6 +58,60 @@ class FlowTestValidator:
                 for i, step in enumerate(data[section]):
                     step_path = f"{path}.{section}[{i}]"
                     self._step_validator.validate_step(step, step_path, result, is_flow=True)
+
+    def _validate_sources(self, sources, path: str, result: ValidationResult):
+        """Validate the sources array.
+
+        Mirrors the driver models (FlowTestSource): sources must be an array of
+        objects with a required 'layout' string and optional 'alias'/'spec'
+        strings. An object map ({"alias": "path"}) passes JSON but crashes the
+        iOS/Android drivers at deserialization.
+        """
+        if not isinstance(sources, list):
+            result.errors.append(ValidationMessage(
+                path=path,
+                message=f"'sources' must be an array of {{layout, alias?, spec?}} objects, got: {type(sources).__name__}. The drivers reject non-array sources at parse time."
+            ))
+            return
+
+        if len(sources) == 0:
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="'sources' must not be empty (omit it entirely when using file references)"
+            ))
+            return
+
+        valid_source_keys = {"layout", "alias", "spec"}
+        for i, source in enumerate(sources):
+            source_path = f"{path}[{i}]"
+            if not isinstance(source, dict):
+                result.errors.append(ValidationMessage(
+                    path=source_path,
+                    message=f"Source must be an object with a 'layout' string, got: {type(source).__name__}"
+                ))
+                continue
+
+            layout = source.get("layout")
+            if not isinstance(layout, str) or not layout.strip():
+                result.errors.append(ValidationMessage(
+                    path=source_path,
+                    message="Source must have a non-empty string 'layout'"
+                ))
+
+            for key in ("alias", "spec"):
+                if key in source and (not isinstance(source[key], str) or not source[key].strip()):
+                    result.errors.append(ValidationMessage(
+                        path=source_path,
+                        message=f"Source '{key}' must be a non-empty string"
+                    ))
+
+            for key in source.keys():
+                if key not in valid_source_keys:
+                    result.warnings.append(ValidationMessage(
+                        path=source_path,
+                        message=f"Unknown key in source: {key}",
+                        level="warning"
+                    ))
 
     def _check_subdirectory_references(self, data: dict, path: str, result: ValidationResult):
         """Check for file references that use unsupported subdirectory paths."""

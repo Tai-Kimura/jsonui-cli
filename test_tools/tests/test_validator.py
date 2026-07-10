@@ -319,6 +319,87 @@ class TestFlowTestValidation:
         assert result.is_valid
 
 
+class TestFlowSourcesAndInlineScreenValidation:
+    """Tests mirroring the driver models: sources must be an array of
+    {layout, alias?, spec?}, and inline flow steps must name their screen."""
+
+    def setup_method(self):
+        self.validator = TestValidator()
+
+    def _make_flow_test(self, **overrides) -> dict:
+        data = {
+            "type": "flow",
+            "metadata": {"name": "flow_test"},
+            "steps": [{"screen": "login", "action": "tap", "id": "button_id"}]
+        }
+        data.update(overrides)
+        return data
+
+    def test_sources_object_map_fails(self):
+        """An object map for sources crashes driver deserialization — must error."""
+        data = self._make_flow_test(sources={"login": "layouts/login.json"})
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("must be an array" in str(e) for e in result.errors)
+
+    def test_sources_empty_array_fails(self):
+        data = self._make_flow_test(sources=[])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+
+    def test_sources_entry_missing_layout_fails(self):
+        data = self._make_flow_test(sources=[{"alias": "login"}])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("'layout'" in str(e) for e in result.errors)
+
+    def test_sources_entry_non_object_fails(self):
+        data = self._make_flow_test(sources=["layouts/login.json"])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+
+    def test_sources_entry_non_string_alias_fails(self):
+        data = self._make_flow_test(sources=[{"layout": "layouts/login.json", "alias": 1}])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+
+    def test_sources_unknown_key_warns(self):
+        data = self._make_flow_test(sources=[{"layout": "layouts/login.json", "screen": "login"}])
+        result = self.validator.validate_data(data)
+        assert result.is_valid
+        assert any("Unknown key in source" in str(w) for w in result.warnings)
+
+    def test_inline_step_without_screen_fails(self):
+        data = self._make_flow_test(steps=[{"assert": "visible", "id": "app_title_label"}])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("'screen'" in str(e) for e in result.errors)
+
+    def test_inline_step_with_empty_screen_fails(self):
+        data = self._make_flow_test(steps=[{"screen": "  ", "action": "tap", "id": "button_id"}])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+
+    def test_setup_inline_step_without_screen_fails(self):
+        data = self._make_flow_test(setup=[{"action": "waitFor", "id": "launch", "timeout": 5000}])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+
+    def test_block_inner_steps_do_not_need_screen(self):
+        """Block inner steps execute directly (toTestStep) — no screen required."""
+        data = self._make_flow_test(steps=[{
+            "block": "login_block",
+            "steps": [{"action": "tap", "id": "button_id"}]
+        }])
+        result = self.validator.validate_data(data)
+        assert result.is_valid
+
+    def test_file_steps_do_not_need_screen(self):
+        data = self._make_flow_test(steps=[{"file": "login", "case": "valid_login"}])
+        result = self.validator.validate_data(data)
+        assert result.is_valid
+
+
 class TestCaseValidation:
     """Tests for test case validation."""
 
@@ -455,9 +536,9 @@ class TestFlowTestFileReferenceValidation:
         """Test flow with mixed file references and inline steps."""
         data = self._make_flow_test([
             {"file": "screens/login", "case": "valid_login"},
-            {"action": "waitFor", "id": "home_screen", "timeout": 5000},
+            {"screen": "home", "action": "waitFor", "id": "home_screen", "timeout": 5000},
             {"file": "screens/home", "cases": ["verify_display", "navigate_to_profile"]},
-            {"assert": "visible", "id": "profile_title"}
+            {"screen": "profile", "assert": "visible", "id": "profile_title"}
         ])
         result = self.validator.validate_data(data)
         assert result.is_valid
@@ -475,10 +556,10 @@ class TestFlowTestSetupTeardown:
             "type": "flow",
             "metadata": {"name": "flow_with_setup"},
             "setup": [
-                {"action": "waitFor", "id": "launch_screen", "timeout": 5000}
+                {"screen": "launch", "action": "waitFor", "id": "launch_screen", "timeout": 5000}
             ],
             "steps": [
-                {"action": "tap", "id": "start_button"}
+                {"screen": "home", "action": "tap", "id": "start_button"}
             ]
         }
         result = self.validator.validate_data(data)
@@ -490,10 +571,10 @@ class TestFlowTestSetupTeardown:
             "type": "flow",
             "metadata": {"name": "flow_with_teardown"},
             "steps": [
-                {"action": "tap", "id": "start_button"}
+                {"screen": "home", "action": "tap", "id": "start_button"}
             ],
             "teardown": [
-                {"action": "screenshot", "name": "final_state"}
+                {"screen": "home", "action": "screenshot", "name": "final_state"}
             ]
         }
         result = self.validator.validate_data(data)
@@ -505,8 +586,8 @@ class TestFlowTestSetupTeardown:
             "type": "flow",
             "metadata": {"name": "flow_with_checkpoints"},
             "steps": [
-                {"action": "tap", "id": "login_button"},
-                {"action": "waitFor", "id": "home_screen", "timeout": 5000}
+                {"screen": "login", "action": "tap", "id": "login_button"},
+                {"screen": "home", "action": "waitFor", "id": "home_screen", "timeout": 5000}
             ],
             "checkpoints": [
                 {"name": "after_login", "afterStep": 1, "screenshot": True}
@@ -803,7 +884,7 @@ class TestArgsValidation:
         data = self._make_flow_test([
             {"file": "login", "case": "display"},
             {"file": "login", "case": "input", "args": {"userName": "testuser"}},
-            {"action": "waitFor", "id": "home", "timeout": 5000},
+            {"screen": "home", "action": "waitFor", "id": "home", "timeout": 5000},
             {"file": "home", "args": {"welcomeText": "Hello"}}
         ])
         result = self.validator.validate_data(data)
@@ -1044,7 +1125,7 @@ class TestFlowBlockStepValidation:
                     {"assert": "visible", "id": "success_message"}
                 ]
             },
-            {"action": "waitFor", "id": "home_screen", "timeout": 5000},
+            {"screen": "home", "action": "waitFor", "id": "home_screen", "timeout": 5000},
             {"file": "screens/home", "case": "verify_display"}
         ])
         result = self.validator.validate_data(data)
@@ -1339,7 +1420,7 @@ class TestPlatformFieldValidation:
             "type": "flow",
             "metadata": {"name": "test", "description": "Test"},
             "platform": platform,
-            "steps": [{"action": "back"}],
+            "steps": [{"screen": "home", "action": "back"}],
         }
 
     # --- test-level, screen ---

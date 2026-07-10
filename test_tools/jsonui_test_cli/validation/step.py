@@ -71,6 +71,18 @@ class StepValidator:
         action = step.get("action")
         assertion = step.get("assert")
 
+        # Top-level inline flow steps must name their screen — the drivers'
+        # FlowTestStep.isInlineStep requires screen != null, so a screen-less
+        # action/assert step deserializes but never executes on-device.
+        # (Block inner steps are validated with is_flow=False and don't need it.)
+        if is_flow and (action or assertion):
+            screen = step.get("screen")
+            if not isinstance(screen, str) or not screen.strip():
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="Inline flow step must have a non-empty 'screen' (the source alias this step runs on)"
+                ))
+
         if action and assertion:
             result.errors.append(ValidationMessage(
                 path=path,
