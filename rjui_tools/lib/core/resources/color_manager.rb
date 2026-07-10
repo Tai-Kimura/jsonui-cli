@@ -663,7 +663,12 @@ module RjuiTools
 
           # --- Config ---
           lines << "const FALLBACK_MODE = '#{@fallback_mode}';"
-          lines << 'const SYSTEM_MODE_MAPPING = Object.freeze({'
+          # Same TS7053 story as _rawPalettes above: with a single-mode
+          # colors.json the frozen literal infers as e.g. { light: 'light' }
+          # and indexing it with `'light' | 'dark'` fails under strict. A
+          # loose readonly record keeps the lookup legal for any mode set.
+          mapping_type = typescript ? ': Readonly<Record<string, string | undefined>>' : ''
+          lines << "const SYSTEM_MODE_MAPPING#{mapping_type} = Object.freeze({"
           (@system_mode_mapping || {}).each do |os_mode, project_mode|
             lines << "  #{js_string_or_ident(os_mode)}: '#{project_mode}',"
           end

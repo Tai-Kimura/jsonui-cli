@@ -343,8 +343,14 @@ module RjuiTools
           jsx_content = jsx_content.gsub('StringManager.currentLanguage.', '$s.')
         end
 
-        # Generate data-based props interface and signature
-        props_interface = generate_data_props_interface(name)
+        # Generate data-based props interface and signature.
+        # A layout with no bindings (static partials like a logo header)
+        # never reads `data` — include sites render it as `<Name />` with no
+        # props, so a required `data` prop would make the generated files
+        # inconsistent with each other (TS2741). Keep the prop for call-site
+        # compatibility (pages/cells pass it) but make it optional.
+        uses_data = jsx_content.match?(/\bdata\./) || !focus_fields.empty?
+        props_interface = generate_data_props_interface(name, uses_data)
         props_sig = @config['typescript'] ? "{ data }: #{name}Props" : '{ data }'
 
         marker_source = name.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
@@ -373,11 +379,15 @@ module RjuiTools
         JSX
       end
 
-      # Generate TypeScript interface for data-based props
-      def generate_data_props_interface(name)
+      # Generate TypeScript interface for data-based props.
+      # `data` is required only when the component body actually reads it;
+      # binding-less layouts keep it optional so `<Name />` (include sites)
+      # and `<Name data={...} />` (pages, cells) both typecheck.
+      def generate_data_props_interface(name, uses_data = true)
+        data_field = uses_data ? "data: #{name}Data;" : "data?: #{name}Data;"
         <<~TS
           interface #{name}Props {
-            data: #{name}Data;
+            #{data_field}
           }
         TS
       end

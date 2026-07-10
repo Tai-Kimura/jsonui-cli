@@ -176,6 +176,41 @@ RSpec.describe RjuiTools::React::ReactGenerator do
       expect(result).not_to include('Configuration.Font')
     end
   end
+
+  describe '#generate_component_file data prop requiredness (regression: rjui-include-partial-requires-data-prop-not-passed)' do
+    # A binding-less partial (static logo header) never reads `data`, but
+    # include sites render it as `<Name />` with no props — a required
+    # `data` prop makes the generated files fail each other with TS2741.
+    let(:minimal_json) { { 'type' => 'View' } }
+
+    it 'makes data optional when the body never reads data' do
+      jsx = '      <header>logo + service name</header>'
+      result = generator.send(:generate_component_file, 'UserHeader', jsx, minimal_json)
+      expect(result).to include('data?: UserHeaderData;')
+    end
+
+    it 'keeps data required when the JSX reads data' do
+      jsx = '      <span>{data.title}</span>'
+      result = generator.send(:generate_component_file, 'Titled', jsx, minimal_json)
+      expect(result).to include('data: TitledData;')
+      expect(result).not_to include('data?:')
+    end
+
+    it 'keeps data required when focus bindings reference data' do
+      json = { 'type' => 'View', 'child' => [
+        { 'type' => 'TextField', 'id' => 'email_input' }
+      ] }
+      jsx = '      <input />'
+      result = generator.send(:generate_component_file, 'Form', jsx, json)
+      expect(result).to include('data: FormData;')
+    end
+
+    it 'does not mistake cellData references for data usage' do
+      jsx = '      <Cell data={cellData} />'
+      result = generator.send(:generate_component_file, 'ListHost', jsx, minimal_json)
+      expect(result).to include('data?: ListHostData;')
+    end
+  end
 end
 RSpec.describe RjuiTools::React::ReactGenerator, 'focus-state declarations' do
   let(:generator) do

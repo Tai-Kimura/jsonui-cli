@@ -719,4 +719,36 @@ RSpec.describe RjuiTools::Core::Resources::ColorManager do
       end
     end
   end
+
+  describe '#generate_ts_code SYSTEM_MODE_MAPPING type (regression: rjui-colormanager-single-mode-system-mapping-ts-error)' do
+    # With a light-only colors.json, `Object.freeze({ light: 'light' })`
+    # infers a single-key literal type, so `SYSTEM_MODE_MAPPING[osMode]`
+    # (osMode: 'light' | 'dark') fails strict tsc with TS7053. The emitted
+    # const needs an explicit loose readonly record annotation.
+    let(:single_mode_manager) do
+      File.write(File.join(resources_dir, 'colors.json'), JSON.generate({
+        'modes' => ['light'],
+        'fallback_mode' => 'light',
+        'systemModeMapping' => { 'light' => 'light' },
+        'light' => { 'primary' => '#336699' }
+      }))
+      described_class.new(config, source_path, resources_dir)
+    end
+
+    it 'annotates SYSTEM_MODE_MAPPING as a loose readonly record in TS output' do
+      code = single_mode_manager.send(
+        :generate_ts_code, single_mode_manager.send(:deep_clone_palettes), true
+      )
+      expect(code).to include(
+        'const SYSTEM_MODE_MAPPING: Readonly<Record<string, string | undefined>> = Object.freeze({'
+      )
+    end
+
+    it 'leaves the JS output unannotated' do
+      code = single_mode_manager.send(
+        :generate_ts_code, single_mode_manager.send(:deep_clone_palettes), false
+      )
+      expect(code).to include('const SYSTEM_MODE_MAPPING = Object.freeze({')
+    end
+  end
 end
