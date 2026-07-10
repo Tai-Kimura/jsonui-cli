@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 
 def register_generate_command(subparsers: argparse._SubParsersAction) -> None:
@@ -31,7 +32,8 @@ def register_generate_command(subparsers: argparse._SubParsersAction) -> None:
     converter_parser = gen_sub.add_parser("converter", help="Generate custom component converter")
     converter_parser.add_argument("name", nargs="?", help="Component name")
     converter_parser.add_argument("--from", dest="from_spec", metavar="SPEC_FILE",
-                                  help="Generate from component spec file")
+                                  help="Generate from component spec file — a filename resolved "
+                                       "against component_spec_directory, or a path to the spec")
     converter_parser.add_argument("--all", dest="all_specs", action="store_true",
                                   help="Generate from all component specs")
     converter_parser.add_argument("--attributes", help="Attributes (key:type,...)")
@@ -902,6 +904,15 @@ def _cmd_generate_converter(args: argparse.Namespace) -> int:
     platforms = config.get("platforms", {})
     skip_existing = bool(getattr(args, "skip_existing", False))
 
+    # Converters are emitted per platform — with no platform configured the
+    # generation loop runs zero times, which used to exit 0 without creating
+    # any file. Fail loudly instead.
+    if not any(p in ("ios", "android", "web") for p in platforms):
+        print("ERROR: No platforms configured in jui.config.json — "
+              "run platform setup (platforms.ios / platforms.android / platforms.web) "
+              "before generating converters.")
+        return 1
+
     if args.all_specs:
         comp_dir = config_mgr.component_spec_directory
         specs_to_process = sorted(comp_dir.glob("*.component.json"))
@@ -912,7 +923,14 @@ def _cmd_generate_converter(args: argparse.Namespace) -> int:
             specs_to_process, platforms, config_mgr, skip_existing=skip_existing
         )
     if args.from_spec:
-        spec_path = config_mgr.component_spec_directory / args.from_spec
+        # Accept either a bare filename (resolved against component_spec_directory)
+        # or a direct path to the spec file — joining a cwd-relative path onto
+        # component_spec_directory used to produce a doubled path that never exists.
+        direct_path = Path(args.from_spec)
+        if direct_path.is_file():
+            spec_path = direct_path
+        else:
+            spec_path = config_mgr.component_spec_directory / args.from_spec
         if not spec_path.exists():
             print(f"ERROR: Component spec not found: {spec_path}")
             return 1

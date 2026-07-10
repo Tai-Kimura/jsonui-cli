@@ -46,7 +46,6 @@ def generate_flow_html(
     metadata = data.get("metadata", {})
     name = metadata.get("name", file_path.stem)
     description = metadata.get("description", "")
-    title = description or name
     steps = data.get("steps", [])
     setup_steps = data.get("setup", [])
     teardown_steps = data.get("teardown", [])
@@ -95,13 +94,14 @@ def generate_flow_html(
         # Inline steps (action/assert) are not shown in sidebar and not numbered
 
     # Build HTML
-    html_parts = _get_html_header(title, name)
+    html_parts = _get_html_header(name)
     html_parts.extend(generate_flow_sidebar(name, sidebar_steps, checkpoints, all_tests_nav, current_test_path))
 
     # Main content wrapper
     html_parts.append("  <main class='main-content'>")
-    html_parts.append(f"    <h1>{escape_html(title)}</h1>")
-    html_parts.append(f"    <p class='test-name-label'><strong>Flow Name:</strong> <code>{escape_html(name)}</code></p>")
+    html_parts.append(f"    <h1>{escape_html(name)}</h1>")
+    if description:
+        html_parts.append(f"    <p class='test-description'>{escape_html(description)}</p>")
 
     # Test info
     html_parts.append("    <div class='info'>")
@@ -318,7 +318,7 @@ def _render_flow_step(
     return parts
 
 
-def _get_html_header(title: str, name: str) -> list[str]:
+def _get_html_header(title: str) -> list[str]:
     """Get HTML header with styles for flow test pages."""
     parts = [
         "<!DOCTYPE html>",

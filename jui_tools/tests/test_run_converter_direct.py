@@ -18,7 +18,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from jui_cli.commands.generate_cmd import _run_converter_direct
+import argparse
+import contextlib
+import os
+
+from jui_cli.commands.generate_cmd import _cmd_generate_converter, _run_converter_direct
 from jui_cli.core.config_manager import ConfigManager
 
 
@@ -141,6 +145,93 @@ class RunConverterDirectTest(unittest.TestCase):
                 )
 
             self.assertEqual(rc, 1)
+
+
+@contextlib.contextmanager
+def _chdir(path: Path):
+    prev = Path.cwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(prev)
+
+
+def _converter_args(**overrides) -> argparse.Namespace:
+    defaults = dict(
+        name=None, from_spec=None, all_specs=False,
+        attributes=None, container=False, skip_existing=False,
+    )
+    defaults.update(overrides)
+    return argparse.Namespace(**defaults)
+
+
+class CmdGenerateConverterTest(unittest.TestCase):
+    """Regression of `jui-generate-converter-silent-noop-without-platforms`."""
+
+    def _project(self, root: Path, platforms: dict) -> None:
+        (root / "jui.config.json").write_text(json.dumps({
+            "component_spec_directory": "docs/components/json",
+            "platforms": platforms,
+        }))
+        spec_dir = root / "docs" / "components" / "json"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "mycard.component.json").write_text(json.dumps({
+            "metadata": {"name": "MyCard"},
+            "props": {"items": [{"name": "title", "type": "string"}]},
+        }))
+
+    def test_empty_platforms_errors_instead_of_silent_noop(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._project(root, {})
+            with _chdir(root):
+                rc = _cmd_generate_converter(
+                    _converter_args(from_spec="mycard.component.json"))
+            self.assertEqual(rc, 1)
+
+    def test_only_unsupported_platform_keys_also_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._project(root, {"flutter": {"root": "app"}})
+            with _chdir(root):
+                rc = _cmd_generate_converter(
+                    _converter_args(name="MyCard"))
+            self.assertEqual(rc, 1)
+
+    def test_from_spec_accepts_direct_path(self):
+        # A cwd-relative path used to be joined onto component_spec_directory,
+        # producing a doubled path that never exists.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._project(root, {"web": {"root": "web"}})
+            calls = []
+
+            def fake_run(cmd, cwd=None, env=None):
+                calls.append(list(cmd))
+                return _StubCompletedProcess(0)
+
+            with _chdir(root), patch("subprocess.run", side_effect=fake_run):
+                rc = _cmd_generate_converter(_converter_args(
+                    from_spec="docs/components/json/mycard.component.json"))
+            self.assertEqual(rc, 0)
+            self.assertEqual(len(calls), 1)
+
+    def test_from_spec_bare_filename_still_resolves_in_spec_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._project(root, {"web": {"root": "web"}})
+            calls = []
+
+            def fake_run(cmd, cwd=None, env=None):
+                calls.append(list(cmd))
+                return _StubCompletedProcess(0)
+
+            with _chdir(root), patch("subprocess.run", side_effect=fake_run):
+                rc = _cmd_generate_converter(_converter_args(
+                    from_spec="mycard.component.json"))
+            self.assertEqual(rc, 0)
+            self.assertEqual(len(calls), 1)
 
 
 if __name__ == "__main__":

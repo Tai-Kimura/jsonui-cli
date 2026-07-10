@@ -37,7 +37,6 @@ def generate_screen_html(
     metadata = data.get("metadata", {})
     name = metadata.get("name", file_path.stem)
     description = metadata.get("description", "")
-    title = description or name
     cases = data.get("cases", [])
 
     # Pre-compute case display names for sidebar
@@ -51,13 +50,14 @@ def generate_screen_html(
             case_displays.append(case.get("description") or case_name)
 
     # Build HTML
-    html_parts = _get_html_header(title)
-    html_parts.extend(generate_screen_sidebar(title, case_displays, all_tests_nav, current_test_path))
+    html_parts = _get_html_header(name)
+    html_parts.extend(generate_screen_sidebar(name, case_displays, all_tests_nav, current_test_path))
 
     # Main content wrapper
     html_parts.append("  <main class='main-content'>")
-    html_parts.append(f"    <h1>{escape_html(title)}</h1>")
-    html_parts.append(f"    <p class='test-name-label'><strong>Test Name:</strong> <code>{escape_html(name)}</code></p>")
+    html_parts.append(f"    <h1>{escape_html(name)}</h1>")
+    if description:
+        html_parts.append(f"    <p class='test-description'>{escape_html(description)}</p>")
 
     # Test info
     html_parts.append("    <div class='info'>")
