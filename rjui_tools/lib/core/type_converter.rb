@@ -267,6 +267,23 @@ module RjuiTools
             return is_optional ? "#{result} | undefined" : result
           end
 
+          # Check for Swift bracket syntax: [Element] -> Element[] and
+          # [Key: Value] -> Record<Key, Value>. Works for custom element
+          # types too — previously e.g. [SelectOption] leaked through
+          # verbatim and read as a TS one-element tuple.
+          if base_type.start_with?('[') && base_type.end_with?(']')
+            inner = base_type[1...-1].strip
+            colon = top_level_colon_index(inner)
+            result = if colon
+                       key_type = to_typescript_type(inner[0...colon].strip)
+                       value_type = to_typescript_type(inner[(colon + 1)..].strip)
+                       "Record<#{key_type}, #{value_type}>"
+                     else
+                       "#{to_typescript_type(inner)}[]"
+                     end
+            return is_optional ? "#{result} | undefined" : result
+          end
+
           # Check for function type: (params) -> ReturnType or ((params) -> ReturnType)?
           func_result = parse_function_type(type_str)
           return func_result if func_result
@@ -274,6 +291,23 @@ module RjuiTools
           # Return mapped type, or original type as-is if not found
           result = TYPE_MAPPING[base_type] || base_type
           is_optional ? "#{result} | undefined" : result
+        end
+
+        # Index of the first colon at bracket/paren depth 0, or nil.
+        # Distinguishes [Key: Value] dictionaries from [Element] arrays
+        # whose element type may itself contain colons at depth > 0.
+        # Angle brackets are deliberately not counted — `->` in closure
+        # types would unbalance them.
+        def top_level_colon_index(str)
+          depth = 0
+          str.each_char.with_index do |ch, i|
+            case ch
+            when '(', '[' then depth += 1
+            when ')', ']' then depth -= 1
+            when ':' then return i if depth.zero?
+            end
+          end
+          nil
         end
 
         # Parse a function type string and convert to TypeScript

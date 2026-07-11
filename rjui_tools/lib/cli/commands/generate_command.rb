@@ -418,6 +418,14 @@ module RjuiTools
             opts.on('--no-container', 'Force component to not be a container (ignores children)') do
               options[:is_container] = false
             end
+
+            opts.on('--force', 'Overwrite existing converter/component files without prompting') do
+              options[:force] = true
+            end
+
+            opts.on('--skip-existing', 'Leave existing converter/component files untouched (non-interactive)') do
+              options[:skip_existing] = true
+            end
           end.parse!(@args)
 
           options

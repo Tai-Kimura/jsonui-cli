@@ -68,6 +68,81 @@ RSpec.describe RjuiTools::React::Generators::ConverterGenerator do
     end
   end
 
+  describe 'ReactComponentGenerator scaffold id contract (regression: rjui-converter-scaffold-component-props-missing-id)' do
+    let(:component_generator) do
+      RjuiTools::React::Generators::ReactComponentGenerator.new('GanttChart', { attributes: {} }, {})
+    end
+
+    it 'includes id in the props interface, destructure and root element' do
+      template = component_generator.send(:component_template)
+      expect(template).to include('id?: string;')
+      expect(template).to match(/\{ id, children, className \}/)
+      expect(template).to include('<div id={id} className="gantt-chart">')
+    end
+  end
+
+  describe 'overwrite prompt non-interactive behavior (regression: rjui-generator-overwrite-prompt-crashes-on-eof)' do
+    it 'treats stdin EOF as "n" instead of crashing on nil (converter file)' do
+      Dir.mktmpdir do |tmp|
+        Dir.chdir(tmp) do
+          FileUtils.mkdir_p(File.join(tmp, 'rjui_tools'))
+          ext_dir = File.join(tmp, 'rjui_tools', 'lib', 'react', 'converters', 'extensions')
+          FileUtils.mkdir_p(ext_dir)
+          existing_file = File.join(ext_dir, 'card_converter.rb')
+          File.write(existing_file, "ORIGINAL\n")
+
+          original_stdin = $stdin
+          $stdin = StringIO.new('') # immediate EOF -> gets returns nil
+          begin
+            expect { generator.send(:create_converter_file) }.not_to raise_error
+          ensure
+            $stdin = original_stdin
+          end
+          expect(File.read(existing_file)).to eq("ORIGINAL\n")
+        end
+      end
+    end
+
+    it 'overwrites without prompting when options[:force] is set' do
+      Dir.mktmpdir do |tmp|
+        Dir.chdir(tmp) do
+          FileUtils.mkdir_p(File.join(tmp, 'rjui_tools'))
+          ext_dir = File.join(tmp, 'rjui_tools', 'lib', 'react', 'converters', 'extensions')
+          FileUtils.mkdir_p(ext_dir)
+          existing_file = File.join(ext_dir, 'card_converter.rb')
+          File.write(existing_file, "ORIGINAL\n")
+
+          forced = described_class.new('Card', { attributes: {}, force: true }, {})
+          original_stdin = $stdin
+          $stdin = StringIO.new('') # would crash/deny if the prompt were reached
+          begin
+            forced.send(:create_converter_file)
+          ensure
+            $stdin = original_stdin
+          end
+          expect(File.read(existing_file)).not_to eq("ORIGINAL\n")
+        end
+      end
+    end
+
+    it 'skips the existing component file with options[:skip_existing]' do
+      Dir.mktmpdir do |tmp|
+        Dir.chdir(tmp) do
+          comp_dir = File.join(tmp, 'src', 'components', 'extensions')
+          FileUtils.mkdir_p(comp_dir)
+          existing_file = File.join(comp_dir, 'Card.tsx')
+          File.write(existing_file, "USER OWNED\n")
+
+          gen = RjuiTools::React::Generators::ReactComponentGenerator.new(
+            'Card', { attributes: {}, skip_existing: true }, {}
+          )
+          gen.send(:create_component_file)
+          expect(File.read(existing_file)).to eq("USER OWNED\n")
+        end
+      end
+    end
+  end
+
   describe 'ReactComponentGenerator#ruby_type_to_typescript' do
     let(:component_generator) do
       RjuiTools::React::Generators::ReactComponentGenerator.new('Card', { attributes: {} }, {})

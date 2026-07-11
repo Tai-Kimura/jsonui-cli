@@ -40,10 +40,19 @@ module RjuiTools
           file_path = component_file_path
 
           if File.exist?(file_path)
-            @logger.warn "Component file already exists: #{file_path}"
-            print "Overwrite? (y/n): "
-            response = $stdin.gets.chomp.downcase
-            return unless response == 'y'
+            # Same non-interactive contract as the converter file: env var /
+            # --skip-existing leave the (user-owned) scaffold alone, --force
+            # overwrites, and stdin EOF means "n" instead of a nil crash.
+            if ENV['JUI_SKIP_EXISTING'] == '1' || @options[:skip_existing]
+              @logger.info "Skipped existing component: #{file_path}"
+              return
+            end
+            unless @options[:force]
+              @logger.warn "Component file already exists: #{file_path}"
+              print "Overwrite? (y/n): "
+              response = $stdin.gets&.chomp&.downcase
+              return unless response == 'y'
+            end
           end
 
           File.write(file_path, component_template)
@@ -75,7 +84,7 @@ module RjuiTools
 
             export const #{@name}: React.FC<#{@name}Props> = (#{props_destructure}) => {
               return (
-                <div className="#{to_kebab_case(@name)}">
+                <div id={id} className="#{to_kebab_case(@name)}">
                   #{body}
                 </div>
               );
@@ -89,6 +98,10 @@ module RjuiTools
           is_container = @options[:is_container]
           lines = ["interface #{@name}Props {"]
 
+          # The converter emits id="..." whenever the layout node has one
+          # (BaseConverter#build_id_attr), so the scaffold contract must
+          # accept it.
+          lines << '  id?: string;'
           # Only include children prop if container mode
           lines << "  children?: React.ReactNode;" unless is_container == false
           lines << "  className?: string;"
@@ -104,7 +117,7 @@ module RjuiTools
 
         def generate_props_destructure
           is_container = @options[:is_container]
-          props = []
+          props = ['id']
 
           # Only include children in destructure if container mode
           props << 'children' unless is_container == false

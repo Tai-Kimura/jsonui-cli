@@ -342,6 +342,31 @@ RSpec.describe RjuiTools::Core::TypeConverter do
     end
   end
 
+  # Regression: rjui-data-model-ignores-type-map-custom-types —
+  # Swift bracket syntax must convert for custom element types too,
+  # not leak through as a TS one-element tuple.
+  describe '.to_typescript_type with Swift bracket syntax' do
+    it 'converts [String] to string[]' do
+      expect(described_class.to_typescript_type('[String]')).to eq('string[]')
+    end
+
+    it 'converts [SelectOption] (custom type) to SelectOption[]' do
+      expect(described_class.to_typescript_type('[SelectOption]')).to eq('SelectOption[]')
+    end
+
+    it 'converts [SelectOption]? to SelectOption[] | undefined' do
+      expect(described_class.to_typescript_type('[SelectOption]?')).to eq('SelectOption[] | undefined')
+    end
+
+    it 'converts nested [[Int]] to number[][]' do
+      expect(described_class.to_typescript_type('[[Int]]')).to eq('number[][]')
+    end
+
+    it 'converts [String: Any] dictionary shorthand to a Record' do
+      expect(described_class.to_typescript_type('[String: Int]')).to eq('Record<string, number>')
+    end
+  end
+
   describe '.load_type_mapping' do
     before(:each) do
       described_class.clear_type_mapping_cache

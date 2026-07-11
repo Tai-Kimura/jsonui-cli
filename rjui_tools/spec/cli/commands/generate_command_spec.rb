@@ -26,6 +26,14 @@ RSpec.describe RjuiTools::CLI::Commands::GenerateCommand do
       opts = parse('a:String,b:Int')
       expect(opts[:attributes]).to eq('a' => 'String', 'b' => 'Int')
     end
+
+    it 'parses --force and --skip-existing (non-interactive overwrite control)' do
+      cmd = described_class.allocate
+      cmd.instance_variable_set(:@args, ['--force', '--skip-existing'])
+      opts = cmd.send(:parse_converter_options)
+      expect(opts[:force]).to be true
+      expect(opts[:skip_existing]).to be true
+    end
   end
 
   describe '#split_top_level_commas' do

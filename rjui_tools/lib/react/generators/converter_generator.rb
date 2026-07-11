@@ -63,14 +63,19 @@ module RjuiTools
           if File.exist?(file_path)
             # `jui build` (and other non-interactive flows) set JUI_SKIP_EXISTING=1
             # so the prompt is bypassed and existing converter files are left alone.
-            if ENV['JUI_SKIP_EXISTING'] == '1'
+            # `--skip-existing` is the CLI equivalent; `--force` overwrites.
+            if ENV['JUI_SKIP_EXISTING'] == '1' || @options[:skip_existing]
               @logger.info "Skipped existing converter: #{file_path}"
               return
             end
-            @logger.warn "Converter file already exists: #{file_path}"
-            print "Overwrite? (y/n): "
-            response = $stdin.gets.chomp.downcase
-            return unless response == 'y'
+            unless @options[:force]
+              @logger.warn "Converter file already exists: #{file_path}"
+              print "Overwrite? (y/n): "
+              # gets returns nil on stdin EOF (non-interactive run) — treat
+              # as "n" instead of crashing on nil.chomp.
+              response = $stdin.gets&.chomp&.downcase
+              return unless response == 'y'
+            end
           end
 
           File.write(file_path, converter_template)
