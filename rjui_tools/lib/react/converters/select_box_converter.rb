@@ -130,7 +130,7 @@ module RjuiTools
             #{indent_str(indent + 2)}{#{items_prop}?.map((item) => {
             #{indent_str(indent + 4)}const opt = item#{opt_cast};
             #{indent_str(indent + 4)}return typeof opt === 'object' && opt !== null
-            #{indent_str(indent + 6)}? <option key={opt.value || opt.id} value={opt.value || opt.id}>{opt.text || opt.label}</option>
+            #{indent_str(indent + 6)}? <option key={String(opt.value ?? opt.id ?? '')} value={String(opt.value ?? opt.id ?? '')}>{opt.text || opt.label}</option>
             #{indent_str(indent + 6)}: <option key={String(opt)} value={String(opt)}>{String(opt)}</option>;
             #{indent_str(indent + 2)}})}
             #{indent_str(indent)}</select>

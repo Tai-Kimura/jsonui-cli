@@ -45,14 +45,19 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
       # SwiftJsonUI SelectBoxView), so the option row must branch on the
       # element shape, AND the branch must go through a widening cast so
       # string[] declarations don't narrow the object branch to `never`.
+      # Object key/value use nullish fallbacks (?? not ||) so an empty-string
+      # value ("all items" idiom) stays a valid key/value instead of
+      # collapsing to undefined
+      # (rjui-selectbox-object-items-empty-value-key-warning).
       it 'supports canonical string-array items via a widened typeof branch' do
         converter = create_converter({ 'class' => 'SelectBox', 'items' => '@{sortOptions}' })
         result = converter.convert
         expect(result).to include('const opt = item as string | number | { value?: string | number; id?: string | number; text?: string; label?: string };')
         expect(result).to include("typeof opt === 'object' && opt !== null")
         expect(result).to include('<option key={String(opt)} value={String(opt)}>{String(opt)}</option>')
-        expect(result).to include('<option key={opt.value || opt.id} value={opt.value || opt.id}>{opt.text || opt.label}</option>')
+        expect(result).to include("<option key={String(opt.value ?? opt.id ?? '')} value={String(opt.value ?? opt.id ?? '')}>{opt.text || opt.label}</option>")
         expect(result).not_to include('item.value')
+        expect(result).not_to include('opt.value || opt.id')
       end
 
       it 'omits the TS cast in JavaScript mode' do
