@@ -289,8 +289,12 @@ module RjuiTools
             end
           end
 
-          # Visibility (hidden attribute - static)
-          classes << TailwindMapper.map_visibility(attributes['hidden']) if attributes['hidden']
+          # Visibility (hidden attribute - static). A binding value is
+          # handled as a conditional class in wrap_with_visibility — mapping
+          # it here would bake an unconditional `hidden` into the className.
+          if attributes['hidden'] && !has_binding?(attributes['hidden'])
+            classes << TailwindMapper.map_visibility(attributes['hidden'])
+          end
 
           # Visibility attribute (supports data binding)
           # If it's a binding, we'll handle it with conditional render/class
@@ -929,6 +933,8 @@ module RjuiTools
         # Wrap JSX with visibility condition (conditional render)
         # "gone" → removes from DOM, "invisible" → hidden but keeps space
         def wrap_with_visibility(jsx, indent)
+          jsx = apply_hidden_binding(jsx)
+
           vis_info = build_visibility_info
           return jsx unless vis_info
 
@@ -944,19 +950,38 @@ module RjuiTools
           JSX
         end
 
+        # `hidden` is ["boolean", "binding"] — a bound value toggles the
+        # Tailwind `hidden` class at runtime instead of baking it in
+        # statically (static true/false is handled in build_class_name).
+        def apply_hidden_binding(jsx)
+          hidden = attributes['hidden']
+          return jsx unless has_binding?(hidden)
+
+          binding_expr = hidden[/@\{([^}]+)\}/, 1]
+          # Only simple property bindings (no ternary / business logic)
+          return jsx unless binding_expr =~ /^[\w.]+$/
+
+          cond = add_viewmodel_data_prefix(binding_expr)
+          inject_class_expression(jsx, "${#{cond} ? \"hidden\" : \"\"}")
+        end
+
         # Inject invisible class into JSX when visibility === "invisible"
         def inject_invisible_class(jsx, condition)
-          invisible_expr = "${#{condition} === \"invisible\" ? \"invisible\" : \"\"}"
+          inject_class_expression(jsx, "${#{condition} === \"invisible\" ? \"invisible\" : \"\"}")
+        end
 
+        # Append a `${...}` expression to the first className attribute,
+        # upgrading a static className="..." to a template literal.
+        def inject_class_expression(jsx, class_expr)
           # Case 1: className={`...`} (template literal)
           result = jsx.sub(/className=\{`([^`]*)`\}/) do
-            "className={`#{$1} #{invisible_expr}`}"
+            "className={`#{$1} #{class_expr}`}"
           end
           return result if result != jsx
 
           # Case 2: className="..." (static string)
           jsx.sub(/className="([^"]*)"/) do
-            "className={`#{$1} #{invisible_expr}`}"
+            "className={`#{$1} #{class_expr}`}"
           end
         end
 

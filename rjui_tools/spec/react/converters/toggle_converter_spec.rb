@@ -11,6 +11,18 @@ RSpec.describe RjuiTools::React::Converters::ToggleConverter do
   end
 
   describe '#convert' do
+    # Regression: rjui-hidden-binding-renders-static-class — the fix lives
+    # in base_converter, so it must hold for every component type
+    # (CheckBox was the second reported reproduction).
+    context 'with hidden binding' do
+      it 'emits a conditional hidden class instead of a static one' do
+        converter = create_converter({ 'class' => 'CheckBox', 'hidden' => '@{isUnavailable}' })
+        result = converter.convert
+        expect(result).to include('${data.isUnavailable ? "hidden" : ""}')
+        expect(result).not_to match(/className="[^"]*\bhidden\b/)
+      end
+    end
+
     context 'basic checkbox' do
       it 'generates checkbox input' do
         converter = create_converter({ 'class' => 'CheckBox' })

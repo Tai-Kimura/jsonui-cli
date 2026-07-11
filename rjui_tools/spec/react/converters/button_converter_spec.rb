@@ -24,6 +24,47 @@ RSpec.describe RjuiTools::React::Converters::ButtonConverter do
       end
     end
 
+    # Regression: rjui-hidden-binding-renders-static-class — a bound
+    # `hidden` toggles the Tailwind class at runtime; only static values
+    # bake `hidden` into the className.
+    context 'with hidden binding' do
+      it 'emits a conditional hidden class instead of a static one' do
+        converter = create_converter({
+          'type' => 'Button',
+          'text' => 'Set default',
+          'hidden' => '@{isDisabledFutureMethod}'
+        })
+        result = converter.convert
+        expect(result).to include('className={`')
+        expect(result).to include('${data.isDisabledFutureMethod ? "hidden" : ""}')
+        expect(result).not_to match(/className="[^"]*\bhidden\b/)
+      end
+
+      it 'keeps a static hidden class for hidden: true' do
+        converter = create_converter({
+          'type' => 'Button',
+          'text' => 'Hidden',
+          'hidden' => true
+        })
+        result = converter.convert
+        expect(result).to match(/className="[^"]*\bhidden\b/)
+        expect(result).not_to include('${')
+      end
+
+      it 'combines with a visibility binding wrapper' do
+        converter = create_converter({
+          'type' => 'Button',
+          'text' => 'Both',
+          'hidden' => '@{isHidden}',
+          'visibility' => '@{buttonVisibility}'
+        })
+        result = converter.convert
+        expect(result).to include('{data.buttonVisibility !== "gone" &&')
+        expect(result).to include('${data.isHidden ? "hidden" : ""}')
+        expect(result).to include('${data.buttonVisibility === "invisible" ? "invisible" : ""}')
+      end
+    end
+
     context 'with href' do
       it 'wraps button in Link component' do
         converter = create_converter({
