@@ -3853,6 +3853,17 @@
         "swift",
         "kotlin"
       ]
+    },
+    "selectedValue": {
+      "type": [
+        "string",
+        "binding"
+      ],
+      "description": "Selected value of the radio group (binding for two-way)"
+    },
+    "onValueChange": {
+      "type": "binding",
+      "description": "Value change handler - binding only (@{functionName})"
     }
   },
   "CheckBox": {

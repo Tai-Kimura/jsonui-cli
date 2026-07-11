@@ -66,7 +66,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'label_converter.rb' => %w[disabledFontColor],
     'network_image_converter.rb' => %w[accessibilityLabel circle circleImage imageUrl scaleType],
     'progress_converter.rb' => %w[barHeight maximumValue progressHeight trackColor value],
-    'radio_converter.rb' => %w[items onValueChange selectedValue],
+    'radio_converter.rb' => %w[items],
     'scroll_view_converter.rb' => %w[contentInset horizontalScroll],
     'segment_converter.rb' => %w[backgroundColor fontColor fontSize selectedBackground selectedFontColor selectedTabIndex],
     'select_box_converter.rb' => %w[onChange placeholderColor value],

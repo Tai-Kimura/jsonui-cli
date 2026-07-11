@@ -1661,4 +1661,20 @@ RSpec.describe SjuiTools::Core::AttributeValidator do
       expect(spacing_gravity_warnings(component)).to be_empty
     end
   end
+
+  describe 'Radio selectedValue/onValueChange declaration (regression: rjui-radio-selectedvalue-onvaluechange-undeclared)' do
+    def unknown_warnings(component)
+      v = described_class.new(:all)
+      v.validate(component).select { |w| w.include?('Unknown attribute') }
+    end
+
+    it 'accepts the converter-wired selection binding attributes' do
+      component = {
+        'type' => 'Radio', 'group' => 'accountType', 'text' => 'Individual',
+        'selectedValue' => '@{accountType}',
+        'onValueChange' => '@{onAccountTypeChanged}'
+      }
+      expect(unknown_warnings(component)).to be_empty
+    end
+  end
 end

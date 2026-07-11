@@ -34,8 +34,12 @@ module JsonUI
         { name: 'iconSize', kind: :number }.freeze,
         # Radio label (can be data binding)
         { name: 'label', kind: :string, bindable: true }.freeze,
+        # Value change handler - binding only (@{functionName})
+        { name: 'onValueChange', kind: :binding }.freeze,
         # Selected icon name
         { name: 'selectedIcon', kind: :string }.freeze,
+        # Selected value of the radio group (binding for two-way)
+        { name: 'selectedValue', kind: :string, bindable: true }.freeze,
         # Selected icon name (underscore alias)
         { name: 'selected_icon', kind: :string }.freeze,
         # Space between icon and text (binding supported)
