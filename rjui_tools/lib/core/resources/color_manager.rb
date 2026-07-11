@@ -2,6 +2,7 @@
 
 require 'json'
 require 'fileutils'
+require 'pathname'
 require_relative '../logger'
 require_relative '../generated_marker'
 
@@ -49,6 +50,7 @@ module RjuiTools
           save_defined_colors_json if @undefined_colors.any?
 
           generate_color_manager if @config['generated_directory']
+          generate_theme_css if @config['generated_directory']
         end
 
         # Apply extracted colors to color asset files.
@@ -793,6 +795,154 @@ module RjuiTools
           lines << Core::GeneratedMarker.comment_footer
 
           lines.join(nl)
+        end
+
+        # ==========================================================
+        # Tailwind @theme CSS generation (web).
+        # ==========================================================
+        #
+        # Generated components emit color utility classes by token name
+        # (`bg-surface`, `text-ink`). Under Tailwind v4 those resolve only
+        # when the project registers `--color-<name>` in an `@theme` block.
+        # Rather than leave that mirror to the consumer (drift on every token
+        # change), emit it as a @generated CSS file the consumer imports with
+        # a single line. Only mode-complete (theme-safe) tokens are mirrored —
+        # the same set the mapper treats as resolvable (a name missing from
+        # some mode would emit a dead class anyway).
+        def generate_theme_css
+          keys = mode_complete_keys
+          return if keys.empty?
+
+          generated_dir = File.join(@source_path, @config['generated_directory'])
+          FileUtils.mkdir_p(generated_dir)
+          output_file = File.join(generated_dir, 'theme.css')
+
+          base_mode = @fallback_mode || DEFAULT_MODE_NAME
+          base_palette = @palettes[base_mode] || @palettes.values.first || {}
+
+          lines = []
+          lines << css_marker_header
+          lines << ''
+          lines << '@theme {'
+          keys.sort.each do |key|
+            css = css_color_value(base_palette[key])
+            lines << "  --color-#{key}: #{css};" if css
+          end
+          lines << '}'
+
+          # Per-mode overrides for any non-base mode (future dark support).
+          # The @theme block above fixes the token→utility mapping; a mode
+          # switch only needs to rebind the CSS variable under a selector.
+          (@modes - [base_mode]).each do |mode|
+            palette = @palettes[mode] || {}
+            overrides = keys.sort.filter_map do |key|
+              css = css_color_value(palette[key])
+              "  --color-#{key}: #{css};" if css
+            end
+            next if overrides.empty?
+
+            lines << ''
+            lines << ":root[data-theme=\"#{mode}\"] {"
+            lines.concat(overrides)
+            lines << '}'
+          end
+
+          lines << ''
+          lines << css_marker_footer
+          lines << ''
+
+          File.write(output_file, lines.join("\n"))
+          Core::Logger.info "✓ Generated theme.css (#{keys.size} tokens)"
+
+          announce_theme_import(output_file)
+        end
+
+        # Convert a colors.json hex value to a CSS color. JsonUI hex is
+        # alpha-FIRST (#AARRGGBB); CSS/Tailwind cannot parse that (it reads
+        # #RRGGBBAA), so 8-digit values become rgba(). 3/6-digit hex is CSS
+        # already. Returns nil for non-hex / nil values (skip the token).
+        def css_color_value(value)
+          return nil unless value.is_a?(String)
+
+          hex = value.strip
+          return nil unless hex.match?(/\A#?([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})\z/)
+
+          hex = hex.sub(/\A#/, '')
+          case hex.length
+          when 3
+            "##{hex}"
+          when 6
+            "##{hex}"
+          when 8
+            a = hex[0..1].to_i(16)
+            r = hex[2..3].to_i(16)
+            g = hex[4..5].to_i(16)
+            b = hex[6..7].to_i(16)
+            alpha = (a / 255.0).round(3)
+            # Trim a trailing ".0" so 1.0 -> 1 (canonical CSS alpha).
+            alpha = alpha.to_i if alpha == alpha.to_i
+            "rgba(#{r}, #{g}, #{b}, #{alpha})"
+          end
+        end
+
+        # One-time guidance: the consumer wires the generated theme with a
+        # single @import. We don't edit their globals.css (not a @generated
+        # file), but we compute the exact import path when we can find it.
+        def announce_theme_import(theme_path)
+          globals = find_globals_css
+          if globals
+            return if globals_imports_theme?(globals, theme_path)
+
+            rel = relative_import_path(globals, theme_path)
+            Core::Logger.info(
+              "To activate brand colors, add to #{globals} (once):\n" \
+              "  @import \"#{rel}\";"
+            )
+          else
+            Core::Logger.info(
+              'To activate brand colors, @import the generated theme.css from ' \
+              'your global stylesheet (after `@import "tailwindcss";`).'
+            )
+          end
+        end
+
+        def find_globals_css
+          %w[
+            src/app/globals.css app/globals.css
+            src/styles/globals.css styles/globals.css
+            src/app/global.css app/global.css
+          ].map { |p| File.join(@source_path, p) }.find { |p| File.exist?(p) }
+        end
+
+        def globals_imports_theme?(globals, theme_path)
+          content = File.read(globals)
+          base = File.basename(theme_path)
+          content.include?(base)
+        rescue StandardError
+          false
+        end
+
+        def relative_import_path(globals, theme_path)
+          from_dir = Pathname.new(File.dirname(globals))
+          Pathname.new(theme_path).relative_path_from(from_dir).to_s
+        rescue StandardError
+          theme_path
+        end
+
+        def css_marker_header
+          [
+            '/*',
+            " * #{Core::GeneratedMarker::SENTINEL} AUTO-GENERATED FILE — DO NOT EDIT",
+            " * Source:    colors.json",
+            " * Generator: rjui build",
+            " * #{Core::GeneratedMarker::HUMAN_WARNING}",
+            " * #{Core::GeneratedMarker::AGENT_WARNING}",
+            ' */'
+          ].join("\n")
+        end
+
+        def css_marker_footer
+          "/* ══ #{Core::GeneratedMarker::END_LINE} ══ */"
         end
 
         def snake_to_camel(snake_case)

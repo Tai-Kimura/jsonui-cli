@@ -119,6 +119,109 @@ RSpec.describe RjuiTools::Core::Resources::ColorManager do
     end
   end
 
+  # Regression: rjui-web-theme-css-not-generated-from-colors-json —
+  # generated components emit `bg-<token>` classes that only resolve when a
+  # Tailwind v4 @theme registers `--color-<token>`. rjui build now emits that
+  # @theme as a @generated theme.css.
+  describe 'theme.css generation' do
+    let(:theme_file) { File.join(source_path, 'src', 'generated', 'theme.css') }
+
+    def write_colors(hash)
+      File.write(File.join(resources_dir, 'colors.json'), JSON.pretty_generate(hash))
+    end
+
+    # process_colors returns early on an empty file list, so drive it with a
+    # colorless layout file — the pass still regenerates ColorManager + theme.
+    def run_process(cfg = config)
+      dummy = File.join(temp_dir, 'dummy_layout.json')
+      File.write(dummy, JSON.pretty_generate('type' => 'View'))
+      described_class.new(cfg, source_path, resources_dir).process_colors([dummy], 1, 0, cfg)
+    end
+
+    it 'emits an @theme block with --color-<token> for each mode-complete token' do
+      write_colors('ink' => '#1C1C1A', 'surface' => '#FFFFFF', 'primary' => '#0E5A46')
+      run_process
+
+      expect(File.exist?(theme_file)).to be true
+      css = File.read(theme_file)
+      expect(css).to include('@theme {')
+      expect(css).to include('--color-ink: #1C1C1A;')
+      expect(css).to include('--color-surface: #FFFFFF;')
+      expect(css).to include('--color-primary: #0E5A46;')
+      expect(css).to include('@generated')
+    end
+
+    it 'converts JsonUI alpha-first 8-digit hex to rgba()' do
+      write_colors('backdrop' => '#731C1C1A')
+      run_process
+
+      css = File.read(theme_file)
+      # #731C1C1A => A=0x73(115)=0.451, R=0x1C(28), G=0x1C(28), B=0x1A(26)
+      expect(css).to include('--color-backdrop: rgba(28, 28, 26, 0.451);')
+    end
+
+    it 'renders fully-opaque 8-digit alpha as integer 1' do
+      write_colors('solid' => '#FF102030')
+      run_process
+
+      expect(File.read(theme_file)).to include('--color-solid: rgba(16, 32, 48, 1);')
+    end
+
+    it 'emits per-mode overrides under :root[data-theme=...] for extra modes' do
+      write_colors(
+        'modes' => %w[light dark],
+        'fallback_mode' => 'light',
+        'light' => { 'surface' => '#FFFFFF', 'ink' => '#1C1C1A' },
+        'dark' => { 'surface' => '#101010', 'ink' => '#F5F5F5' }
+      )
+      run_process
+
+      css = File.read(theme_file)
+      expect(css).to include('@theme {')
+      expect(css).to include('--color-surface: #FFFFFF;')
+      expect(css).to include(':root[data-theme="dark"] {')
+      expect(css).to include('--color-surface: #101010;')
+    end
+
+    it 'skips tokens that are not mode-complete (would emit a dead class)' do
+      write_colors(
+        'modes' => %w[light dark],
+        'light' => { 'surface' => '#FFFFFF', 'lightOnly' => '#ABCDEF' },
+        'dark' => { 'surface' => '#101010' }
+      )
+      run_process
+
+      css = File.read(theme_file)
+      expect(css).to include('--color-surface')
+      expect(css).not_to include('--color-lightOnly')
+    end
+
+    it 'does not write theme.css when there are no colors' do
+      write_colors({})
+      run_process
+      expect(File.exist?(theme_file)).to be false
+    end
+  end
+
+  describe '#css_color_value' do
+    it 'keeps 6-digit hex as-is' do
+      expect(manager.send(:css_color_value, '#0E5A46')).to eq('#0E5A46')
+    end
+
+    it 'expands nothing for 3-digit hex but keeps it valid CSS' do
+      expect(manager.send(:css_color_value, '#abc')).to eq('#abc')
+    end
+
+    it 'converts 8-digit alpha-first hex to rgba' do
+      expect(manager.send(:css_color_value, '#731C1C1A')).to eq('rgba(28, 28, 26, 0.451)')
+    end
+
+    it 'returns nil for non-hex values' do
+      expect(manager.send(:css_color_value, 'not_a_color')).to be_nil
+      expect(manager.send(:css_color_value, nil)).to be_nil
+    end
+  end
+
   describe '#apply_to_color_assets' do
     it 'saves pending colors' do
       manager.apply_to_color_assets
