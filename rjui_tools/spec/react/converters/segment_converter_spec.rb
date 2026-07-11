@@ -66,6 +66,65 @@ RSpec.describe RjuiTools::React::Converters::SegmentConverter do
       end
     end
 
+    # Regression: rjui-segment-items-string-resolution — items go through the
+    # same string resolution as Label.text (convert_binding), matching sjui's
+    # per-item get_text_with_string_manager.
+    context 'items string resolution' do
+      it 'resolves registered string keys via StringManager' do
+        converter = create_converter({ 'class' => 'Segment', 'id' => 'modeSegment', 'items' => %w[mode_daily mode_time_slot] })
+        allow(converter).to receive(:convert_string_key)
+          .with('mode_daily')
+          .and_return('{StringManager.currentLanguage.bookingInputModeDaily}')
+        allow(converter).to receive(:convert_string_key)
+          .with('mode_time_slot')
+          .and_return('{StringManager.currentLanguage.bookingInputModeTimeSlot}')
+        result = converter.convert
+        expect(result).to include('>{StringManager.currentLanguage.bookingInputModeDaily}</button>')
+        expect(result).to include('>{StringManager.currentLanguage.bookingInputModeTimeSlot}</button>')
+        expect(result).not_to include('>mode_daily<')
+      end
+
+      it 'leaves unregistered literals as plain text' do
+        converter = create_converter({ 'class' => 'Segment', 'items' => ['Tab 1', 'Tab 2'] })
+        allow(converter).to receive(:convert_string_key).and_return(nil)
+        result = converter.convert
+        expect(result).to include('>Tab 1</button>')
+        expect(result).to include('>Tab 2</button>')
+      end
+
+      it 'resolves binding items to data expressions' do
+        converter = create_converter({ 'class' => 'Segment', 'items' => ['@{firstLabel}', '@{secondLabel}'] })
+        result = converter.convert
+        expect(result).to include('>{data.firstLabel}</button>')
+        expect(result).to include('>{data.secondLabel}</button>')
+      end
+    end
+
+    # Regression: rjui-segment-item-ids-selecttab — each button carries the
+    # TabView `{id}_tab_{index}` naming contract so the web test driver's
+    # selectTab action can target individual segments.
+    context 'per-item ids for selectTab' do
+      it 'emits {id}_tab_{index} ids on each button' do
+        converter = create_converter({ 'class' => 'Segment', 'id' => 'sizeSegment', 'items' => %w[a b c] })
+        result = converter.convert
+        expect(result).to include('id="sizeSegment_tab_0"')
+        expect(result).to include('id="sizeSegment_tab_1"')
+        expect(result).to include('id="sizeSegment_tab_2"')
+      end
+
+      it 'omits per-item ids when the segment has no id' do
+        converter = create_converter({ 'class' => 'Segment', 'items' => %w[a b] })
+        result = converter.convert
+        expect(result).not_to include('_tab_0"')
+      end
+
+      it 'omits per-item ids when the id is a binding' do
+        converter = create_converter({ 'class' => 'Segment', 'id' => '@{segmentId}', 'items' => %w[a b] })
+        result = converter.convert
+        expect(result).not_to include('_tab_')
+      end
+    end
+
     context 'with testId' do
       it 'generates data-testid attribute' do
         converter = create_converter({ 'class' => 'Segment', 'items' => ['A'], 'testId' => 'tab-control' })

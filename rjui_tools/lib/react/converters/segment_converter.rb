@@ -24,7 +24,10 @@ module RjuiTools
             # Data closure props are always optional (type_converter makes all
             # function types `| undefined`), so the call must be optional-chained.
             on_click_attr = on_change ? " onClick={() => #{on_change}?.(#{index})}" : ''
-            "#{indent_str(indent + 2)}<button key={#{index}} className={`#{button_class}`}#{on_click_attr}#{button_disabled}>#{item}</button>"
+            # Item labels go through the same string resolution as Label.text
+            # (string key -> binding -> literal), matching sjui's per-item
+            # get_text_with_string_manager.
+            "#{indent_str(indent + 2)}<button key={#{index}}#{segment_item_id_attr(index)} className={`#{button_class}`}#{on_click_attr}#{button_disabled}>#{convert_binding(item)}</button>"
           end.join("\n")
 
           # `disabled` is not a valid attribute on <div>; reflect the state via
@@ -39,6 +42,16 @@ module RjuiTools
         end
 
         protected
+
+        # Per-button DOM id following the TabView `{id}_tab_{index}` naming
+        # contract that the web test driver's selectTab action resolves.
+        # Literal ids only — a bound id has no static value to interpolate.
+        def segment_item_id_attr(index)
+          seg_id = extract_id
+          return '' if seg_id.nil? || has_binding?(seg_id)
+
+          " id=\"#{seg_id}_tab_#{index}\""
+        end
 
         def build_class_name
           classes = [super]
