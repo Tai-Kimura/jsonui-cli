@@ -17,6 +17,10 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
       end
     end
 
+    # Regression: rjui-responsive-compact-overrides-emitted-unprefixed —
+    # the helper emits ONLY breakpoint-scoped override classes. Base values
+    # are emitted unprefixed by the converters' normal attribute mapping;
+    # re-emitting them here duplicated the class (p-5 ... p-5 p-4).
     context 'with regular (lg:) breakpoint' do
       it 'generates orientation responsive classes' do
         component = {
@@ -28,8 +32,8 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         }
         result = described_class.build_responsive(component)
 
-        expect(result[:classes]).to include('flex-col')
         expect(result[:classes]).to include('lg:flex-row')
+        expect(result[:classes]).not_to include('flex-col')
         expect(result[:needs_landscape_hook]).to be false
       end
 
@@ -43,8 +47,8 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         }
         result = described_class.build_responsive(component)
 
-        expect(result[:classes]).to include('gap-2')
         expect(result[:classes]).to include('lg:gap-6')
+        expect(result[:classes]).not_to include('gap-2')
       end
 
       it 'generates fontSize responsive classes' do
@@ -57,8 +61,8 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         }
         result = described_class.build_responsive(component)
 
-        expect(result[:classes]).to include('text-sm')
         expect(result[:classes]).to include('lg:text-xl')
+        expect(result[:classes]).not_to include('text-sm')
       end
 
       it 'generates visibility responsive classes (hidden to visible)' do
@@ -71,8 +75,10 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         }
         result = described_class.build_responsive(component)
 
-        expect(result[:classes]).to include('hidden')
+        # Base `hidden` comes from build_class_name's normal visibility
+        # handling; the helper contributes only the scoped override.
         expect(result[:classes]).to include('lg:block')
+        expect(result[:classes]).not_to include('hidden')
       end
 
       it 'generates width responsive classes' do
@@ -85,8 +91,8 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         }
         result = described_class.build_responsive(component)
 
-        expect(result[:classes]).to include('w-full')
         expect(result[:classes]).to include('lg:w-[300px]')
+        expect(result[:classes]).not_to include('w-full')
       end
 
       it 'generates background responsive classes' do
@@ -99,8 +105,8 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         }
         result = described_class.build_responsive(component)
 
-        expect(result[:classes]).to include('bg-[#FFFFFF]')
         expect(result[:classes]).to include('lg:bg-[#000000]')
+        expect(result[:classes]).not_to include('bg-[#FFFFFF]')
       end
 
       it 'generates textAlign responsive classes' do
@@ -113,8 +119,8 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         }
         result = described_class.build_responsive(component)
 
-        expect(result[:classes]).to include('text-left')
         expect(result[:classes]).to include('lg:text-center')
+        expect(result[:classes]).not_to include('text-left')
       end
     end
 
@@ -129,8 +135,57 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         }
         result = described_class.build_responsive(component)
 
-        expect(result[:classes]).to include('flex-col')
         expect(result[:classes]).to include('md:flex-row')
+        expect(result[:classes]).not_to include('flex-col')
+      end
+    end
+
+    # Regression: rjui-responsive-compact-overrides-emitted-unprefixed —
+    # compact overrides are scoped below the md breakpoint (max-md:), NOT
+    # emitted unprefixed (which applied them at every width and collided
+    # with the base classes).
+    context 'with compact (max-md:) breakpoint' do
+      it 'scopes orientation override below md' do
+        component = {
+          'type' => 'View',
+          'orientation' => 'horizontal',
+          'responsive' => {
+            'compact' => { 'orientation' => 'vertical' }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('max-md:flex-col')
+        expect(result[:classes]).not_to include('flex-col')
+        expect(result[:classes]).not_to include('flex-row')
+      end
+
+      it 'emits max-md:hidden for compact visibility gone' do
+        component = {
+          'type' => 'View',
+          'responsive' => {
+            'compact' => { 'visibility' => 'gone' }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('max-md:hidden')
+        expect(result[:classes]).not_to include('hidden')
+      end
+
+      it 'scopes padding override below md' do
+        component = {
+          'type' => 'View',
+          'padding' => 20,
+          'responsive' => {
+            'compact' => { 'padding' => 16 }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('max-md:p-4')
+        expect(result[:classes]).not_to include('p-5')
+        expect(result[:classes]).not_to include('p-4')
       end
     end
 
@@ -147,10 +202,6 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         }
         result = described_class.build_responsive(component)
 
-        # Default classes
-        expect(result[:classes]).to include('flex-col')
-        expect(result[:classes]).to include('gap-1')
-
         # Medium breakpoint
         expect(result[:classes]).to include('md:flex-row')
         expect(result[:classes]).to include('md:gap-3')
@@ -158,6 +209,10 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         # Regular breakpoint
         expect(result[:classes]).to include('lg:flex-row')
         expect(result[:classes]).to include('lg:gap-6')
+
+        # Base values are NOT re-emitted by the helper
+        expect(result[:classes]).not_to include('flex-col')
+        expect(result[:classes]).not_to include('gap-1')
       end
     end
 
@@ -215,8 +270,8 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         }
         result = described_class.build_responsive(component)
 
-        expect(result[:classes]).to include('p-2')
         expect(result[:classes]).to include('lg:p-4')
+        expect(result[:classes]).not_to include('p-2')
       end
 
       it 'generates padding responsive classes for array values' do
@@ -229,8 +284,8 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         }
         result = described_class.build_responsive(component)
 
-        expect(result[:classes]).to include('py-2 px-4')
         expect(result[:classes]).to include('lg:py-4 lg:px-8')
+        expect(result[:classes]).not_to include('py-2 px-4')
       end
     end
 

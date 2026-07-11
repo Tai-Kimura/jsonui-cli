@@ -68,6 +68,62 @@ RSpec.describe 'Responsive integration with converters' do
       end
     end
 
+    # Regression: rjui-responsive-compact-overrides-emitted-unprefixed —
+    # compact overrides compile mobile-first: base value stays unprefixed
+    # (emitted once by the normal attribute mapping) and the compact
+    # override is scoped with max-md:.
+    context 'with compact responsive overrides' do
+      it 'scopes compact visibility gone to max-md:hidden' do
+        converter = create_converter({
+          'type' => 'View',
+          'orientation' => 'horizontal',
+          'responsive' => {
+            'compact' => { 'visibility' => 'gone' }
+          },
+          'child' => []
+        })
+        output = converter.convert(2)
+
+        expect(output).to include('max-md:hidden')
+        expect(output).to include('flex flex-row')
+        expect(output).not_to match(/(?<!max-md:)hidden/)
+      end
+
+      it 'keeps base orientation and scopes the compact override' do
+        converter = create_converter({
+          'type' => 'View',
+          'orientation' => 'horizontal',
+          'responsive' => {
+            'compact' => { 'orientation' => 'vertical' }
+          },
+          'child' => []
+        })
+        output = converter.convert(2)
+
+        expect(output).to include('flex-row')
+        expect(output).to include('max-md:flex-col')
+        expect(output.scan(/(?<![-\w])flex-row/).length).to eq(1)
+        expect(output).not_to match(/(?<!max-md:)flex-col/)
+      end
+
+      it 'emits base padding once and scopes the compact padding override' do
+        converter = create_converter({
+          'type' => 'View',
+          'padding' => 20,
+          'responsive' => {
+            'compact' => { 'padding' => 16 }
+          },
+          'child' => []
+        })
+        output = converter.convert(2)
+
+        expect(output).to include('p-5')
+        expect(output).to include('max-md:p-4')
+        expect(output.scan(/(?<![-\w:])p-5/).length).to eq(1)
+        expect(output).not_to match(/(?<!max-md:)p-4/)
+      end
+    end
+
     context 'with landscape responsive' do
       it 'generates template literal className with isLandscape conditional' do
         converter = create_converter({

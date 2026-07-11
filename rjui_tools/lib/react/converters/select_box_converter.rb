@@ -174,6 +174,35 @@ module RjuiTools
             " value={#{prop}}"
           elsif value
             " defaultValue=\"#{value}\""
+          elsif (index_binding = attributes['selectedIndex']) && has_binding?(index_binding)
+            build_index_value_attr(index_binding)
+          else
+            ''
+          end
+        end
+
+        # selectedIndex is a two-way binding, so the <select> must be a
+        # controlled component: resolve the item at the bound index to the
+        # same value string the <option> rows emit (dual-shape aware).
+        def build_index_value_attr(index_binding)
+          index_prop = extract_binding_property(index_binding)
+          items = attributes['items']
+
+          if items.is_a?(String) && has_binding?(items)
+            items_prop = extract_binding_property(items)
+            sel_cast =
+              if config['typescript'] != false
+                ' as string | number | { value?: string | number; id?: string | number } | undefined'
+              else
+                ''
+              end
+            " value={(() => { const sel = #{items_prop}?.[#{index_prop} ?? -1]#{sel_cast}; return sel != null && typeof sel === 'object' ? String(sel.value ?? sel.id ?? '') : String(sel ?? ''); })()}"
+          elsif items.is_a?(Array)
+            values = items.map do |item|
+              raw = item.is_a?(Hash) ? (item['value'] || item['id'] || item['text']) : item
+              "'#{raw.to_s.gsub("'") { "\\'" }}'"
+            end
+            " value={[#{values.join(', ')}][#{index_prop} ?? -1] ?? ''}"
           else
             ''
           end

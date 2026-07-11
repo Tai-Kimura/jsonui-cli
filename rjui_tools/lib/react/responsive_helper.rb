@@ -7,8 +7,14 @@ module RjuiTools
   module React
     # Generates Tailwind CSS responsive classes from JsonUI responsive blocks.
     #
+    # Canonical semantics (same as SwiftJsonUI / KotlinJsonUI): base
+    # attributes are the default values, and each `responsive.<sizeClass>`
+    # block is an override applied ONLY within that size class. Base values
+    # are emitted by the converters' normal attribute mapping (unprefixed);
+    # this helper emits only the scoped override classes.
+    #
     # Size class -> Tailwind breakpoint mapping:
-    #   compact            -> (default, no prefix)
+    #   compact            -> max-md:  (below 768px)
     #   medium             -> md:  (768px+)
     #   regular            -> lg:  (1024px+)
     #   landscape          -> requires useMediaQuery hook
@@ -19,7 +25,7 @@ module RjuiTools
     module ResponsiveHelper
       # Tailwind breakpoint prefix for each width size class
       BREAKPOINT_PREFIX = {
-        'compact' => '',
+        'compact' => 'max-md:',
         'medium' => 'md:',
         'regular' => 'lg:'
       }.freeze
@@ -88,15 +94,16 @@ module RjuiTools
         #
         # Returns a Hash:
         #   {
-        #     classes: "flex-col lg:flex-row gap-2 lg:gap-6",
+        #     classes: "lg:flex-row lg:gap-6",
         #     needs_landscape_hook: true,
         #     landscape_classes: { "isLandscape" => "flex-row gap-8" },
         #     stripped_keys: Set["orientation", "spacing"]
         #   }
         #
-        # `stripped_keys` lists attribute keys that were handled by responsive
-        # and should NOT be emitted by the normal build_class_name logic for
-        # the default (compact) value.
+        # `classes` holds only the breakpoint-scoped override classes; the
+        # base (default) value of each attribute is emitted unprefixed by
+        # the converters' normal attribute mapping. `stripped_keys` lists
+        # the attribute keys that have responsive overrides (informational).
         def build_responsive(component)
           result = {
             classes: [],
@@ -151,29 +158,11 @@ module RjuiTools
             end
           end
 
-          # Mark overridden keys so base converter can handle defaults
+          # Informational: which attribute keys have responsive overrides.
+          # Base values for these keys are emitted by the converters' normal
+          # attribute mapping — re-emitting them here would duplicate the
+          # unprefixed class (p-5 ... p-5 max-md:p-4) in the className.
           result[:stripped_keys] = overridden
-
-          # Add default (compact) classes for overridden attributes without prefix
-          overridden.each do |attr|
-            next if %w[type child data responsive].include?(attr)
-            next unless component.key?(attr)
-
-            mapper = ATTRIBUTE_MAPPERS[attr]
-            next unless mapper
-
-            default_value = component[attr]
-
-            # For visibility: if default is "gone" and responsive overrides to "visible",
-            # emit "hidden lg:block" pattern
-            if attr == 'visibility' && default_value == 'gone'
-              result[:classes].unshift('hidden')
-              next
-            end
-
-            cls = mapper.call(default_value, '')
-            result[:classes].unshift(cls) if cls
-          end
 
           result
         end

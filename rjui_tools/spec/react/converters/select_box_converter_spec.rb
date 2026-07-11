@@ -102,6 +102,48 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
       end
     end
 
+    # Regression: rjui-selectbox-selectedindex-binding-not-emitted —
+    # selectedIndex is a two-way binding, so the <select> must be controlled:
+    # the bound index resolves to the same value string the <option> rows emit.
+    context 'with selectedIndex binding' do
+      it 'emits a controlled value resolving dynamic items at the bound index' do
+        converter = create_converter({ 'class' => 'SelectBox', 'items' => '@{groupFilterOptions}', 'selectedIndex' => '@{groupFilterIndex}' })
+        result = converter.convert
+        expect(result).to include('value={(() => { const sel = data.groupFilterOptions?.[data.groupFilterIndex ?? -1]')
+        expect(result).to include("typeof sel === 'object' ? String(sel.value ?? sel.id ?? '') : String(sel ?? '')")
+        expect(result).to include(' as string | number | { value?: string | number; id?: string | number } | undefined')
+      end
+
+      it 'omits the TS cast in JavaScript mode' do
+        converter = create_converter(
+          { 'class' => 'SelectBox', 'items' => '@{opts}', 'selectedIndex' => '@{idx}' },
+          { 'use_tailwind' => true, 'typescript' => false }
+        )
+        result = converter.convert
+        expect(result).to include('const sel = data.opts?.[data.idx ?? -1];')
+        expect(result).not_to include(' as string')
+      end
+
+      it 'indexes into a static value list for static items' do
+        converter = create_converter({ 'class' => 'SelectBox', 'items' => ['A', 'B'], 'selectedIndex' => '@{selectedIdx}' })
+        result = converter.convert
+        expect(result).to include("value={['A', 'B'][data.selectedIdx ?? -1] ?? ''}")
+      end
+
+      it 'uses option values for static hash items' do
+        converter = create_converter({ 'class' => 'SelectBox', 'items' => [{ 'value' => '1', 'text' => 'First' }, { 'value' => '2', 'text' => 'Second' }], 'selectedIndex' => '@{idx}' })
+        result = converter.convert
+        expect(result).to include("value={['1', '2'][data.idx ?? -1] ?? ''}")
+      end
+
+      it 'prefers selectedValue when both bindings are present' do
+        converter = create_converter({ 'class' => 'SelectBox', 'items' => ['A'], 'selectedValue' => '@{val}', 'selectedIndex' => '@{idx}' })
+        result = converter.convert
+        expect(result).to include('value={data.val}')
+        expect(result).not_to include('data.idx ?? -1')
+      end
+    end
+
     context 'with static default value' do
       it 'generates defaultValue' do
         converter = create_converter({ 'class' => 'SelectBox', 'items' => ['A', 'B'], 'value' => 'B' })
