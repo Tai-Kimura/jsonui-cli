@@ -377,7 +377,9 @@ def cmd_mock_serve(args):
 
     config, config_path = _load_mock_config(getattr(args, "config", None))
     mock_dir = args.mock_dir or config.get("mockDir", "tests/mocks")
-    port = args.port or config.get("server", {}).get("port", 8790)
+    # `is not None` (not `or`): --port 0 means "pick an ephemeral port" and
+    # must not fall through to the config/default port.
+    port = args.port if args.port is not None else config.get("server", {}).get("port", 8790)
     run_targets = config.get("runTargets", {})
     project_root = config_path.parent if config_path else Path(".")
 
@@ -387,10 +389,23 @@ def cmd_mock_serve(args):
 
     store = MockStore.load(mock_dir)
     server = MockServer(store, RunManager(run_targets, project_root), port=port)
-    print(f"JsonUI mock server: http://127.0.0.1:{port}")
+    # Bind BEFORE printing the banner: consumers parse the URL/token from
+    # stdout as the "server is up" signal, so a banner followed by a bind
+    # failure reads as a successful start. Bind also resolves port 0 to
+    # the real ephemeral port.
+    try:
+        server.bind()
+    except OSError as e:
+        reason = e.strerror or str(e)
+        print(f"Error: cannot bind 127.0.0.1:{port} ({reason})", file=sys.stderr)
+        return 1
+    print(f"JsonUI mock server: http://127.0.0.1:{server.port}")
     print(f"  loaded {len(store.endpoints)} endpoint(s) from {mock_dir}/")
-    print(f"  control panel: http://127.0.0.1:{port}/__jsonui__/panel")
-    print(f"  admin token:   {server.token}")
+    print(f"  control panel: http://127.0.0.1:{server.port}/__jsonui__/panel")
+    # flush: piped stdout is block-buffered and serve_forever() never
+    # returns — without an explicit flush the banner (and the admin token,
+    # whose only channel is stdout) never reaches the consumer.
+    print(f"  admin token:   {server.token}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

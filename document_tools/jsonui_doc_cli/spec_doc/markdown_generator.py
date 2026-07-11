@@ -167,9 +167,12 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None) -> 
         lines.append(f"**Notes:** {structure['notes']}")
         lines.append("")
 
-    # Collection Structure
-    collection = structure.get("collection")
-    if collection:
+    # Collection Structure(s) — structure.collection + structure.collections[]
+    _all_collections = [
+        c for c in [structure.get("collection"), *(structure.get("collections") or [])]
+        if isinstance(c, dict)
+    ]
+    for collection in _all_collections:
         lines.append("### Collection Structure")
         lines.append("")
         lines.append(f"**Collection ID:** `{collection.get('id', '-')}`")

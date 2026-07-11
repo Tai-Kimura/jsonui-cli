@@ -27,7 +27,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'blur_converter.rb' => %w[backgroundColor blurRadius cornerRadius effectStyle intensity onClick onclick],
     'button_converter.rb' => %w[cornerRadius disabledBackground disabledFontColor enabled highlightBackground highlightColor href partialAttributes tapBackground text],
     'circle_view_converter.rb' => %w[background backgroundColor borderColor borderStyle borderWidth fillColor onClick onclick shadow strokeColor strokeWidth],
-    'collection_converter.rb' => %w[autoChangeTrackingId cellClasses cellIdProperty columnCount columnSpacing columns contentInset footerClasses headerClasses itemSpacing items layout lazy lineSpacing orientation scrollDirection scrollEnabled sections spacing],
+    'collection_converter.rb' => %w[autoChangeTrackingId cellClasses cellIdProperty columnCount columnSpacing columns contentInset footerClasses headerClasses id itemSpacing items layout lazy lineSpacing orientation scrollDirection scrollEnabled sections spacing],
     'embed_converter.rb' => %w[events id navigationMode params screen],
     'gradient_view_converter.rb' => %w[angle colors cornerRadius direction endPoint gradient gradientDirection gradientType locations onClick onclick orientation startPoint],
     'icon_label_converter.rb' => %w[fontColor fontSize fontWeight icon iconMargin iconOff iconOn iconPosition iconSize iconTintColor icon_off icon_on onClick onclick selected spacing strikethrough text tintColor underline],

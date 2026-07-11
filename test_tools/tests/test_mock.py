@@ -356,3 +356,65 @@ class TestRunManager:
         rm = RunManager({"web": {"command": "true", "cwd": ".", "resultsPath": "../../etc/passwd"}}, tmp_path)
         rm._last_target = "web"
         assert rm.read_results() is None
+
+
+class TestCmdMockServe:
+    """Startup contract of `jsonui-test mock serve` (regressions:
+    jui-test-mock-serve-banner-before-bind /
+    jui-test-mock-serve-stdout-not-flushed-when-piped)."""
+
+    def _mock_dir(self, tmp_path):
+        spec_file = tmp_path / "spec.json"
+        spec_file.write_text(json.dumps(SPEC))
+        out = tmp_path / "mocks"
+        generate([str(spec_file)], out)
+        return out
+
+    def _args(self, mock_dir, port):
+        import argparse
+        return argparse.Namespace(config=None, mock_dir=str(mock_dir), port=port)
+
+    def test_port_conflict_fails_fast_without_banner(self, tmp_path, capsys):
+        import socket
+        from jsonui_test_cli.cli import cmd_mock_serve
+
+        blocker = socket.socket()
+        blocker.bind(("127.0.0.1", 0))
+        blocker.listen(1)
+        busy_port = blocker.getsockname()[1]
+        try:
+            rc = cmd_mock_serve(self._args(self._mock_dir(tmp_path), busy_port))
+        finally:
+            blocker.close()
+
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "cannot bind" in captured.err
+        # No success-looking banner (with a token) may precede the failure.
+        assert "admin token" not in captured.out
+        assert "JsonUI mock server" not in captured.out
+
+    def test_banner_printed_after_bind_with_resolved_port(self, tmp_path, capsys, monkeypatch):
+        from jsonui_test_cli.cli import cmd_mock_serve
+
+        started = {}
+
+        def fake_serve(self):
+            started["server"] = self
+
+        monkeypatch.setattr(MockServer, "serve_forever", fake_serve)
+        try:
+            rc = cmd_mock_serve(self._args(self._mock_dir(tmp_path), 0))
+        finally:
+            # server_close(), not shutdown(): shutdown() blocks on the
+            # serve_forever loop's exit event, and the loop never ran here.
+            if "server" in started and started["server"]._httpd:
+                started["server"]._httpd.server_close()
+
+        out = capsys.readouterr().out
+        assert rc == 0
+        import re
+        m = re.search(r"JsonUI mock server: http://127\.0\.0\.1:(\d+)", out)
+        # Port 0 resolved to a real ephemeral port => bind happened before the banner.
+        assert m and m.group(1) != "0"
+        assert "admin token" in out

@@ -512,7 +512,7 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
             layout_gen = LayoutGenerator(type_mapper)
             layout_json = layout_gen.generate(screen_spec)
             cell_gen = CellLayoutGenerator(layout_gen)
-            cell_entry = _extract_cell_entry(sf)
+            cell_entries = _extract_cell_entries(sf)
 
             layouts_dir = config_mgr.layouts_directory
             if screen_spec.layout_file:
@@ -557,13 +557,16 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
                 generated_files.append(layout_path)
                 print(f"  Created: {layout_path.relative_to(config_mgr.project_root)}")
 
-            # Generate cell Layout JSON when opted in
-            if cell_gen.should_generate(screen_spec.collection):
-                cell_json = cell_gen.generate(screen_spec.collection, screen_spec)
+            # Generate cell Layout JSON when opted in — for every declared
+            # Collection (structure.collection + structure.collections[]).
+            for coll_def, coll_cell_entry in zip(screen_spec.collections, cell_entries):
+                if not cell_gen.should_generate(coll_def):
+                    continue
+                cell_json = cell_gen.generate(coll_def, screen_spec)
                 cell_path = cell_gen.resolve_output_path(
-                    screen_spec.collection,
+                    coll_def,
                     layouts_dir,
-                    cell_entry,
+                    coll_cell_entry,
                 )
                 if args.dry_run:
                     print(f"  [DRY-RUN] Would create cell: {cell_path}")
@@ -822,11 +825,12 @@ def _to_snake_case(name: str) -> str:
     return s
 
 
-def _extract_cell_entry(spec_file: Path) -> dict | None:
-    """Load the raw ``structure.collection.cell`` dict from a spec file.
+def _extract_cell_entries(spec_file: Path) -> list[dict | None]:
+    """Raw ``cell`` dicts for structure.collection + structure.collections[].
 
-    Used by the cell layout generator to resolve the output path
-    (``layout`` field). Returns ``None`` when the cell is not defined.
+    Used by the cell layout generator to resolve output paths (``layout``
+    field). The list is aligned with ``ScreenSpec.collections`` — both use
+    the same "non-empty dict" filter over the same slots.
     """
     import json as _json
 
@@ -834,10 +838,14 @@ def _extract_cell_entry(spec_file: Path) -> dict | None:
         with open(spec_file, "r", encoding="utf-8") as f:
             data = _json.load(f)
     except (OSError, ValueError):
-        return None
-    coll = (data.get("structure") or {}).get("collection") or {}
-    cell = coll.get("cell")
-    return cell if isinstance(cell, dict) else None
+        return []
+    structure = data.get("structure") or {}
+    entries: list[dict | None] = []
+    for coll in [structure.get("collection"), *(structure.get("collections") or [])]:
+        if isinstance(coll, dict) and coll:
+            cell = coll.get("cell")
+            entries.append(cell if isinstance(cell, dict) else None)
+    return entries
 
 
 def _cmd_generate_screen(args: argparse.Namespace) -> int:

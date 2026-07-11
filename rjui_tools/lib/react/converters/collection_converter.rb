@@ -166,7 +166,7 @@ module RjuiTools
             else
               lines << "#{indent_str(indent)}{#{source_expr}.map((cellData, cellIndex) => ("
             end
-            lines << "#{indent_str(indent + 2)}<#{cell_view} key={#{key_expr}} data={cellData#{cell_cast}} />"
+            lines << "#{indent_str(indent + 2)}<#{cell_view} key={#{key_expr}}#{cell_item_id_attr('cellIndex')} data={cellData#{cell_cast}} />"
             lines << "#{indent_str(indent)}))}"
           elsif cell_view
             # Placeholder for static content
@@ -180,6 +180,18 @@ module RjuiTools
           end
 
           lines.join("\n")
+        end
+
+        # `{collectionId}_item_{index}` identifier for each cell (kjui
+        # testTag parity — jsonui-test-runner's tapItem clicks `#id`).
+        # Generated components apply the `id` prop to their root element.
+        # Only a literal collection id qualifies; without one, tapItem has
+        # no way to address the collection anyway.
+        def cell_item_id_attr(index_var)
+          collection_id = attributes['id']
+          return '' unless collection_id.is_a?(String) && !collection_id.empty? && !collection_id.include?('@{')
+
+          " id={`#{collection_id}_item_${#{index_var}}`}"
         end
 
         def generate_legacy_content(indent)
@@ -210,7 +222,7 @@ module RjuiTools
               # Add type annotation for TypeScript
               item_type = config['typescript'] ? ": #{cell_view}Data" : ''
               lines << "#{indent_str(indent)}{#{items_binding}?.map((item#{item_type}, index: number) => ("
-              lines << "#{indent_str(indent + 2)}<#{cell_view} key={index} data={item} />"
+              lines << "#{indent_str(indent + 2)}<#{cell_view} key={index}#{cell_item_id_attr('index')} data={item} />"
               lines << "#{indent_str(indent)}))}"
             else
               lines << "#{indent_str(indent)}{/* Add items prop to render cells */}"

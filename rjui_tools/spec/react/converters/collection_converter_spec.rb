@@ -54,6 +54,21 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
         expect(result).to include('key={index}')
         expect(result).to include('data={item}')
       end
+
+      # Regression: rjui-collection-cells-missing-item-index-id — kjui
+      # testTag parity so jsonui-test-runner's tapItem can click
+      # #{collectionId}_item_{index}.
+      it 'passes the {id}_item_{index} identifier to each cell (legacy path)' do
+        converter = create_converter({ 'class' => 'Collection', 'id' => 'gallery_thumbnail_row',
+                                       'cellClasses' => ['ItemCell'], 'items' => '@{listItems}' })
+        result = converter.convert
+        expect(result).to include('key={index} id={`gallery_thumbnail_row_item_${index}`} data={item} />')
+      end
+
+      it 'omits the item identifier when the collection has no literal id' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'items' => '@{listItems}' })
+        expect(converter.convert).not_to include('_item_')
+      end
     end
 
     context 'with headerClasses' do
@@ -87,6 +102,17 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
         expect(result).to include('SectionFooter')
         # Updated expectation: uses nullish coalescing with array
         expect(result).to include('sections?.[0]?.cells?.data ?? []')
+      end
+
+      it 'passes the {id}_item_{index} identifier to each cell (sections path)' do
+        json = {
+          'class' => 'Collection',
+          'id' => 'fee_sections_collection',
+          'sections' => [{ 'cell' => 'FeeCell' }],
+          'items' => '@{sectionData}'
+        }
+        result = create_converter(json).convert
+        expect(result).to include('id={`fee_sections_collection_item_${cellIndex}`}')
       end
     end
 

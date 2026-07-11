@@ -76,10 +76,13 @@ def _expand_collection_refs(spec_data: dict, layouts_dir: Path) -> None:
     structure = spec_data.get("structure")
     if not isinstance(structure, dict):
         return
-    collection = structure.get("collection")
-    if not isinstance(collection, dict):
-        return
+    targets = [structure.get("collection"), *(structure.get("collections") or [])]
+    for collection in targets:
+        if isinstance(collection, dict):
+            _expand_one_collection(collection, layouts_dir)
 
+
+def _expand_one_collection(collection: dict, layouts_dir: Path) -> None:
     # 2a. Single-cell object form (legacy single-cell Collections) plus header/footer.
     for key in ("cell", "header", "footer"):
         entry = collection.get(key)

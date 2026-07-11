@@ -188,9 +188,13 @@ def generate_spec_html(
     if structure.get("notes"):
         parts.append(f'<p class="notes"><strong>Notes:</strong> {_e(structure["notes"])}</p>')
 
-    # Collection
-    collection = structure.get("collection")
-    if collection:
+    # Collection(s) — structure.collection plus the multi-Collection
+    # structure.collections[] form; each renders its own block.
+    _all_collections = [
+        c for c in [structure.get("collection"), *(structure.get("collections") or [])]
+        if isinstance(c, dict)
+    ]
+    for collection in _all_collections:
         parts.append('<h3>Collection Structure</h3>')
         lazy_badge = ''
         # `lazy: false` opts out of virtualization. Call it out here because it

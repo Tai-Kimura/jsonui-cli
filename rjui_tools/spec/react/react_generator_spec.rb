@@ -194,7 +194,7 @@ RSpec.describe RjuiTools::React::ReactGenerator do
       jsx = '      <span>{data.title}</span>'
       result = generator.send(:generate_component_file, 'Titled', jsx, minimal_json)
       expect(result).to include('data?: Partial<TitledData>;')
-      expect(result).to include('({ data: dataProp }: TitledProps)')
+      expect(result).to include('({ data: dataProp, id }: TitledProps)')
       expect(result).to include('const data: TitledData = { ...createTitledData(), ...dataProp };')
       expect(result).to include("import { type TitledData, createTitledData } from '@/generated/data/TitledData';")
     end
@@ -214,6 +214,34 @@ RSpec.describe RjuiTools::React::ReactGenerator do
       result = generator.send(:generate_component_file, 'ListHost', jsx, minimal_json)
       expect(result).to include('data?: ListHostData;')
       expect(result).not_to include('dataProp')
+    end
+  end
+
+  describe '#generate_component_file root id passthrough (regression: rjui-collection-cells-missing-item-index-id)' do
+    # Collections address cells as {collectionId}_item_{index} via an `id`
+    # prop applied to the component's root element (kjui testTag parity).
+    let(:minimal_json) { { 'type' => 'View' } }
+
+    it 'injects id={id} into an element root and destructures id' do
+      jsx = '      <div className="cell">{data.label}</div>'
+      result = generator.send(:generate_component_file, 'RowCell', jsx, minimal_json)
+      expect(result).to include('<div id={id} className="cell">')
+      expect(result).to include('({ data: dataProp, id }: RowCellProps)')
+      expect(result).to include('id?: string;')
+    end
+
+    it 'keeps a layout-declared root id as the fallback' do
+      jsx = '      <div id="own_root" className="cell">{data.label}</div>'
+      result = generator.send(:generate_component_file, 'OwnId', jsx, minimal_json)
+      expect(result).to include('<div id={id ?? "own_root"} className="cell">')
+    end
+
+    it 'skips injection for an expression-container root but keeps id in the interface' do
+      jsx = "    {data.visible !== \"gone\" && (\n    <div>x</div>\n    )}"
+      result = generator.send(:generate_component_file, 'CondRoot', jsx, minimal_json)
+      expect(result).to include('id?: string;')
+      expect(result).not_to include('id={id}')
+      expect(result).to include('({ data: dataProp }: CondRootProps)')
     end
   end
 

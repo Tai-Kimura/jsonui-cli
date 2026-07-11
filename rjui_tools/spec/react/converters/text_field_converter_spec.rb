@@ -35,6 +35,30 @@ RSpec.describe RjuiTools::React::Converters::TextFieldConverter do
       end
     end
 
+    context 'with a strings.json key as hint (regression: rjui-textfield-hint-string-key-not-resolved)' do
+      it 'resolves the key through StringManager like sjui does' do
+        converter = create_converter({
+          'type' => 'TextField',
+          'hint' => 'staff_auth_6_digit_code'
+        })
+        allow(converter).to receive(:convert_string_key)
+          .with('staff_auth_6_digit_code')
+          .and_return('{StringManager.currentLanguage.staffAuth6DigitCode}')
+        result = converter.convert
+        expect(result).to include('placeholder={StringManager.currentLanguage.staffAuth6DigitCode}')
+      end
+
+      it 'leaves unregistered keys as plain literals' do
+        converter = create_converter({
+          'type' => 'TextField',
+          'hint' => 'not_a_registered_key'
+        })
+        allow(converter).to receive(:convert_string_key).and_return(nil)
+        result = converter.convert
+        expect(result).to include('placeholder="not_a_registered_key"')
+      end
+    end
+
     context 'with text binding' do
       it 'converts binding to controlled component (value + onChange)' do
         converter = create_converter({

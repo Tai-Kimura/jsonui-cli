@@ -437,9 +437,22 @@ class SpecValidator:
         if "layout" in structure and not has_layout_file:
             self._validate_layout(structure["layout"], "structure.layout", component_ids, result)
 
-        # Validate collection
+        # Validate collection(s). `structure.collections` (array) is the
+        # multi-Collection form — screens with several Collections declare
+        # each cell's typed data there (doc-spec-schema-single-collection-only).
         if "collection" in structure and structure["collection"]:
             self._validate_collection(structure["collection"], component_ids, result)
+        collections = structure.get("collections")
+        if isinstance(collections, list):
+            for i, coll in enumerate(collections):
+                coll_path = f"structure.collections[{i}]"
+                if isinstance(coll, dict):
+                    self._validate_collection(coll, component_ids, result, path=coll_path)
+                else:
+                    result.errors.append(SpecValidationMessage(
+                        path=coll_path,
+                        message="Each structure.collections entry must be an object",
+                    ))
 
         # Validate tabView
         if "tabView" in structure and structure["tabView"]:
@@ -646,7 +659,7 @@ class SpecValidator:
                         child["children"], f"{path}[{i}].children", component_ids, result
                     )
 
-    def _validate_collection(self, collection: dict, component_ids: set, result: SpecValidationResult):
+    def _validate_collection(self, collection: dict, component_ids: set, result: SpecValidationResult, path: str = "structure.collection"):
         """Validate collection structure.
 
         A collection must declare at least one of:
@@ -658,7 +671,7 @@ class SpecValidator:
         `sections` schema is accepted; both are valid and supported at the
         Layout JSON / runtime level.
         """
-        self._validate_required_fields(collection, ["id"], "structure.collection", result)
+        self._validate_required_fields(collection, ["id"], path, result)
 
         has_single_cell = "cell" in collection and collection.get("cell")
         has_cell_classes = (
@@ -673,7 +686,7 @@ class SpecValidator:
 
         if not (has_single_cell or has_cell_classes or has_section_cells):
             result.errors.append(SpecValidationMessage(
-                path="structure.collection",
+                path=path,
                 message=(
                     "Collection must declare at least one of: 'cell', "
                     "'cellClasses' (non-empty array), or 'sections[].cell'."
@@ -694,15 +707,15 @@ class SpecValidator:
         # the cell does not reference an external Layout JSON. The same rule
         # applies to header/footer slots.
         if has_single_cell and not _has_external_layout_ref(collection["cell"]):
-            self._validate_layout(collection["cell"], "structure.collection.cell", component_ids, result)
+            self._validate_layout(collection["cell"], f"{path}.cell", component_ids, result)
 
         header = collection.get("header")
         if isinstance(header, dict) and not _has_external_layout_ref(header):
-            self._validate_layout(header, "structure.collection.header", component_ids, result)
+            self._validate_layout(header, f"{path}.header", component_ids, result)
 
         footer = collection.get("footer")
         if isinstance(footer, dict) and not _has_external_layout_ref(footer):
-            self._validate_layout(footer, "structure.collection.footer", component_ids, result)
+            self._validate_layout(footer, f"{path}.footer", component_ids, result)
 
     def _validate_tab_view(self, tab_view: dict, result: SpecValidationResult):
         """Validate tabView structure."""

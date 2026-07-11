@@ -94,6 +94,7 @@ class ParentSpecMerger:
             "wrapperViews": [],
             "customComponents": [],
             "collection": None,
+            "collections": [],
             "tabView": None,
         }
 
@@ -180,6 +181,10 @@ class ParentSpecMerger:
             # collection / tabView: the first one wins
             if sub_structure.get("collection") and structure["collection"] is None:
                 structure["collection"] = sub_structure["collection"]
+            # collections (multi-Collection form): concatenated across sub-specs
+            for extra_coll in sub_structure.get("collections") or []:
+                if isinstance(extra_coll, dict):
+                    structure["collections"].append(extra_coll)
             if sub_structure.get("tabView") and structure["tabView"] is None:
                 structure["tabView"] = sub_structure["tabView"]
 
@@ -349,6 +354,8 @@ class ParentSpecMerger:
             structure.pop("customComponents", None)
         if structure["collection"] is None:
             structure.pop("collection", None)
+        if not structure["collections"]:
+            structure.pop("collections", None)
         if structure["tabView"] is None:
             structure.pop("tabView", None)
 

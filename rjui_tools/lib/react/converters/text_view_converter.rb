@@ -139,6 +139,11 @@ module RjuiTools
             resolved = convert_binding(placeholder)
             if resolved != placeholder && resolved.include?('{')
               attrs << " placeholder={#{resolved.gsub(/^\{|\}$/, '')}}"
+            elsif (string_resolved = convert_string_key(placeholder))
+              # strings.json key -> StringManager, matching sjui's hint
+              # contract (get_text_with_string_manager). Unregistered keys
+              # and plain literals fall through unchanged.
+              attrs << " placeholder=#{string_resolved}"
             else
               attrs << " placeholder=\"#{placeholder}\""
             end

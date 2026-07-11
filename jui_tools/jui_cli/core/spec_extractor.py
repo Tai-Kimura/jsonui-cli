@@ -184,11 +184,78 @@ class ScreenSpec:
     components: list[ComponentDef] = field(default_factory=list)
     layout_tree: dict = field(default_factory=dict)
     collection: CollectionDef | None = None
+    # All declared collections (structure.collection + structure.collections[]).
+    # `collection` stays as the first entry for single-Collection consumers.
+    collections: list[CollectionDef] = field(default_factory=list)
     tab_view: TabViewDef | None = None
     display_logic: list[DisplayLogicRule] = field(default_factory=list)
     custom_components: list[dict] = field(default_factory=list)
     decorative_elements: list[DecorativeElementDef] = field(default_factory=list)
     wrapper_views: list[WrapperViewDef] = field(default_factory=list)
+
+
+
+def _parse_collection(coll_data: dict) -> CollectionDef:
+    """Parse one structure.collection / structure.collections[] entry."""
+    sections = []
+    cell = coll_data.get("cell")
+    cell_root_def = None
+    generate_cell_layout = False
+    cell_ui_variables: list[UIVariableDef] = []
+    cell_event_handlers: list[EventHandlerDef] = []
+    if cell:
+        root_val = cell.get("root")
+        if isinstance(root_val, dict):
+            # Full tree form: root is an object describing the cell view
+            sections.append({"cell": root_val.get("id", "")})
+            cell_root_def = _parse_component(root_val)
+            generate_cell_layout = bool(cell.get("generateCellLayout"))
+        else:
+            sections.append({"cell": root_val or ""})
+
+        # Cell-local typed data (new). Populates the generated cell Layout
+        # JSON's `data` section so the cell gets its own typed model
+        # instead of inheriting untyped values through the parent
+        # Collection's items binding.
+        for var in cell.get("uiVariables", []) or []:
+            cell_ui_variables.append(UIVariableDef(
+                name=var["name"],
+                type=var["type"],
+                default=var.get("default") or var.get("defaultValue"),
+                description=var.get("description", ""),
+            ))
+        for h in cell.get("eventHandlers", []) or []:
+            cell_event_handlers.append(EventHandlerDef(
+                name=h["name"],
+                description=h.get("description", ""),
+            ))
+    header = coll_data.get("header")
+    if header:
+        h_root = header.get("root")
+        if not sections:
+            sections.append({"cell": ""})
+        sections[0]["header"] = (
+            h_root.get("id", "") if isinstance(h_root, dict) else (h_root or "")
+        )
+    footer = coll_data.get("footer")
+    if footer:
+        f_root = footer.get("root")
+        if not sections:
+            sections.append({"cell": ""})
+        sections[0]["footer"] = (
+            f_root.get("id", "") if isinstance(f_root, dict) else (f_root or "")
+        )
+
+    return CollectionDef(
+        id=coll_data.get("id", "collection"),
+        cell_id_property=coll_data.get("cellIdProperty", ""),
+        auto_change_tracking_id=bool(coll_data.get("autoChangeTrackingId", False)),
+        sections=sections,
+        cell_root=cell_root_def,
+        generate_cell_layout=generate_cell_layout,
+        cell_ui_variables=cell_ui_variables,
+        cell_event_handlers=cell_event_handlers,
+    )
 
 
 def extract_screen_spec(spec_data: dict) -> ScreenSpec:
@@ -275,65 +342,13 @@ def extract_screen_spec(spec_data: dict) -> ScreenSpec:
             effects=rule.get("effects", []),
         ))
 
-    # Collection
-    collection = None
-    coll_data = structure.get("collection")
-    if coll_data:
-        sections = []
-        cell = coll_data.get("cell")
-        cell_root_def = None
-        generate_cell_layout = False
-        cell_ui_variables: list[UIVariableDef] = []
-        cell_event_handlers: list[EventHandlerDef] = []
-        if cell:
-            root_val = cell.get("root")
-            if isinstance(root_val, dict):
-                # Full tree form: root is an object describing the cell view
-                sections.append({"cell": root_val.get("id", "")})
-                cell_root_def = _parse_component(root_val)
-                generate_cell_layout = bool(cell.get("generateCellLayout"))
-            else:
-                sections.append({"cell": root_val or ""})
-
-            # Cell-local typed data (new). Populates the generated cell Layout
-            # JSON's `data` section so the cell gets its own typed model
-            # instead of inheriting untyped values through the parent
-            # Collection's items binding.
-            for var in cell.get("uiVariables", []) or []:
-                cell_ui_variables.append(UIVariableDef(
-                    name=var["name"],
-                    type=var["type"],
-                    default=var.get("default") or var.get("defaultValue"),
-                    description=var.get("description", ""),
-                ))
-            for h in cell.get("eventHandlers", []) or []:
-                cell_event_handlers.append(EventHandlerDef(
-                    name=h["name"],
-                    description=h.get("description", ""),
-                ))
-        header = coll_data.get("header")
-        if header:
-            h_root = header.get("root")
-            sections[0]["header"] = (
-                h_root.get("id", "") if isinstance(h_root, dict) else (h_root or "")
-            )
-        footer = coll_data.get("footer")
-        if footer:
-            f_root = footer.get("root")
-            sections[0]["footer"] = (
-                f_root.get("id", "") if isinstance(f_root, dict) else (f_root or "")
-            )
-
-        collection = CollectionDef(
-            id=coll_data.get("id", "collection"),
-            cell_id_property=coll_data.get("cellIdProperty", ""),
-            auto_change_tracking_id=bool(coll_data.get("autoChangeTrackingId", False)),
-            sections=sections,
-            cell_root=cell_root_def,
-            generate_cell_layout=generate_cell_layout,
-            cell_ui_variables=cell_ui_variables,
-            cell_event_handlers=cell_event_handlers,
-        )
+    # Collection(s). `structure.collections` (array) is the multi-Collection
+    # form — every entry gets the same parsing as the single slot.
+    collections: list[CollectionDef] = []
+    for coll_data in [structure.get("collection"), *(structure.get("collections") or [])]:
+        if isinstance(coll_data, dict) and coll_data:
+            collections.append(_parse_collection(coll_data))
+    collection = collections[0] if collections else None
 
     # TabView
     tab_view = None
@@ -374,6 +389,7 @@ def extract_screen_spec(spec_data: dict) -> ScreenSpec:
         components=components,
         layout_tree=structure.get("layout", {}),
         collection=collection,
+        collections=collections,
         tab_view=tab_view,
         display_logic=display_logic,
         custom_components=structure.get("customComponents", []),

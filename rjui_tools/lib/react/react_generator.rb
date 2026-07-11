@@ -354,6 +354,14 @@ module RjuiTools
           jsx_content = jsx_content.gsub('StringManager.currentLanguage.', '$s.')
         end
 
+        # Root id passthrough: collections address cells as
+        # {collectionId}_item_{index} via an `id` prop (kjui testTag
+        # parity — the web test driver clicks `#id` and needs it on the
+        # cell's real root box), and include sites may set id too. Inject
+        # before the visibility fragment wrap: an expression-container
+        # root can't carry an id, so injection is skipped there.
+        jsx_content, root_id_injected = inject_root_id_prop(jsx_content)
+
         # A root element with a visibility binding arrives here as a bare
         # JSX expression container (`{cond && (...)}` from
         # BaseConverter#wrap_with_visibility). That form is only legal as a
@@ -371,11 +379,15 @@ module RjuiTools
         # data-consuming component merges the prop over its createXxxData()
         # defaults so every member is present for the body's reads.
         props_interface = generate_data_props_interface(name, uses_data)
+        # `id` is destructured only when it was injected into the root —
+        # the interface always accepts it (call sites can't know), but an
+        # unused binding would trip noUnusedParameters setups.
+        id_part = root_id_injected ? ', id' : ''
         props_sig =
           if uses_data
-            @config['typescript'] ? "{ data: dataProp }: #{name}Props" : '{ data: dataProp }'
+            @config['typescript'] ? "{ data: dataProp#{id_part} }: #{name}Props" : "{ data: dataProp#{id_part} }"
           else
-            @config['typescript'] ? "{ data }: #{name}Props" : '{ data }'
+            @config['typescript'] ? "{ data#{id_part} }: #{name}Props" : "{ data#{id_part} }"
           end
         data_merge_declaration =
           if uses_data
@@ -421,8 +433,31 @@ module RjuiTools
         <<~TS
           interface #{name}Props {
             #{data_field}
+            id?: string;
           }
         TS
+      end
+
+      # Inject the `id` prop into the root element's tag so collection
+      # cells ({collectionId}_item_{index}) and include sites can address
+      # the component's real root box. Returns [jsx, injected?]. A layout
+      # root that declares its own id keeps it as the fallback
+      # (`id={id ?? "own"}`); an expression-container root (visibility
+      # binding) is left untouched.
+      def inject_root_id_prop(jsx_content)
+        stripped = jsx_content.lstrip
+        return [jsx_content, false] unless stripped.start_with?('<') && stripped[1] =~ /[A-Za-z]/
+
+        first_tag = jsx_content[/\A\s*<[^>]*>/m]
+        return [jsx_content, false] unless first_tag
+
+        if first_tag =~ /\sid="([^"]*)"/
+          [jsx_content.sub(/\sid="([^"]*)"/) { " id={id ?? \"#{Regexp.last_match(1)}\"}" }, true]
+        elsif first_tag =~ /\sid=\{([^}]*)\}/
+          [jsx_content.sub(/\sid=\{([^}]*)\}/) { " id={id ?? (#{Regexp.last_match(1)})}" }, true]
+        else
+          [jsx_content.sub(/\A(\s*)<([A-Za-z][\w.]*)/) { "#{Regexp.last_match(1)}<#{Regexp.last_match(2)} id={id}" }, true]
+        end
       end
 
       def capitalize_first(str)
