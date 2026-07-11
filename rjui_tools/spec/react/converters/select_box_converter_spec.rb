@@ -38,6 +38,18 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         expect(result).to include('{data.options?.map((item) =>')
         expect(result).to include('{item.text || item.label}')
       end
+
+      # Regression: rjui-selectbox-dynamic-items-assumes-object-shape —
+      # canonical items are a plain string array ([String], matching
+      # SwiftJsonUI SelectBoxView), so the option row must branch on the
+      # element shape instead of assuming {value, text} objects.
+      it 'supports canonical string-array items via a typeof branch' do
+        converter = create_converter({ 'class' => 'SelectBox', 'items' => '@{sortOptions}' })
+        result = converter.convert
+        expect(result).to include("typeof item === 'object' && item !== null")
+        expect(result).to include('<option key={String(item)} value={String(item)}>{String(item)}</option>')
+        expect(result).to include('<option key={item.value || item.id} value={item.value || item.id}>{item.text || item.label}</option>')
+      end
     end
 
     context 'with placeholder/hint/prompt' do

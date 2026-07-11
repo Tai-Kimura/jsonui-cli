@@ -67,14 +67,23 @@ module RjuiTools
         def build_class_name
           classes = [super]
 
-          # Content mode
+          # Content mode (canonical enum: fit/fill/center/top/... plus the
+          # iOS long forms — see attribute_definitions Image.contentMode)
           case attributes['contentMode']&.downcase
-          when 'aspectfit', 'aspect_fit'
+          when 'fit', 'aspectfit', 'aspect_fit'
             classes << 'object-contain'
-          when 'aspectfill', 'aspect_fill'
+          when 'fill', 'aspectfill', 'aspect_fill'
             classes << 'object-cover'
           when 'center'
             classes << 'object-none object-center'
+          when 'top'
+            classes << 'object-none object-top'
+          when 'bottom'
+            classes << 'object-none object-bottom'
+          when 'left'
+            classes << 'object-none object-left'
+          when 'right'
+            classes << 'object-none object-right'
           when 'scaletofill', 'scale_to_fill'
             classes << 'object-fill'
           else

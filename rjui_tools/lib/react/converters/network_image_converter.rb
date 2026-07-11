@@ -39,14 +39,23 @@ module RjuiTools
         def build_class_name
           classes = [super]
 
-          # Content mode to object-fit
+          # Content mode to object-fit. Keys cover the canonical
+          # attribute_definitions enum (fit/fill/center/top/... /AspectFit)
+          # plus the iOS/Android long forms.
           content_mode = attributes['contentMode'] || attributes['scaleType']
           if content_mode
             mode_map = {
+              'fit' => 'object-contain',
+              'fill' => 'object-cover',
+              'center' => 'object-none object-center',
+              'Center' => 'object-none object-center',
+              'top' => 'object-none object-top',
+              'bottom' => 'object-none object-bottom',
+              'left' => 'object-none object-left',
+              'right' => 'object-none object-right',
               'scaleAspectFill' => 'object-cover',
               'scaleAspectFit' => 'object-contain',
               'scaleToFill' => 'object-fill',
-              'center' => 'object-none',
               'centerCrop' => 'object-cover',
               'fitCenter' => 'object-contain',
               'fitXY' => 'object-fill',
@@ -86,11 +95,22 @@ module RjuiTools
           content_mode = attributes['contentMode'] || attributes['scaleType']
           return '' unless content_mode
 
+          # Normalize the canonical enum (fit/fill/center/top/.../AspectFit)
+          # and the iOS/Android long forms into the NetworkImageProps union
+          # ('cover' | 'contain' | 'fill' | 'none' | 'scaleDown') — the
+          # template contract must accept every value emitted here.
           mode_map = {
+            'fit' => 'contain',
+            'fill' => 'cover',
+            'center' => 'none',
+            'Center' => 'none',
+            'top' => 'none',
+            'bottom' => 'none',
+            'left' => 'none',
+            'right' => 'none',
             'scaleAspectFill' => 'cover',
             'scaleAspectFit' => 'contain',
             'scaleToFill' => 'fill',
-            'center' => 'none',
             'centerCrop' => 'cover',
             'fitCenter' => 'contain',
             'fitXY' => 'fill',

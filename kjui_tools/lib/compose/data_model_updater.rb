@@ -24,6 +24,14 @@ module KjuiTools
       end
 
       def update_data_models(files_to_update = nil)
+        # Uniqueness is a project-wide invariant, so check the full glob
+        # even on incremental (files_to_update) runs.
+        all_json_files = Dir.glob(File.join(@layouts_dir, '**/*.json')).reject do |file|
+          # Skip Resources and Styles folders (styles don't need data models)
+          file.include?('/Resources/') || file.include?('/Styles/')
+        end
+        ensure_unique_layout_basenames!(all_json_files)
+
         # If specific files provided, only update those
         if files_to_update && !files_to_update.empty?
           puts "  Updating data models for #{files_to_update.length} modified files..."
@@ -31,17 +39,35 @@ module KjuiTools
             process_json_file(json_file)
           end
         else
-          # Process all JSON files in Layouts directory but exclude Resources and Styles folders
-          json_files = Dir.glob(File.join(@layouts_dir, '**/*.json')).reject do |file|
-            # Skip Resources and Styles folders (styles don't need data models)
-            file.include?('/Resources/') || file.include?('/Styles/')
-          end
-
-          puts "  Updating data models for #{json_files.length} files..."
-          json_files.each do |json_file|
+          puts "  Updating data models for #{all_json_files.length} files..."
+          all_json_files.each do |json_file|
             process_json_file(json_file)
           end
         end
+      end
+
+      # Data models are written as <Basename>Data.kt into a single flat
+      # package, so layout basenames must be unique project-wide. A silent
+      # last-write-wins overwrite corrupts the earlier screen's Data model,
+      # so duplicates abort the build. Mirrors the identical check in
+      # rjui/sjui.
+      def ensure_unique_layout_basenames!(json_files)
+        duplicates = json_files.group_by { |f| File.basename(f) }
+                               .select { |_, files| files.size > 1 }
+        return if duplicates.empty?
+
+        details = duplicates.map do |base, files|
+          rels = files.map { |f| f.sub(%r{\A#{Regexp.escape(@layouts_dir)}/?}, '') }.sort
+          "  #{base}: #{rels.join(', ')}"
+        end
+        abort(
+          "ERROR: duplicate layout file name(s) detected.\n" \
+          "Data models are generated as <Name>Data files into a single directory/package " \
+          "on every platform (TypeScript/Swift/Kotlin), so layout basenames must be unique " \
+          "project-wide even across subdirectories — otherwise the last one processed " \
+          "silently overwrites the others. Rename one file of each pair (and its references):\n" +
+          details.join("\n")
+        )
       end
 
       private

@@ -287,15 +287,26 @@ module RjuiTools
         lucide_import = lucide_icons.empty? ? '' :
                         "\nimport { #{lucide_icons.join(', ')} } from 'lucide-react';"
 
+        # Determined early because the Data import shape depends on it:
+        # data-consuming components also import the createXxxData factory
+        # for the Partial-merge call convention (see props emission below).
+        uses_data = jsx_content.match?(/\bdata\./) || !focus_fields.empty?
+
         # Generate Data type import (for TypeScript)
         data_import = ''
         if @config['typescript']
-          data_import = "\nimport type { #{name}Data } from '@/generated/data/#{name}Data';"
+          data_import = if uses_data
+                          "\nimport { type #{name}Data, create#{name}Data } from '@/generated/data/#{name}Data';"
+                        else
+                          "\nimport type { #{name}Data } from '@/generated/data/#{name}Data';"
+                        end
           # Also import cell Data types for Collections
           cell_types = extract_collection_cell_types(json)
           cell_types.each do |cell_type|
             data_import += "\nimport type { #{cell_type}Data } from '@/generated/data/#{cell_type}Data';"
           end
+        elsif uses_data
+          data_import = "\nimport { create#{name}Data } from '@/generated/data/#{name}Data';"
         end
 
         # Generate imports for extension components
@@ -353,14 +364,26 @@ module RjuiTools
         end
 
         # Generate data-based props interface and signature.
-        # A layout with no bindings (static partials like a logo header)
-        # never reads `data` — include sites render it as `<Name />` with no
-        # props, so a required `data` prop would make the generated files
-        # inconsistent with each other (TS2741). Keep the prop for call-site
-        # compatibility (pages/cells pass it) but make it optional.
-        uses_data = jsx_content.match?(/\bdata\./) || !focus_fields.empty?
+        # Call convention (rjui-include-data-partial-call-convention-missing):
+        # `data` is optional at every call site — bare includes render
+        # `<Name />`, data-passing includes render `<Name data={{...}} />`
+        # with a Partial, and pages/cells pass the full object. A
+        # data-consuming component merges the prop over its createXxxData()
+        # defaults so every member is present for the body's reads.
         props_interface = generate_data_props_interface(name, uses_data)
-        props_sig = @config['typescript'] ? "{ data }: #{name}Props" : '{ data }'
+        props_sig =
+          if uses_data
+            @config['typescript'] ? "{ data: dataProp }: #{name}Props" : '{ data: dataProp }'
+          else
+            @config['typescript'] ? "{ data }: #{name}Props" : '{ data }'
+          end
+        data_merge_declaration =
+          if uses_data
+            type_annotation = @config['typescript'] ? ": #{name}Data" : ''
+            "\n  const data#{type_annotation} = { ...create#{name}Data(), ...dataProp };"
+          else
+            ''
+          end
 
         marker_source = name.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
                             .gsub(/([a-z\d])([A-Z])/, '\1_\2')
@@ -376,7 +399,7 @@ module RjuiTools
           #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{configuration_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}
 
           #{props_interface if @config['typescript']}
-          export const #{name} = (#{props_sig}) => {#{state_declarations}#{focus_declarations}#{landscape_declaration}#{string_manager_declaration}
+          export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{landscape_declaration}#{string_manager_declaration}
             return (
           #{jsx_content}
             );
@@ -389,11 +412,12 @@ module RjuiTools
       end
 
       # Generate TypeScript interface for data-based props.
-      # `data` is required only when the component body actually reads it;
-      # binding-less layouts keep it optional so `<Name />` (include sites)
-      # and `<Name data={...} />` (pages, cells) both typecheck.
+      # `data` is always optional: bare include sites render `<Name />`,
+      # data-passing includes provide a Partial that the component merges
+      # over its createXxxData() defaults, and pages/cells pass the full
+      # object (a full XxxData is assignable to Partial<XxxData>).
       def generate_data_props_interface(name, uses_data = true)
-        data_field = uses_data ? "data: #{name}Data;" : "data?: #{name}Data;"
+        data_field = uses_data ? "data?: Partial<#{name}Data>;" : "data?: #{name}Data;"
         <<~TS
           interface #{name}Props {
             #{data_field}

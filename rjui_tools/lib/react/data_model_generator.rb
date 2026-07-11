@@ -34,9 +34,36 @@ module RjuiTools
             file.include?(File.join(@layouts_dir, 'Styles'))
         end
 
+        ensure_unique_layout_basenames!(json_files)
+
         json_files.each do |json_file|
           process_json_file(json_file)
         end
+      end
+
+      # Data models are written as <Basename>Data.<ext> into a single flat
+      # directory on EVERY platform (ts here, swift/kt on sjui/kjui — Swift
+      # has no directory namespacing at all), so layout basenames must be
+      # unique project-wide. A silent last-write-wins overwrite corrupts the
+      # earlier screen's Data model (rjui-cell-data-model-name-collision-
+      # across-screens), so duplicates abort the build.
+      def ensure_unique_layout_basenames!(json_files)
+        duplicates = json_files.group_by { |f| File.basename(f) }
+                               .select { |_, files| files.size > 1 }
+        return if duplicates.empty?
+
+        details = duplicates.map do |base, files|
+          rels = files.map { |f| f.sub(%r{\A#{Regexp.escape(@layouts_dir)}/?}, '') }.sort
+          "  #{base}: #{rels.join(', ')}"
+        end
+        abort(
+          "ERROR: duplicate layout file name(s) detected.\n" \
+          "Data models are generated as <Name>Data files into a single directory/package " \
+          "on every platform (TypeScript/Swift/Kotlin), so layout basenames must be unique " \
+          "project-wide even across subdirectories — otherwise the last one processed " \
+          "silently overwrites the others. Rename one file of each pair (and its references):\n" +
+          details.join("\n")
+        )
       end
 
       private

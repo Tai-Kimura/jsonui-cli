@@ -7,10 +7,13 @@
 import React, { useState, useEffect } from 'react';
 
 interface NetworkImageProps {
+  id?: string;
   src?: string;
   alt?: string;
   className?: string;
-  contentMode?: 'cover' | 'contain' | 'fill' | 'none' | 'scaleDown';
+  // 'fit' is the canonical JsonUI alias for 'contain' — the converter
+  // normalizes it, but accept it here too so the contract can't drift.
+  contentMode?: 'cover' | 'contain' | 'fill' | 'none' | 'scaleDown' | 'fit';
   placeholder?: string;
   errorImage?: string;
   onLoad?: () => void;
@@ -18,6 +21,7 @@ interface NetworkImageProps {
 }
 
 export const NetworkImage: React.FC<NetworkImageProps> = ({
+  id,
   src,
   alt = '',
   className = '',
@@ -68,6 +72,7 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
     fill: 'object-fill',
     none: 'object-none',
     scaleDown: 'object-scale-down',
+    fit: 'object-contain',
   };
 
   const objectFitClass = objectFitMap[contentMode] || 'object-cover';
@@ -75,6 +80,7 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
   if (loading && placeholder) {
     return (
       <img
+        id={id}
         src={placeholder}
         alt={alt}
         className={`${className} ${objectFitClass}`}
@@ -84,13 +90,13 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
 
   if (loading) {
     return (
-      <div className={`${className} animate-pulse bg-gray-200`} />
+      <div id={id} className={`${className} animate-pulse bg-gray-200`} />
     );
   }
 
   if (error && !errorImage) {
     return (
-      <div className={`${className} bg-gray-100 flex items-center justify-center`}>
+      <div id={id} className={`${className} bg-gray-100 flex items-center justify-center`}>
         <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
@@ -100,6 +106,7 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
 
   return (
     <img
+      id={id}
       src={imageUrl || ''}
       alt={alt}
       className={`${className} ${objectFitClass}`}

@@ -321,4 +321,20 @@ RSpec.describe RjuiTools::React::DataModelGenerator, 'focus-state value bindings
     expect(bindings['noteInputIsFocused']).to eq({ type: 'boolean', defaultValue: false })
     expect(bindings.keys.grep(/IsFocused/).size).to eq(2)
   end
+
+  describe '#ensure_unique_layout_basenames! (regression: rjui-cell-data-model-name-collision-across-screens)' do
+    let(:generator) { described_class.new }
+
+    it 'aborts when two layouts share a basename across subdirectories' do
+      files = ['/x/Layouts/dashboard/breakdown_row.json', '/x/Layouts/sales/breakdown_row.json']
+      expect { generator.send(:ensure_unique_layout_basenames!, files) }
+        .to raise_error(SystemExit)
+        .and output(/duplicate layout file name.*breakdown_row\.json/m).to_stderr
+    end
+
+    it 'stays silent for unique basenames' do
+      files = ['/x/Layouts/dashboard/breakdown_row.json', '/x/Layouts/sales/sales_breakdown_row.json']
+      expect { generator.send(:ensure_unique_layout_basenames!, files) }.not_to raise_error
+    end
+  end
 end

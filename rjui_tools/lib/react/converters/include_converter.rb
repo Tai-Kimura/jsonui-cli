@@ -23,41 +23,46 @@ module RjuiTools
           merged_data.merge!(attributes['shared_data']) if attributes['shared_data'].is_a?(Hash)
           merged_data.merge!(json['data']) if json['data'].is_a?(Hash)
 
-          # Build props
-          props = build_props(merged_data)
+          # The partial receives a single `data` prop (Partial<XxxData> —
+          # the component merges it over its createXxxData() defaults), so
+          # the include-site map becomes one object literal, not individual
+          # props. Bindings resolve through add_viewmodel_data_prefix like
+          # every built-in converter (they reference the PARENT's data).
+          data_prop = build_data_prop(merged_data)
 
           id_attr = build_id_attr
 
-          if props.empty?
+          if data_prop.empty?
             "#{indent_str(indent)}<#{component_name}#{id_attr} />"
           else
-            "#{indent_str(indent)}<#{component_name}#{id_attr} #{props} />"
+            "#{indent_str(indent)}<#{component_name}#{id_attr} #{data_prop} />"
           end
         end
 
         private
 
-        def build_props(data)
+        def build_data_prop(data)
           return '' if data.empty?
 
-          props = data.map do |key, value|
-            formatted_value = format_prop_value(value)
-            "#{key}={#{formatted_value}}"
+          pairs = data.map do |key, value|
+            "#{key}: #{format_prop_value(value)}"
           end
 
-          props.join(' ')
+          "data={{ #{pairs.join(', ')} }}"
         end
 
         def format_prop_value(value)
           case value
           when String
-            if value.match?(/@\{([^}]+)\}/)
-              # @{xxx} binding -> direct reference
-              value.gsub(/@\{([^}]+)\}/) do
-                var_name = ::Regexp.last_match(1)
-                # Remove 'this.' prefix if present
-                var_name.gsub(/^this\./, '')
+            if (m = value.match(/\A@\{([^}]+)\}\z/))
+              # Whole-value binding -> parent data reference
+              add_viewmodel_data_prefix(m[1].gsub(/^this\./, ''))
+            elsif value.match?(/@\{([^}]+)\}/)
+              # Interpolated binding(s) -> template literal
+              interpolated = value.gsub(/@\{([^}]+)\}/) do
+                "${#{add_viewmodel_data_prefix(::Regexp.last_match(1).gsub(/^this\./, ''))}}"
               end
+              "`#{interpolated.gsub('`') { '\\`' }}`"
             else
               # Regular string
               "\"#{value}\""

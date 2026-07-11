@@ -630,4 +630,20 @@ RSpec.describe SjuiTools::SwiftUI::DataModelUpdater do
       expect(result[0]['class']).to eq('((Event) -> Void)?')
     end
   end
+
+  describe '#ensure_unique_layout_basenames! (parity with rjui-cell-data-model-name-collision-across-screens)' do
+    let(:updater) { described_class.new }
+
+    it 'aborts when two layouts share a basename across subdirectories' do
+      files = ['/x/Layouts/dashboard/breakdown_row.json', '/x/Layouts/sales/breakdown_row.json']
+      expect { updater.send(:ensure_unique_layout_basenames!, files) }
+        .to raise_error(SystemExit)
+        .and output(/duplicate layout file name.*breakdown_row\.json/m).to_stderr
+    end
+
+    it 'stays silent for unique basenames' do
+      files = ['/x/Layouts/dashboard/breakdown_row.json', '/x/Layouts/sales/sales_breakdown_row.json']
+      expect { updater.send(:ensure_unique_layout_basenames!, files) }.not_to raise_error
+    end
+  end
 end

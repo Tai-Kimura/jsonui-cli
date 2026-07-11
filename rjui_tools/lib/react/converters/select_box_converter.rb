@@ -112,10 +112,15 @@ module RjuiTools
           hint_option = hint ? "\n#{indent_str(indent + 2)}<option value=\"\">#{hint_text}</option>" : ''
           class_attr = build_select_class_attr(class_name)
 
+          # Canonical items are a plain string array ([String] — matches
+          # SwiftJsonUI SelectBoxView's `items: [String]`); {value,text}
+          # object elements stay supported as the web-side extended form.
           <<~JSX.chomp
             #{indent_str(indent)}<select#{id_attr} #{class_attr}#{value_attr}#{on_change}#{disabled_attr}#{style_attr}#{testid_attr}#{tag_attr}>#{hint_option}
             #{indent_str(indent + 2)}{#{items_prop}?.map((item) => (
-            #{indent_str(indent + 4)}<option key={item.value || item.id} value={item.value || item.id}>{item.text || item.label}</option>
+            #{indent_str(indent + 4)}typeof item === 'object' && item !== null
+            #{indent_str(indent + 6)}? <option key={item.value || item.id} value={item.value || item.id}>{item.text || item.label}</option>
+            #{indent_str(indent + 6)}: <option key={String(item)} value={String(item)}>{String(item)}</option>
             #{indent_str(indent + 2)}))}
             #{indent_str(indent)}</select>
           JSX
