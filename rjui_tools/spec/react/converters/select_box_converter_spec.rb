@@ -35,20 +35,31 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
       it 'generates dynamic options mapping' do
         converter = create_converter({ 'class' => 'SelectBox', 'items' => '@{options}' })
         result = converter.convert
-        expect(result).to include('{data.options?.map((item) =>')
-        expect(result).to include('{item.text || item.label}')
+        expect(result).to include('{data.options?.map((item) => {')
+        expect(result).to include('{opt.text || opt.label}')
       end
 
-      # Regression: rjui-selectbox-dynamic-items-assumes-object-shape —
+      # Regression: rjui-selectbox-dynamic-items-assumes-object-shape +
+      # rjui-selectbox-dynamic-object-branch-ts2339-on-string-items —
       # canonical items are a plain string array ([String], matching
       # SwiftJsonUI SelectBoxView), so the option row must branch on the
-      # element shape instead of assuming {value, text} objects.
-      it 'supports canonical string-array items via a typeof branch' do
+      # element shape, AND the branch must go through a widening cast so
+      # string[] declarations don't narrow the object branch to `never`.
+      it 'supports canonical string-array items via a widened typeof branch' do
         converter = create_converter({ 'class' => 'SelectBox', 'items' => '@{sortOptions}' })
         result = converter.convert
-        expect(result).to include("typeof item === 'object' && item !== null")
-        expect(result).to include('<option key={String(item)} value={String(item)}>{String(item)}</option>')
-        expect(result).to include('<option key={item.value || item.id} value={item.value || item.id}>{item.text || item.label}</option>')
+        expect(result).to include('const opt = item as string | number | { value?: string | number; id?: string | number; text?: string; label?: string };')
+        expect(result).to include("typeof opt === 'object' && opt !== null")
+        expect(result).to include('<option key={String(opt)} value={String(opt)}>{String(opt)}</option>')
+        expect(result).to include('<option key={opt.value || opt.id} value={opt.value || opt.id}>{opt.text || opt.label}</option>')
+        expect(result).not_to include('item.value')
+      end
+
+      it 'omits the TS cast in JavaScript mode' do
+        converter = create_converter({ 'class' => 'SelectBox', 'items' => '@{sortOptions}' }, { 'use_tailwind' => true, 'typescript' => false })
+        result = converter.convert
+        expect(result).to include('const opt = item;')
+        expect(result).not_to include(' as string')
       end
     end
 

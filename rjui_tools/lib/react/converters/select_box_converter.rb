@@ -115,13 +115,24 @@ module RjuiTools
           # Canonical items are a plain string array ([String] — matches
           # SwiftJsonUI SelectBoxView's `items: [String]`); {value,text}
           # object elements stay supported as the web-side extended form.
+          # The widening cast keeps the runtime dual-shape branch compatible
+          # with ANY declared element type — on string[] items a bare
+          # typeof-narrowing would reduce the object branch to `never` and
+          # every property access to TS2339.
+          opt_cast =
+            if config['typescript'] != false
+              ' as string | number | { value?: string | number; id?: string | number; text?: string; label?: string }'
+            else
+              ''
+            end
           <<~JSX.chomp
             #{indent_str(indent)}<select#{id_attr} #{class_attr}#{value_attr}#{on_change}#{disabled_attr}#{style_attr}#{testid_attr}#{tag_attr}>#{hint_option}
-            #{indent_str(indent + 2)}{#{items_prop}?.map((item) => (
-            #{indent_str(indent + 4)}typeof item === 'object' && item !== null
-            #{indent_str(indent + 6)}? <option key={item.value || item.id} value={item.value || item.id}>{item.text || item.label}</option>
-            #{indent_str(indent + 6)}: <option key={String(item)} value={String(item)}>{String(item)}</option>
-            #{indent_str(indent + 2)}))}
+            #{indent_str(indent + 2)}{#{items_prop}?.map((item) => {
+            #{indent_str(indent + 4)}const opt = item#{opt_cast};
+            #{indent_str(indent + 4)}return typeof opt === 'object' && opt !== null
+            #{indent_str(indent + 6)}? <option key={opt.value || opt.id} value={opt.value || opt.id}>{opt.text || opt.label}</option>
+            #{indent_str(indent + 6)}: <option key={String(opt)} value={String(opt)}>{String(opt)}</option>;
+            #{indent_str(indent + 2)}})}
             #{indent_str(indent)}</select>
           JSX
         end

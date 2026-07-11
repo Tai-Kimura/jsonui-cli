@@ -8,13 +8,13 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "da6b7dd718f28e187508382aaab0e3f072af622b3885a9e307e9b296c2669fa0",
+  "generatedFrom": "cdc350c994bd16de95ca5a62139b90dbe9c06adcdc005833eed37e156307d428",
   "counts": {
-    "fixtures": 643,
+    "fixtures": 644,
     "assertable": 25,
-    "visual": 599,
+    "visual": 600,
     "interactive": 19,
-    "skipped": 165,
+    "skipped": 166,
     "promoted": {
       "callback": 12
     }
@@ -12488,6 +12488,28 @@
       "promotedFrom": null
     },
     {
+      "id": "Radio/selectedValue__static",
+      "component": "Radio",
+      "attribute": "selectedValue",
+      "case": "static",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": "selectedValue",
+      "aliasOf": null,
+      "value": "sample",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Radio/selectedValue__static.layout.json",
+      "test": "fixtures/Radio/selectedValue__static.test.json",
+      "state": null,
+      "promotedFrom": null
+    },
+    {
       "id": "CheckBox/label__static",
       "component": "CheckBox",
       "attribute": "label",
@@ -14931,6 +14953,11 @@
     },
     {
       "component": "Collection",
+      "attribute": "onValueChange",
+      "reason": "callback"
+    },
+    {
+      "component": "Radio",
       "attribute": "onValueChange",
       "reason": "callback"
     },
