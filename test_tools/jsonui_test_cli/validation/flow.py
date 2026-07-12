@@ -8,6 +8,7 @@ from .models import ValidationMessage, ValidationResult
 from .step import StepValidator
 from .launch import validate_launch
 from .platform import validate_platform_field
+from .mock import find_mock_index, validate_mock_reference
 
 
 class FlowTestValidator:
@@ -34,6 +35,14 @@ class FlowTestValidator:
         # Validate test-level platform if present (flow tests have no case objects)
         if "platform" in data:
             validate_platform_field(data["platform"], f"{path}.platform", result)
+
+        # Validate root-level mock scenario set. File-level mocks are applied
+        # before the first launch by the iOS/Android/Web drivers (parity with
+        # screen tests); previously this block passed validation but was
+        # silently ignored at runtime.
+        if "mocks" in data:
+            index = find_mock_index(self._test_file_path)
+            validate_mock_reference(data["mocks"], f"{path}.mocks", result, index)
 
         # Validate launch configuration if present
         if "launch" in data:

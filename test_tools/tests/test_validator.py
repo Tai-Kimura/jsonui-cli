@@ -580,6 +580,52 @@ class TestFlowTestSetupTeardown:
         result = self.validator.validate_data(data)
         assert result.is_valid
 
+    def test_flow_with_file_level_mocks_valid(self):
+        """Flow file-level mocks: a well-formed map validates (drivers apply it).
+
+        Regression: test-flow-file-level-mocks-silently-ignored — file-level
+        mocks used to pass validation but be silently dropped at runtime. Now
+        the drivers apply them and the validator checks the map shape.
+        """
+        data = {
+            "type": "flow",
+            "metadata": {"name": "flow_with_mocks"},
+            "mocks": {"listHistory": "real_id"},
+            "steps": [
+                {"screen": "home", "action": "tap", "id": "start_button"}
+            ]
+        }
+        result = self.validator.validate_data(data)
+        assert result.is_valid
+
+    def test_flow_file_level_mocks_non_string_scenario_fails(self):
+        """Flow file-level mocks with a non-string scenario is an error."""
+        data = {
+            "type": "flow",
+            "metadata": {"name": "flow_bad_mocks"},
+            "mocks": {"listHistory": 123},
+            "steps": [
+                {"screen": "home", "action": "tap", "id": "start_button"}
+            ]
+        }
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("scenario name must be a string" in e.message for e in result.errors)
+
+    def test_flow_file_level_mocks_non_object_fails(self):
+        """Flow file-level mocks that is not an object is an error."""
+        data = {
+            "type": "flow",
+            "metadata": {"name": "flow_bad_mocks_type"},
+            "mocks": ["listHistory"],
+            "steps": [
+                {"screen": "home", "action": "tap", "id": "start_button"}
+            ]
+        }
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("must be an object of operationId" in e.message for e in result.errors)
+
     def test_flow_with_checkpoints(self):
         """Test flow test with checkpoints."""
         data = {
