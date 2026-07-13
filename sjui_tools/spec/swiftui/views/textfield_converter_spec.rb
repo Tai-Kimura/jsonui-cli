@@ -293,6 +293,57 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextFieldConverter do
       end
     end
 
+    # Regression: sjui-textfield-contenttype-newpassword-not-mapped — the
+    # declared SSoT attribute was silently degraded to .none.
+    context 'with contentType newPassword' do
+      let(:component) do
+        {
+          'type' => 'TextField',
+          'hint' => 'New password',
+          'contentType' => 'newPassword'
+        }
+      end
+
+      it 'adds newPassword textContentType' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('.textContentType(.newPassword)')
+      end
+    end
+
+    context 'with contentType oneTimeCode' do
+      let(:component) do
+        {
+          'type' => 'TextField',
+          'hint' => 'Code',
+          'contentType' => 'oneTimeCode'
+        }
+      end
+
+      it 'adds oneTimeCode textContentType' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('.textContentType(.oneTimeCode)')
+      end
+    end
+
+    context 'with unknown contentType' do
+      let(:component) do
+        {
+          'type' => 'TextField',
+          'hint' => 'X',
+          'contentType' => 'notARealType'
+        }
+      end
+
+      it 'warns instead of silently dropping to .none' do
+        converter = described_class.new(component)
+        expect { converter.convert }.to output(/unknown contentType 'notARealType'/).to_stdout
+      end
+    end
+
     context 'with disabled state' do
       let(:component) do
         {

@@ -305,23 +305,42 @@ module SjuiTools
           end
         end
 
+        # UITextContentType mapping — vocabulary kept in step with rjui's
+        # map_content_type (autocomplete) and kjui's keyboard handling.
+        # Unknown values warn instead of silently degrading to .none
+        # (sjui-textfield-contenttype-newpassword-not-mapped).
         def map_content_type(type)
-          case type
+          case type.to_s.downcase
           when 'username'
             '.username'
           when 'password'
             '.password'
-          when 'email'
+          when 'newpassword'
+            '.newPassword'
+          when 'onetimecode'
+            '.oneTimeCode'
+          when 'email', 'emailaddress'
             '.emailAddress'
           when 'name'
             '.name'
-          when 'tel'
+          when 'givenname'
+            '.givenName'
+          when 'familyname'
+            '.familyName'
+          when 'tel', 'telephonenumber'
             '.telephoneNumber'
-          when 'streetAddress'
+          when 'streetaddress'
             '.streetAddressLine1'
-          when 'postalCode'
+          when 'postalcode'
             '.postalCode'
+          when 'country'
+            '.countryName'
+          when 'creditcardnumber'
+            '.creditCardNumber'
+          when 'url'
+            '.URL'
           else
+            puts "Warning: unknown contentType '#{type}' — emitting .textContentType(.none); add a mapping if this is a canonical value"
             '.none'
           end
         end
