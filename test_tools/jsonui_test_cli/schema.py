@@ -153,9 +153,13 @@ SUPPORTED_ACTIONS = {
         "optional": []
     },
     "addMedia": {
-        "description": "Insert media files into the device gallery (Android only)",
+        "description": "Provide media/files to the app: Android inserts into the device "
+                       "gallery; Web sets the files on a file input (step 'id' targets the "
+                       "input or an element containing one; without 'id', the page's first "
+                       "input[type=file]). Paths resolve relative to the test file. "
+                       "Not supported on iOS.",
         "required": ["paths"],
-        "optional": []
+        "optional": ["id", "timeout"]
     },
     "setMocks": {
         "description": "Switch API mock scenarios (map of operationId -> scenario name). "
@@ -175,6 +179,15 @@ SUPPORTED_ACTIONS = {
                        "Web: swaps viewport width/height in mobile-emulation contexts, else no-op with a warning)",
         "required": ["orientation"],
         "optional": []
+    },
+    "emitHook": {
+        "description": "Call a browser-side hook the app registered on "
+                       "window.__jsonuiTestHooks (e.g. an RTDB mock emitter): "
+                       "hookArgs are passed positionally. Web only; iOS/Android "
+                       "no-op with a warning — gate dependent steps with "
+                       "'when.platform: web'.",
+        "required": ["name"],
+        "optional": ["hookArgs"]
     }
 }
 
@@ -220,6 +233,13 @@ SUPPORTED_ASSERTIONS = {
         "description": "Visual regression: compare capture against a named baseline",
         "required": ["name"],
         "optional": ["cropId", "threshold", "timeout"]
+    },
+    "openedUrl": {
+        "description": "Assert the most recent window.open call (recorded by the "
+                       "runner's spy) — 'equals' or 'contains' is required. Web only; "
+                       "gate with 'when.platform: web' in cross-platform tests.",
+        "required": [],
+        "optional": ["equals", "contains", "timeout"]
     }
 }
 
@@ -283,6 +303,8 @@ VALID_STEP_KEYS = [
     "width", "height", "orientation",
     # setMocks: switch mock scenarios mid-flow (map of operationId -> scenario)
     "mocks",
+    # emitHook: positional arguments for the registered browser-side hook
+    "hookArgs",
     # Screenshot assertion parameters
     "cropId", "threshold",
     # File reference step keys (for flow tests)
@@ -334,5 +356,6 @@ PARAMETER_DESCRIPTIONS = {
     "orientation": "Target orientation for setOrientation: portrait or landscape",
     "paths": "Media file paths for addMedia (relative to test file)",
     "cropId": "Element id whose bounding box crops the screenshot before comparing",
-    "threshold": "Required similarity percentage for screenshot assertion (0-100, default 98.0)"
+    "threshold": "Required similarity percentage for screenshot assertion (0-100, default 98.0)",
+    "hookArgs": "Positional arguments for emitHook, passed to the registered browser-side hook"
 }

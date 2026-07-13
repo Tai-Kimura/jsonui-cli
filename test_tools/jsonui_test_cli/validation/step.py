@@ -578,6 +578,8 @@ class StepValidator:
             self._validate_set_viewport_action(step, path, result)
         elif action == "setOrientation":
             self._validate_set_orientation_action(step, path, result)
+        elif action == "emitHook":
+            self._validate_emit_hook_action(step, path, result)
 
     def _validate_repeat_action(self, step: dict, path: str, result: ValidationResult):
         """Validate a repeat control step."""
@@ -697,6 +699,31 @@ class StepValidator:
                 message="'paths' must be an array of non-empty strings"
             ))
 
+    def _validate_emit_hook_action(self, step: dict, path: str, result: ValidationResult):
+        """Validate an emitHook action (web-only; no-op+warn on iOS/Android)."""
+        name = step.get("name")
+        if name is not None and (not isinstance(name, str) or not name.strip()):
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="'name' must be a non-empty hook name string"
+            ))
+
+        if "hookArgs" in step and not isinstance(step["hookArgs"], list):
+            result.errors.append(ValidationMessage(
+                path=path,
+                message=f"'hookArgs' must be an array, got: {type(step['hookArgs']).__name__}"
+            ))
+
+        # Web-only step in a cross-platform file: nudge toward a platform gate
+        # so the mobile drivers' no-op warning is intentional, not a surprise.
+        if "when" not in step:
+            result.warnings.append(ValidationMessage(
+                path=path,
+                message="emitHook is web-only (no-op with a warning on iOS/Android); "
+                        "gate it with 'when': {'platform': 'web'} in cross-platform tests",
+                level="warning"
+            ))
+
     def _validate_assertion(self, step: dict, path: str, result: ValidationResult):
         """Validate an assertion step."""
         assertion = step["assert"]
@@ -733,6 +760,21 @@ class StepValidator:
                 result.errors.append(ValidationMessage(
                     path=path,
                     message="Text assertion must have 'equals' or 'contains'"
+                ))
+
+        # openedUrl: web-only assert against the runner's window.open spy
+        if assertion == "openedUrl":
+            if "equals" not in step and "contains" not in step:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="openedUrl assertion must have 'equals' or 'contains'"
+                ))
+            if "when" not in step:
+                result.warnings.append(ValidationMessage(
+                    path=path,
+                    message="openedUrl is web-only (the mobile drivers reject it); "
+                            "gate it with 'when': {'platform': 'web'} in cross-platform tests",
+                    level="warning"
                 ))
 
         # For count assertion, equals must be a non-negative integer

@@ -4,7 +4,6 @@
   "title": "JsonUI Flow Test",
   "description": "Schema for multi-screen flow test cases (N:1 mapping with layout JSONs)",
   "type": "object",
-
   "definitions": {
     "fileStep": {
       "type": "object",
@@ -21,7 +20,9 @@
         },
         "cases": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "List of test case names to run (optional)"
         },
         "args": {
@@ -29,9 +30,13 @@
           "description": "Arguments overriding the screen test's default args for @{varName} substitution",
           "additionalProperties": true
         },
-        "when": { "$ref": "actions.schema.json#/definitions/condition" }
+        "when": {
+          "$ref": "actions.schema.json#/definitions/condition"
+        }
       },
-      "required": ["file"],
+      "required": [
+        "file"
+      ],
       "additionalProperties": false
     },
     "blockStep": {
@@ -53,13 +58,20 @@
         },
         "steps": {
           "type": "array",
-          "items": { "$ref": "actions.schema.json#/definitions/step" },
+          "items": {
+            "$ref": "actions.schema.json#/definitions/step"
+          },
           "minItems": 1,
           "description": "Action/assertion steps in this block (no nested blocks or file references; no screen prefix)"
         },
-        "when": { "$ref": "actions.schema.json#/definitions/condition" }
+        "when": {
+          "$ref": "actions.schema.json#/definitions/condition"
+        }
       },
-      "required": ["block", "steps"],
+      "required": [
+        "block",
+        "steps"
+      ],
       "additionalProperties": false
     },
     "inlineStep": {
@@ -73,36 +85,45 @@
               "description": "Screen identifier (matches source layout name without extension)"
             }
           },
-          "required": ["screen"]
+          "required": [
+            "screen"
+          ]
         },
         {
           "oneOf": [
-            { "$ref": "actions.schema.json#/definitions/action" },
-            { "$ref": "actions.schema.json#/definitions/assertion" }
+            {
+              "$ref": "actions.schema.json#/definitions/action"
+            },
+            {
+              "$ref": "actions.schema.json#/definitions/assertion"
+            }
           ]
         }
       ]
     },
     "flowStep": {
       "oneOf": [
-        { "$ref": "#/definitions/fileStep" },
-        { "$ref": "#/definitions/blockStep" },
-        { "$ref": "#/definitions/inlineStep" }
+        {
+          "$ref": "#/definitions/fileStep"
+        },
+        {
+          "$ref": "#/definitions/blockStep"
+        },
+        {
+          "$ref": "#/definitions/inlineStep"
+        }
       ]
     }
   },
-
   "properties": {
     "$schema": {
       "type": "string",
       "description": "Reference to this schema"
     },
-
     "type": {
       "const": "flow",
       "description": "Test type identifier"
     },
-
     "sources": {
       "type": "array",
       "description": "Source files involved in this flow",
@@ -122,12 +143,13 @@
             "description": "Short alias for referencing this screen in steps"
           }
         },
-        "required": ["layout"],
+        "required": [
+          "layout"
+        ],
         "additionalProperties": false
       },
       "minItems": 1
     },
-
     "metadata": {
       "type": "object",
       "description": "Test metadata",
@@ -151,25 +173,37 @@
         },
         "tags": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Tags for filtering tests"
         }
       },
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "additionalProperties": false
     },
-
     "platform": {
       "oneOf": [
         {
           "type": "string",
-          "enum": ["ios", "android", "web", "all"]
+          "enum": [
+            "ios",
+            "android",
+            "web",
+            "all"
+          ]
         },
         {
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["ios", "android", "web"]
+            "enum": [
+              "ios",
+              "android",
+              "web"
+            ]
           },
           "minItems": 1,
           "uniqueItems": true
@@ -178,11 +212,12 @@
       "default": "all",
       "description": "Target platform(s) for this test"
     },
-
     "launch": {
       "$ref": "actions.schema.json#/definitions/launch"
     },
-
+    "mocks": {
+      "$ref": "actions.schema.json#/definitions/mocksScenarioMap"
+    },
     "initialState": {
       "type": "object",
       "description": "Initial application state before flow execution",
@@ -202,26 +237,28 @@
       },
       "additionalProperties": false
     },
-
     "setup": {
       "type": "array",
       "description": "Steps to execute before the flow test",
-      "items": { "$ref": "#/definitions/flowStep" }
+      "items": {
+        "$ref": "#/definitions/flowStep"
+      }
     },
-
     "teardown": {
       "type": "array",
       "description": "Steps to execute after the flow test",
-      "items": { "$ref": "#/definitions/flowStep" }
+      "items": {
+        "$ref": "#/definitions/flowStep"
+      }
     },
-
     "steps": {
       "type": "array",
       "description": "Flow test steps with screen context",
-      "items": { "$ref": "#/definitions/flowStep" },
+      "items": {
+        "$ref": "#/definitions/flowStep"
+      },
       "minItems": 1
     },
-
     "checkpoints": {
       "type": "array",
       "description": "Named checkpoints for debugging and reporting",
@@ -243,17 +280,22 @@
             "description": "Take screenshot at this checkpoint"
           }
         },
-        "required": ["name", "afterStep"],
+        "required": [
+          "name",
+          "afterStep"
+        ],
         "additionalProperties": false
       }
     },
-
     "descriptionFile": {
       "type": "string",
       "description": "Path to external description JSON file (relative to test file)"
     }
   },
-
-  "required": ["type", "metadata", "steps"],
+  "required": [
+    "type",
+    "metadata",
+    "steps"
+  ],
   "additionalProperties": false
 }

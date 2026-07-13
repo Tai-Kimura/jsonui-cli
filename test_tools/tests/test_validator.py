@@ -580,6 +580,72 @@ class TestFlowTestSetupTeardown:
         result = self.validator.validate_data(data)
         assert result.is_valid
 
+    # Regression: test-web-script-step-for-browser-side-hooks — emitHook /
+    # openedUrl are the web-only browser-hook vocabulary (Plan B: limited
+    # API, not a raw script step).
+    def _screen_with_steps(self, steps):
+        return {
+            "type": "screen",
+            "source": {"layout": "layouts/test.json"},
+            "metadata": {"name": "hook_test"},
+            "cases": [{"name": "case", "steps": steps}]
+        }
+
+    def test_emit_hook_valid_with_platform_gate(self):
+        data = self._screen_with_steps([
+            {"action": "emitHook", "name": "rtdb", "hookArgs": ["op-1", "succeeded"],
+             "when": {"platform": "web"}}
+        ])
+        result = self.validator.validate_data(data)
+        assert result.is_valid
+        assert not any("emitHook is web-only" in w.message for w in result.warnings)
+
+    def test_emit_hook_without_gate_warns(self):
+        data = self._screen_with_steps([
+            {"action": "emitHook", "name": "rtdb"}
+        ])
+        result = self.validator.validate_data(data)
+        assert result.is_valid
+        assert any("emitHook is web-only" in w.message for w in result.warnings)
+
+    def test_emit_hook_missing_name_fails(self):
+        data = self._screen_with_steps([
+            {"action": "emitHook", "hookArgs": []}
+        ])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("Missing required parameter 'name'" in e.message for e in result.errors)
+
+    def test_emit_hook_non_array_hook_args_fails(self):
+        data = self._screen_with_steps([
+            {"action": "emitHook", "name": "rtdb", "hookArgs": {"op": 1}}
+        ])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("'hookArgs' must be an array" in e.message for e in result.errors)
+
+    def test_opened_url_requires_matcher(self):
+        data = self._screen_with_steps([
+            {"assert": "openedUrl"}
+        ])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("must have 'equals' or 'contains'" in e.message for e in result.errors)
+
+    def test_opened_url_valid_with_contains(self):
+        data = self._screen_with_steps([
+            {"assert": "openedUrl", "contains": "/files/", "when": {"platform": "web"}}
+        ])
+        result = self.validator.validate_data(data)
+        assert result.is_valid
+
+    def test_add_media_with_target_id_valid(self):
+        data = self._screen_with_steps([
+            {"action": "addMedia", "id": "icon_upload_input", "paths": ["fixtures/icon.png"]}
+        ])
+        result = self.validator.validate_data(data)
+        assert result.is_valid
+
     def test_flow_with_file_level_mocks_valid(self):
         """Flow file-level mocks: a well-formed map validates (drivers apply it).
 

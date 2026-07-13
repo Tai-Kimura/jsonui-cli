@@ -277,6 +277,9 @@
         },
         {
           "$ref": "#/definitions/setOrientationAction"
+        },
+        {
+          "$ref": "#/definitions/emitHookAction"
         }
       ]
     },
@@ -1044,7 +1047,7 @@
             "minLength": 1
           },
           "minItems": 1,
-          "description": "Media file paths (relative to test file). Android only; iOS/Web fail with 'not supported'"
+          "description": "Media file paths (relative to test file). Android: inserted into the device gallery; Web: set on a file input. Not supported on iOS"
         },
         "label": {
           "$ref": "#/definitions/label"
@@ -1054,6 +1057,15 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId",
+          "description": "Web: the file input to target (the input itself, or an element containing one). Omit to use the page's first input[type=file]"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Wait for the target element in ms (Web)"
         }
       },
       "required": [
@@ -1087,6 +1099,9 @@
         },
         {
           "$ref": "#/definitions/screenshotAssertion"
+        },
+        {
+          "$ref": "#/definitions/openedUrlAssertion"
         }
       ]
     },
@@ -1467,6 +1482,83 @@
       "required": [
         "action",
         "orientation"
+      ],
+      "additionalProperties": false
+    },
+    "emitHookAction": {
+      "type": "object",
+      "description": "Call a browser-side hook the app registered on window.__jsonuiTestHooks (e.g. an RTDB mock emitter). Web only; iOS/Android no-op with a warning — gate dependent steps with 'when.platform: web'",
+      "properties": {
+        "action": {
+          "const": "emitHook"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Hook name registered on window.__jsonuiTestHooks"
+        },
+        "hookArgs": {
+          "type": "array",
+          "description": "Positional arguments passed to the hook"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "action",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "openedUrlAssertion": {
+      "type": "object",
+      "description": "Assert the most recent window.open call recorded by the runner's spy. Web only; gate with 'when.platform: web' in cross-platform tests",
+      "properties": {
+        "assert": {
+          "const": "openedUrl"
+        },
+        "equals": {
+          "type": "string",
+          "description": "Exact URL to match"
+        },
+        "contains": {
+          "type": "string",
+          "description": "URL substring to match"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "assert"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "equals"
+          ]
+        },
+        {
+          "required": [
+            "contains"
+          ]
+        }
       ],
       "additionalProperties": false
     }
