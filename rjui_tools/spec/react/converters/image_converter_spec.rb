@@ -101,6 +101,62 @@ RSpec.describe RjuiTools::React::Converters::ImageConverter do
         expect(result).to include('alt="Accessible Image"')
       end
     end
+
+    # Regression: rjui-image-src-bare-name-string-key-collision — a src that
+    # matches a strings.json key must NEVER be resolved through the string
+    # table (the img src silently became UI text the moment the key was
+    # registered), and bare names get a build warning steering to srcName.
+    context 'src string-key collision guard' do
+      it 'never resolves src through the string table and warns on collision' do
+        converter = create_converter({ 'type' => 'Image', 'src' => 'close' })
+        allow(converter).to receive(:convert_string_key)
+          .with('close')
+          .and_return('{StringManager.currentLanguage.reservationsClose}')
+        expect(RjuiTools::Core::Logger).to receive(:warn)
+          .with(/collides with a strings\.json key/)
+        result = converter.convert
+        expect(result).to include('src="close"')
+        expect(result).not_to include('StringManager')
+      end
+
+      it 'warns on a bare name without a key collision' do
+        converter = create_converter({ 'type' => 'Image', 'src' => 'check' })
+        allow(converter).to receive(:convert_string_key).and_return(nil)
+        expect(RjuiTools::Core::Logger).to receive(:warn)
+          .with(/bare name.*srcName/m)
+        result = converter.convert
+        expect(result).to include('src="check"')
+      end
+
+      it 'does not warn for paths, URLs, or bindings' do
+        expect(RjuiTools::Core::Logger).not_to receive(:warn)
+        expect(create_converter({ 'type' => 'Image', 'src' => '/images/close.svg' }).convert).to include('src="/images/close.svg"')
+        expect(create_converter({ 'type' => 'Image', 'src' => 'https://x.test/a.png' }).convert).to include('src="https://x.test/a.png"')
+        expect(create_converter({ 'type' => 'Image', 'src' => '@{imageUrl}' }).convert).to include('src={data.imageUrl}')
+      end
+    end
+
+    # Regression companion: alt is user-visible text, so it resolves
+    # strings.json keys exactly like text/hint.
+    context 'alt string-key resolution' do
+      it 'resolves a registered key to a StringManager reference' do
+        converter = create_converter({ 'type' => 'Image', 'src' => '/i.png', 'alt' => 'hourly_rule_row_locked' })
+        allow(converter).to receive(:convert_string_key)
+          .with('hourly_rule_row_locked')
+          .and_return('{StringManager.currentLanguage.hourlyRuleRowLocked}')
+        result = converter.convert
+        expect(result).to include('alt={StringManager.currentLanguage.hourlyRuleRowLocked}')
+      end
+
+      it 'keeps unregistered literals and empty decorative alt raw' do
+        converter = create_converter({ 'type' => 'Image', 'src' => '/i.png', 'alt' => 'Plain alt' })
+        allow(converter).to receive(:convert_string_key).and_return(nil)
+        expect(converter.convert).to include('alt="Plain alt"')
+
+        decorative = create_converter({ 'type' => 'Image', 'src' => '/i.png', 'alt' => '' })
+        expect(decorative.convert).to include('alt=""')
+      end
+    end
   end
 
   describe '#build_class_name' do

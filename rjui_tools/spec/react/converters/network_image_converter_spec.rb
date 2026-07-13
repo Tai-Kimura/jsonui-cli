@@ -147,6 +147,19 @@ RSpec.describe RjuiTools::React::Converters::NetworkImageConverter do
       end
     end
 
+    # Regression companion (rjui-image-src-bare-name-string-key-collision):
+    # alt resolves strings.json keys on NetworkImage too.
+    context 'alt string-key resolution' do
+      it 'resolves a registered key to a StringManager reference' do
+        converter = create_converter({ 'class' => 'NetworkImage', 'url' => 'https://example.com/i.jpg', 'alt' => 'profile_photo_alt' })
+        allow(converter).to receive(:convert_string_key)
+          .with('profile_photo_alt')
+          .and_return('{StringManager.currentLanguage.profilePhotoAlt}')
+        result = converter.convert
+        expect(result).to include('alt={StringManager.currentLanguage.profilePhotoAlt}')
+      end
+    end
+
     context 'with testId' do
       it 'generates data-testid attribute' do
         converter = create_converter({ 'class' => 'NetworkImage', 'url' => 'https://example.com/image.jpg', 'testId' => 'profile-image' })

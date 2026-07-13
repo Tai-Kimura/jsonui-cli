@@ -23,7 +23,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
   CONVERTERS_DIR = File.expand_path('../../../lib/react/converters', __dir__)
 
   CONSUMED = {
-    'base_converter.rb' => %w[alignBottom alignLeft alignRight alignTop background borderColor borderStyle borderWidth bottomMargin bottomPadding centerHorizontal centerInParent centerVertical className clipToBounds cornerRadius direction enabled endMargin font fontColor fontFamily fontSize fontWeight gravity height hidden id insetHorizontal insets key leftMargin leftPadding margins maxHeight maxWidth minHeight minWidth offsetX offsetY onClick onclick opacity orientation padding paddingBottom paddingEnd paddingLeft paddingRight paddingStart paddingTop paddings propertyName rightMargin rightPadding shadow startMargin tag testId textAlign tintColor topMargin topPadding userInteractionEnabled visibility weight width zIndex],
+    'base_converter.rb' => %w[accessibilityLabel alignBottom alignLeft alignRight alignTop alt background borderColor borderStyle borderWidth bottomMargin bottomPadding centerHorizontal centerInParent centerVertical className clipToBounds cornerRadius direction enabled endMargin font fontColor fontFamily fontSize fontWeight gravity height hidden id insetHorizontal insets key leftMargin leftPadding margins maxHeight maxWidth minHeight minWidth offsetX offsetY onClick onclick opacity orientation padding paddingBottom paddingEnd paddingLeft paddingRight paddingStart paddingTop paddings propertyName rightMargin rightPadding shadow startMargin tag testId textAlign tintColor topMargin topPadding userInteractionEnabled visibility weight width zIndex],
     'blur_converter.rb' => %w[backgroundColor blurRadius cornerRadius effectStyle intensity onClick onclick],
     'button_converter.rb' => %w[cornerRadius disabledBackground disabledFontColor enabled highlightBackground highlightColor href partialAttributes tapBackground text],
     'circle_view_converter.rb' => %w[background backgroundColor borderColor borderStyle borderWidth fillColor onClick onclick shadow strokeColor strokeWidth],
@@ -31,11 +31,11 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'embed_converter.rb' => %w[events id navigationMode params screen],
     'gradient_view_converter.rb' => %w[angle colors cornerRadius direction endPoint gradient gradientDirection gradientType locations onClick onclick orientation startPoint],
     'icon_label_converter.rb' => %w[fontColor fontSize fontWeight icon iconMargin iconOff iconOn iconPosition iconSize iconTintColor icon_off icon_on onClick onclick selected spacing strikethrough text tintColor underline],
-    'image_converter.rb' => %w[accessibilityLabel alt canTap contentMode cornerRadius defaultImage onClick onclick src srcName url],
+    'image_converter.rb' => %w[canTap contentMode cornerRadius defaultImage onClick onclick src srcName url],
     'include_converter.rb' => %w[shared_data],
     'indicator_converter.rb' => %w[borderWidth color halfSpinner height size strokeWidth tintColor width],
     'label_converter.rb' => %w[autoShrink disabledFontColor edgeInset enabled fontSize gravity lineBreakMode lineHeightMultiple lineSpacing lines linkable minimumScaleFactor onClick onclick partialAttributes strikethrough text textAlign underline],
-    'network_image_converter.rb' => %w[accessibilityLabel alt canTap circle circleImage contentMode cornerRadius defaultImage errorImage imageUrl onClick onclick placeholder scaleType src url],
+    'network_image_converter.rb' => %w[canTap circle circleImage contentMode cornerRadius defaultImage errorImage imageUrl onClick onclick placeholder scaleType src url],
     'progress_converter.rb' => %w[barHeight maximumValue progress progressHeight progressTintColor tintColor trackColor trackTintColor value],
     'radio_converter.rb' => %w[enabled group items onValueChange selectedValue text tintColor],
     'scroll_view_converter.rb' => %w[bounces contentInset contentInsetAdjustmentBehavior horizontalScroll maxZoom orientation paging scrollEnabled scrollMode showsHorizontalScrollIndicator showsVerticalScrollIndicator],
@@ -52,7 +52,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
   }.freeze
 
   UNDECLARED = {
-    'base_converter.rb' => %w[direction font fontColor fontFamily fontSize fontWeight insetHorizontal insets key offsetX offsetY orientation textAlign zIndex],
+    'base_converter.rb' => %w[accessibilityLabel alt direction font fontColor fontFamily fontSize fontWeight insetHorizontal insets key offsetX offsetY orientation textAlign zIndex],
     'blur_converter.rb' => %w[backgroundColor blurRadius intensity],
     'button_converter.rb' => %w[href partialAttributes],
     'circle_view_converter.rb' => %w[backgroundColor fillColor strokeColor strokeWidth],
@@ -60,11 +60,11 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'embed_converter.rb' => %w[],
     'gradient_view_converter.rb' => %w[angle colors direction endPoint gradientType orientation startPoint],
     'icon_label_converter.rb' => %w[fontWeight icon iconOff iconOn iconSize iconTintColor spacing strikethrough underline],
-    'image_converter.rb' => %w[accessibilityLabel defaultImage url],
+    'image_converter.rb' => %w[defaultImage url],
     'include_converter.rb' => %w[],
     'indicator_converter.rb' => %w[halfSpinner size strokeWidth],
     'label_converter.rb' => %w[disabledFontColor],
-    'network_image_converter.rb' => %w[accessibilityLabel circle circleImage imageUrl scaleType],
+    'network_image_converter.rb' => %w[circle circleImage imageUrl scaleType],
     'progress_converter.rb' => %w[barHeight maximumValue progressHeight trackColor value],
     'radio_converter.rb' => %w[items],
     'scroll_view_converter.rb' => %w[contentInset horizontalScroll],

@@ -780,6 +780,21 @@ module RjuiTools
           end
         end
 
+        # Build the alt attribute for image-family converters. alt is
+        # user-visible text (screen readers), so it resolves strings.json
+        # keys exactly like text/hint. Decorative images keep alt=""
+        # untouched; unregistered literals pass through raw.
+        def build_alt_attr
+          raw = attributes['alt'] || attributes['accessibilityLabel'] || ''
+          return " alt=\"#{raw}\"" if raw.empty?
+
+          if (resolved = convert_string_key(raw))
+            " alt=#{resolved}"
+          else
+            " alt=\"#{raw}\""
+          end
+        end
+
         # Build data-testid attribute for testing
         def build_testid_attr
           test_id = attributes['testId']

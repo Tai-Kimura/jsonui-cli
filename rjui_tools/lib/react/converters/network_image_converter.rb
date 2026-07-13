@@ -14,7 +14,6 @@ module RjuiTools
           tag_attr = build_tag_attr
 
           src = build_src_attr
-          alt = attributes['alt'] || attributes['accessibilityLabel'] || ''
           content_mode = build_content_mode_attr
           placeholder_attr = build_placeholder_attr
           error_image = attributes['errorImage'] ? " errorImage=\"#{attributes['errorImage']}\"" : ''
@@ -28,7 +27,7 @@ module RjuiTools
           corner_radius_style = build_corner_radius_style
 
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<NetworkImage#{id_attr} className="#{class_name}"#{src}#{content_mode}#{placeholder_attr}#{error_image} alt="#{alt}"#{on_load}#{on_error}#{onclick_attr}#{corner_radius_style}#{style_attr}#{testid_attr}#{tag_attr} />
+            #{indent_str(indent)}<NetworkImage#{id_attr} className="#{class_name}"#{src}#{content_mode}#{placeholder_attr}#{error_image}#{build_alt_attr}#{on_load}#{on_error}#{onclick_attr}#{corner_radius_style}#{style_attr}#{testid_attr}#{tag_attr} />
           JSX
 
           wrap_with_visibility(jsx, indent)

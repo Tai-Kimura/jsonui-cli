@@ -10,7 +10,6 @@ module RjuiTools
           class_name = build_class_name
           style_attr = build_style_attr
           src = build_src
-          alt = attributes['alt'] || attributes['accessibilityLabel'] || ''
           id_attr = build_id_attr
           onclick_attr = build_onclick_attr
           testid_attr = build_testid_attr
@@ -25,7 +24,7 @@ module RjuiTools
                        " src=\"#{src}\""
                      end
 
-          jsx = "#{indent_str(indent)}<img#{id_attr} className=\"#{class_name}\"#{style_attr}#{src_attr} alt=\"#{alt}\"#{onclick_attr}#{testid_attr}#{tag_attr} />"
+          jsx = "#{indent_str(indent)}<img#{id_attr} className=\"#{class_name}\"#{style_attr}#{src_attr}#{build_alt_attr}#{onclick_attr}#{testid_attr}#{tag_attr} />"
 
           wrap_with_visibility(jsx, indent)
         end
@@ -42,15 +41,53 @@ module RjuiTools
               "/images/#{resolve_image_extension(attributes['srcName'])}"
             end
           elsif attributes['src']
-            convert_binding(attributes['src'])
+            convert_src_value(attributes['src'], 'src')
           elsif attributes['url']
-            convert_binding(attributes['url'])
+            convert_src_value(attributes['url'], 'url')
           elsif attributes['defaultImage']
             "/images/#{resolve_image_extension(attributes['defaultImage'])}"
           else
             '/images/placeholder.png'
           end
         end
+
+        # Convert a src/url value WITHOUT the string-table resolution that
+        # convert_binding applies: an image source that happens to match a
+        # strings.json key would silently become UI text ("閉じる") the
+        # moment someone registers the key — the img breaks with no warning
+        # (rjui-image-src-bare-name-string-key-collision). Bindings resolve
+        # as usual; bare names get a build warning steering to srcName.
+        def convert_src_value(value, attr_name)
+          return convert_binding(value) if has_binding?(value)
+          return value unless value.is_a?(String)
+
+          if bare_image_name?(value)
+            if convert_string_key(value)
+              Core::Logger.warn(
+                "Image #{attr_name} '#{value}' collides with a strings.json key — " \
+                "#{attr_name} is never resolved through the string table; " \
+                "use srcName for named images (emitting the literal as-is)"
+              )
+            else
+              Core::Logger.warn(
+                "Image #{attr_name} '#{value}' is a bare name (no path/extension/scheme) — " \
+                'named images should use srcName so the /images/ path and extension resolve'
+              )
+            end
+          end
+
+          convert_text_with_newlines(value)
+        end
+
+        # A "bare name" carries no path, extension, or scheme — it cannot
+        # resolve as an <img> src and is almost certainly a srcName typo.
+        def bare_image_name?(value)
+          !value.empty? &&
+            !value.include?('/') &&
+            !value.include?('.') &&
+            !value.start_with?('http', 'data:')
+        end
+
 
         # Resolve image file extension by checking public/images/ directory
         def resolve_image_extension(name)
