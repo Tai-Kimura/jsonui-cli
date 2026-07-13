@@ -25,6 +25,13 @@ module RjuiTools
       module_function
 
       # Return a multi-line comment banner suitable for TS/JS/Swift/Kotlin.
+      #
+      # For the default `//` (TS/JS) prefix the banner also carries a
+      # blanket `/* eslint-disable */`: generated output is machine-owned
+      # and regenerated on every build, so consumer lint configs (Next's
+      # react-hooks rules etc.) must not gate on it — the @generated
+      # sentinel makes that machine-readable, this line makes eslint
+      # actually honor it (rjui-generated-code-eslint-violations).
       def comment_header(source:, generator:, prefix: "//")
         lines = [
           "╔══════════════════════════════════════════════════════════════════╗",
@@ -35,7 +42,8 @@ module RjuiTools
           "║  #{AGENT_WARNING}",
           "╚══════════════════════════════════════════════════════════════════╝",
         ]
-        lines.map { |l| "#{prefix} #{l}" }.join("\n")
+        banner = lines.map { |l| "#{prefix} #{l}" }.join("\n")
+        prefix == "//" ? "/* eslint-disable */\n#{banner}" : banner
       end
 
       # One-line closing marker.
