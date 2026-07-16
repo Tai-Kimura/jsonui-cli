@@ -286,6 +286,37 @@ _ADB_NO_DEVICE_MARKERS = ("no devices", "device offline", "device unauthorized",
                           "device not found", "more than one device")
 
 
+def find_adb(android_cfg: dict | None = None):
+    """Resolve the adb executable beyond PATH.
+
+    An MCP daemon does not inherit a login shell's PATH, so PATH-only
+    resolution structurally kills the Android leg there. Order:
+    config `test.artifacts.android.adb` > PATH > $ANDROID_HOME /
+    $ANDROID_SDK_ROOT > OS-default SDK locations. Returns None when
+    nothing is found.
+    """
+    explicit = (android_cfg or {}).get("adb")
+    if explicit:
+        p = Path(os.path.expanduser(str(explicit)))
+        return str(p) if p.is_file() else None
+
+    on_path = shutil.which("adb")
+    if on_path:
+        return on_path
+
+    candidates = []
+    for env in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
+        base = os.environ.get(env)
+        if base:
+            candidates.append(Path(base) / "platform-tools" / "adb")
+    candidates.append(Path.home() / "Library/Android/sdk/platform-tools/adb")  # macOS default
+    candidates.append(Path.home() / "Android/Sdk/platform-tools/adb")          # Linux default
+    for c in candidates:
+        if c.is_file() and os.access(c, os.X_OK):
+            return str(c)
+    return None
+
+
 def pull_android(test_cfg: dict, project_root, out_root,
                  serial_override=None, clean=False) -> PullResult:
     """Pull on-device artifact dirs into <out_root>/android/<stamp>/ (merged)."""
@@ -297,8 +328,15 @@ def pull_android(test_cfg: dict, project_root, out_root,
         raise ArtifactsConfigError(
             "android artifacts pull requires 'test.artifacts.android.appId' in jui.config.json")
 
+    adb_path = find_adb(android_cfg)
+    if not adb_path:
+        result.skipped.append(
+            "adb not found (PATH, $ANDROID_HOME/$ANDROID_SDK_ROOT, default SDK "
+            "locations); set test.artifacts.android.adb to an explicit path")
+        return result
+
     serial = serial_override or android_cfg.get("serial")
-    adb = ["adb"] + (["-s", str(serial)] if serial else [])
+    adb = [adb_path] + (["-s", str(serial)] if serial else [])
 
     stamp = _now_stamp()
     stamp_dir = Path(out_root) / "android" / stamp
@@ -355,6 +393,7 @@ def status(test_cfg: dict, project_root) -> dict:
         "android": {
             "appId": android_cfg.get("appId"),
             "serial": android_cfg.get("serial"),
+            "adb": find_adb(android_cfg),
         },
         "existing": collect_files(out_root),
     }

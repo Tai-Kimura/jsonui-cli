@@ -275,7 +275,7 @@ The index page includes:
 Pull test artifacts (screenshots, recordings) into the local artifacts directory.
 
 - **iOS**: exports attachments from the newest `.xcresult` bundle (explicit path, glob, or automatic DerivedData discovery) via `xcrun xcresulttool export attachments`, organized per test into `screenshots/`, `recordings/`, and `other/` subdirectories.
-- **Android**: pulls `/sdcard/Android/data/<appId>/files/jsonui-artifacts` and `/data/local/tmp/jsonui-artifacts` from the device via `adb pull`.
+- **Android**: pulls `/sdcard/Android/data/<appId>/files/jsonui-artifacts` and `/data/local/tmp/jsonui-artifacts` from the device via `adb pull`. adb is resolved from `test.artifacts.android.adb` (explicit path) > PATH > `$ANDROID_HOME` / `$ANDROID_SDK_ROOT` > the OS-default SDK location (`~/Library/Android/sdk` on macOS, `~/Android/Sdk` on Linux) — so it also works from environments without a login-shell PATH (e.g. an MCP daemon).
 
 Each pull lands in `<dir>/<platform>/<stamp>/` (iOS stamps use the xcresult mtime so re-pulls of the same run are stable) and a `<dir>/<platform>/latest` symlink points at the newest pull.
 
@@ -309,7 +309,7 @@ jsonui-test a pull --json
 
 ### artifacts status (a status)
 
-Show the resolved artifacts configuration (artifacts dir, discovered xcresult, Android appId/serial) and every file currently under the artifacts directory.
+Show the resolved artifacts configuration (artifacts dir, discovered xcresult, Android appId/serial and the resolved adb path) and every file currently under the artifacts directory.
 
 ```bash
 jsonui-test artifacts status
@@ -330,7 +330,7 @@ Configured under the `test.artifacts` block of `jui.config.json`:
     "artifacts": {
       "dir": "tests/artifacts",
       "ios": { "xcresult": null },
-      "android": { "appId": "com.example.app", "serial": null }
+      "android": { "appId": "com.example.app", "serial": null, "adb": null }
     }
   }
 }

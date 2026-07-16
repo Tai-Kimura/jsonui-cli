@@ -222,6 +222,21 @@ class TestXcresultDiscovery:
 # -- tests: Android ---------------------------------------------------------------
 
 class TestPullAndroid:
+    @pytest.fixture(autouse=True)
+    def _pin_adb(self, monkeypatch):
+        # Resolution is find_adb's business (tested separately); pin it so the
+        # fake's `cmd[0] == "adb"` assertions stay deterministic on any host.
+        monkeypatch.setattr(artifacts, "find_adb", lambda cfg=None: "adb")
+
+    def test_adb_unresolvable_is_skipped_with_guidance(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(artifacts, "find_adb", lambda cfg=None: None)
+
+        result = pull_android(ANDROID_CFG, tmp_path, tmp_path / "out")
+
+        assert result.files == []
+        assert any("adb not found" in s and "test.artifacts.android.adb" in s
+                   for s in result.skipped)
+
     def test_merges_existing_roots_into_single_stamp_dir(self, tmp_path, monkeypatch):
         calls = []
         monkeypatch.setattr(artifacts, "_run", make_adb_fake({SDCARD_ROOT}, calls))
@@ -306,6 +321,10 @@ class TestPullAndroid:
 # -- tests: status / symlink / exit codes ------------------------------------------
 
 class TestStatus:
+    @pytest.fixture(autouse=True)
+    def _pin_adb(self, monkeypatch):
+        monkeypatch.setattr(artifacts, "find_adb", lambda cfg=None: "/fake/adb")
+
     def test_resolved_shape_and_existing_files(self, tmp_path):
         cfg = {"artifacts": {
             "dir": "my-artifacts",
@@ -321,14 +340,59 @@ class TestStatus:
 
         assert info["artifactsDir"] == str((tmp_path / "my-artifacts").resolve())
         assert info["ios"]["xcresult"] == str(xc)
-        assert info["android"] == {"appId": "com.example.app", "serial": "sn1"}
+        assert info["android"] == {"appId": "com.example.app", "serial": "sn1",
+                                   "adb": "/fake/adb"}
         assert info["existing"] == [str(existing.resolve())]
 
     def test_defaults_when_unconfigured(self, tmp_path):
         info = status({}, tmp_path)
         assert info["artifactsDir"] == str((tmp_path / "tests/artifacts").resolve())
-        assert info["android"] == {"appId": None, "serial": None}
+        assert info["android"] == {"appId": None, "serial": None, "adb": "/fake/adb"}
         assert info["existing"] == []
+
+
+class TestFindAdb:
+    """Resolution order: config explicit > PATH > env SDK > OS-default SDK."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate(self, tmp_path, monkeypatch):
+        # No PATH hit, no env SDKs, HOME without default SDK — unless a test adds them.
+        monkeypatch.setattr(artifacts.shutil, "which", lambda name: None)
+        monkeypatch.delenv("ANDROID_HOME", raising=False)
+        monkeypatch.delenv("ANDROID_SDK_ROOT", raising=False)
+        monkeypatch.setattr(artifacts.Path, "home", staticmethod(lambda: tmp_path / "home"))
+
+    @staticmethod
+    def _make_adb(base: Path) -> Path:
+        adb = base / "platform-tools" / "adb"
+        adb.parent.mkdir(parents=True, exist_ok=True)
+        adb.write_text("#!/bin/sh\n")
+        adb.chmod(0o755)
+        return adb
+
+    def test_explicit_config_wins(self, tmp_path):
+        adb = self._make_adb(tmp_path / "sdk")
+        assert artifacts.find_adb({"adb": str(adb)}) == str(adb)
+
+    def test_explicit_config_missing_file_is_none_not_fallback(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(artifacts.shutil, "which", lambda name: "/on/path/adb")
+        assert artifacts.find_adb({"adb": str(tmp_path / "nope/adb")}) is None
+
+    def test_path_hit(self, monkeypatch):
+        monkeypatch.setattr(artifacts.shutil, "which", lambda name: "/on/path/adb")
+        assert artifacts.find_adb({}) == "/on/path/adb"
+
+    def test_android_home_fallback(self, tmp_path, monkeypatch):
+        adb = self._make_adb(tmp_path / "sdk")
+        monkeypatch.setenv("ANDROID_HOME", str(tmp_path / "sdk"))
+        assert artifacts.find_adb({}) == str(adb)
+
+    def test_macos_default_location_fallback(self, tmp_path):
+        adb = self._make_adb(tmp_path / "home" / "Library/Android/sdk")
+        assert artifacts.find_adb({}) == str(adb)
+
+    def test_nothing_found_returns_none(self):
+        assert artifacts.find_adb({}) is None
 
 
 class TestLatestSymlink:
