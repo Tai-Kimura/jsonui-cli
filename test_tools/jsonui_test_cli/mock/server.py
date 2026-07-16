@@ -191,7 +191,7 @@ class RequestLog:
 class RunManager:
     """Runs a single configured test target at a time, streaming its output."""
 
-    def __init__(self, run_targets: dict, project_root: Path):
+    def __init__(self, run_targets: dict, project_root: Path, post_run_hook=None):
         self._targets = run_targets or {}
         self._root = project_root
         self._lock = threading.Lock()
@@ -200,6 +200,10 @@ class RunManager:
         self._returncode: int | None = None
         self._running = False
         self._last_target: str | None = None
+        # Optional callable(target, returncode) invoked after a run finishes
+        # (e.g. `mock serve --artifacts` pulls device artifacts). Hook errors
+        # are logged to the run output, never raised — the server must survive.
+        self._post_run_hook = post_run_hook
 
     @property
     def targets(self) -> list[str]:
@@ -248,10 +252,10 @@ class RunManager:
             with self._lock:
                 self._running = False
             return False, "run cwd escapes project root"
-        threading.Thread(target=self._run, args=(spec["command"], cwd), daemon=True).start()
+        threading.Thread(target=self._run, args=(target, spec["command"], cwd), daemon=True).start()
         return True, "started"
 
-    def _run(self, command: str, cwd: Path):
+    def _run(self, target: str, command: str, cwd: Path):
         try:
             proc = subprocess.Popen(
                 command, shell=True, cwd=str(cwd),
@@ -273,6 +277,12 @@ class RunManager:
             self._running = False
             self._returncode = rc
             self._proc = None
+        if self._post_run_hook is not None:
+            try:
+                self._post_run_hook(target, rc)
+            except Exception as e:  # noqa: BLE001 - hook failures must not kill the server
+                with self._lock:
+                    self._lines.append(f"[post-run hook error] {e}")
 
 
 def _panel_html(token: str) -> bytes:

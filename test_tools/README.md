@@ -71,6 +71,8 @@ pyenv local 3.11.0
 | `generate description flow` | `g d flow` | Generate description JSON for flow test case |
 | `generate doc` | `g doc` | Generate HTML/MD documentation for single file |
 | `generate html` | `g html` | Generate HTML directory with index for all test files |
+| `artifacts pull` | `a pull` | Pull test artifacts (screenshots/recordings) from devices and xcresults |
+| `artifacts status` | `a status` | Show resolved artifacts config and existing artifact files |
 
 ### validate (v)
 
@@ -267,6 +269,100 @@ The index page includes:
 - Summary statistics (total files, screen tests, flow tests, cases, steps)
 - Links to all test documentation organized by type
 - Test metadata (platform, case count, description)
+
+### artifacts pull (a pull)
+
+Pull test artifacts (screenshots, recordings) into the local artifacts directory.
+
+- **iOS**: exports attachments from the newest `.xcresult` bundle (explicit path, glob, or automatic DerivedData discovery) via `xcrun xcresulttool export attachments`, organized per test into `screenshots/`, `recordings/`, and `other/` subdirectories.
+- **Android**: pulls `/sdcard/Android/data/<appId>/files/jsonui-artifacts` and `/data/local/tmp/jsonui-artifacts` from the device via `adb pull`.
+
+Each pull lands in `<dir>/<platform>/<stamp>/` (iOS stamps use the xcresult mtime so re-pulls of the same run are stable) and a `<dir>/<platform>/latest` symlink points at the newest pull.
+
+```bash
+# Pull from all platforms (best effort — missing device/xcresult is skipped)
+jsonui-test artifacts pull
+jsonui-test a pull
+
+# Pull only iOS from an explicit xcresult
+jsonui-test a pull --platform ios --xcresult path/to/Run.xcresult
+
+# Pull only Android from a specific device, removing device files afterwards
+jsonui-test a pull --platform android --serial emulator-5554 --clean
+
+# Machine-readable output
+jsonui-test a pull --json
+```
+
+**Options:**
+- `--platform`: `ios`, `android`, or `all` (default: `all`)
+- `--xcresult`: Explicit `.xcresult` path or glob (overrides `test.artifacts.ios.xcresult`)
+- `--serial`: adb device serial (overrides `test.artifacts.android.serial`)
+- `--out`: Output directory (overrides `test.artifacts.dir`)
+- `--config`: Config file (default: `jui.config.json`)
+- `--clean`: Remove pulled artifact dirs from the Android device after pulling
+- `--json`: Print a single JSON object: `{"outputDir": ..., "files": [...], "skipped": [...]}`
+
+**Exit codes:**
+- `0`: Pull succeeded (with `--platform all`, per-platform skips are benign)
+- `1`: An explicitly requested single platform produced no files, or config error (e.g. missing `appId`)
+
+### artifacts status (a status)
+
+Show the resolved artifacts configuration (artifacts dir, discovered xcresult, Android appId/serial) and every file currently under the artifacts directory.
+
+```bash
+jsonui-test artifacts status
+jsonui-test a status --json
+```
+
+**Options:**
+- `--config`: Config file (default: `jui.config.json`)
+- `--json`: Print status as a single JSON object
+
+### Artifacts Configuration
+
+Configured under the `test.artifacts` block of `jui.config.json`:
+
+```json
+{
+  "test": {
+    "artifacts": {
+      "dir": "tests/artifacts",
+      "ios": { "xcresult": null },
+      "android": { "appId": "com.example.app", "serial": null }
+    }
+  }
+}
+```
+
+- `dir`: Output root, relative to the config file's directory (default: `tests/artifacts`)
+- `ios.xcresult`: Explicit `.xcresult` path or glob. When omitted, the newest `~/Library/Developer/Xcode/DerivedData/*/Logs/Test/*.xcresult` is used
+- `android.appId`: Application ID (required for Android pulls)
+- `android.serial`: adb device serial (optional; `--serial` overrides)
+
+**Output structure:**
+```
+tests/artifacts/
+├── ios/
+│   ├── latest -> 20260101-120000
+│   └── 20260101-120000/
+│       └── LoginTests/testLogin()/
+│           ├── screenshots/launch_screen.png
+│           └── recordings/run_recording.mp4
+└── android/
+    ├── latest -> 20260101-120500
+    └── 20260101-120500/
+        └── shot.png
+```
+
+### mock serve --artifacts
+
+The mock server (`jsonui-test mock serve`) accepts an `--artifacts` flag: after an `ios` or `android` run target (from `mock.runTargets`) finishes, the corresponding `artifacts pull` runs automatically. Other targets (e.g. `web`) are skipped, and pull errors never crash the server.
+
+```bash
+jsonui-test mock serve --artifacts
+```
 
 ### Legacy Syntax
 

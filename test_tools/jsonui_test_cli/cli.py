@@ -371,6 +371,33 @@ def cmd_mock_generate(args):
     return 0
 
 
+def _make_artifacts_post_run_hook(explicit_config):
+    """Post-run hook for `mock serve --artifacts`: pull artifacts for the target.
+
+    RunManager wraps the hook in try/except and logs failures to its own
+    line buffer, so this never crashes the server.
+    """
+    from . import artifacts
+
+    def hook(target, returncode):
+        platform = str(target).lower()
+        if platform not in ("ios", "android"):
+            return  # web / custom targets have no on-device artifacts
+        test_cfg, cfg_path = _load_test_config(explicit_config)
+        project_root = cfg_path.parent if cfg_path else Path(".")
+        out_root = artifacts.resolve_out_root(test_cfg, project_root)
+        if platform == "ios":
+            result = artifacts.pull_ios(test_cfg, project_root, out_root)
+        else:
+            result = artifacts.pull_android(test_cfg, project_root, out_root)
+        line = f"[artifacts] {platform}: {len(result.files)} file(s) -> {result.stamp_dir or out_root}"
+        if result.skipped:
+            line += f" (skipped: {'; '.join(result.skipped)})"
+        print(line, flush=True)
+
+    return hook
+
+
 def cmd_mock_serve(args):
     """Start the local mock server + control panel."""
     from .mock.server import MockStore, MockServer, RunManager
@@ -387,8 +414,13 @@ def cmd_mock_serve(args):
         print(f"Error: mock dir not found: {mock_dir} (run 'jsonui-test mock generate' first)", file=sys.stderr)
         return 1
 
+    post_run_hook = None
+    if getattr(args, "artifacts", False):
+        post_run_hook = _make_artifacts_post_run_hook(getattr(args, "config", None))
+
     store = MockStore.load(mock_dir)
-    server = MockServer(store, RunManager(run_targets, project_root), port=port)
+    server = MockServer(store, RunManager(run_targets, project_root,
+                                          post_run_hook=post_run_hook), port=port)
     # Bind BEFORE printing the banner: consumers parse the URL/token from
     # stdout as the "server is up" signal, so a banner followed by a bind
     # failure reads as a successful start. Bind also resolves port 0 to
@@ -411,6 +443,72 @@ def cmd_mock_serve(args):
     except KeyboardInterrupt:
         print("\nshutting down")
         server.shutdown()
+    return 0
+
+
+def cmd_artifacts_pull(args):
+    """Pull test artifacts (xcresult attachments / on-device files) locally."""
+    from . import artifacts
+
+    test_cfg, cfg_path = _load_test_config(getattr(args, "config", None))
+    project_root = cfg_path.parent if cfg_path else Path(".")
+    out_root = artifacts.resolve_out_root(test_cfg, project_root, override=args.out)
+
+    platforms = ["ios", "android"] if args.platform == "all" else [args.platform]
+    results = []
+    for platform in platforms:
+        try:
+            if platform == "ios":
+                results.append(artifacts.pull_ios(
+                    test_cfg, project_root, out_root,
+                    xcresult_override=args.xcresult))
+            else:
+                results.append(artifacts.pull_android(
+                    test_cfg, project_root, out_root,
+                    serial_override=args.serial, clean=args.clean))
+        except artifacts.ArtifactsConfigError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+    files = [f for r in results for f in r.files]
+    skipped = [f"{r.platform}: {reason}" for r in results for reason in r.skipped]
+
+    if args.json:
+        print(json.dumps({
+            "outputDir": str(out_root),
+            "files": files,
+            "skipped": skipped,
+        }, ensure_ascii=False, indent=2))
+    else:
+        for r in results:
+            if r.files:
+                print(f"{r.platform}: pulled {len(r.files)} file(s) -> {r.stamp_dir}")
+            for reason in r.skipped:
+                print(f"{r.platform}: skipped ({reason})")
+        print(f"Output dir: {out_root}")
+
+    return artifacts.pull_exit_code(args.platform, results)
+
+
+def cmd_artifacts_status(args):
+    """Show resolved artifacts config and files currently in the artifacts dir."""
+    from . import artifacts
+
+    test_cfg, cfg_path = _load_test_config(getattr(args, "config", None))
+    project_root = cfg_path.parent if cfg_path else Path(".")
+    info = artifacts.status(test_cfg, project_root)
+
+    if args.json:
+        print(json.dumps(info, ensure_ascii=False, indent=2))
+    else:
+        print(f"Artifacts dir: {info['artifactsDir']}")
+        print(f"  ios.xcresult:   {info['ios']['xcresult'] or '(none found)'}")
+        print(f"  android.appId:  {info['android']['appId'] or '(not set)'}")
+        print(f"  android.serial: {info['android']['serial'] or '(default device)'}")
+        print(f"  existing files: {len(info['existing'])}")
+        for f in info["existing"]:
+            print(f"    {f}")
+
     return 0
 
 
@@ -597,6 +695,38 @@ def main():
     mock_serve_parser.add_argument("--port", type=int, help="Port (default: mock.server.port or 8790)")
     mock_serve_parser.add_argument("--mock-dir", help="Mock dir (default: mock.mockDir or tests/mocks)")
     mock_serve_parser.add_argument("--config", help="Config file (default: jui.config.json)")
+    mock_serve_parser.add_argument("--artifacts", action="store_true",
+                                   help="After an ios/android run target finishes, pull its artifacts automatically")
+
+    # Artifacts command (nested: artifacts pull | artifacts status)
+    artifacts_parser = subparsers.add_parser(
+        "artifacts",
+        aliases=["a"],
+        help="Pull test artifacts (screenshots/recordings) from devices and xcresults"
+    )
+    artifacts_subparsers = artifacts_parser.add_subparsers(dest="artifacts_action", help="Artifacts action")
+
+    artifacts_pull_parser = artifacts_subparsers.add_parser(
+        "pull", help="Pull artifacts into the artifacts dir")
+    artifacts_pull_parser.add_argument("--platform", choices=["ios", "android", "all"], default="all",
+                                       help="Platform to pull from (default: all)")
+    artifacts_pull_parser.add_argument("--xcresult",
+                                       help="Explicit .xcresult path or glob (overrides test.artifacts.ios.xcresult)")
+    artifacts_pull_parser.add_argument("--serial",
+                                       help="adb device serial (overrides test.artifacts.android.serial)")
+    artifacts_pull_parser.add_argument("--out",
+                                       help="Output dir (overrides test.artifacts.dir, default: tests/artifacts)")
+    artifacts_pull_parser.add_argument("--config", help="Config file (default: jui.config.json)")
+    artifacts_pull_parser.add_argument("--clean", action="store_true",
+                                       help="Remove pulled artifact dirs from the Android device after pulling")
+    artifacts_pull_parser.add_argument("--json", action="store_true",
+                                       help="Print result as a single JSON object")
+
+    artifacts_status_parser = artifacts_subparsers.add_parser(
+        "status", help="Show resolved artifacts config and existing files")
+    artifacts_status_parser.add_argument("--config", help="Config file (default: jui.config.json)")
+    artifacts_status_parser.add_argument("--json", action="store_true",
+                                         help="Print status as a single JSON object")
 
     args = parser.parse_args()
 
@@ -614,6 +744,13 @@ def main():
         elif getattr(args, "mock_action", None) == "serve":
             return cmd_mock_serve(args)
         mock_parser.print_help()
+        return 0
+    elif args.command in ["artifacts", "a"]:
+        if getattr(args, "artifacts_action", None) == "pull":
+            return cmd_artifacts_pull(args)
+        elif getattr(args, "artifacts_action", None) == "status":
+            return cmd_artifacts_status(args)
+        artifacts_parser.print_help()
         return 0
     elif args.command in ["generate", "g"]:
         # Check for subcommand
