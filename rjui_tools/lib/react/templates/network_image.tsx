@@ -76,7 +76,7 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
       img.onload = null;
       img.onerror = null;
     };
-  }, [src, errorImage, onLoad, onError]);
+  }, [src, placeholder, errorImage, onLoad, onError]);
 
   const objectFitMap: Record<string, string> = {
     cover: 'object-cover',
