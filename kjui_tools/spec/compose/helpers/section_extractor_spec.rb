@@ -397,19 +397,25 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
       KOTLIN
       new_body, fns = described_class.extract(body, **opts, line_threshold: 10)
 
-      # All 4 (hero + taste) × (outer-if/regular, outer-if/default, outer-else/regular,
-      # outer-else/default) combinations get lifted.
-      expect(fns.size).to be >= 8
-      # No `Column(modifier = Modifier.testTag("hero")) {` or `taste` chunks
-      # remain inline — every occurrence must have been replaced.
+      # Branch extraction lifts the outer if/else branch bodies wholesale
+      # (ColumnScope-receiver extensions, since the gate sits inside the
+      # wrapper Column), then recurses so the nested panel-responsive gates
+      # inside each lifted branch are split further. Nothing content-shaped
+      # stays inline in the outer body.
+      expect(fns.size).to be >= 2
       expect(new_body.scan(/testTag\("hero"\)/).size).to eq(0)
       expect(new_body.scan(/testTag\("taste"\)/).size).to eq(0)
-      # The panel-wrapper testTags stay (they hold `.weight(` or are siblings
-      # of weighted ones, so they cannot be lifted). Two copies of each
-      # because the outer if/else duplicates the whole panel-responsive
-      # sub-tree.
-      expect(new_body.scan(/testTag\("regular_panel"\)/).size).to eq(2)
-      expect(new_body.scan(/testTag\("default_panel"\)/).size).to eq(2)
+      expect(new_body.scan(/testTag\("regular_panel"\)/).size).to eq(0)
+      expect(new_body.scan(/testTag\("default_panel"\)/).size).to eq(0)
+      # Every hero/taste/panel occurrence lives inside SOME lifted function
+      # (both outer branches' copies).
+      all_fns = fns.join("\n")
+      # hero/taste appear once per panel-responsive branch (regular+default)
+      # per outer branch = 4 copies; panel wrappers once per outer branch = 2.
+      expect(all_fns.scan(/testTag\("hero"\)/).size).to eq(4)
+      expect(all_fns.scan(/testTag\("taste"\)/).size).to eq(4)
+      expect(all_fns.scan(/testTag\("regular_panel"\)/).size).to eq(2)
+      expect(all_fns.scan(/testTag\("default_panel"\)/).size).to eq(2)
     end
 
     # Regression: kjui-section-extractor-val-merge-breaks-collection-cell-scope.
@@ -586,26 +592,29 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
         line_threshold: 10
       )
 
-      # The comment header stays inline inside LazyVerticalGrid's body —
-      # no Section function is generated to wrap it.
-      expect(new_body).to include('// Section 1: shop_items_list/shop_item_list_item (5 columns)')
+      # Branch extraction may relocate the whole gate (grid included) into a
+      # lifted function; the invariants are location-independent:
+      everything = ([new_body] + fns).join("\n")
 
-      # No lifted function carries just a comment line as its body.
+      # 1. The comment header survives exactly once, still inside the
+      #    LazyVerticalGrid body — never wrapped into its own Section.
+      expect(everything.scan('// Section 1: shop_items_list/shop_item_list_item (5 columns)').size).to eq(1)
+
+      # 2. No lifted function carries just a comment line as its body.
       fns.each do |f|
         body_lines = f.lines[5..-2] || []  # rough body slice (skip signature)
         body_text = body_lines.map(&:strip).reject(&:empty?).join("\n")
         expect(body_text).not_to match(/\A\/\/[^\n]*\z/m)
       end
 
-      # Specifically, no `SectionN(data, viewModel)` call appears on the
-      # line immediately after the LazyVerticalGrid opener — the kjui
-      # codegen emits exactly one comment line first; the next non-empty
-      # line must be the original `data.gridItems?.sections?...` block,
-      # never a Section call.
-      lines = new_body.lines.map(&:chomp)
+      # 3. No `SectionN(data, viewModel)` call appears on the line
+      #    immediately after the LazyVerticalGrid opener (wherever the grid
+      #    ended up) — the comment line must still be the first child; a
+      #    Section call there would sit in LazyGridScope where @Composable
+      #    invocations are forbidden.
+      lines = everything.lines.map(&:chomp)
       grid_open = lines.find_index { |l| l.include?('LazyVerticalGrid(') }
       expect(grid_open).not_to be_nil
-      # Find the first non-empty line inside the grid body (after `) {`)
       body_start = lines.each_with_index.find { |l, i| i > grid_open && l.strip.end_with?('{') }&.last
       expect(body_start).not_to be_nil
       first_inside = lines[(body_start + 1)..].find { |l| !l.strip.empty? }
@@ -651,11 +660,12 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
         }
       KOTLIN
       new_body, fns = described_class.extract(body, **opts, line_threshold: 6)
-      expect(fns.size).to be >= 4
-      # Both `Text(text = data.line1)` call sites must be replaced inside
-      # the lifted sections, not the body. Body should mention SectionN
-      # calls inside both branches.
-      expect(new_body.scan(/Section\d+(?:_\d+)*\(data, viewModel\)/).size).to be >= 4
+      # Branch extraction lifts EACH branch body wholesale into its own
+      # Section function (recursing within), so the gate skeleton shrinks to
+      # exactly one call per branch — the strongest possible shape for the
+      # JVM/ART method-size ceilings.
+      expect(fns.size).to be >= 2
+      expect(new_body.scan(/Section\d+(?:_\d+)*\(data, viewModel\)/).size).to eq(2)
       # The body itself shouldn't carry the duplicated literal Texts.
       expect(new_body.scan('Text(text = data.line1)').size).to eq(0)
     end

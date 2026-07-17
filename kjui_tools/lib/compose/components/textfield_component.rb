@@ -10,6 +10,12 @@ module KjuiTools
       class TextFieldComponent
         @counter ||= 0
 
+        # Per-file determinism: compose_builder calls this before each layout
+        # so resolved_* local names don't drift with process build history.
+        def self.reset_counter!
+          @counter = 0
+        end
+
         def self.next_resolved_var
           @counter += 1
           "resolved_textfield#{@counter}"

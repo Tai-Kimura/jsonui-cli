@@ -117,6 +117,16 @@ module KjuiTools
           @responsive_functions = []
           @responsive_counter = 0
 
+          # Reset the per-class resolved_* local-name counters so each layout
+          # generates the same bytes regardless of what was built before it in
+          # the same process — regeneration must be idempotent (a rebuild over
+          # an existing file has to equal a clean generation).
+          Components::TextComponent.reset_counter!
+          Components::TextFieldComponent.reset_counter!
+          Components::TextViewComponent.reset_counter!
+          Components::ButtonComponent.reset_counter!
+          Components::ConstraintLayoutComponent.reset_counter!
+
           # Collect data definitions for ResourceResolver to check optional/non-optional
           data_properties = extract_data_properties(json_data)
           data_definitions = {}
@@ -914,10 +924,12 @@ module KjuiTools
           # Create content that switches based on DynamicModeManager
           composable_content = generate_mode_aware_content(layout_name, static_content, dynamic_content, 1)
 
+          # Block form: a STRING replacement would interpret backslash
+          # sequences (\&, \', \`, \0-\9) inside the generated Kotlin and
+          # could splice stale file content into the output.
           updated_content = existing_content.gsub(
-            /\/\/ >>> GENERATED_CODE_START.*?\/\/ >>> GENERATED_CODE_END/m,
-            "// >>> GENERATED_CODE_START\n#{composable_content}    // >>> GENERATED_CODE_END"
-          )
+            /\/\/ >>> GENERATED_CODE_START.*?\/\/ >>> GENERATED_CODE_END/m
+          ) { "// >>> GENERATED_CODE_START\n#{composable_content}    // >>> GENERATED_CODE_END" }
 
           # Responsive helper composables MUST sit at file scope, not inside
           # the parent GeneratedView fun. Local @Composable functions can't
@@ -932,7 +944,7 @@ module KjuiTools
             helpers_block = @responsive_functions.join("\n\n")
             helpers_section = "\n\n// >>> RESPONSIVE_HELPERS_START\n#{helpers_block}\n// >>> RESPONSIVE_HELPERS_END\n"
             if updated_content =~ helpers_marker_regex
-              updated_content = updated_content.sub(helpers_marker_regex, helpers_section)
+              updated_content = updated_content.sub(helpers_marker_regex) { helpers_section }
             else
               updated_content = updated_content.rstrip + helpers_section
             end
@@ -986,10 +998,10 @@ module KjuiTools
         update_data_content = generate_update_data_function(data_properties, view_name)
 
         # Replace the generated section
+        # Block form — see update_generated_file for the backreference rationale.
         updated_content = existing_content.gsub(
-          /\/\/ >>> GENERATED_CODE_START.*?\/\/ >>> GENERATED_CODE_END/m,
-          "// >>> GENERATED_CODE_START\n#{update_data_content}    // >>> GENERATED_CODE_END"
-        )
+          /\/\/ >>> GENERATED_CODE_START.*?\/\/ >>> GENERATED_CODE_END/m
+        ) { "// >>> GENERATED_CODE_START\n#{update_data_content}    // >>> GENERATED_CODE_END" }
 
         # Add kotlinx.coroutines.flow.update import if not present
         update_import = "import kotlinx.coroutines.flow.update"

@@ -20,6 +20,12 @@ module KjuiTools
           attr_accessor :counter
         end
 
+        # Per-file determinism: compose_builder calls this before each layout
+        # so resolved_* local names don't drift with process build history.
+        def self.reset_counter!
+          @counter = 0
+        end
+
         # Returns a fresh `resolved_text<N>` local name for the FontSpec block.
         def self.next_resolved_var
           @counter += 1

@@ -8,6 +8,12 @@ module KjuiTools
   module Compose
     module Components
       class ConstraintLayoutComponent
+        # Per-file determinism: compose_builder calls this before each layout
+        # so resolved_* local names don't drift with process build history.
+        def self.reset_counter!
+          @counter = 0
+        end
+
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
           required_imports&.add(:constraint_layout)
 

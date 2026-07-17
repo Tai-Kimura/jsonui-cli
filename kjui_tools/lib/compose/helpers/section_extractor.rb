@@ -105,6 +105,10 @@ module KjuiTools
             @threshold = threshold
             @functions = []
             @top_level_counter = 0
+            # name => receiver FQN prefix, for sections emitted as scope
+            # extensions; used to keep their call sites inside a matching
+            # receiver context.
+            @scoped_names = {}
           end
 
           # Recursively split `code` if it is over the threshold and a
@@ -128,6 +132,15 @@ module KjuiTools
           private
 
           def process_once(code, prefix)
+            # Responsive `if (…) { … } else { … }` gates first: each branch
+            # duplicates the subtree, so branch extraction halves the inline
+            # body per gate and is the primary defense against the JVM 64KB /
+            # ART JIT method-size ceilings (a large responsive screen used to
+            # keep ~8k lines inline in the single ScrollView item lambda —
+            # one View away from `Method too large`).
+            gated = extract_if_else_branches(code, prefix)
+            return gated if gated
+
             result = find_splittable_children(code)
             return code unless result
 
@@ -154,6 +167,162 @@ module KjuiTools
 
             new_body_lines.concat(trailer_lines)
             new_body_lines.join("\n")
+          end
+
+          # Fully-qualified receiver types for scope-bound branch extraction.
+          # FQNs sidestep the import machinery entirely.
+          SCOPE_RECEIVERS = {
+            'Row' => 'androidx.compose.foundation.layout.RowScope.',
+            'Column' => 'androidx.compose.foundation.layout.ColumnScope.',
+            'Box' => 'androidx.compose.foundation.layout.BoxScope.',
+            'item' => 'androidx.compose.foundation.lazy.LazyItemScope.',
+            'items' => 'androidx.compose.foundation.lazy.LazyItemScope.',
+            'itemsIndexed' => 'androidx.compose.foundation.lazy.LazyItemScope.'
+          }.freeze
+
+          # Finds the first `if (…) {` whose branch bodies are large enough to
+          # be worth lifting, and replaces each branch body with a
+          # `SectionN(data, viewModel)` call whose definition is a file-scope
+          # @Composable — as a scope-receiver extension (FQ receiver type)
+          # when the branch content needs the enclosing container's scope.
+          # Returns the rewritten code, or nil when no gate qualifies.
+          def extract_if_else_branches(code, prefix)
+            lines = code.lines.map(&:chomp)
+            depth = 0
+
+            lines.each_with_index do |line, idx|
+              stripped = line.strip
+              opens = stripped.count('{')
+              closes = stripped.count('}')
+
+              if stripped =~ /\Aif\s*\(/ && opens > closes
+                segments = if_else_segments(lines, idx)
+                if segments
+                  branch_line_total = segments[:branches].sum { |b| b[:end_idx] - b[:start] + 1 }
+                  if branch_line_total > @threshold
+                    rewritten = lift_branches(lines, segments, prefix)
+                    return rewritten if rewritten
+                  end
+                end
+              end
+
+              depth += opens - closes
+            end
+
+            nil
+          end
+
+          # Maps an `if` opener at `if_idx` to its then/else branch ranges:
+          #   { branches: [{start:, end_idx:}, ...], boundaries: [if_idx, else_idx..., close_idx] }
+          # Handles `} else {` and `} else if (…) {` chains. Returns nil when
+          # the shape is unrecognized.
+          def if_else_segments(lines, if_idx)
+            branches = []
+            boundaries = [if_idx]
+            depth = 0
+            branch_start = if_idx + 1
+
+            (if_idx...lines.size).each do |i|
+              stripped = lines[i].strip
+
+              if i == if_idx
+                depth += stripped.count('{') - stripped.count('}')
+                next
+              end
+
+              # Branch boundaries must be detected BEFORE the generic depth
+              # update: `} else {` is a net-zero line (one close, one open),
+              # so depth alone never returns to 0 there and the whole
+              # then+else span would fuse into a single (brace-unbalanced)
+              # branch.
+              if depth == 1 && stripped.start_with?('}')
+                if stripped =~ /\A\}\s*else(\s+if\s*\(.*)?\s*\{\z/
+                  branches << { start: branch_start, end_idx: i - 1 }
+                  boundaries << i
+                  branch_start = i + 1
+                  next # net-zero line: depth stays 1 inside the new branch
+                elsif stripped == '}'
+                  branches << { start: branch_start, end_idx: i - 1 }
+                  boundaries << i
+                  return { branches: branches, boundaries: boundaries }
+                end
+                # Any other `}…` line at depth 1 (e.g. `})`) means this is
+                # not the simple gate shape we handle — fall through to the
+                # generic update and ultimately refuse.
+              end
+
+              depth += stripped.count('{') - stripped.count('}')
+              return nil if depth <= 0
+            end
+
+            nil
+          end
+
+          # Lifts each branch body of the gate into its own Section function.
+          # Returns rewritten code, or nil when any branch cannot be lifted
+          # (all-or-nothing keeps the boundary bookkeeping simple: a partial
+          # lift would still shrink the body on the next process_once pass).
+          def lift_branches(lines, segments, prefix)
+            receiver = enclosing_receiver(lines, segments[:boundaries].first)
+
+            branch_bodies = segments[:branches].map do |b|
+              lines[b[:start]..b[:end_idx]].join("\n")
+            end
+
+            # Refuse when a branch reaches into cell-lambda locals it doesn't
+            # declare, or needs a scope receiver we couldn't identify.
+            branch_bodies.each do |body|
+              return nil if references_outer_scope_local?(body)
+              return nil if dangling_lazy_dsl?(body)
+              needs_scope = SCOPE_BOUND_MODIFIER_PREFIXES.any? { |m| body.include?(m) }
+              # Calls to receiver-extension sections require the SAME receiver
+              # on the lifted function; mixed or unknown receivers can't be
+              # bridged by a single extension signature.
+              scoped = scoped_call_names(body).map { |n| @scoped_names[n] }.uniq
+              return nil if scoped.size > 1
+              needs_scope ||= scoped.any?
+              return nil if scoped.any? && scoped.first != receiver
+              return nil if needs_scope && receiver.nil?
+            end
+
+            calls = branch_bodies.map do |body|
+              name = next_name(prefix)
+              lifted_body = process(body, "#{name}_")
+              needs_scope = SCOPE_BOUND_MODIFIER_PREFIXES.any? { |m| body.include?(m) }
+              needs_scope ||= scoped_call_names(lifted_body).any?
+              fn_receiver = needs_scope ? receiver : nil
+              @functions << build_function(name, lifted_body, receiver: fn_receiver)
+              @scoped_names[name] = fn_receiver if fn_receiver
+              name
+            end
+
+            indent = lines[segments[:boundaries].first].match(/\A(\s*)/)[1]
+            out = lines[0...segments[:boundaries].first]
+            segments[:branches].each_with_index do |_b, k|
+              out << lines[segments[:boundaries][k]] # `if (…) {` / `} else {`
+              out << "#{indent}    #{calls[k]}(data, viewModel)"
+            end
+            out << lines[segments[:boundaries].last] # final `}`
+            out.concat(lines[(segments[:boundaries].last + 1)..] || [])
+            out.join("\n")
+          end
+
+          # Walks upward from the gate opener to the nearest enclosing block
+          # opener and maps its keyword to a scope-receiver FQN. Returns nil
+          # when the enclosing scope is unknown (e.g. LazyColumn's own DSL
+          # block, where an extracted @Composable couldn't be called anyway).
+          def enclosing_receiver(lines, gate_idx)
+            depth = 0
+            (gate_idx - 1).downto(0) do |i|
+              stripped = lines[i].strip
+              next if stripped.empty?
+              depth += stripped.count('}') - stripped.count('{')
+              if depth < 0
+                keyword = container_keyword(lines, i)
+                return SCOPE_RECEIVERS[keyword]
+              end
+            end
+            nil
           end
 
           # `Section`-prefixed top-level lifts share a global counter so
@@ -353,8 +522,65 @@ module KjuiTools
             end
           end
 
+          # A lazy-DSL call (`item` / `items` / `itemsIndexed` / `stickyHeader`)
+          # is "dangling" when no lazy container OPENED WITHIN THE CHUNK is
+          # active at that point — its receiver is the enclosing (out-of-chunk)
+          # Lazy*Scope, so lifting the chunk to a file-scope @Composable strips
+          # the scope and the DSL no longer resolves (`Unresolved reference
+          # 'items'`). A chunk that wraps the DSL in its own LazyColumn /
+          # LazyRow / Lazy*Grid / CollectionStack lazyContent is self-contained
+          # and fine. Intermediate non-DSL lambdas (`let { … }`) don't break
+          # receiver visibility in Kotlin, so "any in-chunk lazy container
+          # currently open" is the right containment test.
+          def dangling_lazy_dsl?(code)
+            depth = 0
+            lazy_depths = []
+            pending_lazy = false
+
+            code.lines.each do |raw|
+              s = raw.strip
+              next if s.empty?
+
+              pending_lazy = true if s =~ /\b(?:LazyColumn|LazyRow|LazyVerticalGrid|LazyHorizontalGrid)\s*\(/
+              lazy_open_here = s =~ /lazyContent\s*=\s*\{/ ? true : false
+
+              if lazy_depths.empty? && s =~ /(?:\A|[\s{(.])(?:item|items|itemsIndexed|stickyHeader)\s*[({]/
+                return true
+              end
+
+              opens = s.count('{')
+              closes = s.count('}')
+              if opens > closes
+                depth += opens - closes
+                if pending_lazy || lazy_open_here
+                  lazy_depths << depth
+                  pending_lazy = false
+                end
+              elsif closes > opens
+                depth -= closes - opens
+                lazy_depths.pop while lazy_depths.any? && lazy_depths.last > depth
+              end
+            end
+
+            false
+          end
+
+          # Names of receiver-extension sections that `code` calls.
+          def scoped_call_names(code)
+            code.scan(/\b(Section\d+(?:_\d+)*)\(data, viewModel\)/).flatten.uniq
+                .select { |n| @scoped_names.key?(n) }
+          end
+
           def references_outer_scope_local?(code)
             declared_inside = code.scan(/\b(?:val|var)\s+(\w+)\b/).flatten.to_set
+            # Lambda parameters are declarations too: a chunk containing the
+            # whole `items(…) { cellIndex -> … }` lambda self-contains
+            # cellIndex — without this, any branch enclosing a Collection
+            # emission is misread as leaking cell-scope locals and large
+            # responsive gates around Collections are never extracted.
+            code.scan(/\{\s*(\w+(?:\s*,\s*\w+)*)\s*->/).flatten.each do |params|
+              params.split(',').each { |p| declared_inside << p.strip }
+            end
             code.scan(OUTER_SCOPE_LOCAL_PATTERN).flatten.uniq.any? do |id|
               !declared_inside.include?(id)
             end
@@ -487,6 +713,11 @@ module KjuiTools
             first_word = stripped.match(/^(\w+)/)&.[](1)
             return true if first_word && LAZY_DSL_KEYWORDS.include?(first_word)
 
+            # Lazy-DSL calls whose receiver scope lives OUTSIDE the chunk
+            # (e.g. `data.gridItems?.…let { items(…) { … } }` directly under a
+            # LazyVerticalGrid) — lifting would strip the Lazy*Scope receiver.
+            return true if dangling_lazy_dsl?(code)
+
             # Collection / Lazy cell-scope locals leak through a file-scope
             # lift. Detect names matching the kjui-emit patterns (cellIndex,
             # cellData0, cellViewModel, cellId, currentCellData, section0,
@@ -498,6 +729,12 @@ module KjuiTools
             # inside `"step_section3_button"`, would also match — but lift
             # suppression is harmless, the chunk just stays inline.)
             return true if references_outer_scope_local?(code)
+
+            # Calls to receiver-extension sections (emitted by the if/else
+            # branch pass): lifting the call site into a plain file-scope
+            # function severs the receiver context and the extension no
+            # longer resolves. These call-skeletons are tiny; keep inline.
+            return true if scoped_call_names(code).any?
 
             # Scope-bound modifier anywhere in the chunk — including:
             #   (a) inline named-arg form on the opener line, e.g.
@@ -521,10 +758,10 @@ module KjuiTools
             false
           end
 
-          def build_function(name, body)
+          def build_function(name, body, receiver: nil)
             <<~KOTLIN.chomp
               @Composable
-              private fun #{name}(
+              private fun #{receiver}#{name}(
                   data: #{@data_type},
                   viewModel: #{@viewmodel_type}
               ) {
