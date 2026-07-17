@@ -34,7 +34,7 @@ DEFAULT_ARTIFACTS_DIR = "tests/artifacts"
 DERIVED_DATA_XCRESULT_GLOB = "~/Library/Developer/Xcode/DerivedData/*/Logs/Test/*.xcresult"
 
 SCREENSHOT_EXTS = {".png", ".jpg", ".jpeg", ".heic"}
-RECORDING_EXTS = {".mp4", ".mov"}
+RECORDING_EXTS = {".mp4", ".mov", ".webm"}
 
 # Characters unsafe in file names (keep '/', it is handled as a separator).
 _SANITIZE_RE = re.compile(r'[<>:"|?*\\\x00-\x1f]')
@@ -378,6 +378,69 @@ def pull_android(test_cfg: dict, project_root, out_root,
     return result
 
 
+# -- Web ------------------------------------------------------------------------
+
+def _resolve_rel(project_root, raw) -> Path:
+    p = Path(os.path.expanduser(str(raw)))
+    return p if p.is_absolute() else Path(project_root) / p
+
+
+def pull_web(test_cfg: dict, project_root, out_root, clean=False) -> PullResult:
+    """Collect Playwright output + driver screenshots into <out_root>/web/<stamp>/.
+
+    Sources (both local — no device, no result bundle):
+      - `web.testResults` (default "test-results"): Playwright's per-test dirs
+        (`<spec>-<title-slug>-<project>/`) holding video.webm (with
+        `use: { video: 'on' }` in playwright.config), trace, error context.
+        Each subdir is one test bucket; files are classified by extension.
+      - `web.screenshotDir` (default "screenshots"): the web driver's own
+        failure_/screenshot_ PNGs (flat, names carry test/case identity).
+    """
+    result = PullResult(platform="web")
+    web_cfg = _artifacts_cfg(test_cfg).get("web", {}) or {}
+
+    test_results = _resolve_rel(project_root, web_cfg.get("testResults", "test-results"))
+    shot_dir = _resolve_rel(project_root, web_cfg.get("screenshotDir", "screenshots"))
+
+    stamp_dir = Path(out_root) / "web" / _now_stamp()
+    used: set = set()
+    pulled_any = False
+
+    if test_results.is_dir():
+        for bucket in sorted(p for p in test_results.iterdir() if p.is_dir()):
+            for src in sorted(p for p in bucket.rglob("*") if p.is_file()):
+                dest_dir = stamp_dir / bucket.name / _classify(src.suffix)
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                dest = _dedupe(dest_dir / _sanitize(src.name), used)
+                shutil.copy2(src, dest)
+                result.files.append(str(dest))
+                pulled_any = True
+    else:
+        result.skipped.append(f"no Playwright output at {test_results}")
+
+    if shot_dir.is_dir():
+        for src in sorted(p for p in shot_dir.rglob("*") if p.is_file()):
+            dest_dir = stamp_dir / "screenshots"
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest = _dedupe(dest_dir / _sanitize(src.name), used)
+            shutil.copy2(src, dest)
+            result.files.append(str(dest))
+            pulled_any = True
+    else:
+        result.skipped.append(f"no driver screenshots at {shot_dir}")
+
+    if not pulled_any:
+        return result
+
+    if clean:
+        shutil.rmtree(test_results, ignore_errors=True)
+        shutil.rmtree(shot_dir, ignore_errors=True)
+
+    result.stamp_dir = str(stamp_dir)
+    update_latest_symlink(out_root, "web", stamp_dir)
+    return result
+
+
 # -- status & exit-code policy -------------------------------------------------
 
 def status(test_cfg: dict, project_root) -> dict:
@@ -386,7 +449,10 @@ def status(test_cfg: dict, project_root) -> dict:
     out_root = resolve_out_root(test_cfg, project_root)
     ios_cfg = art.get("ios", {}) or {}
     android_cfg = art.get("android", {}) or {}
+    web_cfg = art.get("web", {}) or {}
     xcresult = find_xcresult(ios_cfg)
+    web_results = _resolve_rel(project_root, web_cfg.get("testResults", "test-results"))
+    web_shots = _resolve_rel(project_root, web_cfg.get("screenshotDir", "screenshots"))
     return {
         "artifactsDir": str(out_root),
         "ios": {"xcresult": str(xcresult) if xcresult else None},
@@ -394,6 +460,10 @@ def status(test_cfg: dict, project_root) -> dict:
             "appId": android_cfg.get("appId"),
             "serial": android_cfg.get("serial"),
             "adb": find_adb(android_cfg),
+        },
+        "web": {
+            "testResults": str(web_results) if web_results.is_dir() else None,
+            "screenshotDir": str(web_shots) if web_shots.is_dir() else None,
         },
         "existing": collect_files(out_root),
     }

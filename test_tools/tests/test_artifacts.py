@@ -540,7 +540,7 @@ class TestCliArgv:
 
         assert rc == 0
         data = json.loads(capsys.readouterr().out)
-        assert set(data.keys()) == {"artifactsDir", "ios", "android", "existing"}
+        assert set(data.keys()) == {"artifactsDir", "ios", "android", "web", "existing"}
         assert data["artifactsDir"] == str((tmp_path / "arts").resolve())
         assert data["android"]["appId"] == "com.example.app"
         assert data["existing"] == []
@@ -574,3 +574,79 @@ class TestExportSuffixStrip:
         from jsonui_test_cli.artifacts import _strip_export_suffix
         # a name that IS only the suffix keeps its original stem
         assert _strip_export_suffix("_0_FCBD85F8-B89A-44E9-A4F6-2B129EC95F36.png") == "_0_FCBD85F8-B89A-44E9-A4F6-2B129EC95F36.png"
+
+
+# -- tests: Web ---------------------------------------------------------------
+
+class TestPullWeb:
+    @staticmethod
+    def _make_sources(tmp_path):
+        tr = tmp_path / "test-results"
+        bucket = tr / "probe-artifact-probe-fail-case-chromium"
+        bucket.mkdir(parents=True)
+        (bucket / "video.webm").write_bytes(b"WEBM")
+        (bucket / "error-context.md").write_text("ctx")
+        shots = tmp_path / "screenshots"
+        shots.mkdir()
+        (shots / "failure_login_case1.png").write_bytes(b"PNG")
+        return tr, shots
+
+    def test_organizes_playwright_buckets_and_driver_screenshots(self, tmp_path, monkeypatch):
+        from jsonui_test_cli.artifacts import pull_web
+        self._make_sources(tmp_path)
+        monkeypatch.setattr(artifacts, "_now_stamp", lambda: FIXED_STAMP)
+        out = tmp_path / "out"
+
+        result = pull_web({}, tmp_path, out)
+
+        stamp = out / "web" / FIXED_STAMP
+        assert (stamp / "probe-artifact-probe-fail-case-chromium" / "recordings" / "video.webm").is_file()
+        assert (stamp / "probe-artifact-probe-fail-case-chromium" / "other" / "error-context.md").is_file()
+        assert (stamp / "screenshots" / "failure_login_case1.png").is_file()
+        assert len(result.files) == 3
+        assert result.stamp_dir == str(stamp)
+        assert (out / "web" / "latest").is_symlink()
+
+    def test_missing_sources_are_skipped_not_raised(self, tmp_path, monkeypatch):
+        from jsonui_test_cli.artifacts import pull_web
+        monkeypatch.setattr(artifacts, "_now_stamp", lambda: FIXED_STAMP)
+
+        result = pull_web({}, tmp_path, tmp_path / "out")
+
+        assert result.files == []
+        assert result.stamp_dir is None
+        assert len(result.skipped) == 2
+
+    def test_clean_removes_source_dirs(self, tmp_path, monkeypatch):
+        from jsonui_test_cli.artifacts import pull_web
+        tr, shots = self._make_sources(tmp_path)
+        monkeypatch.setattr(artifacts, "_now_stamp", lambda: FIXED_STAMP)
+
+        pull_web({}, tmp_path, tmp_path / "out", clean=True)
+
+        assert not tr.exists()
+        assert not shots.exists()
+
+    def test_custom_dirs_from_config(self, tmp_path, monkeypatch):
+        from jsonui_test_cli.artifacts import pull_web
+        tr = tmp_path / "webapp" / "pw-out"
+        (tr / "b1").mkdir(parents=True)
+        (tr / "b1" / "video.webm").write_bytes(b"W")
+        monkeypatch.setattr(artifacts, "_now_stamp", lambda: FIXED_STAMP)
+        cfg = {"artifacts": {"web": {"testResults": "webapp/pw-out",
+                                     "screenshotDir": "webapp/shots"}}}
+
+        result = pull_web(cfg, tmp_path, tmp_path / "out")
+
+        assert any(f.endswith("b1/recordings/video.webm") for f in result.files)
+        assert any("webapp/shots" in s for s in result.skipped)
+
+    def test_root_level_files_ignored(self, tmp_path, monkeypatch):
+        from jsonui_test_cli.artifacts import pull_web
+        tr, _ = self._make_sources(tmp_path)
+        (tr / ".last-run.json").write_text("{}")
+        monkeypatch.setattr(artifacts, "_now_stamp", lambda: FIXED_STAMP)
+
+        result = pull_web({}, tmp_path, tmp_path / "out")
+
+        assert not any(".last-run" in f for f in result.files)

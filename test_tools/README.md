@@ -277,6 +277,30 @@ Pull test artifacts (screenshots, recordings) into the local artifacts directory
 - **iOS**: exports attachments from the newest `.xcresult` bundle (explicit path, glob, or automatic DerivedData discovery) via `xcrun xcresulttool export attachments`, organized per test into `screenshots/`, `recordings/`, and `other/` subdirectories.
 - **Android**: pulls `/sdcard/Android/data/<appId>/files/jsonui-artifacts` and `/data/local/tmp/jsonui-artifacts` from the device via `adb pull`. adb is resolved from `test.artifacts.android.adb` (explicit path) > PATH > `$ANDROID_HOME` / `$ANDROID_SDK_ROOT` > the OS-default SDK location (`~/Library/Android/sdk` on macOS, `~/Android/Sdk` on Linux) — so it also works from environments without a login-shell PATH (e.g. an MCP daemon).
 
+- **Web**: collects Playwright's per-test output dirs (`test-results/<spec>-<title>-<project>/` — video.webm, traces, error context) plus the web driver's `screenshotDir` PNGs. Recording and browser selection are Playwright-native — enable them in the consuming harness:
+
+  ```ts
+  // playwright.config.ts
+  export default defineConfig({
+    use: { video: 'on' },                       // or 'retain-on-failure'
+    projects: [
+      { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+      { name: 'firefox',  use: { ...devices['Desktop Firefox'] } },
+      { name: 'webkit',   use: { ...devices['Desktop Safari'] } },
+    ],
+  });
+  ```
+
+  ```ts
+  // in the test: point the driver's screenshotDir at the per-test bucket so
+  // failure/action PNGs land next to the video and pull collects them together
+  test('login', async ({ page }, testInfo) => {
+    const runner = new JsonUITestRunner(page, { screenshotDir: testInfo.outputDir });
+    ...
+  });
+  ```
+
+
 Each pull lands in `<dir>/<platform>/<stamp>/` (iOS stamps use the xcresult mtime so re-pulls of the same run are stable) and a `<dir>/<platform>/latest` symlink points at the newest pull.
 
 ```bash
@@ -330,7 +354,8 @@ Configured under the `test.artifacts` block of `jui.config.json`:
     "artifacts": {
       "dir": "tests/artifacts",
       "ios": { "xcresult": null },
-      "android": { "appId": "com.example.app", "serial": null, "adb": null }
+      "android": { "appId": "com.example.app", "serial": null, "adb": null },
+      "web": { "testResults": "test-results", "screenshotDir": "screenshots" }
     }
   }
 }

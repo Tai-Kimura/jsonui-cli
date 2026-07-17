@@ -381,15 +381,17 @@ def _make_artifacts_post_run_hook(explicit_config):
 
     def hook(target, returncode):
         platform = str(target).lower()
-        if platform not in ("ios", "android"):
-            return  # web / custom targets have no on-device artifacts
+        if platform not in ("ios", "android", "web"):
+            return  # custom targets have no known artifact source
         test_cfg, cfg_path = _load_test_config(explicit_config)
         project_root = cfg_path.parent if cfg_path else Path(".")
         out_root = artifacts.resolve_out_root(test_cfg, project_root)
         if platform == "ios":
             result = artifacts.pull_ios(test_cfg, project_root, out_root)
-        else:
+        elif platform == "android":
             result = artifacts.pull_android(test_cfg, project_root, out_root)
+        else:
+            result = artifacts.pull_web(test_cfg, project_root, out_root)
         line = f"[artifacts] {platform}: {len(result.files)} file(s) -> {result.stamp_dir or out_root}"
         if result.skipped:
             line += f" (skipped: {'; '.join(result.skipped)})"
@@ -454,7 +456,7 @@ def cmd_artifacts_pull(args):
     project_root = cfg_path.parent if cfg_path else Path(".")
     out_root = artifacts.resolve_out_root(test_cfg, project_root, override=args.out)
 
-    platforms = ["ios", "android"] if args.platform == "all" else [args.platform]
+    platforms = ["ios", "android", "web"] if args.platform == "all" else [args.platform]
     results = []
     for platform in platforms:
         try:
@@ -462,10 +464,13 @@ def cmd_artifacts_pull(args):
                 results.append(artifacts.pull_ios(
                     test_cfg, project_root, out_root,
                     xcresult_override=args.xcresult))
-            else:
+            elif platform == "android":
                 results.append(artifacts.pull_android(
                     test_cfg, project_root, out_root,
                     serial_override=args.serial, clean=args.clean))
+            else:
+                results.append(artifacts.pull_web(
+                    test_cfg, project_root, out_root, clean=args.clean))
         except artifacts.ArtifactsConfigError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
@@ -708,7 +713,7 @@ def main():
 
     artifacts_pull_parser = artifacts_subparsers.add_parser(
         "pull", help="Pull artifacts into the artifacts dir")
-    artifacts_pull_parser.add_argument("--platform", choices=["ios", "android", "all"], default="all",
+    artifacts_pull_parser.add_argument("--platform", choices=["ios", "android", "web", "all"], default="all",
                                        help="Platform to pull from (default: all)")
     artifacts_pull_parser.add_argument("--xcresult",
                                        help="Explicit .xcresult path or glob (overrides test.artifacts.ios.xcresult)")
