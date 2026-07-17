@@ -4,8 +4,9 @@ name: conformance-mobile
 # cross-platform report as the gate: 0 mismatches / 0 fail / 0 error.
 #
 # Too slow for per-push (iOS ~30 min on a macOS runner, Android needs an
-# emulator boot), so it runs nightly + on manual dispatch. Per-push coverage
-# is ci.yml (unit suites + guards + web conformance).
+# emulator boot), so it runs weekly + on manual dispatch. Per-push coverage
+# is ci.yml (unit suites + guards + web conformance). For an on-demand full
+# run (e.g. before a release), use workflow_dispatch.
 #
 # The iOS host lives in the SwiftJsonUI repo (ConformanceHost/), the Android
 # host in the KotlinJsonUI repo (conformance-host/) — both public and checked
@@ -15,8 +16,9 @@ name: conformance-mobile
 
 on:
   schedule:
-    # 18:00 UTC = 03:00 JST — after the workday, before the next one.
-    - cron: "0 18 * * *"
+    # Sunday 18:00 UTC = Monday 03:00 JST — weekly, results ready before the
+    # work week starts.
+    - cron: "0 18 * * 0"
   workflow_dispatch:
 
 concurrency:
