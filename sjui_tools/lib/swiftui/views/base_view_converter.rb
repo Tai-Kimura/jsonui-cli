@@ -242,7 +242,15 @@ module SjuiTools
         ACCESSIBILITY_CONTAINER_TYPES = %w[
           view safeareaview scrollview scroll
           blur blurview gradientview gradient
+          embed
         ].freeze
+        # `embed` is here because EmbedContainer is a plain wrapper view: a
+        # bare .accessibilityIdentifier on it is pushed down into the
+        # embedded screen and clobbers the identifier of that screen's root
+        # container (its nearest descendant element) — the embedded root id
+        # then never resolves in XCUITest while pane leaves still do. The
+        # merge-hazard anchor is always emitted for an id-bearing Embed
+        # (its subtree is unknown at codegen time, contribution 0).
 
         # Component types that are guaranteed to surface at least one
         # accessibility element of their own when visible (text, controls,

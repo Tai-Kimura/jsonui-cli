@@ -196,6 +196,21 @@ RSpec.describe 'container accessibilityIdentifier emission' do
       expect(code.scan('.accessibilityElement(children: .contain)').length).to eq(2)
     end
 
+    it 'counts an id-bearing Embed child as an element itself (two-pane root gets no anchor)' do
+      code = convert({ 'type' => 'View', 'id' => 'root', 'orientation' => 'horizontal',
+                       'child' => [
+                         { 'type' => 'Embed', 'id' => 'detailPane', 'screen' => 'order_detail', 'weight' => 1 },
+                         { 'type' => 'Embed', 'id' => 'searchPane', 'screen' => 'search_results', 'weight' => 1 }
+                       ] })
+
+      # root has 2 guaranteed children (two explicit embed containers) ->
+      # no anchor on root; each embed (unknown subtree) is anchored itself
+      expect(code.scan('.accessibilityElement(children: .contain)').length).to eq(3)
+      expect(code.scan(ANCHOR_OVERLAY).length).to eq(2)
+      expect(code).to include('.accessibilityIdentifier("detailPane")')
+      expect(code).to include('.accessibilityIdentifier("searchPane")')
+    end
+
     it 'does not count a decorative empty container child' do
       code = convert({ 'type' => 'View', 'id' => 'root',
                        'child' => [

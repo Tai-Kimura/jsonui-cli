@@ -50,6 +50,32 @@ RSpec.describe SjuiTools::SwiftUI::Views::EmbedConverter do
       end
     end
 
+    # Regression: sjui-embed-pane-container-root-ids-not-queryable-xcuitest —
+    # EmbedContainer is a plain wrapper view, so a bare
+    # .accessibilityIdentifier on it was pushed down into the embedded screen
+    # and clobbered the embedded root container's own identifier (the root id
+    # never resolved in XCUITest inside a pane while leaves still did).
+    context 'accessibility exposure of an id-bearing Embed' do
+      it 'becomes an explicit accessibility container with the anchor overlay' do
+        code = convert(
+          'type' => 'Embed', 'id' => 'detailPane', 'screen' => 'order_detail'
+        )
+        expect(code).to include('.accessibilityElement(children: .contain)')
+        expect(code).to include('.accessibilityIdentifier("detailPane")')
+        expect(code.index('.accessibilityElement(children: .contain)'))
+          .to be < code.index('.accessibilityIdentifier("detailPane")')
+        # subtree is unknown at codegen time -> always merge-hazard anchored
+        expect(code).to include('.overlay(alignment: .topLeading) {')
+        expect(code).to include('.accessibilityElement(children: .ignore)')
+      end
+
+      it 'emits no accessibility modifiers for an Embed without id' do
+        code = convert('type' => 'Embed', 'screen' => 'order_detail')
+        expect(code).not_to include('.accessibilityIdentifier(')
+        expect(code).not_to include('.accessibilityElement(children: .contain)')
+      end
+    end
+
     context 'params wiring (P2)' do
       it 'emits literal params using Swift dict literal syntax' do
         code = convert(
