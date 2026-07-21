@@ -63,6 +63,12 @@ module RjuiTools
           raw = TailwindMapper.map_height(v)
           raw.empty? ? nil : "#{prefix}#{raw}"
         },
+        'weight' => ->(v, prefix) {
+          raw = TailwindMapper.map_flex_grow(v)
+          # map_flex_grow can return multiple utilities
+          # ("flex-[1.5] min-w-0 min-h-0") — each needs its own prefix.
+          raw.empty? ? nil : raw.split(' ').map { |c| "#{prefix}#{c}" }.join(' ')
+        },
         'visibility' => ->(v, prefix) {
           case v
           when 'visible'

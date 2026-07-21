@@ -173,6 +173,46 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         expect(result[:classes]).not_to include('hidden')
       end
 
+      it 'emits max-md:flex-none for compact weight 0 (ratio layout opt-out)' do
+        component = {
+          'type' => 'View',
+          'weight' => 1.5,
+          'responsive' => {
+            'compact' => { 'weight' => 0, 'width' => 'matchParent' }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('max-md:flex-none')
+        expect(result[:classes].join(' ')).not_to include('max-md:min-w-0')
+      end
+
+      it 'prefixes every utility for non-zero compact weight override' do
+        component = {
+          'type' => 'View',
+          'weight' => 1,
+          'responsive' => {
+            'compact' => { 'weight' => 2.5 }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('max-md:flex-[2.5] max-md:min-w-0 max-md:min-h-0')
+      end
+
+      it 'emits md:flex-1 for medium weight 1 override' do
+        component = {
+          'type' => 'View',
+          'weight' => 0,
+          'responsive' => {
+            'medium' => { 'weight' => 1 }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('md:flex-1 md:min-w-0 md:min-h-0')
+      end
+
       it 'scopes padding override below md' do
         component = {
           'type' => 'View',
