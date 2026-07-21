@@ -148,6 +148,10 @@ module RjuiTools
                   result[:landscape_styles][landscape_key] << cls if cls
                 end
               end
+
+              responsive_gravity_classes(component, overrides).each do |cls|
+                result[:landscape_styles][landscape_key] << cls
+              end
             else
               # Pure width breakpoint -> Tailwind responsive prefix
               prefix = BREAKPOINT_PREFIX[parsed[:width]] || ''
@@ -160,6 +164,10 @@ module RjuiTools
                   cls = mapper.call(value, prefix)
                   result[:classes] << cls if cls
                 end
+              end
+
+              responsive_gravity_classes(component, overrides).each do |cls|
+                result[:classes] << "#{prefix}#{cls}"
               end
             end
           end
@@ -222,6 +230,46 @@ module RjuiTools
         end
 
         private
+
+        # Gravity cannot go through ATTRIBUTE_MAPPERS: its Tailwind classes
+        # (items-* / justify-*) depend on the flex direction, so the override
+        # must be interpreted against the EFFECTIVE orientation of the same
+        # size-class block (its own orientation override, else the base one).
+        #
+        # Canonical semantics: a responsive `gravity` REPLACES the base
+        # gravity wholesale. When the new value doesn't specify an axis that
+        # the base classes covered, that axis is reset to the flex default
+        # (items-stretch / justify-normal) inside the breakpoint — otherwise
+        # the base's unprefixed class survives the override.
+        #
+        # An `orientation`-only override also re-emits the base gravity:
+        # the base classes were computed against the base orientation, so
+        # inside the breakpoint they alias the wrong axis (horizontal
+        # centerVertical = items-center, but under a vertical override the
+        # same intent is justify-center). SwiftJsonUI / KotlinJsonUI resolve
+        # merged attributes at runtime, so this is rjui-specific.
+        def responsive_gravity_classes(component, overrides)
+          has_gravity = overrides.key?('gravity')
+          base_gravity = component['gravity']
+          return [] unless has_gravity || (overrides.key?('orientation') && base_gravity)
+
+          base_classes = TailwindMapper.map_gravity(base_gravity, component['orientation'])
+          effective_orientation = overrides['orientation'] || component['orientation']
+          new_gravity = has_gravity ? overrides['gravity'] : base_gravity
+          new_classes = TailwindMapper.map_gravity(new_gravity, effective_orientation)
+
+          # Classes identical to the base need no scoped re-emit — the
+          # unprefixed base class already applies at every width.
+          classes = new_classes - base_classes
+
+          { 'items' => 'items-stretch', 'justify' => 'justify-normal' }.each do |axis, reset|
+            base_has = base_classes.any? { |c| c.start_with?("#{axis}-") }
+            new_has = new_classes.any? { |c| c.start_with?("#{axis}-") }
+            classes << reset if base_has && !new_has
+          end
+
+          classes
+        end
 
         def build_landscape_key(parsed)
           if parsed[:width]
