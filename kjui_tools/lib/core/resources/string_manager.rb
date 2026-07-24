@@ -195,8 +195,11 @@ module KjuiTools
           #   "test.json" -> "test"
           #   "subdir/test.json" -> "subdir_test"
           #   "a/b/c/test.json" -> "a_b_c_test"
+          # Variant files (home@regular.json) fold into the BASE screen's
+          # namespace — same screen, shared strings dedupe.
           relative_path
             .gsub(/\.json$/, '')
+            .sub(/@[^\/]*\z/, '')
             .gsub('/', '_')
         end
         

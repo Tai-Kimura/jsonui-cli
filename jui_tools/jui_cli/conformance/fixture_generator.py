@@ -466,6 +466,22 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     summary.assertable_count += sum(1 for e in embed_entries if e["class"] == "assertable")
     summary.interactive_count += sum(1 for e in embed_entries if e["class"] == "interactive")
 
+    # Bespoke responsive variant-file semantic fixtures (06 track):
+    # companion screens shipped with @-suffixed size-class variants under
+    # fixtures/common/__screens/ — see variant_fixtures module docstring.
+    from .variant_fixtures import build_variant_fixtures
+
+    variant_files, variant_entries = build_variant_fixtures(source_label)
+    for rel_path, payload in variant_files:
+        target = out_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_dump_json(payload), encoding="utf-8")
+        summary.files_written += 1
+    fixture_entries.extend(variant_entries)
+    summary.fixture_count += len(variant_entries)
+    summary.assertable_count += sum(1 for e in variant_entries if e["class"] == "assertable")
+    summary.interactive_count += sum(1 for e in variant_entries if e["class"] == "interactive")
+
     skipped_entries = [
         {"component": s.section, "attribute": s.attribute, "reason": s.reason}
         for s in skipped

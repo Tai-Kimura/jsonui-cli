@@ -1,0 +1,56 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/variantfile__compact_resolution.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.variantfile (compact_resolution)",
+    "description": "Responsive variant-file semantic fixture (compact_resolution). Companion screens with @-suffixed variants live under fixtures/common/__screens/ — see manifest 'companions'.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "variantfile",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "resolves_compact_tier",
+      "description": "variant-file: resolves_compact_tier",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "variant-which",
+          "equals": "compact"
+        }
+      ],
+      "platform": [
+        "ios"
+      ]
+    },
+    {
+      "name": "base_on_regular_tier",
+      "description": "variant-file: base_on_regular_tier",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "variant-which",
+          "equals": "base"
+        }
+      ],
+      "platform": [
+        "android",
+        "web"
+      ]
+    }
+  ]
+}

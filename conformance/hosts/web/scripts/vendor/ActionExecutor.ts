@@ -5,16 +5,21 @@
  * Uses id attribute for element matching (ReactJsonUI exposes id as HTML id attribute)
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import type { Page, Locator } from 'playwright';
-import type { TestStep } from './types.ts';
+import { type TestStep, deriveOrientation } from './types.ts';
 
 export class ActionExecutor {
   private page: Page;
   private defaultTimeout: number;
+  /** Runtime variable store shared with the runner (written by readText) */
+  private variables: Record<string, string>;
 
-  constructor(page: Page, defaultTimeout: number = 5000) {
+  constructor(page: Page, defaultTimeout: number = 5000, variables: Record<string, string> = {}) {
     this.page = page;
     this.defaultTimeout = defaultTimeout;
+    this.variables = variables;
   }
 
   /**
@@ -41,11 +46,17 @@ export class ActionExecutor {
       case 'input':
         await this.executeInput(step, timeout);
         break;
+      case 'typeText':
+        await this.executeTypeText(step);
+        break;
       case 'clear':
         await this.executeClear(step, timeout);
         break;
       case 'scroll':
         await this.executeScroll(step, timeout);
+        break;
+      case 'scrollUntilVisible':
+        await this.executeScrollUntilVisible(step);
         break;
       case 'swipe':
         await this.executeSwipe(step, timeout);
@@ -62,6 +73,9 @@ export class ActionExecutor {
       case 'back':
         await this.executeBack();
         break;
+      case 'hideKeyboard':
+        await this.executeHideKeyboard();
+        break;
       case 'screenshot':
         await this.executeScreenshot(step);
         break;
@@ -77,6 +91,29 @@ export class ActionExecutor {
       case 'selectTab':
         await this.executeSelectTab(step, timeout);
         break;
+      case 'readText':
+        await this.executeReadText(step, timeout);
+        break;
+      case 'setLocation':
+        await this.executeSetLocation(step);
+        break;
+      case 'addMedia':
+        await this.executeAddMedia(step);
+        break;
+      case 'emitHook':
+        await this.executeEmitHook(step);
+        break;
+      case 'setViewport':
+        await this.executeSetViewport(step);
+        break;
+      case 'setOrientation':
+        await this.executeSetOrientation(step);
+        break;
+      case 'repeat':
+      case 'retry':
+        // Control steps are executed by the runner (they need condition evaluation
+        // and nested step handling); reaching here means the runner was bypassed
+        throw new Error(`'${action}' is a control step and is handled by the test runner`);
       default:
         throw new Error(`Unknown action: ${action}`);
     }
@@ -143,6 +180,20 @@ export class ActionExecutor {
       // Try filling directly if the element itself is an input
       await element.fill(value);
     }
+  }
+
+  /**
+   * Type into whatever currently holds keyboard focus — no element id.
+   * For fields that are focused but not directly targetable (e.g. an invisible
+   * code-entry input behind visible slots). Focus is established app-side
+   * (auto-focus or a prior tap); keyboard events route to document.activeElement.
+   */
+  private async executeTypeText(step: TestStep): Promise<void> {
+    const value = step.value;
+    if (value === undefined) {
+      throw new Error("typeText requires 'value'");
+    }
+    await this.page.keyboard.type(value);
   }
 
   private async executeClear(step: TestStep, timeout: number): Promise<void> {
@@ -297,8 +348,34 @@ export class ActionExecutor {
     await this.page.goBack();
   }
 
+  /**
+   * Dismiss the soft keyboard by blurring the focused element. Under mobile
+   * emulation this closes the on-screen keyboard; on desktop it is a
+   * harmless blur (cross-platform parity with the ios/android drivers).
+   */
+  private async executeHideKeyboard(): Promise<void> {
+    await this.page.evaluate(() => {
+      const el = document.activeElement as HTMLElement | null;
+      if (el && typeof el.blur === 'function') {
+        el.blur();
+      }
+    });
+  }
+
+  /**
+   * Sink for `screenshot` action captures. The runner wires this so the
+   * capture lands in config.screenshotDir with test/case identity in the
+   * name (collected by `jsonui-test artifacts pull`); the bare CWD write
+   * below is only the fallback for executors used without a runner.
+   */
+  screenshotHandler?: (name: string) => Promise<void>;
+
   private async executeScreenshot(step: TestStep): Promise<void> {
     const name = step.name ?? `screenshot_${Date.now()}`;
+    if (this.screenshotHandler) {
+      await this.screenshotHandler(name);
+      return;
+    }
     await this.page.screenshot({ path: `${name}.png` });
   }
 
@@ -431,6 +508,253 @@ export class ActionExecutor {
     await element.click();
   }
 
+  private async executeScrollUntilVisible(step: TestStep): Promise<void> {
+    const id = step.id;
+    if (!id) {
+      throw new Error("scrollUntilVisible requires 'id'");
+    }
+    const direction = step.direction ?? 'down';
+    const timeout = step.timeout ?? 20000;
+    const target = this.getLocator(id).first();
+
+    const isTargetVisible = async (): Promise<boolean> => {
+      return (await target.count()) > 0 && await target.isVisible();
+    };
+
+    if (await isTargetVisible()) {
+      return;
+    }
+
+    // `direction` is the FIRST direction to search, not a constraint: when the
+    // primary sweep reaches the end of content without a hit, the search
+    // continues in the OPPOSITE direction to the other end. The target can
+    // legitimately sit on the far side of the starting offset (measured on a
+    // tablet 2-column page: a tall section left partially visible at the
+    // viewport top made an "scroll up until visible" reset step a correct
+    // no-op, and a down-only search then ran to the bottom while the target
+    // sat just above the viewport).
+    const searchLeg = async (
+      legDirection: 'up' | 'down' | 'left' | 'right',
+      deadline: number
+    ): Promise<boolean> => {
+      let previousMarker: string | null = null;
+      let unchangedCount = 0;
+
+      while (Date.now() < deadline) {
+        const marker = await this.scrollOneStep(step.container, legDirection);
+
+        if (await isTargetVisible()) {
+          return true;
+        }
+
+        // End-reached detection: two consecutive scrolls with no position/content change
+        if (marker !== null && marker === previousMarker) {
+          unchangedCount += 1;
+          if (unchangedCount >= 1) {
+            return false;
+          }
+        } else {
+          unchangedCount = 0;
+        }
+        previousMarker = marker;
+
+        await this.page.waitForTimeout(150);
+      }
+      return isTargetVisible();
+    };
+
+    if (await searchLeg(direction, Date.now() + timeout)) {
+      return;
+    }
+    // Reverse leg: grant it a real budget even when the primary leg burned the
+    // step timeout (bounded: at most one extra half-timeout).
+    const reverseMap = { down: 'up', up: 'down', left: 'right', right: 'left' } as const;
+    const reverse = reverseMap[direction] ?? 'up';
+    if (await searchLeg(reverse, Date.now() + Math.max(timeout / 2, 6000))) {
+      return;
+    }
+    throw new Error(
+      `Element '${id}' not found after scrolling to both ends of ${step.container ? `'${step.container}'` : 'the page'}`
+    );
+  }
+
+  /**
+   * Scroll one step in the given direction. Returns a marker string describing the
+   * scroll position after scrolling (used for end-reached detection), or null if unknown.
+   */
+  private async scrollOneStep(
+    containerId: string | undefined,
+    direction: 'up' | 'down' | 'left' | 'right'
+  ): Promise<string | null> {
+    if (containerId) {
+      const container = this.getLocator(containerId).first();
+      if (await container.count() === 0) {
+        throw new Error(`scrollUntilVisible container '${containerId}' not found`);
+      }
+      return container.evaluate((el, dir) => {
+        const step = Math.round((dir === 'up' || dir === 'down' ? el.clientHeight : el.clientWidth) * 0.7);
+        switch (dir) {
+          case 'up': el.scrollTop -= step; break;
+          case 'down': el.scrollTop += step; break;
+          case 'left': el.scrollLeft -= step; break;
+          case 'right': el.scrollLeft += step; break;
+        }
+        return `${el.scrollTop},${el.scrollLeft}`;
+      }, direction);
+    }
+
+    // Scroll the window
+    return this.page.evaluate((dir) => {
+      const step = Math.round((dir === 'up' || dir === 'down' ? window.innerHeight : window.innerWidth) * 0.7);
+      switch (dir) {
+        case 'up': window.scrollBy(0, -step); break;
+        case 'down': window.scrollBy(0, step); break;
+        case 'left': window.scrollBy(-step, 0); break;
+        case 'right': window.scrollBy(step, 0); break;
+      }
+      return `${window.scrollY},${window.scrollX}`;
+    }, direction);
+  }
+
+  private async executeReadText(step: TestStep, timeout: number): Promise<void> {
+    const id = step.id;
+    if (!id) {
+      throw new Error("readText requires 'id'");
+    }
+    const variable = step.variable;
+    if (!variable) {
+      throw new Error("readText requires 'variable'");
+    }
+    const element = await this.waitForElement(id, timeout);
+
+    // For input/textarea, read value; otherwise text content
+    const text = await element.evaluate((el) => {
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        return el.value;
+      }
+      const input = el.querySelector(
+        'input:not([type="checkbox"]):not([type="radio"]), textarea'
+      );
+      if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
+        return input.value;
+      }
+      return el.textContent ?? '';
+    });
+
+    this.variables[variable] = text;
+  }
+
+  private async executeSetLocation(step: TestStep): Promise<void> {
+    const { latitude, longitude } = step;
+    if (latitude === undefined || longitude === undefined) {
+      throw new Error("setLocation requires 'latitude' and 'longitude'");
+    }
+    const context = this.page.context();
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude, longitude });
+  }
+
+  /**
+   * Set files on a file input. Paths resolve relative to the test file's
+   * directory (TestLoader base path); absolute paths pass through. With an
+   * `id`, targets that element (the input itself, or a file input inside
+   * it); without one, the page's first input[type=file]. setInputFiles
+   * works on hidden inputs (display:none / opacity:0), so the native picker
+   * never needs to open.
+   */
+  private async executeAddMedia(step: TestStep): Promise<void> {
+    const paths = step.paths;
+    if (!paths || paths.length === 0) {
+      throw new Error("addMedia requires non-empty 'paths'");
+    }
+
+    const base = process.cwd(); // vendored: TestLoader base-path resolution not used by conformance
+    const resolved = paths.map((p) => (path.isAbsolute(p) ? p : path.resolve(base, p)));
+    for (const p of resolved) {
+      if (!fs.existsSync(p)) {
+        throw new Error(`addMedia: file not found: ${p}`);
+      }
+    }
+
+    let input: Locator;
+    if (step.id) {
+      const target = this.getLocator(step.id).first();
+      await target.waitFor({ state: 'attached', timeout: step.timeout ?? this.defaultTimeout });
+      const isFileInput = await target.evaluate(
+        (node) => node instanceof HTMLInputElement && node.type === 'file'
+      );
+      input = isFileInput ? target : target.locator('input[type="file"]').first();
+    } else {
+      input = this.page.locator('input[type="file"]').first();
+    }
+
+    await input.setInputFiles(resolved);
+  }
+
+  /**
+   * Call a browser-side hook the app registered on window.__jsonuiTestHooks
+   * (e.g. an RTDB mock emitter). A limited, declarative alternative to a raw
+   * script step: the runner can only invoke hooks the app chose to expose.
+   * Web-only — mobile drivers treat emitHook as a no-op with a warning.
+   */
+  private async executeEmitHook(step: TestStep): Promise<void> {
+    const name = step.name;
+    if (!name) {
+      throw new Error("emitHook requires 'name'");
+    }
+    const hookArgs = step.hookArgs ?? [];
+
+    await this.page.evaluate(
+      ({ name, hookArgs }) => {
+        const hooks = (window as unknown as {
+          __jsonuiTestHooks?: Record<string, (...args: unknown[]) => unknown>;
+        }).__jsonuiTestHooks;
+        const fn = hooks?.[name];
+        if (typeof fn !== 'function') {
+          const registered = hooks ? Object.keys(hooks).join(', ') || '(none)' : '(none)';
+          throw new Error(
+            `emitHook: hook '${name}' is not registered on window.__jsonuiTestHooks (registered: ${registered})`
+          );
+        }
+        return fn(...hookArgs);
+      },
+      { name, hookArgs }
+    );
+  }
+
+  /** Resize the viewport to sweep responsive breakpoints (web-native drive) */
+  private async executeSetViewport(step: TestStep): Promise<void> {
+    const { width, height } = step;
+    if (width === undefined || height === undefined) {
+      throw new Error("setViewport requires 'width' and 'height'");
+    }
+    await this.page.setViewportSize({ width, height });
+  }
+
+  /**
+   * Rotate to the given orientation by swapping the viewport width/height.
+   * Already-matching orientation is a no-op; a `viewport: null` context
+   * (headful / --start-maximized) cannot be resized, so it is a no-op with a
+   * warning — dependent asserts should self-gate with `when.responsive`.
+   */
+  private async executeSetOrientation(step: TestStep): Promise<void> {
+    const orientation = step.orientation;
+    if (!orientation) {
+      throw new Error("setOrientation requires 'orientation'");
+    }
+    const viewport = this.page.viewportSize();
+    if (!viewport) {
+      console.warn(
+        '[ActionExecutor] setOrientation: no viewport is set (viewport: null context) - skipping (no-op)'
+      );
+      return;
+    }
+    if (deriveOrientation(viewport) === orientation) {
+      return;
+    }
+    await this.page.setViewportSize({ width: viewport.height, height: viewport.width });
+  }
+
   // Helper functions
 
   /**
@@ -459,6 +783,17 @@ export class ActionExecutor {
    * Calculates the approximate position of the target text and clicks there
    */
   private async tapTextPortion(element: Locator, targetText: string): Promise<void> {
+    // Preferred: a real DOM descendant carrying exactly the range text —
+    // ReactJsonUI renders each clickable partialAttributes range as its own
+    // <span onClick>. Clicking its true rect is exact for centered/matchParent
+    // and wrapped labels where the proportional estimate below misses
+    // (test-partialattributes-subrange-tap-misses-on-centered-matchparent-label).
+    const rangeTarget = element.getByText(targetText, { exact: true }).first();
+    if ((await rangeTarget.count()) > 0) {
+      await rangeTarget.click();
+      return;
+    }
+
     const fullText = await element.textContent();
     if (!fullText) {
       throw new Error('Element has no text content');

@@ -1,0 +1,64 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/variantfile__viewport_switch.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.variantfile (viewport_switch)",
+    "description": "Responsive variant-file semantic fixture (viewport_switch). Companion screens with @-suffixed variants live under fixtures/common/__screens/ — see manifest 'companions'.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "variantfile",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "switches_with_viewport",
+      "description": "variant-file: switches_with_viewport",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "variant-which",
+          "equals": "regular"
+        },
+        {
+          "action": "setViewport",
+          "width": 390,
+          "height": 844
+        },
+        {
+          "assert": "text",
+          "id": "variant-which",
+          "equals": "base"
+        },
+        {
+          "action": "setViewport",
+          "width": 800,
+          "height": 600
+        },
+        {
+          "assert": "text",
+          "id": "variant-which",
+          "equals": "base"
+        },
+        {
+          "action": "setViewport",
+          "width": 1280,
+          "height": 800
+        },
+        {
+          "assert": "text",
+          "id": "variant-which",
+          "equals": "regular"
+        }
+      ]
+    }
+  ]
+}

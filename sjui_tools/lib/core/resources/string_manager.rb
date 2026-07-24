@@ -8,6 +8,7 @@ require_relative '../config_manager'
 require_relative '../project_finder'
 require_relative '../logger'
 require_relative '../plural_validator'
+require_relative '../layout_variant'
 
 module SjuiTools
   module Core
@@ -38,7 +39,10 @@ module SjuiTools
 
           json_files.each do |json_file|
             begin
-              file_name = File.basename(json_file, '.json')
+              # Variant files (home@regular.json) register their strings
+              # under the BASE screen's namespace — they are the same
+              # screen, so shared strings dedupe instead of duplicating.
+              file_name, = JsonUIShared::LayoutVariant.split(File.basename(json_file, '.json'))
               json_content = File.read(json_file)
               json_data = JSON.parse(json_content)
 

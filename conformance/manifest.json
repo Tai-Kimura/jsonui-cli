@@ -10,10 +10,10 @@
   "schemaVersion": 2,
   "generatedFrom": "f583d391a72ddb5156e31014688200cec2b605e9e59d2ef399f715c1c41901aa",
   "counts": {
-    "fixtures": 664,
-    "assertable": 29,
+    "fixtures": 669,
+    "assertable": 33,
     "visual": 600,
-    "interactive": 35,
+    "interactive": 36,
     "skipped": 166,
     "promoted": {
       "callback": 12
@@ -14781,6 +14781,141 @@
       "promotedFrom": null,
       "companions": [
         "fixtures/Embed/__screens/embed_params.layout.json"
+      ]
+    },
+    {
+      "id": "common/variantfile__regular_resolution",
+      "component": "common",
+      "attribute": "variantfile",
+      "case": "regular_resolution",
+      "class": "assertable",
+      "host": "View",
+      "writtenKey": "variantfile",
+      "aliasOf": null,
+      "value": "@regular",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/variantfile__regular_resolution.layout.json",
+      "test": "fixtures/common/variantfile__regular_resolution.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "companions": [
+        "fixtures/common/__screens/variant_host.layout.json",
+        "fixtures/common/__screens/variant_host@regular.layout.json"
+      ]
+    },
+    {
+      "id": "common/variantfile__compact_resolution",
+      "component": "common",
+      "attribute": "variantfile",
+      "case": "compact_resolution",
+      "class": "assertable",
+      "host": "View",
+      "writtenKey": "variantfile",
+      "aliasOf": null,
+      "value": "@compact",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/variantfile__compact_resolution.layout.json",
+      "test": "fixtures/common/variantfile__compact_resolution.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "companions": [
+        "fixtures/common/__screens/variant_host_c.layout.json",
+        "fixtures/common/__screens/variant_host_c@compact.layout.json"
+      ]
+    },
+    {
+      "id": "common/variantfile__medium_no_promotion",
+      "component": "common",
+      "attribute": "variantfile",
+      "case": "medium_no_promotion",
+      "class": "assertable",
+      "host": "View",
+      "writtenKey": "variantfile",
+      "aliasOf": null,
+      "value": "@medium",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/variantfile__medium_no_promotion.layout.json",
+      "test": "fixtures/common/variantfile__medium_no_promotion.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "companions": [
+        "fixtures/common/__screens/variant_host_m.layout.json",
+        "fixtures/common/__screens/variant_host_m@medium.layout.json"
+      ]
+    },
+    {
+      "id": "common/variantfile__viewport_switch",
+      "component": "common",
+      "attribute": "variantfile",
+      "case": "viewport_switch",
+      "class": "assertable",
+      "host": "View",
+      "writtenKey": "variantfile",
+      "aliasOf": null,
+      "value": "@regular",
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/variantfile__viewport_switch.layout.json",
+      "test": "fixtures/common/variantfile__viewport_switch.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "companions": [
+        "fixtures/common/__screens/variant_host.layout.json",
+        "fixtures/common/__screens/variant_host@regular.layout.json"
+      ]
+    },
+    {
+      "id": "common/variantfile__state_vm_survives",
+      "component": "common",
+      "attribute": "variantfile",
+      "case": "state_vm_survives",
+      "class": "interactive",
+      "host": "View",
+      "writtenKey": "variantfile",
+      "aliasOf": null,
+      "value": "@regular",
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/variantfile__state_vm_survives.layout.json",
+      "test": "fixtures/common/variantfile__state_vm_survives.test.json",
+      "state": {
+        "vars": [
+          {
+            "name": "conformanceText",
+            "class": "String",
+            "defaultValue": ""
+          }
+        ],
+        "handlers": []
+      },
+      "promotedFrom": null,
+      "companions": [
+        "fixtures/common/__screens/variant_state.layout.json",
+        "fixtures/common/__screens/variant_state@regular.layout.json"
       ]
     }
   ],

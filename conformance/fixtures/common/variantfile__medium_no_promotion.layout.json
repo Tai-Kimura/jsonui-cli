@@ -1,0 +1,30 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "root",
+  "width": "matchParent",
+  "height": "matchParent",
+  "orientation": "vertical",
+  "child": [
+    {
+      "type": "Label",
+      "id": "variant-host-marker",
+      "text": "host"
+    },
+    {
+      "type": "Embed",
+      "id": "variant-pane",
+      "width": "matchParent",
+      "height": "wrapContent",
+      "screen": "variant_host_m",
+      "navigationMode": "delegate"
+    }
+  ]
+}

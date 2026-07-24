@@ -90,6 +90,19 @@ if (companionPaths.size > 0) {
   console.log(`[generate] copied ${companionPaths.size} companion embedded-screen layout(s)`);
 }
 
+// Responsive machinery: variant-file dispatches (and landscape branches)
+// import `@/hooks/useMediaQuery`, normally installed into consumer
+// projects by `rjui init`. Vendor the current template unconditionally —
+// build artifact, gitignored.
+const hooksDir = path.join(hostDir, 'src/hooks');
+fs.rmSync(hooksDir, { recursive: true, force: true });
+fs.mkdirSync(hooksDir, { recursive: true });
+fs.copyFileSync(
+  path.join(rjuiDir, 'lib/react/templates/use_media_query.ts'),
+  path.join(hooksDir, 'useMediaQuery.ts')
+);
+console.log('[generate] vendored use_media_query.ts template into src/hooks/');
+
 // Embed fixtures need the EmbedContainer runtime helper (normally emitted
 // into consumer projects by `rjui init`). Vendor the current template so
 // the host always matches the codegen it just ran (template v2 for
