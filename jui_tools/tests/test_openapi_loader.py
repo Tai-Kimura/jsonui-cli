@@ -1827,5 +1827,102 @@ class MultiFileRefTests(unittest.TestCase):
         self.assertEqual(len(docs), 2)
 
 
+class FormatRetentionTests(unittest.TestCase):
+    """String format hints are retained on FieldType.format (plan 03).
+
+    The IR carries the hint unconditionally (no flag involved at the
+    loader layer); the primitive kind stays STRING so flag-off consumers
+    of the IR are untouched.
+    """
+
+    def _field(self, doc, schema_name, wire_name):
+        schema = next(s for s in doc.schemas if s.name == schema_name)
+        return next(f for f in schema.fields if f.wire_name == wire_name)
+
+    def test_recognized_formats_retained(self):
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "required": ["a", "b", "c"],
+                "properties": {
+                    "a": {"type": "string", "format": "date-time"},
+                    "b": {"type": "string", "format": "uuid"},
+                    "c": {"type": "string", "format": "binary"},
+                },
+            },
+        }), "test.json")
+        for wire, fmt in (("a", "date-time"), ("b", "uuid"), ("c", "binary")):
+            f = self._field(doc, "M", wire)
+            self.assertTrue(f.type.is_primitive)
+            self.assertEqual(f.type.primitive, PrimitiveKind.STRING)
+            self.assertEqual(f.type.format, fmt)
+
+    def test_unrecognized_format_discarded(self):
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "required": ["a", "b"],
+                "properties": {
+                    "a": {"type": "string", "format": "email"},
+                    "b": {"type": "string"},
+                },
+            },
+        }), "test.json")
+        self.assertIsNone(self._field(doc, "M", "a").type.format)
+        self.assertIsNone(self._field(doc, "M", "b").type.format)
+
+    def test_nullable_rebuild_preserves_format(self):
+        """_extract_fields reconstructs FieldType to attach nullable — the
+        format side channel must survive that rebuild (01 handover #3)."""
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "properties": {
+                    "a": {"type": "string", "format": "date-time"},
+                },
+            },
+        }), "test.json")
+        f = self._field(doc, "M", "a")
+        self.assertTrue(f.type.nullable)
+        self.assertEqual(f.type.format, "date-time")
+
+    def test_array_and_map_elements_carry_format(self):
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "required": ["xs", "m"],
+                "properties": {
+                    "xs": {"type": "array", "items": {"type": "string", "format": "date-time"}},
+                    "m": {
+                        "type": "object",
+                        "additionalProperties": {"type": "string", "format": "uuid"},
+                    },
+                },
+            },
+        }), "test.json")
+        self.assertEqual(self._field(doc, "M", "xs").type.element.format, "date-time")
+        self.assertEqual(self._field(doc, "M", "m").type.element.format, "uuid")
+
+    def test_wrapper_schema_carries_format(self):
+        doc = parse_swagger(_doc({
+            "Stamp": {"type": "string", "format": "date-time"},
+        }), "test.json")
+        wrapper = doc.schemas[0]
+        self.assertTrue(wrapper.is_wrapper)
+        self.assertEqual(wrapper.wrapped_type.format, "date-time")
+
+    def test_integer_formats_untouched(self):
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "required": ["a"],
+                "properties": {"a": {"type": "integer", "format": "int64"}},
+            },
+        }), "test.json")
+        f = self._field(doc, "M", "a")
+        self.assertEqual(f.type.primitive, PrimitiveKind.INTEGER_64)
+        self.assertIsNone(f.type.format)
+
+
 if __name__ == "__main__":
     unittest.main()

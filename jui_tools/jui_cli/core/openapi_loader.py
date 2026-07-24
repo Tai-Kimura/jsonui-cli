@@ -27,6 +27,13 @@ Union support (2026-07, plan ``2026-07-24-v1-unsupported/02``):
   variant-internal tags are not the wire mechanism, so inference does
   not apply).
 
+Format retention (2026-07, plan ``2026-07-24-v1-unsupported/03``):
+
+- ``type: string`` schemas retain the ``date-time`` / ``uuid`` / ``binary``
+  format hint on :attr:`FieldType.format`. The IR carries the hint
+  unconditionally; whether generators map it to native types is the
+  per-doc opt-in ``api.format_mapping`` decision.
+
 §3.3 ERROR halt rules enforced here (raise :class:`OpenAPILoadError`):
 
 - ``anyOf`` → halt (permanent — untagged unions have no portable native
@@ -1967,8 +1974,17 @@ def _field_type(
 
     # 5. primitives
     if type_str == "string":
+        # Retain the recognized string format hints (plan 03). Unrecognized
+        # formats (email, hostname, custom …) stay plain STRING with no
+        # side channel — v1 maps only the three unambiguous ones.
+        fmt = body.get("format")
+        retained_fmt = fmt if fmt in _RETAINED_STRING_FORMATS else None
         return (
-            FieldType(is_primitive=True, primitive=PrimitiveKind.STRING),
+            FieldType(
+                is_primitive=True,
+                primitive=PrimitiveKind.STRING,
+                format=retained_fmt,
+            ),
             [],
             [],
         )
@@ -1999,6 +2015,12 @@ def _field_type(
         source=source_path,
         pointer=pointer,
     )
+
+
+# String formats retained on FieldType.format (plan 03 — format-aware
+# mapping). Kept to the three formats whose native mapping is unambiguous
+# on every platform; everything else is intentionally discarded.
+_RETAINED_STRING_FORMATS = ("date-time", "uuid", "binary")
 
 
 _PASCAL_RE = re.compile(r"(?:^|[_\s-])([a-z0-9])")

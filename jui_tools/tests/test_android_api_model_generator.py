@@ -1416,5 +1416,164 @@ class SchemaLevelUnionTests(unittest.TestCase):
         self.assertIn("val pet: PetDto", src)
 
 
+class FormatAwareMappingTests(unittest.TestCase):
+    """Opt-in format-aware mapping (plan 2026-07-24-v1-unsupported/03)."""
+
+    def _fmt_gen(
+        self,
+        tmp: Path,
+        serializer: str = "kotlinx",
+        excluded: frozenset[str] = frozenset(),
+    ) -> AndroidApiModelGenerator:
+        return AndroidApiModelGenerator(AndroidApiPlatformConfig(
+            sources_root=tmp,
+            serializer=serializer,
+            format_mapping=True,
+            format_excluded_docs=excluded,
+        ))
+
+    def _attachment_doc(self):
+        return parse_swagger(_doc({
+            "Attachment": {
+                "type": "object",
+                "required": ["id", "data"],
+                "properties": {
+                    "id": {"type": "string", "format": "uuid"},
+                    "data": {"type": "string", "format": "binary"},
+                    "created_at": {"type": "string", "format": "date-time"},
+                    "stamps": {
+                        "type": "array",
+                        "items": {"type": "string", "format": "date-time"},
+                    },
+                },
+            },
+        }), "test.json")
+
+    def test_native_types_kotlinx(self):
+        doc = self._attachment_doc()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = self._fmt_gen(Path(tmpdir)).generate_dto_source(doc.schemas[0], doc)
+        self.assertIn("import kotlinx.datetime.Instant", src)
+        self.assertIn("val id: Uuid", src)
+        self.assertIn(
+            "val data: @Serializable(Base64ByteArraySerializer::class) ByteArray",
+            src,
+        )
+        self.assertIn("val createdAt: Instant? = null", src)
+        self.assertIn("val stamps: List<Instant>? = null", src)
+
+    def test_moshi_and_none_halt(self):
+        doc = self._attachment_doc()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for serializer in ("moshi", "none"):
+                gen = self._fmt_gen(Path(tmpdir), serializer)
+                with self.assertRaises(ValueError) as ctx:
+                    gen.generate_dto_source(doc.schemas[0], doc)
+                self.assertIn("requires the kotlinx serializer", str(ctx.exception))
+                self.assertIn("kotlinx-datetime", str(ctx.exception))
+
+    def test_moshi_without_format_fields_unaffected(self):
+        doc = parse_swagger(_doc(_user_schema()), "test.json")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            on = self._fmt_gen(tmp, "moshi").generate_dto_source(doc.schemas[0], doc)
+            off = _gen(tmp, "moshi").generate_dto_source(doc.schemas[0], doc)
+        self.assertEqual(on, off)
+
+    def test_flag_off_output_unchanged(self):
+        doc = self._attachment_doc()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = _gen(Path(tmpdir), "kotlinx").generate_dto_source(doc.schemas[0], doc)
+        self.assertIn("val id: String", src)
+        self.assertNotIn("Instant", src)
+        self.assertNotIn("ByteArray", src)
+
+    def test_per_doc_opt_out_matches_flag_off(self):
+        doc = self._attachment_doc()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            excluded = self._fmt_gen(tmp, "kotlinx", frozenset({"test.json"})).generate_dto_source(doc.schemas[0], doc)
+            off = _gen(tmp, "kotlinx").generate_dto_source(doc.schemas[0], doc)
+        self.assertEqual(excluded, off)
+
+    def test_support_file_sources(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gen = self._fmt_gen(Path(tmpdir))
+            uuid_src = gen.generate_uuid_alias_source()
+            b64_src = gen.generate_base64_serializer_source()
+        self.assertIn("typealias Uuid = String", uuid_src)
+        self.assertIn("@generated", uuid_src)
+        self.assertIn("object Base64ByteArraySerializer : KSerializer<ByteArray>", b64_src)
+        self.assertIn("Base64.getEncoder().encodeToString(value)", b64_src)
+        self.assertIn(
+            'PrimitiveSerialDescriptor("Base64ByteArray", PrimitiveKind.STRING)',
+            b64_src,
+        )
+
+    def _oneof_with_formats_doc(self, data_body: dict):
+        return parse_swagger(_doc({
+            "A": {"type": "object", "required": ["v"], "properties": {"v": {"type": "string"}}},
+            "Parent": {
+                "type": "object",
+                "required": ["type", "content", "at", "data"],
+                "properties": {
+                    "type": {"type": "string"},
+                    "at": {"type": "string", "format": "date-time"},
+                    "data": data_body,
+                    "content": {
+                        "oneOf": [{"$ref": "#/components/schemas/A"}],
+                        "discriminator": {
+                            "propertyName": "type",
+                            "mapping": {"a": "#/components/schemas/A"},
+                        },
+                    },
+                },
+            },
+        }), "test.json")
+
+    def test_oneof_serializer_formats(self):
+        doc = self._oneof_with_formats_doc({"type": "string", "format": "binary"})
+        parent = next(s for s in doc.schemas if s.name == "Parent")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = self._fmt_gen(Path(tmpdir)).generate_dto_source(parent, doc)
+        # date rides the reified decode with the Instant type
+        self.assertIn("val at: Instant = json.decodeFromJsonElement(", src)
+        # binary goes through the explicit serializer both ways
+        self.assertIn('element("data", Base64ByteArraySerializer.descriptor)', src)
+        self.assertIn(
+            "val data: ByteArray = json.decodeFromJsonElement("
+            'Base64ByteArraySerializer, obj["data"] ?: error("missing data"))',
+            src,
+        )
+        self.assertIn(
+            'put("data", json.encodeToJsonElement(Base64ByteArraySerializer, value.data))',
+            src,
+        )
+
+    def test_oneof_nested_binary_halts(self):
+        doc = self._oneof_with_formats_doc({
+            "type": "array",
+            "items": {"type": "string", "format": "binary"},
+        })
+        parent = next(s for s in doc.schemas if s.name == "Parent")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self.assertRaises(ValueError) as ctx:
+                self._fmt_gen(Path(tmpdir)).generate_dto_source(parent, doc)
+        self.assertIn("nests format: binary", str(ctx.exception))
+
+    def test_wrapper_date_uses_instant_serializer(self):
+        doc = parse_swagger(_doc({
+            "Stamp": {"type": "string", "format": "date-time"},
+        }), "test.json")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = self._fmt_gen(Path(tmpdir)).generate_dto_source(doc.schemas[0], doc)
+        self.assertIn("data class StampDto(val value: Instant)", src)
+        self.assertIn("InstantIso8601Serializer", src)
+        self.assertIn(
+            "import kotlinx.datetime.serializers.InstantIso8601Serializer", src
+        )
+        self.assertIn("import kotlinx.datetime.Instant", src)
+
+
 if __name__ == "__main__":
     unittest.main()

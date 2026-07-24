@@ -45,6 +45,8 @@ from ..core.schema_ir import (
     SchemaDef,
     SwaggerDocument,
     UnionDef,
+    collect_string_formats,
+    schema_string_formats,
 )
 
 
@@ -73,6 +75,10 @@ class AndroidApiPlatformConfig:
     domain_package: str = "com.example.app.model"           # FQN for Domain wrapper files
     dto_package: str = "com.example.app.model.generated"    # FQN for DTO files (under domain_package)
     serializer: str = "moshi"
+    # Format-aware mapping (plan 03): project-level opt-in mirrored from
+    # ``api.format_mapping`` + the per-doc opt-out (swagger file basenames).
+    format_mapping: bool = False
+    format_excluded_docs: frozenset[str] = frozenset()
 
 
 class AndroidApiModelGenerator:
@@ -93,6 +99,34 @@ class AndroidApiModelGenerator:
             )
         self._config = config
 
+    def _format_enabled(self, doc: SwaggerDocument) -> bool:
+        """Per-doc format-aware mapping decision (opt-in + per-doc opt-out)."""
+        if not self._config.format_mapping:
+            return False
+        return Path(doc.source_path).name not in self._config.format_excluded_docs
+
+    def _check_format_serializer(self, schema: SchemaDef) -> None:
+        """Halt when format-native emission needs kotlinx but got moshi/none.
+
+        Same pattern (and same spirit) as the oneOf × moshi halt: silently
+        keeping ``String`` here would create iOS=Date / Android=String from
+        the same swagger — a silent cross-platform parity break. A consumer
+        that wants the degraded behavior simply leaves the flag off (or
+        lists the doc in ``api.format_mapping_exclude``).
+        """
+        used = schema_string_formats(schema)
+        if used and self._config.serializer != "kotlinx":
+            raise ValueError(
+                f"Schema {schema.name!r} uses string format(s) "
+                f"{sorted(used)} with api.format_mapping enabled, which "
+                f"requires the kotlinx serializer "
+                f"(current={self._config.serializer!r}). Switch "
+                f"api.platforms.android.serializer to 'kotlinx' (date-time "
+                f"also needs the kotlinx-datetime dependency in the "
+                f"consumer's build.gradle), or list this doc in "
+                f"api.format_mapping_exclude."
+            )
+
     # ----------------------------- paths ----------------------------- #
 
     def _package_to_path(self, full_package: str) -> Path:
@@ -107,6 +141,10 @@ class AndroidApiModelGenerator:
     def dto_path(self, schema_name: str) -> Path:
         return self._package_to_path(self._dto_package()) / f"{schema_name}Dto.kt"
 
+    def support_path(self, basename: str) -> Path:
+        """Path of a shared format support file (``Uuid.kt`` etc.)."""
+        return self._package_to_path(self._dto_package()) / basename
+
     def enum_path(self, enum_name: str) -> Path:
         return self._package_to_path(self._dto_package()) / f"{enum_name}.kt"
 
@@ -117,6 +155,9 @@ class AndroidApiModelGenerator:
 
     def generate_dto_source(self, schema: SchemaDef, doc: SwaggerDocument) -> str:
         """Return the Kotlin source for the DTO file (with @generated banner)."""
+        fmt = self._format_enabled(doc)
+        if fmt:
+            self._check_format_serializer(schema)
         has_oneof = any(f.type.is_one_of_ref for f in schema.fields)
         if has_oneof and self._config.serializer != "kotlinx":
             raise ValueError(
@@ -142,6 +183,7 @@ class AndroidApiModelGenerator:
                 self._dto_package(),
                 enum_names={e.name for e in doc.enums},
                 generator_name=self.GENERATOR_NAME,
+                format_native=fmt,
             )
 
         header = comment_header(
@@ -151,13 +193,17 @@ class AndroidApiModelGenerator:
         footer = comment_footer()
         enums_by_name = {e.name: e for e in doc.enums}
         enum_names = set(enums_by_name)
+        schema_formats = schema_string_formats(schema) if fmt else set()
 
         lines: list[str] = []
         lines.append(f"package {self._dto_package()}")
         lines.append("")
-        for imp in self._dto_imports(has_oneof=has_oneof):
+        imports = self._dto_imports(
+            has_oneof=has_oneof, schema_formats=schema_formats
+        )
+        for imp in imports:
             lines.append(imp)
-        if self._dto_imports(has_oneof=has_oneof):
+        if imports:
             lines.append("")
         if schema.description:
             lines.extend(_kdoc_lines(schema.description))
@@ -173,7 +219,11 @@ class AndroidApiModelGenerator:
         last = len(schema.fields) - 1
         for i, f in enumerate(schema.fields):
             for ln in self._dto_field_lines(
-                f, enum_names, enums_by_name, trailing_comma=(i < last) or True
+                f,
+                enum_names,
+                enums_by_name,
+                trailing_comma=(i < last) or True,
+                format_native=fmt,
             ):
                 lines.append(ln)
         # Trailing comma after the last field is valid Kotlin and matches Moshi codegen output.
@@ -189,7 +239,7 @@ class AndroidApiModelGenerator:
             lines.append("")
             lines.extend(
                 _emit_kotlin_oneof_serializer(
-                    schema, self._dto_package(), enum_names
+                    schema, self._dto_package(), enum_names, format_native=fmt
                 )
             )
         else:
@@ -197,14 +247,26 @@ class AndroidApiModelGenerator:
         body = "\n".join(lines)
         return f"{header}\n\n{body}\n\n{footer}\n"
 
-    def _dto_imports(self, *, has_oneof: bool = False) -> list[str]:
+    def _dto_imports(
+        self,
+        *,
+        has_oneof: bool = False,
+        schema_formats: set[str] | None = None,
+    ) -> list[str]:
         if self._config.serializer == "moshi":
             return [
                 "import com.squareup.moshi.Json",
                 "import com.squareup.moshi.JsonClass",
             ]
         if self._config.serializer == "kotlinx":
-            base = [
+            base = []
+            if schema_formats and "date-time" in schema_formats:
+                # kotlinx-datetime Instant — its default serializer is the
+                # ISO 8601 string form, so the type alone carries the wire
+                # contract. The dependency lives in the consumer's
+                # build.gradle (never auto-injected).
+                base.append("import kotlinx.datetime.Instant")
+            base += [
                 "import kotlinx.serialization.SerialName",
                 "import kotlinx.serialization.Serializable",
             ]
@@ -252,6 +314,7 @@ class AndroidApiModelGenerator:
         enums_by_name: dict[str, EnumDef],
         *,
         trailing_comma: bool,
+        format_native: bool = False,
     ) -> list[str]:
         out: list[str] = []
         if field.description:
@@ -261,9 +324,13 @@ class AndroidApiModelGenerator:
         if field.type.is_one_of_ref:
             type_str = _kotlin_oneof_field_type(field)
         else:
-            type_str = _kotlin_type_with_enums(field.type, enum_names)
+            type_str = _kotlin_type_with_enums(
+                field.type, enum_names, format_native=format_native
+            )
         name = _kotlin_property_name(field)
-        default = _kotlin_default_literal(field, enums_by_name)
+        default = _kotlin_default_literal(
+            field, enums_by_name, format_native=format_native
+        )
         rename_annot = self._field_rename_annotation(field, name)
         prefix = f"    {rename_annot}val " if rename_annot else "    val "
         decl = f"{prefix}{name}: {type_str}"
@@ -289,6 +356,67 @@ class AndroidApiModelGenerator:
                 return f'@SerialName("{field.wire_name}") '
             return ""
         return ""
+
+    # ----------------------- format support files --------------------- #
+
+    def generate_uuid_alias_source(self) -> str:
+        """Shared ``Uuid.kt`` — a documented String typealias.
+
+        A single file per DTO package (typealiases must be top-level, and
+        one per package avoids redeclaration). Kotlin has no standard UUID
+        value type to map to, so we deliberately do not invent one.
+        """
+        header = comment_header(
+            source="api.format_mapping (shared support)",
+            generator=self.GENERATOR_NAME,
+        )
+        footer = comment_footer()
+        body = (
+            f"package {self._dto_package()}\n"
+            "\n"
+            "/** OpenAPI `format: uuid` — kept as a String on the wire and in memory. */\n"
+            "typealias Uuid = String"
+        )
+        return f"{header}\n\n{body}\n\n{footer}\n"
+
+    def generate_base64_serializer_source(self) -> str:
+        """Shared ``Base64ByteArraySerializer.kt`` (kotlinx, base64 wire form).
+
+        kotlinx would otherwise serialize ByteArray as a JSON array of
+        numbers; the wire contract for ``format: binary`` is a base64
+        string.
+        """
+        header = comment_header(
+            source="api.format_mapping (shared support)",
+            generator=self.GENERATOR_NAME,
+        )
+        footer = comment_footer()
+        body = (
+            f"package {self._dto_package()}\n"
+            "\n"
+            "import java.util.Base64\n"
+            "import kotlinx.serialization.KSerializer\n"
+            "import kotlinx.serialization.descriptors.PrimitiveKind\n"
+            "import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor\n"
+            "import kotlinx.serialization.descriptors.SerialDescriptor\n"
+            "import kotlinx.serialization.encoding.Decoder\n"
+            "import kotlinx.serialization.encoding.Encoder\n"
+            "\n"
+            "/** OpenAPI `format: binary` — base64 string on the wire, ByteArray in memory. */\n"
+            "object Base64ByteArraySerializer : KSerializer<ByteArray> {\n"
+            "    override val descriptor: SerialDescriptor =\n"
+            '        PrimitiveSerialDescriptor("Base64ByteArray", PrimitiveKind.STRING)\n'
+            "\n"
+            "    override fun serialize(encoder: Encoder, value: ByteArray) {\n"
+            "        encoder.encodeString(Base64.getEncoder().encodeToString(value))\n"
+            "    }\n"
+            "\n"
+            "    override fun deserialize(decoder: Decoder): ByteArray {\n"
+            "        return Base64.getDecoder().decode(decoder.decodeString())\n"
+            "    }\n"
+            "}"
+        )
+        return f"{header}\n\n{body}\n\n{footer}\n"
 
     # ---------------------------- emit union ------------------------- #
 
@@ -834,7 +962,23 @@ _PRIMITIVE_TO_KOTLIN: dict[PrimitiveKind, str] = {
 }
 
 
-def _kotlin_type_with_enums(ftype: FieldType, enum_names: set[str]) -> str:
+# Native Kotlin renderings for retained string formats (plan 03).
+# ``binary`` carries a type-position ``@Serializable`` so base64 encoding
+# holds in every position (top-level property, List element, Map value) —
+# kotlinx would otherwise serialize ByteArray as a JSON number array.
+_FORMAT_TO_KOTLIN: dict[str, str] = {
+    "date-time": "Instant",
+    "uuid": "Uuid",
+    "binary": "@Serializable(Base64ByteArraySerializer::class) ByteArray",
+}
+
+
+def _kotlin_type_with_enums(
+    ftype: FieldType,
+    enum_names: set[str],
+    *,
+    format_native: bool = False,
+) -> str:
     """Render a :class:`FieldType` as a Kotlin type expression.
 
     Object refs become ``<Name>Dto``; enum refs become just ``<Name>``.
@@ -842,15 +986,25 @@ def _kotlin_type_with_enums(ftype: FieldType, enum_names: set[str]) -> str:
     """
     if ftype.is_primitive:
         base = _PRIMITIVE_TO_KOTLIN[ftype.primitive]
+        if format_native and ftype.format is not None:
+            base = _FORMAT_TO_KOTLIN.get(ftype.format, base)
     elif (ftype.is_object_ref or ftype.is_enum_ref) and ftype.ref_name in enum_names:
         base = ftype.ref_name
     elif ftype.is_object_ref or ftype.is_enum_ref:
         base = f"{ftype.ref_name}Dto"
     elif ftype.is_array:
-        inner = _kotlin_type_with_enums(ftype.element, enum_names) if ftype.element else "String"
+        inner = (
+            _kotlin_type_with_enums(ftype.element, enum_names, format_native=format_native)
+            if ftype.element
+            else "String"
+        )
         base = f"List<{inner}>"
     elif ftype.is_map:
-        inner = _kotlin_type_with_enums(ftype.element, enum_names) if ftype.element else "String"
+        inner = (
+            _kotlin_type_with_enums(ftype.element, enum_names, format_native=format_native)
+            if ftype.element
+            else "String"
+        )
         base = f"Map<String, {inner}>"
     else:
         base = "String"
@@ -860,6 +1014,8 @@ def _kotlin_type_with_enums(ftype: FieldType, enum_names: set[str]) -> str:
 def _kotlin_default_literal(
     field: FieldDef,
     enums_by_name: dict[str, EnumDef],
+    *,
+    format_native: bool = False,
 ) -> str | None:
     """Render OpenAPI ``default`` as a Kotlin literal, or None if absent.
 
@@ -880,6 +1036,17 @@ def _kotlin_default_literal(
     value = field.default
     if value is None:
         return "null"
+
+    # Format-native fields (Instant / ByteArray) can't take the swagger's
+    # string default as a Kotlin literal — skip it (decoder fills the
+    # value at runtime). ``uuid`` stays a String typealias, so its string
+    # default still compiles.
+    if (
+        format_native
+        and field.type.is_primitive
+        and field.type.format in ("date-time", "binary")
+    ):
+        return None
 
     # Enum-typed field → resolve to EnumName.CASE_NAME.
     ftype = field.type
@@ -913,6 +1080,8 @@ def _kotlin_default_literal(
 def _kotlin_wrapper_serializer_expr(
     ftype: FieldType,
     enum_names: set[str],
+    *,
+    format_native: bool = False,
 ) -> tuple[str, list[str]]:
     """Return ``(serializerExpr, extraImports)`` for a wrapped Kotlin type.
 
@@ -921,6 +1090,15 @@ def _kotlin_wrapper_serializer_expr(
     calls that thread payload bytes through the right kotlinx serializer.
     Returns the canonical ``T.serializer()`` form when one exists.
     """
+    if format_native and ftype.is_primitive and ftype.format is not None:
+        if ftype.format == "date-time":
+            return (
+                "InstantIso8601Serializer",
+                ["import kotlinx.datetime.serializers.InstantIso8601Serializer"],
+            )
+        if ftype.format == "binary":
+            return "Base64ByteArraySerializer", []
+        # uuid — String typealias, plain String serializer below.
     if ftype.is_primitive:
         mapping = {
             PrimitiveKind.STRING: ("String.serializer()", "import kotlinx.serialization.builtins.serializer"),
@@ -939,7 +1117,7 @@ def _kotlin_wrapper_serializer_expr(
         return f"{ftype.ref_name}Dto.serializer()", []
     if ftype.is_array and ftype.element is not None:
         inner_expr, inner_imports = _kotlin_wrapper_serializer_expr(
-            ftype.element, enum_names
+            ftype.element, enum_names, format_native=format_native
         )
         return (
             f"ListSerializer({inner_expr})",
@@ -959,11 +1137,14 @@ def _generate_kotlin_wrapper_dto(
     *,
     enum_names: set[str],
     generator_name: str,
+    format_native: bool = False,
 ) -> str:
     """Render a wrapper DTO file (data class + custom KSerializer object)."""
     field = schema.fields[0]
     field_name = field.wire_name
-    field_type = _kotlin_type_with_enums(field.type, enum_names)
+    field_type = _kotlin_type_with_enums(
+        field.type, enum_names, format_native=format_native
+    )
 
     header = comment_header(
         source=_relative_source(doc.source_path) + f"#{schema.source_pointer.rsplit('#', 1)[-1]}",
@@ -972,8 +1153,10 @@ def _generate_kotlin_wrapper_dto(
     footer = comment_footer()
 
     serializer_expr, serializer_imports = _kotlin_wrapper_serializer_expr(
-        field.type, enum_names
+        field.type, enum_names, format_native=format_native
     )
+    if format_native and "date-time" in collect_string_formats(field.type):
+        serializer_imports = serializer_imports + ["import kotlinx.datetime.Instant"]
 
     base_imports = [
         "import kotlinx.serialization.KSerializer",
@@ -1073,10 +1256,29 @@ def _emit_kotlin_oneof_sealed_class(field: FieldDef, one_of: OneOfRef) -> list[s
     return lines
 
 
+def _kotlin_binary_shape(field: FieldDef, *, format_native: bool) -> str | None:
+    """Classify a non-oneOf field's binary usage for the oneOf serializer.
+
+    Returns ``"primitive"`` for a direct ``format: binary`` field,
+    ``"nested"`` when binary sits inside a collection (List / Map), and
+    ``None`` when the field carries no binary at all. Nested binary in a
+    oneOf-bearing schema needs a composed serializer expression that the
+    hand-rolled JSON path doesn't build in v1 — the caller halts with
+    guidance to extract the collection into a referenced schema.
+    """
+    if not format_native or "binary" not in collect_string_formats(field.type):
+        return None
+    if field.type.is_primitive:
+        return "primitive"
+    return "nested"
+
+
 def _emit_kotlin_oneof_serializer(
     schema: SchemaDef,
     dto_package: str,
     enum_names: set[str],
+    *,
+    format_native: bool = False,
 ) -> list[str]:
     """Emit ``object {Name}DtoSerializer : KSerializer<{Name}Dto>``.
 
@@ -1086,8 +1288,25 @@ def _emit_kotlin_oneof_serializer(
     serialize path mirrors this by encoding each non-oneOf field straight
     into the resulting ``JsonObject`` and folding each oneOf variant's
     underlying DTO back into the named slot.
+
+    Format-aware mode: ``Instant`` / ``Uuid`` ride the reified
+    ``(de|en)codeFromJsonElement`` calls via their default serializers;
+    direct ``format: binary`` fields go through the explicit
+    ``Base64ByteArraySerializer`` (reified inference would drop the
+    type-position annotation and fall back to the number-array form).
     """
     name = schema.name
+    for f in schema.fields:
+        if f.type.is_one_of_ref:
+            continue
+        if _kotlin_binary_shape(f, format_native=format_native) == "nested":
+            raise ValueError(
+                f"Schema {name!r} field {f.wire_name!r} nests format: binary "
+                f"inside a collection on a oneOf-bearing schema — not "
+                f"supported in v1. Extract the collection into a referenced "
+                f"schema (or drop api.format_mapping for this doc via "
+                f"api.format_mapping_exclude)."
+            )
     lines: list[str] = []
     lines.append(f"object {name}DtoSerializer : KSerializer<{name}Dto> {{")
     lines.append(
@@ -1102,8 +1321,15 @@ def _emit_kotlin_oneof_serializer(
                 f'        element("{f.wire_name}", '
                 f'buildClassSerialDescriptor("{nested}") {{}})'
             )
+        elif _kotlin_binary_shape(f, format_native=format_native) == "primitive":
+            lines.append(
+                f'        element("{f.wire_name}", '
+                f"Base64ByteArraySerializer.descriptor)"
+            )
         else:
-            kt_type = _kotlin_type_with_enums(f.type, enum_names)
+            kt_type = _kotlin_type_with_enums(
+                f.type, enum_names, format_native=format_native
+            )
             base = kt_type.rstrip("?")
             lines.append(f'        element<{base}>("{f.wire_name}")')
     lines.append("    }")
@@ -1130,6 +1356,17 @@ def _emit_kotlin_oneof_serializer(
             lines.append(f"                {name}Dto.{nested}.Unknown -> JsonNull")
             lines.append("            }")
             lines.append(f'            put("{f.wire_name}", {prop}Json)')
+        elif _kotlin_binary_shape(f, format_native=format_native) == "primitive":
+            if f.type.nullable:
+                lines.append(
+                    f'            put("{f.wire_name}", value.{prop}?.let {{ '
+                    f"json.encodeToJsonElement(Base64ByteArraySerializer, it) }} ?: JsonNull)"
+                )
+            else:
+                lines.append(
+                    f'            put("{f.wire_name}", '
+                    f"json.encodeToJsonElement(Base64ByteArraySerializer, value.{prop}))"
+                )
         else:
             lines.append(f'            put("{f.wire_name}", json.encodeToJsonElement(value.{prop}))')
     lines.append("        }")
@@ -1152,8 +1389,23 @@ def _emit_kotlin_oneof_serializer(
         prop = _kotlin_property_name(f)
         if f.type.is_one_of_ref:
             continue
-        kt_type = _kotlin_type_with_enums(f.type, enum_names)
+        kt_type = _kotlin_type_with_enums(
+            f.type, enum_names, format_native=format_native
+        )
         base = kt_type.rstrip("?")
+        if _kotlin_binary_shape(f, format_native=format_native) == "primitive":
+            if f.type.nullable:
+                lines.append(
+                    f'        val {prop}: ByteArray? = obj["{f.wire_name}"]?.let '
+                    f"{{ json.decodeFromJsonElement(Base64ByteArraySerializer, it) }}"
+                )
+            else:
+                lines.append(
+                    f"        val {prop}: ByteArray = json.decodeFromJsonElement("
+                    f'Base64ByteArraySerializer, obj["{f.wire_name}"] ?: '
+                    f'error("missing {f.wire_name}"))'
+                )
+            continue
         if f.type.nullable:
             lines.append(
                 f'        val {prop}: {kt_type} = obj["{f.wire_name}"]?.let '

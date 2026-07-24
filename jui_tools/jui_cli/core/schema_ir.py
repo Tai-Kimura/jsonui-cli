@@ -21,9 +21,13 @@ from typing import Any
 class PrimitiveKind(str, Enum):
     """Atomic OpenAPI types resolved to a normalized enum.
 
-    Reflects the §4 mapping table. ``format`` hints are intentionally
-    discarded (date-time / uuid / binary etc. all collapse to STRING) —
-    see Q9 in the plan: format-aware mapping is v2.
+    Reflects the §4 mapping table. String-typed schemas always resolve to
+    ``STRING`` here; the recognized string ``format`` hints
+    (``date-time`` / ``uuid`` / ``binary``) are retained as a side channel
+    on :attr:`FieldType.format` (plan ``2026-07-24-v1-unsupported/03``).
+    Whether a generator maps them to native types is decided per doc by
+    the opt-in ``api.format_mapping`` config — the IR carries the hint
+    unconditionally so the loader stays orthogonal to the flag.
     """
 
     STRING = "string"
@@ -117,6 +121,13 @@ class FieldType:
             (``additionalProperties: <typed>``).
         is_one_of_ref: ``one_of`` carries the discriminated union spec.
         nullable: True if the field is optional or ``nullable: true``.
+        format: retained OpenAPI string ``format`` hint — one of
+            ``"date-time"`` / ``"uuid"`` / ``"binary"`` when the swagger
+            declared it on a ``type: string`` schema, else ``None``.
+            Only meaningful when ``primitive is PrimitiveKind.STRING``;
+            generators consult it only when ``api.format_mapping`` is
+            enabled for the doc (integer/number widths use dedicated
+            :class:`PrimitiveKind` members instead).
     """
 
     is_primitive: bool = False
@@ -130,6 +141,7 @@ class FieldType:
     element: "FieldType | None" = None
     one_of: OneOfRef | None = None
     nullable: bool = False
+    format: str | None = None
 
     def referenced_schemas(self) -> set[str]:
         """Names of schemas this type depends on (transitively).
@@ -306,3 +318,39 @@ class SwaggerDocument:
         ``name`` and the override set is keyed by schema name either way.
         """
         return schema.skip_domain or schema.name in self.skip_domain_overrides
+
+
+def collect_string_formats(ftype: FieldType) -> set[str]:
+    """Retained string formats reachable through array / map nesting.
+
+    Refs are not followed — the referenced schema reports its own formats.
+    Used by generators / sync planners to decide which format support
+    artifacts (typealias / serializer files, halts) a schema or doc needs.
+    """
+    found: set[str] = set()
+    if ftype.is_primitive and ftype.format is not None:
+        found.add(ftype.format)
+    if ftype.element is not None:
+        found |= collect_string_formats(ftype.element)
+    return found
+
+
+def schema_string_formats(schema: SchemaDef) -> set[str]:
+    """Union of :func:`collect_string_formats` over a schema's fields."""
+    found: set[str] = set()
+    for f in schema.fields:
+        found |= collect_string_formats(f.type)
+    return found
+
+
+def doc_string_formats(doc: SwaggerDocument) -> set[str]:
+    """Union of :func:`schema_string_formats` over every schema in *doc*.
+
+    Wrapper schemas are covered through their synthesized field; unions
+    carry no fields of their own (variants are refs), so they contribute
+    nothing here.
+    """
+    found: set[str] = set()
+    for schema in doc.schemas:
+        found |= schema_string_formats(schema)
+    return found

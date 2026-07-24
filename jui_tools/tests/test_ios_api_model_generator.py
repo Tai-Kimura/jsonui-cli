@@ -998,5 +998,160 @@ class SchemaLevelUnionTests(unittest.TestCase):
         self.assertIn("let pet: PetDto", src)
 
 
+class FormatAwareMappingTests(unittest.TestCase):
+    """Opt-in format-aware mapping (plan 2026-07-24-v1-unsupported/03)."""
+
+    def _fmt_gen(self, tmp: Path, excluded: frozenset[str] = frozenset()) -> IosApiModelGenerator:
+        return IosApiModelGenerator(IosApiPlatformConfig(
+            sources_root=tmp, format_mapping=True, format_excluded_docs=excluded,
+        ))
+
+    def _attachment_doc(self):
+        return parse_swagger(_doc({
+            "Attachment": {
+                "type": "object",
+                "required": ["id", "data"],
+                "properties": {
+                    "id": {"type": "string", "format": "uuid"},
+                    "data": {"type": "string", "format": "binary"},
+                    "created_at": {"type": "string", "format": "date-time"},
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string", "format": "date-time"},
+                    },
+                },
+            },
+        }), "test.json")
+
+    def test_native_types_and_custom_codable(self):
+        doc = self._attachment_doc()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = self._fmt_gen(Path(tmpdir)).generate_dto_source(doc.schemas[0], doc)
+        self.assertIn("let id: UUID", src)
+        self.assertIn("let data: Data", src)
+        self.assertIn("let createdAt: Date?", src)
+        self.assertIn("let tags: [Date]?", src)
+        # date fields force the custom Codable pair + ISO helpers
+        self.assertIn("init(from decoder: Decoder) throws {", src)
+        self.assertIn("func encode(to encoder: Encoder) throws {", src)
+        self.assertIn("_juiParseIsoDate", src)
+        self.assertIn(".withFractionalSeconds", src)
+        # UUID / Data decode through plain Codable inside the custom init
+        self.assertIn("try container.decode(UUID.self, forKey: .id)", src)
+        self.assertIn("try container.decode(Data.self, forKey: .data)", src)
+        # date fields decode raw String and convert
+        self.assertIn(
+            "try container.decodeIfPresent(String.self, forKey: .createdAt)"
+            ".map { try _juiParseIsoDate($0, codingPath: decoder.codingPath) }",
+            src,
+        )
+        self.assertIn(
+            "try container.decodeIfPresent([String].self, forKey: .tags)",
+            src,
+        )
+        # encode re-emits ISO strings
+        self.assertIn("_juiFormatIsoDate($0)", src)
+        # memberwise init restored (suppressed by the custom init)
+        self.assertIn("init(id: UUID, data: Data, createdAt: Date?, tags: [Date]?)", src)
+
+    def test_uuid_data_only_keeps_synthesized_codable(self):
+        """UUID / Data decode natively — no custom init without a date."""
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "required": ["id", "blob"],
+                "properties": {
+                    "id": {"type": "string", "format": "uuid"},
+                    "blob": {"type": "string", "format": "binary"},
+                },
+            },
+        }), "test.json")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = self._fmt_gen(Path(tmpdir)).generate_dto_source(doc.schemas[0], doc)
+        self.assertIn("let id: UUID", src)
+        self.assertIn("let blob: Data", src)
+        self.assertNotIn("init(from decoder:", src)
+        self.assertNotIn("_juiParseIsoDate", src)
+
+    def test_flag_off_output_unchanged(self):
+        doc = self._attachment_doc()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            off = _make_generator(Path(tmpdir)).generate_dto_source(doc.schemas[0], doc)
+        self.assertIn("let id: String", off)
+        self.assertIn("let createdAt: String?", off)
+        self.assertNotIn("Date", off)
+        self.assertNotIn("init(from decoder:", off)
+
+    def test_per_doc_opt_out_matches_flag_off(self):
+        doc = self._attachment_doc()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            excluded = self._fmt_gen(tmp, frozenset({"test.json"})).generate_dto_source(doc.schemas[0], doc)
+            off = _make_generator(tmp).generate_dto_source(doc.schemas[0], doc)
+        self.assertEqual(excluded, off)
+
+    def test_oneof_and_date_share_single_init(self):
+        """M5: oneOf + format reasons drive ONE custom init, not two."""
+        doc = parse_swagger(_doc({
+            "A": {"type": "object", "required": ["v"], "properties": {"v": {"type": "string"}}},
+            "B": {"type": "object", "required": ["w"], "properties": {"w": {"type": "string"}}},
+            "Parent": {
+                "type": "object",
+                "required": ["type", "content", "at"],
+                "properties": {
+                    "type": {"type": "string"},
+                    "at": {"type": "string", "format": "date-time"},
+                    "content": {
+                        "oneOf": [
+                            {"$ref": "#/components/schemas/A"},
+                            {"$ref": "#/components/schemas/B"},
+                        ],
+                        "discriminator": {
+                            "propertyName": "type",
+                            "mapping": {
+                                "a": "#/components/schemas/A",
+                                "b": "#/components/schemas/B",
+                            },
+                        },
+                    },
+                },
+            },
+        }), "test.json")
+        parent = next(s for s in doc.schemas if s.name == "Parent")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = self._fmt_gen(Path(tmpdir)).generate_dto_source(parent, doc)
+        self.assertEqual(src.count("init(from decoder: Decoder) throws {"), 1)
+        self.assertEqual(src.count("func encode(to encoder: Encoder) throws {"), 1)
+        # both reasons are served inside the one init
+        self.assertIn("_juiParseIsoDate", src)
+        self.assertIn("switch self.type {", src)
+
+    def test_wrapper_date_uses_single_value_conversion(self):
+        doc = parse_swagger(_doc({
+            "Stamp": {"type": "string", "format": "date-time"},
+        }), "test.json")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = self._fmt_gen(Path(tmpdir)).generate_dto_source(doc.schemas[0], doc)
+        self.assertIn("let value: Date", src)
+        self.assertIn("decoder.singleValueContainer()", src)
+        self.assertIn("_juiParseIsoDate((try container.decode(String.self))", src)
+        self.assertIn("try container.encode(_juiFormatIsoDate(self.value))", src)
+
+    def test_date_default_literal_skipped(self):
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "required": ["at"],
+                "properties": {
+                    "at": {"type": "string", "format": "date-time", "default": "2026-01-01T00:00:00Z"},
+                },
+            },
+        }), "test.json")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = self._fmt_gen(Path(tmpdir)).generate_dto_source(doc.schemas[0], doc)
+        self.assertIn("let at: Date\n", src)
+        self.assertNotIn('= "2026-01-01T00:00:00Z"', src)
+
+
 if __name__ == "__main__":
     unittest.main()

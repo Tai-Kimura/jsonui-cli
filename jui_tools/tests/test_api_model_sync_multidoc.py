@@ -16,7 +16,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from jui_cli.core.api_model_sync import collect_docs, plan_ios
+from jui_cli.core.api_model_sync import collect_docs, plan_android, plan_ios, plan_web
 from jui_cli.core.config_manager import ConfigManager
 from jui_cli.core.openapi_loader import OpenAPILoadError
 
@@ -222,6 +222,153 @@ class SplitInlineEquivalenceTests(unittest.TestCase):
             files_split = _plan_by_basename(cfg_split)
             files_inline = _plan_by_basename(cfg_inline)
         self.assertEqual(files_split, files_inline)
+
+
+_ATTACHMENT = {
+    "type": "object",
+    "required": ["id", "data"],
+    "properties": {
+        "id": {"type": "string", "format": "uuid"},
+        "data": {"type": "string", "format": "binary"},
+        "created_at": {"type": "string", "format": "date-time"},
+    },
+}
+
+
+def _build_format_project(
+    root: Path,
+    api_files: dict[str, dict],
+    *,
+    api_extra: dict | None = None,
+) -> ConfigManager:
+    """All-platform project with an ``api`` config block (plan 03 tests)."""
+    (root / "jui.config.json").write_text(json.dumps({
+        "api_directory": "docs/api",
+        "api": api_extra or {},
+        "platforms": {
+            "ios": {"root": "ios"},
+            "android": {"root": "android"},
+            "web": {"root": "web"},
+        },
+    }), encoding="utf-8")
+    (root / "ios").mkdir()
+    (root / "ios" / "sjui.config.json").write_text(
+        json.dumps({"source_directory": ""}), encoding="utf-8"
+    )
+    (root / "android").mkdir()
+    (root / "web").mkdir()
+    api_dir = root / "docs" / "api"
+    api_dir.mkdir(parents=True)
+    for name, data in api_files.items():
+        (api_dir / name).write_text(json.dumps(data), encoding="utf-8")
+    return ConfigManager(root / "jui.config.json")
+
+
+class FormatMappingConfigTests(unittest.TestCase):
+    """ConfigManager.api_format_mapping — defaults + parsing."""
+
+    def _cfg(self, api_block: dict) -> ConfigManager:
+        self._tmp = tempfile.TemporaryDirectory()
+        root = Path(self._tmp.name)
+        (root / "jui.config.json").write_text(
+            json.dumps({"api": api_block}), encoding="utf-8"
+        )
+        self.addCleanup(self._tmp.cleanup)
+        return ConfigManager(root / "jui.config.json")
+
+    def test_default_off(self):
+        enabled, excluded = self._cfg({}).api_format_mapping()
+        self.assertFalse(enabled)
+        self.assertEqual(excluded, frozenset())
+
+    def test_enabled_with_exclude(self):
+        enabled, excluded = self._cfg({
+            "format_mapping": True,
+            "format_mapping_exclude": ["legacy.json"],
+        }).api_format_mapping()
+        self.assertTrue(enabled)
+        self.assertEqual(excluded, frozenset({"legacy.json"}))
+
+    def test_malformed_exclude_ignored(self):
+        enabled, excluded = self._cfg({
+            "format_mapping": True,
+            "format_mapping_exclude": "legacy.json",
+        }).api_format_mapping()
+        self.assertTrue(enabled)
+        self.assertEqual(excluded, frozenset())
+
+
+class FormatSupportFilePlanTests(unittest.TestCase):
+    """Shared support files enter the plan exactly when a mapped doc uses
+    the format (plan 03) — per-doc opt-out keeps an excluded doc from
+    forcing them in."""
+
+    def _plan_names(self, plan) -> set[str]:
+        return {p.name for p in plan.expected_files}
+
+    def test_support_files_planned_when_enabled(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = _build_format_project(
+                Path(tmpdir),
+                {"a.json": _swagger({"Attachment": _ATTACHMENT})},
+                api_extra={
+                    "format_mapping": True,
+                    "platforms": {"android": {"serializer": "kotlinx"}},
+                },
+            )
+            docs = collect_docs(cfg)
+            android = plan_android(cfg, {"root": "android"}, docs)
+            web = plan_web(cfg, {"root": "web"}, docs)
+            ios = plan_ios(cfg, {"root": "ios"}, docs)
+        self.assertIn("Uuid.kt", self._plan_names(android))
+        self.assertIn("Base64ByteArraySerializer.kt", self._plan_names(android))
+        self.assertIn("Uuid.ts", self._plan_names(web))
+        self.assertIn("Base64Data.ts", self._plan_names(web))
+        # iOS maps to Foundation types — no support files
+        self.assertEqual(
+            {n for n in self._plan_names(ios) if not n.endswith(".swift")}, set()
+        )
+        ios_src = next(
+            src for p, src in ios.expected_files.items() if p.name == "AttachmentDto.swift"
+        )
+        self.assertIn("let createdAt: Date?", ios_src)
+
+    def test_support_files_absent_when_disabled(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = _build_format_project(
+                Path(tmpdir),
+                {"a.json": _swagger({"Attachment": _ATTACHMENT})},
+                api_extra={"platforms": {"android": {"serializer": "kotlinx"}}},
+            )
+            docs = collect_docs(cfg)
+            android = plan_android(cfg, {"root": "android"}, docs)
+            web = plan_web(cfg, {"root": "web"}, docs)
+        for name in ("Uuid.kt", "Base64ByteArraySerializer.kt"):
+            self.assertNotIn(name, self._plan_names(android))
+        for name in ("Uuid.ts", "Base64Data.ts"):
+            self.assertNotIn(name, self._plan_names(web))
+
+    def test_excluded_doc_does_not_force_support_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = _build_format_project(
+                Path(tmpdir),
+                {"legacy.json": _swagger({"Attachment": _ATTACHMENT})},
+                api_extra={
+                    "format_mapping": True,
+                    "format_mapping_exclude": ["legacy.json"],
+                    "platforms": {"android": {"serializer": "kotlinx"}},
+                },
+            )
+            docs = collect_docs(cfg)
+            android = plan_android(cfg, {"root": "android"}, docs)
+            web = plan_web(cfg, {"root": "web"}, docs)
+            ios = plan_ios(cfg, {"root": "ios"}, docs)
+        self.assertNotIn("Uuid.kt", self._plan_names(android))
+        self.assertNotIn("Uuid.ts", self._plan_names(web))
+        ios_src = next(
+            src for p, src in ios.expected_files.items() if p.name == "AttachmentDto.swift"
+        )
+        self.assertNotIn("Date", ios_src)
 
 
 if __name__ == "__main__":

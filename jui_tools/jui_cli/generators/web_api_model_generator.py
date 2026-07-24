@@ -16,6 +16,7 @@ Two ``case_convention`` modes (v3 plan §3.2):
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,6 +32,8 @@ from ..core.schema_ir import (
     SchemaDef,
     SwaggerDocument,
     UnionDef,
+    collect_string_formats,
+    schema_string_formats,
 )
 
 
@@ -39,12 +42,22 @@ CASE_CONVENTIONS = ("snake_case", "camelCase")
 
 @dataclass(frozen=True)
 class WebApiPlatformConfig:
-    """Resolved ``api.platforms.web`` config (with defaults applied)."""
+    """Resolved ``api.platforms.web`` config (with defaults applied).
+
+    ``format_mapping`` mirrors the project-level ``api.format_mapping``
+    opt-in (plan 03) with the per-doc opt-out in ``format_excluded_docs``
+    (swagger file basenames). When on: ``date-time`` fields become ``Date``
+    on the DTO with generated parse/serialize helpers doing the ISO 8601
+    conversion (no ``JSON.parse`` passthrough for affected schemas);
+    ``uuid`` / ``binary`` become documented string typealiases.
+    """
 
     sources_root: Path           # absolute, e.g. <project>/<web.root>/src
     model_dir: str = "models"    # relative to sources_root
     dto_subdir: str = "generated"
     case_convention: str = "snake_case"
+    format_mapping: bool = False
+    format_excluded_docs: frozenset[str] = frozenset()
 
 
 class WebApiModelGenerator:
@@ -59,6 +72,12 @@ class WebApiModelGenerator:
                 f"expected one of {CASE_CONVENTIONS}"
             )
         self._config = config
+
+    def _format_enabled(self, doc: SwaggerDocument) -> bool:
+        """Per-doc format-aware mapping decision (opt-in + per-doc opt-out)."""
+        if not self._config.format_mapping:
+            return False
+        return Path(doc.source_path).name not in self._config.format_excluded_docs
 
     # ----------------------------- paths ----------------------------- #
 
@@ -85,6 +104,47 @@ class WebApiModelGenerator:
             / f"{schema_name}.ts"
         )
 
+    def support_path(self, basename: str) -> Path:
+        """Path of a shared format support file (``Uuid.ts`` etc.)."""
+        return (
+            self._config.sources_root
+            / self._config.model_dir
+            / self._config.dto_subdir
+            / basename
+        )
+
+    # ----------------------- format support files --------------------- #
+
+    def generate_uuid_alias_source(self) -> str:
+        """Shared ``Uuid.ts`` — a documented string typealias.
+
+        Branded-type gymnastics are deliberately avoided; the alias exists
+        for greppability and intent, not nominal safety.
+        """
+        header = comment_header(
+            source="api.format_mapping (shared support)",
+            generator=self.GENERATOR_NAME,
+        )
+        footer = comment_footer()
+        body = (
+            "/** OpenAPI `format: uuid` — kept as a string on the wire and in memory. */\n"
+            "export type Uuid = string;"
+        )
+        return f"{header}\n\n{body}\n\n{footer}\n"
+
+    def generate_base64_alias_source(self) -> str:
+        """Shared ``Base64Data.ts`` — a documented string typealias."""
+        header = comment_header(
+            source="api.format_mapping (shared support)",
+            generator=self.GENERATOR_NAME,
+        )
+        footer = comment_footer()
+        body = (
+            "/** OpenAPI `format: binary` — base64 string on the wire and in memory. */\n"
+            "export type Base64Data = string;"
+        )
+        return f"{header}\n\n{body}\n\n{footer}\n"
+
     # ---------------------------- emit DTO --------------------------- #
 
     def generate_dto_source(self, schema: SchemaDef, doc: SwaggerDocument) -> str:
@@ -95,20 +155,32 @@ class WebApiModelGenerator:
         footer = comment_footer()
         enum_names = {e.name for e in doc.enums}
 
+        fmt = self._format_enabled(doc)
+        affected = web_affected_names(doc) if fmt else frozenset()
+        is_affected = fmt and schema.name in affected
+
         # Wrapper path: ``type: string`` / ``type: array`` etc. become a
         # TypeScript type alias (``export type FooDto = string;``).
         # Structural typing makes this transparent at every call site —
         # the alias is interchangeable with the underlying primitive.
         if schema.is_wrapper:
             return _generate_web_wrapper_dto(
-                schema, doc, header, footer, enum_names
+                schema,
+                doc,
+                header,
+                footer,
+                enum_names,
+                format_native=fmt,
+                affected=affected,
             )
 
         has_oneof = any(f.type.is_one_of_ref for f in schema.fields)
 
         lines: list[str] = []
         # Import enum / nested DTO refs that appear in this schema.
-        for imp in self._collect_imports(schema, enum_names, doc):
+        for imp in self._collect_imports(
+            schema, enum_names, doc, format_native=fmt, affected=affected
+        ):
             lines.append(imp)
         if lines:
             lines.append("")
@@ -128,25 +200,37 @@ class WebApiModelGenerator:
             lines.append("// additionalProperties: false (strict — extra fields are dropped on decode)")
         lines.append(f"export interface {schema.name}Dto {{")
         for f in schema.fields:
-            lines.extend(self._dto_field_lines(f, enum_names, schema))
+            lines.extend(
+                self._dto_field_lines(f, enum_names, schema, format_native=fmt)
+            )
         lines.append("}")
 
-        # camelCase mode also needs parse/serialize helpers since the wire
-        # format is snake_case. Skip when the schema has oneOf — the
-        # dedicated dispatch helpers (emitted below) own the parse/serialize
-        # surface for that case.
-        if (
-            self._config.case_convention == "camelCase"
-            and self._has_wire_camel_skew(schema)
-            and not has_oneof
-        ):
-            lines.extend(self._parse_serialize_helpers(schema, enum_names))
+        if is_affected:
+            # Format-aware helpers own the whole parse/serialize surface
+            # for date-affected schemas (plan 03) — one emitter driven by
+            # the reason set (Date conversion / camelCase skew / oneOf
+            # dispatch) so the raw wire JSON never reaches the Date-typed
+            # DTO without conversion.
+            lines.extend(
+                self._emit_ts_format_helpers(schema, enum_names, affected)
+            )
+        else:
+            # camelCase mode also needs parse/serialize helpers since the
+            # wire format is snake_case. Skip when the schema has oneOf —
+            # the dedicated dispatch helpers (emitted below) own the
+            # parse/serialize surface for that case.
+            if (
+                self._config.case_convention == "camelCase"
+                and self._has_wire_camel_skew(schema)
+                and not has_oneof
+            ):
+                lines.extend(self._parse_serialize_helpers(schema, enum_names))
 
-        # oneOf-bearing schemas need dispatch helpers regardless of case
-        # convention — caller passes raw JSON, helper wraps each variant
-        # in the corresponding ``{ kind, data }`` shape.
-        if has_oneof:
-            lines.extend(_emit_ts_oneof_helpers(schema, enum_names, self._config.case_convention))
+            # oneOf-bearing schemas need dispatch helpers regardless of case
+            # convention — caller passes raw JSON, helper wraps each variant
+            # in the corresponding ``{ kind, data }`` shape.
+            if has_oneof:
+                lines.extend(_emit_ts_oneof_helpers(schema, enum_names, self._config.case_convention))
 
         body = "\n".join(lines)
         return f"{header}\n\n{body}\n\n{footer}\n"
@@ -156,17 +240,33 @@ class WebApiModelGenerator:
         schema: SchemaDef,
         enum_names: set[str],
         doc: SwaggerDocument,
+        *,
+        format_native: bool = False,
+        affected: frozenset[str] | set[str] = frozenset(),
     ) -> list[str]:
         """Return ``import`` lines for every other DTO/enum this schema references."""
         refs = schema.referenced_schemas() - {schema.name}
-        if not refs:
-            return []
         lines: list[str] = []
         for name in sorted(refs):
             if name in enum_names:
                 lines.append(f'import type {{ {name} }} from "./{name}";')
+            elif format_native and schema.name in affected and name in affected:
+                # Affected refs are parsed/serialized by delegation — pull
+                # in their helpers + wire type alongside the DTO type.
+                lines.append(
+                    f'import {{ parse{name}Dto, serialize{name}Dto }} from "./{name}Dto";'
+                )
+                lines.append(
+                    f'import type {{ {name}Dto, {name}Wire }} from "./{name}Dto";'
+                )
             else:
                 lines.append(f'import type {{ {name}Dto }} from "./{name}Dto";')
+        if format_native:
+            used = schema_string_formats(schema)
+            if "uuid" in used:
+                lines.append('import type { Uuid } from "./Uuid";')
+            if "binary" in used:
+                lines.append('import type { Base64Data } from "./Base64Data";')
         return lines
 
     def _dto_field_lines(
@@ -174,6 +274,8 @@ class WebApiModelGenerator:
         field: FieldDef,
         enum_names: set[str],
         schema: SchemaDef,
+        *,
+        format_native: bool = False,
     ) -> list[str]:
         out: list[str] = []
         if field.description:
@@ -183,7 +285,9 @@ class WebApiModelGenerator:
         if field.type.is_one_of_ref:
             type_str = _ts_oneof_union_name(schema, field)
         else:
-            type_str = _ts_type_with_enums(field.type, enum_names)
+            type_str = _ts_type_with_enums(
+                field.type, enum_names, format_native=format_native
+            )
         name = self._ts_property_name(field)
         # Optional fields use ``?:`` rather than ``| undefined`` for ergonomics.
         sep = "?:" if field.type.nullable else ":"
@@ -215,8 +319,12 @@ class WebApiModelGenerator:
 
         These bridge the on-the-wire snake_case JSON to the domain-facing
         camelCase shape. Kept intentionally minimal — no enum coercion or
-        date parsing (those are user responsibility per the v3 plan
-        "filter native conversion through Domain proxies" principle).
+        date parsing. Historically dates were entirely a Domain-proxy
+        responsibility (v3 plan "filter native conversion through Domain
+        proxies"); since plan 03 that principle holds only while
+        ``api.format_mapping`` is off — date-affected schemas take the
+        format-aware helper path (:meth:`_emit_ts_format_helpers`) and
+        never reach this emitter.
         """
         name = schema.name
         wire_iface = f"{name}Wire"
@@ -243,6 +351,128 @@ class WebApiModelGenerator:
         out.append("});")
         return out
 
+    def _emit_ts_format_helpers(
+        self,
+        schema: SchemaDef,
+        enum_names: set[str],
+        affected: frozenset[str] | set[str],
+    ) -> list[str]:
+        """Unified wire ↔ DTO helpers for a date-affected schema (plan 03).
+
+        One emitter driven by the reason set: ISO 8601 ⇄ ``Date``
+        conversion, camelCase renames (when configured), and oneOf
+        dispatch. Affected refs delegate to the referenced DTO's own
+        ``parse{Ref}Dto`` / ``serialize{Ref}Dto`` so the conversion
+        cascades without any ``JSON.parse``-passthrough gap.
+        """
+        name = schema.name
+        camel_mode = self._config.case_convention == "camelCase"
+        out: list[str] = []
+
+        if "date-time" in schema_string_formats(schema):
+            out.extend(_TS_PARSE_ISO_DATE_HELPER)
+
+        out.append("")
+        out.append(
+            f"// Wire format (raw JSON shape) — used by parse{name}Dto / serialize{name}Dto."
+        )
+        out.append(f"export interface {name}Wire {{")
+        for f in schema.fields:
+            if f.type.is_one_of_ref:
+                wire_type = "unknown"
+            else:
+                wire_type = _ts_wire_type(f.type, enum_names, affected)
+            sep = "?:" if f.type.nullable else ":"
+            out.append(f"  {_ts_obj_key(f.wire_name)}{sep} {wire_type};")
+        out.append("}")
+
+        # ---------- parse ----------
+        out.append("")
+        out.append(f"export const parse{name}Dto = (wire: {name}Wire): {name}Dto => {{")
+        for f in schema.fields:
+            if not (f.type.is_one_of_ref and f.type.one_of is not None):
+                continue
+            prop = self._ts_property_name(f)
+            union_name = _ts_oneof_union_name(schema, f)
+            disc_field = next(
+                (g for g in schema.fields if g.wire_name == f.type.one_of.discriminator_property),
+                None,
+            )
+            disc_wire = disc_field.wire_name if disc_field else f.type.one_of.discriminator_property
+            out.append(f"  let {prop}: {union_name};")
+            out.append(f"  switch (wire[{_ts_oneof_kind_literal(disc_wire)}]) {{")
+            for variant in f.type.one_of.variants:
+                kind = _ts_oneof_kind_literal(variant.discriminator_value)
+                if variant.ref_name in affected:
+                    data_expr = (
+                        f"parse{variant.ref_name}Dto("
+                        f"wire[{_ts_oneof_kind_literal(f.wire_name)}] as {variant.ref_name}Wire)"
+                    )
+                else:
+                    data_expr = (
+                        f"wire[{_ts_oneof_kind_literal(f.wire_name)}] as {variant.ref_name}Dto"
+                    )
+                out.append(f"    case {kind}:")
+                out.append(f"      {prop} = {{ kind: {kind}, data: {data_expr} }};")
+                out.append("      break;")
+            out.append("    default:")
+            out.append(f'      {prop} = {{ kind: "unknown" }};')
+            out.append("  }")
+        return_parts: list[str] = []
+        for f in schema.fields:
+            prop = self._ts_property_name(f)
+            if f.type.is_one_of_ref:
+                return_parts.append(f"{prop}: {prop}")
+                continue
+            src = f"wire.{f.wire_name}" if _ts_is_identifier(f.wire_name) else f"wire[{_ts_oneof_kind_literal(f.wire_name)}]"
+            if _ts_needs_conversion(f.type, affected):
+                converted = _ts_parse_expr(f.type, src, affected, depth=0)
+                if f.type.nullable:
+                    converted = f"{src} == null ? undefined : {converted}"
+                return_parts.append(f"{prop}: {converted}")
+            else:
+                return_parts.append(f"{prop}: {src}")
+        out.append("  return { " + ", ".join(return_parts) + " };")
+        out.append("};")
+
+        # ---------- serialize ----------
+        out.append("")
+        out.append(f"export const serialize{name}Dto = (model: {name}Dto): {name}Wire => {{")
+        obj_parts: list[str] = []
+        for f in schema.fields:
+            prop = self._ts_property_name(f)
+            key = _ts_obj_key(f.wire_name)
+            if f.type.is_one_of_ref and f.type.one_of is not None:
+                local = f"{prop}Value"
+                out.append(f"  let {local}: unknown;")
+                out.append(f"  switch (model.{prop}.kind) {{")
+                for variant in f.type.one_of.variants:
+                    kind = _ts_oneof_kind_literal(variant.discriminator_value)
+                    if variant.ref_name in affected:
+                        unwrap = f"serialize{variant.ref_name}Dto(model.{prop}.data)"
+                    else:
+                        unwrap = f"model.{prop}.data"
+                    out.append(f"    case {kind}:")
+                    out.append(f"      {local} = {unwrap};")
+                    out.append("      break;")
+                out.append('    case "unknown":')
+                out.append(f"      {local} = null;")
+                out.append("      break;")
+                out.append("  }")
+                obj_parts.append(f"{key}: {local}")
+                continue
+            src = f"model.{prop}"
+            if _ts_needs_conversion(f.type, affected):
+                converted = _ts_serialize_expr(f.type, src, affected, depth=0)
+                if f.type.nullable:
+                    converted = f"{src} == null ? undefined : {converted}"
+                obj_parts.append(f"{key}: {converted}")
+            else:
+                obj_parts.append(f"{key}: {src}")
+        out.append("  return { " + ", ".join(obj_parts) + " };")
+        out.append("};")
+        return out
+
     # ---------------------------- emit union ------------------------- #
 
     def generate_union_source(self, union: UnionDef, doc: SwaggerDocument) -> str:
@@ -266,9 +496,21 @@ class WebApiModelGenerator:
         name = union.name
         tag_key = _ts_oneof_kind_literal(union.discriminator_property)
 
+        fmt = self._format_enabled(doc)
+        affected = web_affected_names(doc) if fmt else frozenset()
+        is_affected = fmt and name in affected
+
         lines: list[str] = []
         for ref in sorted({v.ref_name for v in union.variants}):
-            lines.append(f'import type {{ {ref}Dto }} from "./{ref}Dto";')
+            if is_affected and ref in affected:
+                lines.append(
+                    f'import {{ parse{ref}Dto, serialize{ref}Dto }} from "./{ref}Dto";'
+                )
+                lines.append(
+                    f'import type {{ {ref}Dto, {ref}Wire }} from "./{ref}Dto";'
+                )
+            else:
+                lines.append(f'import type {{ {ref}Dto }} from "./{ref}Dto";')
         lines.append("")
         if union.description:
             lines.extend(_jsdoc_lines(union.description))
@@ -314,13 +556,51 @@ class WebApiModelGenerator:
         for variant in union.variants:
             kind = _ts_oneof_kind_literal(variant.discriminator_value)
             lines.append(f"    case {kind}:")
-            lines.append(
-                f"      return {{ ...value.data, [{tag_key}]: {kind} }};"
-            )
+            if is_affected and variant.ref_name in affected:
+                lines.append(
+                    f"      return {{ ...serialize{variant.ref_name}Dto(value.data), "
+                    f"[{tag_key}]: {kind} }};"
+                )
+            else:
+                lines.append(
+                    f"      return {{ ...value.data, [{tag_key}]: {kind} }};"
+                )
         lines.append('    case "unknown":')
         lines.append("      return {};")
         lines.append("  }")
         lines.append("};")
+
+        if is_affected:
+            wire_union = " | ".join(
+                f"{v.ref_name}Wire" if v.ref_name in affected else f"{v.ref_name}Dto"
+                for v in union.variants
+            )
+            lines.append("")
+            lines.append(
+                f"// Raw JSON shape of the union payload — parse{name}Dto converts"
+            )
+            lines.append("// date-affected variants into their Date-typed DTOs.")
+            lines.append(f"export type {name}Wire = {wire_union};")
+            lines.append("")
+            lines.append(
+                f"export const parse{name}Dto = (wire: {name}Wire | unknown): {name}Dto => {{"
+            )
+            lines.append(
+                f"  switch ((wire as Record<string, unknown> | null)?.[{tag_key}]) {{"
+            )
+            for variant in union.variants:
+                kind = _ts_oneof_kind_literal(variant.discriminator_value)
+                lines.append(f"    case {kind}:")
+                if variant.ref_name in affected:
+                    lines.append(
+                        f"      return parse{variant.ref_name}Dto(wire as {variant.ref_name}Wire);"
+                    )
+                else:
+                    lines.append(f"      return wire as {variant.ref_name}Dto;")
+            lines.append("    default:")
+            lines.append(f"      return wire as {name}Dto;")
+            lines.append("  }")
+            lines.append("};")
 
         body = "\n".join(lines)
         return f"{header}\n\n{body}\n\n{footer}\n"
@@ -450,25 +730,200 @@ _PRIMITIVE_TO_TS: dict[PrimitiveKind, str] = {
 }
 
 
-def _ts_type_with_enums(ftype: FieldType, enum_names: set[str]) -> str:
+# Native TS renderings for retained string formats (plan 03). ``uuid`` /
+# ``binary`` are documented string typealiases (shared support files);
+# only ``date-time`` changes the runtime representation.
+_FORMAT_TO_TS: dict[str, str] = {
+    "date-time": "Date",
+    "uuid": "Uuid",
+    "binary": "Base64Data",
+}
+
+
+def _ts_type_with_enums(
+    ftype: FieldType,
+    enum_names: set[str],
+    *,
+    format_native: bool = False,
+) -> str:
     """Render a :class:`FieldType` as a TypeScript type expression.
 
     Optional/nullable is signaled by the parent (``?:`` in field
     declaration) — this function only returns the bare type.
     """
     if ftype.is_primitive:
-        return _PRIMITIVE_TO_TS[ftype.primitive]
+        base = _PRIMITIVE_TO_TS[ftype.primitive]
+        if format_native and ftype.format is not None:
+            base = _FORMAT_TO_TS.get(ftype.format, base)
+        return base
     if (ftype.is_object_ref or ftype.is_enum_ref) and ftype.ref_name in enum_names:
         return ftype.ref_name
     if ftype.is_object_ref or ftype.is_enum_ref:
         return f"{ftype.ref_name}Dto"
     if ftype.is_array:
-        inner = _ts_type_with_enums(ftype.element, enum_names) if ftype.element else "string"
+        inner = (
+            _ts_type_with_enums(ftype.element, enum_names, format_native=format_native)
+            if ftype.element
+            else "string"
+        )
         return f"{inner}[]"
     if ftype.is_map:
-        inner = _ts_type_with_enums(ftype.element, enum_names) if ftype.element else "string"
+        inner = (
+            _ts_type_with_enums(ftype.element, enum_names, format_native=format_native)
+            if ftype.element
+            else "string"
+        )
         return f"Record<string, {inner}>"
     return "string"
+
+
+# --------------------------------------------------------------------------- #
+# format-aware mapping helpers (plan 2026-07-24-v1-unsupported/03)
+# --------------------------------------------------------------------------- #
+
+
+_TS_IDENTIFIER_RE = re.compile(r"^[A-Za-z_$][A-Za-z0-9_$]*$")
+
+
+def _ts_is_identifier(name: str) -> bool:
+    return bool(_TS_IDENTIFIER_RE.match(name))
+
+
+def _ts_obj_key(wire_name: str) -> str:
+    """Object-literal / interface key for a wire name (quoted when needed)."""
+    if _ts_is_identifier(wire_name):
+        return wire_name
+    escaped = wire_name.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def web_affected_names(doc: SwaggerDocument) -> frozenset[str]:
+    """Schemas / unions whose DTO runtime shape differs from the wire JSON.
+
+    A schema is *affected* when it (transitively, through refs / arrays /
+    maps / oneOf variants / union variants) contains a ``date-time``
+    field — i.e. its parsed DTO holds ``Date`` objects somewhere, so raw
+    ``JSON.parse`` output must not be cast to it. Enum refs never affect.
+    """
+    enum_names = {e.name for e in doc.enums}
+    refs_by_name: dict[str, set[str]] = {}
+    affected: set[str] = set()
+    for schema in doc.schemas:
+        if "date-time" in schema_string_formats(schema):
+            affected.add(schema.name)
+        refs_by_name[schema.name] = schema.referenced_schemas() - enum_names
+    for union in doc.unions:
+        refs_by_name[union.name] = union.referenced_schemas()
+    changed = True
+    while changed:
+        changed = False
+        for name, refs in refs_by_name.items():
+            if name not in affected and refs & affected:
+                affected.add(name)
+                changed = True
+    return frozenset(affected)
+
+
+_TS_PARSE_ISO_DATE_HELPER: tuple[str, ...] = (
+    "",
+    "const parseIsoDate = (raw: string): Date => {",
+    "  const parsed = new Date(raw);",
+    "  if (Number.isNaN(parsed.getTime())) {",
+    "    throw new Error(`Invalid ISO 8601 date-time: ${raw}`);",
+    "  }",
+    "  return parsed;",
+    "};",
+)
+
+
+def _ts_needs_conversion(ftype: FieldType, affected: frozenset[str] | set[str]) -> bool:
+    """True when wire value ≠ DTO value for this type (Date somewhere)."""
+    if ftype.is_primitive:
+        return ftype.format == "date-time"
+    if ftype.is_object_ref:
+        return ftype.ref_name in affected
+    if ftype.element is not None:
+        return _ts_needs_conversion(ftype.element, affected)
+    return False
+
+
+def _ts_wire_type(
+    ftype: FieldType,
+    enum_names: set[str],
+    affected: frozenset[str] | set[str],
+) -> str:
+    """Raw JSON type expression: Dates stay strings, affected refs → Wire."""
+    if ftype.is_object_ref and ftype.ref_name in affected:
+        return f"{ftype.ref_name}Wire"
+    if ftype.is_array:
+        inner = (
+            _ts_wire_type(ftype.element, enum_names, affected)
+            if ftype.element
+            else "string"
+        )
+        return f"{inner}[]"
+    if ftype.is_map:
+        inner = (
+            _ts_wire_type(ftype.element, enum_names, affected)
+            if ftype.element
+            else "string"
+        )
+        return f"Record<string, {inner}>"
+    # Primitives (incl. date-time → string) and unaffected refs match the
+    # flag-off rendering exactly.
+    return _ts_type_with_enums(ftype, enum_names)
+
+
+def _ts_parse_expr(
+    ftype: FieldType,
+    src: str,
+    affected: frozenset[str] | set[str],
+    *,
+    depth: int,
+) -> str:
+    """Wire → DTO conversion expression for a non-null value of *ftype*."""
+    if ftype.is_primitive and ftype.format == "date-time":
+        return f"parseIsoDate({src})"
+    if ftype.is_object_ref and ftype.ref_name in affected:
+        return f"parse{ftype.ref_name}Dto({src})"
+    if ftype.is_array and ftype.element is not None:
+        v = f"v{depth}"
+        inner = _ts_parse_expr(ftype.element, v, affected, depth=depth + 1)
+        return f"{src}.map(({v}) => {inner})"
+    if ftype.is_map and ftype.element is not None:
+        k, v = f"k{depth}", f"v{depth}"
+        inner = _ts_parse_expr(ftype.element, v, affected, depth=depth + 1)
+        return (
+            f"Object.fromEntries(Object.entries({src}).map("
+            f"([{k}, {v}]) => [{k}, {inner}]))"
+        )
+    return src
+
+
+def _ts_serialize_expr(
+    ftype: FieldType,
+    src: str,
+    affected: frozenset[str] | set[str],
+    *,
+    depth: int,
+) -> str:
+    """DTO → wire conversion expression for a non-null value of *ftype*."""
+    if ftype.is_primitive and ftype.format == "date-time":
+        return f"{src}.toISOString()"
+    if ftype.is_object_ref and ftype.ref_name in affected:
+        return f"serialize{ftype.ref_name}Dto({src})"
+    if ftype.is_array and ftype.element is not None:
+        v = f"v{depth}"
+        inner = _ts_serialize_expr(ftype.element, v, affected, depth=depth + 1)
+        return f"{src}.map(({v}) => {inner})"
+    if ftype.is_map and ftype.element is not None:
+        k, v = f"k{depth}", f"v{depth}"
+        inner = _ts_serialize_expr(ftype.element, v, affected, depth=depth + 1)
+        return (
+            f"Object.fromEntries(Object.entries({src}).map("
+            f"([{k}, {v}]) => [{k}, {inner}]))"
+        )
+    return src
 
 
 # --------------------------------------------------------------------------- #
@@ -482,24 +937,46 @@ def _generate_web_wrapper_dto(
     header: str,
     footer: str,
     enum_names: set[str],
+    *,
+    format_native: bool = False,
+    affected: frozenset[str] | set[str] = frozenset(),
 ) -> str:
     """Render a wrapper DTO as an ``export type`` alias.
 
     Structural typing in TypeScript makes the alias indistinguishable
     from the underlying primitive at every call site (so a ``ThinkingDto``
     in a discriminated union or repository return type just acts as a
-    string at runtime).
+    string at runtime). Date-affected wrappers additionally get a
+    ``{Name}Wire`` alias + parse/serialize helpers (plan 03).
     """
-    wrapped_type_str = _ts_type_with_enums(schema.wrapped_type, enum_names) \
-        if schema.wrapped_type is not None else "unknown"
+    is_affected = format_native and schema.name in affected
+    wrapped = schema.wrapped_type
+    wrapped_type_str = (
+        _ts_type_with_enums(wrapped, enum_names, format_native=format_native)
+        if wrapped is not None
+        else "unknown"
+    )
 
     refs = schema.referenced_schemas()
     lines: list[str] = []
     for name in sorted(refs):
         if name in enum_names:
             lines.append(f'import type {{ {name} }} from "./{name}";')
+        elif is_affected and name in affected:
+            lines.append(
+                f'import {{ parse{name}Dto, serialize{name}Dto }} from "./{name}Dto";'
+            )
+            lines.append(
+                f'import type {{ {name}Dto, {name}Wire }} from "./{name}Dto";'
+            )
         else:
             lines.append(f'import type {{ {name}Dto }} from "./{name}Dto";')
+    if format_native and wrapped is not None:
+        used = collect_string_formats(wrapped)
+        if "uuid" in used:
+            lines.append('import type { Uuid } from "./Uuid";')
+        if "binary" in used:
+            lines.append('import type { Base64Data } from "./Base64Data";')
     if lines:
         lines.append("")
     if schema.description:
@@ -507,6 +984,28 @@ def _generate_web_wrapper_dto(
     if schema.deprecated:
         lines.append("/** @deprecated */")
     lines.append(f"export type {schema.name}Dto = {wrapped_type_str};")
+
+    if is_affected and wrapped is not None:
+        name = schema.name
+        if "date-time" in collect_string_formats(wrapped):
+            lines.extend(_TS_PARSE_ISO_DATE_HELPER)
+        wire_type = _ts_wire_type(wrapped, enum_names, affected)
+        lines.append("")
+        lines.append(
+            f"// Raw JSON shape — parse{name}Dto / serialize{name}Dto convert Date values."
+        )
+        lines.append(f"export type {name}Wire = {wire_type};")
+        lines.append("")
+        parse_expr = _ts_parse_expr(wrapped, "wire", affected, depth=0)
+        lines.append(
+            f"export const parse{name}Dto = (wire: {name}Wire): {name}Dto => {parse_expr};"
+        )
+        lines.append("")
+        serialize_expr = _ts_serialize_expr(wrapped, "value", affected, depth=0)
+        lines.append(
+            f"export const serialize{name}Dto = (value: {name}Dto): {name}Wire => {serialize_expr};"
+        )
+
     body = "\n".join(lines)
     return f"{header}\n\n{body}\n\n{footer}\n"
 

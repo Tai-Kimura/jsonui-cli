@@ -47,11 +47,19 @@ class IosApiPlatformConfig:
 
     Carried through the generator so callers don't have to pass paths
     around piecewise.
+
+    ``format_mapping`` mirrors the project-level ``api.format_mapping``
+    opt-in (plan 03): when True, string formats map to native types
+    (``date-time`` → ``Date``, ``uuid`` → ``UUID``, ``binary`` → ``Data``)
+    except for docs listed in ``format_excluded_docs`` (swagger file
+    basenames — the per-doc opt-out).
     """
 
     sources_root: Path  # absolute, e.g. <project>/<ios.root>/<sources>
     model_dir: str = "Model"          # relative to sources_root
     dto_subdir: str = "Generated"     # relative to model_dir
+    format_mapping: bool = False
+    format_excluded_docs: frozenset[str] = frozenset()
 
 
 class IosApiModelGenerator:
@@ -74,6 +82,12 @@ class IosApiModelGenerator:
 
     def __init__(self, config: IosApiPlatformConfig):
         self._config = config
+
+    def _format_enabled(self, doc: SwaggerDocument) -> bool:
+        """Per-doc format-aware mapping decision (opt-in + per-doc opt-out)."""
+        if not self._config.format_mapping:
+            return False
+        return Path(doc.source_path).name not in self._config.format_excluded_docs
 
     # ----------------------------- paths ----------------------------- #
 
@@ -144,21 +158,41 @@ class IosApiModelGenerator:
             f"struct {schema.name}Dto: {', '.join(conformances)} {{"
         )
 
+        fmt = self._format_enabled(doc)
+
         # Wrapper schemas (top-level ``type: string`` / ``type: array`` etc.)
         # take a separate emission path: a single stored property + a
         # ``singleValueContainer``-based Codable so the wire format is the
         # bare wrapped value rather than a JSON object envelope.
         if schema.is_wrapper:
-            body_lines.extend(_emit_swift_wrapper_body(schema, enum_names))
+            body_lines.extend(
+                _emit_swift_wrapper_body(schema, enum_names, format_native=fmt)
+            )
             body_lines.append("}")
+            if fmt and _ftype_has_native_date(schema.fields[0].type):
+                body_lines.append("")
+                body_lines.extend(_SWIFT_ISO_DATE_HELPERS)
             body = "\n".join(body_lines)
             return f"{header}\nimport Foundation\n\n{body}\n\n{footer}\n"
 
         has_oneof = any(f.type.is_one_of_ref for f in schema.fields)
+        # Reasons for hand-writing init(from:)/encode(to:) form a set (plan
+        # 03): oneOf dispatch and/or native Date fields (the synthesized
+        # Codable would use the decoder's dateDecodingStrategy — default
+        # ``deferredToDate`` — instead of the wire's ISO 8601 strings).
+        # UUID / Data decode correctly through synthesized Codable (native
+        # Codable conformance / default ``.base64`` strategy), so they do
+        # not force the custom path on their own.
+        has_native_date = fmt and any(
+            _ftype_has_native_date(f.type) for f in schema.fields
+        )
+        needs_custom_codable = has_oneof or has_native_date
 
         # Stored properties (one per field).
         for f in schema.fields:
-            body_lines.extend(_dto_field_lines(f, enum_names, enums_by_name))
+            body_lines.extend(
+                _dto_field_lines(f, enum_names, enums_by_name, format_native=fmt)
+            )
 
         # Nested ``enum {Field}: Codable`` declarations — one per oneOf field.
         # Variants live alongside the parent type so consumers refer to them as
@@ -170,13 +204,17 @@ class IosApiModelGenerator:
         # Memberwise initializer — Swift suppresses the auto-synthesized one
         # once we write a custom ``init(from decoder:)`` below, so explicitly
         # restore it for consumers who construct DTOs at call sites.
-        if has_oneof:
-            body_lines.extend(_emit_swift_memberwise_init(schema, enum_names))
+        if needs_custom_codable:
+            body_lines.extend(
+                _emit_swift_memberwise_init(schema, enum_names, format_native=fmt)
+            )
 
         # Custom CodingKeys when at least one field is renamed, OR always when
-        # the schema has a oneOf field (the custom ``init(from:)`` needs the
-        # keys to dispatch).
-        if has_oneof or any(_swift_property_name(f) != f.wire_name for f in schema.fields):
+        # the schema needs a custom ``init(from:)`` (the decoder needs the
+        # keys to dispatch / convert).
+        if needs_custom_codable or any(
+            _swift_property_name(f) != f.wire_name for f in schema.fields
+        ):
             body_lines.append("")
             body_lines.append("    enum CodingKeys: String, CodingKey {")
             for f in schema.fields:
@@ -187,14 +225,20 @@ class IosApiModelGenerator:
                     body_lines.append(f'        case {prop} = "{f.wire_name}"')
             body_lines.append("    }")
 
-        # Custom ``init(from:)`` + ``encode(to:)`` for oneOf-bearing schemas:
-        # decoder reads the sibling discriminator first, then dispatches into
-        # the matching variant decode; encoder is symmetric.
-        if has_oneof:
+        # Single custom ``init(from:)`` + ``encode(to:)`` emitter driven by
+        # the reason set (oneOf dispatch and/or ISO date conversion) so the
+        # two features never emit duplicate initializers on one schema.
+        if needs_custom_codable:
             body_lines.extend(
-                _emit_swift_oneof_init_from_decoder(schema, enum_names, enums_by_name)
+                _emit_swift_custom_init_from_decoder(
+                    schema, enum_names, enums_by_name, format_native=fmt
+                )
             )
-            body_lines.extend(_emit_swift_oneof_encode_to_encoder(schema, enum_names))
+            body_lines.extend(
+                _emit_swift_custom_encode_to_encoder(
+                    schema, enum_names, format_native=fmt
+                )
+            )
 
         # Explicit ``hash(into:)`` when Swift auto-synthesis would fail —
         # currently triggered by any map / array-of-map / nested-map field.
@@ -202,6 +246,10 @@ class IosApiModelGenerator:
             body_lines.extend(_emit_hash_body_lines(schema))
 
         body_lines.append("}")
+
+        if has_native_date:
+            body_lines.append("")
+            body_lines.extend(_SWIFT_ISO_DATE_HELPERS)
 
         body = "\n".join(body_lines)
         return f"{header}\nimport Foundation\n\n{body}\n\n{footer}\n"
@@ -442,6 +490,8 @@ def _dto_field_lines(
     field: FieldDef,
     enum_names: set[str],
     enums_by_name: dict[str, EnumDef],
+    *,
+    format_native: bool = False,
 ) -> list[str]:
     """Lines emitted for one DTO stored property.
 
@@ -463,9 +513,13 @@ def _dto_field_lines(
     if field.type.is_one_of_ref:
         type_str = _swift_oneof_field_type(field)
     else:
-        type_str = _swift_type_with_enums(field.type, enum_names)
+        type_str = _swift_type_with_enums(
+            field.type, enum_names, format_native=format_native
+        )
     name = _swift_property_name(field)
-    default = _swift_default_literal(field, type_str, enums_by_name)
+    default = _swift_default_literal(
+        field, type_str, enums_by_name, format_native=format_native
+    )
     line = f"    let {name}: {type_str}"
     if default is not None:
         line += f" = {default}"
@@ -547,10 +601,12 @@ def _swift_case_name(case_name: str) -> str:
     return snake_to_camel(case_name)
 
 
-def _swift_type(ftype: FieldType) -> str:
+def _swift_type(ftype: FieldType, *, format_native: bool = False) -> str:
     """Render a :class:`FieldType` as a Swift type expression."""
     if ftype.is_primitive:
         base = _PRIMITIVE_TO_SWIFT[ftype.primitive]
+        if format_native and ftype.format is not None:
+            base = _FORMAT_TO_SWIFT.get(ftype.format, base)
     elif ftype.is_object_ref or ftype.is_enum_ref:
         # Object refs become ``<Name>Dto``; enum refs become just ``<Name>``.
         # We don't have the enum/object disambiguation here without a doc-
@@ -559,17 +615,30 @@ def _swift_type(ftype: FieldType) -> str:
         # _swift_type_with_enums.)
         base = f"{ftype.ref_name}Dto"
     elif ftype.is_array:
-        inner = _swift_type(ftype.element) if ftype.element else "String"
+        inner = (
+            _swift_type(ftype.element, format_native=format_native)
+            if ftype.element
+            else "String"
+        )
         base = f"[{inner}]"
     elif ftype.is_map:
-        inner = _swift_type(ftype.element) if ftype.element else "String"
+        inner = (
+            _swift_type(ftype.element, format_native=format_native)
+            if ftype.element
+            else "String"
+        )
         base = f"[String: {inner}]"
     else:
         base = "String"
     return f"{base}?" if ftype.nullable else base
 
 
-def _swift_type_with_enums(ftype: FieldType, enum_names: set[str]) -> str:
+def _swift_type_with_enums(
+    ftype: FieldType,
+    enum_names: set[str],
+    *,
+    format_native: bool = False,
+) -> str:
     """Like :func:`_swift_type` but treats enum refs without the ``Dto`` suffix.
 
     Used when the generator has access to the doc-level enum name set
@@ -579,20 +648,26 @@ def _swift_type_with_enums(ftype: FieldType, enum_names: set[str]) -> str:
         base = ftype.ref_name
         return f"{base}?" if ftype.nullable else base
     if ftype.is_array and ftype.element:
-        inner = _swift_type_with_enums(ftype.element, enum_names)
+        inner = _swift_type_with_enums(
+            ftype.element, enum_names, format_native=format_native
+        )
         rendered = f"[{inner}]"
         return f"{rendered}?" if ftype.nullable else rendered
     if ftype.is_map and ftype.element:
-        inner = _swift_type_with_enums(ftype.element, enum_names)
+        inner = _swift_type_with_enums(
+            ftype.element, enum_names, format_native=format_native
+        )
         rendered = f"[String: {inner}]"
         return f"{rendered}?" if ftype.nullable else rendered
-    return _swift_type(ftype)
+    return _swift_type(ftype, format_native=format_native)
 
 
 def _swift_default_literal(
     field: FieldDef,
     type_str: str,
     enums_by_name: dict[str, EnumDef],
+    *,
+    format_native: bool = False,
 ) -> str | None:
     """Render OpenAPI ``default`` to a Swift literal, or None if absent.
 
@@ -610,6 +685,12 @@ def _swift_default_literal(
     value = field.default
     if value is None:
         return "nil"
+
+    # Format-native fields (Date / UUID / Data) can't take the swagger's
+    # string default as a literal — skip it and let the decoder fill the
+    # value at runtime (matches the complex-default policy below).
+    if format_native and field.type.is_primitive and field.type.format is not None:
+        return None
 
     # Enum-typed field → EnumName.caseName.
     ftype = field.type
@@ -645,6 +726,88 @@ _PRIMITIVE_TO_SWIFT: dict[PrimitiveKind, str] = {
     PrimitiveKind.DOUBLE: "Double",
     PrimitiveKind.BOOLEAN: "Bool",
 }
+
+
+# --------------------------------------------------------------------------- #
+# format-aware mapping helpers (plan 2026-07-24-v1-unsupported/03)
+# --------------------------------------------------------------------------- #
+
+
+_FORMAT_TO_SWIFT: dict[str, str] = {
+    "date-time": "Date",
+    "uuid": "UUID",
+    "binary": "Data",
+}
+
+
+def _ftype_has_native_date(ftype: FieldType) -> bool:
+    """True when the type (through array / map nesting) holds a ``date-time``.
+
+    Object / enum / oneOf refs are excluded on purpose: referenced DTOs
+    own their own (de)coding, so a parent never converts on their behalf.
+    """
+    if ftype.is_primitive:
+        return ftype.format == "date-time"
+    if (ftype.is_array or ftype.is_map) and ftype.element is not None:
+        return _ftype_has_native_date(ftype.element)
+    return False
+
+
+# fileprivate so per-DTO-file duplication never collides across the
+# generated module. Formatters are built per call instead of cached in a
+# ``static let`` — ISO8601DateFormatter is not Sendable, and a shared
+# mutable-class global would trip strict-concurrency checking.
+_SWIFT_ISO_DATE_HELPERS: tuple[str, ...] = (
+    "fileprivate func _juiParseIsoDate(_ raw: String, codingPath: [CodingKey]) throws -> Date {",
+    "    let formatter = ISO8601DateFormatter()",
+    "    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]",
+    "    if let date = formatter.date(from: raw) { return date }",
+    "    formatter.formatOptions = [.withInternetDateTime]",
+    "    if let date = formatter.date(from: raw) { return date }",
+    "    throw DecodingError.dataCorrupted(DecodingError.Context(",
+    "        codingPath: codingPath,",
+    '        debugDescription: "Invalid ISO 8601 date-time: \\(raw)"',
+    "    ))",
+    "}",
+    "",
+    "fileprivate func _juiFormatIsoDate(_ date: Date) -> String {",
+    "    let formatter = ISO8601DateFormatter()",
+    "    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]",
+    "    return formatter.string(from: date)",
+    "}",
+)
+
+
+def _swift_date_decode_expr(ftype: FieldType, src: str) -> str:
+    """Conversion expression: raw (String-shaped) value → native Date shape.
+
+    *src* is an expression of the raw type (``String`` / ``[String]`` /
+    ``[String: String]`` …). The returned expression carries its own
+    ``try`` prefixes so it is valid both as an assignment RHS and as a
+    closure body.
+    """
+    if ftype.is_primitive:
+        return f"try _juiParseIsoDate({src}, codingPath: decoder.codingPath)"
+    if ftype.is_array and ftype.element is not None:
+        inner = _swift_date_decode_expr(ftype.element, "$0")
+        return f"try {src}.map {{ {inner} }}"
+    if ftype.is_map and ftype.element is not None:
+        inner = _swift_date_decode_expr(ftype.element, "$0")
+        return f"try {src}.mapValues {{ {inner} }}"
+    return src
+
+
+def _swift_date_encode_expr(ftype: FieldType, src: str) -> str:
+    """Conversion expression: native Date shape → raw (String-shaped) value."""
+    if ftype.is_primitive:
+        return f"_juiFormatIsoDate({src})"
+    if ftype.is_array and ftype.element is not None:
+        inner = _swift_date_encode_expr(ftype.element, "$0")
+        return f"{src}.map {{ {inner} }}"
+    if ftype.is_map and ftype.element is not None:
+        inner = _swift_date_encode_expr(ftype.element, "$0")
+        return f"{src}.mapValues {{ {inner} }}"
+    return src
 
 
 # --------------------------------------------------------------------------- #
@@ -691,8 +854,10 @@ def _emit_swift_oneof_nested_enum(field: FieldDef, one_of: OneOfRef) -> list[str
 def _emit_swift_memberwise_init(
     schema: SchemaDef,
     enum_names: set[str],
+    *,
+    format_native: bool = False,
 ) -> list[str]:
-    """Emit a memberwise ``init`` so consumers can build oneOf-bearing DTOs.
+    """Emit a memberwise ``init`` so consumers can build custom-Codable DTOs.
 
     Swift suppresses the auto-synthesized memberwise initializer once a
     custom ``init(from decoder:)`` is declared in the same type, so we
@@ -704,7 +869,9 @@ def _emit_swift_memberwise_init(
         if f.type.is_one_of_ref:
             type_str = _swift_oneof_field_type(f)
         else:
-            type_str = _swift_type_with_enums(f.type, enum_names)
+            type_str = _swift_type_with_enums(
+                f.type, enum_names, format_native=format_native
+            )
         params.append(f"{name}: {type_str}")
     lines: list[str] = ["", f"    init({', '.join(params)}) {{"]
     for f in schema.fields:
@@ -714,13 +881,21 @@ def _emit_swift_memberwise_init(
     return lines
 
 
-def _emit_swift_oneof_init_from_decoder(
+def _emit_swift_custom_init_from_decoder(
     schema: SchemaDef,
     enum_names: set[str],
     enums_by_name: dict[str, EnumDef],
+    *,
+    format_native: bool = False,
 ) -> list[str]:
-    """Emit ``init(from decoder:)`` that dispatches each oneOf field on its
-    discriminator sibling.
+    """Emit the single custom ``init(from decoder:)`` for a DTO.
+
+    Driven by the reason set (plan 03): oneOf fields dispatch on their
+    discriminator sibling; when *format_native* is on, ``date-time``
+    fields decode their raw ISO 8601 strings through
+    ``_juiParseIsoDate``. Keeping one emitter for both reasons prevents
+    duplicate ``init(from:)`` definitions when a schema has oneOf and
+    Date fields at once.
 
     When the discriminator sibling is an inline-derived enum (the common
     case for swaggers that declare ``type: string, enum: [...]``), the
@@ -733,12 +908,28 @@ def _emit_swift_oneof_init_from_decoder(
     lines: list[str] = ["", "    init(from decoder: Decoder) throws {"]
     lines.append("        let container = try decoder.container(keyedBy: CodingKeys.self)")
 
-    # Decode non-oneOf fields first — they're plain Codable.
+    # Decode non-oneOf fields first — plain Codable, except native-Date
+    # shapes which decode their raw String form and convert.
     for f in schema.fields:
         if f.type.is_one_of_ref:
             continue
         name = _swift_property_name(f)
-        type_str = _swift_type_with_enums(f.type, enum_names)
+        if format_native and _ftype_has_native_date(f.type):
+            raw = _swift_type_with_enums(f.type, enum_names).rstrip("?")
+            if f.type.nullable:
+                convert = _swift_date_decode_expr(f.type, "$0")
+                lines.append(
+                    f"        self.{name} = try container.decodeIfPresent({raw}.self, forKey: .{name}).map {{ {convert} }}"
+                )
+            else:
+                convert = _swift_date_decode_expr(
+                    f.type, f"(try container.decode({raw}.self, forKey: .{name}))"
+                )
+                lines.append(f"        self.{name} = {convert}")
+            continue
+        type_str = _swift_type_with_enums(
+            f.type, enum_names, format_native=format_native
+        )
         bare = type_str.rstrip("?")
         if f.type.nullable:
             lines.append(
@@ -816,11 +1007,18 @@ def _emit_swift_oneof_init_from_decoder(
     return lines
 
 
-def _emit_swift_oneof_encode_to_encoder(
+def _emit_swift_custom_encode_to_encoder(
     schema: SchemaDef,
     enum_names: set[str],
+    *,
+    format_native: bool = False,
 ) -> list[str]:
-    """Emit the symmetric ``encode(to:)`` for oneOf-bearing schemas."""
+    """Emit the symmetric ``encode(to:)`` for custom-Codable schemas.
+
+    Same reason-set driver as :func:`_emit_swift_custom_init_from_decoder`
+    — oneOf variants encode through their case payload, native-Date
+    shapes re-emit ISO 8601 strings via ``_juiFormatIsoDate``.
+    """
     lines: list[str] = ["", "    func encode(to encoder: Encoder) throws {"]
     lines.append("        var container = encoder.container(keyedBy: CodingKeys.self)")
 
@@ -836,6 +1034,18 @@ def _emit_swift_oneof_encode_to_encoder(
                 )
             lines.append(f"        case .unknown: try container.encodeNil(forKey: .{name})")
             lines.append("        }")
+            continue
+        if format_native and _ftype_has_native_date(f.type):
+            if f.type.nullable:
+                convert = _swift_date_encode_expr(f.type, "$0")
+                lines.append(
+                    f"        try container.encodeIfPresent(self.{name}.map {{ {convert} }}, forKey: .{name})"
+                )
+            else:
+                convert = _swift_date_encode_expr(f.type, f"self.{name}")
+                lines.append(
+                    f"        try container.encode({convert}, forKey: .{name})"
+                )
             continue
         if f.type.nullable:
             lines.append(
@@ -864,6 +1074,8 @@ def _find_field_by_wire_name(schema: SchemaDef, wire_name: str) -> FieldDef | No
 def _emit_swift_wrapper_body(
     schema: SchemaDef,
     enum_names: set[str],
+    *,
+    format_native: bool = False,
 ) -> list[str]:
     """Lines for the body of a wrapper DTO.
 
@@ -871,11 +1083,38 @@ def _emit_swift_wrapper_body(
     initializer (Swift suppresses the auto one once we declare a custom
     ``init(from:)``), and a pair of ``singleValueContainer``-based
     Codable methods so the wire format is just the bare value
-    (``"hello"`` / ``[1, 2, 3]``) — not a JSON object.
+    (``"hello"`` / ``[1, 2, 3]``) — not a JSON object. Native-Date
+    wrapped shapes decode/encode through the ISO 8601 helpers.
     """
     field = schema.fields[0]
-    type_str = _swift_type_with_enums(field.type, enum_names)
+    type_str = _swift_type_with_enums(
+        field.type, enum_names, format_native=format_native
+    )
     name = field.wire_name
+
+    if format_native and _ftype_has_native_date(field.type):
+        raw = _swift_type_with_enums(field.type, enum_names)
+        decode_expr = _swift_date_decode_expr(
+            field.type, f"(try container.decode({raw}.self))"
+        )
+        encode_expr = _swift_date_encode_expr(field.type, f"self.{name}")
+        return [
+            f"    let {name}: {type_str}",
+            "",
+            f"    init({name}: {type_str}) {{",
+            f"        self.{name} = {name}",
+            "    }",
+            "",
+            "    init(from decoder: Decoder) throws {",
+            "        let container = try decoder.singleValueContainer()",
+            f"        self.{name} = {decode_expr}",
+            "    }",
+            "",
+            "    func encode(to encoder: Encoder) throws {",
+            "        var container = encoder.singleValueContainer()",
+            f"        try container.encode({encode_expr})",
+            "    }",
+        ]
 
     return [
         f"    let {name}: {type_str}",

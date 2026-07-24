@@ -172,6 +172,25 @@ class ConfigManager:
         defaults = API_PLATFORM_DEFAULTS.get(platform, {})
         return {**defaults, **per_platform}
 
+    def api_format_mapping(self) -> tuple[bool, frozenset[str]]:
+        """Return ``(enabled, excluded_docs)`` for format-aware mapping.
+
+        ``api.format_mapping`` (default ``False``) opts the project into
+        mapping OpenAPI string formats (``date-time`` / ``uuid`` /
+        ``binary``) to native DTO types. ``api.format_mapping_exclude``
+        is a per-doc opt-out: a list of swagger file names (basenames,
+        e.g. ``"legacy.json"``) whose DTOs keep plain strings even when
+        the project flag is on — so one legacy API that lies about its
+        formats doesn't force the whole project off.
+        """
+        config = self.load()
+        api_cfg = config.get("api", {}) or {}
+        enabled = bool(api_cfg.get("format_mapping", False))
+        exclude = api_cfg.get("format_mapping_exclude") or []
+        if not isinstance(exclude, list):
+            exclude = []
+        return enabled, frozenset(str(name) for name in exclude)
+
     def api_schemas_config(self) -> dict[str, Any]:
         """Return the raw ``api.schemas`` block from ``jui.config.json``.
 

@@ -26,7 +26,7 @@ from typing import Callable, Iterable
 from .config_manager import ConfigManager
 from .openapi_loader import OpenAPILoadError, load_swagger
 from .schema_filter import SchemaFilterConfig
-from .schema_ir import SchemaDef, SwaggerDocument
+from .schema_ir import SchemaDef, SwaggerDocument, doc_string_formats
 
 
 @dataclass(frozen=True)
@@ -48,6 +48,27 @@ class SyncPlan:
     expected_files: dict[Path, str]  # absolute path → expected source
     domain_scaffolds: dict[Path, str]  # absolute path → scaffold source (write only if absent)
     domain_patchers: dict[Path, Callable[[], bool]] = field(default_factory=dict)
+
+
+def _format_mapped_formats(
+    config_mgr: ConfigManager,
+    docs: list[SwaggerDocument],
+) -> set[str]:
+    """String formats used by docs with format-aware mapping in effect.
+
+    Respects the per-doc opt-out — an excluded doc's formats don't force
+    shared support files into the plan. Returns the empty set when the
+    project flag is off.
+    """
+    enabled, excluded = config_mgr.api_format_mapping()
+    if not enabled:
+        return set()
+    used: set[str] = set()
+    for doc in docs:
+        if Path(doc.source_path).name in excluded:
+            continue
+        used |= doc_string_formats(doc)
+    return used
 
 
 def _shadowed_schema_names(config_mgr: ConfigManager) -> set[str]:
@@ -118,12 +139,15 @@ def plan_android(
         domain_package = f"{base_package}.{raw_model_pkg}"
     dto_package = f"{domain_package}.{api_cfg['dto_subpackage']}"
 
+    fmt_enabled, fmt_excluded = config_mgr.api_format_mapping()
     gen = AndroidApiModelGenerator(
         AndroidApiPlatformConfig(
             sources_root=sources_root,
             domain_package=domain_package,
             dto_package=dto_package,
             serializer=api_cfg["serializer"],
+            format_mapping=fmt_enabled,
+            format_excluded_docs=fmt_excluded,
         )
     )
 
@@ -185,6 +209,16 @@ def plan_android(
             if enum_path in expected:
                 continue  # cross-doc duplicate — first doc wins
             expected[enum_path] = gen.generate_enum_source(enum, doc)
+    # Shared format support files (plan 03). Added only when a mapped doc
+    # actually uses the format; unused ones fall out of ``expected`` and
+    # get orphan-pruned like any other stale generated file.
+    used_formats = _format_mapped_formats(config_mgr, docs)
+    if "uuid" in used_formats:
+        expected[gen.support_path("Uuid.kt")] = gen.generate_uuid_alias_source()
+    if "binary" in used_formats:
+        expected[gen.support_path("Base64ByteArraySerializer.kt")] = (
+            gen.generate_base64_serializer_source()
+        )
     return SyncPlan(
         platform="android",
         expected_files=expected,
@@ -207,12 +241,15 @@ def plan_web(
     platform_root = config_mgr.project_root / pconfig["root"]
     sources_root = _resolve_web_sources_root(platform_root)
     api_cfg = config_mgr.api_platform_config("web")
+    fmt_enabled, fmt_excluded = config_mgr.api_format_mapping()
     gen = WebApiModelGenerator(
         WebApiPlatformConfig(
             sources_root=sources_root,
             model_dir=api_cfg["model_dir"],
             dto_subdir=api_cfg["dto_subdir"],
             case_convention=api_cfg["case_convention"],
+            format_mapping=fmt_enabled,
+            format_excluded_docs=fmt_excluded,
         )
     )
 
@@ -247,6 +284,14 @@ def plan_web(
             if enum_path in expected:
                 continue  # cross-doc duplicate — first doc wins
             expected[enum_path] = gen.generate_enum_source(enum, doc)
+    # Shared format support files (plan 03) — see plan_android.
+    used_formats = _format_mapped_formats(config_mgr, docs)
+    if "uuid" in used_formats:
+        expected[gen.support_path("Uuid.ts")] = gen.generate_uuid_alias_source()
+    if "binary" in used_formats:
+        expected[gen.support_path("Base64Data.ts")] = (
+            gen.generate_base64_alias_source()
+        )
     return SyncPlan(platform="web", expected_files=expected, domain_scaffolds=scaffolds)
 
 
@@ -268,11 +313,14 @@ def plan_ios(
     platform_root = config_mgr.project_root / pconfig["root"]
     sources_root = _resolve_ios_sources_root(platform_root)
     api_cfg = config_mgr.api_platform_config("ios")
+    fmt_enabled, fmt_excluded = config_mgr.api_format_mapping()
     gen = IosApiModelGenerator(
         IosApiPlatformConfig(
             sources_root=sources_root,
             model_dir=api_cfg["model_dir"],
             dto_subdir=api_cfg["dto_subdir"],
+            format_mapping=fmt_enabled,
+            format_excluded_docs=fmt_excluded,
         )
     )
 

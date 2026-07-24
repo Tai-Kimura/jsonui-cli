@@ -1,6 +1,9 @@
 """Tests for web_api_model_generator — DTO + enum + Domain + camelCase mode."""
 from __future__ import annotations
 
+import re
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,6 +22,23 @@ def _gen(tmp: Path, case_convention: str = "snake_case") -> WebApiModelGenerator
             model_dir="models",
             dto_subdir="generated",
             case_convention=case_convention,
+        )
+    )
+
+
+def _fmt_gen(
+    tmp: Path,
+    case_convention: str = "snake_case",
+    excluded: frozenset[str] = frozenset(),
+) -> WebApiModelGenerator:
+    return WebApiModelGenerator(
+        WebApiPlatformConfig(
+            sources_root=tmp,
+            model_dir="models",
+            dto_subdir="generated",
+            case_convention=case_convention,
+            format_mapping=True,
+            format_excluded_docs=excluded,
         )
     )
 
@@ -444,6 +464,341 @@ class SchemaLevelUnionTests(unittest.TestCase):
             src = _gen(Path(tmp)).generate_dto_source(owner, doc)
         self.assertIn('import type { PetDto } from "./PetDto";', src)
         self.assertIn("pet: PetDto;", src)
+
+
+class FormatAwareMappingTests(unittest.TestCase):
+    """Opt-in format-aware mapping (plan 2026-07-24-v1-unsupported/03)."""
+
+    def _event_schemas(self):
+        return {
+            "Attachment": {
+                "type": "object",
+                "required": ["id", "data"],
+                "properties": {
+                    "id": {"type": "string", "format": "uuid"},
+                    "data": {"type": "string", "format": "binary"},
+                    "created_at": {"type": "string", "format": "date-time"},
+                },
+            },
+            "Event": {
+                "type": "object",
+                "required": ["at", "tags"],
+                "properties": {
+                    "at": {"type": "string", "format": "date-time"},
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string", "format": "date-time"},
+                    },
+                    "attachment": {"$ref": "#/components/schemas/Attachment"},
+                    "note": {"type": "string"},
+                },
+            },
+            "Plain": {
+                "type": "object",
+                "required": ["x"],
+                "properties": {"x": {"type": "string"}},
+            },
+        }
+
+    def _event_doc(self):
+        return parse_swagger(_doc(self._event_schemas()), "test.json")
+
+    def test_native_types_and_wire_helpers(self):
+        doc = self._event_doc()
+        event = next(s for s in doc.schemas if s.name == "Event")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _fmt_gen(Path(tmp)).generate_dto_source(event, doc)
+        self.assertIn("at: Date;", src)
+        self.assertIn("tags: Date[];", src)
+        self.assertIn("export interface EventWire {", src)
+        self.assertIn("at: string;", src)
+        self.assertIn("tags: string[];", src)
+        self.assertIn("export const parseEventDto = (wire: EventWire): EventDto =>", src)
+        self.assertIn("at: parseIsoDate(wire.at)", src)
+        self.assertIn("tags: wire.tags.map((v0) => parseIsoDate(v0))", src)
+        self.assertIn("export const serializeEventDto = (model: EventDto): EventWire =>", src)
+        self.assertIn("at: model.at.toISOString()", src)
+        # invalid dates throw instead of producing Invalid Date silently
+        self.assertIn("Number.isNaN(parsed.getTime())", src)
+
+    def test_affected_ref_delegates(self):
+        doc = self._event_doc()
+        event = next(s for s in doc.schemas if s.name == "Event")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _fmt_gen(Path(tmp)).generate_dto_source(event, doc)
+        self.assertIn(
+            'import { parseAttachmentDto, serializeAttachmentDto } from "./AttachmentDto";',
+            src,
+        )
+        self.assertIn(
+            'import type { AttachmentDto, AttachmentWire } from "./AttachmentDto";',
+            src,
+        )
+        self.assertIn("attachment?: AttachmentWire;", src)
+        self.assertIn(
+            "attachment: wire.attachment == null ? undefined : "
+            "parseAttachmentDto(wire.attachment)",
+            src,
+        )
+
+    def test_uuid_binary_aliases(self):
+        doc = self._event_doc()
+        attachment = next(s for s in doc.schemas if s.name == "Attachment")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _fmt_gen(Path(tmp)).generate_dto_source(attachment, doc)
+        self.assertIn('import type { Uuid } from "./Uuid";', src)
+        self.assertIn('import type { Base64Data } from "./Base64Data";', src)
+        self.assertIn("id: Uuid;", src)
+        self.assertIn("data: Base64Data;", src)
+        # aliases are strings — no conversion in parse/serialize
+        self.assertIn("id: wire.id", src)
+        self.assertIn("data: wire.data", src)
+
+    def test_unaffected_schema_output_unchanged(self):
+        doc = self._event_doc()
+        plain = next(s for s in doc.schemas if s.name == "Plain")
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            on = _fmt_gen(tmp_path).generate_dto_source(plain, doc)
+            off = _gen(tmp_path).generate_dto_source(plain, doc)
+        self.assertEqual(on, off)
+
+    def test_flag_off_and_opt_out_unchanged(self):
+        doc = self._event_doc()
+        event = next(s for s in doc.schemas if s.name == "Event")
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            off = _gen(tmp_path).generate_dto_source(event, doc)
+            excluded = _fmt_gen(tmp_path, excluded=frozenset({"test.json"})).generate_dto_source(event, doc)
+        self.assertEqual(off, excluded)
+        self.assertNotIn("Date", off)
+        self.assertNotIn("EventWire", off)
+
+    def test_camel_case_unified_with_dates(self):
+        doc = self._event_doc()
+        attachment = next(s for s in doc.schemas if s.name == "Attachment")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _fmt_gen(Path(tmp), "camelCase").generate_dto_source(attachment, doc)
+        # DTO renamed, Wire keeps wire names, one helper pair does both jobs
+        self.assertIn("createdAt?: Date;", src)
+        self.assertIn("created_at?: string;", src)
+        self.assertIn(
+            "createdAt: wire.created_at == null ? undefined : parseIsoDate(wire.created_at)",
+            src,
+        )
+        self.assertIn(
+            "created_at: model.createdAt == null ? undefined : model.createdAt.toISOString()",
+            src,
+        )
+        # the old camel-skew helpers are subsumed, not duplicated
+        self.assertNotIn("export const parseAttachment =", src)
+
+    def test_support_file_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            gen = _fmt_gen(Path(tmp))
+            uuid_src = gen.generate_uuid_alias_source()
+            b64_src = gen.generate_base64_alias_source()
+        self.assertIn("export type Uuid = string;", uuid_src)
+        self.assertIn("export type Base64Data = string;", b64_src)
+        self.assertIn("@generated", uuid_src)
+
+    def test_wrapper_date_alias_and_helpers(self):
+        doc = parse_swagger(_doc({
+            "Stamp": {"type": "string", "format": "date-time"},
+        }), "test.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _fmt_gen(Path(tmp)).generate_dto_source(doc.schemas[0], doc)
+        self.assertIn("export type StampDto = Date;", src)
+        self.assertIn("export type StampWire = string;", src)
+        self.assertIn(
+            "export const parseStampDto = (wire: StampWire): StampDto => parseIsoDate(wire);",
+            src,
+        )
+        self.assertIn(
+            "export const serializeStampDto = (value: StampDto): StampWire => value.toISOString();",
+            src,
+        )
+
+
+class FormatAwareUnionTests(unittest.TestCase):
+    """Schema-level unions with date-affected variants delegate (plan 03)."""
+
+    def _pet_doc(self):
+        return parse_swagger(_doc({
+            "Pet": {
+                "oneOf": [
+                    {"$ref": "#/components/schemas/Dog"},
+                    {"$ref": "#/components/schemas/Cat"},
+                ],
+                "discriminator": {
+                    "propertyName": "pet_type",
+                    "mapping": {
+                        "dog": "#/components/schemas/Dog",
+                        "cat": "#/components/schemas/Cat",
+                    },
+                },
+            },
+            "Dog": {
+                "type": "object",
+                "required": ["born_at"],
+                "properties": {"born_at": {"type": "string", "format": "date-time"}},
+            },
+            "Cat": {
+                "type": "object",
+                "properties": {"lives_left": {"type": "integer"}},
+            },
+        }), "test.json")
+
+    def test_union_wire_and_parse_delegation(self):
+        doc = self._pet_doc()
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _fmt_gen(Path(tmp)).generate_union_source(doc.unions[0], doc)
+        self.assertIn(
+            'import { parseDogDto, serializeDogDto } from "./DogDto";', src
+        )
+        self.assertIn("export type PetWire = DogWire | CatDto;", src)
+        self.assertIn(
+            "export const parsePetDto = (wire: PetWire | unknown): PetDto => {", src
+        )
+        self.assertIn("return parseDogDto(wire as DogWire);", src)
+        self.assertIn("return wire as CatDto;", src)
+        # serialize delegates the affected variant, injects the tag
+        self.assertIn(
+            'return { ...serializeDogDto(value.data), ["pet_type"]: "dog" };', src
+        )
+        self.assertIn('return { ...value.data, ["pet_type"]: "cat" };', src)
+
+    def test_union_flag_off_unchanged(self):
+        doc = self._pet_doc()
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp)).generate_union_source(doc.unions[0], doc)
+        self.assertNotIn("PetWire", src)
+        self.assertNotIn("parsePetDto", src)
+
+    def test_parent_referencing_affected_union_delegates(self):
+        doc = parse_swagger(_doc({
+            "Pet": {
+                "oneOf": [{"$ref": "#/components/schemas/Dog"}],
+                "discriminator": {
+                    "propertyName": "pet_type",
+                    "mapping": {"dog": "#/components/schemas/Dog"},
+                },
+            },
+            "Dog": {
+                "type": "object",
+                "required": ["born_at"],
+                "properties": {"born_at": {"type": "string", "format": "date-time"}},
+            },
+            "Owner": {
+                "type": "object",
+                "required": ["pet"],
+                "properties": {"pet": {"$ref": "#/components/schemas/Pet"}},
+            },
+        }), "test.json")
+        owner = next(s for s in doc.schemas if s.name == "Owner")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _fmt_gen(Path(tmp)).generate_dto_source(owner, doc)
+        self.assertIn("pet: parsePetDto(wire.pet)", src)
+        self.assertIn("pet: serializePetDto(model.pet)", src)
+
+
+@unittest.skipUnless(shutil.which("node"), "node not available")
+class NodeRoundTripTests(unittest.TestCase):
+    """Semantic round-trip of the generated web code, executed on node.
+
+    Node ≥ 22.6 strips erasable TS syntax natively, so the generated
+    files run as-is once the extensionless relative imports are given an
+    explicit ``.ts`` extension (a test-harness concern only — bundlers
+    resolve extensionless imports fine).
+    """
+
+    def _write_generated(self, gen: WebApiModelGenerator, doc, out_dir: Path) -> None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for schema in doc.schemas:
+            src = gen.generate_dto_source(schema, doc)
+            src = re.sub(r'from "\./([A-Za-z0-9_]+)";', r'from "./\1.ts";', src)
+            (out_dir / f"{schema.name}Dto.ts").write_text(src, encoding="utf-8")
+        (out_dir / "Uuid.ts").write_text(gen.generate_uuid_alias_source(), encoding="utf-8")
+        (out_dir / "Base64Data.ts").write_text(gen.generate_base64_alias_source(), encoding="utf-8")
+
+    def test_round_trip_semantics(self):
+        doc = parse_swagger(_doc({
+            "Attachment": {
+                "type": "object",
+                "required": ["id", "data"],
+                "properties": {
+                    "id": {"type": "string", "format": "uuid"},
+                    "data": {"type": "string", "format": "binary"},
+                    "created_at": {"type": "string", "format": "date-time"},
+                },
+            },
+            "Event": {
+                "type": "object",
+                "required": ["at", "tags"],
+                "properties": {
+                    "at": {"type": "string", "format": "date-time"},
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string", "format": "date-time"},
+                    },
+                    "attachment": {"$ref": "#/components/schemas/Attachment"},
+                    "note": {"type": "string"},
+                },
+            },
+        }), "test.json")
+        harness = """
+import { parseEventDto, serializeEventDto } from "./EventDto.ts";
+
+const wire = {
+  at: "2026-07-24T12:34:56.789Z",
+  tags: ["2026-07-24T00:00:00+09:00"],
+  attachment: {
+    id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+    data: "aGVsbG8=",
+    created_at: "2026-07-23T01:02:03Z",
+  },
+  note: "hi",
+};
+const dto = parseEventDto(wire as any);
+if (!(dto.at instanceof Date)) throw new Error("at is not a Date");
+if (dto.at.toISOString() !== "2026-07-24T12:34:56.789Z") throw new Error("at value");
+// TZ normalization is semantic equivalence, not byte equivalence:
+// +09:00 re-emits as UTC.
+if (dto.tags[0].toISOString() !== "2026-07-23T15:00:00.000Z") throw new Error("tz normalize");
+if (!(dto.attachment!.created_at instanceof Date)) throw new Error("nested date");
+if (dto.attachment!.id !== wire.attachment.id) throw new Error("uuid passthrough");
+if (dto.attachment!.data !== wire.attachment.data) throw new Error("binary passthrough");
+
+const wire2 = serializeEventDto(dto);
+const dto2 = parseEventDto(wire2 as any);
+if (dto2.at.getTime() !== dto.at.getTime()) throw new Error("round-trip at");
+if (dto2.tags[0].getTime() !== dto.tags[0].getTime()) throw new Error("round-trip tag");
+if (dto2.attachment!.created_at!.getTime() !== dto.attachment!.created_at!.getTime()) {
+  throw new Error("round-trip nested");
+}
+
+let threw = false;
+try {
+  parseEventDto({ at: "not-a-date", tags: [] } as any);
+} catch {
+  threw = true;
+}
+if (!threw) throw new Error("invalid date must throw");
+console.log("ROUND_TRIP_OK");
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "generated"
+            self._write_generated(_fmt_gen(Path(tmp)), doc, out_dir)
+            harness_path = out_dir / "harness.ts"
+            harness_path.write_text(harness, encoding="utf-8")
+            proc = subprocess.run(
+                ["node", "--experimental-strip-types", "--no-warnings", str(harness_path)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+        self.assertIn("ROUND_TRIP_OK", proc.stdout)
 
 
 class WriteBehaviorTests(unittest.TestCase):
