@@ -134,12 +134,18 @@ def plan_android(
     shadowed = _shadowed_schema_names(config_mgr)
     for doc in docs:
         for schema in doc.schemas:
+            dto_path = gen.dto_path(schema.name)
+            if dto_path in expected:
+                # Cross-doc duplicate of a shared schema (the loader halts
+                # when same-name bodies differ) — first doc in sorted order
+                # wins so the generated header's source comment is stable.
+                continue
             # DTO is always emitted regardless of shadow status: it carries
             # the wire format and the Domain wrapper that the user
             # hand-writes still references it as ``val dto: {Name}Dto``.
             # Dropping the DTO would orphan-prune it and leave the
             # consumer's hand-written wrapper with an unresolved type.
-            expected[gen.dto_path(schema.name)] = gen.generate_dto_source(schema, doc)
+            expected[dto_path] = gen.generate_dto_source(schema, doc)
             if schema.name in shadowed:
                 # Shadow opts the consumer out of the auto Domain wrapper
                 # (scaffold + kotlinx patcher) — they own the file at
@@ -161,7 +167,10 @@ def plan_android(
         for enum in doc.enums:
             # Enums live in the DTO subpackage and are treated as wire
             # types — emit unconditionally, mirroring DTO behavior.
-            expected[gen.enum_path(enum.name)] = gen.generate_enum_source(enum, doc)
+            enum_path = gen.enum_path(enum.name)
+            if enum_path in expected:
+                continue  # cross-doc duplicate — first doc wins
+            expected[enum_path] = gen.generate_enum_source(enum, doc)
     return SyncPlan(
         platform="android",
         expected_files=expected,
@@ -198,15 +207,21 @@ def plan_web(
     shadowed = _shadowed_schema_names(config_mgr)
     for doc in docs:
         for schema in doc.schemas:
+            dto_path = gen.dto_path(schema.name)
+            if dto_path in expected:
+                continue  # cross-doc duplicate — first doc wins (see plan_android)
             # DTO emit is unconditional — the hand-written Domain wrapper
             # for a shadowed schema still consumes ``XxxDto``.
-            expected[gen.dto_path(schema.name)] = gen.generate_dto_source(schema, doc)
+            expected[dto_path] = gen.generate_dto_source(schema, doc)
             if schema.name in shadowed:
                 continue
             if not doc.should_skip_domain(schema):
                 scaffolds[gen.domain_path(schema.name)] = gen.generate_domain_source(schema)
         for enum in doc.enums:
-            expected[gen.enum_path(enum.name)] = gen.generate_enum_source(enum, doc)
+            enum_path = gen.enum_path(enum.name)
+            if enum_path in expected:
+                continue  # cross-doc duplicate — first doc wins
+            expected[enum_path] = gen.generate_enum_source(enum, doc)
     return SyncPlan(platform="web", expected_files=expected, domain_scaffolds=scaffolds)
 
 
@@ -241,10 +256,13 @@ def plan_ios(
     shadowed = _shadowed_schema_names(config_mgr)
     for doc in docs:
         for schema in doc.schemas:
+            dto_path = gen.dto_path(schema.name)
+            if dto_path in expected:
+                continue  # cross-doc duplicate — first doc wins (see plan_android)
             # DTO emit is unconditional — see plan_android for the
             # rationale (shadowed Domain wrappers still reference the
             # auto-emitted DTO via ``let dto: XxxDto``).
-            expected[gen.dto_path(schema.name)] = gen.generate_dto_source(schema, doc)
+            expected[dto_path] = gen.generate_dto_source(schema, doc)
             if schema.name in shadowed:
                 continue
             # OR-evaluate per-schema x-jui-skip-domain (schema.skip_domain)
@@ -253,7 +271,10 @@ def plan_ios(
             if not doc.should_skip_domain(schema):
                 scaffolds[gen.domain_path(schema.name)] = gen.generate_domain_source(schema)
         for enum in doc.enums:
-            expected[gen.enum_path(enum.name)] = gen.generate_enum_source(enum, doc)
+            enum_path = gen.enum_path(enum.name)
+            if enum_path in expected:
+                continue  # cross-doc duplicate — first doc wins
+            expected[enum_path] = gen.generate_enum_source(enum, doc)
     return SyncPlan(platform="ios", expected_files=expected, domain_scaffolds=scaffolds)
 
 

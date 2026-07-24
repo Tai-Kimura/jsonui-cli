@@ -10,6 +10,10 @@ setup(
     install_requires=[
         "watchdog>=4.0.0",
         "aiohttp>=3.9.0",
+        # YAML swagger input (`jui build` api-model sync). Imported lazily
+        # by openapi_loader with a guided halt when missing, so consumers
+        # on the rsync/sync_tool path (no pip re-run) don't break.
+        "PyYAML>=6.0",
     ],
     extras_require={
         # Screenshot baseline hashing (`jui conformance baseline` + the

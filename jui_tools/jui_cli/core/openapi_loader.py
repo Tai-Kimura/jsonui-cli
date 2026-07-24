@@ -1,18 +1,32 @@
-"""Load OpenAPI / Swagger 2.0 JSON files and extract :class:`SchemaIR`.
+"""Load OpenAPI / Swagger 2.0 JSON / YAML files and extract :class:`SchemaIR`.
 
-Entry point: :func:`load_swagger`. Reads ``*.json`` files from a directory,
-filters to OpenAPI / Swagger artifacts via :func:`is_swagger_file`, parses
-each into a :class:`SwaggerDocument`.
+Entry point: :func:`load_swagger`. Reads ``*.json`` / ``*.yaml`` / ``*.yml``
+files from a directory, filters to OpenAPI / Swagger artifacts via
+:func:`is_swagger_file` / :func:`is_swagger_yaml_file`, parses each into a
+:class:`SwaggerDocument`.
+
+Input normalization (2026-07, Q8 / Q12 lift — plan
+``2026-07-24-v1-unsupported/01``):
+
+- YAML swagger is parsed (PyYAML, lazy import) and merged into the same
+  pipeline as JSON. Canonical authoring format stays JSON; nothing is
+  written back to disk.
+- Relative cross-file ``$ref`` between files inside the api directory are
+  resolved by a pre-parse merge layer (:class:`_CrossFileRefResolver`), so
+  :func:`parse_swagger` — whose signature is frozen — never sees one.
 
 §3.3 ERROR halt rules enforced here (raise :class:`OpenAPILoadError`):
 
 - ``oneOf`` / ``anyOf`` / discriminator → halt (Q11)
-- multi-file ``$ref`` (``./other.yaml#/Foo``) → halt (Q12)
+- URL ``$ref``, ``$ref`` escaping the api dir, non-schema pointers,
+  cross-file ref cycles → halt
+- YAML 1.1 implicit typing that diverges from JSON (Norway problem) → halt
+- same doc under two suffixes (``foo.yaml`` + stale ``foo.json``) → halt
+- same-name top-level schema with different bodies across docs → halt
 - direct self-reference without collection indirection → halt (Q13)
 - inline object name collision with top-level schema → halt (Q4 / B2)
 - ``type: object`` with no ``$ref`` / ``properties`` / ``additionalProperties``
   → halt (§3.3)
-- YAML files → halt (Q8: JSON only in v1)
 
 Soft cases (warning only, NOT halt):
 
@@ -21,6 +35,8 @@ Soft cases (warning only, NOT halt):
 """
 from __future__ import annotations
 
+import copy
+import datetime
 import json
 import re
 from pathlib import Path
@@ -97,6 +113,420 @@ def is_swagger_yaml_file(path: Path) -> bool:
     return bool(_YAML_SWAGGER_KEY_RE.search(text))
 
 
+_PYYAML_HINT = (
+    "PyYAML is required to read YAML swagger files but is not installed in "
+    "this Python environment. Run `pip3 install pyyaml` and retry."
+)
+
+
+def _import_yaml():
+    """Import PyYAML lazily.
+
+    Kept lazy (and monkeypatchable for tests) because the rsync /
+    ``jui sync_tool`` distribution path does not re-run ``pip install`` —
+    a module-top import would break every existing consumer that never
+    uses YAML.
+    """
+    try:
+        import yaml
+    except ImportError:
+        return None
+    return yaml
+
+
+def _safe_load_yaml(path: Path) -> Any:
+    """``yaml.safe_load`` with the loader's halt semantics.
+
+    Raises ``pyyaml-missing`` when the dependency is absent and
+    ``yaml-parse-error`` (with line/column when available) on malformed
+    input. Type-coercion guards are the caller's job — a regex-prefiltered
+    file that turns out not to be a swagger doc must be skipped without
+    them (see :func:`load_swagger`).
+    """
+    yaml_mod = _import_yaml()
+    if yaml_mod is None:
+        raise OpenAPILoadError("pyyaml-missing", _PYYAML_HINT, source=str(path))
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return yaml_mod.safe_load(f)
+    except yaml_mod.YAMLError as e:
+        mark = getattr(e, "problem_mark", None)
+        loc = (
+            f" at line {mark.line + 1}, column {mark.column + 1}"
+            if mark is not None
+            else ""
+        )
+        raise OpenAPILoadError(
+            "yaml-parse-error",
+            f"YAML parse failed{loc}: {e}",
+            source=str(path),
+        ) from e
+
+
+def _check_yaml_type_coercion(node: Any, *, source: str, pointer: str = "#") -> None:
+    """Halt where YAML 1.1 implicit typing silently diverged from JSON.
+
+    ``yaml.safe_load`` type-coerces unquoted scalars: ``NO`` → bool (the
+    Norway problem), ``2026-07-24`` → ``datetime.date``, and allows
+    non-string mapping keys — all of which would make "YAML input yields
+    the same IR as JSON" silently false. Enum members and mapping keys are
+    where coercion corrupts codegen, so those halt with quote-the-value
+    guidance. Plain bools elsewhere (``nullable: true`` …) are legitimate
+    JSON and pass through.
+    """
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if not isinstance(key, str):
+                raise OpenAPILoadError(
+                    "yaml-type-coercion",
+                    f"Mapping key {key!r} was implicitly typed as "
+                    f"{type(key).__name__} by the YAML parser. Quote the "
+                    f"key so it stays a string like in JSON.",
+                    source=source,
+                    pointer=pointer,
+                )
+            child_pointer = f"{pointer}/{key}"
+            if key == "enum" and isinstance(value, list):
+                for i, member in enumerate(value):
+                    if isinstance(member, bool) or not isinstance(
+                        member, (str, int, float, type(None))
+                    ):
+                        raise OpenAPILoadError(
+                            "yaml-type-coercion",
+                            f"Enum member {member!r} was implicitly typed "
+                            f"as {type(member).__name__} by the YAML parser "
+                            f"(YAML 1.1 coerces NO/yes/on/off to bool and "
+                            f"date literals to dates). Quote the value "
+                            f"(e.g. 'NO') to keep it a string.",
+                            source=source,
+                            pointer=f"{child_pointer}/{i}",
+                        )
+                continue
+            _check_yaml_type_coercion(value, source=source, pointer=child_pointer)
+    elif isinstance(node, list):
+        for i, item in enumerate(node):
+            _check_yaml_type_coercion(item, source=source, pointer=f"{pointer}/{i}")
+    elif isinstance(node, (datetime.date, datetime.datetime)):
+        raise OpenAPILoadError(
+            "yaml-type-coercion",
+            f"Value {node!r} was implicitly parsed as a date by the YAML "
+            f"parser. Quote it (e.g. '2026-07-24') to keep it a string.",
+            source=source,
+            pointer=pointer,
+        )
+
+
+def _check_duplicate_swagger_basenames(paths: list[Path]) -> None:
+    """Halt when the same swagger doc exists under two suffixes.
+
+    ``foo.yaml`` next to ``foo.json`` is almost always a stale converted
+    copy — silently regenerating outdated DTOs from it is the exact silent
+    drift v1 is built to prevent, so "JSON wins + warn" was rejected in
+    favor of an explicit halt.
+    """
+    groups: dict[tuple[str, str], list[Path]] = {}
+    for p in paths:
+        groups.setdefault((str(p.parent), p.stem), []).append(p)
+    for (_, stem), group in sorted(groups.items()):
+        if len(group) > 1:
+            names = ", ".join(sorted(p.name for p in group))
+            raise OpenAPILoadError(
+                "duplicate-swagger-basename",
+                f"Swagger doc {stem!r} exists more than once ({names}). "
+                f"Keep exactly one — a stale converted copy would silently "
+                f"regenerate outdated DTOs.",
+                source=str(group[0].parent),
+            )
+
+
+def _normalize_schema_body(body: Any) -> str:
+    """Canonical fingerprint of a raw schema body for cross-doc comparison.
+
+    ``$ref`` strings are canonicalized to their terminal schema name
+    because that is exactly the post-merge semantics: ``#/definitions/X``,
+    ``#/components/schemas/X`` and ``./common.json#/components/schemas/X``
+    all denote the merged top-level schema ``X``.
+    """
+
+    def canon(node: Any) -> Any:
+        if isinstance(node, dict):
+            return {
+                key: (
+                    f"$ref:{value.rsplit('/', 1)[-1]}"
+                    if key == "$ref" and isinstance(value, str)
+                    else canon(value)
+                )
+                for key, value in node.items()
+            }
+        if isinstance(node, list):
+            return [canon(item) for item in node]
+        return node
+
+    return json.dumps(canon(body), sort_keys=True, default=repr)
+
+
+class _CrossFileRefResolver:
+    """Resolve relative cross-file ``$ref`` before :func:`parse_swagger`.
+
+    Operates strictly as a pre-parse merge layer: referenced schemas are
+    deep-copied into the referencing document's own schema container and
+    every cross-file ref string is rewritten to the local form, so
+    :func:`parse_swagger` — whose signature is frozen because generator
+    tests call it directly — never sees a cross-file ref.
+
+    Supported: relative paths (with or without ``./``) between files
+    inside the api directory, JSON or YAML targets, pointers into
+    ``#/components/schemas/`` / ``#/definitions/``. Halted: URL refs
+    (``multi-file-ref``), paths escaping the api directory
+    (``ref-outside-api-dir``), non-schema pointers
+    (``ref-non-schema-pointer``), cross-file cycles
+    (``cross-file-ref-cycle`` — break them by co-locating the mutually
+    recursive schemas in one file).
+
+    The file cache is shared across documents of one :func:`load_swagger`
+    run; merged bodies are deep copies, so cached raws stay pristine.
+    """
+
+    def __init__(self, api_directory: Path):
+        self._api_dir = api_directory.resolve()
+        self._file_cache: dict[Path, Any] = {}
+
+    def merge_into(self, raw: dict[str, Any], doc_path: Path) -> dict[str, Any]:
+        """Resolve every cross-file ref in *raw* in place.
+
+        Returns the document's (possibly created) top-level schema
+        container so the caller can run the cross-doc conflict check
+        against raw bodies.
+        """
+        self._root_path = doc_path.resolve()
+        if "swagger" in raw:
+            container = raw.get("definitions")
+            if not isinstance(container, dict):
+                container = {}
+                raw["definitions"] = container
+            self._local_prefix = "#/definitions/"
+        else:
+            components = raw.get("components")
+            if not isinstance(components, dict):
+                components = {}
+                raw["components"] = components
+            container = components.get("schemas")
+            if not isinstance(container, dict):
+                container = {}
+                components["schemas"] = container
+            self._local_prefix = "#/components/schemas/"
+        self._container = container
+        self._merged: set[tuple[Path, str]] = set()
+        self._walk(raw, base_file=self._root_path, stack=())
+        return container
+
+    def _walk(
+        self, node: Any, *, base_file: Path, stack: tuple[tuple[Path, str], ...]
+    ) -> None:
+        if isinstance(node, dict):
+            ref = node.get("$ref")
+            if isinstance(ref, str):
+                node["$ref"] = self._resolve_ref(ref, base_file=base_file, stack=stack)
+            # Snapshot: _ensure_merged inserts merged schemas into the root
+            # container while we may be iterating that very dict. Newly
+            # merged bodies are walked by their own _walk call, so skipping
+            # them here is correct, not just safe.
+            for key, value in list(node.items()):
+                if key == "$ref":
+                    continue
+                self._walk(value, base_file=base_file, stack=stack)
+        elif isinstance(node, list):
+            for item in node:
+                self._walk(item, base_file=base_file, stack=stack)
+
+    def _resolve_ref(
+        self, ref: str, *, base_file: Path, stack: tuple[tuple[Path, str], ...]
+    ) -> str:
+        at_root = base_file == self._root_path
+        if ref.startswith("#"):
+            if at_root:
+                # Native local ref — parse_swagger's own rules apply.
+                return ref
+            # Local ref inside a merged external body points into the
+            # external file's own container: pull the target in too and
+            # rewrite to the root document's container prefix.
+            name = self._schema_pointer_name(ref[1:], ref, base_file)
+            self._ensure_merged(base_file, name, ref, stack)
+            return self._local_prefix + name
+        if ref.startswith(("http://", "https://")):
+            raise OpenAPILoadError(
+                "multi-file-ref",
+                f"URL $ref not supported: {ref!r}. Vendor the referenced "
+                f"schema into a file inside the api directory and use a "
+                f"relative $ref.",
+                source=str(base_file),
+            )
+        file_part, _, fragment = ref.partition("#")
+        name = self._schema_pointer_name(fragment, ref, base_file)
+        target = (base_file.parent / file_part).resolve()
+        if not target.is_relative_to(self._api_dir):
+            raise OpenAPILoadError(
+                "ref-outside-api-dir",
+                f"$ref {ref!r} escapes the api directory "
+                f"({self._api_dir}). Move the referenced file under the "
+                f"api directory.",
+                source=str(base_file),
+            )
+        self._ensure_merged(target, name, ref, stack)
+        return self._local_prefix + name
+
+    @staticmethod
+    def _schema_pointer_name(fragment: str, ref: str, base_file: Path) -> str:
+        for prefix in ("/components/schemas/", "/definitions/"):
+            if fragment.startswith(prefix):
+                name = fragment[len(prefix):]
+                if name and "/" not in name:
+                    return name
+        raise OpenAPILoadError(
+            "ref-non-schema-pointer",
+            f"$ref {ref!r} does not point at a top-level schema. "
+            f"Cross-file refs must target #/components/schemas/<Name> or "
+            f"#/definitions/<Name> — pointers into paths / parameters / "
+            f"responses (or whole-file refs) are not supported.",
+            source=str(base_file),
+        )
+
+    def _ensure_merged(
+        self,
+        file: Path,
+        name: str,
+        ref: str,
+        stack: tuple[tuple[Path, str], ...],
+    ) -> None:
+        key = (file, name)
+        if key in stack:
+            chain = " -> ".join(f"{f.name}#{n}" for f, n in stack + (key,))
+            raise OpenAPILoadError(
+                "cross-file-ref-cycle",
+                f"Cross-file $ref cycle: {chain}. Break the cycle by "
+                f"moving the mutually recursive schemas into a single "
+                f"file.",
+                source=str(file),
+            )
+        if file == self._root_path:
+            # Points back into the document being processed — nothing to
+            # merge, but the target must exist.
+            if name not in self._container:
+                raise OpenAPILoadError(
+                    "ref-not-found",
+                    f"$ref {ref!r} points back at this document but no "
+                    f"top-level schema named {name!r} exists.",
+                    source=str(self._root_path),
+                )
+            return
+        if key in self._merged:
+            return
+        raw = self._load_file(file, ref)
+        body = self._lookup(raw, name)
+        if body is None:
+            raise OpenAPILoadError(
+                "ref-not-found",
+                f"$ref {ref!r}: no schema named {name!r} in {file.name}",
+                source=str(file),
+            )
+        existing = self._container.get(name)
+        if existing is not None:
+            if _normalize_schema_body(existing) != _normalize_schema_body(body):
+                raise OpenAPILoadError(
+                    "cross-doc-schema-conflict",
+                    f"$ref {ref!r} would merge schema {name!r} from "
+                    f"{file.name}, but a different schema with that name "
+                    f"already exists in this document's scope. Rename one "
+                    f"of them or share a single definition.",
+                    source=str(self._root_path),
+                )
+            self._merged.add(key)
+            return
+        body_copy = copy.deepcopy(body)
+        self._container[name] = body_copy
+        self._walk(body_copy, base_file=file, stack=stack + (key,))
+        self._merged.add(key)
+
+    def _load_file(self, path: Path, ref: str) -> Any:
+        cached = self._file_cache.get(path)
+        if cached is not None:
+            return cached
+        if not path.exists():
+            raise OpenAPILoadError(
+                "ref-not-found",
+                f"$ref {ref!r}: referenced file does not exist",
+                source=str(path),
+            )
+        if path.suffix in (".yaml", ".yml"):
+            data = _safe_load_yaml(path)
+            _check_yaml_type_coercion(data, source=str(path))
+        else:
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except json.JSONDecodeError as e:
+                raise OpenAPILoadError(
+                    "json-parse-error",
+                    f"$ref {ref!r}: referenced file is not valid JSON: {e}",
+                    source=str(path),
+                ) from e
+        self._file_cache[path] = data
+        return data
+
+    @staticmethod
+    def _lookup(raw: Any, name: str) -> Any:
+        """Find *name* in a loaded file's schema containers (either style)."""
+        if not isinstance(raw, dict):
+            return None
+        components = raw.get("components")
+        if isinstance(components, dict):
+            schemas = components.get("schemas")
+            if isinstance(schemas, dict) and isinstance(schemas.get(name), dict):
+                return schemas[name]
+        definitions = raw.get("definitions")
+        if isinstance(definitions, dict) and isinstance(definitions.get(name), dict):
+            return definitions[name]
+        return None
+
+
+def _check_cross_doc_schemas(
+    doc: SwaggerDocument,
+    schemas_root: dict[str, Any],
+    registry: dict[str, tuple[str, str]],
+) -> None:
+    """Cross-doc same-name emission guard (new in the Q12 lift).
+
+    Multiple docs referencing a shared ``common.json#Money`` all end up
+    emitting a top-level ``Money`` — with one generated file path per
+    schema name, the sync layer's dict used to silently last-win. Now:
+    identical normalized bodies → allowed (the sync layer dedups,
+    first doc wins); differing bodies → ``cross-doc-schema-conflict``.
+
+    Inline-derived names are skipped (absent from *schemas_root*); the
+    per-doc ``inline-name-collision`` rules already govern those.
+    """
+    emitted = {s.name for s in doc.schemas} | {e.name for e in doc.enums}
+    for name in sorted(emitted):
+        body = schemas_root.get(name)
+        if body is None:
+            continue
+        normalized = _normalize_schema_body(body)
+        prior = registry.get(name)
+        if prior is None:
+            registry[name] = (normalized, doc.source_path)
+        elif prior[0] != normalized:
+            raise OpenAPILoadError(
+                "cross-doc-schema-conflict",
+                f"Schema {name!r} is defined with different content in "
+                f"{prior[1]} and {doc.source_path}. Generated model files "
+                f"are keyed by schema name, so both docs would fight over "
+                f"one file. Rename one of them, or extract the shared "
+                f"shape into a single file and $ref it from both.",
+                source=doc.source_path,
+                pointer=f"#/components/schemas/{name}",
+            )
+
+
 def load_swagger(
     api_directory: Path,
     *,
@@ -104,8 +534,15 @@ def load_swagger(
 ) -> list[SwaggerDocument]:
     """Discover and parse every swagger doc under *api_directory*.
 
-    YAML files trigger an :class:`OpenAPILoadError` (Q8 — v1 is JSON only).
-    Non-swagger ``*.json`` files are silently skipped.
+    JSON and YAML swagger files are accepted (YAML since 2026-07 — Q8
+    lift; parsed in memory, never converted on disk). Non-swagger files
+    of either flavor are silently skipped. Relative cross-file ``$ref``
+    between files inside *api_directory* are resolved by a pre-parse
+    merge layer (Q12 lift) — see :class:`_CrossFileRefResolver`.
+
+    Top-level schemas emitted by more than one document must have
+    identical bodies (the sync layer dedups, first doc in sorted order
+    wins); differing bodies halt with ``cross-doc-schema-conflict``.
 
     *schema_filter* is the optional v2 path/schema filter. When omitted
     or :meth:`SchemaFilterConfig.is_active` returns False, every
@@ -117,27 +554,39 @@ def load_swagger(
     if not api_directory.exists():
         return []
 
+    sources: list[tuple[Path, dict[str, Any]]] = []
     for yml in sorted(api_directory.rglob("*.yaml")) + sorted(api_directory.rglob("*.yml")):
-        # Only the "convert to JSON" guidance applies to YAML the user meant
-        # as a codegen input. An unrelated YAML artifact sharing the api dir
-        # (another workstream's contract, a doc) must be skipped like a
-        # non-swagger JSON — otherwise one stray file hard-halts `jui build`
-        # for every subproject that doesn't even consume it.
+        # An unrelated YAML artifact sharing the api dir (another
+        # workstream's contract, a doc) must be skipped like a non-swagger
+        # JSON — otherwise one stray file hard-halts `jui build` for every
+        # subproject that doesn't even consume it.
         if not is_swagger_yaml_file(yml):
             continue
-        raise OpenAPILoadError(
-            "yaml-not-supported",
-            "YAML swagger files are not supported in v1 (Q8). Convert to JSON.",
-            source=str(yml),
-        )
-
-    docs: list[SwaggerDocument] = []
+        data = _safe_load_yaml(yml)
+        if not isinstance(data, dict) or not ("openapi" in data or "swagger" in data):
+            # The cheap regex prefilter can false-match `openapi:` inside
+            # a comment or block scalar. After a real parse, a document
+            # without a top-level swagger key is not a codegen input.
+            continue
+        _check_yaml_type_coercion(data, source=str(yml))
+        sources.append((yml, data))
     for json_path in sorted(api_directory.rglob("*.json")):
         if not is_swagger_file(json_path):
             continue
         with open(json_path, "r", encoding="utf-8") as f:
-            raw = json.load(f)
-        docs.append(parse_swagger(raw, str(json_path), schema_filter=schema_filter))
+            sources.append((json_path, json.load(f)))
+
+    _check_duplicate_swagger_basenames([p for p, _ in sources])
+    sources.sort(key=lambda pair: str(pair[0]))
+
+    resolver = _CrossFileRefResolver(api_directory)
+    registry: dict[str, tuple[str, str]] = {}
+    docs: list[SwaggerDocument] = []
+    for path, raw in sources:
+        schemas_root = resolver.merge_into(raw, path)
+        doc = parse_swagger(raw, str(path), schema_filter=schema_filter)
+        _check_cross_doc_schemas(doc, schemas_root, registry)
+        docs.append(doc)
     return docs
 
 
@@ -587,11 +1036,16 @@ def _check_ref_local(ref: str, *, source_path: str, pointer: str) -> None:
     if ref.startswith("#"):
         return
     # Anything with a file path component or scheme is multi-file/URL.
+    # Cross-file refs between files inside the api directory are resolved
+    # by the pre-parse merge layer in load_swagger, so by the time parsing
+    # runs, one surviving here is either a URL ref or a parse_swagger call
+    # that bypassed load_swagger.
     if ref.startswith(("http://", "https://", "./", "../", "/")) or ".yaml" in ref or ".yml" in ref or ".json" in ref:
         raise OpenAPILoadError(
             "multi-file-ref",
-            f"Multi-file / URL $ref not supported in v1: {ref!r}. "
-            f"Inline the referenced schema or wait for v2 multi-file support.",
+            f"Unresolved cross-file / URL $ref: {ref!r}. URL refs are not "
+            f"supported — cross-file refs work only between files inside "
+            f"the api directory (resolved when loading the directory).",
             source=source_path,
             pointer=pointer,
         )

@@ -874,13 +874,25 @@ class ConformanceFlagTests(unittest.TestCase):
 
 
 class LoadSwaggerDirectoryTests(unittest.TestCase):
-    def test_yaml_halts(self):
+    def test_yaml_swagger_loads(self):
+        # Q8 lift (2026-07): YAML swagger is parsed, no longer halts.
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
-            (tmp / "doc.yaml").write_text("openapi: 3.0.3\n", encoding="utf-8")
-            with self.assertRaises(OpenAPILoadError) as ctx:
-                load_swagger(tmp)
-            self.assertEqual(ctx.exception.code, "yaml-not-supported")
+            (tmp / "doc.yaml").write_text(
+                "openapi: 3.0.3\n"
+                "info:\n  title: T\n  version: '1'\n"
+                "components:\n"
+                "  schemas:\n"
+                "    User:\n"
+                "      type: object\n"
+                "      properties:\n"
+                "        id:\n"
+                "          type: string\n",
+                encoding="utf-8",
+            )
+            docs = load_swagger(tmp)
+            self.assertEqual(len(docs), 1)
+            self.assertEqual(docs[0].schemas[0].name, "User")
 
     def test_skips_non_swagger_json(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -916,17 +928,24 @@ class LoadSwaggerDirectoryTests(unittest.TestCase):
             docs = load_swagger(tmp)
             self.assertEqual(len(docs), 1)
 
-    def test_swagger_authored_in_yaml_still_halts(self):
-        # A YAML that DOES look like swagger (intended input) keeps the
-        # helpful "convert to JSON" halt.
+    def test_swagger_2_authored_in_yml_loads(self):
+        # Swagger 2.0 in a .yml file also parses (definitions container).
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             (tmp / "spec.yml").write_text(
-                "swagger: '2.0'\ninfo:\n  title: X\n", encoding="utf-8"
+                "swagger: '2.0'\n"
+                "info:\n  title: X\n  version: '1'\n"
+                "definitions:\n"
+                "  Item:\n"
+                "    type: object\n"
+                "    properties:\n"
+                "      name:\n"
+                "        type: string\n",
+                encoding="utf-8",
             )
-            with self.assertRaises(OpenAPILoadError) as ctx:
-                load_swagger(tmp)
-            self.assertEqual(ctx.exception.code, "yaml-not-supported")
+            docs = load_swagger(tmp)
+            self.assertEqual(len(docs), 1)
+            self.assertEqual(docs[0].schemas[0].name, "Item")
 
     def test_loads_valid_swagger(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1043,6 +1062,440 @@ class FilterIntegrationTests(unittest.TestCase):
         doc = parse_swagger(raw, "test.json", schema_filter=SchemaFilterConfig())
         self.assertEqual({s.name for s in doc.schemas}, {"A", "B"})
         self.assertEqual(doc.filtered_out, frozenset())
+
+
+def _write_json(tmp: Path, name: str, data: dict) -> Path:
+    p = tmp / name
+    p.write_text(json.dumps(data), encoding="utf-8")
+    return p
+
+
+_MONEY = {
+    "type": "object",
+    "properties": {
+        "amount": {"type": "integer"},
+        "currency": {"type": "string"},
+    },
+}
+
+
+def _fragment(schemas: dict) -> dict:
+    """A shared schema file that is NOT itself a swagger doc (no openapi key)."""
+    return {"components": {"schemas": schemas}}
+
+
+class YamlInputTests(unittest.TestCase):
+    """Q8 lift (plan 2026-07-24-v1-unsupported/01): YAML swagger input."""
+
+    def test_yaml_ir_matches_json(self):
+        import yaml as yaml_mod
+
+        schemas = {
+            "User": {
+                "type": "object",
+                "required": ["id"],
+                "properties": {
+                    "id": {"type": "string"},
+                    "age": {"type": "integer"},
+                    "role": {"type": "string", "enum": ["admin", "member"]},
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as d_json, \
+                tempfile.TemporaryDirectory() as d_yaml:
+            _write_json(Path(d_json), "api.json", _doc(schemas))
+            (Path(d_yaml) / "api.yaml").write_text(
+                yaml_mod.safe_dump(_doc(schemas), sort_keys=False), encoding="utf-8"
+            )
+            doc_j = load_swagger(Path(d_json))[0]
+            doc_y = load_swagger(Path(d_yaml))[0]
+        self.assertEqual(
+            [s.name for s in doc_y.schemas], [s.name for s in doc_j.schemas]
+        )
+        self.assertEqual(doc_y.schemas[0].fields, doc_j.schemas[0].fields)
+        self.assertEqual(doc_y.enums, doc_j.enums)
+
+    def test_broken_yaml_halts_with_parse_error(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "api.yaml").write_text(
+                "openapi: 3.0.3\ninfo: {unclosed\n", encoding="utf-8"
+            )
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "yaml-parse-error")
+
+    def test_regex_false_match_without_top_level_key_skips(self):
+        # The cheap text prefilter matches `openapi:` at a line start inside
+        # a multi-line quoted scalar; the parsed document is not a mapping
+        # with a swagger key, so it must be skipped, not halted.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "notes.yaml").write_text(
+                '"text with\nopenapi: 3"\n', encoding="utf-8"
+            )
+            self.assertEqual(load_swagger(tmp), [])
+
+    def test_norway_problem_enum_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "api.yaml").write_text(
+                "openapi: 3.0.3\n"
+                "info:\n  title: T\n  version: '1'\n"
+                "components:\n"
+                "  schemas:\n"
+                "    CountryCode:\n"
+                "      type: string\n"
+                "      enum: [NO, SE, DK]\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "yaml-type-coercion")
+            self.assertIn("Quote", str(ctx.exception))
+
+    def test_quoted_norway_enum_loads(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "api.yaml").write_text(
+                "openapi: 3.0.3\n"
+                "info:\n  title: T\n  version: '1'\n"
+                "components:\n"
+                "  schemas:\n"
+                "    CountryCode:\n"
+                "      type: string\n"
+                "      enum: ['NO', 'SE']\n",
+                encoding="utf-8",
+            )
+            docs = load_swagger(tmp)
+            self.assertEqual(docs[0].enums[0].string_values, ["NO", "SE"])
+
+    def test_date_literal_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "api.yaml").write_text(
+                "openapi: 3.0.3\n"
+                "info:\n  title: T\n  version: '1'\n"
+                "components:\n"
+                "  schemas:\n"
+                "    M:\n"
+                "      type: object\n"
+                "      properties:\n"
+                "        since:\n"
+                "          type: string\n"
+                "          default: 2026-07-24\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "yaml-type-coercion")
+
+    def test_duplicate_basename_yaml_and_json_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "api.json", _doc({
+                "User": {"type": "object", "properties": {"id": {"type": "string"}}},
+            }))
+            (tmp / "api.yaml").write_text(
+                "openapi: 3.0.3\ninfo:\n  title: T\n  version: '1'\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "duplicate-swagger-basename")
+
+    def test_same_stem_non_swagger_json_does_not_halt(self):
+        # The basename guard only fires between actual swagger docs.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "api.json", {"not": "swagger"})
+            (tmp / "api.yaml").write_text(
+                "openapi: 3.0.3\n"
+                "info:\n  title: T\n  version: '1'\n"
+                "components:\n"
+                "  schemas:\n"
+                "    User:\n"
+                "      type: object\n"
+                "      properties:\n"
+                "        id:\n"
+                "          type: string\n",
+                encoding="utf-8",
+            )
+            docs = load_swagger(tmp)
+            self.assertEqual(len(docs), 1)
+
+    def test_pyyaml_missing_halts_with_install_guidance(self):
+        from jui_cli.core import openapi_loader as loader_mod
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "api.yaml").write_text(
+                "openapi: 3.0.3\ninfo:\n  title: T\n", encoding="utf-8"
+            )
+            original = loader_mod._import_yaml
+            loader_mod._import_yaml = lambda: None
+            try:
+                with self.assertRaises(OpenAPILoadError) as ctx:
+                    load_swagger(tmp)
+            finally:
+                loader_mod._import_yaml = original
+            self.assertEqual(ctx.exception.code, "pyyaml-missing")
+            self.assertIn("pip3 install pyyaml", str(ctx.exception))
+
+
+class MultiFileRefTests(unittest.TestCase):
+    """Q12 lift (plan 2026-07-24-v1-unsupported/01): cross-file $ref."""
+
+    def test_relative_ref_with_and_without_dot_prefix(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "main.json", _doc({
+                "Order": {
+                    "type": "object",
+                    "properties": {
+                        "total": {"$ref": "./common.json#/components/schemas/Money"},
+                        "fee": {"$ref": "common.json#/components/schemas/Money"},
+                    },
+                },
+            }))
+            _write_json(tmp, "common.json", _fragment({"Money": _MONEY}))
+            docs = load_swagger(tmp)
+        # The fragment has no openapi key — it is not its own document.
+        self.assertEqual(len(docs), 1)
+        self.assertEqual({s.name for s in docs[0].schemas}, {"Order", "Money"})
+        order = next(s for s in docs[0].schemas if s.name == "Order")
+        for f in order.fields:
+            self.assertTrue(f.type.is_object_ref)
+            self.assertEqual(f.type.ref_name, "Money")
+
+    def test_yaml_doc_refs_json_fragment(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "main.yaml").write_text(
+                "openapi: 3.0.3\n"
+                "info:\n  title: T\n  version: '1'\n"
+                "components:\n"
+                "  schemas:\n"
+                "    Order:\n"
+                "      type: object\n"
+                "      properties:\n"
+                "        total:\n"
+                "          $ref: './common.json#/components/schemas/Money'\n",
+                encoding="utf-8",
+            )
+            _write_json(tmp, "common.json", _fragment({"Money": _MONEY}))
+            docs = load_swagger(tmp)
+        self.assertEqual({s.name for s in docs[0].schemas}, {"Order", "Money"})
+
+    def test_nested_chain_and_transitive_local_refs(self):
+        # main → a.json#A; A refs b.json#B (cross-file) AND #/…/Helper
+        # (local to a.json). Both must be pulled into main's scope.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "main.json", _doc({
+                "Root": {
+                    "type": "object",
+                    "properties": {
+                        "a": {"$ref": "./a.json#/components/schemas/A"},
+                    },
+                },
+            }))
+            _write_json(tmp, "a.json", _fragment({
+                "A": {
+                    "type": "object",
+                    "properties": {
+                        "b": {"$ref": "./b.json#/components/schemas/B"},
+                        "h": {"$ref": "#/components/schemas/Helper"},
+                    },
+                },
+                "Helper": {
+                    "type": "object",
+                    "properties": {"x": {"type": "string"}},
+                },
+            }))
+            _write_json(tmp, "b.json", _fragment({
+                "B": {"type": "object", "properties": {"y": {"type": "string"}}},
+            }))
+            docs = load_swagger(tmp)
+        self.assertEqual(
+            {s.name for s in docs[0].schemas}, {"Root", "A", "B", "Helper"}
+        )
+
+    def test_cross_file_cycle_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "main.json", _doc({
+                "Root": {
+                    "type": "object",
+                    "properties": {
+                        "a": {"$ref": "./a.json#/components/schemas/A"},
+                    },
+                },
+            }))
+            _write_json(tmp, "a.json", _fragment({
+                "A": {
+                    "type": "object",
+                    "properties": {
+                        "b": {"$ref": "./b.json#/components/schemas/B"},
+                    },
+                },
+            }))
+            _write_json(tmp, "b.json", _fragment({
+                "B": {
+                    "type": "object",
+                    "properties": {
+                        "a": {"$ref": "./a.json#/components/schemas/A"},
+                    },
+                },
+            }))
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "cross-file-ref-cycle")
+
+    def test_ref_outside_api_dir_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            api = tmp / "api"
+            api.mkdir()
+            _write_json(tmp, "outside.json", _fragment({"Money": _MONEY}))
+            _write_json(api, "main.json", _doc({
+                "Order": {
+                    "type": "object",
+                    "properties": {
+                        "m": {"$ref": "../outside.json#/components/schemas/Money"},
+                    },
+                },
+            }))
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(api)
+            self.assertEqual(ctx.exception.code, "ref-outside-api-dir")
+
+    def test_url_ref_halts_during_directory_load(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "main.json", _doc({
+                "Order": {
+                    "type": "object",
+                    "properties": {
+                        "m": {"$ref": "https://example.com/common.json#/components/schemas/Money"},
+                    },
+                },
+            }))
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "multi-file-ref")
+
+    def test_non_schema_pointer_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "common.json", {"components": {"parameters": {"Page": {}}}})
+            _write_json(tmp, "main.json", _doc({
+                "Order": {
+                    "type": "object",
+                    "properties": {
+                        "p": {"$ref": "./common.json#/components/parameters/Page"},
+                    },
+                },
+            }))
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "ref-non-schema-pointer")
+
+    def test_whole_file_ref_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "common.json", _fragment({"Money": _MONEY}))
+            _write_json(tmp, "main.json", _doc({
+                "Order": {
+                    "type": "object",
+                    "properties": {"m": {"$ref": "./common.json"}},
+                },
+            }))
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "ref-non-schema-pointer")
+
+    def test_ref_missing_schema_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "common.json", _fragment({"Money": _MONEY}))
+            _write_json(tmp, "main.json", _doc({
+                "Order": {
+                    "type": "object",
+                    "properties": {
+                        "m": {"$ref": "./common.json#/components/schemas/Nope"},
+                    },
+                },
+            }))
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "ref-not-found")
+
+    def test_swagger2_root_merges_into_definitions(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "main.json", {
+                "swagger": "2.0",
+                "info": {"title": "T", "version": "1"},
+                "definitions": {
+                    "Item": {
+                        "type": "object",
+                        "properties": {
+                            "m": {"$ref": "./common.json#/components/schemas/Money"},
+                        },
+                    },
+                },
+            })
+            _write_json(tmp, "common.json", _fragment({"Money": _MONEY}))
+            docs = load_swagger(tmp)
+        self.assertEqual({s.name for s in docs[0].schemas}, {"Item", "Money"})
+
+    def test_shared_schema_identical_across_docs_ok(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "a.json", _doc({
+                "OrderA": {
+                    "type": "object",
+                    "properties": {
+                        "m": {"$ref": "./common.json#/components/schemas/Money"},
+                    },
+                },
+            }))
+            _write_json(tmp, "b.json", _doc({
+                "OrderB": {
+                    "type": "object",
+                    "properties": {
+                        "m": {"$ref": "common.json#/components/schemas/Money"},
+                    },
+                },
+            }))
+            _write_json(tmp, "common.json", _fragment({"Money": _MONEY}))
+            docs = load_swagger(tmp)
+        self.assertEqual(len(docs), 2)
+        for doc in docs:
+            self.assertIn("Money", {s.name for s in doc.schemas})
+
+    def test_cross_doc_same_name_different_body_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "a.json", _doc({
+                "User": {"type": "object", "properties": {"id": {"type": "string"}}},
+            }))
+            _write_json(tmp, "b.json", _doc({
+                "User": {"type": "object", "properties": {"uid": {"type": "integer"}}},
+            }))
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "cross-doc-schema-conflict")
+
+    def test_cross_doc_same_name_identical_body_ok(self):
+        shared = {"type": "object", "properties": {"id": {"type": "string"}}}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "a.json", _doc({"User": shared}))
+            _write_json(tmp, "b.json", _doc({"User": shared}))
+            docs = load_swagger(tmp)
+        self.assertEqual(len(docs), 2)
 
 
 if __name__ == "__main__":

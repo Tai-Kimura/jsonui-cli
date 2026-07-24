@@ -344,9 +344,11 @@ esac
 # scripts dir that isn't on PATH (the common `--user` / PEP 668 failure).
 #
 # Caveat: only the core commands are pure-stdlib. `jui hotload` additionally
-# imports `watchdog` + `aiohttp`; the `pip install -e .` step above installs
-# those as deps. If that pip step was skipped/failed, the core jui commands
-# still work via PATH, but `jui hotload` needs `pip install watchdog aiohttp`.
+# imports `watchdog` + `aiohttp`, and YAML swagger input in `jui build`
+# needs `pyyaml`; the `pip install -e .` step above installs those as deps.
+# If that pip step was skipped/failed, the core jui commands still work via
+# PATH, but `jui hotload` needs `pip install watchdog aiohttp` and YAML
+# swagger input needs `pip install pyyaml` (jui halts with that guidance).
 PATH_EXPORTS=""
 [ -x "$INSTALL_DIR/jui_tools/bin/jui" ]            && PATH_EXPORTS="$PATH_EXPORTS\nexport PATH=\"$INSTALL_DIR/jui_tools/bin:\$PATH\""
 [ -x "$INSTALL_DIR/document_tools/jsonui-doc" ]    && PATH_EXPORTS="$PATH_EXPORTS\nexport PATH=\"$INSTALL_DIR/document_tools:\$PATH\""
@@ -373,5 +375,5 @@ echo -e "  ${BLUE}echo -e '$PATH_EXPORTS' >> $SHELL_RC && source $SHELL_RC${NC}"
 echo ""
 echo "Note: the lines above use absolute paths and put 'jui' on PATH via its"
 echo "self-contained launcher — no pip console script required for core commands."
-echo -e "'jui hotload' also needs: ${BLUE}pip3 install watchdog aiohttp${NC} (installed by this script's pip step when available)."
+echo -e "'jui hotload' also needs: ${BLUE}pip3 install watchdog aiohttp${NC}; YAML swagger input needs ${BLUE}pip3 install pyyaml${NC} (both installed by this script's pip step when available)."
 echo ""
