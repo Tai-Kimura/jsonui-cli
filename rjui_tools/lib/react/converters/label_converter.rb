@@ -20,7 +20,7 @@ module RjuiTools
           elsif attributes['linkable']
             render_linkable_text(indent, id_attr, class_name, style_attr, onclick_attr, testid_attr, tag_attr)
           else
-            text = convert_binding(attributes['text'] || '')
+            text = convert_text_binding(attributes['text'] || '')
             "#{indent_str(indent)}<span#{id_attr} className=\"#{class_name}\"#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>#{text}</span>"
           end
 

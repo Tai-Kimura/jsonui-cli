@@ -27,7 +27,7 @@ module RjuiTools
             # Item labels go through the same string resolution as Label.text
             # (string key -> binding -> literal), matching sjui's per-item
             # get_text_with_string_manager.
-            "#{indent_str(indent + 2)}<button key={#{index}}#{segment_item_id_attr(index)} className={`#{button_class}`}#{on_click_attr}#{button_disabled}>#{convert_binding(item)}</button>"
+            "#{indent_str(indent + 2)}<button key={#{index}}#{segment_item_id_attr(index)} className={`#{button_class}`}#{on_click_attr}#{button_disabled}>#{convert_text_binding(item)}</button>"
           end.join("\n")
 
           # `disabled` is not a valid attribute on <div>; reflect the state via

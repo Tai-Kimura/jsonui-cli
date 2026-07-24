@@ -14,7 +14,7 @@ module RjuiTools
           tag_attr = build_tag_attr
           onclick_attr = build_onclick_attr
 
-          text = convert_binding(attributes['text'] || '')
+          text = convert_text_binding(attributes['text'] || '')
           icon_position = (attributes['iconPosition'] || 'Left').downcase
           icon_src = get_icon_src
           icon_style = build_icon_style

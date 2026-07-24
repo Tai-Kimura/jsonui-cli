@@ -1,0 +1,34 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "root",
+  "width": "matchParent",
+  "height": "matchParent",
+  "orientation": "vertical",
+  "data": [
+    {
+      "name": "conformanceItems",
+      "class": "Array",
+      "defaultValue": [
+        "alpha",
+        "beta"
+      ]
+    }
+  ],
+  "child": [
+    {
+      "type": "Label",
+      "id": "target",
+      "width": "wrapContent",
+      "height": "wrapContent",
+      "text": "@{conformanceItems[1]}"
+    }
+  ]
+}

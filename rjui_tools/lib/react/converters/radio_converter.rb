@@ -65,7 +65,7 @@ module RjuiTools
           end.join("\n")
 
           label_jsx = if label_text && !label_text.empty?
-                        "#{indent_str(indent + 2)}<span className=\"font-medium\">#{convert_binding(label_text)}</span>\n"
+                        "#{indent_str(indent + 2)}<span className=\"font-medium\">#{convert_text_binding(label_text)}</span>\n"
                       else
                         ''
                       end
@@ -90,7 +90,7 @@ module RjuiTools
           <<~JSX.chomp
             #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center gap-2"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
             #{indent_str(indent + 2)}<input type="radio" name="#{group}" value="#{radio_value}"#{state_attrs}#{disabled_attr}#{input_style} />
-            #{indent_str(indent + 2)}<span>#{convert_binding(text)}</span>
+            #{indent_str(indent + 2)}<span>#{convert_text_binding(text)}</span>
             #{indent_str(indent)}</label>
           JSX
         end

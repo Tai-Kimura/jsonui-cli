@@ -57,6 +57,23 @@ TYPED_TEXT = "Typed Text"
 RESULT_BEFORE = "ready"
 RESULT_AFTER = "fired"
 
+# Binding-resolution measurement vocabulary (renderer SSoT track 15-5).
+# These fixtures measure shared/core/binding_semantics.json semantics on the
+# real runtimes; each mirrors a shared vector (binding_vectors.json id noted
+# on the spec). Layout-only seeds (DataVar) carry native JSON values through
+# the standard `data` section WITHOUT a manifest state.vars declaration —
+# state.vars stays the String-typed host contract surface.
+PROFILE_VAR = "conformanceProfile"
+PROFILE_DEFAULT = {"name": "Grace", "meta": {"age": 36}}
+ITEMS_VAR = "conformanceItems"
+ITEMS_OBJECTS = [{"title": "First"}, {"title": "Second"}]
+ITEMS_SCALARS = ["alpha", "beta"]
+COUNT_VAR = "conformanceCount"
+COUNT_DEFAULT = 5
+FLAG_VAR = "conformanceFlag"
+MISSING_KEY = "conformanceMissing"  # deliberately never provisioned
+DEFAULT_LITERAL = "Guest"
+
 
 # --------------------------------------------------------------------------- #
 # Contract dataclasses
@@ -84,6 +101,25 @@ class StateHandler:
 
 
 @dataclass(frozen=True)
+class DataVar:
+    """One layout-only ``data``-section entry with a native JSON default.
+
+    Unlike :class:`StateVar`, a DataVar is NOT declared in the manifest
+    ``state.vars`` (that surface is String-typed by host contract — the iOS
+    host decodes ``defaultValue`` as String and exposes Binding<String>).
+    A DataVar rides the standard production data-section defaults path of
+    each runtime instead: SwiftJsonUI ``DynamicView.mergeDataDefaults``,
+    KotlinJsonUI ``applyDataSectionDefaults``, rjui ``create<View>Data()``.
+    This is the vehicle for nested objects / arrays / typed scalars that the
+    binding-resolution fixtures (track 15-5) resolve dot paths against.
+    """
+
+    name: str
+    cls: str
+    default: Any
+
+
+@dataclass(frozen=True)
 class InteractiveSpec:
     """One concrete interactive fixture for a (section, attribute) pair."""
 
@@ -94,6 +130,7 @@ class InteractiveSpec:
     handlers: tuple[StateHandler, ...]
     steps: tuple[dict, ...]  # test steps appended after `waitFor root`
     mirror_var: str | None = None  # append a mirror Label bound to this var
+    data_vars: tuple[DataVar, ...] = ()  # layout-only data-section seeds
 
 
 @dataclass(frozen=True)
@@ -204,6 +241,147 @@ def _callback_fire(host: str, attribute: str, value: str, trigger: dict | None) 
     )
 
 
+def _binding_text(
+    case: str,
+    template: str,
+    expected: str,
+    *,
+    vars: tuple[StateVar, ...] = (),
+    data_vars: tuple[DataVar, ...] = (),
+) -> InteractiveSpec:
+    """One Label.text binding-resolution fixture: template in, exact text out.
+
+    Statically assertable (waitFor + text equals) — no handlers, no mirror.
+    Unresolved-expectation templates wrap the expression in literal parens so
+    the Label never renders fully empty (a zero-size text node is not reliably
+    addressable by every platform driver).
+    """
+    return InteractiveSpec(
+        case=case,
+        host="Label",
+        target_attrs=(("text", template),),
+        vars=vars,
+        handlers=(),
+        steps=(_text_equals(rules.TARGET_ID, expected),),
+        data_vars=data_vars,
+    )
+
+
+#: Binding-resolution fixtures for Label.text (binding_semantics.json `text`
+#: context). Comments name the shared vector each case mirrors.
+_TEXT_STATE = (StateVar(TEXT_VAR, "String", BOUND_INITIAL),)
+_PROFILE_DATA = (DataVar(PROFILE_VAR, "Object", PROFILE_DEFAULT),)
+
+_BINDING_SEMANTICS_TEXT: tuple[InteractiveSpec, ...] = (
+    # text_flat_basic — mixed-text interpolation
+    _binding_text(
+        "binding_mixed",
+        f"Hello @{{{TEXT_VAR}}}!",
+        f"Hello {BOUND_INITIAL}!",
+        vars=_TEXT_STATE,
+    ),
+    # text_dot_path — nested object traversal
+    _binding_text(
+        "binding_dot_path",
+        f"@{{{PROFILE_VAR}.name}}",
+        "Grace",
+        data_vars=_PROFILE_DATA,
+    ),
+    # text_deep_dot_path — 3-segment path + integral-number stringification
+    _binding_text(
+        "binding_deep_path",
+        f"@{{{PROFILE_VAR}.meta.age}}",
+        "36",
+        data_vars=_PROFILE_DATA,
+    ),
+    # text_bracket_index — bracket index into array of objects
+    _binding_text(
+        "binding_bracket_index",
+        f"@{{{ITEMS_VAR}[0].title}}",
+        "First",
+        data_vars=(DataVar(ITEMS_VAR, "Array", ITEMS_OBJECTS),),
+    ),
+    # text_bracket_index_scalar — bracket index to a scalar element
+    _binding_text(
+        "binding_bracket_scalar",
+        f"@{{{ITEMS_VAR}[1]}}",
+        "beta",
+        data_vars=(DataVar(ITEMS_VAR, "Array", ITEMS_SCALARS),),
+    ),
+    # text_default_double_quotes — `??` default, double-quoted, missing key
+    _binding_text(
+        "binding_default_double",
+        f'@{{{MISSING_KEY} ?? "{DEFAULT_LITERAL}"}}',
+        DEFAULT_LITERAL,
+    ),
+    # text_default_single_quotes — `??` default, single-quoted (canonical-new)
+    _binding_text(
+        "binding_default_single",
+        f"@{{{MISSING_KEY} ?? '{DEFAULT_LITERAL}'}}",
+        DEFAULT_LITERAL,
+    ),
+    # text_default_number — `??` typed number default stringified
+    _binding_text(
+        "binding_default_number",
+        f"@{{{MISSING_KEY} ?? 42}}",
+        "42",
+    ),
+    # text_default_resolved_wins / fallbackPrecedence 1 over 2 — the
+    # data-section defaultValue resolves, so the inline default never applies
+    _binding_text(
+        "binding_default_resolved",
+        f"@{{{TEXT_VAR} ?? '{DEFAULT_LITERAL}'}}",
+        BOUND_INITIAL,
+        vars=_TEXT_STATE,
+    ),
+    # text_unresolved_flat — unresolved flat key -> empty string (parens keep
+    # the Label addressable)
+    _binding_text(
+        "binding_unresolved_flat",
+        f"(@{{{MISSING_KEY}}})",
+        "()",
+    ),
+    # text_unresolved_intermediate — missing intermediate node -> empty string
+    _binding_text(
+        "binding_unresolved_path",
+        f"(@{{{MISSING_KEY}.name}})",
+        "()",
+    ),
+    # text_number_integer — '5', never '5.0'
+    _binding_text(
+        "binding_number_int",
+        f"@{{{COUNT_VAR}}}",
+        "5",
+        data_vars=(DataVar(COUNT_VAR, "Int", COUNT_DEFAULT),),
+    ),
+    # text_bool_true — bool stringification 'true'
+    _binding_text(
+        "binding_bool_text",
+        f"@{{{FLAG_VAR}}}",
+        "true",
+        data_vars=(DataVar(FLAG_VAR, "Bool", True),),
+    ),
+)
+
+
+def _negation_hidden() -> InteractiveSpec:
+    """value_bool_negation_false — `hidden: "@{!flag}"` with flag=false.
+
+    The assertive direction: !false => hidden=true => notVisible. An
+    unresolved expression falls back to the attribute default (hidden=false,
+    visible), so a resolution failure cannot pass by accident.
+    """
+    return InteractiveSpec(
+        case="binding_negation",
+        host="View",
+        target_attrs=(("hidden", f"@{{!{FLAG_VAR}}}"),),
+        vars=(),
+        handlers=(),
+        steps=(_target_not_visible(),),
+        data_vars=(DataVar(FLAG_VAR, "Bool", False),),
+    )
+
+
 _FIRE_BINDING = f"@{{{FIRE_HANDLER}}}"
 
 #: visibility enum value -> assertion (mirrors rules._assertable_cases).
@@ -243,11 +421,12 @@ def _visibility_sweep() -> tuple[InteractiveSpec, ...]:
 #: bare handler name; binding-typed attributes use ``@{...}``.
 INTERACTIVE_SPECS: dict[tuple[str, str], tuple[InteractiveSpec, ...]] = {
     # --- binding fixtures on already-testable attributes (not promotions) --- #
-    ("Label", "text"): (_binding_initial("Label"),),
+    ("Label", "text"): (_binding_initial("Label"),) + _BINDING_SEMANTICS_TEXT,
     ("Button", "text"): (_binding_initial("Button"),),
     ("TextField", "text"): (_binding_twoway("TextField"),),
     ("TextView", "text"): (_binding_twoway("TextView"),),
     ("common", "visibility"): _visibility_sweep(),
+    ("common", "hidden"): (_negation_hidden(),),
     # --- promotions out of `untestable: callback` --- #
     ("common", "onclick"): (_callback_fire("Button", "onclick", FIRE_HANDLER, _tap_target()),),
     ("common", "onClick"): (_callback_fire("Button", "onClick", _FIRE_BINDING, _tap_target()),),

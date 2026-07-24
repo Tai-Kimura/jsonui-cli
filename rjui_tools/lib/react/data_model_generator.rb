@@ -796,16 +796,43 @@ module RjuiTools
           value.to_s.downcase
         else
           # For arrays and objects
-          if value.is_a?(Array)
-            '[]'
-          elsif value.is_a?(Hash)
-            '{}'
+          if value.is_a?(Array) || value.is_a?(Hash)
+            to_js_literal(value)
           elsif value.is_a?(String) && value =~ /^CollectionDataSource\(/
             "new #{value}"
           else
             value.to_s
           end
         end
+      end
+
+      # Render a data-section Hash/Array defaultValue as a real (recursive)
+      # JS literal so nested defaults like {name: "Grace"} actually seed the
+      # data map — binding_semantics fallbackPrecedence step 1 merges the
+      # data-section defaultValue BEFORE any binding resolves, so emptying
+      # these to {} / [] made `data.conformanceProfile?.name` render
+      # nothing. Keys stay as-is when they are valid JS identifiers (quoted
+      # otherwise); strings are double-quoted; bools/numbers stay bare.
+      def to_js_literal(value)
+        case value
+        when Hash
+          return '{}' if value.empty?
+          pairs = value.map { |k, v| "#{js_object_key(k)}: #{to_js_literal(v)}" }
+          "{ #{pairs.join(', ')} }"
+        when Array
+          "[#{value.map { |v| to_js_literal(v) }.join(', ')}]"
+        when String
+          value.to_json
+        when nil
+          'null'
+        else
+          value.to_s
+        end
+      end
+
+      def js_object_key(key)
+        k = key.to_s
+        k.match?(/\A[A-Za-z_$][\w$]*\z/) ? k : k.to_json
       end
 
       def to_pascal_case(str)

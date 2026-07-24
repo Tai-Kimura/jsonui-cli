@@ -240,8 +240,17 @@ def build_interactive_layout(
         # (frame semantics) — the mirror Label would intercept taps on the
         # target. Interactive fixtures therefore stack vertically.
         "orientation": "vertical",
+        # State vars (String-typed host contract surface, mirrored in the
+        # manifest `state.vars`) first, then layout-only DataVar seeds
+        # (native JSON defaults for binding-resolution fixtures; NOT part of
+        # the manifest state contract — they ride each runtime's production
+        # data-section defaults path).
         "data": [
             {"name": v.name, "class": v.cls, "defaultValue": v.default} for v in spec.vars
+        ]
+        + [
+            {"name": v.name, "class": v.cls, "defaultValue": v.default}
+            for v in spec.data_vars
         ],
         "child": children,
     }

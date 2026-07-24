@@ -84,7 +84,7 @@ module RjuiTools
 
         def build_tab_item(tab, index, selected_binding)
           raw_title = tab['title'] || "Tab #{index + 1}"
-          resolved_title = convert_binding(raw_title)
+          resolved_title = convert_text_binding(raw_title)
           title = if resolved_title != raw_title && resolved_title.include?('{')
                     resolved_title
                   else

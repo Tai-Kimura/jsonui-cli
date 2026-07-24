@@ -41,7 +41,7 @@ module RjuiTools
             <<~JSX.chomp
               #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center gap-3 cursor-pointer"#{style_attr}#{testid_attr}#{tag_attr}#{aria_disabled_attr}>
               #{indent_str(indent + 2)}#{switch_html}
-              #{indent_str(indent + 2)}<span>#{convert_binding(text)}</span>
+              #{indent_str(indent + 2)}<span>#{convert_text_binding(text)}</span>
               #{indent_str(indent)}</label>
             JSX
           end

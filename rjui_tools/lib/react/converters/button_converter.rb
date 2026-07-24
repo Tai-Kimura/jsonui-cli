@@ -19,7 +19,7 @@ module RjuiTools
           jsx = if attributes['partialAttributes'] && attributes['partialAttributes'].is_a?(Array) && !attributes['partialAttributes'].empty?
             render_partial_attributes_button(indent, id_attr, class_name, style_attr, on_click, disabled_attr, testid_attr, tag_attr)
           else
-            text = convert_binding(attributes['text'] || '')
+            text = convert_text_binding(attributes['text'] || '')
 
             # If href is specified, wrap with Next.js Link
             if attributes['href']

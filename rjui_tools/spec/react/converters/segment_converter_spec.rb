@@ -67,7 +67,7 @@ RSpec.describe RjuiTools::React::Converters::SegmentConverter do
     end
 
     # Regression: rjui-segment-items-string-resolution — items go through the
-    # same string resolution as Label.text (convert_binding), matching sjui's
+    # same string resolution as Label.text (convert_text_binding), matching sjui's
     # per-item get_text_with_string_manager.
     context 'items string resolution' do
       it 'resolves registered string keys via StringManager' do
@@ -95,8 +95,8 @@ RSpec.describe RjuiTools::React::Converters::SegmentConverter do
       it 'resolves binding items to data expressions' do
         converter = create_converter({ 'class' => 'Segment', 'items' => ['@{firstLabel}', '@{secondLabel}'] })
         result = converter.convert
-        expect(result).to include('>{data.firstLabel}</button>')
-        expect(result).to include('>{data.secondLabel}</button>')
+        expect(result).to include('>{`${data.firstLabel ?? ""}`}</button>')
+        expect(result).to include('>{`${data.secondLabel ?? ""}`}</button>')
       end
     end
 

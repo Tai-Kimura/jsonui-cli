@@ -1,0 +1,33 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/hidden__binding_negation.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.hidden (binding_negation)",
+    "description": "Interactive conformance fixture for 'hidden' on View (section: common, case: binding_negation). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "interactive",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "hidden__binding_negation",
+      "description": "Interactive conformance fixture for 'hidden' on View (section: common, case: binding_negation). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "notVisible",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

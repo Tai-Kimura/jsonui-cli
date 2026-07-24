@@ -98,7 +98,7 @@ RSpec.describe RjuiTools::React::Converters::ButtonConverter do
           'text' => '@{buttonLabel}'
         })
         result = converter.convert
-        expect(result).to include('{data.buttonLabel}')
+        expect(result).to include('{`${data.buttonLabel ?? ""}`}')
       end
     end
   end

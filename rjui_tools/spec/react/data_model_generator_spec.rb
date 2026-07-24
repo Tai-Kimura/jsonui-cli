@@ -129,6 +129,32 @@ RSpec.describe RjuiTools::React::DataModelGenerator do
     end
   end
 
+  # Regression: nested data-section defaults were emptied to {} / [] —
+  # binding_semantics fallbackPrecedence step 1 requires the data-section
+  # defaultValue to actually seed the data map before any binding resolves.
+  describe '#format_default_value with nested defaults' do
+    let(:generator) { described_class.new }
+
+    it 'emits a nested Hash default as a real JS object literal' do
+      value = { 'name' => 'Grace', 'meta' => { 'age' => 36 } }
+      result = generator.send(:format_default_value, value, 'Record<string, any>')
+      expect(result).to eq('{ name: "Grace", meta: { age: 36 } }')
+    end
+
+    it 'emits an Array default as a real JS array literal' do
+      value = [{ 'title' => 'A', 'done' => false }, { 'title' => 'B', 'done' => true }]
+      result = generator.send(:format_default_value, value, 'any[]')
+      expect(result).to eq('[{ title: "A", done: false }, { title: "B", done: true }]')
+    end
+
+    it 'keeps empty containers compact and quotes non-identifier keys' do
+      expect(generator.send(:format_default_value, {}, 'Record<string, any>')).to eq('{}')
+      expect(generator.send(:format_default_value, [], 'any[]')).to eq('[]')
+      expect(generator.send(:format_default_value, { 'a-b' => 1 }, 'Record<string, any>'))
+        .to eq('{ "a-b": 1 }')
+    end
+  end
+
   describe '#to_pascal_case' do
     let(:generator) { described_class.new }
 

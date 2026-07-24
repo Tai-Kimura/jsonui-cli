@@ -241,6 +241,65 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
     end
   end
 
+  # Canonical textStringification (shared/core/binding_semantics.json):
+  # TEXT sinks emit template literals so booleans render "true"/"false"
+  # and unresolved paths render "" (raw JSX {data.flag} renders booleans
+  # as NOTHING). Value contexts keep using #convert_binding.
+  describe '#convert_text_binding' do
+    let(:converter) { create_converter({ 'type' => 'View' }) }
+
+    it 'emits a whole-value binding as a stringifying template literal' do
+      expect(converter.send(:convert_text_binding, '@{x}')).to eq('{`${data.x ?? ""}`}')
+    end
+
+    it 'keeps optional chaining for dotted and indexed paths' do
+      expect(converter.send(:convert_text_binding, '@{profile.name}'))
+        .to eq('{`${data.profile?.name ?? ""}`}')
+      expect(converter.send(:convert_text_binding, '@{items[0].title}'))
+        .to eq('{`${data.items?.[0]?.title ?? ""}`}')
+    end
+
+    it 'composes an authored ?? default instead of the empty-string fallback' do
+      expect(converter.send(:convert_text_binding, '@{x ?? "Guest"}'))
+        .to eq('{`${data.x ?? "Guest"}`}')
+      expect(converter.send(:convert_text_binding, '@{count ?? 42}'))
+        .to eq('{`${data.count ?? 42}`}')
+    end
+
+    it 'treats a null default as unresolved (empty string)' do
+      expect(converter.send(:convert_text_binding, '@{x ?? null}')).to eq('{`${data.x ?? ""}`}')
+    end
+
+    it 'canonicalizes mixed text as one template literal run' do
+      expect(converter.send(:convert_text_binding, 'Hello @{name}!'))
+        .to eq('{`Hello ${data.name ?? ""}!`}')
+      expect(converter.send(:convert_text_binding, 'A @{a} and B @{b.c}'))
+        .to eq('{`A ${data.a ?? ""} and B ${data.b?.c ?? ""}`}')
+    end
+
+    it 'escapes backticks and ${ in literal segments' do
+      expect(converter.send(:convert_text_binding, 'a `t` ${n} @{x}'))
+        .to eq('{`a \`t\` \${n} ${data.x ?? ""}`}')
+    end
+
+    it 'renders negation in text as unresolved (binding-negation-context)' do
+      expect(converter.send(:convert_text_binding, '@{!flag}')).to eq('{``}')
+    end
+
+    it 'leaves plain text on the existing literal path' do
+      expect(converter.send(:convert_text_binding, 'plain text')).to eq('plain text')
+      expect(converter.send(:convert_text_binding, "line1\nline2")).to eq('<>line1<br />line2</>')
+    end
+
+    it 'routes strings.json keys to StringManager before binding logic' do
+      allow(converter).to receive(:convert_string_key)
+        .with('home_title')
+        .and_return('{StringManager.currentLanguage.homeTitle}')
+      expect(converter.send(:convert_text_binding, 'home_title'))
+        .to eq('{StringManager.currentLanguage.homeTitle}')
+    end
+  end
+
   describe '#convert_binding' do
     context 'with simple property binding' do
       it 'converts @{title} to {data.title}' do

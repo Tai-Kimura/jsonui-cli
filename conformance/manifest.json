@@ -10,10 +10,10 @@
   "schemaVersion": 2,
   "generatedFrom": "ced1604d18e80a4e70bfd938fcc8858d56f19892cc036b3fb0c0870d0991ce99",
   "counts": {
-    "fixtures": 650,
+    "fixtures": 664,
     "assertable": 29,
     "visual": 600,
-    "interactive": 21,
+    "interactive": 35,
     "skipped": 166,
     "promoted": {
       "callback": 12
@@ -929,6 +929,31 @@
       "layout": "fixtures/common/hidden__false.layout.json",
       "test": "fixtures/common/hidden__false.test.json",
       "state": null,
+      "promotedFrom": null
+    },
+    {
+      "id": "common/hidden__binding_negation",
+      "component": "common",
+      "attribute": "hidden",
+      "case": "binding_negation",
+      "class": "interactive",
+      "host": "View",
+      "writtenKey": "hidden",
+      "aliasOf": null,
+      "value": "@{!conformanceFlag}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/hidden__binding_negation.layout.json",
+      "test": "fixtures/common/hidden__binding_negation.test.json",
+      "state": {
+        "vars": [],
+        "handlers": []
+      },
       "promotedFrom": null
     },
     {
@@ -3118,6 +3143,343 @@
             "defaultValue": "Bound Initial"
           }
         ],
+        "handlers": []
+      },
+      "promotedFrom": null
+    },
+    {
+      "id": "Label/text__binding_mixed",
+      "component": "Label",
+      "attribute": "text",
+      "case": "binding_mixed",
+      "class": "interactive",
+      "host": "Label",
+      "writtenKey": "text",
+      "aliasOf": null,
+      "value": "Hello @{conformanceText}!",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/text__binding_mixed.layout.json",
+      "test": "fixtures/Label/text__binding_mixed.test.json",
+      "state": {
+        "vars": [
+          {
+            "name": "conformanceText",
+            "class": "String",
+            "defaultValue": "Bound Initial"
+          }
+        ],
+        "handlers": []
+      },
+      "promotedFrom": null
+    },
+    {
+      "id": "Label/text__binding_dot_path",
+      "component": "Label",
+      "attribute": "text",
+      "case": "binding_dot_path",
+      "class": "interactive",
+      "host": "Label",
+      "writtenKey": "text",
+      "aliasOf": null,
+      "value": "@{conformanceProfile.name}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/text__binding_dot_path.layout.json",
+      "test": "fixtures/Label/text__binding_dot_path.test.json",
+      "state": {
+        "vars": [],
+        "handlers": []
+      },
+      "promotedFrom": null
+    },
+    {
+      "id": "Label/text__binding_deep_path",
+      "component": "Label",
+      "attribute": "text",
+      "case": "binding_deep_path",
+      "class": "interactive",
+      "host": "Label",
+      "writtenKey": "text",
+      "aliasOf": null,
+      "value": "@{conformanceProfile.meta.age}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/text__binding_deep_path.layout.json",
+      "test": "fixtures/Label/text__binding_deep_path.test.json",
+      "state": {
+        "vars": [],
+        "handlers": []
+      },
+      "promotedFrom": null
+    },
+    {
+      "id": "Label/text__binding_bracket_index",
+      "component": "Label",
+      "attribute": "text",
+      "case": "binding_bracket_index",
+      "class": "interactive",
+      "host": "Label",
+      "writtenKey": "text",
+      "aliasOf": null,
+      "value": "@{conformanceItems[0].title}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/text__binding_bracket_index.layout.json",
+      "test": "fixtures/Label/text__binding_bracket_index.test.json",
+      "state": {
+        "vars": [],
+        "handlers": []
+      },
+      "promotedFrom": null
+    },
+    {
+      "id": "Label/text__binding_bracket_scalar",
+      "component": "Label",
+      "attribute": "text",
+      "case": "binding_bracket_scalar",
+      "class": "interactive",
+      "host": "Label",
+      "writtenKey": "text",
+      "aliasOf": null,
+      "value": "@{conformanceItems[1]}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/text__binding_bracket_scalar.layout.json",
+      "test": "fixtures/Label/text__binding_bracket_scalar.test.json",
+      "state": {
+        "vars": [],
+        "handlers": []
+      },
+      "promotedFrom": null
+    },
+    {
+      "id": "Label/text__binding_default_double",
+      "component": "Label",
+      "attribute": "text",
+      "case": "binding_default_double",
+      "class": "interactive",
+      "host": "Label",
+      "writtenKey": "text",
+      "aliasOf": null,
+      "value": "@{conformanceMissing ?? \"Guest\"}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/text__binding_default_double.layout.json",
+      "test": "fixtures/Label/text__binding_default_double.test.json",
+      "state": {
+        "vars": [],
+        "handlers": []
+      },
+      "promotedFrom": null
+    },
+    {
+      "id": "Label/text__binding_default_single",
+      "component": "Label",
+      "attribute": "text",
+      "case": "binding_default_single",
+      "class": "interactive",
+      "host": "Label",
+      "writtenKey": "text",
+      "aliasOf": null,
+      "value": "@{conformanceMissing ?? 'Guest'}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/text__binding_default_single.layout.json",
+      "test": "fixtures/Label/text__binding_default_single.test.json",
+      "state": {
+        "vars": [],
+        "handlers": []
+      },
+      "promotedFrom": null
+    },
+    {
+      "id": "Label/text__binding_default_number",
+      "component": "Label",
+      "attribute": "text",
+      "case": "binding_default_number",
+      "class": "interactive",
+      "host": "Label",
+      "writtenKey": "text",
+      "aliasOf": null,
+      "value": "@{conformanceMissing ?? 42}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/text__binding_default_number.layout.json",
+      "test": "fixtures/Label/text__binding_default_number.test.json",
+      "state": {
+        "vars": [],
+        "handlers": []
+      },
+      "promotedFrom": null
+    },
+    {
+      "id": "Label/text__binding_default_resolved",
+      "component": "Label",
+      "attribute": "text",
+      "case": "binding_default_resolved",
+      "class": "interactive",
+      "host": "Label",
+      "writtenKey": "text",
+      "aliasOf": null,
+      "value": "@{conformanceText ?? 'Guest'}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/text__binding_default_resolved.layout.json",
+      "test": "fixtures/Label/text__binding_default_resolved.test.json",
+      "state": {
+        "vars": [
+          {
+            "name": "conformanceText",
+            "class": "String",
+            "defaultValue": "Bound Initial"
+          }
+        ],
+        "handlers": []
+      },
+      "promotedFrom": null
+    },
+    {
+      "id": "Label/text__binding_unresolved_flat",
+      "component": "Label",
+      "attribute": "text",
+      "case": "binding_unresolved_flat",
+      "class": "interactive",
+      "host": "Label",
+      "writtenKey": "text",
+      "aliasOf": null,
+      "value": "(@{conformanceMissing})",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/text__binding_unresolved_flat.layout.json",
+      "test": "fixtures/Label/text__binding_unresolved_flat.test.json",
+      "state": {
+        "vars": [],
+        "handlers": []
+      },
+      "promotedFrom": null
+    },
+    {
+      "id": "Label/text__binding_unresolved_path",
+      "component": "Label",
+      "attribute": "text",
+      "case": "binding_unresolved_path",
+      "class": "interactive",
+      "host": "Label",
+      "writtenKey": "text",
+      "aliasOf": null,
+      "value": "(@{conformanceMissing.name})",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/text__binding_unresolved_path.layout.json",
+      "test": "fixtures/Label/text__binding_unresolved_path.test.json",
+      "state": {
+        "vars": [],
+        "handlers": []
+      },
+      "promotedFrom": null
+    },
+    {
+      "id": "Label/text__binding_number_int",
+      "component": "Label",
+      "attribute": "text",
+      "case": "binding_number_int",
+      "class": "interactive",
+      "host": "Label",
+      "writtenKey": "text",
+      "aliasOf": null,
+      "value": "@{conformanceCount}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/text__binding_number_int.layout.json",
+      "test": "fixtures/Label/text__binding_number_int.test.json",
+      "state": {
+        "vars": [],
+        "handlers": []
+      },
+      "promotedFrom": null
+    },
+    {
+      "id": "Label/text__binding_bool_text",
+      "component": "Label",
+      "attribute": "text",
+      "case": "binding_bool_text",
+      "class": "interactive",
+      "host": "Label",
+      "writtenKey": "text",
+      "aliasOf": null,
+      "value": "@{conformanceFlag}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/text__binding_bool_text.layout.json",
+      "test": "fixtures/Label/text__binding_bool_text.test.json",
+      "state": {
+        "vars": [],
         "handlers": []
       },
       "promotedFrom": null

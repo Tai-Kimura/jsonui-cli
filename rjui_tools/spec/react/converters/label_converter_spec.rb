@@ -31,7 +31,7 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
           'text' => '@{userName}'
         })
         result = converter.convert
-        expect(result).to include('{data.userName}')
+        expect(result).to include('{`${data.userName ?? ""}`}')
       end
     end
   end

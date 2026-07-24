@@ -94,7 +94,7 @@ module RjuiTools
 
         def resolve_hint_text(hint)
           return hint unless hint
-          resolved = convert_binding(hint)
+          resolved = convert_text_binding(hint)
           if resolved != hint && resolved.include?('{')
             resolved
           else

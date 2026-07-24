@@ -656,6 +656,81 @@ module RjuiTools
           convert_text_with_newlines(value)
         end
 
+        # TEXT-context binding conversion (Label text and equivalents
+        # rendered as JSX children). Canonical textStringification
+        # (shared/core/binding_semantics.json) needs bool => "true"/"false"
+        # and unresolved => "" — but raw JSX `{data.flag}` renders booleans
+        # as NOTHING, so text sinks emit a template literal instead: JS
+        # interpolation is exactly canonical (`${true}` => "true",
+        # `${5.0}` => "5", `${undefined ?? ""}` => "").
+        #
+        #   "@{x}"            => {`${data.x ?? ""}`}
+        #   "@{x ?? 'Guest'}" => {`${data.x ?? 'Guest'}`}
+        #   "Hello @{name}!"  => {`Hello ${data.name ?? ""}!`}
+        #
+        # strings.json keys still route to StringManager BEFORE binding
+        # logic, exactly like convert_binding. Non-text value contexts
+        # (visibility conditions, controlled inputs, handler refs, style
+        # bindings) must keep using convert_binding / raw references.
+        def convert_text_binding(value)
+          return value unless value.is_a?(String)
+
+          if (resolved = convert_string_key(value))
+            return resolved
+          end
+
+          return convert_text_with_newlines(value) unless value.match?(/@\{[^}]+\}/)
+
+          body = value.split(/(@\{[^}]+\})/).map do |part|
+            if (inner = part[/\A@\{([^}]+)\}\z/, 1])
+              expr = text_binding_expression(inner)
+              expr.nil? ? '' : "${#{expr}}"
+            else
+              escape_template_literal_segment(part)
+            end
+          end.join
+
+          "{`#{body}`}"
+        end
+
+        # JS expression for one '@{...}' occurrence in a text run.
+        # Canonical paths get the text-context unresolved default appended
+        # (`?? ""`) unless an authored '?? literal' already survived emit
+        # (a null default is dropped by add_viewmodel_data_prefix, so the
+        # canonical unresolved->emptyString still applies). '!' negation is
+        # a validator error in text (binding-negation-context): the token
+        # resolves as an ordinary unresolvable key => empty string (nil
+        # here). Non-canonical legacy expressions pass through unchanged —
+        # appending '?? ""' to arbitrary JS (e.g. `a || b`) can be a
+        # SyntaxError.
+        def text_binding_expression(inner)
+          expr = inner.to_s.strip
+          return nil if expr.start_with?('!')
+
+          path, default = expr.split(/\s*\?\?\s*/, 2)
+          bare = path.to_s.strip
+                     .sub(/\AviewModel\.data\./, '')
+                     .sub(/\AviewModel\./, '')
+                     .sub(/\Adata\./, '')
+          canonical = bare.match?(BINDING_PATH_RE) &&
+                      (default.nil? || default.strip.match?(BINDING_DEFAULT_LITERAL_RE))
+
+          js = add_viewmodel_data_prefix(expr)
+          return js unless canonical
+
+          js.include?(' ?? ') ? js : "#{js} ?? \"\""
+        end
+
+        # Literal text inside the generated template literal: backticks and
+        # '${' must be escaped so authored braces/backticks render verbatim;
+        # raw newlines become '\n' so the emitted JSX stays single-line.
+        # Block-form gsub is deliberate: in a plain replacement STRING the
+        # sequence backslash-backtick is the PREMATCH special sequence and
+        # would corrupt the output.
+        def escape_template_literal_segment(text)
+          text.gsub('`') { '\\`' }.gsub('${') { '\\${' }.gsub("\n") { '\\n' }
+        end
+
         # Convert text with newline characters to JSX with <br /> tags
         def convert_text_with_newlines(value)
           return value unless value.is_a?(String)
