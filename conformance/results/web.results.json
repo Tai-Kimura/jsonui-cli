@@ -1,6 +1,6 @@
 {
   "platform": "web",
-  "manifestHash": "18edf3354224d62bca07d35cb2b014ee2308e6375a623dd125aec35cfa334f56",
+  "manifestHash": "74914410de7db000802381324b886618274ed430574935e1c28304d496472612",
   "runner": {
     "name": "playwright",
     "version": "1.61.1"
@@ -232,6 +232,11 @@
     },
     {
       "id": "common/hidden__false",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/hidden__binding_negation",
       "status": "pass",
       "detail": ""
     },
@@ -775,6 +780,71 @@
     },
     {
       "id": "Label/text__binding_initial",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_mixed",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_dot_path",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_deep_path",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_bracket_index",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_bracket_scalar",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_default_double",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_default_single",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_default_number",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_default_resolved",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_unresolved_flat",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_unresolved_path",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_number_int",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_bool_text",
       "status": "pass",
       "detail": ""
     },
@@ -3252,6 +3322,12 @@
       "detail": "not applicable to web"
     },
     {
+      "id": "Radio/selectedValue__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Radio_selectedValue__static.png"
+    },
+    {
       "id": "CheckBox/label__static",
       "status": "pass",
       "detail": "",
@@ -3686,6 +3762,36 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/TabView_showLabels__true.png"
+    },
+    {
+      "id": "Embed/navigationMode__delegate_baseline",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Embed/navigationMode__isolated_root",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Embed/navigationMode__isolated_push",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Embed/navigationMode__isolated_pop_boundary",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Embed/params__nested_leaf",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Embed/params__nested_leaf_binding",
+      "status": "pass",
+      "detail": ""
     }
   ]
 }

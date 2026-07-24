@@ -1,6 +1,6 @@
 {
   "platform": "android",
-  "manifestHash": "4f679408f1028dcaa83afc8dbccc7ea72716b67c3e55bd46a4bc200c9c78d577",
+  "manifestHash": "74914410de7db000802381324b886618274ed430574935e1c28304d496472612",
   "runner": {
     "name": "uiautomator",
     "version": "2.3.0"
@@ -211,12 +211,32 @@
       "detail": ""
     },
     {
+      "id": "common/visibility__binding_visible",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/visibility__binding_invisible",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/visibility__binding_gone",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "common/hidden__true",
       "status": "pass",
       "detail": ""
     },
     {
       "id": "common/hidden__false",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/hidden__binding_negation",
       "status": "pass",
       "detail": ""
     },
@@ -463,22 +483,10 @@
       "screenshot": "artifacts/android/common_alignTopOfView__static.png"
     },
     {
-      "id": "common/alignTopOfView__alias_alignTopView",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/common_alignTopOfView__alias_alignTopView.png"
-    },
-    {
       "id": "common/alignBottomOfView__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/common_alignBottomOfView__static.png"
-    },
-    {
-      "id": "common/alignBottomOfView__alias_alignBottomView",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/common_alignBottomOfView__alias_alignBottomView.png"
     },
     {
       "id": "common/alignLeftOfView__static",
@@ -487,22 +495,10 @@
       "screenshot": "artifacts/android/common_alignLeftOfView__static.png"
     },
     {
-      "id": "common/alignLeftOfView__alias_alignLeftView",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/common_alignLeftOfView__alias_alignLeftView.png"
-    },
-    {
       "id": "common/alignRightOfView__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/common_alignRightOfView__static.png"
-    },
-    {
-      "id": "common/alignRightOfView__alias_alignRightView",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/common_alignRightOfView__alias_alignRightView.png"
     },
     {
       "id": "common/alignTopView__static",
@@ -556,6 +552,21 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/common_clipToBounds__true.png"
+    },
+    {
+      "id": "common/onclick__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/onClick__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/onLongPress__callback_fire",
+      "status": "pass",
+      "detail": ""
     },
     {
       "id": "common/tintColor__static",
@@ -661,6 +672,11 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/common_gravity__center.png"
+    },
+    {
+      "id": "common/onAppear__callback_fire",
+      "status": "pass",
+      "detail": ""
     },
     {
       "id": "common/alignment__topleading",
@@ -772,6 +788,76 @@
     },
     {
       "id": "Label/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_initial",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_mixed",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_dot_path",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_deep_path",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_bracket_index",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_bracket_scalar",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_default_double",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_default_single",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_default_number",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_default_resolved",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_unresolved_flat",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_unresolved_path",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_number_int",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding_bool_text",
       "status": "pass",
       "detail": ""
     },
@@ -993,6 +1079,11 @@
     },
     {
       "id": "TextField/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "TextField/text__binding_twoway",
       "status": "pass",
       "detail": ""
     },
@@ -1316,6 +1407,11 @@
       "screenshot": "artifacts/android/TextField_tintColor__static.png"
     },
     {
+      "id": "TextField/onTextChange__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "TextField/autocapitalizationType__static",
       "status": "pass",
       "detail": "",
@@ -1388,6 +1484,11 @@
     },
     {
       "id": "TextView/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "TextView/text__binding_twoway",
       "status": "pass",
       "detail": ""
     },
@@ -1632,6 +1733,11 @@
       "screenshot": "artifacts/android/TextView_keyboardType__static.png"
     },
     {
+      "id": "TextView/onTextChange__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "TextView/maxLength__static",
       "status": "skipped",
       "detail": "not applicable to android"
@@ -1756,6 +1862,11 @@
       "detail": ""
     },
     {
+      "id": "Button/text__binding_initial",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "Button/font__static",
       "status": "pass",
       "detail": "",
@@ -1802,12 +1913,6 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/Button_tapBackground__static.png"
-    },
-    {
-      "id": "Button/tapBackground__alias_highlightBackground",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Button_tapBackground__alias_highlightBackground.png"
     },
     {
       "id": "Button/highlightBackground__static",
@@ -2364,6 +2469,16 @@
       "detail": "not applicable to android"
     },
     {
+      "id": "SelectBox/onValueChange__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "SelectBox/onValueChanged__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "SelectBox/colorScheme__light",
       "status": "skipped",
       "detail": "not applicable to android"
@@ -2447,6 +2562,11 @@
       "detail": "not applicable to android"
     },
     {
+      "id": "Switch/onValueChange__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "Switch/labelPosition__leading",
       "status": "pass",
       "detail": "",
@@ -2520,6 +2640,11 @@
       "id": "Toggle/offTintColor__static",
       "status": "skipped",
       "detail": "not applicable to android"
+    },
+    {
+      "id": "Toggle/onValueChange__callback_fire",
+      "status": "pass",
+      "detail": ""
     },
     {
       "id": "Toggle/labelPosition__leading",
@@ -3188,6 +3313,12 @@
       "screenshot": "artifacts/android/Radio_iconColor__static.png"
     },
     {
+      "id": "Radio/selectedValue__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_selectedValue__static.png"
+    },
+    {
       "id": "CheckBox/label__static",
       "status": "pass",
       "detail": "",
@@ -3273,6 +3404,11 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/CheckBox_spacing__static.png"
+    },
+    {
+      "id": "CheckBox/onValueChange__callback_fire",
+      "status": "pass",
+      "detail": ""
     },
     {
       "id": "CheckBox/checkedColor__static",
@@ -3378,6 +3514,11 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/Check_spacing__static.png"
+    },
+    {
+      "id": "Check/onValueChange__callback_fire",
+      "status": "pass",
+      "detail": ""
     },
     {
       "id": "Check/checkedColor__static",
@@ -3622,6 +3763,36 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/TabView_showLabels__true.png"
+    },
+    {
+      "id": "Embed/navigationMode__delegate_baseline",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Embed/navigationMode__isolated_root",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Embed/navigationMode__isolated_push",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Embed/navigationMode__isolated_pop_boundary",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Embed/params__nested_leaf",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Embed/params__nested_leaf_binding",
+      "status": "pass",
+      "detail": ""
     }
   ]
 }

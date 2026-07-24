@@ -1,5 +1,5 @@
 {
-  "manifestHash" : "4f679408f1028dcaa83afc8dbccc7ea72716b67c3e55bd46a4bc200c9c78d577",
+  "manifestHash" : "74914410de7db000802381324b886618274ed430574935e1c28304d496472612",
   "platform" : "ios",
   "results" : [
     {
@@ -208,12 +208,32 @@
     },
     {
       "detail" : "",
+      "id" : "common/visibility__binding_visible",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/visibility__binding_invisible",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/visibility__binding_gone",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/hidden__true",
       "status" : "pass"
     },
     {
       "detail" : "",
       "id" : "common/hidden__false",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/hidden__binding_negation",
       "status" : "pass"
     },
     {
@@ -460,20 +480,8 @@
     },
     {
       "detail" : "",
-      "id" : "common/alignTopOfView__alias_alignTopView",
-      "screenshot" : "artifacts/ios/common_alignTopOfView__alias_alignTopView.png",
-      "status" : "pass"
-    },
-    {
-      "detail" : "",
       "id" : "common/alignBottomOfView__static",
       "screenshot" : "artifacts/ios/common_alignBottomOfView__static.png",
-      "status" : "pass"
-    },
-    {
-      "detail" : "",
-      "id" : "common/alignBottomOfView__alias_alignBottomView",
-      "screenshot" : "artifacts/ios/common_alignBottomOfView__alias_alignBottomView.png",
       "status" : "pass"
     },
     {
@@ -484,20 +492,8 @@
     },
     {
       "detail" : "",
-      "id" : "common/alignLeftOfView__alias_alignLeftView",
-      "screenshot" : "artifacts/ios/common_alignLeftOfView__alias_alignLeftView.png",
-      "status" : "pass"
-    },
-    {
-      "detail" : "",
       "id" : "common/alignRightOfView__static",
       "screenshot" : "artifacts/ios/common_alignRightOfView__static.png",
-      "status" : "pass"
-    },
-    {
-      "detail" : "",
-      "id" : "common/alignRightOfView__alias_alignRightView",
-      "screenshot" : "artifacts/ios/common_alignRightOfView__alias_alignRightView.png",
       "status" : "pass"
     },
     {
@@ -551,6 +547,21 @@
       "detail" : "",
       "id" : "common/clipToBounds__true",
       "screenshot" : "artifacts/ios/common_clipToBounds__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/onclick__callback_fire",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/onClick__callback_fire",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/onLongPress__callback_fire",
       "status" : "pass"
     },
     {
@@ -657,6 +668,11 @@
       "id" : "common/gravity__center",
       "screenshot" : "artifacts/ios/common_gravity__center.png",
       "status" : "pass"
+    },
+    {
+      "detail" : "mode compose not hosted (SwiftUI dynamic host)",
+      "id" : "common/onAppear__callback_fire",
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -775,6 +791,76 @@
     {
       "detail" : "",
       "id" : "Label/text__static",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/text__binding_initial",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/text__binding_mixed",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/text__binding_dot_path",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/text__binding_deep_path",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/text__binding_bracket_index",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/text__binding_bracket_scalar",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/text__binding_default_double",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/text__binding_default_single",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/text__binding_default_number",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/text__binding_default_resolved",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/text__binding_unresolved_flat",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/text__binding_unresolved_path",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/text__binding_number_int",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/text__binding_bool_text",
       "status" : "pass"
     },
     {
@@ -996,6 +1082,11 @@
     {
       "detail" : "",
       "id" : "TextField/text__static",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/text__binding_twoway",
       "status" : "pass"
     },
     {
@@ -1324,6 +1415,11 @@
     },
     {
       "detail" : "",
+      "id" : "TextField/onTextChange__callback_fire",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "TextField/autocapitalizationType__static",
       "screenshot" : "artifacts/ios/TextField_autocapitalizationType__static.png",
       "status" : "pass"
@@ -1398,6 +1494,11 @@
     {
       "detail" : "",
       "id" : "TextView/text__static",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/text__binding_twoway",
       "status" : "pass"
     },
     {
@@ -1641,6 +1742,11 @@
       "status" : "pass"
     },
     {
+      "detail" : "",
+      "id" : "TextView/onTextChange__callback_fire",
+      "status" : "pass"
+    },
+    {
       "detail" : "not applicable to ios",
       "id" : "TextView/maxLength__static",
       "status" : "skipped"
@@ -1766,6 +1872,11 @@
     },
     {
       "detail" : "",
+      "id" : "Button/text__binding_initial",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Button/font__static",
       "screenshot" : "artifacts/ios/Button_font__static.png",
       "status" : "pass"
@@ -1810,12 +1921,6 @@
       "detail" : "",
       "id" : "Button/tapBackground__static",
       "screenshot" : "artifacts/ios/Button_tapBackground__static.png",
-      "status" : "pass"
-    },
-    {
-      "detail" : "",
-      "id" : "Button/tapBackground__alias_highlightBackground",
-      "screenshot" : "artifacts/ios/Button_tapBackground__alias_highlightBackground.png",
       "status" : "pass"
     },
     {
@@ -2376,6 +2481,16 @@
       "status" : "skipped"
     },
     {
+      "detail" : "",
+      "id" : "SelectBox/onValueChange__callback_fire",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/onValueChanged__callback_fire",
+      "status" : "pass"
+    },
+    {
       "detail" : "not applicable to ios",
       "id" : "SelectBox/colorScheme__light",
       "status" : "skipped"
@@ -2459,6 +2574,11 @@
       "status" : "skipped"
     },
     {
+      "detail" : "",
+      "id" : "Switch/onValueChange__callback_fire",
+      "status" : "pass"
+    },
+    {
       "detail" : "not applicable to ios",
       "id" : "Switch/labelPosition__leading",
       "status" : "skipped"
@@ -2530,6 +2650,11 @@
       "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
       "id" : "Toggle/offTintColor__static",
       "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "Toggle/onValueChange__callback_fire",
+      "status" : "pass"
     },
     {
       "detail" : "not applicable to ios",
@@ -3204,6 +3329,12 @@
     },
     {
       "detail" : "",
+      "id" : "Radio/selectedValue__static",
+      "screenshot" : "artifacts/ios/Radio_selectedValue__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "CheckBox/label__static",
       "screenshot" : "artifacts/ios/CheckBox_label__static.png",
       "status" : "pass"
@@ -3287,6 +3418,11 @@
       "detail" : "",
       "id" : "CheckBox/spacing__static",
       "screenshot" : "artifacts/ios/CheckBox_spacing__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/onValueChange__callback_fire",
       "status" : "pass"
     },
     {
@@ -3392,6 +3528,11 @@
       "detail" : "",
       "id" : "Check/spacing__static",
       "screenshot" : "artifacts/ios/Check_spacing__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Check/onValueChange__callback_fire",
       "status" : "pass"
     },
     {
@@ -3641,10 +3782,40 @@
       "id" : "TabView/showLabels__true",
       "screenshot" : "artifacts/ios/TabView_showLabels__true.png",
       "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Embed/navigationMode__delegate_baseline",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Embed/navigationMode__isolated_root",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Embed/navigationMode__isolated_push",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Embed/navigationMode__isolated_pop_boundary",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Embed/params__nested_leaf",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Embed/params__nested_leaf_binding",
+      "status" : "pass"
     }
   ],
   "runner" : {
     "name" : "xcuitest",
-    "version" : "ios-18.6"
+    "version" : "ios-26.5"
   }
 }
