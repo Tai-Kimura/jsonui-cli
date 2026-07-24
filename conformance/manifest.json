@@ -8,13 +8,13 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "f583d391a72ddb5156e31014688200cec2b605e9e59d2ef399f715c1c41901aa",
+  "generatedFrom": "d5e6c3d0746e45a6df350bc3dd672e5b56ffd81a9a0869b2c8713de9a2b2cb49",
   "counts": {
     "fixtures": 672,
     "assertable": 36,
     "visual": 600,
     "interactive": 36,
-    "skipped": 166,
+    "skipped": 167,
     "promoted": {
       "callback": 12
     }
@@ -15012,6 +15012,11 @@
     {
       "component": "common",
       "attribute": "partial",
+      "reason": "metadata (not rendered)"
+    },
+    {
+      "component": "common",
+      "attribute": "platform",
       "reason": "metadata (not rendered)"
     },
     {

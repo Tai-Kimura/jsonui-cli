@@ -102,6 +102,9 @@ METADATA_ATTRS = {
     "type",
     "generatedBy",
     "partial",
+    # build directive consumed (and removed) at distribution time by
+    # PlatformResolver — never reaches any renderer
+    "platform",
     "propertyName",
     "binding_id",
     "binding_group",
