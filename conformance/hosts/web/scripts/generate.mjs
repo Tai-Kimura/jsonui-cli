@@ -75,6 +75,36 @@ webFixtures.forEach((fixture, i) => {
 });
 console.log(`[generate] copied ${entries.length} web-applicable fixture layouts`);
 
+// Companion embedded-screen layouts (Embed fixtures) keep their BARE names
+// so the fixture's `screen: "embed_root"` reference resolves to the
+// generated EmbedRoot component (`@/generated/components/EmbedRoot`).
+const companionPaths = new Set();
+for (const fixture of webFixtures) {
+  for (const companion of fixture.companions ?? []) companionPaths.add(companion);
+}
+for (const companion of companionPaths) {
+  const base = path.basename(companion).replace(/\.layout\.json$/, '.json');
+  fs.copyFileSync(path.join(conformanceDir, companion), path.join(layoutsPagesDir, base));
+}
+if (companionPaths.size > 0) {
+  console.log(`[generate] copied ${companionPaths.size} companion embedded-screen layout(s)`);
+}
+
+// Embed fixtures need the EmbedContainer runtime helper (normally emitted
+// into consumer projects by `rjui init`). Vendor the current template so
+// the host always matches the codegen it just ran (template v2 for
+// isolated). Emitted as a build artifact next to src/, gitignored.
+const extensionsDir = path.join(hostDir, 'src/components/extensions');
+fs.rmSync(extensionsDir, { recursive: true, force: true });
+if (companionPaths.size > 0) {
+  fs.mkdirSync(extensionsDir, { recursive: true });
+  fs.copyFileSync(
+    path.join(rjuiDir, 'lib/react/templates/EmbedContainer.tsx'),
+    path.join(extensionsDir, 'EmbedContainer.tsx')
+  );
+  console.log('[generate] vendored EmbedContainer.tsx template into src/components/extensions/');
+}
+
 // ---------------------------------------------------------------- rjui build
 const rjuiBin = path.join(rjuiDir, 'bin/rjui');
 if (!fs.existsSync(rjuiBin)) {

@@ -39,7 +39,12 @@ class EmbedFixturesTest(unittest.TestCase):
         layout = self.by_path[entry["layout"]]
         self.assertEqual(layout["data"][0]["name"], "hostValue")
         embed = layout["child"][1]
-        self.assertEqual(embed["params"], {"profile": {"name": "@{hostValue}"}})
+        # Mixed literal + binding tree; meta present because the embedded
+        # layout dereferences profile.meta.age unconditionally.
+        self.assertEqual(
+            embed["params"],
+            {"profile": {"name": "@{hostValue}", "meta": {"age": "36"}}},
+        )
         test = self.by_path[entry["test"]]
         steps = test["cases"][0]["steps"]
         self.assertIn(

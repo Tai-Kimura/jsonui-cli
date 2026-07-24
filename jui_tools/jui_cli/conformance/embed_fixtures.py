@@ -71,6 +71,16 @@ def _companion_params(source_label: str) -> dict:
         "width": "matchParent",
         "height": "wrapContent",
         "orientation": "vertical",
+        # Declared so the web static codegen types the dot-path bindings
+        # (class Object → Record<string, any>); the nested params tree
+        # handed by the host replaces this default wholesale.
+        "data": [
+            {
+                "name": "profile",
+                "class": "Object",
+                "defaultValue": {"name": "", "meta": {"age": ""}},
+            }
+        ],
         "child": [
             {"type": "Label", "id": PARAMS_NAME_ID, "text": "@{profile.name}"},
             {"type": "Label", "id": PARAMS_AGE_ID, "text": "@{profile.meta.age}"},
@@ -258,19 +268,24 @@ def build_embed_fixtures(source_label: str) -> tuple[list[tuple[str, dict]], lis
         ],
         companions=params_companion,
     )
+    # Mixed literal + binding tree: the params object must be complete
+    # (meta included) because the embedded layout dereferences
+    # profile.meta.age unconditionally — dot-chains over object-typed data
+    # are not null-safe in generated code.
     _add(
         attribute="params",
         case="nested_leaf_binding",
-        value={"profile": {"name": "@{hostValue}"}},
+        value={"profile": {"name": "@{hostValue}", "meta": {"age": "36"}}},
         layout=_host_layout(
             source_label,
             screen="embed_params",
             navigation_mode="delegate",
-            params={"profile": {"name": "@{hostValue}"}},
+            params={"profile": {"name": "@{hostValue}", "meta": {"age": "36"}}},
             data=[{"name": "hostValue", "class": "String", "defaultValue": "from-host"}],
         ),
         asserts=[
             {"assert": "text", "id": PARAMS_NAME_ID, "equals": "from-host"},
+            {"assert": "text", "id": PARAMS_AGE_ID, "equals": "36"},
             {"assert": "text", "id": HOST_MARKER_ID, "equals": HOST_MARKER_TEXT},
         ],
         companions=params_companion,

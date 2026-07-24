@@ -30,6 +30,11 @@
         },
         {
           "assert": "text",
+          "id": "embed-params-age",
+          "equals": "36"
+        },
+        {
+          "assert": "text",
           "id": "host-marker",
           "equals": "host"
         }

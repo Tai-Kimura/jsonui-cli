@@ -129,7 +129,7 @@ export type EmbedScreenResolver = (entry: EmbedStackEntry) => React.ReactNode;
  * Unknown screens render an explicit error box — never a silent no-op.
  */
 export function buildEmbedScreenResolver(
-  table: Record<string, React.ComponentType>,
+  table: Record<string, React.ComponentType<{ data?: Record<string, unknown> }>>,
 ): EmbedScreenResolver {
   return (entry) => {
     const Component = table[entry.screen];
@@ -140,7 +140,10 @@ export function buildEmbedScreenResolver(
         </div>
       );
     }
-    return <Component />;
+    // Pushed entries receive their params as the `data` prop (generated
+    // components shallow-merge it over their Data defaults); VM-backed
+    // screens additionally receive them via useEmbeddedInitParams.
+    return Object.keys(entry.params).length > 0 ? <Component data={entry.params} /> : <Component />;
   };
 }
 
@@ -238,9 +241,14 @@ export const EmbedContainer: React.FC<EmbedContainerProps> = ({
       >
         {/* The embed root stays mounted underneath pushed entries so its
             hook state survives push/pop round trips (parity with iOS
-            NavigationStack / Android SaveableStateHolder). */}
+            NavigationStack / Android SaveableStateHolder). A single valid
+            child element additionally receives `params` as its `data` prop
+            (shallow-merged over the generated Data defaults) so params
+            reach the embedded screen even without VM wiring. */}
         <div style={top !== null ? { display: 'none' } : undefined} data-embed-stack-level="root">
-          {children}
+          {React.isValidElement(children) && params && Object.keys(params).length > 0
+            ? React.cloneElement(children as React.ReactElement<{ data?: Record<string, unknown> }>, { data: params })
+            : children}
         </div>
         {isolatedContent !== null && (
           <div data-embed-stack-level={stack.length}>{isolatedContent}</div>

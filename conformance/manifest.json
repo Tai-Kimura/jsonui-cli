@@ -14317,7 +14317,10 @@
       "aliasOf": null,
       "value": {
         "profile": {
-          "name": "@{hostValue}"
+          "name": "@{hostValue}",
+          "meta": {
+            "age": "36"
+          }
         }
       },
       "platforms": [

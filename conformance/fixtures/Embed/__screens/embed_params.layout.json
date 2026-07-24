@@ -12,6 +12,18 @@
   "width": "matchParent",
   "height": "wrapContent",
   "orientation": "vertical",
+  "data": [
+    {
+      "name": "profile",
+      "class": "Object",
+      "defaultValue": {
+        "name": "",
+        "meta": {
+          "age": ""
+        }
+      }
+    }
+  ],
   "child": [
     {
       "type": "Label",

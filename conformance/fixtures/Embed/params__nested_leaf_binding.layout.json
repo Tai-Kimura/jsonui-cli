@@ -34,7 +34,10 @@
       "navigationMode": "delegate",
       "params": {
         "profile": {
-          "name": "@{hostValue}"
+          "name": "@{hostValue}",
+          "meta": {
+            "age": "36"
+          }
         }
       }
     }
