@@ -1036,6 +1036,7 @@
     },
     "addMediaAction": {
       "type": "object",
+      "description": "Seed media fixtures into the device/library so the app can pick them. Android: inserted into the gallery (MediaStore); iOS: seeded into the photo library via PhotoKit — SIMULATOR ONLY (on a real device seeded assets would remain in the user's photo library) and the UITest runner needs a photos-add pre-grant (`xcrun simctl privacy <udid> grant photos-add <uitest-bundle-id>.xctrunner` — the jsonui-test CLI does this automatically); Web: set on a file input. Seeding accumulates across runs on the same simulator/emulator — assert on existence or app state after picking, never on counts. Supported types: png/jpg/jpeg/gif (photo) and mp4 (video)",
       "properties": {
         "action": {
           "const": "addMedia"
@@ -1047,7 +1048,7 @@
             "minLength": 1
           },
           "minItems": 1,
-          "description": "Media file paths (relative to test file). Android: inserted into the device gallery; Web: set on a file input. Not supported on iOS"
+          "description": "Media fixture paths. Android: resolved against the on-device media fixtures dir (files must be pushed there beforehand); iOS: resolved inside the UITest bundle, which is flat — use basenames (a subdirectory path that works on Android falls back to its basename on iOS); Web: resolved relative to the test file and set on a file input"
         },
         "label": {
           "$ref": "#/definitions/label"

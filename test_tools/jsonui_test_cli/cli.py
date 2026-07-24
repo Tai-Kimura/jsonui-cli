@@ -108,6 +108,23 @@ def _load_test_config(explicit_path=None):
     return {}, None
 
 
+# addMedia fixture types shared by the iOS/Android drivers.
+MEDIA_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".mp4")
+
+
+def _resolve_media_files(test_config, project_root):
+    """Collect addMedia fixtures from `test.mediaDir` (default tests/media)."""
+    media_dir = Path(test_config.get("mediaDir") or "tests/media")
+    if not media_dir.is_absolute():
+        media_dir = project_root / media_dir
+    if not media_dir.is_dir():
+        return []
+    return sorted(
+        p for p in media_dir.rglob("*")
+        if p.is_file() and p.suffix.lower() in MEDIA_EXTENSIONS
+    )
+
+
 def _install_validated_tests(valid_test_files, config_path):
     """Flatten-install valid .test.json files per config. Returns exit code."""
     from .install import resolve_targets, flatten_install
@@ -121,11 +138,12 @@ def _install_validated_tests(valid_test_files, config_path):
     if not targets:
         return 0  # no install destinations declared → validate-only
 
-    report = flatten_install(valid_test_files, targets)
+    media_files = _resolve_media_files(test_config, project_root)
+    report = flatten_install(valid_test_files, targets, media_files=media_files)
 
     if report.has_collision:
         print(f"\n{'='*50}")
-        print("Install ABORTED: duplicate test file names (flat layout needs unique names per target):")
+        print("Install ABORTED: duplicate file names (flat layout needs unique names per target):")
         for platform, name, srcs in report.collisions:
             print(f"  [COLLISION] {name} ({platform})")
             for src in srcs:
@@ -147,6 +165,9 @@ def _install_validated_tests(valid_test_files, config_path):
         flows = report.skipped_flows.get(platform, [])
         if flows:
             details.append(f"{len(flows)} flow(s) dropped: {', '.join(flows)}")
+        media = len(report.media_copied.get(platform, []))
+        if media:
+            details.append(f"{media} media file(s) → media/")
         detail = f" ({', '.join(details)})" if details else ""
         print(f"  {platform}: {installed} test(s){detail} → {dest}")
     return 0
@@ -517,6 +538,144 @@ def cmd_artifacts_status(args):
     return 0
 
 
+def _steps_use_add_media(steps):
+    """True if any step (or nested repeat/retry step) is an addMedia step
+    reachable on iOS (i.e. not gated off ios by its own `when.platform`)."""
+    for step in steps or []:
+        if not isinstance(step, dict):
+            continue
+        when = step.get("when")
+        when_platform = when.get("platform") if isinstance(when, dict) else None
+        if when_platform is not None:
+            allowed = when_platform if isinstance(when_platform, list) else [when_platform]
+            if "ios" not in allowed and "all" not in allowed:
+                continue
+        if step.get("action") == "addMedia":
+            return True
+        if _steps_use_add_media(step.get("steps")):
+            return True
+    return False
+
+
+def _platform_reaches_ios(value):
+    """Mirror of the install-time platform-membership rules, for target ios."""
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value in ("all", "ios")
+    if isinstance(value, list):
+        return "ios" in value
+    return True
+
+
+def _test_uses_add_media_on_ios(data):
+    """True if a parsed test file can execute an addMedia step on iOS."""
+    if not isinstance(data, dict):
+        return False
+    if not _platform_reaches_ios(data.get("platform")):
+        return False
+    if data.get("type") == "screen":
+        for case in data.get("cases") or []:
+            if not isinstance(case, dict):
+                continue
+            if not _platform_reaches_ios(case.get("platform")):
+                continue
+            if _steps_use_add_media(case.get("steps")):
+                return True
+        return False
+    return any(_steps_use_add_media(data.get(k)) for k in ("setup", "steps", "teardown"))
+
+
+def cmd_pregrant(args):
+    """Pre-grant photo-library add access to the iOS UITest runner.
+
+    addMedia on iOS seeds the photo library from the xctrunner process, which
+    needs photos-add authorization. Granting it up front (before xcodebuild)
+    means no permission alert ever appears. Probed on iOS 18.6: the service
+    must be `photos-add` — `photos` is written to TCC but not honored for the
+    runner — and the grant works pre-install and survives reinstalls.
+    """
+    import subprocess
+
+    test_config, cfg_path = _load_test_config(getattr(args, "config", None))
+
+    # 1) Scan for addMedia usage reachable on iOS.
+    paths = getattr(args, "paths", None) or []
+    files = []
+    if paths:
+        for p in paths:
+            pp = Path(p)
+            if pp.is_dir():
+                files.extend(sorted(pp.rglob("*.test.json")))
+            elif pp.exists():
+                files.append(pp)
+            else:
+                print(f"Warning: Path not found: {p}", file=sys.stderr)
+    else:
+        root = cfg_path.parent if cfg_path else Path(".")
+        tests_dir = root / "tests"
+        if tests_dir.is_dir():
+            files = sorted(tests_dir.rglob("*.test.json"))
+
+    uses = []
+    for f in files:
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if _test_uses_add_media_on_ios(data):
+            uses.append(f)
+    if not uses and not getattr(args, "force", False):
+        print("pregrant: no iOS-reachable addMedia steps found — nothing to grant")
+        return 0
+
+    # 2) UITest bundle id → runner id (<bundle-id>.xctrunner).
+    bundle_id = getattr(args, "bundle_id", None)
+    if not bundle_id:
+        ios_entry = (test_config.get("install") or {}).get("ios")
+        if isinstance(ios_entry, dict):
+            bundle_id = ios_entry.get("uitestBundleId") or ios_entry.get("uitest_bundle_id")
+    if not bundle_id:
+        print("pregrant: UITest bundle id unknown — pass --bundle-id or set "
+              "test.install.ios.uitestBundleId in the config", file=sys.stderr)
+        return 1
+    runner_id = bundle_id if bundle_id.endswith(".xctrunner") else bundle_id + ".xctrunner"
+
+    # 3) Simulator UDID (simctl privacy needs a booted device).
+    udid = getattr(args, "udid", None)
+    if not udid:
+        try:
+            out = subprocess.run(
+                ["xcrun", "simctl", "list", "devices", "booted", "-j"],
+                capture_output=True, text=True, check=True).stdout
+            devices = [d for devs in json.loads(out).get("devices", {}).values()
+                       for d in devs if d.get("state") == "Booted"]
+        except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as e:
+            print(f"pregrant: could not list booted simulators: {e}", file=sys.stderr)
+            return 1
+        if len(devices) == 1:
+            udid = devices[0]["udid"]
+        elif not devices:
+            print("pregrant: no booted simulator — boot one first "
+                  "(simctl privacy needs a booted device)", file=sys.stderr)
+            return 1
+        else:
+            print("pregrant: multiple booted simulators — pass --udid:", file=sys.stderr)
+            for d in devices:
+                print(f"  {d['udid']}  {d.get('name', '?')}", file=sys.stderr)
+            return 1
+
+    # 4) Grant.
+    cmd = ["xcrun", "simctl", "privacy", udid, "grant", "photos-add", runner_id]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        print(f"pregrant: {' '.join(cmd)} failed: {proc.stderr.strip()}", file=sys.stderr)
+        return 1
+    print(f"pregrant: granted photos-add to {runner_id} on {udid}"
+          f" ({len(uses)} test file(s) use addMedia)")
+    return 0
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -733,6 +892,25 @@ def main():
     artifacts_status_parser.add_argument("--json", action="store_true",
                                          help="Print status as a single JSON object")
 
+    # Pregrant command (iOS addMedia)
+    pregrant_parser = subparsers.add_parser(
+        "pregrant",
+        help="Pre-grant simulator photo-library add access to the iOS UITest "
+             "runner so addMedia never prompts (run before xcodebuild)")
+    pregrant_parser.add_argument(
+        "paths", nargs="*",
+        help="Test files/dirs to scan for addMedia (default: tests/)")
+    pregrant_parser.add_argument(
+        "--bundle-id",
+        help="UITest target bundle id ('.xctrunner' appended automatically; "
+             "default: test.install.ios.uitestBundleId from config)")
+    pregrant_parser.add_argument(
+        "--udid", help="Simulator UDID (default: the single booted simulator)")
+    pregrant_parser.add_argument("--config", help="Config file (default: jui.config.json)")
+    pregrant_parser.add_argument(
+        "--force", action="store_true",
+        help="Grant even when no addMedia usage is found")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -757,6 +935,8 @@ def main():
             return cmd_artifacts_status(args)
         artifacts_parser.print_help()
         return 0
+    elif args.command == "pregrant":
+        return cmd_pregrant(args)
     elif args.command in ["generate", "g"]:
         # Check for subcommand
         if hasattr(args, 'generate_type') and args.generate_type:

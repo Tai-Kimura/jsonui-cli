@@ -154,10 +154,14 @@ SUPPORTED_ACTIONS = {
     },
     "addMedia": {
         "description": "Provide media/files to the app: Android inserts into the device "
-                       "gallery; Web sets the files on a file input (step 'id' targets the "
+                       "gallery (paths resolve against the on-device media fixtures dir); "
+                       "iOS seeds the simulator photo library via PhotoKit (simulator only; "
+                       "paths resolve inside the UITest bundle — use basenames; the runner "
+                       "needs a photos-add pre-grant, see `jsonui-test pregrant`); "
+                       "Web sets the files on a file input (step 'id' targets the "
                        "input or an element containing one; without 'id', the page's first "
-                       "input[type=file]). Paths resolve relative to the test file. "
-                       "Not supported on iOS.",
+                       "input[type=file]; paths resolve relative to the test file). "
+                       "Seeding accumulates across runs — assert existence/app state, not counts.",
         "required": ["paths"],
         "optional": ["id", "timeout"]
     },
@@ -354,7 +358,8 @@ PARAMETER_DESCRIPTIONS = {
     "width": "Viewport width in logical pixels for setViewport (positive integer)",
     "height": "Viewport height in logical pixels for setViewport (positive integer)",
     "orientation": "Target orientation for setOrientation: portrait or landscape",
-    "paths": "Media file paths for addMedia (relative to test file)",
+    "paths": "Media file paths for addMedia (Android: device media fixtures dir; "
+             "iOS: UITest bundle, basenames recommended; Web: relative to test file)",
     "cropId": "Element id whose bounding box crops the screenshot before comparing",
     "threshold": "Required similarity percentage for screenshot assertion (0-100, default 98.0)",
     "hookArgs": "Positional arguments for emitHook, passed to the registered browser-side hook"

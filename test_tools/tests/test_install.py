@@ -598,5 +598,62 @@ class TestValidateInstallIntegration:
         assert not (tmp_path / "ios/GeneratedTests").exists()
 
 
+class TestMediaInstall:
+    """addMedia fixtures: iOS targets get a CLI-owned media/ subdir."""
+
+    def _media(self, tmp_path, name, content=b"\x89PNG"):
+        p = tmp_path / "tests/media" / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(content)
+        return p
+
+    def test_ios_gets_media_android_web_do_not(self, tmp_path):
+        src = _write_test(tmp_path / "tests/screens/login/login.test.json")
+        m = self._media(tmp_path, "icon.png")
+        ios, android, web = tmp_path / "ios", tmp_path / "android", tmp_path / "web"
+
+        report = flatten_install(
+            [src], [("ios", ios), ("android", android), ("web", web)],
+            media_files=[m])
+
+        assert (ios / "media/icon.png").exists()
+        assert not (android / "media").exists()
+        assert not (web / "media").exists()
+        assert report.media_copied.get("ios") == [str(ios / "media/icon.png")]
+
+    def test_media_full_sync_removes_stale(self, tmp_path):
+        src = _write_test(tmp_path / "tests/screens/login/login.test.json")
+        ios = tmp_path / "ios"
+        stale = ios / "media/gone.mp4"
+        stale.parent.mkdir(parents=True)
+        stale.write_bytes(b"old")
+        m = self._media(tmp_path, "icon.png")
+
+        report = flatten_install([src], [("ios", ios)], media_files=[m])
+
+        assert not stale.exists()
+        assert (ios / "media/icon.png").exists()
+        assert report.media_removed == 1
+
+    def test_media_basename_collision_aborts(self, tmp_path):
+        src = _write_test(tmp_path / "tests/screens/login/login.test.json")
+        a = self._media(tmp_path, "a/dup.png")
+        b = self._media(tmp_path, "b/dup.png")
+        ios = tmp_path / "ios"
+
+        report = flatten_install([src], [("ios", ios)], media_files=[a, b])
+
+        assert report.has_collision
+        assert ("media", "dup.png", [str(a), str(b)]) in report.collisions
+        assert not ios.exists()  # nothing written on collision
+
+    def test_no_media_files_leaves_dirs_untouched(self, tmp_path):
+        src = _write_test(tmp_path / "tests/screens/login/login.test.json")
+        ios = tmp_path / "ios"
+        report = flatten_install([src], [("ios", ios)])
+        assert not (ios / "media").exists()
+        assert report.media_copied == {}
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

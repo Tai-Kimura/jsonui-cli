@@ -41,6 +41,8 @@ class InstallReport:
     skipped_files: dict = field(default_factory=dict)  # platform -> [source_str]
     pruned_cases: dict = field(default_factory=dict)   # platform -> [(source_str, case_name)]
     skipped_flows: dict = field(default_factory=dict)  # platform -> [reason_str]
+    media_copied: dict = field(default_factory=dict)   # platform -> [dest_file_str]
+    media_removed: int = 0                             # stale media cleaned
 
     @property
     def has_collision(self) -> bool:
@@ -255,7 +257,7 @@ def _plan_target(files: list, parsed: dict, platform: str, report: InstallReport
     return surviving
 
 
-def flatten_install(test_files, targets) -> InstallReport:
+def flatten_install(test_files, targets, media_files=None) -> InstallReport:
     """Flatten-copy each `.test.json` in `test_files` into every target dir.
 
     Per target, the source set is shaped first (see module docstring): files
@@ -268,10 +270,28 @@ def flatten_install(test_files, targets) -> InstallReport:
     renamed/deleted SSoT tests leave no stale copies. Basename collisions among
     the files actually written to the same destination abort the install — the
     flat layout requires screen-unique names per target.
+
+    `media_files` are addMedia fixtures (from `test.mediaDir`). iOS targets get
+    them under `<target_dir>/media/` — a CLI-owned subdir so stale cleanup can
+    wipe it wholesale; the driver resolves basenames there, and synchronized
+    groups flatten it into the bundle root anyway. Android (adb push, not a
+    file copy) and web (paths relative to the test file) are not media targets.
+    Media basenames must be unique for the same flat-lookup reason as tests.
     """
     files = [Path(f) for f in test_files]
+    media = [Path(f) for f in (media_files or [])]
 
     report = InstallReport(targets=[(p, str(d)) for p, d in targets])
+
+    # Media basename collisions abort exactly like test-name collisions.
+    media_by_name: dict = {}
+    for m in media:
+        media_by_name.setdefault(m.name, []).append(str(m))
+    for name, srcs in media_by_name.items():
+        if len(srcs) > 1:
+            report.collisions.append(("media", name, srcs))
+    if report.collisions:
+        return report
 
     # Parse each source once; shaping decisions need the JSON content.
     # Unparseable files are copied as-is (validate gates real installs).
@@ -314,5 +334,21 @@ def flatten_install(test_files, targets) -> InstallReport:
                     json.dump(entry.shaped, fp, indent=2, ensure_ascii=False)
             report.copied.append((platform, str(target)))
             report.installed.setdefault(platform, []).append(str(target))
+
+        # Media fixtures: iOS UITest-bundle targets only. media/ is wholly
+        # CLI-owned, so full-sync is a safe wipe-and-repopulate.
+        if platform == "ios":
+            media_dir = dest_dir / "media"
+            if media_dir.is_dir():
+                for stale in media_dir.iterdir():
+                    if stale.is_file():
+                        stale.unlink()
+                        report.media_removed += 1
+            if media:
+                media_dir.mkdir(parents=True, exist_ok=True)
+                for m in media:
+                    target = media_dir / m.name
+                    shutil.copy2(m, target)
+                    report.media_copied.setdefault(platform, []).append(str(target))
 
     return report

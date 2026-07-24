@@ -693,11 +693,44 @@ class StepValidator:
                 path=path,
                 message="'paths' must be a non-empty array"
             ))
-        elif not all(isinstance(p, str) and p.strip() for p in paths):
+            return
+        if not all(isinstance(p, str) and p.strip() for p in paths):
             result.errors.append(ValidationMessage(
                 path=path,
                 message="'paths' must be an array of non-empty strings"
             ))
+            return
+
+        # Extension matrix shared by the Android and iOS drivers; anything
+        # else fails at runtime, so surface it at validate time.
+        supported = {"png", "jpg", "jpeg", "gif", "mp4"}
+        for p in paths:
+            ext = p.rsplit(".", 1)[-1].lower() if "." in p else ""
+            if ext not in supported:
+                result.warnings.append(ValidationMessage(
+                    path=path,
+                    message=f"addMedia path '{p}' has an unsupported type for "
+                            f"iOS/Android drivers (supported: png/jpg/jpeg/gif/mp4)",
+                    level="warning"
+                ))
+
+        # The iOS bundle is flat: a subdirectory path silently falls back to
+        # its basename there. Nudge toward basenames unless the step is
+        # explicitly gated off iOS.
+        when_platform = (step.get("when") or {}).get("platform")
+        gated_off_ios = when_platform is not None and "ios" not in (
+            when_platform if isinstance(when_platform, list) else [when_platform]
+        )
+        if not gated_off_ios:
+            for p in paths:
+                if "/" in p and not p.startswith("/"):
+                    result.warnings.append(ValidationMessage(
+                        path=path,
+                        message=f"addMedia path '{p}' contains a directory; on iOS it "
+                                f"resolves by basename only — prefer basenames (or gate "
+                                f"the step with 'when': {{'platform': ...}})",
+                        level="warning"
+                    ))
 
     def _validate_emit_hook_action(self, step: dict, path: str, result: ValidationResult):
         """Validate an emitHook action (web-only; no-op+warn on iOS/Android)."""
