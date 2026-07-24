@@ -5,6 +5,7 @@ require 'fileutils'
 require 'rexml/document'
 require_relative '../logger'
 require_relative '../generated_marker'
+require_relative '../plural_validator'
 
 module KjuiTools
   module Core
@@ -21,8 +22,10 @@ module KjuiTools
         
         # Main process method called from ResourcesManager
         def process_strings(processed_files, processed_count, skipped_count)
+          validate_plural_strings!
+
           return if processed_files.empty?
-          
+
           Core::Logger.info "Extracting strings from #{processed_count} files (#{skipped_count} skipped)..."
           
           # Extract strings from JSON files
@@ -36,9 +39,34 @@ module KjuiTools
           # generate_string_manager_kotlin if @config['resource_manager_directory']
         end
         
+        # Validate plural entries in strings.json (schema + CLDR categories)
+        # and reject layout string attributes that reference a plural key
+        # (VM-only in v1; Compose/VM code uses pluralStringResource /
+        # getQuantityString against R.plurals). Raises
+        # JsonUIShared::PluralValidator::ValidationError. Memoized — both
+        # process_strings and apply_to_strings_files call through here.
+        def validate_plural_strings!
+          return if @plural_validated
+          @plural_validated = true
+
+          errors = JsonUIShared::PluralValidator.validate_strings(@strings_data)
+          layouts_dir = File.join(@source_path, @config['source_directory'] || 'src/main', 'assets/Layouts')
+          layout_files = Dir.glob(File.join(layouts_dir, '**/*.json')).reject do |file|
+            file.include?('/Resources/')
+          end
+          errors.concat(JsonUIShared::PluralValidator.validate_layout_references(@strings_data, layout_files))
+          return if errors.empty?
+
+          errors.each { |e| Core::Logger.error e }
+          raise JsonUIShared::PluralValidator::ValidationError,
+                "strings.json plural validation failed (#{errors.length} error(s))"
+        end
+
         # Apply extracted strings to strings.xml files
         def apply_to_strings_files
           return if @strings_data.empty?
+
+          validate_plural_strings!
           
           # Get string files from config
           string_files = @config['string_files'] || []
@@ -333,8 +361,13 @@ module KjuiTools
             name = elem.attributes['name']
             existing_strings[name] = elem if name
           end
+          existing_plurals = {}
+          resources.elements.each('plurals') do |elem|
+            name = elem.attributes['name']
+            existing_plurals[name] = elem if name
+          end
           Core::Logger.debug "Found #{existing_strings.keys.length} existing strings"
-          
+
           # Add new strings from strings.json (now structured by file)
           @strings_data.each do |file_prefix, file_strings|
             next unless file_strings.is_a?(Hash)
@@ -342,7 +375,14 @@ module KjuiTools
             file_strings.each do |key, value|
               # Create full key with file prefix
               full_key = "#{file_prefix}_#{key}"
-              
+
+              # Plural entries compile to <plurals> (R.plurals); VM/Compose
+              # code reads them via pluralStringResource / getQuantityString.
+              if JsonUIShared::PluralValidator.plural_value?(value)
+                upsert_plurals_element(resources, existing_plurals, full_key, value, lang_dir)
+                next
+              end
+
               # Use translated value if available for this language
               translated_value = get_translated_value(full_key, value, lang_dir)
               # Trim whitespace and normalize the string for XML
@@ -376,11 +416,18 @@ module KjuiTools
           # must not survive here (same semantics as iOS Localizable.strings).
           # Hand-written keys outside the managed prefixes are never touched.
           expected_keys = {}
+          expected_plural_keys = {}
           managed_prefixes = []
           @strings_data.each do |file_prefix, file_strings|
             next unless file_strings.is_a?(Hash)
             managed_prefixes << "#{file_prefix}_"
-            file_strings.each_key { |key| expected_keys["#{file_prefix}_#{key}"] = true }
+            file_strings.each do |key, value|
+              if JsonUIShared::PluralValidator.plural_value?(value)
+                expected_plural_keys["#{file_prefix}_#{key}"] = true
+              else
+                expected_keys["#{file_prefix}_#{key}"] = true
+              end
+            end
           end
           pruned_count = 0
           existing_strings.each do |name, elem|
@@ -389,6 +436,16 @@ module KjuiTools
             resources.delete_element(elem)
             pruned_count += 1
             Core::Logger.debug "Pruned stale string '#{name}' from #{lang_dir}/strings.xml"
+          end
+          # Same rule for <plurals>: prunes keys removed from strings.json
+          # AND the stale twin left behind when a key switches between the
+          # flat and plural forms.
+          existing_plurals.each do |name, elem|
+            next if expected_plural_keys[name]
+            next unless managed_prefixes.any? { |prefix| name.start_with?(prefix) }
+            resources.delete_element(elem)
+            pruned_count += 1
+            Core::Logger.debug "Pruned stale plurals '#{name}' from #{lang_dir}/strings.xml"
           end
           Core::Logger.info "Pruned #{pruned_count} stale strings from #{lang_dir}/strings.xml" if pruned_count > 0
 
@@ -404,6 +461,41 @@ module KjuiTools
           Core::Logger.info "Updated #{lang_dir}/strings.xml"
         end
         
+        # Insert or update a <plurals name="..."> element for a plural
+        # strings.json entry, resolved for the language of lang_dir. Items
+        # are rebuilt in place (stable element position) in CLDR category
+        # order; `{count}` becomes %d (%1$d when it appears more than once).
+        def upsert_plurals_element(resources, existing_plurals, full_key, value, lang_dir)
+          lang_code = lang_dir =~ /values-(\w+)/ ? $1 : 'en'
+          forms = JsonUIShared::PluralValidator.plural_forms(value, lang_code)
+          return unless forms
+
+          elem = existing_plurals[full_key]
+          if elem
+            elem.elements.delete_all('item')
+          else
+            elem = REXML::Element.new('plurals')
+            elem.add_attribute('name', full_key)
+            resources.add_element(elem)
+            existing_plurals[full_key] = elem
+            Core::Logger.debug "Added plurals '#{full_key}' to #{lang_dir}/strings.xml"
+          end
+
+          JsonUIShared::PluralValidator::CATEGORIES.each do |cat|
+            body = forms[cat]
+            next unless body.is_a?(String)
+            normalized = body.strip.gsub("\n", "\\n").gsub(/[ \t\r]+/, ' ')
+            normalized = normalized.gsub("'") { "\\'" }
+            normalized = JsonUIShared::PluralValidator.substitute_count(
+              normalized, token: '%d', positional_token: '%1$d'
+            )
+            item = REXML::Element.new('item')
+            item.add_attribute('quantity', cat)
+            item.text = normalized
+            elem.add_element(item)
+          end
+        end
+
         # Create a new strings.xml document
         def create_new_strings_xml
           doc = REXML::Document.new

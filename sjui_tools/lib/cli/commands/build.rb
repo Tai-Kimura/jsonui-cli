@@ -6,6 +6,7 @@ require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
 require_relative '../../core/logger'
 require_relative '../../core/resources_manager'
+require_relative '../../core/plural_validator'
 require_relative '../../core/attribute_validator'
 require_relative '../../core/normalization'
 require_relative '../../core/binding_validator'
@@ -25,7 +26,12 @@ module SjuiTools
           @validation_errors = 0
 
           # Process all JSON files for string extraction
-          process_strings_extraction
+          begin
+            process_strings_extraction
+          rescue JsonUIShared::PluralValidator::ValidationError => e
+            Core::Logger.error e.message
+            exit 1
+          end
 
           case mode
           when 'uikit', 'all'

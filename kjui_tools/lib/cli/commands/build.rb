@@ -185,8 +185,14 @@ module KjuiTools
 
           # Extract resources before processing layouts
           require_relative '../../core/resources_manager'
+          require_relative '../../core/plural_validator'
           resources_manager = Core::ResourcesManager.new(config, source_path)
-          resources_manager.extract_resources(json_files)
+          begin
+            resources_manager.extract_resources(json_files)
+          rescue JsonUIShared::PluralValidator::ValidationError => e
+            Core::Logger.error e.message
+            exit 1
+          end
           Core::Logger.info "-" * 60
 
           # Track new includes and style dependencies
