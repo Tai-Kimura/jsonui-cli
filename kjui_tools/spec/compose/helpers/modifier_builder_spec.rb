@@ -338,6 +338,28 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
       expect(result[:visibility_info][:hidden_binding]).to eq('data.isHidden')
     end
 
+    # Canonical negation emit (binding_semantics.json): hidden is a boolean
+    # value context, so '@{!prop}' must produce valid Kotlin. The old emit
+    # produced 'data.!isLogin' (compile error); a bare nullable boolean is
+    # coerced so the '!' operator always has a non-null receiver.
+    it 'emits a real Kotlin negation for hidden negation bindings' do
+      json_data = { 'hidden' => '@{!isLogin}' }
+      result = described_class.build_visibility(json_data, imports)
+      expect(result[:visibility_info][:hidden_binding]).to eq('!(data.isLogin ?: false)')
+    end
+
+    it 'emits an elvis default for hidden ?? bindings' do
+      json_data = { 'hidden' => '@{isHidden ?? false}' }
+      result = described_class.build_visibility(json_data, imports)
+      expect(result[:visibility_info][:hidden_binding]).to eq('(data.isHidden ?: false)')
+    end
+
+    it 'emits an elvis default for visibility ?? bindings' do
+      json_data = { 'visibility' => "@{paneVisibility ?? 'gone'}" }
+      result = described_class.build_visibility(json_data, imports)
+      expect(result[:visibility_info][:visibility_binding]).to eq('(data.paneVisibility ?: "gone")')
+    end
+
     it 'builds alpha modifier' do
       json_data = { 'alpha' => 0.5 }
       result = described_class.build_visibility(json_data, imports)

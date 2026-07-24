@@ -62,12 +62,30 @@ RSpec.describe SjuiTools::SwiftUI::Views::VisibilityHelper do
     end
 
     context 'with binding visibility' do
-      it 'wraps with VisibilityWrapper using binding variable' do
+      # Intended diff (renderer-ssot-15-4): the visibility path now uses the
+      # canonical expression parsing shared with parse_binding — the binding
+      # key is used verbatim (no to_camel_case mangling, which also broke
+      # '??' and '!')
+      it 'wraps with VisibilityWrapper using the binding path verbatim' do
         child = { 'type' => 'Label', 'visibility' => '@{is_visible}' }
         helper.apply_visibility_wrapper(child)
 
-        expect(helper.generated_code).to include('VisibilityWrapper(data.isVisible) {')
+        expect(helper.generated_code).to include('VisibilityWrapper(data.is_visible) {')
         expect(helper.generated_code).to include('}')
+      end
+
+      it 'emits a canonical ?? default as a double-quoted Swift literal' do
+        child = { 'type' => 'Label', 'visibility' => "@{vis ?? 'gone'}" }
+        helper.apply_visibility_wrapper(child)
+
+        expect(helper.generated_code).to include('VisibilityWrapper(data.vis ?? "gone") {')
+      end
+
+      it 'bridges bool negation to visible/gone so the Swift compiles' do
+        child = { 'type' => 'Label', 'visibility' => '@{!isHidden}' }
+        helper.apply_visibility_wrapper(child)
+
+        expect(helper.generated_code).to include('VisibilityWrapper(!(data.isHidden ?? false) ? "visible" : "gone") {')
       end
     end
 

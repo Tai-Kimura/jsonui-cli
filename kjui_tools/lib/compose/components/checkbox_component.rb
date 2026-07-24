@@ -190,8 +190,8 @@ module KjuiTools
             # Handle enabled attribute
             if json_data.key?('enabled')
               if json_data['enabled'].is_a?(String) && json_data['enabled'].start_with?('@{')
-                variable = json_data['enabled'].match(/@\{([^}]+)\}/)[1]
-                code += ",\n" + indent("enabled = data.#{variable}", depth + 1)
+                inner_expr = json_data['enabled'].match(/@\{([^}]+)\}/)[1]
+                code += ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 1)
               else
                 code += ",\n" + indent("enabled = #{json_data['enabled']}", depth + 1)
               end

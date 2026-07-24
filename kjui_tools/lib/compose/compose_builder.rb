@@ -13,6 +13,7 @@ require_relative 'style_loader'
 require_relative 'include_expander'
 require_relative 'data_model_updater'
 require_relative 'helpers/import_manager'
+require_relative 'helpers/binding_expression'
 require_relative 'helpers/modifier_builder'
 require_relative 'helpers/resource_resolver'
 require_relative 'helpers/visibility_helper'
@@ -1163,6 +1164,11 @@ module KjuiTools
         indent_str = "    " * depth
 
         code = ""
+        # Embed init-params child-side wiring: unconditionally drive any
+        # pending init params from an enclosing EmbedContainer into this
+        # screen's ViewModel. No-op when the screen is not embedded.
+        code += "#{indent_str}// Requires KotlinJsonUI >= 2.13.0 (embed init-params)\n"
+        code += "#{indent_str}DriveEmbedInitParams(viewModel)\n"
         code += "#{indent_str}// Check if Dynamic Mode is active\n"
         code += "#{indent_str}if (DynamicModeManager.isActive()) {\n"
         code += "#{indent_str}    // Dynamic Mode - use SafeDynamicView for real-time updates\n"
@@ -1174,6 +1180,9 @@ module KjuiTools
 
         # Add required imports for DynamicModeManager
         @required_imports.add(:dynamic_mode_manager)
+        # DriveEmbedInitParams lives in the main library module
+        # (com.kotlinjsonui.embed) — new in KotlinJsonUI 2.13.0.
+        @required_imports.add(:drive_embed_init_params)
         # SafeDynamicView import is already added in generate_dynamic_view
 
         code
@@ -1436,14 +1445,11 @@ module KjuiTools
       def process_data_binding(text)
         return quote(text) unless text.is_a?(String)
 
-        if text.match(/@\{([^}]+)\}/)
-          variable = $1
-          if variable.include?(' ?? ')
-            var_name = variable.split(' ?? ')[0].strip
-            "\"\${data.#{var_name}}\""
-          else
-            "\"\${data.#{variable}}\""
-          end
+        if (inner = Helpers::BindingExpression.extract_inner(text))
+          # Canonical text-context emit (shared with ResourceResolver):
+          # nullable access gets the authored `??` default (or `?: ""`),
+          # non-null access is plain — see BindingExpression.
+          Helpers::BindingExpression.interpolated_access(inner)
         else
           quote(text)
         end

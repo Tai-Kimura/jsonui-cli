@@ -183,6 +183,10 @@ module KjuiTools
             # output fail to compile against pre-2.12.0 libraries (the
             # version-skew guard).
             embed_isolated_navigation: "import com.kotlinjsonui.embed.EmbedIsolatedNavigation",
+            # Child-side embed init-params wiring, emitted unconditionally at
+            # the top of every GeneratedView body (no-op when the screen is
+            # not embedded). New in KotlinJsonUI 2.13.0.
+            drive_embed_init_params: "import com.kotlinjsonui.embed.DriveEmbedInitParams",
             embedded_event: "import com.kotlinjsonui.embed.EmbeddedEvent",
             viewmodel_compose: "import androidx.lifecycle.viewmodel.compose.viewModel",
             # `hiltViewModel(viewModelStoreOwner, key)` from

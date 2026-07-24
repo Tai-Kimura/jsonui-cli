@@ -1105,9 +1105,9 @@ module SjuiTools
           indent do
             scroll_call = "scrollProxy.scrollTo(#{recv_var}, anchor: .#{anchor})"
             if scroll_animated.is_a?(String) && scroll_animated.start_with?('@{') && scroll_animated.end_with?('}')
-              # Binding: runtime check
-              prop_name = to_camel_case(scroll_animated[2..-2])
-              add_line "if data.#{prop_name} {"
+              # Binding: runtime check (canonical expression parsing)
+              animated_expr = SwiftUI::Binding::BindingExpression.swift_bool_expr(scroll_animated[2..-2])
+              add_line "if #{animated_expr} {"
               indent do
                 add_line "withAnimation {"
                 indent do
@@ -1490,7 +1490,9 @@ module SjuiTools
           return nil unless items_property
           
           if items_property.start_with?('@{') && items_property.end_with?('}')
-            items_property[2...-1]
+            # Data-source reference: parsed path only ('??'/'!' are not
+            # meaningful for collection data sources)
+            SwiftUI::Binding::BindingExpression.parse(items_property[2...-1]).path
           else
             nil
           end

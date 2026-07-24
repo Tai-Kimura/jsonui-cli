@@ -267,10 +267,65 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
     end
 
     context 'with nested property binding' do
-      it 'converts @{item.name} to {data.item.name}' do
+      # Multi-segment user data paths get optional chaining so a missing
+      # intermediate node resolves to undefined instead of throwing
+      # (binding SSoT: intermediateMiss must never crash).
+      it 'converts @{item.name} to {data.item?.name}' do
         converter = create_converter({ 'type' => 'View' })
         result = converter.send(:convert_binding, '@{item.name}')
-        expect(result).to eq('{data.item.name}')
+        expect(result).to eq('{data.item?.name}')
+      end
+
+      it 'chains every segment of a deep path' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, '@{profile.meta.age}')
+        expect(result).to eq('{data.profile?.meta?.age}')
+      end
+
+      it 'chains bracket-indexed paths (@{items[0].title})' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, '@{items[0].title}')
+        expect(result).to eq('{data.items?.[0]?.title}')
+      end
+
+      it 'keeps a single flat segment unchained' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, '@{title}')
+        expect(result).to eq('{data.title}')
+      end
+    end
+
+    context 'with ?? default (canonical)' do
+      it 'emits the default after the chained path' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, "@{a.b ?? 'd'}")
+        expect(result).to eq("{data.a?.b ?? 'd'}")
+      end
+
+      it 'supports double-quoted and non-string literals' do
+        converter = create_converter({ 'type' => 'View' })
+        expect(converter.send(:convert_binding, '@{missing ?? "Guest"}')).to eq('{data.missing ?? "Guest"}')
+        expect(converter.send(:convert_binding, '@{count ?? 42}')).to eq('{data.count ?? 42}')
+        expect(converter.send(:convert_binding, '@{flag ?? true}')).to eq('{data.flag ?? true}')
+      end
+
+      it 'drops a null default (null means unresolved)' do
+        converter = create_converter({ 'type' => 'View' })
+        expect(converter.send(:convert_binding, '@{missing ?? null}')).to eq('{data.missing}')
+      end
+    end
+
+    context 'with bool negation (canonical on bool value contexts)' do
+      it 'emits {!data.flag} instead of {data.!flag}' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, '@{!flag}')
+        expect(result).to eq('{!data.flag}')
+      end
+
+      it 'chains a negated dotted path' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, '@{!settings.enabled}')
+        expect(result).to eq('{!data.settings?.enabled}')
       end
     end
 

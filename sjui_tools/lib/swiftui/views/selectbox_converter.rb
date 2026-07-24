@@ -243,8 +243,8 @@ module SjuiTools
           if hidden_value == true
             @modifier_bag.register(:hidden, ".hidden()")
           elsif hidden_value.is_a?(String) && hidden_value.start_with?('@{') && hidden_value.end_with?('}')
-            var_name = to_camel_case(hidden_value[2..-2])
-            @modifier_bag.register(:hidden, ".opacity(data.#{var_name} ? 0 : 1)")
+            hidden_expr = SwiftUI::Binding::BindingExpression.swift_bool_expr(hidden_value[2..-2])
+            @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1)")
           end
 
           generated_code

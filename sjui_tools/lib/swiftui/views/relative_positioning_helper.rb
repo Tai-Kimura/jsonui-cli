@@ -182,12 +182,13 @@ module SjuiTools
                     # View (with optional VisibilityWrapper)
                     visibility_value = child['visibility']
                     has_visibility = visibility_value.is_a?(String) && visibility_value.start_with?('@{') && visibility_value.end_with?('}')
-                    vis_prop = has_visibility ? visibility_value[2..-2] : nil
+                    # Canonical expression parsing shared with parse_binding
+                    vis_param = has_visibility ? SwiftUI::Binding::BindingExpression.swift_visibility_param(visibility_value) : nil
 
                     add_line "view: AnyView("
                     if has_visibility
                       indent do
-                        add_line "VisibilityWrapper(data.#{vis_prop}) {"
+                        add_line "VisibilityWrapper(#{vis_param}) {"
                       end
                     end
                     indent do
@@ -487,9 +488,8 @@ module SjuiTools
           return value.to_s unless value.is_a?(String)
 
           if value.start_with?('@{') && value.end_with?('}')
-            # @{propertyName} -> data.propertyName
-            property = value[2..-2]
-            "data.#{property}"
+            # @{propertyName [?? default]} -> data.propertyName [?? default]
+            SwiftUI::Binding::BindingExpression.swift_value_expr(value[2..-2])
           else
             value
           end

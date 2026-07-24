@@ -83,9 +83,11 @@ module RjuiTools
         # bindings at object positions), and nested literal objects →
         # inline JS object literals (recursive, so nested leaf bindings
         # rewrite too — a plain to_json would stringify them dead).
+        # Dotted/indexed parent-data paths get optional chaining like every
+        # other user data path (@{profile.name} → data.profile?.name).
         def render_param_value(value)
           if value.is_a?(String) && value =~ /^@\{(.+)\}$/
-            "data.#{Regexp.last_match(1)}"
+            add_viewmodel_data_prefix(Regexp.last_match(1))
           elsif value.is_a?(String)
             "'#{value.gsub("'", "\\\\'")}'"
           elsif value == true || value == false

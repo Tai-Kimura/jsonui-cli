@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
 
+require_relative '../binding/binding_expression'
+
 module SjuiTools
   module SwiftUI
     module Views
@@ -41,15 +43,10 @@ module SjuiTools
         end
         
         def render_child_with_visibility(child, orientation)
-          visibility_value = child['visibility']
-          # Check if it's a binding
-          if visibility_value.is_a?(String) && visibility_value.start_with?('@{') && visibility_value.end_with?('}')
-            var_name = to_camel_case(visibility_value[2..-2])
-            visibility_param = "data.#{var_name}"
-          else
-            visibility_param = "\"#{visibility_value}\""
-          end
-          
+          # Canonical expression parsing (path / '?? default' / '!path')
+          # shared with view_binding_handler#parse_binding
+          visibility_param = SwiftUI::Binding::BindingExpression.swift_visibility_param(child['visibility'])
+
           # Create child converter with extra indent level for content inside VisibilityWrapper
           child_converter = @converter_factory.create_converter(child, @indent_level + 1, @action_manager, @converter_factory, @view_registry)
           return unless child_converter

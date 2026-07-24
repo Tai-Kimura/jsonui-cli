@@ -19,9 +19,9 @@ module SjuiTools
           # hint (SwiftJsonUIではplaceholderではなくhint)
           hint_raw = @component['hint'] || @component['placeholder'] || ""
           if hint_raw.is_a?(String) && hint_raw.start_with?('@{') && hint_raw.end_with?('}')
-            # Binding expression -> resolve to data property
-            property_name = hint_raw[2..-2]
-            hint = "data.#{property_name}"
+            # Binding expression -> resolve to data property (canonical
+            # expression parsing: path + optional '?? default')
+            hint = SwiftUI::Binding::BindingExpression.swift_value_expr(hint_raw[2..-2])
           else
             # Use localized strings for snake_case hint text
             hint = get_text_with_string_manager("\"#{hint_raw}\"")
@@ -259,8 +259,8 @@ module SjuiTools
           if hidden_value == true
             @modifier_bag.register(:hidden, ".hidden()")
           elsif hidden_value.is_a?(String) && hidden_value.start_with?('@{') && hidden_value.end_with?('}')
-            var_name = to_camel_case(hidden_value[2..-2])
-            @modifier_bag.register(:hidden, ".opacity(data.#{var_name} ? 0 : 1)")
+            hidden_expr = SwiftUI::Binding::BindingExpression.swift_bool_expr(hidden_value[2..-2])
+            @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1)")
           end
 
           # Apply binding-specific modifiers

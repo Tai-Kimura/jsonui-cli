@@ -41,8 +41,8 @@ module KjuiTools
           # Add enabled state if specified
           if json_data.key?('enabled')
             enabled_value = json_data['enabled']
-            if enabled_value.is_a?(String) && enabled_value.match(/@\{([^}]+)\}/)
-              code += "\n" + indent("enabled = data.#{$1},", depth + 1)
+            if enabled_value.is_a?(String) && (enabled_inner = Helpers::BindingExpression.extract_inner(enabled_value))
+              code += "\n" + indent("enabled = #{Helpers::BindingExpression.value_access(enabled_inner, negatable: true)},", depth + 1)
             else
               code += "\n" + indent("enabled = #{enabled_value},", depth + 1)
             end
@@ -107,8 +107,8 @@ module KjuiTools
               # Add enabled state to Tab if segment is disabled
               if json_data.key?('enabled')
                 enabled_value = json_data['enabled']
-                if enabled_value.is_a?(String) && enabled_value.match(/@\{([^}]+)\}/)
-                  code += "\n" + indent("enabled = data.#{$1},", depth + 2)
+                if enabled_value.is_a?(String) && (enabled_inner = Helpers::BindingExpression.extract_inner(enabled_value))
+                  code += "\n" + indent("enabled = #{Helpers::BindingExpression.value_access(enabled_inner, negatable: true)},", depth + 2)
                 else
                   code += "\n" + indent("enabled = #{enabled_value},", depth + 2)
                 end
@@ -211,8 +211,8 @@ module KjuiTools
             # Add enabled state to Tab if segment is disabled
             if json_data.key?('enabled')
               enabled_value = json_data['enabled']
-              if enabled_value.is_a?(String) && enabled_value.match(/@\{([^}]+)\}/)
-                code += "\n" + indent("enabled = data.#{$1},", depth + 3)
+              if enabled_value.is_a?(String) && (enabled_inner = Helpers::BindingExpression.extract_inner(enabled_value))
+                code += "\n" + indent("enabled = #{Helpers::BindingExpression.value_access(enabled_inner, negatable: true)},", depth + 3)
               else
                 code += "\n" + indent("enabled = #{enabled_value},", depth + 3)
               end

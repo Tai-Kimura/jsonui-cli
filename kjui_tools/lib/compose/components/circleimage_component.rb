@@ -84,10 +84,11 @@ module KjuiTools
         
         def self.process_data_binding(text)
           return quote(text) unless text.is_a?(String)
-          
-          if text.match(/@\{([^}]+)\}/)
-            variable = $1
-            "data.#{variable}"
+
+          if (inner = Helpers::BindingExpression.extract_inner(text))
+            # Value context (src): canonical parse; a `??` default becomes a
+            # real Kotlin elvis on nullable properties (see BindingExpression).
+            Helpers::BindingExpression.value_access(inner)
           else
             quote(text)
           end

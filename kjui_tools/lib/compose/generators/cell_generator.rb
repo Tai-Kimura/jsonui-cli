@@ -106,14 +106,18 @@ module KjuiTools
             "cornerRadius" => 6,
             "child" => [
               {
+                # Canonical collection-cell scope: the item object's own
+                # fields, flat (plus reserved `index`). An `item.` prefix is
+                # non-canonical — see shared/core/binding_semantics.json
+                # collectionCellScope.
                 "type" => "Text",
-                "text" => "@{item.title}",
+                "text" => "@{title}",
                 "fontSize" => 14,
                 "weight" => 1
               },
               {
                 "type" => "Text",
-                "text" => "@{item.value}",
+                "text" => "@{value}",
                 "fontSize" => 14,
                 "fontWeight" => "bold"
               }

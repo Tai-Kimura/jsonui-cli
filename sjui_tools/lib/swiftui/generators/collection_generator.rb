@@ -167,17 +167,22 @@ module SjuiTools
 
             struct #{@pascal_name}GeneratedView: View {
                 @SwiftUI.Binding var data: #{@pascal_name}Data
+                var viewModel: Any = ()
 
                 var body: some View {
+                    Group {
         #if DEBUG
-                    if ViewSwitcher.isDynamicMode {
-                        DynamicView(jsonName: "#{@snake_name}", viewId: "#{@snake_name}_view", data: data.toDictionary(binding: $data))
-                    } else {
-                        generatedBody
-                    }
+                        if ViewSwitcher.isDynamicMode {
+                            DynamicView(jsonName: "#{@snake_name}", viewId: "#{@snake_name}_view", data: data.toDictionary(binding: $data))
+                        } else {
+                            generatedBody
+                        }
         #else
-                    generatedBody
+                        generatedBody
         #endif
+                    }
+                    // Requires SwiftJsonUI >= 10.6.0 (embed init-params child-side wiring)
+                    .receiveEmbedInitParams(to: viewModel)
                 }
 
                 @ViewBuilder

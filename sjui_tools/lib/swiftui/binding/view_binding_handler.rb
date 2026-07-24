@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'binding_expression'
+
 module SjuiTools
   module SwiftUI
     module Binding
@@ -8,19 +10,21 @@ module SjuiTools
           @binding_code = []
         end
 
-        # Parse binding syntax @{propertyName} and return the binding code
-        # Supports negation: @{!propertyName} -> !$data.propertyName
-        # @param read_only [Boolean] if true, use data. (read-only) instead of $data. (Binding)
+        # Parse binding syntax @{expr} and return the Swift binding code.
+        # Canonical expression grammar (shared/core/binding_semantics.json):
+        # path with optional single '?? default', or '!path' negation.
+        # @param read_only [Boolean] if true, use data. (read-only value
+        #   context) instead of $data. (two-way Binding position; canonically
+        #   a single flat identifier — defaults/negation are validator errors
+        #   and are not emitted there)
         def parse_binding(value, read_only: false)
           return nil unless value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
 
           inner = value[2..-2] # Remove @{ and }
-          prefix = read_only ? 'data' : '$data'
-          if inner.start_with?('!')
-            property_name = inner[1..]
-            "!#{prefix}.#{property_name}"
+          if read_only
+            BindingExpression.swift_value_expr(inner, prefix: 'data')
           else
-            "#{prefix}.#{inner}"
+            BindingExpression.swift_two_way_expr(inner, prefix: '$data')
           end
         end
 

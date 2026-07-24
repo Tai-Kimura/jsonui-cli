@@ -11,7 +11,20 @@ module RjuiTools
     class BindingValidator
       PLATFORM = 'react'.freeze
 
-      attr_reader :warnings
+      # Canonical binding grammar (shared/core/binding_semantics.json):
+      # inner = [!]path [?? default]; path = identifier segments joined by
+      # '.' with optional bracket index; default = quoted string ('' or ""),
+      # true/false, number, or null.
+      FLAT_IDENTIFIER_RE = /\A[a-zA-Z_$][\w$]*\z/
+      CANONICAL_PATH_RE = /\A[a-zA-Z_$][\w$]*(?:\.[a-zA-Z_$][\w$]*|\[\d+\])*\z/
+      CANONICAL_DEFAULT_RE = /\A(?:"[^"]*"|'[^']*'|true|false|null|-?\d+(?:\.\d+)?)\z/
+      CANONICAL_EXPR_RE = /\A!?\s*[a-zA-Z_$][\w$]*(?:\.[a-zA-Z_$][\w$]*|\[\d+\])*(?:\s*\?\?\s*(?:"[^"]*"|'[^']*'|true|false|null|-?\d+(?:\.\d+)?))?\z/
+
+      # Errors are canonical validator-rule violations
+      # (binding_semantics.json validatorRules, severity: error); warnings
+      # keep the advisory role they always had. Both message streams carry
+      # the rule id in the form "[rule-id] ..." when a canonical rule fired.
+      attr_reader :warnings, :errors
 
       # Patterns that indicate business logic in bindings
       # Note: Order matters - more specific patterns should come before general ones
@@ -46,11 +59,10 @@ module RjuiTools
           pattern: /&&|\|\|/,
           message: "logical operator (&&, ||) - move logic to ViewModel"
         },
-        # Nil coalescing
-        {
-          pattern: /\?\?/,
-          message: "nil coalescing (??) - handle nil in ViewModel"
-        },
+        # NOTE: '?? default' is officially supported (binding SSoT track 15,
+        # shared/core/binding_semantics.json defaultOperator) — a single
+        # '??' with a literal default is canonical and no longer warned.
+        # More than one '??' is the binding-double-default ERROR instead.
         # Function calls with arguments (standalone or chained)
         {
           pattern: /\w+\([^)]+\)/,
@@ -70,12 +82,10 @@ module RjuiTools
         {
           pattern: /\.\.\./,
           message: "spread operator - handle in ViewModel"
-        },
-        # Negation operator (generates invalid code)
-        {
-          pattern: /^!/,
-          message: "negation operator (!) - create a computed property in ViewModel instead (e.g., isLoggedOut instead of !isLoggedIn)"
         }
+        # NOTE: '!' negation is canonical on boolean value attributes
+        # (@{!flag} emits {!data.flag}); outside a boolean value context it
+        # is the binding-negation-context ERROR (see check_canonical_binding_rules).
       ].freeze
 
       # Allowed simple patterns that look like logic but are acceptable
@@ -92,19 +102,24 @@ module RjuiTools
 
       def initialize
         @warnings = []
+        @errors = []
         @data_properties = Set.new
         @used_properties = Set.new  # Track used properties for unused detection
+        @cell_local_properties = Set.new # data declared inside a Collection cell subtree
         @data_types = {} # Store property name -> type mapping
         @has_data_definitions = false
-        @incompatible_attrs_by_type = load_incompatible_attrs
+        @cell_depth = 0
+        defs = load_attribute_definitions
+        @incompatible_attrs_by_type = build_incompatible_attrs(defs)
+        @two_way_attrs_by_type = build_two_way_attrs(defs)
+        @boolean_attrs_by_type = build_boolean_attrs(defs)
+        @known_attrs_by_type = build_known_attrs(defs)
       end
 
-      # Load attribute_definitions.json and collect, per component type, the set
-      # of attribute names marked for platforms other than 'react'. Bindings
-      # inside these attributes are iOS/Android-only and should be skipped.
-      def load_incompatible_attrs
-        # Deployed copies mirror the file into lib/core/ alongside this file.
-        # Source-repo layout keeps the canonical copy at ../../../shared/core/.
+      # Load attribute_definitions.json (deployed copies mirror the file
+      # into lib/core/ alongside this file; source-repo layout keeps the
+      # canonical copy at ../../../shared/core/).
+      def load_attribute_definitions
         candidates = [
           File.join(File.dirname(__FILE__), 'attribute_definitions.json'),
           File.expand_path('../../../../shared/core/attribute_definitions.json', __FILE__)
@@ -112,7 +127,15 @@ module RjuiTools
         path = candidates.find { |p| File.exist?(p) }
         return {} unless path
 
-        defs = JSON.parse(File.read(path))
+        JSON.parse(File.read(path))
+      rescue JSON::ParserError
+        {}
+      end
+
+      # Per component type, the set of attribute names marked for platforms
+      # other than 'react'. Bindings inside these attributes are
+      # iOS/Android-only and should be skipped.
+      def build_incompatible_attrs(defs)
         result = {}
         defs.each do |component_type, attrs|
           next unless attrs.is_a?(Hash)
@@ -129,8 +152,65 @@ module RjuiTools
           result[component_type] = incompatible unless incompatible.empty?
         end
         result
-      rescue JSON::ParserError
-        {}
+      end
+
+      # Per component type, attribute names declared `binding_direction:
+      # "two-way"` (TextField.text, Toggle.isOn, Slider.value, ...). These
+      # write back to the binding, so the canonical twoWay context applies:
+      # the expression must be a single flat identifier.
+      def build_two_way_attrs(defs)
+        collect_attrs_by(defs) do |attr_def|
+          attr_def['binding_direction'] == 'two-way'
+        end
+      end
+
+      # Per component type, attribute names whose declared type includes
+      # 'boolean' — the only value context where '!' negation is canonical.
+      def build_boolean_attrs(defs)
+        collect_attrs_by(defs) do |attr_def|
+          Array(attr_def['type']).include?('boolean')
+        end
+      end
+
+      # Per component type, every declared attribute name (used to decide
+      # whether a whole-value negation target is a KNOWN non-bool attribute
+      # — unknown/custom attributes are left alone to avoid false errors).
+      def build_known_attrs(defs)
+        collect_attrs_by(defs) { |_attr_def| true }
+      end
+
+      def collect_attrs_by(defs)
+        result = {}
+        defs.each do |component_type, attrs|
+          next unless attrs.is_a?(Hash)
+          matched = Set.new
+          attrs.each do |attr_name, attr_def|
+            next unless attr_def.is_a?(Hash)
+            next unless yield(attr_def)
+
+            matched << attr_name
+            Array(attr_def['aliases']).each { |a| matched << a }
+          end
+          result[component_type] = matched unless matched.empty?
+        end
+        result
+      end
+
+      def two_way_attr?(component_type, attr_name)
+        lookup_attr_set(@two_way_attrs_by_type, component_type, attr_name)
+      end
+
+      def boolean_attr?(component_type, attr_name)
+        lookup_attr_set(@boolean_attrs_by_type, component_type, attr_name)
+      end
+
+      def known_attr?(component_type, attr_name)
+        lookup_attr_set(@known_attrs_by_type, component_type, attr_name)
+      end
+
+      def lookup_attr_set(table, component_type, attr_name)
+        (table[component_type]&.include?(attr_name)) ||
+          (table['common']&.include?(attr_name)) || false
       end
 
       def incompatible_attr?(component_type, attr_name)
@@ -145,14 +225,17 @@ module RjuiTools
       # Validate all bindings in a JSON component tree
       # @param json_data [Hash] The root component
       # @param file_name [String] The file name for error messages
-      # @return [Array<String>] Array of warning messages
+      # @return [Array<String>] Warnings followed by canonical-rule errors
       def validate(json_data, file_name = nil)
         @warnings = []
+        @errors = []
         @current_file = file_name
         @data_properties = Set.new
         @used_properties = Set.new
+        @cell_local_properties = Set.new
         @data_types = {}
         @has_data_definitions = false
+        @cell_depth = 0
 
         # First pass: collect all data property names and types
         collect_data_properties(json_data)
@@ -163,7 +246,7 @@ module RjuiTools
         # Third pass: check for unused data properties
         check_unused_properties
 
-        @warnings
+        @warnings + @errors
       end
 
       # Check a single binding expression
@@ -177,6 +260,17 @@ module RjuiTools
         # Check if it's allowed simple pattern
         full_binding = "@{#{binding_expr}}"
         return warnings if allowed_pattern?(full_binding)
+
+        # Canonical binding expressions ([!]path [?? literal]) are never
+        # business logic — dot-paths, bracket indices, bool negation and a
+        # single '??' default are all official grammar now (binding SSoT
+        # track 15). Context violations are reported as canonical rule
+        # errors in check_canonical_binding_rules, not here. The
+        # viewModel. prefix stays a warning (legacy spelling).
+        if binding_expr.strip.match?(CANONICAL_EXPR_RE) &&
+           !binding_expr.strip.sub(/\A!\s*/, '').start_with?('viewModel.')
+          return warnings
+        end
 
         # Check for business logic patterns
         BUSINESS_LOGIC_PATTERNS.each do |rule|
@@ -194,17 +288,28 @@ module RjuiTools
         !@warnings.empty?
       end
 
-      # Print all warnings to stdout
+      # Check if there are any canonical-rule errors
+      def has_errors?
+        !@errors.empty?
+      end
+
+      # Print all warnings (and canonical-rule errors) to stdout
       def print_warnings
         @warnings.each do |warning|
           puts "\e[33m[RJUI Binding Warning]\e[0m #{warning}"
+        end
+        @errors.each do |error|
+          puts "\e[31m[RJUI Binding Error]\e[0m #{error}"
         end
       end
 
       private
 
-      # Collect all data property names and types from the component tree
-      def collect_data_properties(component)
+      # Collect all data property names and types from the component tree.
+      # `in_cell` tracks Collection cell subtrees so cell-declared
+      # properties can be told apart from parent-screen data (used by the
+      # binding-cell-parent-scope rule).
+      def collect_data_properties(component, in_cell = false)
         return unless component.is_a?(Hash)
 
         # Check for data declarations
@@ -216,6 +321,7 @@ module RjuiTools
             # Add property name and type to the maps
             if data_item['name']
               @data_properties << data_item['name']
+              @cell_local_properties << data_item['name'] if in_cell
               @data_types[data_item['name']] = data_item['class'] if data_item['class']
               @has_data_definitions = true
             end
@@ -229,9 +335,9 @@ module RjuiTools
           next unless child.is_a?(Hash)
           # Check if child is a data-only object (no 'type' key, has 'data' key)
           if child['data'] && !child['type']
-            collect_data_from_array(child['data'])
+            collect_data_from_array(child['data'], in_cell)
           else
-            collect_data_properties(child)
+            collect_data_properties(child, in_cell)
           end
         end
 
@@ -240,14 +346,15 @@ module RjuiTools
           component['sections'].each do |section|
             next unless section.is_a?(Hash)
             ['header', 'footer', 'cell'].each do |key|
-              collect_data_properties(section[key]) if section[key].is_a?(Hash)
+              next unless section[key].is_a?(Hash)
+              collect_data_properties(section[key], in_cell || key == 'cell')
             end
           end
         end
       end
 
       # Helper to collect data from a data array
-      def collect_data_from_array(data_array)
+      def collect_data_from_array(data_array, in_cell = false)
         return unless data_array.is_a?(Array)
 
         data_array.each do |data_item|
@@ -257,6 +364,7 @@ module RjuiTools
           # Add property name to the set
           if data_item['name']
             @data_properties << data_item['name']
+            @cell_local_properties << data_item['name'] if in_cell
             @has_data_definitions = true
           end
         end
@@ -289,12 +397,21 @@ module RjuiTools
         children = [children] unless children.is_a?(Array)
         children.each { |child| validate_component(child, component_type) if child.is_a?(Hash) }
 
-        # Validate sections (Collection/Table)
+        # Validate sections (Collection/Table). Cell subtrees run with the
+        # cell-scope flag so binding-cell-parent-scope can fire; header /
+        # footer render in parent scope and are exempt.
         if component['sections'].is_a?(Array)
           component['sections'].each do |section|
             next unless section.is_a?(Hash)
             ['header', 'footer', 'cell'].each do |key|
-              validate_component(section[key], component_type) if section[key].is_a?(Hash)
+              next unless section[key].is_a?(Hash)
+              if key == 'cell'
+                @cell_depth += 1
+                validate_component(section[key], component_type)
+                @cell_depth -= 1
+              else
+                validate_component(section[key], component_type)
+              end
             end
           end
         end
@@ -307,6 +424,13 @@ module RjuiTools
 
         case value
         when String
+          if value.include?('@{')
+            # Canonical binding-resolution rules (errors) run on every
+            # occurrence, including mixed-text interpolation.
+            check_canonical_binding_rules(value, attribute_name, component_type)
+            check_cell_parent_scope(value, attribute_name, component_type)
+          end
+
           if value.start_with?('@{') && value.end_with?('}')
             binding_expr = value[2..-2] # Remove @{ and }
             binding_warnings = check_binding(binding_expr, attribute_name, component_type)
@@ -324,10 +448,115 @@ module RjuiTools
             check_value_for_bindings(v, "#{attribute_name}.#{k}", component_type)
           end
         when Array
+          # Arrays are unsupported anywhere inside Embed params
+          # (binding-params-array — embed isolated+params track).
+          if embed_params_attr?(component_type, attribute_name)
+            add_error('binding-params-array',
+                      "'#{component_type}.#{attribute_name}' is an array — arrays are not supported in Embed params (nest literal objects or bind a scalar leaf)")
+          end
           value.each_with_index do |item, index|
             check_value_for_bindings(item, "#{attribute_name}[#{index}]", component_type)
           end
         end
+      end
+
+      # Canonical validator rules from shared/core/binding_semantics.json
+      # (renderer SSoT track 15). Rule ids are embedded in the emitted
+      # messages so tooling and the shared vector suite can match them.
+      def check_canonical_binding_rules(value, attribute_name, component_type)
+        exprs = value.scan(/@\{([^}]*)\}/).flatten
+        return if exprs.empty?
+
+        top_attr = attribute_name.to_s.split(/[.\[]/).first
+        embed_params = embed_params_attr?(component_type, attribute_name)
+        two_way = !embed_params && two_way_attr?(component_type, top_attr)
+        whole_value = exprs.length == 1 && value.strip == "@{#{exprs.first}}"
+
+        exprs.each do |inner|
+          expr = inner.strip
+
+          # binding-double-default: exactly one '??' per expression
+          if expr.scan(/\?\?/).length > 1
+            add_error('binding-double-default',
+                      "Binding '@{#{expr}}' in '#{component_type}.#{attribute_name}' uses '??' more than once — exactly one default is allowed. Split the fallback chain in the ViewModel.")
+          end
+
+          # binding-two-way-complex: two-way bindings write back, so the
+          # expression must be a single flat identifier — no '.', '[',
+          # '??', '!' and no surrounding text.
+          if two_way
+            unless whole_value && expr.match?(FLAT_IDENTIFIER_RE)
+              add_error('binding-two-way-complex',
+                        "Two-way binding '@{#{expr}}' in '#{component_type}.#{attribute_name}' must be a single flat identifier (no '.', '[', '??', '!'). Bind a flat property and derive the value in the ViewModel.")
+            end
+            next
+          end
+
+          if embed_params
+            if expr.start_with?('!')
+              add_error('binding-negation-context',
+                        "Binding '@{#{expr}}' in '#{component_type}.#{attribute_name}' uses '!' negation in an Embed params leaf — negation is only valid on boolean value attributes. Compute the negated flag in the ViewModel.")
+            elsif expr.include?('??')
+              add_error('binding-default-in-params',
+                        "Binding '@{#{expr}}' in '#{component_type}.#{attribute_name}' uses a '??' default in an Embed params leaf — defaults belong to the embedded screen's data-section defaultValue.")
+            end
+            next
+          end
+
+          # binding-negation-context: '!' is canonical only as the whole
+          # value of a boolean attribute. Unknown/custom attributes are
+          # left alone (their type cannot be established here).
+          next unless expr.start_with?('!')
+
+          if !whole_value
+            add_error('binding-negation-context',
+                      "Binding '@{#{expr}}' in '#{component_type}.#{attribute_name}' uses '!' negation inside text interpolation — negation is only valid as the whole value of a boolean attribute. Compute the negated flag in the ViewModel.")
+          elsif known_attr?(component_type, top_attr) && !boolean_attr?(component_type, top_attr)
+            add_error('binding-negation-context',
+                      "Binding '@{#{expr}}' in '#{component_type}.#{attribute_name}' uses '!' negation on a non-boolean attribute — negation is only valid on boolean value attributes (e.g. hidden, enabled). Compute the negated flag in the ViewModel.")
+          end
+        end
+      end
+
+      # binding-cell-parent-scope (warning): a Collection cell layout is
+      # guaranteed only the item's own fields (data.-prefixed in rjui cell
+      # convention) plus the reserved 'index'. Binding a bare key that is
+      # declared in the parent screen's data section is non-portable.
+      # Only inline `sections` cells are detectable here — cell layouts in
+      # separate files are validated standalone, without parent data context.
+      def check_cell_parent_scope(value, attribute_name, component_type)
+        return unless @cell_depth > 0
+
+        value.scan(/@\{([^}]*)\}/).flatten.each do |inner|
+          expr = inner.strip
+          expr = expr[1..].to_s.strip if expr.start_with?('!')
+          path = expr.split(/\s*\?\?\s*/, 2).first.to_s
+          next if path.start_with?('data.')
+
+          root = path.split(/[.\[]/).first.to_s
+          next if root.empty? || root == 'index'
+          next if @cell_local_properties.include?(root)
+          next unless @data_properties.include?(root)
+
+          add_rule_warning('binding-cell-parent-scope',
+                           "Cell binding '@{#{inner.strip}}' in '#{component_type}.#{attribute_name}' depends on parent-screen data key '#{root}' — cell scope guarantees only the item's own fields plus 'index'. Pass the value through the item data instead.")
+        end
+      end
+
+      def embed_params_attr?(component_type, attribute_name)
+        component_type == 'Embed' && attribute_name.to_s.split(/[.\[]/).first == 'params'
+      end
+
+      def add_error(rule_id, message)
+        context = @current_file ? "[#{@current_file}] " : ""
+        entry = "#{context}[#{rule_id}] #{message}"
+        @errors << entry unless @errors.include?(entry)
+      end
+
+      def add_rule_warning(rule_id, message)
+        context = @current_file ? "[#{@current_file}] " : ""
+        entry = "#{context}[#{rule_id}] #{message}"
+        @warnings << entry unless @warnings.include?(entry)
       end
 
       # Check if variables in binding expression are defined in data

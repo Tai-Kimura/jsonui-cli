@@ -108,11 +108,20 @@ RSpec.describe SjuiTools::SwiftUI::Views::ChildRenderer do
     end
 
     context 'with binding visibility' do
-      it 'uses binding variable name' do
+      # Intended diff (renderer-ssot-15-4): canonical expression parsing —
+      # the binding key is used verbatim (no to_camel_case mangling)
+      it 'uses the binding path verbatim' do
         child = { 'type' => 'View', 'visibility' => '@{is_shown}' }
         renderer.send(:render_child_with_visibility, child, 'horizontal')
 
-        expect(renderer.generated_code).to include('VisibilityWrapper(data.isShown) {')
+        expect(renderer.generated_code).to include('VisibilityWrapper(data.is_shown) {')
+      end
+
+      it 'emits a canonical ?? default without mangling' do
+        child = { 'type' => 'View', 'visibility' => "@{vis ?? 'gone'}" }
+        renderer.send(:render_child_with_visibility, child, 'horizontal')
+
+        expect(renderer.generated_code).to include('VisibilityWrapper(data.vis ?? "gone") {')
       end
     end
 

@@ -229,7 +229,7 @@ module SjuiTools
                 }
 
                 var body: some View {
-                    #{view_name}GeneratedView(data: $viewModel.data)
+                    #{view_name}GeneratedView(data: $viewModel.data, viewModel: viewModel)
                         // Add navigation destinations, sheets, or other view-level modifiers here
                 }
             }
@@ -264,17 +264,22 @@ module SjuiTools
 
             struct #{view_name}GeneratedView: View {
                 @SwiftUI.Binding var data: #{view_name}Data
+                var viewModel: Any = ()
 
                 var body: some View {
+                    Group {
         #if DEBUG
-                    if ViewSwitcher.isDynamicMode {
-                        DynamicView(jsonName: "#{json_reference}", viewId: "#{json_name}_view", data: data.toDictionary(binding: $data))
-                    } else {
-                        generatedBody
-                    }
+                        if ViewSwitcher.isDynamicMode {
+                            DynamicView(jsonName: "#{json_reference}", viewId: "#{json_name}_view", data: data.toDictionary(binding: $data))
+                        } else {
+                            generatedBody
+                        }
         #else
-                    generatedBody
+                        generatedBody
         #endif
+                    }
+                    // Requires SwiftJsonUI >= 10.6.0 (embed init-params child-side wiring)
+                    .receiveEmbedInitParams(to: viewModel)
                 }
 
                 @ViewBuilder

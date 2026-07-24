@@ -46,9 +46,24 @@ RSpec.describe KjuiTools::Compose::Helpers::ResourceResolver do
       end
     end
 
-    it 'processes data binding with null coalescing' do
+    it 'evaluates the ?? default instead of stripping it (canonical emit)' do
+      result = described_class.process_text('@{userName ?? "Guest"}', required_imports)
+      expect(result).to eq('"${data.userName ?: "Guest"}"')
+    end
+
+    it 'accepts single-quoted ?? defaults (canonical-new spelling)' do
+      result = described_class.process_text("@{userName ?? 'Guest'}", required_imports)
+      expect(result).to eq('"${data.userName ?: "Guest"}"')
+    end
+
+    it 'emits plain access when the property has a data-section defaultValue (inline default is dead)' do
+      described_class.data_definitions = {
+        'userName' => { 'name' => 'userName', 'class' => 'String', 'defaultValue' => 'X' }
+      }
       result = described_class.process_text('@{userName ?? "Guest"}', required_imports)
       expect(result).to eq('"${data.userName}"')
+    ensure
+      described_class.data_definitions = {}
     end
 
     it 'quotes plain text' do

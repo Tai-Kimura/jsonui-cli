@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/modifier_builder'
+require_relative '../helpers/binding_expression'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/font_spec_helper'
 
@@ -388,11 +389,12 @@ module KjuiTools
             code += ",\n" + indent("// hideOnFocused = #{json_data['hideOnFocused']}", depth + 1)
           end
 
-          # Enabled state
+          # Enabled state (boolean value context: supports `??` default and
+          # `@{!flag}` negation via the canonical binding parser)
           if json_data.key?('enabled')
             if json_data['enabled'].is_a?(String) && json_data['enabled'].start_with?('@{')
-              variable = json_data['enabled'].match(/@\{([^}]+)\}/)[1]
-              code += ",\n" + indent("enabled = data.#{variable}", depth + 1)
+              inner_expr = json_data['enabled'][2..-2]
+              code += ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 1)
             else
               code += ",\n" + indent("enabled = #{json_data['enabled']}", depth + 1)
             end
@@ -412,15 +414,11 @@ module KjuiTools
         def self.process_data_binding(text)
           return quote(text) unless text.is_a?(String)
 
-          if text.match(/@\{([^}]+)\}/)
-            variable = $1
-            if variable.include?(' ?? ')
-              parts = variable.split(' ?? ')
-              var_name = parts[0].strip
-              "data.#{var_name}"
-            else
-              "data.#{variable}"
-            end
+          if (inner = Helpers::BindingExpression.extract_inner(text))
+            # Two-way context: flat path only (a `??` default here is a
+            # validator error — binding-two-way-complex); shared parse via
+            # BindingExpression.
+            "data.#{Helpers::BindingExpression.two_way_path(inner)}"
           else
             quote(text)
           end

@@ -4,6 +4,7 @@ require 'rexml/document'
 require 'json'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
+require_relative 'binding_expression'
 
 module KjuiTools
   module Compose
@@ -55,22 +56,11 @@ module KjuiTools
           def process_text(text, required_imports = nil)
             return quote(text) unless text.is_a?(String)
 
-            # Handle data binding expressions
-            if text.match(/@\{([^}]+)\}/)
-              variable = $1
-              if variable.include?(' ?? ')
-                parts = variable.split(' ?? ')
-                var_name = parts[0].strip
-                return "\"\${data.#{var_name}}\""
-              else
-                # Check if property has defaultValue (non-optional)
-                if has_default_value?(variable)
-                  return "\"\${data.#{variable}}\""
-                else
-                  # Optional - add ?: "" fallback
-                  return "\"\${data.#{variable} ?: \"\"}\""
-                end
-              end
+            # Handle data binding expressions — canonical parse + emit
+            # (nullability-aware `?:` fallback, real `??` default evaluation)
+            # is centralized in BindingExpression.
+            if (inner = BindingExpression.extract_inner(text))
+              return BindingExpression.interpolated_access(inner)
             end
             
             # Skip resource resolution if we're in the extraction phase
@@ -96,9 +86,13 @@ module KjuiTools
           def process_color(color, required_imports = nil)
             return nil unless color.is_a?(String)
 
-            # Handle data binding expressions - convert to data property access
+            # Handle data binding expressions - convert to data property access.
+            # Canonical parse via BindingExpression so a `?? 'default'` no
+            # longer corrupts the property path; a string default feeds the
+            # ColorManager name fallback for nullable String properties.
             if color.start_with?('@{') && color.end_with?('}')
-              variable = color.gsub(/@\{|\}/, '')
+              parsed = BindingExpression.parse(color[2..-2])
+              variable = parsed.path
               prop_class = get_property_class(variable)
 
               # String type: resolve color name at runtime via ColorManager
@@ -107,7 +101,8 @@ module KjuiTools
                 if has_default_value?(variable)
                   return "ColorManager.compose.color(data.#{variable}) ?: Color.Unspecified"
                 else
-                  return "ColorManager.compose.color(data.#{variable} ?: \"\") ?: Color.Unspecified"
+                  fallback = parsed.has_default && parsed.default.is_a?(String) ? parsed.default : ''
+                  return "ColorManager.compose.color(data.#{variable} ?: #{BindingExpression.quote(fallback)}) ?: Color.Unspecified"
                 end
               end
 

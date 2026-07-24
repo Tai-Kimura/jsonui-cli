@@ -216,8 +216,8 @@ RSpec.describe RjuiTools::Core::BindingValidator do
       end
     end
 
-    context 'with nil coalescing (business logic)' do
-      it 'warns about nil coalescing operator' do
+    context 'with ?? default (official support, binding SSoT track 15)' do
+      it 'accepts a single ?? default with a literal' do
         component = {
           'type' => 'View',
           'child' => [
@@ -226,8 +226,98 @@ RSpec.describe RjuiTools::Core::BindingValidator do
           ]
         }
         warnings = validator.validate(component)
-        expect(warnings).not_to be_empty
-        expect(warnings.first).to include('nil coalescing')
+        expect(warnings).to be_empty
+      end
+
+      it 'rejects more than one ?? (binding-double-default)' do
+        component = {
+          'type' => 'Label',
+          'text' => "@{a ?? 'x' ?? 'y'}"
+        }
+        messages = validator.validate(component)
+        expect(messages.any? { |m| m.include?('[binding-double-default]') }).to be true
+        expect(validator.has_errors?).to be true
+      end
+    end
+
+    context 'with canonical negation and two-way rules' do
+      it 'accepts @{!flag} on a boolean attribute (hidden)' do
+        component = {
+          'type' => 'View',
+          'hidden' => '@{!flag}'
+        }
+        messages = validator.validate(component)
+        expect(messages.select { |m| m.include?('binding-negation-context') }).to be_empty
+        expect(messages.select { |m| m.include?('negation operator') }).to be_empty
+      end
+
+      it 'rejects @{!flag} on a non-boolean known attribute (binding-negation-context)' do
+        component = {
+          'type' => 'Label',
+          'text' => '@{!flag}'
+        }
+        messages = validator.validate(component)
+        expect(messages.any? { |m| m.include?('[binding-negation-context]') }).to be true
+      end
+
+      it 'rejects a dotted path on a two-way attribute (binding-two-way-complex)' do
+        component = {
+          'type' => 'TextField',
+          'text' => '@{user.email}'
+        }
+        messages = validator.validate(component)
+        expect(messages.any? { |m| m.include?('[binding-two-way-complex]') }).to be true
+      end
+
+      it 'accepts a flat identifier on a two-way attribute' do
+        component = {
+          'type' => 'TextField',
+          'text' => '@{email}'
+        }
+        messages = validator.validate(component)
+        expect(messages.select { |m| m.include?('binding-two-way-complex') }).to be_empty
+      end
+    end
+
+    context 'with Collection cell parent-scope dependence' do
+      it 'warns when a cell binds a parent-screen data key (binding-cell-parent-scope)' do
+        component = {
+          'type' => 'View',
+          'data' => [
+            { 'name' => 'screenTitle', 'class' => 'String' },
+            { 'name' => 'items', 'class' => 'Array' }
+          ],
+          'child' => [
+            { 'type' => 'Label', 'text' => '@{screenTitle}' },
+            {
+              'type' => 'Collection',
+              'items' => '@{items}',
+              'sections' => [
+                { 'cell' => { 'type' => 'Label', 'text' => '@{screenTitle}' } }
+              ]
+            }
+          ]
+        }
+        messages = validator.validate(component)
+        expect(messages.any? { |m| m.include?('[binding-cell-parent-scope]') }).to be true
+      end
+
+      it 'does not warn for item-scope (data.-prefixed) cell bindings' do
+        component = {
+          'type' => 'View',
+          'data' => [{ 'name' => 'items', 'class' => 'Array' }],
+          'child' => [
+            {
+              'type' => 'Collection',
+              'items' => '@{items}',
+              'sections' => [
+                { 'cell' => { 'type' => 'Label', 'text' => '@{data.title}' } }
+              ]
+            }
+          ]
+        }
+        messages = validator.validate(component)
+        expect(messages.select { |m| m.include?('binding-cell-parent-scope') }).to be_empty
       end
     end
 

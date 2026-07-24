@@ -157,6 +157,20 @@ RSpec.describe KjuiTools::Compose::Generators::CellGenerator do
       content = JSON.parse(File.read(json_path))
       expect(content).to have_key('child')
     end
+
+    # Canonical collection-cell scope (binding_semantics.json
+    # collectionCellScope): scaffolds must emit the item's own fields FLAT —
+    # the old '@{item.title}' / '@{item.value}' prefix is non-canonical.
+    it 'scaffolds flat item-field bindings without the item. prefix' do
+      generator = described_class.new('TestCell')
+      expect { generator.generate }.to output(/Generated Collection Cell/).to_stdout
+
+      json_path = File.join(temp_dir, 'src/main/assets/Layouts/test_cell.json')
+      raw = File.read(json_path)
+      expect(raw).to include('@{title}')
+      expect(raw).to include('@{value}')
+      expect(raw).not_to include('@{item.')
+    end
   end
 
   describe 'generated Kotlin files' do

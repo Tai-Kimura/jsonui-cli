@@ -78,18 +78,31 @@ RSpec.describe KjuiTools::Core::BindingValidator do
       end
     end
 
-    context 'with simple boolean negation' do
+    context 'with simple boolean negation on a boolean value attribute' do
+      # Canonical rule (binding_semantics.json): '@{!prop}' is valid ONLY in
+      # boolean value contexts. 'hidden' is boolean; 'visibility' is a String
+      # enum, so negation there is a binding-negation-context error.
       let(:json_data) do
         {
+          'type' => 'View',
+          'data' => [{ 'name' => 'isLoggedIn', 'class' => 'Boolean' }],
+          'hidden' => '@{!isLoggedIn}'
+        }
+      end
+
+      it 'returns no warnings for negation on a boolean attribute' do
+        warnings = validator.validate(json_data)
+        expect(warnings).to be_empty, warnings.inspect
+      end
+
+      it 'errors with binding-negation-context for negation on the String visibility attribute' do
+        json = {
           'type' => 'View',
           'data' => [{ 'name' => 'isHidden', 'class' => 'Boolean' }],
           'visibility' => '@{!isHidden}'
         }
-      end
-
-      it 'returns no warnings for simple negation' do
-        warnings = validator.validate(json_data)
-        expect(warnings).to be_empty
+        warnings = validator.validate(json)
+        expect(warnings).to include(a_string_including('binding-negation-context'))
       end
     end
 

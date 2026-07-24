@@ -68,6 +68,18 @@ RSpec.describe SjuiTools::SwiftUI::ViewUpdater do
 
         expect(content).to include('TestData')
       end
+
+      # Intended diff (renderer-ssot-15-4): unconditional embed init-params
+      # child-side wiring. The type-erased overload lands in SwiftJsonUI
+      # 10.6.0; the default `()` keeps VM-less call sites source compatible.
+      it 'emits unconditional embed init-params child-side wiring' do
+        updater.update_generated_body(swift_file_path, 'Text("Test")')
+        content = File.read(swift_file_path)
+
+        expect(content).to include('var viewModel: Any = ()')
+        expect(content).to include('// Requires SwiftJsonUI >= 10.6.0')
+        expect(content).to include('.receiveEmbedInitParams(to: viewModel)')
+      end
     end
 
     context 'viewModel injection (regression: sjui-embed-event-bridge-references-undeclared-viewmodel)' do
@@ -101,6 +113,20 @@ RSpec.describe SjuiTools::SwiftUI::ViewUpdater do
         updater.update_generated_body(swift_file_path, 'Text("no embed events")')
         content = File.read(swift_file_path)
         expect(content).not_to include('@ObservedObject var viewModel:')
+        # renderer-ssot-15-4: a type-erased slot takes its place for the
+        # unconditional init-params wiring
+        expect(content).to include('var viewModel: Any = ()')
+      end
+
+      it 'keeps the typed viewModel declaration AND wires init params for eventBridge bodies' do
+        updater.update_generated_body(
+          swift_file_path,
+          "EmbedContainer(...) { eventBridge: { event in viewModel.onBarSelected(payload) } }"
+        )
+        content = File.read(swift_file_path)
+        expect(content).to include('@ObservedObject var viewModel: TabletBarBrowserViewModel')
+        expect(content).not_to include('var viewModel: Any = ()')
+        expect(content).to include('.receiveEmbedInitParams(to: viewModel)')
       end
     end
 

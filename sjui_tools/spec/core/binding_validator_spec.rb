@@ -240,18 +240,30 @@ RSpec.describe SjuiTools::Core::BindingValidator do
       end
     end
 
-    context 'with nil coalescing' do
+    context 'with nil coalescing (canonical `??` default — officially supported)' do
+      # Intended diff (renderer-ssot-15-4): '@{path ?? default}' is canonical
+      # (shared/core/binding_semantics.json) — the legacy "handle nil in
+      # ViewModel" warning contradicted it and was removed.
       let(:json_data) do
         {
           'type' => 'Label',
+          'id' => 'label',
           'data' => [{ 'name' => 'userName', 'class' => 'String?' }],
           'text' => '@{userName ?? "Guest"}'
         }
       end
 
-      it 'returns warning for nil coalescing' do
+      it 'does not warn for a single canonical default' do
         warnings = validator.validate(json_data)
-        expect(warnings.first).to include('nil coalescing')
+        expect(warnings.any? { |w| w.include?('nil coalescing') }).to be false
+        expect(warnings.any? { |w| w.include?('binding-double-default') }).to be false
+      end
+
+      it 'errors on more than one ?? (binding-double-default)' do
+        doubled = json_data.merge('text' => "@{userName ?? 'a' ?? 'b'}")
+        warnings = validator.validate(doubled)
+        expect(warnings.any? { |w| w.include?('binding-double-default') }).to be true
+        expect(validator.errors.any? { |w| w.include?('binding-double-default') }).to be true
       end
     end
 
@@ -604,10 +616,12 @@ RSpec.describe SjuiTools::Core::BindingValidator do
     it 'collects all warnings' do
       warnings = validator.validate(json_data)
       # Multiple patterns can match same binding (ternary + comparison for the second child)
-      expect(warnings.length).to be >= 3
+      expect(warnings.length).to be >= 2
       expect(warnings.any? { |w| w.include?('logical operator') }).to be true
       expect(warnings.any? { |w| w.include?('ternary operator') }).to be true
-      expect(warnings.any? { |w| w.include?('nil coalescing') }).to be true
+      # Intended diff (renderer-ssot-15-4): '@{value ?? "default"}' is
+      # canonical and no longer warned
+      expect(warnings.any? { |w| w.include?('nil coalescing') }).to be false
     end
   end
 

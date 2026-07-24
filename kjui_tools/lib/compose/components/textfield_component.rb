@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/modifier_builder'
+require_relative '../helpers/binding_expression'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/font_spec_helper'
 
@@ -25,10 +26,11 @@ module KjuiTools
           # TextField uses 'text' for value and supports both 'hint' and 'placeholder'
           # For TextField value, we need direct data binding (not string interpolation)
           raw_text = json_data['text'] || ''
-          value = if raw_text.match(/@\{([^}]+)\}/)
-            variable = $1
-            var_name = variable.include?(' ?? ') ? variable.split(' ?? ')[0].strip : variable
-            "data.#{var_name}"
+          value = if (inner = Helpers::BindingExpression.extract_inner(raw_text))
+            # Two-way context: flat path only (a `??` default here is a
+            # validator error — binding-two-way-complex); shared parse via
+            # BindingExpression.
+            "data.#{Helpers::BindingExpression.two_way_path(inner)}"
           else
             Helpers::ResourceResolver.process_text(raw_text, required_imports)
           end

@@ -16,7 +16,9 @@ module SjuiTools
 
           # Extract property name from binding (e.g., "@{simpleText}" -> "simpleText")
           if text_binding && text_binding.start_with?('@{') && text_binding.end_with?('}')
-            property_name = text_binding[2..-2]  # Remove @{ and }
+            # Two-way position: canonically a single flat identifier — the
+            # parsed path alone is emitted ('??'/'!' are validator errors)
+            property_name = SwiftUI::Binding::BindingExpression.parse(text_binding[2..-2]).path
             binding_path = "data.#{property_name}"
           else
             # Fallback to ID-based naming if no binding
@@ -34,9 +36,10 @@ module SjuiTools
             hint_value = @component['hint'] || @component['placeholder']
             if hint_value
               if hint_value.is_a?(String) && hint_value.start_with?('@{') && hint_value.end_with?('}')
-                # Binding expression -> resolve to data property
-                property_name = hint_value[2..-2]
-                add_line "hint: data.#{property_name},"
+                # Binding expression -> resolve to data property (canonical
+                # expression parsing: path + optional '?? default')
+                hint_expr = SwiftUI::Binding::BindingExpression.swift_value_expr(hint_value[2..-2])
+                add_line "hint: #{hint_expr},"
               else
                 # Escape newlines in hint text
                 escaped_hint = hint_value.gsub("\n", "\\n")
@@ -240,8 +243,8 @@ module SjuiTools
           if hidden_value == true
             @modifier_bag.register(:hidden, ".hidden()")
           elsif hidden_value.is_a?(String) && hidden_value.start_with?('@{') && hidden_value.end_with?('}')
-            var_name = to_camel_case(hidden_value[2..-2])
-            @modifier_bag.register(:hidden, ".opacity(data.#{var_name} ? 0 : 1)")
+            hidden_expr = SwiftUI::Binding::BindingExpression.swift_bool_expr(hidden_value[2..-2])
+            @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1)")
           end
 
           generated_code

@@ -20,8 +20,8 @@ module SjuiTools
           
           # Check if value is a binding
           if @component['value'] && @component['value'].to_s.start_with?('@{') && @component['value'].to_s.end_with?('}')
-            # Use binding from data model
-            property_name = @component['value'][2..-2]
+            # Use binding from data model (two-way position: parsed path only)
+            property_name = SwiftUI::Binding::BindingExpression.parse(@component['value'][2..-2]).path
             binding_var = "$data.#{property_name}"
             add_line "Slider(value: #{binding_var}, in: #{min_value}...#{max_value})"
           else

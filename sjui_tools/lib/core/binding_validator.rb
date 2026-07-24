@@ -4,10 +4,16 @@ require 'json'
 
 module SjuiTools
   module Core
-    # Validates binding expressions in JSON layouts
-    # Warns when bindings contain business logic that should be in ViewModel
+    # Validates binding expressions in JSON layouts.
+    # Enforces the canonical validatorRules from
+    # shared/core/binding_semantics.json (rule ids appear verbatim in the
+    # emitted messages) and warns when bindings contain business logic that
+    # should be in ViewModel.
     class BindingValidator
       attr_reader :warnings
+      # Error-severity canonical rule violations (subset of the messages
+      # returned by #validate; kept separately so callers can escalate)
+      attr_reader :errors
 
       # Patterns that indicate business logic in bindings
       BUSINESS_LOGIC_PATTERNS = [
@@ -31,11 +37,9 @@ module SjuiTools
           pattern: /&&|\|\|/,
           message: "logical operator (&&, ||) - move logic to ViewModel"
         },
-        # Nil coalescing
-        {
-          pattern: /\?\?/,
-          message: "nil coalescing (??) - handle nil in ViewModel"
-        },
+        # NOTE: nil coalescing (??) is NOT flagged here — '@{path ?? default}'
+        # is officially supported (shared/core/binding_semantics.json). The
+        # canonical validator rules below enforce its grammar instead.
         # Method calls with arguments (but allow simple property access)
         {
           pattern: /\.\w+\([^)]+\)/,
@@ -75,13 +79,19 @@ module SjuiTools
         {
           pattern: /\+\+|--/,
           message: "increment/decrement - update value in ViewModel"
-        },
-        # Negation operator (generates invalid code like data.!isLogin)
-        {
-          pattern: /^!/,
-          message: "negation operator (!) - create a computed property in ViewModel instead (e.g., isLoggedOut instead of !isLoggedIn)"
         }
+        # NOTE: '!' negation is no longer a blanket warning — '@{!path}' is
+        # canonical in boolean value contexts; other contexts get the
+        # binding-negation-context error from the canonical rules below.
       ].freeze
+
+      # Canonical path: identifier segments joined by '.', optional bracket
+      # index per segment (items[0].title) — shared/core/binding_semantics.json
+      CANONICAL_PATH = /[a-zA-Z_][a-zA-Z0-9_]*(\[\d+\])?(\.[a-zA-Z_][a-zA-Z0-9_]*(\[\d+\])?)*/
+      # Canonical default literal: "str" | 'str' | true | false | null | number
+      CANONICAL_DEFAULT = /("[^"]*"|'[^']*'|true|false|null|-?\d+(\.\d+)?)/
+      # Two-way bindings must be a single flat identifier
+      FLAT_IDENTIFIER = /\A[a-zA-Z_][a-zA-Z0-9_]*\z/
 
       # Allowed simple patterns that look like logic but are acceptable
       ALLOWED_PATTERNS = [
@@ -92,12 +102,21 @@ module SjuiTools
         # Action bindings (callbacks)
         /^@\{on[A-Z][a-zA-Z0-9_]*\}$/,
         # data. prefix for accessing data properties (e.g., @{data.name} in Collection cells)
-        /^@\{data\.[a-zA-Z_][a-zA-Z0-9_.]*\}$/
+        /^@\{data\.[a-zA-Z_][a-zA-Z0-9_.]*\}$/,
+        # Canonical '??' default: @{path ?? literal} (single default only —
+        # arity is enforced by the binding-double-default rule)
+        /^@\{\s*#{CANONICAL_PATH.source}\s*\?\?\s*#{CANONICAL_DEFAULT.source}\s*\}$/,
+        # Canonical negation: @{!path} (context is enforced by the
+        # binding-negation-context rule)
+        /^@\{\s*!\s*#{CANONICAL_PATH.source}\s*\}$/
       ].freeze
 
       def initialize
         @warnings = []
+        @errors = []
+        @in_cell_context = false
         @data_properties = Set.new
+        @cell_data_properties = Set.new  # Properties declared inside section cells
         @used_properties = Set.new  # Track used properties for unused detection
         @data_types = {} # Store property name -> type mapping
         @current_file = nil
@@ -115,8 +134,11 @@ module SjuiTools
       # @return [Array<String>] Array of warning messages
       def validate(json_data, file_name = nil)
         @warnings = []
+        @errors = []
+        @in_cell_context = false
         @current_file = file_name
         @data_properties = Set.new
+        @cell_data_properties = Set.new
         @used_properties = Set.new
         @data_types = {}
 
@@ -137,6 +159,11 @@ module SjuiTools
         !@warnings.empty?
       end
 
+      # Check if there are any error-severity canonical rule violations
+      def has_errors?
+        !@errors.empty?
+      end
+
       # Print all warnings to stdout
       def print_warnings
         @warnings.each do |warning|
@@ -148,9 +175,15 @@ module SjuiTools
       # @param binding_expr [String] The binding expression (without @{ })
       # @param attribute_name [String] The attribute name
       # @param component_type [String] The component type
+      # @param mixed_text [Boolean] true when the binding occurs inside mixed
+      #   text (interpolation context) rather than as the whole value
       # @return [Array<String>] Array of warning messages
-      def check_binding(binding_expr, attribute_name, component_type)
+      def check_binding(binding_expr, attribute_name, component_type, mixed_text: false)
         warnings = []
+
+        # Canonical validator rules run first — they apply even to
+        # expressions the business-logic allowlist would wave through
+        warnings.concat(check_canonical_rules(binding_expr, attribute_name, component_type, mixed_text: mixed_text))
 
         # Check if it's allowed simple pattern
         full_binding = "@{#{binding_expr}}"
@@ -166,10 +199,42 @@ module SjuiTools
         warnings
       end
 
+      # Canonical validatorRules from shared/core/binding_semantics.json.
+      # Rule ids appear verbatim in the emitted messages; error-severity
+      # violations are also recorded in #errors.
+      def check_canonical_rules(binding_expr, attribute_name, component_type, mixed_text: false)
+        messages = []
+        expr = binding_expr.strip
+
+        # binding-double-default (error, any context): more than one '??'
+        if expr.scan('??').length >= 2
+          messages << canonical_error("binding-double-default",
+            "Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' has more than one '??' — exactly one default per expression.")
+        end
+
+        if two_way_attribute?(component_type, attribute_name)
+          # binding-two-way-complex (error): must be a single flat identifier
+          unless expr.match?(FLAT_IDENTIFIER)
+            messages << canonical_error("binding-two-way-complex",
+              "Two-way binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' must be a single flat identifier (no '.', '[', '??', '!').")
+          end
+        elsif expr.start_with?('!')
+          # binding-negation-context (error): '!' is only valid in boolean
+          # value contexts. Mixed text is always a text context; whole-value
+          # usage is invalid when the attribute is not boolean-typed.
+          if mixed_text || non_boolean_value_attribute?(component_type, attribute_name)
+            messages << canonical_error("binding-negation-context",
+              "Negation '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' is only valid in boolean value contexts.")
+          end
+        end
+
+        messages
+      end
+
       private
 
       # Collect all data property names and types from the component tree
-      def collect_data_properties(component)
+      def collect_data_properties(component, in_cell: false)
         return unless component.is_a?(Hash)
 
         # Check for data declarations
@@ -186,6 +251,7 @@ module SjuiTools
             # Add property name and type to the maps
             if data_item['name']
               @data_properties << data_item['name']
+              @cell_data_properties << data_item['name'] if in_cell
               @data_types[data_item['name']] = data_item['class'] if data_item['class']
             end
           end
@@ -194,14 +260,15 @@ module SjuiTools
         # Recurse into children
         children = component['child'] || component['children'] || []
         children = [children] unless children.is_a?(Array)
-        children.each { |child| collect_data_properties(child) if child.is_a?(Hash) }
+        children.each { |child| collect_data_properties(child, in_cell: in_cell) if child.is_a?(Hash) }
 
         # Recurse into sections
         if component['sections'].is_a?(Array)
           component['sections'].each do |section|
             next unless section.is_a?(Hash)
             ['header', 'footer', 'cell'].each do |key|
-              collect_data_properties(section[key]) if section[key].is_a?(Hash)
+              next unless section[key].is_a?(Hash)
+              collect_data_properties(section[key], in_cell: in_cell || key == 'cell')
             end
           end
         end
@@ -256,7 +323,13 @@ module SjuiTools
             ['header', 'footer', 'cell'].each do |key|
               next unless section[key].is_a?(Hash)
               section_hierarchy = hierarchy ? "#{hierarchy}.sections[#{section_index}].#{key}" : "sections[#{section_index}].#{key}"
+              # Cell subtrees resolve against the item's own fields (flat) +
+              # 'index' — parent-screen data is NOT guaranteed there
+              # (binding-cell-parent-scope)
+              previous_cell_context = @in_cell_context
+              @in_cell_context = true if key == 'cell'
               validate_component(section[key], component_type, is_root: false, hierarchy: section_hierarchy)
+              @in_cell_context = previous_cell_context
             end
           end
         end
@@ -299,6 +372,12 @@ module SjuiTools
 
             # Check if color attributes have correct type (should be Color, not String)
             check_color_type(binding_expr, attribute_name, component_type)
+          elsif value.include?('@{')
+            # Mixed-text interpolation: apply the canonical rules to each
+            # '@{...}' occurrence (text context)
+            value.scan(/@\{([^}]+)\}/).flatten.each do |inner|
+              @warnings.concat(check_canonical_rules(inner, attribute_name, component_type, mixed_text: true))
+            end
           end
         when Hash
           value.each do |k, v|
@@ -323,6 +402,18 @@ module SjuiTools
           # Track as used property
           @used_properties << var if @data_properties.include?(var)
 
+          if @in_cell_context
+            # binding-cell-parent-scope (warning): a cell binding that only
+            # resolves against the parent screen's data section is
+            # non-portable — cell scope guarantees the item's own fields
+            # (flat) plus 'index' only.
+            if @data_properties.include?(var) && !@cell_data_properties.include?(var)
+              @warnings << "#{build_context_prefix}[binding-cell-parent-scope] Cell binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' refers to parent screen data property '#{var}' — cell scope only guarantees the item's own fields and 'index'."
+            end
+            # Item fields are unknowable statically — skip the undefined check
+            next
+          end
+
           unless @data_properties.include?(var)
             @warnings << "#{build_context_prefix}Binding variable '#{var}' in '#{component_type}.#{attribute_name}' is not defined in data. Add: { \"class\": \"#{infer_type(var, attribute_name, component_type)}\", \"name\": \"#{var}\" }"
           end
@@ -337,8 +428,9 @@ module SjuiTools
         expr = binding_expr.gsub(/'[^']*'/, '').gsub(/"[^"]*"/, '')
 
         # Match variable names (identifiers that are not keywords or literals)
-        # Skip: numbers, true, false, nil, visible, gone
-        keywords = %w[true false nil visible gone]
+        # Skip: numbers, true, false, nil, null, visible, gone, and the
+        # reserved cell-scope key 'index'
+        keywords = %w[true false nil null visible gone index]
 
         expr.scan(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/).flatten.each do |match|
           next if keywords.include?(match)
@@ -522,9 +614,28 @@ module SjuiTools
           when Hash
             validate_embed_params_node(value, key_path)
           when Array
-            @warnings << "#{build_context_prefix}'Embed.#{key_path}' is an array — arrays are not supported in Embed params. Nest literal objects or bind a scalar leaf instead."
+            @warnings << canonical_error("binding-params-array",
+              "'Embed.#{key_path}' is an array — arrays are not supported in Embed params. Nest literal objects or bind a scalar leaf instead.")
           when String
             if value.start_with?('@{') && value.end_with?('}')
+              inner = value[2..-2].strip
+              # (binding-double-default for params leaves is covered by the
+              # generic attribute traversal — not duplicated here)
+
+              # binding-default-in-params (error): '??' defaults belong to
+              # the embedded screen's data section, not to params leaves
+              if inner.include?('??')
+                @warnings << canonical_error("binding-default-in-params",
+                  "'??' default in Embed params leaf '#{key_path}' — defaults belong to the embedded screen's data section (defaultValue).")
+              end
+
+              # binding-negation-context (error): '!' is not valid in
+              # embedParams context
+              if inner.start_with?('!')
+                @warnings << canonical_error("binding-negation-context",
+                  "Negation '@{#{inner}}' in Embed params leaf '#{key_path}' is only valid in boolean value contexts.")
+              end
+
               prop = value[2..-2]
               type = @data_types[prop]
               if type.is_a?(String) && type.match?(/\[\s*String\s*:|Dictionary\s*</)
@@ -626,6 +737,42 @@ module SjuiTools
         rescue JSON::ParserError
           {}
         end
+      end
+
+      # Record an error-severity canonical rule violation and return its
+      # message (rule id appears verbatim for machine matching)
+      def canonical_error(rule_id, detail)
+        message = "#{build_context_prefix}[#{rule_id}] #{detail}"
+        @errors << message
+        message
+      end
+
+      # Look up an attribute definition for [component_type, 'common']
+      def attribute_definition(component_type, attr_name)
+        [component_type, 'common'].each do |type_key|
+          component_defs = @attribute_definitions[type_key]
+          next unless component_defs.is_a?(Hash)
+          attr_def = component_defs[attr_name]
+          return attr_def if attr_def.is_a?(Hash)
+        end
+        nil
+      end
+
+      # Two-way attributes (TextField text, Switch isOn, ...) carry
+      # binding_direction: "two-way" in attribute_definitions.json
+      def two_way_attribute?(component_type, attr_name)
+        attr_def = attribute_definition(component_type, attr_name)
+        !!(attr_def && attr_def['binding_direction'] == 'two-way')
+      end
+
+      # True when the attribute is known and NOT boolean-typed (negation is
+      # canonical only in boolean value contexts). Unknown attributes return
+      # false — be lenient rather than false-positive.
+      def non_boolean_value_attribute?(component_type, attr_name)
+        attr_def = attribute_definition(component_type, attr_name)
+        return false unless attr_def
+        types = Array(attr_def['type'])
+        !types.include?('boolean')
       end
 
       # Check if an attribute is excluded for the current platform/mode

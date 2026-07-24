@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'template_helper'
+require_relative '../binding/binding_expression'
 require_relative 'alignment_helper'
 require_relative 'frame_helper'
 require_relative 'color_helper'
@@ -417,8 +418,8 @@ module SjuiTools
             bg_value = @component['background']
             if bg_value.is_a?(String) && bg_value.start_with?('@{')
               # Binding background - resolve here at the correct position (before margins)
-              prop = bg_value[2..-2] # Remove @{ and }
-              @modifier_bag.register(:background, ".background(SwiftJsonUIConfiguration.shared.getColor(for: data.#{prop}) ?? Color.clear)")
+              bg_expr = SwiftUI::Binding::BindingExpression.swift_value_expr(bg_value[2..-2])
+              @modifier_bag.register(:background, ".background(SwiftJsonUIConfiguration.shared.getColor(for: #{bg_expr}) ?? Color.clear)")
             else
               processed_bg = process_template_value(bg_value)
               if processed_bg.is_a?(Hash) && processed_bg[:template_var]

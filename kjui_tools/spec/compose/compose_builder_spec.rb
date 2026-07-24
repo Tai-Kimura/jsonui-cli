@@ -97,6 +97,27 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         )
         expect(File.exist?(viewmodel_file)).to be true
       end
+
+      # Phase 15-4 (②): child-side embed init-params wiring is emitted
+      # unconditionally at the top of every GeneratedView body — a no-op
+      # when the screen is not embedded. Requires KotlinJsonUI >= 2.13.0.
+      it 'emits DriveEmbedInitParams(viewModel) at the start of the GENERATED_CODE region' do
+        builder.build_file(File.join(layouts_dir, 'test_view.json'))
+
+        gen_path = File.join(
+          temp_dir, 'src/main/kotlin/com/example/app/views/test_view/TestViewGeneratedView.kt'
+        )
+        content = File.read(gen_path)
+
+        body_block = content[/\/\/ >>> GENERATED_CODE_START.*?\/\/ >>> GENERATED_CODE_END/m]
+        expect(body_block).to include('// Requires KotlinJsonUI >= 2.13.0 (embed init-params)')
+        expect(body_block).to include('DriveEmbedInitParams(viewModel)')
+        # ...before the dynamic-mode switch
+        expect(body_block.index('DriveEmbedInitParams(viewModel)'))
+          .to be < body_block.index('DynamicModeManager.isActive()')
+
+        expect(content).to include('import com.kotlinjsonui.embed.DriveEmbedInitParams')
+      end
     end
 
     # Regression: kjui-view-responsive-helper-data-closure-scope-leak +
@@ -435,14 +456,23 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
     end
 
     describe '#process_data_binding' do
-      it 'processes simple binding' do
+      # Canonical emit (BindingExpression): a property with no data-section
+      # defaultValue is nullable in the generated data class, so text-context
+      # access always carries an explicit fallback — the authored `??`
+      # default when present, else `?: ""` (unresolved text => empty string).
+      it 'processes simple binding with the canonical empty-string fallback' do
         result = builder.send(:process_data_binding, '@{userName}')
-        expect(result).to eq('"${data.userName}"')
+        expect(result).to eq('"${data.userName ?: ""}"')
       end
 
-      it 'processes binding with null coalescing' do
+      it 'evaluates the ?? default instead of stripping it' do
         result = builder.send(:process_data_binding, '@{userName ?? "Guest"}')
-        expect(result).to eq('"${data.userName}"')
+        expect(result).to eq('"${data.userName ?: "Guest"}"')
+      end
+
+      it 'accepts single-quoted defaults and emits a double-quoted Kotlin string' do
+        result = builder.send(:process_data_binding, "@{userName ?? 'Guest'}")
+        expect(result).to eq('"${data.userName ?: "Guest"}"')
       end
 
       it 'quotes non-binding text' do

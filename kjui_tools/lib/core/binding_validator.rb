@@ -86,12 +86,12 @@ module KjuiTools
         {
           pattern: /\.(let|run|apply|also|with)\s*\{/,
           message: "scope function - move logic to ViewModel"
-        },
-        # Negation operator (generates invalid code like data.!isLogin)
-        {
-          pattern: /^!/,
-          message: "negation operator (!) - create a computed property in ViewModel instead (e.g., isLoggedOut instead of !isLoggedIn)"
         }
+        # NOTE: the old blanket `^!` negation ban lived here but never fired
+        # (ALLOWED_PATTERNS' negation pattern early-returned first). Negation
+        # is now validated context-aware by the canonical rules below:
+        # allowed on boolean value attributes, binding-negation-context
+        # error everywhere else (shared/core/binding_semantics.json).
       ].freeze
 
       # Allowed simple patterns that look like logic but are acceptable
@@ -104,15 +104,23 @@ module KjuiTools
         /^@\{on[A-Z][a-zA-Z0-9_]*\}$/,
         # data. prefix for accessing data properties (e.g., @{data.name} in Collection cells)
         /^@\{data\.[a-zA-Z_][a-zA-Z0-9_.]*\}$/,
-        # Simple boolean negation of a single property (e.g., @{!isHidden})
+        # Simple boolean negation of a single property (e.g., @{!isHidden}).
+        # Whether negation is legal for the CONTEXT is decided by the
+        # canonical rules (binding-negation-context), not here — this only
+        # keeps the business-logic patterns from double-flagging it.
         /^@\{!\s*[a-zA-Z_][a-zA-Z0-9_]*(\??\.[a-zA-Z_][a-zA-Z0-9_]*)*\}$/
       ].freeze
+
+      # Canonical two-way binding grammar: a single flat identifier
+      # (no dots, no brackets, no '??', no '!').
+      CANONICAL_FLAT_IDENTIFIER = /\A[a-zA-Z_][a-zA-Z0-9_]*\z/.freeze
 
       def initialize
         @warnings = []
         @data_properties = Set.new
         @used_properties = Set.new  # Track used properties for unused detection
         @data_types = {} # Store property name -> type mapping
+        @cell_scope = false # true while validating a Collection/Table section cell
         @attribute_definitions = load_attribute_definitions
         @my_platform = 'kotlin'
         @my_mode = 'compose'
@@ -128,6 +136,7 @@ module KjuiTools
         @data_properties = Set.new
         @used_properties = Set.new
         @data_types = {}
+        @cell_scope = false
 
         # First pass: collect all data property names and types
         collect_data_properties(json_data)
@@ -242,12 +251,21 @@ module KjuiTools
         children = [children] unless children.is_a?(Array)
         children.each { |child| validate_component(child, component_type) if child.is_a?(Hash) }
 
-        # Validate sections (Collection/Table)
+        # Validate sections (Collection/Table). Header/footer render in the
+        # parent screen's scope; 'cell' renders in the item scope (flat item
+        # fields + reserved 'index') — see collectionCellScope in
+        # shared/core/binding_semantics.json.
         if component['sections'].is_a?(Array)
           component['sections'].each do |section|
             next unless section.is_a?(Hash)
-            ['header', 'footer', 'cell'].each do |key|
+            ['header', 'footer'].each do |key|
               validate_component(section[key], component_type) if section[key].is_a?(Hash)
+            end
+            if section['cell'].is_a?(Hash)
+              previous_cell_scope = @cell_scope
+              @cell_scope = true
+              validate_component(section['cell'], component_type)
+              @cell_scope = previous_cell_scope
             end
           end
         end
@@ -262,6 +280,11 @@ module KjuiTools
         when String
           if value.start_with?('@{') && value.end_with?('}')
             binding_expr = value[2..-2] # Remove @{ and }
+
+            # Canonical binding-resolution rules
+            # (shared/core/binding_semantics.json validatorRules)
+            check_canonical_binding_rules(binding_expr, attribute_name, component_type)
+
             binding_warnings = check_binding(binding_expr, attribute_name, component_type)
             @warnings.concat(binding_warnings)
 
@@ -270,6 +293,13 @@ module KjuiTools
 
             # Check if color attributes have correct type (should be Color, not String)
             check_color_type(binding_expr, attribute_name, component_type)
+          elsif value.include?('@{')
+            # Mixed-text interpolation ("Hello @{name}!") — apply the
+            # canonical per-occurrence rules (text context: '??' arity and
+            # no negation).
+            value.scan(/@\{([^}]+)\}/).each do |(occurrence)|
+              check_canonical_text_occurrence(occurrence, attribute_name, component_type)
+            end
           end
         when Hash
           value.each do |k, v|
@@ -282,10 +312,111 @@ module KjuiTools
         end
       end
 
+      # ---------------------------------------------------------------
+      # Canonical binding-resolution rules (renderer SSoT 15).
+      # SSoT: shared/core/binding_semantics.json validatorRules — rule ids
+      # are emitted verbatim in the messages so tooling (and the shared
+      # binding_vectors.json validation cases) can match on them.
+      # ---------------------------------------------------------------
+
+      def check_canonical_binding_rules(binding_expr, attribute_name, component_type)
+        # Embed params leaves are validated by validate_embed_params_node
+        # (binding-default-in-params / binding-negation-context /
+        # binding-params-array) — skip here to avoid duplicate reports.
+        return if component_type == 'Embed' && attribute_name.to_s.start_with?('params')
+
+        context = @current_file ? "[#{@current_file}] " : ""
+        expr = binding_expr.strip
+
+        # binding-double-default (error, any context): more than one '??'
+        # in a single expression. String literals are removed first so a
+        # default containing '??' does not false-positive.
+        stripped = expr.gsub(/'[^']*'/, '').gsub(/"[^"]*"/, '')
+        if stripped.scan('??').size > 1
+          @warnings << "#{context}Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' uses more than one '??' (binding-double-default). Exactly one default per expression is allowed."
+        end
+
+        # binding-two-way-complex (error): two-way bindings must be a single
+        # flat identifier — no '.', '[', '??', or '!'.
+        if two_way_attribute?(component_type, attribute_name)
+          unless expr.match?(CANONICAL_FLAT_IDENTIFIER)
+            @warnings << "#{context}Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' is a two-way binding and must be a single flat identifier (binding-two-way-complex). Remove '.', '[', '??' or '!' — compute derived values in the ViewModel."
+          end
+          return
+        end
+
+        # binding-negation-context (error): '!' negation is only canonical
+        # in boolean value contexts.
+        if expr.start_with?('!') && !bool_value_attribute?(component_type, attribute_name)
+          @warnings << "#{context}Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' uses '!' negation outside a boolean value context (binding-negation-context)."
+        end
+
+        # binding-cell-parent-scope (warning): inside a Collection/Table
+        # section cell, only the item's own (flat) fields plus the reserved
+        # 'index' key are guaranteed. Referencing a key that exists in the
+        # PARENT screen's data section is non-portable.
+        if @cell_scope && !expr.start_with?('data.')
+          root = expr.sub(/\A!\s*/, '').split('??').first.to_s.strip.split(/[.\[]/).first
+          if root && root != 'index' && @data_properties.include?(root)
+            @warnings << "#{context}Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' references parent-screen data property '#{root}' from a collection cell (binding-cell-parent-scope). Cells only see the item's own fields plus 'index'."
+          end
+        end
+      end
+
+      # Text-interpolation occurrences ("... @{expr} ..."): '??' arity is
+      # still enforced, and negation is never valid in text context.
+      def check_canonical_text_occurrence(binding_expr, attribute_name, component_type)
+        context = @current_file ? "[#{@current_file}] " : ""
+        expr = binding_expr.strip
+
+        stripped = expr.gsub(/'[^']*'/, '').gsub(/"[^"]*"/, '')
+        if stripped.scan('??').size > 1
+          @warnings << "#{context}Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' uses more than one '??' (binding-double-default). Exactly one default per expression is allowed."
+        end
+
+        if expr.start_with?('!')
+          @warnings << "#{context}Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' uses '!' negation in text context (binding-negation-context). Negation is only valid on boolean value attributes."
+        end
+      end
+
+      # Two-way detection: binding_direction from attribute_definitions.json
+      # (vendored copy of the shared SSoT).
+      def two_way_attribute?(component_type, attr_name)
+        attr_def = find_attribute_definition(component_type, attr_name)
+        attr_def.is_a?(Hash) && attr_def['binding_direction'] == 'two-way'
+      end
+
+      # Boolean value context detection: the attribute's declared type
+      # includes 'boolean' (and it is not a two-way attribute — two-way is
+      # checked first by the caller).
+      def bool_value_attribute?(component_type, attr_name)
+        attr_def = find_attribute_definition(component_type, attr_name)
+        return false unless attr_def.is_a?(Hash)
+        Array(attr_def['type']).include?('boolean')
+      end
+
+      def find_attribute_definition(component_type, attr_name)
+        # Nested attribute paths ("shadow.color") resolve on the base name
+        base_attr = attr_name.to_s.split('.').first
+        [component_type, 'common'].each do |type_key|
+          defs = @attribute_definitions[type_key]
+          next unless defs.is_a?(Hash)
+          attr_def = defs[base_attr]
+          return attr_def if attr_def.is_a?(Hash)
+        end
+        nil
+      end
+
       # Check if variables in binding expression are defined in data
       def check_undefined_variables(binding_expr, attribute_name, component_type)
         # Skip data. prefix bindings (Collection cell bindings)
         return if binding_expr.start_with?('data.')
+
+        # Inside a section cell the binding scope is the ITEM object (flat
+        # fields + 'index'), which the screen-level validator cannot know —
+        # parent-scope references are reported separately as
+        # binding-cell-parent-scope.
+        return if @cell_scope
 
         # Extract variable names from the binding expression
         variables = extract_variables(binding_expr)
@@ -469,10 +600,26 @@ module KjuiTools
           when Hash
             validate_embed_params_node(value, key_path, context)
           when Array
-            @warnings << "#{context}'Embed.#{key_path}' is an array — arrays are not supported in Embed params. Nest literal objects or bind a scalar leaf instead."
+            @warnings << "#{context}'Embed.#{key_path}' is an array — arrays are not supported in Embed params (binding-params-array). Nest literal objects or bind a scalar leaf instead."
           when String
             if value.start_with?('@{') && value.end_with?('}')
-              prop = value[2..-2]
+              inner = value[2..-2].strip
+
+              # binding-default-in-params (error): '??' defaults are not
+              # allowed in params leaves — the embedded screen's own
+              # data-section defaultValue is the canonical fallback
+              # (unresolved leaves are dropped so it applies).
+              if inner.gsub(/'[^']*'/, '').gsub(/"[^"]*"/, '').include?('??')
+                @warnings << "#{context}'Embed.#{key_path}' uses a '??' default inside Embed params (binding-default-in-params). Defaults belong to the embedded screen's data section — remove the '??' and declare a defaultValue there."
+              end
+
+              # binding-negation-context (error): params leaves are not a
+              # boolean value context.
+              if inner.start_with?('!')
+                @warnings << "#{context}'Embed.#{key_path}' uses '!' negation in Embed params (binding-negation-context). Negation is only valid on boolean value attributes."
+              end
+
+              prop = inner.sub(/\A!\s*/, '').split('??').first.to_s.strip
               type = @data_types[prop]
               if type.is_a?(String) && type.match?(/\AMap\s*<|\AHashMap\s*</)
                 @warnings << "#{context}'Embed.#{key_path}' binds map-typed property '#{prop}' — bindings are leaf-only in Embed params (bind scalar leaves; intermediate nodes must be literal objects)."

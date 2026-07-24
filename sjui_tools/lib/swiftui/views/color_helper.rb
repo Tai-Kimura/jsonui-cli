@@ -1,3 +1,5 @@
+require_relative '../binding/binding_expression'
+
 module SjuiTools
   module SwiftUI
     module Views
@@ -44,14 +46,19 @@ module SjuiTools
 
           # Check if it's a binding expression
           if color_value.is_a?(String) && color_value.start_with?('@{') && color_value.end_with?('}')
-            # Extract property name and use data binding
-            property_name = color_value[2...-1]
+            # Canonical expression parsing: '@{path ?? default}' — the path
+            # (not the whole inner expression) keys the data definition lookup
+            parsed = SwiftUI::Binding::BindingExpression.parse(color_value[2..-2])
+            property_name = parsed.path
             data_def = ColorHelper.data_definitions[property_name]
             if data_def && data_def['class'].to_s == 'String'
-              # String type: resolve color name at runtime
-              return "SwiftJsonUIConfiguration.shared.getColor(for: data.#{property_name}) ?? Color.clear"
+              # String type: resolve color name at runtime (string '??'
+              # defaults apply for optional properties)
+              color_expr = SwiftUI::Binding::BindingExpression.swift_value_expr(color_value[2..-2])
+              return "SwiftJsonUIConfiguration.shared.getColor(for: #{color_expr}) ?? Color.clear"
             end
-            # Color type: use directly
+            # Color type: use directly (inline defaults are string literals —
+            # not typeable as Color — so only the path is emitted)
             if ColorHelper.has_default_value?(property_name)
               return "data.#{property_name}"
             else

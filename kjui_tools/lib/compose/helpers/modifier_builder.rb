@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'binding_expression'
 require_relative 'resource_resolver'
 require_relative '../../core/normalization'
 
@@ -499,9 +500,10 @@ module KjuiTools
           # Handle visibility attribute (static or data-bound)
           if json_data['visibility']
             if json_data['visibility'].is_a?(String) && json_data['visibility'].start_with?('@{')
-              # Data binding for visibility
-              variable = json_data['visibility'].gsub('@{', '').gsub('}', '')
-              visibility_info[:visibility_binding] = "data.#{variable}"
+              # Data binding for visibility (string value context —
+              # canonical parse so a `?? 'gone'` default emits a real elvis)
+              inner = json_data['visibility'][2..-2]
+              visibility_info[:visibility_binding] = BindingExpression.value_access(inner)
               required_imports&.add(:visibility_wrapper)
             else
               # Static visibility
@@ -509,13 +511,14 @@ module KjuiTools
               required_imports&.add(:visibility_wrapper)
             end
           end
-          
+
           # Handle hidden attribute (boolean or data binding)
           if json_data['hidden']
             if json_data['hidden'].is_a?(String) && json_data['hidden'].start_with?('@{')
-              # Data binding for hidden
-              variable = json_data['hidden'].gsub('@{', '').gsub('}', '')
-              visibility_info[:hidden_binding] = "data.#{variable}"
+              # Data binding for hidden (boolean value context — `@{!flag}`
+              # emits a real Kotlin negation, `?? true/false` a real elvis)
+              inner = json_data['hidden'][2..-2]
+              visibility_info[:hidden_binding] = BindingExpression.value_access(inner, negatable: true)
               required_imports&.add(:visibility_wrapper)
             elsif json_data['hidden'] == true
               visibility_info[:hidden] = true
@@ -529,14 +532,13 @@ module KjuiTools
           alpha_value = Core::Normalization.attr_lookup(json_data, 'opacity', 'alpha')
           if alpha_value
             required_imports&.add(:alpha)
-            if alpha_value.is_a?(String) && alpha_value.match?(/@\{([^}]+)\}/)
-              variable = alpha_value.gsub(/@\{|\}/, '')
-              modifiers << ".alpha(data.#{variable}.toFloat())"
+            if alpha_value.is_a?(String) && (inner = BindingExpression.extract_inner(alpha_value))
+              modifiers << ".alpha(#{BindingExpression.value_access(inner)}.toFloat())"
             else
               modifiers << ".alpha(#{alpha_value}f)"
             end
           end
-          
+
           # Return both visibility info and modifiers
           { modifiers: modifiers, visibility_info: visibility_info }
         end
@@ -547,9 +549,8 @@ module KjuiTools
           alpha_value = Core::Normalization.attr_lookup(json_data, 'opacity', 'alpha')
           if alpha_value
             required_imports&.add(:alpha)
-            if alpha_value.is_a?(String) && alpha_value.match?(/@\{([^}]+)\}/)
-              variable = alpha_value.gsub(/@\{|\}/, '')
-              modifiers << ".alpha(data.#{variable}.toFloat())"
+            if alpha_value.is_a?(String) && (inner = BindingExpression.extract_inner(alpha_value))
+              modifiers << ".alpha(#{BindingExpression.value_access(inner)}.toFloat())"
             else
               modifiers << ".alpha(#{alpha_value}f)"
             end

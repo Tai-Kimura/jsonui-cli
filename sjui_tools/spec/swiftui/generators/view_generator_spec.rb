@@ -73,6 +73,9 @@ RSpec.describe SjuiTools::SwiftUI::Generators::ViewGenerator do
       content = File.read(main_view_file)
       expect(content).to include('struct SampleView: View')
       expect(content).to include('@StateObject private var viewModel: SampleViewModel')
+      # renderer-ssot-15-4: wrapper passes the VM into the generated view so
+      # the unconditional embed init-params wiring can drive it
+      expect(content).to include('SampleGeneratedView(data: $viewModel.data, viewModel: viewModel)')
     end
 
     it 'creates generated view file' do
@@ -85,6 +88,11 @@ RSpec.describe SjuiTools::SwiftUI::Generators::ViewGenerator do
       content = File.read(generated_file)
       expect(content).to include('struct SampleGeneratedView: View')
       expect(content).to include('@SwiftUI.Binding var data: SampleData')
+      # Intended diff (renderer-ssot-15-4): unconditional embed init-params
+      # child-side wiring
+      expect(content).to include('var viewModel: Any = ()')
+      expect(content).to include('// Requires SwiftJsonUI >= 10.6.0')
+      expect(content).to include('.receiveEmbedInitParams(to: viewModel)')
     end
 
     it 'creates data file' do

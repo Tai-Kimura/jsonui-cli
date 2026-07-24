@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../helpers/binding_expression'
 require_relative '../helpers/modifier_builder'
 
 # Generates Compose code for the `Embed` view type. Embeds another screen as
@@ -148,7 +149,11 @@ module KjuiTools
         # inline `mapOf(...)` (recursive).
         def self.render_param_value(value)
           if value.is_a?(String) && value =~ /^@\{(.+)\}$/
-            "data.#{Regexp.last_match(1)}"
+            # Params-leaf context: path only. `??` defaults are forbidden
+            # here (binding-default-in-params — defaults belong to the
+            # embedded screen's data section); the shared parser keeps the
+            # emit valid Kotlin even for invalid authoring.
+            "data.#{Helpers::BindingExpression.path_only(Regexp.last_match(1))}"
           elsif value.is_a?(String)
             "\"#{value}\""
           elsif value == true || value == false

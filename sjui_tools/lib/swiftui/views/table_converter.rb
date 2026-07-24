@@ -16,7 +16,7 @@ module SjuiTools
           
           # データ配列名の生成（@{items} → items）
           if binding_data && binding_data.start_with?('@{') && binding_data.end_with?('}')
-            data_var_name = binding_data[2..-2]
+            data_var_name = SwiftUI::Binding::BindingExpression.parse(binding_data[2..-2]).path
           else
             data_var_name = 'items'
           end

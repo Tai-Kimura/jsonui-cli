@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../core/generated_marker'
+require_relative 'binding/binding_expression'
 
 module SjuiTools
   module SwiftUI
@@ -42,14 +43,20 @@ module SjuiTools
           state_vars_block = state_variables.map { |sv| "    #{sv}" }.join("\n") + "\n"
         end
 
-        # If the generated body references viewModel.<method>(...), inject a
-        # @ObservedObject property declaration so it resolves. The only emitter
-        # of `viewModel.` is embed_converter's eventBridge; every other handler
-        # path goes through `data.<method>?(...)`. Mirrors KJUI's pattern of
-        # passing viewModel into the generated function (compose_builder.rb:737-747).
-        view_model_decl = ""
+        # viewModel declaration. When the generated body references
+        # viewModel.<method>(...) (embed_converter's eventBridge — the only
+        # emitter of `viewModel.`), inject a typed @ObservedObject so it
+        # resolves; mirrors KJUI's pattern of passing viewModel into the
+        # generated function (compose_builder.rb:737-747).
+        # Otherwise declare a type-erased optional slot (default keeps every
+        # existing call site — including VM-less cell components that pass
+        # `data: $data` — source compatible). Either way the declaration
+        # feeds the unconditional `.receiveEmbedInitParams(to:)` child-side
+        # embed wiring below (renderer-ssot-15-4).
         if new_body_code.include?('viewModel.')
           view_model_decl = "    @ObservedObject var viewModel: #{view_name}ViewModel\n"
+        else
+          view_model_decl = "    var viewModel: Any = ()\n"
         end
 
         # Check if body needs splitting
@@ -91,15 +98,19 @@ module SjuiTools
             @SwiftUI.Binding var data: #{data_name}
         #{view_model_decl}#{state_vars_block}
             var body: some View {
+                Group {
         #if DEBUG
-                if ViewSwitcher.isDynamicMode {
-                    DynamicView(jsonName: "#{json_name}", viewId: "#{json_name}_view", data: data.toDictionary(binding: $data))
-                } else {
-                    generatedBody
-                }
+                    if ViewSwitcher.isDynamicMode {
+                        DynamicView(jsonName: "#{json_name}", viewId: "#{json_name}_view", data: data.toDictionary(binding: $data))
+                    } else {
+                        generatedBody
+                    }
         #else
-                generatedBody
+                    generatedBody
         #endif
+                }
+                // Requires SwiftJsonUI >= 10.6.0 (embed init-params child-side wiring)
+                .receiveEmbedInitParams(to: viewModel)
             }
 
             @ViewBuilder
@@ -541,10 +552,10 @@ module SjuiTools
 
         when 'Label'
           text = json['text'] || ""
-          # Handle data binding
+          # Handle data binding (canonical expression parsing)
           if text.start_with?('@{') && text.end_with?('}')
-            binding = text[2...-1]
-            code << "Text(data.#{binding})"
+            expr = SwiftUI::Binding::BindingExpression.swift_value_expr(text[2...-1])
+            code << "Text(#{expr})"
           else
             code << "Text(\"#{text}\")"
           end

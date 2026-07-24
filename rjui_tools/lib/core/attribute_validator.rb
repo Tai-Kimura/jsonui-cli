@@ -136,7 +136,10 @@ module RjuiTools
           if value.is_a?(Hash)
             validate_embed_params(component, value, key_path)
           elsif value.is_a?(Array)
-            add_warning("Embed.#{key_path} is an array — arrays are not supported in Embed params (nest literal objects or bind a scalar leaf)")
+            # Canonical rule id: binding-params-array (shared/core/
+            # binding_semantics.json validatorRules; BindingValidator emits
+            # the same id as a hard error).
+            add_warning("[binding-params-array] Embed.#{key_path} is an array — arrays are not supported in Embed params (nest literal objects or bind a scalar leaf)")
           end
         end
       end

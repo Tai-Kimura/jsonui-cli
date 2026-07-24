@@ -269,14 +269,9 @@ module SjuiTools
                     child_code = child_converter.convert
 
                     if has_visibility
-                      # Wrap with VisibilityWrapper
-                      visibility_value = child['visibility']
-                      if visibility_value.is_a?(String) && visibility_value.start_with?('@{') && visibility_value.end_with?('}')
-                        var_name = to_camel_case(visibility_value[2..-2])
-                        visibility_param = "data.#{var_name}"
-                      else
-                        visibility_param = "\"#{visibility_value}\""
-                      end
+                      # Wrap with VisibilityWrapper (canonical expression
+                      # parsing shared with view_binding_handler#parse_binding)
+                      visibility_param = SwiftUI::Binding::BindingExpression.swift_visibility_param(child['visibility'])
                       wrapper_indent = "    " * (@indent_level + 2)
                       @generated_code << "#{wrapper_indent}VisibilityWrapper(#{visibility_param}) {"
                       child_code.split("\n").each { |line| @generated_code << line }

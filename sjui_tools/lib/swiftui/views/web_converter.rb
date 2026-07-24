@@ -11,9 +11,8 @@ module SjuiTools
           
           # @{...}形式のテンプレート処理
           if url.start_with?('@{') && url.end_with?('}')
-            # @{...}の中身を取り出す
-            url_var = url[2...-1]
-            url_binding = "data.#{to_camel_case(url_var)}"
+            # Canonical expression parsing (path verbatim + optional '?? default')
+            url_binding = SwiftUI::Binding::BindingExpression.swift_value_expr(url[2..-2])
           else
             url_binding = "\"#{url}\""
           end
