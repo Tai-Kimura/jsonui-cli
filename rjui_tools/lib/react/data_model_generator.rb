@@ -7,6 +7,7 @@ require_relative '../core/config_manager'
 require_relative '../core/type_converter'
 require_relative '../core/generated_marker'
 require_relative 'style_loader'
+require_relative '../core/layout_variant'
 
 module RjuiTools
   module React
@@ -29,6 +30,8 @@ module RjuiTools
 
         # Process all JSON files in Layouts directory
         json_files = Dir.glob(File.join(@layouts_dir, '**/*.json')).reject do |file|
+          # Variant files (home@regular.json) never get their own Data model
+          next true if JsonUIShared::LayoutVariant.variant?(file)
           # Skip Resources folder and Styles folder
           file.include?(File.join(@layouts_dir, 'Resources')) ||
             file.include?(File.join(@layouts_dir, 'Styles'))

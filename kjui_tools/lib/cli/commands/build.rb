@@ -8,6 +8,7 @@ require_relative '../../core/logger'
 require_relative '../../core/attribute_validator'
 require_relative '../../core/binding_validator'
 require_relative '../../core/normalization'
+require_relative '../../core/layout_variant'
 
 module KjuiTools
   module CLI
@@ -174,8 +175,14 @@ module KjuiTools
           style_dependencies = cache_manager.load_style_dependencies
 
           # Process all JSON files in Layouts directory (excluding Resources folder)
-          json_files = Dir.glob(File.join(layouts_dir, '**/*.json')).reject do |file|
+          all_json_files = Dir.glob(File.join(layouts_dir, '**/*.json')).reject do |file|
             file.include?('/Resources/')
+          end
+          # Responsive variant files (home@regular.json) are built alongside
+          # their base screen, never standalone — but they stay in the
+          # resources scan (their strings localize like any layout).
+          json_files = all_json_files.reject do |file|
+            JsonUIShared::LayoutVariant.variant?(file)
           end
 
           if json_files.empty?
@@ -188,7 +195,7 @@ module KjuiTools
           require_relative '../../core/plural_validator'
           resources_manager = Core::ResourcesManager.new(config, source_path)
           begin
-            resources_manager.extract_resources(json_files)
+            resources_manager.extract_resources(all_json_files)
           rescue JsonUIShared::PluralValidator::ValidationError => e
             Core::Logger.error e.message
             exit 1
@@ -204,8 +211,12 @@ module KjuiTools
           json_files.each do |json_file|
             file_name = File.basename(json_file, '.json')
 
-            # Check if file needs update
-            if cache_manager.needs_update?(json_file, last_updated, layouts_dir, last_including_files, style_dependencies)
+            # Check if file needs update. A dirty variant file re-builds its
+            # base screen (the dispatch + variant view live there).
+            variant_dirty = JsonUIShared::LayoutVariant.variants_for(json_file).values.any? do |vf|
+              cache_manager.needs_update?(vf, last_updated, layouts_dir, last_including_files, style_dependencies)
+            end
+            if variant_dirty || cache_manager.needs_update?(json_file, last_updated, layouts_dir, last_including_files, style_dependencies)
               files_to_update << json_file
             else
               # Keep existing includes and style dependencies for unchanged files
@@ -261,6 +272,34 @@ module KjuiTools
                 if binding_warnings.any?
                   @validation_warnings.concat(binding_warnings)
                   Core::Logger.warn "  #{binding_warnings.length} binding warning(s) in #{relative_path}"
+                end
+              end
+
+              # Validate variant files with the same validators (they are
+              # not in json_files — the builder emits them with the base)
+              JsonUIShared::LayoutVariant.variants_for(json_file).each_value do |variant_file|
+                next unless validator || binding_validator
+                variant_rel = Pathname.new(variant_file).relative_path_from(Pathname.new(layouts_dir)).to_s
+                begin
+                  variant_data = JSON.parse(File.read(variant_file))
+                rescue JSON::ParserError
+                  next
+                end
+                if validator
+                  validator.normalized = Core::Normalization.canonicalized?(variant_data)
+                  v_warnings = validate_json(variant_data, validator, File.basename(variant_file, '.json'))
+                  if v_warnings.any?
+                    @validation_warnings.concat(v_warnings.map { |w| "[#{variant_rel}] #{w}" })
+                    @validation_errors += v_warnings.length
+                    Core::Logger.warn "  #{v_warnings.length} attribute warning(s) in #{variant_rel}"
+                  end
+                end
+                if binding_validator
+                  v_binding_warnings = binding_validator.validate(variant_data, variant_rel)
+                  if v_binding_warnings.any?
+                    @validation_warnings.concat(v_binding_warnings)
+                    Core::Logger.warn "  #{v_binding_warnings.length} binding warning(s) in #{variant_rel}"
+                  end
                 end
               end
 

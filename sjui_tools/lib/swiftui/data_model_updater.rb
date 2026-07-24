@@ -7,6 +7,7 @@ require_relative '../core/config_manager'
 require_relative '../core/project_finder'
 require_relative '../core/type_converter'
 require_relative '../core/generated_marker'
+require_relative '../core/layout_variant'
 require_relative 'style_loader'
 require_relative 'include_expander'
 require_relative 'helpers/string_manager_helper'
@@ -29,6 +30,9 @@ module SjuiTools
         json_files = Dir.glob(File.join(@layouts_dir, '**/*.json')).reject do |file|
           # Skip Resources and Styles folders (styles don't need data models)
           next true if file.include?(File.join(@layouts_dir, 'Resources')) || file.include?('/Styles/')
+          # Skip responsive variant files (home@regular.json) — the data
+          # contract is base-canonical, variants never get their own Data
+          next true if JsonUIShared::LayoutVariant.variant?(file)
           # Skip files with "mode": "uikit" (SwiftUI data models don't need UIKit-only files)
           begin
             json_content = JSON.parse(File.read(file))

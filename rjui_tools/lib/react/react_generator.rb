@@ -158,7 +158,7 @@ module RjuiTools
         candidates.find { |dir| File.directory?(dir) }
       end
 
-      def generate(component_name, json, subdir: '')
+      def generate(component_name, json, subdir: '', variants: {}, data_type: nil, source_rel: nil, namespace_stem: nil)
         # Store current JSON file name (snake_case) for StringManager resolution.
         # strings.json groups keys by directory-qualified namespace — e.g. a
         # layout at `learn/installation.json` lives under the `learn_installation`
@@ -167,7 +167,7 @@ module RjuiTools
         # own namespace instead of falling through to Phase 3's linear scan,
         # which would resolve bare keys like `lang_toggle` to whichever
         # namespace appeared first in strings.json.
-        snake_basename = component_name
+        snake_basename = namespace_stem || component_name
           .gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
           .gsub(/([a-z\d])([A-Z])/, '\1_\2')
           .downcase
@@ -188,7 +188,9 @@ module RjuiTools
 
         jsx_content = convert_component(json)
 
-        generate_component_file(component_name, jsx_content, json)
+        generate_component_file(component_name, jsx_content, json,
+                                subdir: subdir, variants: variants,
+                                data_type: data_type, source_rel: source_rel)
       end
 
       private
@@ -209,7 +211,10 @@ module RjuiTools
         converter.convert(indent)
       end
 
-      def generate_component_file(name, jsx_content, json)
+      def generate_component_file(name, jsx_content, json, subdir: '', variants: {}, data_type: nil, source_rel: nil)
+        # Variant screens (home@regular.json) reuse the BASE screen's Data
+        # type — the variant-file data contract is base-canonical.
+        data_name = data_type || name
         state_vars = extract_state_variables(json)
         focus_fields = extract_focus_fields(json)
         included_component_map = extract_included_components(json)  # { CompName => subdir_or_nil }
@@ -244,7 +249,7 @@ module RjuiTools
         needs_state = !state_vars.empty?
         uses_extensions = !extension_components.empty?
         needs_focus = !focus_fields.empty?
-        needs_client = needs_state || uses_string_manager || uses_extensions || needs_landscape || needs_focus
+        needs_client = needs_state || uses_string_manager || uses_extensions || needs_landscape || needs_focus || variants.any?
         use_client = needs_client ? "\"use client\";\n\n" : ''
 
         # Build React import
@@ -257,7 +262,7 @@ module RjuiTools
         react_import = react_hooks.empty? ? "import React from 'react';" : "import React, { #{react_hooks.join(', ')} } from 'react';"
 
         # Generate useMediaQuery import for landscape responsive support
-        media_query_import = needs_landscape ? "\nimport { useMediaQuery } from '@/hooks/useMediaQuery';" : ''
+        media_query_import = (needs_landscape || variants.any?) ? "\nimport { useMediaQuery } from '@/hooks/useMediaQuery';" : ''
 
         # Generate Next.js Link import if needed
         link_import = uses_link ? "\nimport Link from 'next/link';" : ''
@@ -296,9 +301,9 @@ module RjuiTools
         data_import = ''
         if @config['typescript']
           data_import = if uses_data
-                          "\nimport { type #{name}Data, create#{name}Data } from '@/generated/data/#{name}Data';"
+                          "\nimport { type #{data_name}Data, create#{data_name}Data } from '@/generated/data/#{data_name}Data';"
                         else
-                          "\nimport type { #{name}Data } from '@/generated/data/#{name}Data';"
+                          "\nimport type { #{data_name}Data } from '@/generated/data/#{data_name}Data';"
                         end
           # Also import cell Data types for Collections
           cell_types = extract_collection_cell_types(json)
@@ -306,7 +311,7 @@ module RjuiTools
             data_import += "\nimport type { #{cell_type}Data } from '@/generated/data/#{cell_type}Data';"
           end
         elsif uses_data
-          data_import = "\nimport { create#{name}Data } from '@/generated/data/#{name}Data';"
+          data_import = "\nimport { create#{data_name}Data } from '@/generated/data/#{data_name}Data';"
         end
 
         # Generate imports for extension components
@@ -323,14 +328,45 @@ module RjuiTools
         extension_imports = "\n#{extension_imports}" unless extension_imports.empty?
 
         # Generate imports for included components using absolute paths
-        component_imports = included_component_map.map do |comp_name, subdir|
-          if subdir && !subdir.empty?
-            "import #{comp_name} from '@/generated/components/#{subdir}/#{comp_name}';"
+        component_imports = included_component_map.map do |comp_name, inc_subdir|
+          if inc_subdir && !inc_subdir.empty?
+            "import #{comp_name} from '@/generated/components/#{inc_subdir}/#{comp_name}';"
           else
             "import #{comp_name} from '@/generated/components/#{comp_name}';"
           end
         end.join("\n")
         component_imports = "\n#{component_imports}" unless component_imports.empty?
+
+        # Variant-file dispatch (home@regular.json): early-return the
+        # matching variant component by media-query tier (compact < 768 ≤
+        # medium < 1024 ≤ regular — same thresholds as responsive_helper's
+        # Tailwind mapping). Whole-tree replacement; the same data prop
+        # feeds every branch so VM state (owned by the hook above this
+        # component) survives a tier change (06a-design D4/D5).
+        variant_component_imports = ''
+        variant_dispatch_declaration = ''
+        if variants.any?
+          variant_component_imports = "\n" + variants.values.map do |comp|
+            if subdir && !subdir.empty?
+              "import #{comp} from '@/generated/components/#{subdir}/#{comp}';"
+            else
+              "import #{comp} from '@/generated/components/#{comp}';"
+            end
+          end.join("\n")
+
+          hooks = []
+          if variants['medium'] || variants['compact']
+            hooks << "  const jsonuiMinMd = useMediaQuery('(min-width: 768px)');"
+          end
+          if variants['regular'] || variants['medium']
+            hooks << "  const jsonuiMinLg = useMediaQuery('(min-width: 1024px)');"
+          end
+          guards = []
+          guards << "  if (jsonuiMinLg) { return <#{variants['regular']} data={data} />; }" if variants['regular']
+          guards << "  if (jsonuiMinMd && !jsonuiMinLg) { return <#{variants['medium']} data={data} />; }" if variants['medium']
+          guards << "  if (!jsonuiMinMd) { return <#{variants['compact']} data={data} />; }" if variants['compact']
+          variant_dispatch_declaration = "\n" + (hooks + guards).join("\n") + "\n"
+        end
 
         # Generate state declarations
         state_declarations = state_vars.map do |var|
@@ -385,7 +421,7 @@ module RjuiTools
         # with a Partial, and pages/cells pass the full object. A
         # data-consuming component merges the prop over its createXxxData()
         # defaults so every member is present for the body's reads.
-        props_interface = generate_data_props_interface(name, uses_data)
+        props_interface = generate_data_props_interface(name, uses_data, data_type: data_name)
         # `id` is destructured only when it was injected into the root —
         # the interface always accepts it (call sites can't know), but an
         # unused binding would trip noUnusedParameters setups.
@@ -398,8 +434,8 @@ module RjuiTools
           end
         data_merge_declaration =
           if uses_data
-            type_annotation = @config['typescript'] ? ": #{name}Data" : ''
-            "\n  const data#{type_annotation} = { ...create#{name}Data(), ...dataProp };"
+            type_annotation = @config['typescript'] ? ": #{data_name}Data" : ''
+            "\n  const data#{type_annotation} = { ...create#{data_name}Data(), ...dataProp };"
           else
             ''
           end
@@ -408,17 +444,17 @@ module RjuiTools
                             .gsub(/([a-z\d])([A-Z])/, '\1_\2')
                             .downcase
         marker_header = Core::GeneratedMarker.comment_header(
-          source: "Layouts/#{marker_source}.json",
+          source: source_rel || "Layouts/#{marker_source}.json",
           generator: "rjui build"
         )
         marker_footer = Core::GeneratedMarker.comment_footer
 
         <<~JSX
           #{use_client}#{marker_header}
-          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{configuration_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}
+          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{configuration_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
 
           #{props_interface if @config['typescript']}
-          export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{landscape_declaration}#{string_manager_declaration}
+          export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}
             return (
           #{jsx_content}
             );
@@ -435,8 +471,9 @@ module RjuiTools
       # data-passing includes provide a Partial that the component merges
       # over its createXxxData() defaults, and pages/cells pass the full
       # object (a full XxxData is assignable to Partial<XxxData>).
-      def generate_data_props_interface(name, uses_data = true)
-        data_field = uses_data ? "data?: Partial<#{name}Data>;" : "data?: #{name}Data;"
+      def generate_data_props_interface(name, uses_data = true, data_type: nil)
+        data_name = data_type || name
+        data_field = uses_data ? "data?: Partial<#{data_name}Data>;" : "data?: #{data_name}Data;"
         <<~TS
           interface #{name}Props {
             #{data_field}

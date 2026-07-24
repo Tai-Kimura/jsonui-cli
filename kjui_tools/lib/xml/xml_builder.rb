@@ -8,6 +8,7 @@ require_relative '../core/attribute_validator'
 require_relative '../core/binding_validator'
 require_relative '../core/normalization'
 require_relative 'xml_generator'
+require_relative '../core/layout_variant'
 
 module KjuiTools
   module Xml
@@ -61,6 +62,10 @@ module KjuiTools
           file.include?('/Resources/')
         end
         json_files.uniq!
+        # Responsive variant files are a Compose-mode feature; XML mode
+        # (frozen 2026-07-03) skips them so they never become standalone
+        # screens with invalid class names.
+        json_files.reject! { |file| JsonUIShared::LayoutVariant.variant?(file) }
 
         if json_files.empty?
           puts "⚠️  No JSON files found in #{@layouts_dir}"

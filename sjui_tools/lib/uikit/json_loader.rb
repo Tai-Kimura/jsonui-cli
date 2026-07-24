@@ -18,6 +18,7 @@ require_relative "../core/config_manager"
 require_relative "../core/logger"
 require_relative "../core/binding_validator"
 require_relative "../core/resources/string_manager"
+require_relative '../core/layout_variant'
 
 module SjuiTools
   module UIKit
@@ -83,6 +84,9 @@ module SjuiTools
         Dir.glob("#{@layout_path}/**/*.json") do |file|
           # Skip Resources folder
           next if file.include?("#{@layout_path}/Resources/")
+          # Skip responsive variant files — UIKit mode is out of scope for
+          # the v1 variant-file mechanism (SwiftUI/Compose/React only)
+          next if JsonUIShared::LayoutVariant.variant?(file)
           
           # Partial files (starting with _) are now processed too
           # next if File.basename(file).start_with?("_")

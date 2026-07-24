@@ -6,6 +6,7 @@ require 'set'
 require_relative '../core/config_manager'
 require_relative '../core/generated_marker'
 require_relative 'style_loader'
+require_relative '../core/layout_variant'
 
 module RjuiTools
   module React
@@ -28,6 +29,8 @@ module RjuiTools
 
         # Find all JSON layouts
         json_files = Dir.glob(File.join(@layouts_dir, '**/*.json')).reject do |file|
+          # Variant files (home@regular.json) never get their own ViewModel
+          next true if JsonUIShared::LayoutVariant.variant?(file)
           file.include?(File.join(@layouts_dir, 'Resources')) ||
             file.include?(File.join(@layouts_dir, 'Styles'))
         end

@@ -9,6 +9,7 @@ require_relative '../core/logger'
 require_relative '../core/type_converter'
 require_relative '../core/layout_validator'
 require_relative '../core/normalization'
+require_relative '../core/layout_variant'
 require_relative 'style_loader'
 require_relative 'include_expander'
 require_relative 'data_model_updater'
@@ -64,7 +65,8 @@ module KjuiTools
       def build(options = {})
         # Get all JSON files but exclude Resources folder
         json_files = Dir.glob(File.join(@layouts_dir, '**/*.json')).reject do |file|
-          file.include?('/Resources/')
+          file.include?('/Resources/') ||
+            JsonUIShared::LayoutVariant.variant?(file)
         end
 
         if json_files.empty?
@@ -81,9 +83,17 @@ module KjuiTools
       end
 
       def build_file(json_file)
+        # Variant files (home@regular.json) are emitted alongside their
+        # base screen — never as standalone screens.
+        return nil if JsonUIShared::LayoutVariant.variant?(json_file)
+
         base_name = File.basename(json_file, '.json')
         snake_case_name = to_snake_case(base_name)
         pascal_case_name = to_pascal_case(base_name)
+        variants = JsonUIShared::LayoutVariant.variants_for(json_file)
+        variant_structs = variants.keys.each_with_object({}) do |cls, map|
+          map[cls] = "#{pascal_case_name}#{cls.capitalize}VariantGeneratedView"
+        end
 
         begin
           json_content = File.read(json_file)
@@ -168,7 +178,8 @@ module KjuiTools
           if File.exist?(generated_view_file)
             # Calculate the layout name for dynamic mode (relative path without .json)
             dynamic_layout_name = relative_path.sub(/\.json$/, '')
-            update_generated_file(generated_view_file, json_data, dynamic_layout_name)
+            update_generated_file(generated_view_file, json_data, dynamic_layout_name,
+                                  variant_structs: variant_structs)
           else
             Core::Logger.warn "GeneratedView file not found: #{generated_view_file}"
           end
@@ -181,6 +192,16 @@ module KjuiTools
             cell_viewmodel_files.each do |cell_vm_file|
               update_viewmodel_file(cell_vm_file, json_data, pascal_case_name)
             end
+          end
+
+          # Emit one GeneratedView per variant file. Variants share the base
+          # screen's Data/ViewModel types — the size-class dispatch in the
+          # base GeneratedView selects the tree at runtime (06a-design D5).
+          variants.each do |cls, variant_file|
+            build_variant_file(
+              variant_file, json_file, pascal_case_name, view_subdir,
+              variant_structs[cls]
+            )
           end
 
         rescue JSON::ParserError => e
@@ -891,15 +912,20 @@ module KjuiTools
         result
       end
 
-      def update_generated_file(file_path, json_data, dynamic_layout_name = nil)
+      def update_generated_file(file_path, json_data, dynamic_layout_name = nil, fun_stem: nil, types_stem: nil, variant_structs: {})
         existing_content = File.read(file_path)
 
         if existing_content.include?('// >>> GENERATED_CODE_START') &&
            existing_content.include?('// >>> GENERATED_CODE_END')
 
-          # Use the provided dynamic layout name or extract from file path as fallback
+          # Use the provided dynamic layout name or extract from file path
+          # as fallback. Variant views pass fun_stem/types_stem explicitly:
+          # their composable name (HomeRegularVariant) does not round-trip
+          # from the file stem (home@regular), and their Data/ViewModel
+          # types stay base-canonical (Home).
           layout_name = dynamic_layout_name || File.basename(File.dirname(file_path))
-          view_name = to_pascal_case(File.basename(layout_name))
+          view_name = fun_stem || to_pascal_case(File.basename(layout_name))
+          types_name = types_stem || view_name
 
           # Generate both static and dynamic versions
           # is_root: true on the static content threads the caller's
@@ -917,10 +943,19 @@ module KjuiTools
           static_content, section_functions = Helpers::SectionExtractor.extract(
             static_content,
             view_name: view_name,
-            data_type: "#{view_name}Data",
-            viewmodel_type: "#{view_name}ViewModel"
+            data_type: "#{types_name}Data",
+            viewmodel_type: "#{types_name}ViewModel"
           )
           @responsive_functions.concat(section_functions) if section_functions.any?
+
+          # Variant-file dispatch: replace the static tree with a window
+          # width `when` that selects the matching variant composable.
+          # Whole-tree replacement — the same data/viewModel/modifier feed
+          # every branch (06a-design D4/D5).
+          if variant_structs.any?
+            static_content = wrap_static_with_variants(static_content, variant_structs)
+            @required_imports.add(:local_window_info)
+          end
 
           # Create content that switches based on DynamicModeManager
           composable_content = generate_mode_aware_content(layout_name, static_content, dynamic_content, 1)
@@ -958,20 +993,20 @@ module KjuiTools
           # Update function signature to include viewModel and modifier parameters
           # Match initial template (data only)
           updated_content = updated_content.gsub(
-            /fun #{view_name}GeneratedView\(\s*\n\s*data: #{view_name}Data\s*\n\s*\)/m,
-            "fun #{view_name}GeneratedView(\n    data: #{view_name}Data,\n    viewModel: #{view_name}ViewModel,\n    modifier: Modifier = Modifier\n)"
+            /fun #{view_name}GeneratedView\(\s*\n\s*data: #{types_name}Data\s*\n\s*\)/m,
+            "fun #{view_name}GeneratedView(\n    data: #{types_name}Data,\n    viewModel: #{types_name}ViewModel,\n    modifier: Modifier = Modifier\n)"
           )
           # Match previously updated template (data + viewModel, no modifier)
           updated_content = updated_content.gsub(
-            /fun #{view_name}GeneratedView\(\s*\n\s*data: #{view_name}Data,\s*\n\s*viewModel: #{view_name}ViewModel\s*\n\s*\)/m,
-            "fun #{view_name}GeneratedView(\n    data: #{view_name}Data,\n    viewModel: #{view_name}ViewModel,\n    modifier: Modifier = Modifier\n)"
+            /fun #{view_name}GeneratedView\(\s*\n\s*data: #{types_name}Data,\s*\n\s*viewModel: #{types_name}ViewModel\s*\n\s*\)/m,
+            "fun #{view_name}GeneratedView(\n    data: #{types_name}Data,\n    viewModel: #{types_name}ViewModel,\n    modifier: Modifier = Modifier\n)"
           )
 
           # Add ViewModel import if not present
-          viewmodel_import = "import #{@package_name}.viewmodels.#{view_name}ViewModel"
+          viewmodel_import = "import #{@package_name}.viewmodels.#{types_name}ViewModel"
           unless updated_content.include?(viewmodel_import)
             # Add after Data import
-            data_import = "import #{@package_name}.data.#{view_name}Data"
+            data_import = "import #{@package_name}.data.#{types_name}Data"
             updated_content = updated_content.gsub(data_import, "#{data_import}\n#{viewmodel_import}")
           end
 
@@ -981,6 +1016,128 @@ module KjuiTools
         else
           Core::Logger.warn "Generated code markers not found in #{file_path}"
         end
+      end
+
+      # Wrap the base static tree in a window-width `when` that dispatches
+      # to variant composables (regular ≥ 840dp, medium 600..839, compact
+      # < 600 — same thresholds as inline `responsive`). The base tree is
+      # emitted at most once: in the `else` arm when some size class still
+      # resolves to it, or not at all when every class has a variant.
+      def wrap_static_with_variants(static_content, variant_structs)
+        call = lambda do |struct|
+          "#{struct}(data = data, viewModel = viewModel, modifier = modifier)"
+        end
+
+        lines = ["    when {"]
+        all_covered = %w[compact medium regular].all? { |c| variant_structs.key?(c) }
+
+        %w[regular medium].each do |cls|
+          next unless variant_structs[cls]
+          lines << "        #{INLINE_WIDTH_CONDITIONS[cls]} -> #{call.call(variant_structs[cls])}"
+        end
+
+        if all_covered
+          lines << "        else -> #{call.call(variant_structs['compact'])}"
+        else
+          if variant_structs['compact']
+            lines << "        #{INLINE_WIDTH_CONDITIONS['compact']} -> #{call.call(variant_structs['compact'])}"
+          end
+          indented_base = static_content.split("\n").map { |l| l.empty? ? l : "        #{l}" }.join("\n")
+          lines << "        else -> {"
+          lines << indented_base
+          lines << "        }"
+        end
+
+        lines << "    }"
+        lines.join("\n") + "\n"
+      end
+
+      # Build one variant file (home@regular.json) into
+      # <Base><Class>VariantGeneratedView.kt next to the base GeneratedView.
+      # Data definitions come from the BASE layout — the variant contract is
+      # base-canonical (`jui build` gate rule V3/V4).
+      def build_variant_file(variant_file, base_json_file, base_pascal, view_subdir, variant_struct)
+        json_content = File.read(variant_file)
+        json_data = JSON.parse(json_content)
+
+        Core::Normalization.layout_canonicalized = Core::Normalization.canonicalized?(json_data)
+        json_data.delete(Core::Normalization::MARKER_KEY)
+        json_data = StyleLoader.load_and_merge(json_data)
+
+        shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
+          json_data, source_path: File.basename(variant_file)
+        )
+        JsonUIShared::LayoutValidator.print_warnings(shared_warnings) unless shared_warnings.empty?
+
+        json_data = IncludeExpander.process_includes(json_data, File.dirname(variant_file))
+
+        @required_imports = Set.new
+        @included_views = Set.new
+        @custom_components = Set.new
+        @responsive_functions = []
+        @responsive_counter = 0
+        Components::TextComponent.reset_counter!
+        Components::TextFieldComponent.reset_counter!
+        Components::TextViewComponent.reset_counter!
+        Components::ButtonComponent.reset_counter!
+        Components::ConstraintLayoutComponent.reset_counter!
+
+        # Optionality checks resolve against the BASE data section
+        base_json = JSON.parse(File.read(base_json_file))
+        base_json = StyleLoader.load_and_merge(base_json)
+        base_json = IncludeExpander.process_includes(base_json, File.dirname(base_json_file))
+        data_definitions = {}
+        extract_data_properties(base_json).each do |prop|
+          data_definitions[prop['name']] = prop
+        end
+        Helpers::ResourceResolver.data_definitions = data_definitions
+
+        variant_view_file = File.join(@view_dir, view_subdir, "#{variant_struct}.kt")
+        base_view_file = File.join(@view_dir, view_subdir, "#{base_pascal}GeneratedView.kt")
+        ensure_variant_scaffold(variant_view_file, base_view_file, variant_struct, base_pascal)
+
+        relative_path = variant_file.sub(@layouts_dir + '/', '')
+        dynamic_layout_name = relative_path.sub(/\.json$/, '')
+        fun_stem = variant_struct.sub(/GeneratedView\z/, '')
+        update_generated_file(variant_view_file, json_data, dynamic_layout_name,
+                              fun_stem: fun_stem, types_stem: base_pascal)
+      rescue JSON::ParserError => e
+        Core::Logger.error "Failed to parse #{variant_file}: #{e.message}"
+      rescue => e
+        Core::Logger.error "Failed to process #{variant_file}: #{e.message}"
+      end
+
+      # Create the variant GeneratedView file when missing. Reuses the base
+      # GeneratedView's package line (same directory → same package).
+      def ensure_variant_scaffold(variant_view_file, base_view_file, variant_struct, base_pascal)
+        return if File.exist?(variant_view_file)
+
+        package_line = if File.exist?(base_view_file)
+                         File.read(base_view_file)[/^package .+$/] || "package #{@package_name}.views"
+                       else
+                         "package #{@package_name}.views"
+                       end
+        fun_stem = variant_struct.sub(/GeneratedView\z/, '')
+
+        FileUtils.mkdir_p(File.dirname(variant_view_file))
+        File.write(variant_view_file, <<~KOTLIN)
+          #{package_line}
+
+          import androidx.compose.runtime.Composable
+          import androidx.compose.ui.Modifier
+          import #{@package_name}.data.#{base_pascal}Data
+          import #{@package_name}.viewmodels.#{base_pascal}ViewModel
+
+          @Composable
+          fun #{fun_stem}GeneratedView(
+              data: #{base_pascal}Data,
+              viewModel: #{base_pascal}ViewModel,
+              modifier: Modifier = Modifier
+          ) {
+              // >>> GENERATED_CODE_START
+              // >>> GENERATED_CODE_END
+          }
+        KOTLIN
       end
 
       def update_viewmodel_file(file_path, json_data, view_name)

@@ -10,6 +10,7 @@ require_relative '../../core/plural_validator'
 require_relative '../../core/attribute_validator'
 require_relative '../../core/normalization'
 require_relative '../../core/binding_validator'
+require_relative '../../core/layout_variant'
 
 module SjuiTools
   module CLI
@@ -246,6 +247,10 @@ module SjuiTools
           json_files = Dir.glob(File.join(layouts_dir, '**/*.json')).reject do |file|
             # Skip Resources folder
             next true if file.include?(File.join(layouts_dir, 'Resources'))
+            # Skip responsive variant files (home@regular.json) — they are
+            # converted alongside their base screen, never as standalone
+            # screens (jui build's variant gate enforces the contract)
+            next true if JsonUIShared::LayoutVariant.variant?(file)
             # Skip files with "mode": "uikit" (only process swiftui or unspecified)
             begin
               json_content = JSON.parse(File.read(file))
@@ -256,6 +261,12 @@ module SjuiTools
             rescue JSON::ParserError
               false
             end
+          end
+
+          # Map base screen → { size_class => variant file }
+          variants_by_base = json_files.each_with_object({}) do |file, map|
+            found = JsonUIShared::LayoutVariant.variants_for(file)
+            map[file] = found if found.any?
           end
 
           if json_files.empty?
@@ -274,8 +285,13 @@ module SjuiTools
             rel = Pathname.new(json_file).relative_path_from(Pathname.new(layouts_dir)).to_s
             cache_key = rel.sub(/\.json$/, '')
 
-            # Check if file needs update
-            if cache_manager.needs_update?(json_file, last_updated, layouts_dir, last_including_files, style_dependencies, cache_key)
+            # Check if file needs update. A dirty variant file re-converts
+            # its base screen (the dispatch + variant view live there).
+            variant_dirty = (variants_by_base[json_file] || {}).values.any? do |vf|
+              vrel = Pathname.new(vf).relative_path_from(Pathname.new(layouts_dir)).to_s
+              cache_manager.needs_update?(vf, last_updated, layouts_dir, last_including_files, style_dependencies, vrel.sub(/\.json$/, ''))
+            end
+            if variant_dirty || cache_manager.needs_update?(json_file, last_updated, layouts_dir, last_including_files, style_dependencies, cache_key)
               files_to_update << json_file
             else
               # Keep existing includes and style dependencies for unchanged files
@@ -359,6 +375,15 @@ module SjuiTools
               File.join(view_dir, pascal_dir, view_name, "#{view_name}GeneratedView.swift")
             end
 
+            # Responsive variant files attached to this base screen
+            # (home@regular.json → HomeRegularVariantGeneratedView + a size
+            # class dispatch in the base GeneratedView)
+            variants = variants_by_base[json_file] || {}
+            variant_structs = variants.keys.each_with_object({}) do |cls, map|
+              map[cls] = "#{view_name}#{cls.capitalize}VariantGeneratedView"
+            end
+            variant_kwargs = variants.any? ? { variant_dispatch: variant_structs, force_typed_view_model: true } : {}
+
             if File.exist?(swift_file)
               Core::Logger.info "Processing: #{relative_path}"
 
@@ -366,7 +391,7 @@ module SjuiTools
               swiftui_code, _, state_variables, root_children, responsive_functions = converter.convert_json_to_view(json_file)
 
               # Update the existing Swift file's generatedBody
-              updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [])
+              updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [], **variant_kwargs)
 
               Core::Logger.info "  Updated: #{swift_file}"
             else
@@ -405,8 +430,65 @@ module SjuiTools
 
               # Now process the newly created file
               swiftui_code, _, state_variables, root_children, responsive_functions = converter.convert_json_to_view(json_file)
-              updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [])
+              updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [], **variant_kwargs)
               Core::Logger.info "  Created and updated: #{swift_file}"
+            end
+
+            # Emit one GeneratedView per variant file. Variants share the
+            # base screen's Data type and ViewModel — the dispatch in the
+            # base GeneratedView selects the tree, the wrapper's single VM
+            # instance survives the swap (06a-design.md D4/D5).
+            variants.each do |cls, variant_file|
+              variant_rel = Pathname.new(variant_file).relative_path_from(Pathname.new(layouts_dir)).to_s
+              variant_struct = variant_structs[cls]
+              variant_swift_file = File.join(File.dirname(swift_file), "#{variant_struct}.swift")
+              variant_source = variant_rel.sub(/\.json$/, '')
+
+              begin
+                variant_json = JSON.parse(File.read(variant_file))
+                if validator
+                  validator.normalized = Core::Normalization.canonicalized?(variant_json)
+                  warnings = validate_json(variant_json, validator, File.basename(variant_file, '.json'))
+                  if warnings.any?
+                    @validation_warnings.concat(warnings.map { |w| "[#{variant_rel}] #{w}" })
+                    @validation_errors += warnings.length
+                    Core::Logger.warn "  #{warnings.length} attribute warning(s) in #{variant_rel}"
+                  end
+                end
+                if binding_validator
+                  binding_warnings = binding_validator.validate(variant_json, variant_rel)
+                  if binding_warnings.any?
+                    @validation_warnings.concat(binding_warnings)
+                    Core::Logger.warn "  #{binding_warnings.length} binding warning(s) in #{variant_rel}"
+                  end
+                end
+              rescue => ex
+                Core::Logger.warn "Failed to parse #{variant_file}: #{ex.message}"
+              end
+
+              unless File.exist?(variant_swift_file)
+                FileUtils.mkdir_p(File.dirname(variant_swift_file))
+                stub_content = <<~SWIFT
+                  import SwiftUI
+                  import SwiftJsonUI
+                  import Combine
+
+                  struct #{variant_struct}: View {
+                      @SwiftUI.Binding var data: #{view_name}Data
+
+                      var body: some View {
+                          // >>> GENERATED_CODE_START
+                          Text("Placeholder")
+                          // >>> GENERATED_CODE_END
+                      }
+                  }
+                SWIFT
+                File.write(variant_swift_file, stub_content)
+              end
+
+              v_code, _, v_state, v_children, v_responsive = converter.convert_json_to_view(variant_file)
+              updater.update_generated_body(variant_swift_file, v_code, state_variables: v_state || [], root_children: v_children, responsive_functions: v_responsive || [], force_typed_view_model: true, view_model_type: "#{view_name}ViewModel", source_name: variant_source)
+              Core::Logger.info "  Updated variant: #{variant_swift_file}"
             end
           end
 

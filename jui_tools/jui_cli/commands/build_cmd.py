@@ -12,6 +12,13 @@ from pathlib import Path
 from ..core.config_manager import ConfigManager
 from ..core.generated_marker import json_marker
 from ..core.image_converter import ImageConverter
+from ..core.layout_variant import (
+    INLINE_ONLY_CLASSES,
+    VALID_VARIANT_CLASSES,
+    is_variant,
+    split_variant,
+    variant_struct_stem,
+)
 from ..core.impl_updater import (
     atomic_write_text,
     ensure_kotlin_import,
@@ -58,6 +65,12 @@ def cmd_build(args: argparse.Namespace) -> int:
     platforms = config.get("platforms", {})
     clean = ["--clean"] if args.clean else []
     failed = []
+
+    # Hard gate for responsive variant files (home@regular.json) — refuse
+    # to distribute/build while the v1 variant contract is violated
+    # (docs/plans/2026-07-24-v1-unsupported/06a-design.md D3).
+    if _check_variant_constraints(config_mgr) is False:
+        return 1
 
     # Distribute shared assets to each platform before build
     _distribute_layouts(config_mgr, platforms, args)
@@ -254,8 +267,21 @@ def _distribute_layouts(config_mgr: ConfigManager, platforms: dict, args) -> Non
             data = json.loads(src_file.read_text())
 
             # Respect platforms whitelist on the layout root (e.g.
-            # "platforms": ["ios"] limits this file to iOS only).
+            # "platforms": ["ios"] limits this file to iOS only). Variant
+            # files (home@regular.json) inherit the base layout's whitelist
+            # — the variant gate forbids them declaring their own.
             allowed_platforms = data.get("platforms") if isinstance(data, dict) else None
+            variant_base, variant_cls = split_variant(src_file.stem)
+            if variant_cls is not None:
+                base_path = src_file.with_name(variant_base + ".json")
+                if base_path.exists():
+                    try:
+                        base_json = json.loads(base_path.read_text())
+                        allowed_platforms = (
+                            base_json.get("platforms") if isinstance(base_json, dict) else None
+                        )
+                    except json.JSONDecodeError:
+                        allowed_platforms = None
             if isinstance(allowed_platforms, list) and platform not in allowed_platforms:
                 continue
 
@@ -932,6 +958,205 @@ def _check_isolated_embed_constraints(config_mgr: ConfigManager) -> bool:
 
     if errors:
         print("\nERROR [embed-isolated]:")
+        for line in errors:
+            print(f"  - {line}")
+        return False
+    return True
+
+
+_BINDING_ROOT_RE = re.compile(r"@\{\s*!?\s*([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _binding_roots(tree) -> set[str]:
+    """Collect the root identifiers of every ``@{...}`` binding expression
+    in a layout tree (dot paths, ``??`` defaults and negation all start
+    with a plain root identifier)."""
+    roots: set[str] = set()
+
+    def walk(node):
+        if isinstance(node, dict):
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+        elif isinstance(node, str):
+            for match in _BINDING_ROOT_RE.finditer(node):
+                roots.add(match.group(1))
+
+    walk(tree)
+    return roots
+
+
+def _spec_cell_layout_stems(config_mgr: ConfigManager) -> set[str]:
+    """Layouts-relative stems (posix, no extension) referenced as
+    Collection cell/header/footer layouts by any spec — either an explicit
+    ``layoutFile`` (legacy ``layout``) or the ``<rootId>_cell`` default."""
+    stems: set[str] = set()
+    spec_dir = config_mgr.spec_directory
+    if not spec_dir.exists():
+        return stems
+
+    def walk(node):
+        if isinstance(node, dict):
+            for key in ("cell", "header", "footer"):
+                entry = node.get(key)
+                if isinstance(entry, dict):
+                    layout_ref = entry.get("layoutFile") or entry.get("layout")
+                    if isinstance(layout_ref, str) and layout_ref:
+                        stems.add(layout_ref.removesuffix(".json"))
+                    else:
+                        root = entry.get("root")
+                        root_id = root.get("id") if isinstance(root, dict) else None
+                        if root_id:
+                            stems.add(f"{root_id}_cell")
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    for spec_file in sorted(spec_dir.glob("*.spec.json")):
+        try:
+            walk(json.loads(spec_file.read_text()))
+        except json.JSONDecodeError:
+            continue
+    return stems
+
+
+def _check_variant_constraints(config_mgr: ConfigManager) -> bool:
+    """Hard gate for responsive variant files (``home@regular.json``).
+
+    v1 contract (docs/plans/2026-07-24-v1-unsupported/06a-design.md D3):
+    single-size-class suffix vocabulary, base file required, ``data`` /
+    ``platforms`` stay base-canonical, every variant binding root must be
+    declared in the base ``data`` section, screen-root layouts only, and
+    no collision with the reserved ``<base>_<class>_variant`` stem.
+    """
+    layouts_dir = config_mgr.layouts_directory
+    if not layouts_dir.exists():
+        return True
+
+    skip_prefixes = {"Resources"}
+    styles_src = config_mgr.styles_directory
+    if styles_src.exists() and layouts_dir in styles_src.parents:
+        skip_prefixes.add(styles_src.relative_to(layouts_dir).parts[0])
+
+    layout_files: dict[Path, Path] = {}
+    for src_file in sorted(layouts_dir.rglob("*.json")):
+        rel = src_file.relative_to(layouts_dir)
+        if rel.parts[0] in skip_prefixes:
+            continue
+        layout_files[rel] = src_file
+
+    if not any(is_variant(rel.stem) for rel in layout_files):
+        return True
+
+    cell_stems = _spec_cell_layout_stems(config_mgr)
+    cell_basenames = {stem.rsplit("/", 1)[-1] for stem in cell_stems}
+    errors: list[str] = []
+
+    for rel in sorted(layout_files):
+        base, cls = split_variant(rel.stem)
+        if cls is None:
+            continue
+        name = rel.as_posix()
+
+        if cls == "tablet":
+            errors.append(
+                f"{name}: unknown size class '@tablet' — did you mean "
+                f"'{base}@regular.json'?"
+            )
+            continue
+        if cls in INLINE_ONLY_CLASSES:
+            errors.append(
+                f"{name}: '@{cls}' is not a v1 variant suffix — orientation "
+                f"splits stay in the layout's inline 'responsive' attribute "
+                f"(file variants accept @compact / @medium / @regular)"
+            )
+            continue
+        if cls not in VALID_VARIANT_CLASSES:
+            errors.append(
+                f"{name}: unknown variant size class '@{cls}' "
+                f"(valid: @compact, @medium, @regular)"
+            )
+            continue
+        if not base or is_variant(base):
+            errors.append(
+                f"{name}: malformed variant name — expected a single "
+                f"'<base>@<sizeClass>.json'"
+            )
+            continue
+
+        base_rel = rel.with_name(base + ".json")
+        base_file = layout_files.get(base_rel)
+        if base_file is None:
+            errors.append(
+                f"{name}: orphan variant — base layout "
+                f"'{base_rel.as_posix()}' does not exist"
+            )
+            continue
+
+        try:
+            data = json.loads(layout_files[rel].read_text())
+        except json.JSONDecodeError as exc:
+            errors.append(f"{name}: invalid JSON ({exc})")
+            continue
+        if not isinstance(data, dict):
+            continue
+
+        if "data" in data:
+            errors.append(
+                f"{name}: variant files must not declare a 'data' section — "
+                f"the data contract is base-canonical (declare it in "
+                f"'{base_rel.as_posix()}')"
+            )
+        if "platforms" in data:
+            errors.append(
+                f"{name}: variant files must not declare 'platforms' — the "
+                f"whitelist is inherited from the base layout"
+            )
+
+        try:
+            base_data = json.loads(base_file.read_text())
+        except json.JSONDecodeError:
+            base_data = {}
+        if not isinstance(base_data, dict):
+            base_data = {}
+
+        if base_data.get("partial") is True:
+            errors.append(
+                f"{name}: variants are only supported for screen-root "
+                f"layouts (base is 'partial: true')"
+            )
+        base_posix = base_rel.with_suffix("").as_posix()
+        if base_posix in cell_stems or base in cell_basenames:
+            errors.append(
+                f"{name}: variants are only supported for screen-root "
+                f"layouts (base is a Collection cell layout)"
+            )
+
+        declared = {
+            entry.get("name")
+            for entry in base_data.get("data", [])
+            if isinstance(entry, dict)
+        }
+        missing = sorted(r for r in _binding_roots(data) if r not in declared)
+        if missing:
+            errors.append(
+                f"{name}: binding reference(s) not declared in the base "
+                f"'data' section: {', '.join(missing)}"
+            )
+
+        collision_rel = rel.with_name(variant_struct_stem(base, cls) + ".json")
+        if collision_rel in layout_files:
+            errors.append(
+                f"{name}: layout '{collision_rel.as_posix()}' collides with "
+                f"the generated variant view name — rename one of them"
+            )
+
+    if errors:
+        print("\nERROR [variant]: responsive variant-file constraint violation(s):")
         for line in errors:
             print(f"  - {line}")
         return False

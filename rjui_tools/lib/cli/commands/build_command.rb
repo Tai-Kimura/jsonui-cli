@@ -17,6 +17,7 @@ require_relative '../../core/plural_validator'
 require_relative '../../react/data_model_generator'
 require_relative '../../react/viewmodel_generator'
 require_relative '../../react/hook_generator'
+require_relative '../../core/layout_variant'
 
 module RjuiTools
   module CLI
@@ -56,11 +57,16 @@ module RjuiTools
           # Emit shared cellIdGenerator helper
           emit_cell_id_generator
 
-          json_files = Dir.glob(File.join(layouts_dir, '**', '*.json')).reject do |file|
+          all_json_files = Dir.glob(File.join(layouts_dir, '**', '*.json')).reject do |file|
             # Skip Resources folder (colors.json, strings.json, etc.)
             # Skip Styles folder (reusable style definitions, not components)
             file.include?(File.join(layouts_dir, 'Resources')) ||
               file.include?(File.join(layouts_dir, 'Styles'))
+          end
+          # Responsive variant files (home@regular.json) are generated
+          # alongside their base screen, never standalone (06 track).
+          json_files = all_json_files.reject do |file|
+            JsonUIShared::LayoutVariant.variant?(file)
           end
 
           if json_files.empty?
@@ -73,7 +79,7 @@ module RjuiTools
           # with dark/light/custom-mode support. Runs BEFORE the main generator
           # loop so hex→key rewrites land in the JSON before component JSX
           # emission.
-          update_color_manager(json_files, layouts_dir)
+          update_color_manager(all_json_files, layouts_dir)
 
           # First pass: build component name -> subdir mapping
           component_paths = {}
@@ -130,7 +136,13 @@ module RjuiTools
               subdir_parts.shift if %w[pages components].include?(subdir_parts.first)
               nested_subdir = subdir_parts.join('/')
 
-              output = generator.generate(component_name, json_content, subdir: nested_subdir)
+              variants = JsonUIShared::LayoutVariant.variants_for(json_file)
+              variant_comps = variants.keys.each_with_object({}) do |cls, map|
+                map[cls] = "#{component_name}#{cls.capitalize}Variant"
+              end
+
+              output = generator.generate(component_name, json_content, subdir: nested_subdir,
+                                          variants: variant_comps)
 
               # Use .tsx for TypeScript, .jsx for JavaScript
               extension = @config['typescript'] ? '.tsx' : '.jsx'
@@ -153,6 +165,40 @@ module RjuiTools
               expected_component_paths << File.expand_path(output_path)
 
               Core::Logger.success("Generated: #{output_path}")
+
+              # Generate one component per variant file. Variants keep the
+              # base's Data type and string namespace — the media-query
+              # dispatch in the base component selects the tree at runtime.
+              base_namespace_stem = File.basename(json_file, '.json')
+              variants.each do |cls, variant_file|
+                v_json = JSON.parse(File.read(variant_file, encoding: 'UTF-8'))
+                v_json = React::StyleLoader.load_and_merge(v_json)
+                @validator.normalized = Core::Normalization.canonicalized?(v_json)
+                validate_component(v_json, variant_file)
+                validate_bindings(v_json, variant_file)
+                v_shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
+                  v_json, source_path: File.basename(variant_file)
+                )
+                JsonUIShared::LayoutValidator.print_warnings(v_shared_warnings) unless v_shared_warnings.empty?
+
+                v_name = variant_comps[cls]
+                v_rel = variant_file.sub("#{layouts_dir}/", '')
+                v_output = generator.generate(
+                  v_name, v_json, subdir: nested_subdir,
+                  data_type: component_name,
+                  source_rel: "Layouts/#{v_rel}",
+                  namespace_stem: base_namespace_stem
+                )
+                v_path = if nested_subdir.empty?
+                           File.join(@config['components_directory'], "#{v_name}#{extension}")
+                         else
+                           File.join(@config['components_directory'], nested_subdir, "#{v_name}#{extension}")
+                         end
+                FileUtils.mkdir_p(File.dirname(v_path))
+                File.write(v_path, v_output)
+                expected_component_paths << File.expand_path(v_path)
+                Core::Logger.success("Generated variant: #{v_path}")
+              end
             rescue JSON::ParserError => e
               Core::Logger.error("Invalid JSON in #{json_file}: #{e.message}")
             rescue StandardError => e
@@ -218,6 +264,7 @@ module RjuiTools
           layouts_dir = @config['layouts_directory']
           expected_names = Dir.glob(File.join(layouts_dir, '**', '*.json'))
             .reject { |f| f.include?('/Resources/') || f.include?('/Styles/') }
+            .reject { |f| JsonUIShared::LayoutVariant.variant?(f) }
             .map { |f| to_pascal_case(File.basename(f, '.json')) }
             .to_set
 

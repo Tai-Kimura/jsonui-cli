@@ -8,7 +8,7 @@ module SjuiTools
     class ViewUpdater
       LINE_THRESHOLD = 100  # Split body into sub-functions when exceeding this line count
 
-      def update_generated_body(swift_file_path, new_body_code, state_variables: [], root_children: nil, responsive_functions: [])
+      def update_generated_body(swift_file_path, new_body_code, state_variables: [], root_children: nil, responsive_functions: [], variant_dispatch: nil, force_typed_view_model: false, view_model_type: nil, source_name: nil)
         unless File.exist?(swift_file_path)
           puts "Error: Swift file not found: #{swift_file_path}"
           return false
@@ -31,15 +31,24 @@ module SjuiTools
         binding_match = existing_content.match(/@(?:SwiftUI\.)?Binding\s+var\s+data:\s+(\w+Data)/)
         data_name = binding_match ? binding_match[1] : "#{view_name}Data"
 
-        # Convert view name to snake_case for JSON file name
-        # Standard snake_case conversion
-        json_name = view_name.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
-                             .gsub(/([a-z\d])([A-Z])/, '\1_\2')
-                             .downcase
+        # Convert view name to snake_case for JSON file name. Variant views
+        # (home@regular.json) pass source_name explicitly — their struct
+        # name (HomeRegularVariant) does not round-trip to the file stem.
+        json_name = source_name || view_name.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+                                            .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+                                            .downcase
 
-        # Build state variables block
+        # Build state variables block. A variant dispatch needs the
+        # horizontal size class — inject it unless the converter already
+        # declared it for inline `responsive` branches.
+        state_variables = Array(state_variables)
+        if variant_dispatch && variant_dispatch.any? &&
+           state_variables.none? { |sv| sv.include?('horizontalSizeClass') }
+          state_variables = state_variables +
+                            ['@Environment(\.horizontalSizeClass) private var horizontalSizeClass']
+        end
         state_vars_block = ""
-        if state_variables && state_variables.any?
+        if state_variables.any?
           state_vars_block = state_variables.map { |sv| "    #{sv}" }.join("\n") + "\n"
         end
 
@@ -53,16 +62,33 @@ module SjuiTools
         # `data: $data` — source compatible). Either way the declaration
         # feeds the unconditional `.receiveEmbedInitParams(to:)` child-side
         # embed wiring below (renderer-ssot-15-4).
-        if new_body_code.include?('viewModel.')
-          view_model_decl = "    @ObservedObject var viewModel: #{view_name}ViewModel\n"
+        # Variant-file screens force the typed declaration on the base AND
+        # every variant struct so the dispatch call sites always type-check
+        # (the screen wrapper passes its @StateObject VM either way).
+        if new_body_code.include?('viewModel.') || force_typed_view_model
+          view_model_decl = "    @ObservedObject var viewModel: #{view_model_type || "#{view_name}ViewModel"}\n"
         else
           view_model_decl = "    var viewModel: Any = ()\n"
         end
 
+        # A variant dispatch only embeds the base body when some size class
+        # still resolves to it (regular branch without @regular, or the
+        # compact branch without @compact/@medium).
+        dispatch = variant_dispatch || {}
+        regular_call = dispatch['regular'] &&
+                       "#{dispatch['regular']}(data: $data, viewModel: viewModel)"
+        compact_struct = dispatch['compact'] || dispatch['medium']
+        compact_call = compact_struct &&
+                       "#{compact_struct}(data: $data, viewModel: viewModel)"
+        base_needed = dispatch.empty? || regular_call.nil? || compact_call.nil?
+
         # Check if body needs splitting
         line_count = new_body_code.count("\n") + 1
 
-        if line_count > LINE_THRESHOLD && root_children && root_children.size > 1
+        if !base_needed
+          body_code = ""
+          section_functions = ""
+        elsif line_count > LINE_THRESHOLD && root_children && root_children.size > 1
           # WeightedStack root: split using pre-captured children info
           body_code, section_functions = generate_split_code(new_body_code, root_children)
         elsif line_count > LINE_THRESHOLD
@@ -73,9 +99,26 @@ module SjuiTools
           section_functions = ""
         end
 
-        # Append responsive functions if any
+        # Wrap the (possibly split) body in the variant-file dispatch.
+        # Whole-tree replacement: the same $data / viewModel feed every
+        # branch, so VM-owned state survives a size-class swap while
+        # view-local state is dropped by design (06a-design.md D4).
+        if dispatch.any?
+          branch_true = regular_call || body_code
+          branch_false = compact_call || body_code
+          body_code = [
+            "if horizontalSizeClass == .regular {",
+            indent_body_code(branch_true, "    "),
+            "} else {",
+            indent_body_code(branch_false, "    "),
+            "}",
+          ].join("\n")
+        end
+
+        # Append responsive functions if any (dropped when the base body is
+        # unreachable — they are only referenced from the base tree)
         all_functions = [section_functions]
-        if responsive_functions && responsive_functions.any?
+        if base_needed && responsive_functions && responsive_functions.any?
           all_functions.concat(responsive_functions)
         end
         combined_functions = all_functions.reject { |f| f.nil? || f.to_s.strip.empty? }.join("\n")

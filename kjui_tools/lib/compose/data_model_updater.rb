@@ -9,6 +9,7 @@ require_relative '../core/type_converter'
 require_relative '../core/generated_marker'
 require_relative 'style_loader'
 require_relative 'include_expander'
+require_relative '../core/layout_variant'
 
 module KjuiTools
   module Compose
@@ -28,7 +29,9 @@ module KjuiTools
         # even on incremental (files_to_update) runs.
         all_json_files = Dir.glob(File.join(@layouts_dir, '**/*.json')).reject do |file|
           # Skip Resources and Styles folders (styles don't need data models)
-          file.include?('/Resources/') || file.include?('/Styles/')
+          # and responsive variant files (data contract is base-canonical)
+          file.include?('/Resources/') || file.include?('/Styles/') ||
+            JsonUIShared::LayoutVariant.variant?(file)
         end
         ensure_unique_layout_basenames!(all_json_files)
 
