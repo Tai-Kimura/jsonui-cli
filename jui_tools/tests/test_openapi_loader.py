@@ -13,6 +13,8 @@ Covers the §3.3 invariants from the plan:
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import tempfile
 import unittest
@@ -698,28 +700,355 @@ class OneOfDiscriminatorTests(unittest.TestCase):
             parse_swagger(doc_dict, "test.json")
         self.assertEqual(ctx.exception.code, "oneof-discriminator-sibling-missing")
 
-    def test_one_of_at_schema_level_still_halts(self):
-        """Schema-level oneOf (not inside a field) is still v2 work — halts."""
+    def test_field_level_variant_that_is_a_union_halts(self):
+        """A schema-level union cannot appear as a field-level oneOf
+        variant (union-as-variant freeze)."""
+        doc_dict = self._stream_event_doc()
+        # Turn StreamThinkingContent into a (valid, explicit-mapping)
+        # schema-level union; the field-level oneOf on StreamEvent then
+        # references a union as one of its variants → halt.
+        doc_dict["components"]["schemas"]["StreamThinkingContent"] = {
+            "oneOf": [
+                {"$ref": "#/components/schemas/StreamConvIdContent"},
+            ],
+            "discriminator": {
+                "propertyName": "kind",
+                "mapping": {"cid": "#/components/schemas/StreamConvIdContent"},
+            },
+        }
         with self.assertRaises(OpenAPILoadError) as ctx:
-            parse_swagger(_doc({
-                "PolymorphicEnvelope": {
-                    "oneOf": [
-                        {"$ref": "#/components/schemas/A"},
-                        {"$ref": "#/components/schemas/B"},
-                    ],
-                    "discriminator": {
-                        "propertyName": "type",
-                        "mapping": {
-                            "a": "#/components/schemas/A",
-                            "b": "#/components/schemas/B",
-                        },
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "union-variant-not-supported")
+
+
+def _pet_doc(
+    *,
+    mapping: dict | None = None,
+    dog_tag: dict | None = None,
+    cat_tag: dict | None = None,
+    extra: dict | None = None,
+):
+    """Schema-level union fixture: ``Pet = oneOf(Dog, Cat)``.
+
+    ``dog_tag`` / ``cat_tag`` are the ``pet_type`` property bodies on the
+    variants (pass ``None`` explicitly via sentinel ``OMIT`` to drop the
+    property). Defaults model the inference-friendly shape: single-value
+    string enum on Dog, ``const`` on Cat.
+    """
+    discriminator: dict = {"propertyName": "pet_type"}
+    if mapping is not None:
+        discriminator["mapping"] = mapping
+    dog_props: dict = {"bark_volume": {"type": "integer"}}
+    if dog_tag is not _OMIT:
+        dog_props["pet_type"] = (
+            dog_tag if dog_tag is not None else {"type": "string", "enum": ["dog"]}
+        )
+    cat_props: dict = {"lives_left": {"type": "integer"}}
+    if cat_tag is not _OMIT:
+        cat_props["pet_type"] = (
+            cat_tag if cat_tag is not None else {"type": "string", "const": "cat"}
+        )
+    schemas = {
+        "Pet": {
+            "oneOf": [
+                {"$ref": "#/components/schemas/Dog"},
+                {"$ref": "#/components/schemas/Cat"},
+            ],
+            "discriminator": discriminator,
+        },
+        "Dog": {"type": "object", "required": ["pet_type"], "properties": dog_props},
+        "Cat": {"type": "object", "required": ["pet_type"], "properties": cat_props},
+    }
+    if extra:
+        schemas.update(extra)
+    return _doc(schemas)
+
+
+_OMIT = object()
+
+
+class SchemaLevelUnionTests(unittest.TestCase):
+    """Schema-level ``oneOf`` + ``discriminator`` parses into UnionDef
+    (2026-07 lift, plan 2026-07-24-v1-unsupported/02)."""
+
+    def test_explicit_mapping_parses_union(self):
+        doc = parse_swagger(_pet_doc(mapping={
+            "dog": "#/components/schemas/Dog",
+            "cat": "#/components/schemas/Cat",
+        }), "test.json")
+        self.assertEqual(len(doc.unions), 1)
+        union = doc.unions[0]
+        self.assertEqual(union.name, "Pet")
+        self.assertEqual(union.discriminator_property, "pet_type")
+        self.assertFalse(union.mapping_inferred)
+        self.assertEqual(
+            [(v.discriminator_value, v.ref_name) for v in union.variants],
+            [("dog", "Dog"), ("cat", "Cat")],
+        )
+        # The union is NOT in doc.schemas — it has its own IR list.
+        self.assertNotIn("Pet", {s.name for s in doc.schemas})
+
+    def test_inferred_mapping_from_variant_tags(self):
+        """No mapping → inferred from the variants' internal tag (enum /
+        const), in oneOf order, with a WARNING on stderr."""
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            doc = parse_swagger(_pet_doc(), "test.json")
+        union = doc.unions[0]
+        self.assertTrue(union.mapping_inferred)
+        self.assertEqual(
+            [(v.discriminator_value, v.ref_name) for v in union.variants],
+            [("dog", "Dog"), ("cat", "Cat")],
+        )
+        self.assertIn("WARNING [api-model]", stderr.getvalue())
+        self.assertIn("dog -> Dog", stderr.getvalue())
+        self.assertIn("cat -> Cat", stderr.getvalue())
+
+    def test_inferred_and_explicit_mapping_yield_same_variants(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            inferred = parse_swagger(_pet_doc(), "test.json").unions[0]
+        explicit = parse_swagger(_pet_doc(mapping={
+            "dog": "#/components/schemas/Dog",
+            "cat": "#/components/schemas/Cat",
+        }), "test.json").unions[0]
+        self.assertEqual(inferred.variants, explicit.variants)
+        self.assertEqual(
+            inferred.discriminator_property, explicit.discriminator_property
+        )
+
+    def test_inference_tag_via_all_of_base_is_seen(self):
+        """A tag declared on an allOf base schema still counts."""
+        doc_dict = _pet_doc(dog_tag=_OMIT)
+        doc_dict["components"]["schemas"]["Dog"] = {
+            "allOf": [
+                {"$ref": "#/components/schemas/DogBase"},
+                {"type": "object", "properties": {"bark_volume": {"type": "integer"}}},
+            ],
+        }
+        doc_dict["components"]["schemas"]["DogBase"] = {
+            "type": "object",
+            "properties": {"pet_type": {"type": "string", "enum": ["dog"]}},
+        }
+        with contextlib.redirect_stderr(io.StringIO()):
+            doc = parse_swagger(doc_dict, "test.json")
+        self.assertEqual(
+            [v.discriminator_value for v in doc.unions[0].variants],
+            ["dog", "cat"],
+        )
+
+    def test_inference_tagless_variant_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_pet_doc(dog_tag=_OMIT), "test.json")
+        self.assertEqual(ctx.exception.code, "invalid-discriminator")
+        self.assertIn("does not declare", str(ctx.exception))
+
+    def test_inference_non_string_tag_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(
+                _pet_doc(dog_tag={"type": "integer", "enum": [1]}), "test.json"
+            )
+        self.assertEqual(ctx.exception.code, "invalid-discriminator")
+        self.assertIn("non-string", str(ctx.exception))
+
+    def test_inference_multi_value_enum_tag_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(
+                _pet_doc(dog_tag={"type": "string", "enum": ["dog", "puppy"]}),
+                "test.json",
+            )
+        self.assertEqual(ctx.exception.code, "invalid-discriminator")
+        self.assertIn("exactly one", str(ctx.exception))
+
+    def test_inference_duplicate_tag_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(
+                _pet_doc(cat_tag={"type": "string", "const": "dog"}), "test.json"
+            )
+        self.assertEqual(ctx.exception.code, "invalid-discriminator")
+        self.assertIn("unique", str(ctx.exception))
+
+    def test_explicit_mapping_conflicting_variant_tag_halts(self):
+        """mapping says dog → Dog but Dog.pet_type enum says canine."""
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_pet_doc(
+                mapping={
+                    "dog": "#/components/schemas/Dog",
+                    "cat": "#/components/schemas/Cat",
+                },
+                dog_tag={"type": "string", "enum": ["canine"]},
+            ), "test.json")
+        self.assertEqual(ctx.exception.code, "discriminator-tag-conflict")
+
+    def test_explicit_mapping_non_string_variant_tag_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_pet_doc(
+                mapping={
+                    "dog": "#/components/schemas/Dog",
+                    "cat": "#/components/schemas/Cat",
+                },
+                dog_tag={"type": "integer", "enum": [1]},
+            ), "test.json")
+        self.assertEqual(ctx.exception.code, "discriminator-tag-conflict")
+
+    def test_explicit_mapping_matching_tag_ok(self):
+        doc = parse_swagger(_pet_doc(mapping={
+            "dog": "#/components/schemas/Dog",
+            "cat": "#/components/schemas/Cat",
+        }), "test.json")
+        self.assertEqual(len(doc.unions), 1)
+
+    def test_tagless_variant_with_explicit_mapping_ok(self):
+        """Variants without an internal tag are fine when mapping is
+        explicit — the union codegen injects the tag on encode."""
+        doc = parse_swagger(_pet_doc(
+            mapping={
+                "dog": "#/components/schemas/Dog",
+                "cat": "#/components/schemas/Cat",
+            },
+            dog_tag=_OMIT,
+            cat_tag=_OMIT,
+        ), "test.json")
+        self.assertEqual(len(doc.unions), 1)
+
+    def test_schema_level_oneof_without_discriminator_halts(self):
+        doc_dict = _pet_doc()
+        del doc_dict["components"]["schemas"]["Pet"]["discriminator"]
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "polymorphic-not-supported")
+
+    def test_mixed_oneof_and_properties_halts(self):
+        doc_dict = _pet_doc()
+        doc_dict["components"]["schemas"]["Pet"]["properties"] = {
+            "shared": {"type": "string"},
+        }
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "invalid-oneof")
+
+    def test_inline_variant_halts(self):
+        doc_dict = _pet_doc()
+        doc_dict["components"]["schemas"]["Pet"]["oneOf"][0] = {
+            "type": "object",
+            "properties": {"x": {"type": "string"}},
+        }
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "invalid-oneof")
+
+    def test_union_as_variant_of_union_halts(self):
+        doc_dict = _pet_doc(extra={
+            "Robot": {
+                "type": "object",
+                "properties": {"pet_type": {"type": "string", "const": "robot"}},
+            },
+            "Creature": {
+                "oneOf": [
+                    {"$ref": "#/components/schemas/Pet"},
+                    {"$ref": "#/components/schemas/Robot"},
+                ],
+                "discriminator": {"propertyName": "pet_type"},
+            },
+        })
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            with contextlib.redirect_stderr(io.StringIO()):
+                parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "union-variant-not-supported")
+
+    def test_union_reference_positions(self):
+        """Reference matrix: plain property / array items / nullable all
+        resolve to an object ref named after the union."""
+        doc_dict = _pet_doc(extra={
+            "Owner": {
+                "type": "object",
+                "required": ["pet"],
+                "properties": {
+                    "pet": {"$ref": "#/components/schemas/Pet"},
+                    "previous_pet": {"$ref": "#/components/schemas/Pet"},
+                },
+            },
+            "Zoo": {
+                "type": "object",
+                "properties": {
+                    "animals": {
+                        "type": "array",
+                        "items": {"$ref": "#/components/schemas/Pet"},
                     },
                 },
-                "A": {"type": "object", "properties": {"x": {"type": "string"}}},
-                "B": {"type": "object", "properties": {"y": {"type": "string"}}},
+            },
+        })
+        with contextlib.redirect_stderr(io.StringIO()):
+            doc = parse_swagger(doc_dict, "test.json")
+        owner = next(s for s in doc.schemas if s.name == "Owner")
+        pet = next(f for f in owner.fields if f.wire_name == "pet")
+        self.assertTrue(pet.type.is_object_ref)
+        self.assertEqual(pet.type.ref_name, "Pet")
+        self.assertFalse(pet.type.nullable)
+        prev = next(f for f in owner.fields if f.wire_name == "previous_pet")
+        self.assertTrue(prev.type.nullable)
+        zoo = next(s for s in doc.schemas if s.name == "Zoo")
+        animals = next(f for f in zoo.fields if f.wire_name == "animals")
+        self.assertTrue(animals.type.is_array)
+        self.assertEqual(animals.type.element.ref_name, "Pet")
+
+    def test_union_skip_domain_flag(self):
+        doc_dict = _pet_doc(mapping={
+            "dog": "#/components/schemas/Dog",
+            "cat": "#/components/schemas/Cat",
+        })
+        doc_dict["components"]["schemas"]["Pet"]["x-jui-skip-domain"] = True
+        doc = parse_swagger(doc_dict, "test.json")
+        self.assertTrue(doc.unions[0].skip_domain)
+        self.assertTrue(doc.should_skip_domain(doc.unions[0]))
+
+    def test_no_warning_for_explicit_mapping(self):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            parse_swagger(_pet_doc(mapping={
+                "dog": "#/components/schemas/Dog",
+                "cat": "#/components/schemas/Cat",
+            }), "test.json")
+        self.assertEqual(stderr.getvalue(), "")
+
+
+class FreezeDeclarationTests(unittest.TestCase):
+    """anyOf / direct self-ref / union-as-variant are permanent halts —
+    messages no longer promise a future version."""
+
+    def test_any_of_message_is_permanent(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_doc({
+                "M": {"anyOf": [{"type": "string"}, {"type": "integer"}]},
             }), "test.json")
         self.assertEqual(ctx.exception.code, "polymorphic-not-supported")
-        self.assertIn("Schema-level", str(ctx.exception))
+        self.assertIn("permanently", str(ctx.exception))
+        self.assertNotIn("v2", str(ctx.exception))
+
+    def test_self_ref_message_is_permanent(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_doc({
+                "Node": {
+                    "type": "object",
+                    "properties": {
+                        "next": {"$ref": "#/components/schemas/Node"},
+                    },
+                },
+            }), "test.json")
+        self.assertEqual(ctx.exception.code, "direct-self-reference")
+        self.assertIn("permanent", str(ctx.exception))
+
+    def test_union_as_variant_message_is_permanent(self):
+        doc_dict = _pet_doc(extra={
+            "Creature": {
+                "oneOf": [{"$ref": "#/components/schemas/Pet"}],
+                "discriminator": {"propertyName": "pet_type"},
+            },
+        })
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            with contextlib.redirect_stderr(io.StringIO()):
+                parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "union-variant-not-supported")
+        self.assertIn("permanent", str(ctx.exception))
 
 
 class WrapperSchemaTests(unittest.TestCase):

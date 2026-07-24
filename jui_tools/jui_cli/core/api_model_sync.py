@@ -164,6 +164,20 @@ def plan_android(
                     patchers[dpath] = (
                         lambda p=dpath, n=schema.name: _patch_kotlinx_domain(p, n)
                     )
+        for union in doc.unions:
+            dto_path = gen.dto_path(union.name)
+            if dto_path in expected:
+                continue  # cross-doc duplicate — first doc wins
+            expected[dto_path] = gen.generate_union_source(union, doc)
+            if union.name in shadowed:
+                continue
+            if not doc.should_skip_domain(union):
+                # No kotlinx patcher: union Domain scaffolds are new files
+                # (nothing pre-dating the feature to retrofit) and they
+                # already carry the serializer block on first emit.
+                scaffolds[gen.domain_path(union.name)] = (
+                    gen.generate_union_domain_source(union)
+                )
         for enum in doc.enums:
             # Enums live in the DTO subpackage and are treated as wire
             # types — emit unconditionally, mirroring DTO behavior.
@@ -217,6 +231,17 @@ def plan_web(
                 continue
             if not doc.should_skip_domain(schema):
                 scaffolds[gen.domain_path(schema.name)] = gen.generate_domain_source(schema)
+        for union in doc.unions:
+            dto_path = gen.dto_path(union.name)
+            if dto_path in expected:
+                continue  # cross-doc duplicate — first doc wins
+            expected[dto_path] = gen.generate_union_source(union, doc)
+            if union.name in shadowed:
+                continue
+            if not doc.should_skip_domain(union):
+                scaffolds[gen.domain_path(union.name)] = (
+                    gen.generate_union_domain_source(union)
+                )
         for enum in doc.enums:
             enum_path = gen.enum_path(enum.name)
             if enum_path in expected:
@@ -270,6 +295,17 @@ def plan_ios(
             # v2 plan §2.6.
             if not doc.should_skip_domain(schema):
                 scaffolds[gen.domain_path(schema.name)] = gen.generate_domain_source(schema)
+        for union in doc.unions:
+            dto_path = gen.dto_path(union.name)
+            if dto_path in expected:
+                continue  # cross-doc duplicate — first doc wins
+            expected[dto_path] = gen.generate_union_source(union, doc)
+            if union.name in shadowed:
+                continue
+            if not doc.should_skip_domain(union):
+                scaffolds[gen.domain_path(union.name)] = (
+                    gen.generate_union_domain_source(union)
+                )
         for enum in doc.enums:
             enum_path = gen.enum_path(enum.name)
             if enum_path in expected:

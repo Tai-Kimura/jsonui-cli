@@ -879,5 +879,124 @@ class WriteBehaviorTests(unittest.TestCase):
             self.assertEqual(first.path.read_text(encoding="utf-8"), user_content)
 
 
+class SchemaLevelUnionTests(unittest.TestCase):
+    """Schema-level oneOf union emits a self-decoding ``enum {Name}Dto``
+    that reads / writes the discriminator tag inside the payload."""
+
+    def _pet_doc(self):
+        return parse_swagger(_doc({
+            "Pet": {
+                "oneOf": [
+                    {"$ref": "#/components/schemas/Dog"},
+                    {"$ref": "#/components/schemas/Cat"},
+                ],
+                "discriminator": {
+                    "propertyName": "pet_type",
+                    "mapping": {
+                        "dog": "#/components/schemas/Dog",
+                        "cat": "#/components/schemas/Cat",
+                    },
+                },
+            },
+            "Dog": {
+                "type": "object",
+                "required": ["pet_type"],
+                "properties": {
+                    "pet_type": {"type": "string", "enum": ["dog"]},
+                    "bark_volume": {"type": "integer"},
+                },
+            },
+            "Cat": {
+                "type": "object",
+                "required": ["pet_type"],
+                "properties": {
+                    "pet_type": {"type": "string", "enum": ["cat"]},
+                    "lives_left": {"type": "integer"},
+                },
+            },
+        }), "test.json")
+
+    def _union_source(self):
+        doc = self._pet_doc()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gen = _make_generator(Path(tmpdir))
+            return gen.generate_union_source(doc.unions[0], doc)
+
+    def test_enum_declaration_with_variant_and_unknown_cases(self):
+        src = self._union_source()
+        self.assertIn(
+            "enum PetDto: Codable, Sendable, Equatable, Hashable {", src
+        )
+        self.assertIn("case dog(DogDto)", src)
+        self.assertIn("case cat(CatDto)", src)
+        self.assertIn("case unknown", src)
+
+    def test_tag_coding_keys_use_wire_name(self):
+        src = self._union_source()
+        self.assertIn("private enum TagCodingKeys: String, CodingKey {", src)
+        self.assertIn('case tag = "pet_type"', src)
+
+    def test_decode_dispatches_on_payload_tag(self):
+        src = self._union_source()
+        self.assertIn(
+            "let tag = try container.decodeIfPresent(String.self, forKey: .tag)",
+            src,
+        )
+        self.assertIn('case "dog":', src)
+        self.assertIn("self = .dog(try DogDto(from: decoder))", src)
+        self.assertIn("default:", src)
+        self.assertIn("self = .unknown", src)
+
+    def test_encode_writes_payload_then_tag(self):
+        src = self._union_source()
+        self.assertIn("try value.encode(to: encoder)", src)
+        self.assertIn('try container.encode("dog", forKey: .tag)', src)
+        # .unknown encodes as {} (empty keyed container)
+        self.assertIn("case .unknown:", src)
+        self.assertIn("_ = encoder.container(keyedBy: TagCodingKeys.self)", src)
+
+    def test_union_domain_scaffold_is_thin_wrapper(self):
+        doc = self._pet_doc()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gen = _make_generator(Path(tmpdir))
+            src = gen.generate_union_domain_source(doc.unions[0])
+        self.assertIn("struct Pet {", src)
+        self.assertIn("let dto: PetDto", src)
+        self.assertIn("init(dto: PetDto)", src)
+        self.assertIn("switch dto", src)
+
+    def test_expected_dto_paths_include_union(self):
+        doc = self._pet_doc()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gen = _make_generator(Path(tmpdir))
+            paths = {p.name for p in gen.expected_dto_paths(doc)}
+        self.assertIn("PetDto.swift", paths)
+
+    def test_schema_referencing_union_uses_dto_type(self):
+        doc = parse_swagger(_doc({
+            "Pet": {
+                "oneOf": [{"$ref": "#/components/schemas/Dog"}],
+                "discriminator": {
+                    "propertyName": "pet_type",
+                    "mapping": {"dog": "#/components/schemas/Dog"},
+                },
+            },
+            "Dog": {
+                "type": "object",
+                "properties": {"bark_volume": {"type": "integer"}},
+            },
+            "Owner": {
+                "type": "object",
+                "required": ["pet"],
+                "properties": {"pet": {"$ref": "#/components/schemas/Pet"}},
+            },
+        }), "test.json")
+        owner = next(s for s in doc.schemas if s.name == "Owner")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gen = _make_generator(Path(tmpdir))
+            src = gen.generate_dto_source(owner, doc)
+        self.assertIn("let pet: PetDto", src)
+
+
 if __name__ == "__main__":
     unittest.main()

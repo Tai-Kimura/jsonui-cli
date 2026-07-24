@@ -44,6 +44,7 @@ from ..core.schema_ir import (
     PrimitiveKind,
     SchemaDef,
     SwaggerDocument,
+    UnionDef,
 )
 
 
@@ -289,6 +290,177 @@ class AndroidApiModelGenerator:
             return ""
         return ""
 
+    # ---------------------------- emit union ------------------------- #
+
+    def generate_union_source(self, union: UnionDef, doc: SwaggerDocument) -> str:
+        """Kotlin source for a schema-level union (sealed class + KSerializer).
+
+        The wire form is the variant payload itself with the discriminator
+        tag inside it: deserialize reads the tag key from the JSON object
+        and decodes the whole object as the matching variant DTO;
+        serialize writes the variant payload and (re)writes the tag key so
+        round-trips hold even when the variant schema does not declare the
+        tag property. Unknown / missing tags map to ``Unknown``
+        (forward-compat, same convention as the field-level sealed class);
+        ``Unknown`` serializes as ``{}``.
+
+        Requires the kotlinx serializer, mirroring the field-level oneOf
+        constraint.
+        """
+        if self._config.serializer != "kotlinx":
+            raise ValueError(
+                f"Schema {union.name!r} is a schema-level oneOf union, which "
+                f"requires the kotlinx serializer "
+                f"(current={self._config.serializer!r}). Switch "
+                f"api.platforms.android.serializer to 'kotlinx' or wait for "
+                f"v2 Moshi sealed-class codegen."
+            )
+        header = comment_header(
+            source=_relative_source(doc.source_path)
+            + f"#{union.source_pointer.rsplit('#', 1)[-1]}",
+            generator=self.GENERATOR_NAME,
+        )
+        footer = comment_footer()
+        name = union.name
+        tag = union.discriminator_property
+
+        lines: list[str] = []
+        lines.append(f"package {self._dto_package()}")
+        lines.append("")
+        lines.extend([
+            "import kotlinx.serialization.KSerializer",
+            "import kotlinx.serialization.Serializable",
+            "import kotlinx.serialization.descriptors.SerialDescriptor",
+            "import kotlinx.serialization.descriptors.buildClassSerialDescriptor",
+            "import kotlinx.serialization.encoding.Decoder",
+            "import kotlinx.serialization.encoding.Encoder",
+            "import kotlinx.serialization.json.JsonDecoder",
+            "import kotlinx.serialization.json.JsonEncoder",
+            "import kotlinx.serialization.json.JsonPrimitive",
+            "import kotlinx.serialization.json.buildJsonObject",
+            "import kotlinx.serialization.json.decodeFromJsonElement",
+            "import kotlinx.serialization.json.encodeToJsonElement",
+            "import kotlinx.serialization.json.jsonObject",
+            "import kotlinx.serialization.json.put",
+        ])
+        lines.append("")
+        if union.description:
+            lines.extend(_kdoc_lines(union.description))
+        if union.deprecated:
+            lines.append('@Deprecated("schema marked deprecated")')
+        lines.append(f"@Serializable(with = {name}DtoSerializer::class)")
+        lines.append(f"sealed class {name}Dto {{")
+        for variant in union.variants:
+            cls = _kotlin_oneof_variant_class_name(variant.discriminator_value)
+            lines.append("    @Serializable")
+            lines.append(
+                f"    data class {cls}(val data: {variant.ref_name}Dto) : {name}Dto()"
+            )
+        lines.append("    @Serializable")
+        lines.append(f"    data object Unknown : {name}Dto()")
+        lines.append("}")
+        lines.append("")
+        lines.append(f"object {name}DtoSerializer : KSerializer<{name}Dto> {{")
+        lines.append(
+            f'    override val descriptor: SerialDescriptor = '
+            f'buildClassSerialDescriptor("{name}Dto") {{}}'
+        )
+        lines.append("")
+        lines.append(f"    override fun serialize(encoder: Encoder, value: {name}Dto) {{")
+        lines.append(
+            '        val jsonEncoder = encoder as? JsonEncoder '
+            f'?: error("{name}DtoSerializer requires Json format")'
+        )
+        lines.append("        val json = jsonEncoder.json")
+        lines.append("        val obj = when (value) {")
+        for variant in union.variants:
+            cls = _kotlin_oneof_variant_class_name(variant.discriminator_value)
+            lines.append(f"            is {name}Dto.{cls} -> buildJsonObject {{")
+            lines.append(
+                "                json.encodeToJsonElement(value.data).jsonObject"
+                ".forEach { (k, v) -> put(k, v) }"
+            )
+            lines.append(f'                put("{tag}", "{variant.discriminator_value}")')
+            lines.append("            }")
+        lines.append(f"            {name}Dto.Unknown -> buildJsonObject {{}}")
+        lines.append("        }")
+        lines.append("        jsonEncoder.encodeJsonElement(obj)")
+        lines.append("    }")
+        lines.append("")
+        lines.append(f"    override fun deserialize(decoder: Decoder): {name}Dto {{")
+        lines.append(
+            '        val jsonDecoder = decoder as? JsonDecoder '
+            f'?: error("{name}DtoSerializer requires Json format")'
+        )
+        lines.append("        val json = jsonDecoder.json")
+        lines.append("        val obj = jsonDecoder.decodeJsonElement().jsonObject")
+        lines.append(f'        return when ((obj["{tag}"] as? JsonPrimitive)?.content) {{')
+        for variant in union.variants:
+            cls = _kotlin_oneof_variant_class_name(variant.discriminator_value)
+            lines.append(
+                f'            "{variant.discriminator_value}" -> {name}Dto.{cls}('
+                f"json.decodeFromJsonElement<{variant.ref_name}Dto>(obj))"
+            )
+        lines.append(f"            else -> {name}Dto.Unknown")
+        lines.append("        }")
+        lines.append("    }")
+        lines.append("}")
+
+        body = "\n".join(lines)
+        return f"{header}\n\n{body}\n\n{footer}\n"
+
+    def generate_union_domain_source(self, union: UnionDef) -> str:
+        """Domain scaffold for a union — thin wrapper, same shape as object
+        schemas (see plan ``02a-union-emit-design.md``).
+
+        kotlinx mode delegates to the union's ``{Name}DtoSerializer``
+        object directly instead of ``{Name}Dto.serializer()`` so the
+        scaffold never depends on the compiler plugin synthesizing a
+        companion ``serializer()`` for a ``@Serializable(with = ...)``
+        sealed class.
+        """
+        name = union.name
+        dispatch_cls = _kotlin_oneof_variant_class_name(
+            union.variants[0].discriminator_value
+        )
+        dispatch_hint = (
+            "    // Dispatch on the union with `when (dto) { is "
+            f"{name}Dto.{dispatch_cls} -> ... }}`.\n"
+        )
+        if self._config.serializer != "kotlinx":
+            return (
+                f"package {self._domain_package()}\n"
+                "\n"
+                f"import {self._dto_package()}.{name}Dto\n"
+                "\n"
+                f"class {name}(val dto: {name}Dto) {{\n"
+                "    // User customization zone — add proxies, computed properties,\n"
+                "    // stored properties, methods, and conversions here.\n"
+                + dispatch_hint
+                + "}\n"
+            )
+        imports = "\n".join(
+            [
+                f"import {self._dto_package()}.{name}Dto",
+                f"import {self._dto_package()}.{name}DtoSerializer",
+            ]
+            + list(_KOTLINX_DOMAIN_IMPORTS)
+        )
+        return (
+            f"package {self._domain_package()}\n"
+            "\n"
+            f"{imports}\n"
+            "\n"
+            f"@Serializable(with = {name}Serializer::class)\n"
+            f"class {name}(val dto: {name}Dto) {{\n"
+            "    // User customization zone — add proxies, computed properties,\n"
+            "    // stored properties, methods, and conversions here.\n"
+            + dispatch_hint
+            + "}\n"
+            "\n"
+            f"{_generate_kotlinx_union_serializer_block(name)}"
+        )
+
     # ---------------------------- emit enum -------------------------- #
 
     def generate_enum_source(self, enum: EnumDef, doc: SwaggerDocument) -> str:
@@ -462,6 +634,28 @@ def _generate_kotlinx_serializer_block(name: str) -> str:
         f"{_KOTLINX_SERIALIZER_BEGIN}\n"
         f"object {name}Serializer : KSerializer<{name}> {{\n"
         f"    private val dtoSerializer = {name}Dto.serializer()\n"
+        f"    override val descriptor: SerialDescriptor = dtoSerializer.descriptor\n"
+        f"    override fun serialize(encoder: Encoder, value: {name}) =\n"
+        f"        dtoSerializer.serialize(encoder, value.dto)\n"
+        f"    override fun deserialize(decoder: Decoder): {name} =\n"
+        f"        {name}(dtoSerializer.deserialize(decoder))\n"
+        f"}}\n"
+        f"{_KOTLINX_SERIALIZER_END}\n"
+    )
+
+
+def _generate_kotlinx_union_serializer_block(name: str) -> str:
+    """Delegating ``KSerializer`` for a union Domain wrapper.
+
+    Same marker convention as :func:`_generate_kotlinx_serializer_block`
+    but delegates to the ``{name}DtoSerializer`` object directly (the
+    union DTO is ``@Serializable(with = ...)``; no reliance on the
+    plugin-synthesized companion ``serializer()``).
+    """
+    return (
+        f"{_KOTLINX_SERIALIZER_BEGIN}\n"
+        f"object {name}Serializer : KSerializer<{name}> {{\n"
+        f"    private val dtoSerializer = {name}DtoSerializer\n"
         f"    override val descriptor: SerialDescriptor = dtoSerializer.descriptor\n"
         f"    override fun serialize(encoder: Encoder, value: {name}) =\n"
         f"        dtoSerializer.serialize(encoder, value.dto)\n"

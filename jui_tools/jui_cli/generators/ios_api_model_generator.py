@@ -37,6 +37,7 @@ from ..core.schema_ir import (
     PrimitiveKind,
     SchemaDef,
     SwaggerDocument,
+    UnionDef,
 )
 
 
@@ -205,6 +206,108 @@ class IosApiModelGenerator:
         body = "\n".join(body_lines)
         return f"{header}\nimport Foundation\n\n{body}\n\n{footer}\n"
 
+    # ---------------------------- emit union ------------------------- #
+
+    def generate_union_source(self, union: UnionDef, doc: SwaggerDocument) -> str:
+        """Swift source for a schema-level union (self-decoding enum).
+
+        The wire form is the variant payload itself with the discriminator
+        tag inside it, so the enum owns its own (de)coding: decode reads
+        the tag key first and dispatches into the matching variant's
+        ``init(from:)`` against the same decoder; encode writes the
+        variant payload flat and then (re)writes the tag key so
+        round-trips hold even when a variant schema does not declare the
+        tag property (explicit-mapping case). Unknown / missing tags
+        decode to ``.unknown`` (forward-compat, same convention as the
+        field-level oneOf enum); ``.unknown`` encodes as ``{}``.
+        """
+        header = comment_header(
+            source=_relative_source(doc.source_path)
+            + f"#{union.source_pointer.rsplit('#', 1)[-1]}",
+            generator=self.GENERATOR_NAME,
+        )
+        footer = comment_footer()
+
+        lines: list[str] = []
+        if union.description:
+            lines.extend(_doc_comment_lines(union.description))
+        if union.deprecated:
+            lines.append("@available(*, deprecated)")
+        lines.append(
+            f"enum {union.name}Dto: Codable, Sendable, Equatable, Hashable {{"
+        )
+        for variant in union.variants:
+            case = _swift_oneof_case_ident(variant.discriminator_value)
+            lines.append(f"    case {case}({variant.ref_name}Dto)")
+        lines.append("    case unknown")
+        lines.append("")
+        lines.append("    private enum TagCodingKeys: String, CodingKey {")
+        lines.append(f'        case tag = "{union.discriminator_property}"')
+        lines.append("    }")
+        lines.append("")
+        lines.append("    init(from decoder: Decoder) throws {")
+        lines.append(
+            "        let container = try decoder.container(keyedBy: TagCodingKeys.self)"
+        )
+        lines.append(
+            "        let tag = try container.decodeIfPresent(String.self, forKey: .tag)"
+        )
+        lines.append("        switch tag {")
+        for variant in union.variants:
+            case = _swift_oneof_case_ident(variant.discriminator_value)
+            lines.append(f'        case "{variant.discriminator_value}":')
+            lines.append(
+                f"            self = .{case}(try {variant.ref_name}Dto(from: decoder))"
+            )
+        lines.append("        default:")
+        lines.append("            self = .unknown")
+        lines.append("        }")
+        lines.append("    }")
+        lines.append("")
+        lines.append("    func encode(to encoder: Encoder) throws {")
+        lines.append("        switch self {")
+        for variant in union.variants:
+            case = _swift_oneof_case_ident(variant.discriminator_value)
+            lines.append(f"        case .{case}(let value):")
+            lines.append("            try value.encode(to: encoder)")
+            lines.append(
+                "            var container = encoder.container(keyedBy: TagCodingKeys.self)"
+            )
+            lines.append(
+                f'            try container.encode("{variant.discriminator_value}", forKey: .tag)'
+            )
+        lines.append("        case .unknown:")
+        lines.append("            _ = encoder.container(keyedBy: TagCodingKeys.self)")
+        lines.append("        }")
+        lines.append("    }")
+        lines.append("}")
+
+        body = "\n".join(lines)
+        return f"{header}\nimport Foundation\n\n{body}\n\n{footer}\n"
+
+    def generate_union_domain_source(self, union: UnionDef) -> str:
+        """Domain scaffold for a union — same thin-wrapper shape as object
+        schemas (see plan ``02a-union-emit-design.md`` for why a sealed
+        Domain mirror was rejected), plus a dispatch hint.
+        """
+        return (
+            "import Foundation\n"
+            "\n"
+            f"struct {union.name} {{\n"
+            f"    let dto: {union.name}Dto\n"
+            "\n"
+            f"    init(dto: {union.name}Dto) {{\n"
+            "        self.dto = dto\n"
+            "    }\n"
+            "\n"
+            "    // User customization zone — add proxies, computed properties,\n"
+            "    // stored properties, methods, and conversions here.\n"
+            "    // Dispatch on the union with `switch dto { case ."
+            + _swift_oneof_case_ident(union.variants[0].discriminator_value)
+            + "(let value): ... }`.\n"
+            "}\n"
+        )
+
     # ---------------------------- emit enum -------------------------- #
 
     def generate_enum_source(self, enum: EnumDef, doc: SwaggerDocument) -> str:
@@ -307,6 +410,7 @@ class IosApiModelGenerator:
         """
         paths = {self.dto_path(s.name) for s in doc.schemas}
         paths |= {self.enum_path(e.name) for e in doc.enums}
+        paths |= {self.dto_path(u.name) for u in doc.unions}
         return paths
 
 

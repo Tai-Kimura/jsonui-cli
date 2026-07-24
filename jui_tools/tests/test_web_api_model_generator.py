@@ -339,6 +339,113 @@ class OneOfDiscriminatorTests(unittest.TestCase):
         self.assertIn('case "unknown":\n      content = null;', src)
 
 
+class SchemaLevelUnionTests(unittest.TestCase):
+    """Schema-level oneOf union emits a payload union type alias plus
+    ``{Name}DtoCase`` / ``match{Name}Dto`` / ``serialize{Name}Dto``."""
+
+    def _pet_doc(self):
+        return parse_swagger(_doc({
+            "Pet": {
+                "oneOf": [
+                    {"$ref": "#/components/schemas/Dog"},
+                    {"$ref": "#/components/schemas/Cat"},
+                ],
+                "discriminator": {
+                    "propertyName": "pet_type",
+                    "mapping": {
+                        "dog": "#/components/schemas/Dog",
+                        "cat": "#/components/schemas/Cat",
+                    },
+                },
+            },
+            "Dog": {
+                "type": "object",
+                "properties": {"bark_volume": {"type": "integer"}},
+            },
+            "Cat": {
+                "type": "object",
+                "properties": {"lives_left": {"type": "integer"}},
+            },
+        }), "test.json")
+
+    def _union_source(self):
+        doc = self._pet_doc()
+        with tempfile.TemporaryDirectory() as tmp:
+            return _gen(Path(tmp)).generate_union_source(doc.unions[0], doc)
+
+    def test_payload_union_type_alias(self):
+        src = self._union_source()
+        self.assertIn("export type PetDto = DogDto | CatDto;", src)
+        self.assertIn('import type { CatDto } from "./CatDto";', src)
+        self.assertIn('import type { DogDto } from "./DogDto";', src)
+
+    def test_case_type_includes_unknown_arm(self):
+        src = self._union_source()
+        self.assertIn("export type PetDtoCase =", src)
+        self.assertIn('| { kind: "dog"; data: DogDto }', src)
+        self.assertIn('| { kind: "cat"; data: CatDto }', src)
+        self.assertIn('| { kind: "unknown" };', src)
+
+    def test_match_helper_dispatches_on_payload_tag(self):
+        src = self._union_source()
+        self.assertIn(
+            "export const matchPetDto = (value: PetDto | unknown): PetDtoCase => {",
+            src,
+        )
+        self.assertIn(
+            'switch ((value as Record<string, unknown> | null)?.["pet_type"]) {',
+            src,
+        )
+        self.assertIn('return { kind: "dog", data: value as DogDto };', src)
+        self.assertIn('return { kind: "unknown" };', src)
+
+    def test_serialize_helper_injects_tag(self):
+        src = self._union_source()
+        self.assertIn(
+            "export const serializePetDto = (value: PetDtoCase): unknown => {",
+            src,
+        )
+        self.assertIn('return { ...value.data, ["pet_type"]: "dog" };', src)
+        self.assertIn('case "unknown":', src)
+        self.assertIn("return {};", src)
+
+    def test_union_domain_scaffold(self):
+        doc = self._pet_doc()
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp)).generate_union_domain_source(doc.unions[0])
+        self.assertIn("export interface Pet {", src)
+        self.assertIn("dto: PetDto;", src)
+        self.assertIn(
+            "export const petFromDto = (dto: PetDto): Pet => ({ dto });", src
+        )
+        self.assertIn("matchPetDto(dto)", src)
+
+    def test_schema_referencing_union_imports_and_uses_dto_type(self):
+        doc = parse_swagger(_doc({
+            "Pet": {
+                "oneOf": [{"$ref": "#/components/schemas/Dog"}],
+                "discriminator": {
+                    "propertyName": "pet_type",
+                    "mapping": {"dog": "#/components/schemas/Dog"},
+                },
+            },
+            "Dog": {
+                "type": "object",
+                "properties": {"bark_volume": {"type": "integer"}},
+            },
+            "Owner": {
+                "type": "object",
+                "required": ["pet"],
+                "properties": {"pet": {"$ref": "#/components/schemas/Pet"}},
+            },
+        }), "test.json")
+        owner = next(s for s in doc.schemas if s.name == "Owner")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp)).generate_dto_source(owner, doc)
+        self.assertIn('import type { PetDto } from "./PetDto";', src)
+        self.assertIn("pet: PetDto;", src)
+
+
 class WriteBehaviorTests(unittest.TestCase):
     def test_dto_written_idempotent(self):
         doc = parse_swagger(_doc(_user_schema()), "test.json")

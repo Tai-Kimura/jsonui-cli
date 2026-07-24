@@ -30,6 +30,7 @@ from ..core.schema_ir import (
     PrimitiveKind,
     SchemaDef,
     SwaggerDocument,
+    UnionDef,
 )
 
 
@@ -241,6 +242,109 @@ class WebApiModelGenerator:
             out.append(f"  {f.wire_name}: model.{camel},")
         out.append("});")
         return out
+
+    # ---------------------------- emit union ------------------------- #
+
+    def generate_union_source(self, union: UnionDef, doc: SwaggerDocument) -> str:
+        """TS source for a schema-level union.
+
+        The DTO type is the plain payload union (``DogDto | CatDto``) —
+        wire-faithful, so parents referencing it need no parse cascade.
+        The ``{Name}DtoCase`` shape + ``match{Name}Dto`` helper mirror the
+        field-level ``{ kind, data }`` convention including the
+        forward-compat ``"unknown"`` arm; ``serialize{Name}Dto`` folds a
+        case back to the wire payload, (re)writing the tag key so
+        round-trips hold even when the variant schema does not declare
+        the tag property.
+        """
+        header = comment_header(
+            source=_relative_source(doc.source_path)
+            + f"#{union.source_pointer.rsplit('#', 1)[-1]}",
+            generator=self.GENERATOR_NAME,
+        )
+        footer = comment_footer()
+        name = union.name
+        tag_key = _ts_oneof_kind_literal(union.discriminator_property)
+
+        lines: list[str] = []
+        for ref in sorted({v.ref_name for v in union.variants}):
+            lines.append(f'import type {{ {ref}Dto }} from "./{ref}Dto";')
+        lines.append("")
+        if union.description:
+            lines.extend(_jsdoc_lines(union.description))
+        if union.deprecated:
+            lines.append("/** @deprecated */")
+        payload_union = " | ".join(f"{v.ref_name}Dto" for v in union.variants)
+        lines.append(f"export type {name}Dto = {payload_union};")
+        lines.append("")
+        lines.append(
+            f"// Exhaustive-match shape for {name}Dto — mirrors the field-level"
+        )
+        lines.append(
+            '// oneOf `{ kind, data }` convention, including the forward-compat'
+        )
+        lines.append('// "unknown" arm.')
+        lines.append(f"export type {name}DtoCase =")
+        for variant in union.variants:
+            kind = _ts_oneof_kind_literal(variant.discriminator_value)
+            lines.append(f"  | {{ kind: {kind}; data: {variant.ref_name}Dto }}")
+        lines.append('  | { kind: "unknown" };')
+        lines.append("")
+        lines.append(
+            f"export const match{name}Dto = (value: {name}Dto | unknown): {name}DtoCase => {{"
+        )
+        lines.append(
+            f"  switch ((value as Record<string, unknown> | null)?.[{tag_key}]) {{"
+        )
+        for variant in union.variants:
+            kind = _ts_oneof_kind_literal(variant.discriminator_value)
+            lines.append(f"    case {kind}:")
+            lines.append(
+                f"      return {{ kind: {kind}, data: value as {variant.ref_name}Dto }};"
+            )
+        lines.append("    default:")
+        lines.append('      return { kind: "unknown" };')
+        lines.append("  }")
+        lines.append("};")
+        lines.append("")
+        lines.append(
+            f"export const serialize{name}Dto = (value: {name}DtoCase): unknown => {{"
+        )
+        lines.append("  switch (value.kind) {")
+        for variant in union.variants:
+            kind = _ts_oneof_kind_literal(variant.discriminator_value)
+            lines.append(f"    case {kind}:")
+            lines.append(
+                f"      return {{ ...value.data, [{tag_key}]: {kind} }};"
+            )
+        lines.append('    case "unknown":')
+        lines.append("      return {};")
+        lines.append("  }")
+        lines.append("};")
+
+        body = "\n".join(lines)
+        return f"{header}\n\n{body}\n\n{footer}\n"
+
+    def generate_union_domain_source(self, union: UnionDef) -> str:
+        """Domain scaffold for a union — thin wrapper, same shape as object
+        schemas (see plan ``02a-union-emit-design.md``), plus a dispatch
+        hint pointing at the match helper.
+        """
+        factory = factory_name(union.name)
+        return (
+            f'import type {{ {union.name}Dto }} from "./generated/{union.name}Dto";\n'
+            "\n"
+            f"export interface {union.name} {{\n"
+            f"  dto: {union.name}Dto;\n"
+            "  // User customization zone — add proxies, computed properties,\n"
+            "  // stored properties, methods, and conversions here (or in a\n"
+            f"  // separate utility module that consumes the {union.name} type).\n"
+            f"  // Dispatch on the union with `match{union.name}Dto(dto)` from "
+            f"./generated/{union.name}Dto.\n"
+            "}\n"
+            "\n"
+            f"export const {factory} = (dto: {union.name}Dto): {union.name} => ({{ dto }});\n"
+        )
 
     # ---------------------------- emit enum -------------------------- #
 

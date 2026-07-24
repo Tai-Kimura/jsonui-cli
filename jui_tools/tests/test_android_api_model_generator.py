@@ -1297,5 +1297,124 @@ class WriteBehaviorTests(unittest.TestCase):
             self.assertEqual(first.path.read_text(), "// custom\n")
 
 
+class SchemaLevelUnionTests(unittest.TestCase):
+    """Schema-level oneOf union emits ``sealed class {Name}Dto`` + a
+    custom KSerializer that reads / writes the tag inside the payload.
+    kotlinx-only, mirroring the field-level constraint."""
+
+    def _pet_doc(self):
+        return parse_swagger(_doc({
+            "Pet": {
+                "oneOf": [
+                    {"$ref": "#/components/schemas/Dog"},
+                    {"$ref": "#/components/schemas/Cat"},
+                ],
+                "discriminator": {
+                    "propertyName": "pet_type",
+                    "mapping": {
+                        "dog": "#/components/schemas/Dog",
+                        "cat": "#/components/schemas/Cat",
+                    },
+                },
+            },
+            "Dog": {
+                "type": "object",
+                "properties": {"bark_volume": {"type": "integer"}},
+            },
+            "Cat": {
+                "type": "object",
+                "properties": {"lives_left": {"type": "integer"}},
+            },
+        }), "test.json")
+
+    def _union_source(self, serializer: str = "kotlinx"):
+        doc = self._pet_doc()
+        with tempfile.TemporaryDirectory() as tmp:
+            return _gen(Path(tmp), serializer).generate_union_source(
+                doc.unions[0], doc
+            )
+
+    def test_sealed_class_with_variant_and_unknown_arms(self):
+        src = self._union_source()
+        self.assertIn("@Serializable(with = PetDtoSerializer::class)", src)
+        self.assertIn("sealed class PetDto {", src)
+        self.assertIn("data class Dog(val data: DogDto) : PetDto()", src)
+        self.assertIn("data class Cat(val data: CatDto) : PetDto()", src)
+        self.assertIn("data object Unknown : PetDto()", src)
+
+    def test_serializer_deserialize_dispatches_on_payload_tag(self):
+        src = self._union_source()
+        self.assertIn("object PetDtoSerializer : KSerializer<PetDto> {", src)
+        self.assertIn(
+            'return when ((obj["pet_type"] as? JsonPrimitive)?.content) {', src
+        )
+        self.assertIn(
+            '"dog" -> PetDto.Dog(json.decodeFromJsonElement<DogDto>(obj))', src
+        )
+        self.assertIn("else -> PetDto.Unknown", src)
+
+    def test_serializer_serialize_injects_tag(self):
+        src = self._union_source()
+        self.assertIn('put("pet_type", "dog")', src)
+        self.assertIn('put("pet_type", "cat")', src)
+        self.assertIn("PetDto.Unknown -> buildJsonObject {}", src)
+        self.assertIn(
+            "json.encodeToJsonElement(value.data).jsonObject"
+            ".forEach { (k, v) -> put(k, v) }",
+            src,
+        )
+
+    def test_moshi_serializer_halts(self):
+        with self.assertRaises(ValueError) as ctx:
+            self._union_source("moshi")
+        self.assertIn("kotlinx", str(ctx.exception))
+
+    def test_none_serializer_halts(self):
+        with self.assertRaises(ValueError) as ctx:
+            self._union_source("none")
+        self.assertIn("kotlinx", str(ctx.exception))
+
+    def test_union_domain_scaffold_delegates_to_dto_serializer_object(self):
+        doc = self._pet_doc()
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "kotlinx").generate_union_domain_source(
+                doc.unions[0]
+            )
+        self.assertIn("@Serializable(with = PetSerializer::class)", src)
+        self.assertIn("class Pet(val dto: PetDto) {", src)
+        # Delegates to the serializer object directly — must NOT rely on
+        # the plugin-synthesized companion serializer() of a
+        # @Serializable(with = ...) sealed class.
+        self.assertIn("private val dtoSerializer = PetDtoSerializer", src)
+        self.assertNotIn("PetDto.serializer()", src)
+        self.assertIn(
+            "import com.example.app.model.generated.PetDtoSerializer", src
+        )
+
+    def test_schema_referencing_union_uses_dto_type(self):
+        doc = parse_swagger(_doc({
+            "Pet": {
+                "oneOf": [{"$ref": "#/components/schemas/Dog"}],
+                "discriminator": {
+                    "propertyName": "pet_type",
+                    "mapping": {"dog": "#/components/schemas/Dog"},
+                },
+            },
+            "Dog": {
+                "type": "object",
+                "properties": {"bark_volume": {"type": "integer"}},
+            },
+            "Owner": {
+                "type": "object",
+                "required": ["pet"],
+                "properties": {"pet": {"$ref": "#/components/schemas/Pet"}},
+            },
+        }), "test.json")
+        owner = next(s for s in doc.schemas if s.name == "Owner")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "kotlinx").generate_dto_source(owner, doc)
+        self.assertIn("val pet: PetDto", src)
+
+
 if __name__ == "__main__":
     unittest.main()

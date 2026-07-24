@@ -15,9 +15,27 @@ Input normalization (2026-07, Q8 / Q12 lift — plan
   resolved by a pre-parse merge layer (:class:`_CrossFileRefResolver`), so
   :func:`parse_swagger` — whose signature is frozen — never sees one.
 
+Union support (2026-07, plan ``2026-07-24-v1-unsupported/02``):
+
+- Schema-level ``oneOf`` + ``discriminator`` (top-level union envelope)
+  parses into :class:`UnionDef`. When ``discriminator.mapping`` is absent
+  the mapping is inferred from each variant's internal tag property
+  (``const`` string or single-value string ``enum``); the inferred
+  mapping is logged as a WARNING on stderr.
+- Field-level ``oneOf`` + ``discriminator`` keeps requiring an explicit
+  ``mapping`` (the tag lives in the parent's sibling property there —
+  variant-internal tags are not the wire mechanism, so inference does
+  not apply).
+
 §3.3 ERROR halt rules enforced here (raise :class:`OpenAPILoadError`):
 
-- ``oneOf`` / ``anyOf`` / discriminator → halt (Q11)
+- ``anyOf`` → halt (permanent — untagged unions have no portable native
+  representation)
+- ``oneOf`` without ``discriminator`` → halt
+- union schema used as a variant of another union → halt (permanent)
+- non-string / duplicate / missing variant tags when inferring a
+  schema-level mapping → halt
+- explicit mapping contradicting a variant's internal tag → halt
 - URL ``$ref``, ``$ref`` escaping the api dir, non-schema pointers,
   cross-file ref cycles → halt
 - YAML 1.1 implicit typing that diverges from JSON (Norway problem) → halt
@@ -39,6 +57,7 @@ import copy
 import datetime
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +71,7 @@ from .schema_ir import (
     PrimitiveKind,
     SchemaDef,
     SwaggerDocument,
+    UnionDef,
 )
 
 
@@ -505,7 +525,11 @@ def _check_cross_doc_schemas(
     Inline-derived names are skipped (absent from *schemas_root*); the
     per-doc ``inline-name-collision`` rules already govern those.
     """
-    emitted = {s.name for s in doc.schemas} | {e.name for e in doc.enums}
+    emitted = (
+        {s.name for s in doc.schemas}
+        | {e.name for e in doc.enums}
+        | {u.name for u in doc.unions}
+    )
     for name in sorted(emitted):
         body = schemas_root.get(name)
         if body is None:
@@ -646,6 +670,7 @@ def parse_swagger(
     schema_names = set(schemas_root.keys())
     enums: list[EnumDef] = []
     schemas: list[SchemaDef] = []
+    unions: list[UnionDef] = []
     # Inline object schemas extracted on the fly — appended to `schemas`
     # after the main loop so post-processing (cycle / collision) sees them.
     inline_schemas: list[SchemaDef] = []
@@ -660,6 +685,22 @@ def parse_swagger(
         pointer = f"#/components/schemas/{name}"
         if _is_enum_only(body):
             enums.append(_parse_enum(name, body, source_path=source_path, pointer=pointer))
+            continue
+
+        # Schema-level oneOf → top-level discriminated union (UnionDef).
+        # Checked before allOf resolution / polymorphic halts: a top-level
+        # oneOf body is the union envelope itself, not an object schema.
+        if "oneOf" in body:
+            unions.append(
+                _parse_schema_level_union(
+                    name,
+                    body,
+                    schemas_root,
+                    top_level_names=schema_names,
+                    source_path=source_path,
+                    pointer=pointer,
+                )
+            )
             continue
 
         merged = _resolve_all_of(body, schemas_root, source_path=source_path, pointer=pointer)
@@ -677,6 +718,7 @@ def parse_swagger(
                 merged,
                 schema_names,
                 inline_names,
+                schemas_root=schemas_root,
                 source_path=source_path,
                 pointer=pointer,
             )
@@ -696,6 +738,7 @@ def parse_swagger(
             parent_name=name,
             top_level_names=schema_names,
             inline_names=inline_names,
+            schemas_root=schemas_root,
             source_path=source_path,
             parent_pointer=pointer,
         )
@@ -755,8 +798,10 @@ def parse_swagger(
                 "direct-self-reference",
                 f"Schema '{schema.name}' has a direct self-reference field "
                 f"(no collection indirection). Wrap the field in an array "
-                f"or map, or split into a non-recursive shape. "
-                f"v1 halts on all 3 platforms for cross-platform parity.",
+                f"or map, or split into a non-recursive shape. This halt is "
+                f"permanent: a value type cannot contain itself by value on "
+                f"any target platform — the collection-indirection "
+                f"workaround is the supported design.",
                 source=source_path,
                 pointer=schema.source_pointer,
             )
@@ -769,6 +814,7 @@ def parse_swagger(
         enums=enums,
         filtered_out=filtered_out,
         skip_domain_overrides=skip_domain_overrides,
+        unions=unions,
     )
 
 
@@ -811,6 +857,7 @@ def _parse_wrapper_schema(
     top_level_names: set[str],
     inline_names: set[str],
     *,
+    schemas_root: dict[str, Any],
     source_path: str,
     pointer: str,
 ) -> tuple[SchemaDef, list[SchemaDef], list[EnumDef]]:
@@ -828,6 +875,7 @@ def _parse_wrapper_schema(
         field_name="value",
         top_level_names=top_level_names,
         inline_names=inline_names,
+        schemas_root=schemas_root,
         source_path=source_path,
         pointer=pointer,
     )
@@ -1057,10 +1105,408 @@ def _check_ref_local(ref: str, *, source_path: str, pointer: str) -> None:
     )
 
 
+def _collect_one_of_ref_names(
+    body: dict[str, Any],
+    *,
+    top_level_names: set[str],
+    schemas_root: dict[str, Any],
+    union_name: str | None,
+    source_path: str,
+    pointer: str,
+) -> list[str]:
+    """Validate a ``oneOf`` list and return variant names in declared order.
+
+    Shared by the field-level and schema-level union parsers. Halts on:
+
+    - non-list / empty ``oneOf``
+    - inline (non-``$ref``) variants
+    - refs that don't resolve to a top-level schema
+    - variants that are themselves union schemas (their raw body carries
+      ``oneOf`` / ``anyOf``) — ``union-variant-not-supported``, permanent:
+      a union schema has no tag property of its own, so it cannot be
+      selected by a discriminator value
+    """
+    one_of = body.get("oneOf")
+    if not isinstance(one_of, list) or not one_of:
+        raise OpenAPILoadError(
+            "invalid-oneof",
+            "'oneOf' must be a non-empty list of $ref objects",
+            source=source_path,
+            pointer=pointer,
+        )
+    names: list[str] = []
+    for i, entry in enumerate(one_of):
+        if not isinstance(entry, dict) or "$ref" not in entry or len(entry) != 1:
+            raise OpenAPILoadError(
+                "invalid-oneof",
+                "Each oneOf entry must be a `$ref` object — inline variants "
+                "are not supported in v1.",
+                source=source_path,
+                pointer=f"{pointer}/oneOf/{i}",
+            )
+        ref = entry["$ref"]
+        _check_ref_local(ref, source_path=source_path, pointer=f"{pointer}/oneOf/{i}")
+        ref_name = ref.rsplit("/", 1)[-1]
+        if ref_name not in top_level_names:
+            raise OpenAPILoadError(
+                "oneof-variant-not-found",
+                f"oneOf variant {ref_name!r} is not a top-level schema. "
+                f"Inline / nested variants are not supported in v1.",
+                source=source_path,
+                pointer=f"{pointer}/oneOf/{i}",
+            )
+        variant_body = schemas_root.get(ref_name)
+        if isinstance(variant_body, dict) and (
+            "oneOf" in variant_body or "anyOf" in variant_body
+        ):
+            where = f"of union {union_name!r}" if union_name else "of this oneOf"
+            raise OpenAPILoadError(
+                "union-variant-not-supported",
+                f"Schema {ref_name!r} is itself a union and cannot be a "
+                f"variant {where}. A union schema carries no discriminator "
+                f"tag property of its own, so nesting unions is structurally "
+                f"unsupported (permanent). Flatten its variants into this "
+                f"oneOf instead.",
+                source=source_path,
+                pointer=f"{pointer}/oneOf/{i}",
+            )
+        names.append(ref_name)
+    return names
+
+
+def _variant_tag_values(
+    variant_name: str,
+    disc_prop: str,
+    schemas_root: dict[str, Any],
+    *,
+    source_path: str,
+    pointer: str,
+) -> tuple[list[str] | None, bool]:
+    """Read a variant's internal tag declaration.
+
+    Returns ``(values, non_string)`` where *values* is the list of string
+    tag values the variant declares for *disc_prop* (via ``const`` or
+    ``enum``), ``None`` when the variant declares no fixed tag value, and
+    *non_string* is True when a fixed tag exists but is not a string
+    (integer const/enum etc. — the OpenAPI mapping key space is strings,
+    so non-string tags halt at the caller).
+
+    ``allOf`` on the variant is resolved first so tags inherited from a
+    base schema are visible.
+    """
+    body = schemas_root.get(variant_name)
+    if not isinstance(body, dict):
+        return None, False
+    merged = _resolve_all_of(
+        body, schemas_root, source_path=source_path, pointer=pointer
+    )
+    properties = merged.get("properties")
+    if not isinstance(properties, dict):
+        return None, False
+    tag_body = properties.get(disc_prop)
+    if not isinstance(tag_body, dict):
+        return None, False
+    if "const" in tag_body:
+        value = tag_body["const"]
+        if isinstance(value, str) and not isinstance(value, bool):
+            return [value], False
+        return None, True
+    enum_values = tag_body.get("enum")
+    if isinstance(enum_values, list) and enum_values:
+        if all(
+            isinstance(v, str) and not isinstance(v, bool) for v in enum_values
+        ):
+            return [str(v) for v in enum_values], False
+        return None, True
+    return None, False
+
+
+def _parse_schema_level_union(
+    name: str,
+    body: dict[str, Any],
+    schemas_root: dict[str, Any],
+    *,
+    top_level_names: set[str],
+    source_path: str,
+    pointer: str,
+) -> UnionDef:
+    """Parse a top-level ``oneOf`` schema into :class:`UnionDef`.
+
+    Two mapping paths:
+
+    - explicit ``discriminator.mapping`` — validated like the field-level
+      parser, plus the ``discriminator-tag-conflict`` cross-check: when a
+      variant internally declares the tag property with fixed values
+      (const / enum), the mapped value must be among them
+    - no mapping — inferred from each variant's internal tag property.
+      Every variant must declare the tag as a ``const`` string or a
+      single-value string enum; duplicates, non-string tags, and
+      tag-less variants halt. The inferred mapping is printed as a
+      WARNING on **stderr** (never stdout — the loader also runs inside
+      MCP servers whose stdout is a protocol channel).
+    """
+    if "anyOf" in body:
+        # Reuse the canonical anyOf freeze message.
+        _check_polymorphic(body, source_path=source_path, pointer=pointer)
+    if "discriminator" not in body:
+        # Canonical 'oneOf without discriminator' halt.
+        _check_polymorphic(body, source_path=source_path, pointer=pointer)
+    if isinstance(body.get("properties"), dict) and body["properties"]:
+        raise OpenAPILoadError(
+            "invalid-oneof",
+            f"Schema {name!r} mixes top-level 'oneOf' with 'properties'. "
+            f"A schema-level union must be a pure envelope — move the "
+            f"shared properties into the variants (or an allOf base they "
+            f"share).",
+            source=source_path,
+            pointer=pointer,
+        )
+    disc = body.get("discriminator")
+    if not isinstance(disc, dict):
+        raise OpenAPILoadError(
+            "invalid-discriminator",
+            "'discriminator' must be a dict with 'propertyName'",
+            source=source_path,
+            pointer=pointer,
+        )
+    prop_name = disc.get("propertyName")
+    if not isinstance(prop_name, str) or not prop_name.strip():
+        raise OpenAPILoadError(
+            "invalid-discriminator",
+            "'discriminator.propertyName' must be a non-empty string",
+            source=source_path,
+            pointer=pointer,
+        )
+
+    variant_names = _collect_one_of_ref_names(
+        body,
+        top_level_names=top_level_names,
+        schemas_root=schemas_root,
+        union_name=name,
+        source_path=source_path,
+        pointer=pointer,
+    )
+
+    mapping = disc.get("mapping")
+    if mapping is not None and not isinstance(mapping, dict):
+        raise OpenAPILoadError(
+            "invalid-discriminator",
+            "'discriminator.mapping' must be a dict when present",
+            source=source_path,
+            pointer=pointer,
+        )
+
+    if mapping:
+        variants = _union_variants_from_mapping(
+            name,
+            mapping,
+            variant_names,
+            disc_prop=prop_name,
+            top_level_names=top_level_names,
+            schemas_root=schemas_root,
+            source_path=source_path,
+            pointer=pointer,
+        )
+        inferred = False
+    else:
+        variants = _infer_union_variants(
+            name,
+            variant_names,
+            disc_prop=prop_name,
+            schemas_root=schemas_root,
+            source_path=source_path,
+            pointer=pointer,
+        )
+        inferred = True
+        rendered = ", ".join(
+            f"{v.discriminator_value} -> {v.ref_name}" for v in variants
+        )
+        print(
+            f"  WARNING [api-model]: inferred discriminator mapping for "
+            f"schema {name!r}: {rendered}. Add an explicit "
+            f"discriminator.mapping to pin it.",
+            file=sys.stderr,
+        )
+
+    return UnionDef(
+        name=name,
+        discriminator_property=prop_name,
+        variants=tuple(variants),
+        mapping_inferred=inferred,
+        description=_str_or_none(body.get("description")),
+        deprecated=bool(body.get("deprecated", False)),
+        skip_domain=bool(body.get("x-jui-skip-domain", False)),
+        source_pointer=f"{source_path}{pointer}",
+    )
+
+
+def _union_variants_from_mapping(
+    union_name: str,
+    mapping: dict[str, Any],
+    variant_names: list[str],
+    *,
+    disc_prop: str,
+    top_level_names: set[str],
+    schemas_root: dict[str, Any],
+    source_path: str,
+    pointer: str,
+) -> list[OneOfVariant]:
+    """Validate an explicit schema-level mapping → ordered variants.
+
+    Mirrors the field-level rules (string keys, local refs to top-level
+    schemas, oneOf ↔ mapping set equality) and adds the
+    ``discriminator-tag-conflict`` cross-check against variant-internal
+    tags.
+    """
+    variants: list[OneOfVariant] = []
+    mapped_refs: set[str] = set()
+    for disc_value, ref in mapping.items():
+        if not isinstance(disc_value, str) or not disc_value.strip():
+            raise OpenAPILoadError(
+                "invalid-discriminator",
+                "discriminator.mapping keys must be non-empty strings",
+                source=source_path,
+                pointer=pointer,
+            )
+        if not isinstance(ref, str):
+            raise OpenAPILoadError(
+                "invalid-discriminator",
+                f"discriminator.mapping[{disc_value!r}] must be a $ref string",
+                source=source_path,
+                pointer=pointer,
+            )
+        _check_ref_local(ref, source_path=source_path, pointer=pointer)
+        ref_name = ref.rsplit("/", 1)[-1]
+        if ref_name not in top_level_names:
+            raise OpenAPILoadError(
+                "oneof-variant-not-found",
+                f"discriminator.mapping[{disc_value!r}] → {ref_name!r} is "
+                f"not a top-level schema",
+                source=source_path,
+                pointer=pointer,
+            )
+        if ref_name not in variant_names:
+            raise OpenAPILoadError(
+                "discriminator-mapping-mismatch",
+                f"discriminator.mapping[{disc_value!r}] points to {ref_name!r} "
+                f"but this schema is not listed in the oneOf array. Add it "
+                f"to oneOf or remove the mapping entry.",
+                source=source_path,
+                pointer=pointer,
+            )
+        tag_values, non_string = _variant_tag_values(
+            ref_name, disc_prop, schemas_root,
+            source_path=source_path, pointer=pointer,
+        )
+        if non_string:
+            raise OpenAPILoadError(
+                "discriminator-tag-conflict",
+                f"Union {union_name!r}: variant {ref_name!r} declares "
+                f"{disc_prop!r} with a non-string const/enum, but "
+                f"discriminator values are strings (OpenAPI mapping keys "
+                f"and platform switch dispatch are string-typed). Make the "
+                f"tag a string.",
+                source=source_path,
+                pointer=pointer,
+            )
+        if tag_values is not None and disc_value not in tag_values:
+            raise OpenAPILoadError(
+                "discriminator-tag-conflict",
+                f"Union {union_name!r}: discriminator.mapping says "
+                f"{disc_value!r} → {ref_name!r}, but {ref_name!r} declares "
+                f"{disc_prop!r} as {tag_values!r}. The mapped value must be "
+                f"one of the variant's own tag values — fix the mapping or "
+                f"the variant schema.",
+                source=source_path,
+                pointer=pointer,
+            )
+        variants.append(OneOfVariant(disc_value, ref_name))
+        mapped_refs.add(ref_name)
+
+    unmapped = set(variant_names) - mapped_refs
+    if unmapped:
+        raise OpenAPILoadError(
+            "discriminator-mapping-mismatch",
+            "oneOf variants are missing from discriminator.mapping: "
+            + ", ".join(sorted(unmapped))
+            + ". Add explicit mapping entries for each variant.",
+            source=source_path,
+            pointer=pointer,
+        )
+    return variants
+
+
+def _infer_union_variants(
+    union_name: str,
+    variant_names: list[str],
+    *,
+    disc_prop: str,
+    schemas_root: dict[str, Any],
+    source_path: str,
+    pointer: str,
+) -> list[OneOfVariant]:
+    """Infer the mapping from each variant's internal tag (oneOf order)."""
+    variants: list[OneOfVariant] = []
+    seen: dict[str, str] = {}
+    for ref_name in variant_names:
+        tag_values, non_string = _variant_tag_values(
+            ref_name, disc_prop, schemas_root,
+            source_path=source_path, pointer=pointer,
+        )
+        if non_string:
+            raise OpenAPILoadError(
+                "invalid-discriminator",
+                f"Cannot infer discriminator.mapping for union "
+                f"{union_name!r}: variant {ref_name!r} declares "
+                f"{disc_prop!r} with a non-string const/enum. Tags must be "
+                f"strings (OpenAPI mapping keys and platform switch "
+                f"dispatch are string-typed).",
+                source=source_path,
+                pointer=pointer,
+            )
+        if tag_values is None:
+            raise OpenAPILoadError(
+                "invalid-discriminator",
+                f"Cannot infer discriminator.mapping for union "
+                f"{union_name!r}: variant {ref_name!r} does not declare "
+                f"property {disc_prop!r} as a const string or string enum. "
+                f"Declare the tag on the variant, or add an explicit "
+                f"discriminator.mapping.",
+                source=source_path,
+                pointer=pointer,
+            )
+        if len(tag_values) != 1:
+            raise OpenAPILoadError(
+                "invalid-discriminator",
+                f"Cannot infer discriminator.mapping for union "
+                f"{union_name!r}: variant {ref_name!r} declares "
+                f"{disc_prop!r} with {len(tag_values)} enum values "
+                f"{tag_values!r} — inference needs exactly one value per "
+                f"variant. Add an explicit discriminator.mapping.",
+                source=source_path,
+                pointer=pointer,
+            )
+        value = tag_values[0]
+        if value in seen:
+            raise OpenAPILoadError(
+                "invalid-discriminator",
+                f"Cannot infer discriminator.mapping for union "
+                f"{union_name!r}: tag value {value!r} is declared by both "
+                f"{seen[value]!r} and {ref_name!r}. Tag values must be "
+                f"unique across variants.",
+                source=source_path,
+                pointer=pointer,
+            )
+        seen[value] = ref_name
+        variants.append(OneOfVariant(value, ref_name))
+    return variants
+
+
 def _parse_one_of_discriminator(
     body: dict[str, Any],
     *,
     top_level_names: set[str],
+    schemas_root: dict[str, Any],
     source_path: str,
     pointer: str,
 ) -> OneOfRef:
@@ -1069,10 +1515,13 @@ def _parse_one_of_discriminator(
     Validates everything the v1 contract requires:
 
     - ``discriminator`` is a dict with non-empty ``propertyName`` (string)
-    - ``mapping`` is a non-empty dict (explicit mapping required in v1)
+    - ``mapping`` is a non-empty dict (explicit mapping stays required at
+      field level — the tag is the parent's sibling property there, so
+      variant-internal tag inference does not apply)
     - every mapping value is a same-file ``$ref`` to a top-level schema
     - every ``oneOf`` entry is itself a ``$ref`` (inline variants not
       supported)
+    - no variant is itself a union schema (``union-variant-not-supported``)
     - the set of variants in ``oneOf`` matches the set of mapped refs
 
     Returns an :class:`OneOfRef` with variants in **mapping order** so
@@ -1098,45 +1547,22 @@ def _parse_one_of_discriminator(
     if not isinstance(mapping, dict) or not mapping:
         raise OpenAPILoadError(
             "invalid-discriminator",
-            "'discriminator.mapping' is required (explicit map of "
-            "discriminator value → variant $ref). Default-from-schema-name "
-            "is deferred to v2.",
+            "'discriminator.mapping' is required for a field-level oneOf "
+            "(explicit map of discriminator value → variant $ref). Mapping "
+            "inference from variant-internal tags applies only to "
+            "schema-level unions, where the tag lives inside the payload.",
             source=source_path,
             pointer=pointer,
         )
 
-    one_of = body.get("oneOf")
-    if not isinstance(one_of, list) or not one_of:
-        raise OpenAPILoadError(
-            "invalid-oneof",
-            "'oneOf' must be a non-empty list of $ref objects",
-            source=source_path,
-            pointer=pointer,
-        )
-
-    # Collect variant ref names from oneOf (inline variants not supported).
-    one_of_refs: set[str] = set()
-    for i, entry in enumerate(one_of):
-        if not isinstance(entry, dict) or "$ref" not in entry or len(entry) != 1:
-            raise OpenAPILoadError(
-                "invalid-oneof",
-                "Each oneOf entry must be a `$ref` object — inline variants "
-                "are not supported in v1.",
-                source=source_path,
-                pointer=f"{pointer}/oneOf/{i}",
-            )
-        ref = entry["$ref"]
-        _check_ref_local(ref, source_path=source_path, pointer=f"{pointer}/oneOf/{i}")
-        ref_name = ref.rsplit("/", 1)[-1]
-        if ref_name not in top_level_names:
-            raise OpenAPILoadError(
-                "oneof-variant-not-found",
-                f"oneOf variant {ref_name!r} is not a top-level schema. "
-                f"Inline / nested variants are not supported in v1.",
-                source=source_path,
-                pointer=f"{pointer}/oneOf/{i}",
-            )
-        one_of_refs.add(ref_name)
+    one_of_refs = _collect_one_of_ref_names(
+        body,
+        top_level_names=top_level_names,
+        schemas_root=schemas_root,
+        union_name=None,
+        source_path=source_path,
+        pointer=pointer,
+    )
 
     # Parse mapping in declared order; validate each ref + cross-check.
     variants: list[OneOfVariant] = []
@@ -1179,7 +1605,7 @@ def _parse_one_of_discriminator(
         mapped_refs.add(ref_name)
 
     # Every oneOf entry must have a mapping (otherwise it's unreachable).
-    unmapped = one_of_refs - mapped_refs
+    unmapped = set(one_of_refs) - mapped_refs
     if unmapped:
         raise OpenAPILoadError(
             "discriminator-mapping-mismatch",
@@ -1205,22 +1631,26 @@ def _check_polymorphic(
 ) -> None:
     """Halt on unsupported polymorphism.
 
-    Allowed in v1:
-    - ``oneOf`` **with** ``discriminator`` and explicit ``mapping``, **only
-      at field level** (parsed in :func:`_field_type`)
+    Allowed:
+    - ``oneOf`` **with** ``discriminator`` — at field level (explicit
+      mapping required, parsed in :func:`_field_type`) and at schema
+      level (parsed into :class:`UnionDef` before this check runs, so a
+      schema-level oneOf never reaches here)
 
-    Halted:
-    - Schema-level ``oneOf`` even with discriminator — top-level
-      discriminated unions are a v2 follow-up
-    - Field-level ``oneOf`` alone (no discriminator) — no way to dispatch
-    - ``anyOf`` — untagged union, codegen pattern unclear, deferred to v2
+    Halted (both permanent — see the freeze declarations in plan
+    ``2026-07-24-v1-unsupported/02``):
+    - ``anyOf`` — untagged union; there is no portable native
+      representation across Swift / Kotlin / TypeScript
+    - ``oneOf`` without ``discriminator`` — no way to dispatch
     - ``discriminator`` without ``oneOf`` — meaningless alone
     """
     if "anyOf" in body:
         raise OpenAPILoadError(
             "polymorphic-not-supported",
-            "'anyOf' polymorphism is not supported. "
-            "Wait for v2 untagged-union codegen.",
+            "'anyOf' (untagged union) is not supported, permanently: "
+            "there is no portable native representation across Swift / "
+            "Kotlin / TypeScript codegen. Restructure the schema as "
+            "'oneOf' with a discriminator tag instead.",
             source=source_path,
             pointer=pointer,
         )
@@ -1228,9 +1658,10 @@ def _check_polymorphic(
         raise OpenAPILoadError(
             "polymorphic-not-supported",
             "'oneOf' without 'discriminator' is not supported. "
-            "Add a discriminator block with an explicit mapping so codegen "
-            "knows which sibling field tags the union and which value selects "
-            "which variant.",
+            "Add a discriminator block: at field level also provide an "
+            "explicit mapping plus the sibling tag property; at schema "
+            "level the mapping can be inferred when every variant declares "
+            "the tag property as a const string or single-value string enum.",
             source=source_path,
             pointer=pointer,
         )
@@ -1239,19 +1670,6 @@ def _check_polymorphic(
             "polymorphic-not-supported",
             "'discriminator' without 'oneOf' is meaningless. "
             "Either remove the discriminator or add a oneOf list of variants.",
-            source=source_path,
-            pointer=pointer,
-        )
-    # Schema-level oneOf even with discriminator is deferred to v2 —
-    # discriminated envelopes (the OpenAPI-standard pattern) need different
-    # codegen than field-level oneOf and aren't yet implemented.
-    if not at_field_level and "oneOf" in body and "discriminator" in body:
-        raise OpenAPILoadError(
-            "polymorphic-not-supported",
-            "Schema-level 'oneOf' + 'discriminator' (top-level discriminated "
-            "envelope) is not supported in v1. v1 supports oneOf + discriminator "
-            "only when used inside a property (field-level union with a sibling "
-            "tag field). Wait for v2 envelope codegen.",
             source=source_path,
             pointer=pointer,
         )
@@ -1291,6 +1709,7 @@ def _extract_fields(
     parent_name: str,
     top_level_names: set[str],
     inline_names: set[str],
+    schemas_root: dict[str, Any],
     source_path: str,
     parent_pointer: str,
 ) -> tuple[list[FieldDef], list[SchemaDef], list[EnumDef]]:
@@ -1327,6 +1746,7 @@ def _extract_fields(
             field_name=prop_name,
             top_level_names=top_level_names,
             inline_names=inline_names,
+            schemas_root=schemas_root,
             source_path=source_path,
             pointer=prop_pointer,
         )
@@ -1357,6 +1777,7 @@ def _field_type(
     field_name: str,
     top_level_names: set[str],
     inline_names: set[str],
+    schemas_root: dict[str, Any],
     source_path: str,
     pointer: str,
 ) -> tuple[FieldType, list[SchemaDef], list[EnumDef]]:
@@ -1376,6 +1797,7 @@ def _field_type(
         one_of = _parse_one_of_discriminator(
             body,
             top_level_names=top_level_names,
+            schemas_root=schemas_root,
             source_path=source_path,
             pointer=pointer,
         )
@@ -1429,6 +1851,7 @@ def _field_type(
             field_name=field_name + "_item",
             top_level_names=top_level_names,
             inline_names=inline_names,
+            schemas_root=schemas_root,
             source_path=source_path,
             pointer=f"{pointer}/items",
         )
@@ -1449,6 +1872,7 @@ def _field_type(
                 field_name=field_name + "_value",
                 top_level_names=top_level_names,
                 inline_names=inline_names,
+                schemas_root=schemas_root,
                 source_path=source_path,
                 pointer=f"{pointer}/additionalProperties",
             )
@@ -1485,6 +1909,7 @@ def _field_type(
                 parent_name=derived_name,
                 top_level_names=top_level_names,
                 inline_names=inline_names | {derived_name},
+                schemas_root=schemas_root,
                 source_path=source_path,
                 parent_pointer=pointer,
             )

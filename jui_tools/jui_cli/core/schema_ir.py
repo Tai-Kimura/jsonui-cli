@@ -51,6 +51,39 @@ class OneOfVariant:
 
 
 @dataclass(frozen=True)
+class UnionDef:
+    """A top-level (schema-level) discriminated ``oneOf`` union.
+
+    Unlike :class:`OneOfRef` (field-level union, tag lives in the parent
+    schema's sibling property), a ``UnionDef`` is a standalone top-level
+    type whose wire form is the **variant payload itself** with the
+    discriminator tag *inside* the payload. Generators emit a
+    self-decoding union type (Swift enum + custom Codable / Kotlin sealed
+    class + custom KSerializer / TS payload union + match helper) named
+    ``{name}Dto``.
+
+    ``variants`` preserves mapping (or inference) order so generated
+    case / branch order is deterministic. ``mapping_inferred`` is True
+    when ``discriminator.mapping`` was absent and the mapping was
+    inferred from each variant's internal tag property (``const`` string
+    or single-value string enum) — the loader logs the inferred mapping
+    as a WARNING so it is visible outside the swagger diff.
+    """
+
+    name: str
+    discriminator_property: str
+    variants: tuple["OneOfVariant", ...]
+    mapping_inferred: bool = False
+    description: str | None = None
+    deprecated: bool = False
+    skip_domain: bool = False
+    source_pointer: str = ""
+
+    def referenced_schemas(self) -> set[str]:
+        return {v.ref_name for v in self.variants}
+
+
+@dataclass(frozen=True)
 class OneOfRef:
     """A field whose value is one of several variant DTOs, tagged by a
     sibling property in the parent schema.
@@ -264,7 +297,12 @@ class SwaggerDocument:
     enums: list[EnumDef]
     filtered_out: frozenset[str] = field(default_factory=frozenset)
     skip_domain_overrides: frozenset[str] = field(default_factory=frozenset)
+    unions: list[UnionDef] = field(default_factory=list)
 
-    def should_skip_domain(self, schema: SchemaDef) -> bool:
-        """OR-evaluate per-app skip + per-schema skip (v2 plan §2.6)."""
+    def should_skip_domain(self, schema: "SchemaDef | UnionDef") -> bool:
+        """OR-evaluate per-app skip + per-schema skip (v2 plan §2.6).
+
+        Accepts :class:`UnionDef` too — both carry ``skip_domain`` +
+        ``name`` and the override set is keyed by schema name either way.
+        """
         return schema.skip_domain or schema.name in self.skip_domain_overrides

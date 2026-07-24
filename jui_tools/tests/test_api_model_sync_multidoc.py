@@ -113,6 +113,78 @@ class CrossDocDedupTests(unittest.TestCase):
             self.assertEqual(ctx.exception.code, "cross-doc-schema-conflict")
 
 
+class CrossDocUnionDedupTests(unittest.TestCase):
+    """Union files ride the same dedup path as DTOs (plan 02, carry-over
+    item 5 from plan 01): shared union emitted once, first doc wins;
+    same-name unions with different bodies halt."""
+
+    _PET_UNION = {
+        "oneOf": [
+            {"$ref": "#/components/schemas/Dog"},
+            {"$ref": "#/components/schemas/Cat"},
+        ],
+        "discriminator": {
+            "propertyName": "pet_type",
+            "mapping": {
+                "dog": "#/components/schemas/Dog",
+                "cat": "#/components/schemas/Cat",
+            },
+        },
+    }
+    _DOG = {"type": "object", "properties": {"bark_volume": {"type": "integer"}}}
+    _CAT = {"type": "object", "properties": {"lives_left": {"type": "integer"}}}
+
+    def test_shared_union_emitted_once_first_doc_wins(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = _build_project(Path(tmpdir), {
+                "a.json": _swagger({
+                    "Pet": self._PET_UNION, "Dog": self._DOG, "Cat": self._CAT,
+                    "OwnerA": {
+                        "type": "object",
+                        "properties": {"pet": {"$ref": "#/components/schemas/Pet"}},
+                    },
+                }),
+                "b.json": _swagger({
+                    "Pet": self._PET_UNION, "Dog": self._DOG, "Cat": self._CAT,
+                    "OwnerB": {
+                        "type": "object",
+                        "properties": {"pet": {"$ref": "#/components/schemas/Pet"}},
+                    },
+                }),
+            })
+            docs = collect_docs(cfg)
+            plan = plan_ios(cfg, {"root": "ios"}, docs)
+            files = {path.name: source for path, source in plan.expected_files.items()}
+            scaffolds = {path.name for path in plan.domain_scaffolds}
+        self.assertIn("PetDto.swift", files)
+        self.assertIn("a.json", files["PetDto.swift"])
+        self.assertNotIn("b.json", files["PetDto.swift"])
+        # Union Domain scaffold planned alongside object scaffolds.
+        self.assertIn("Pet.swift", scaffolds)
+
+    def test_conflicting_same_name_union_halts_at_collect(self):
+        other_union = dict(self._PET_UNION)
+        other_union["discriminator"] = {
+            "propertyName": "kind",
+            "mapping": {
+                "dog": "#/components/schemas/Dog",
+                "cat": "#/components/schemas/Cat",
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = _build_project(Path(tmpdir), {
+                "a.json": _swagger({
+                    "Pet": self._PET_UNION, "Dog": self._DOG, "Cat": self._CAT,
+                }),
+                "b.json": _swagger({
+                    "Pet": other_union, "Dog": self._DOG, "Cat": self._CAT,
+                }),
+            })
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                collect_docs(cfg)
+            self.assertEqual(ctx.exception.code, "cross-doc-schema-conflict")
+
+
 class SplitInlineEquivalenceTests(unittest.TestCase):
     def test_two_file_fixture_matches_inlined_single_file(self):
         """E2E acceptance for P2: `jui build` plan output of the split
