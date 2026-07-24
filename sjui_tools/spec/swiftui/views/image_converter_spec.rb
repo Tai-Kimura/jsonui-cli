@@ -213,7 +213,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::ImageConverter do
         converter = described_class.new(component)
         code = converter.convert
 
-        expect(code).to include('.hidden()')
+        expect(code).to include('.opacity(0).accessibilityHidden(true)')
       end
     end
 

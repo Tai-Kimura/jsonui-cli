@@ -323,7 +323,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::BaseViewConverter do
       it 'adds hidden modifier' do
         converter = test_converter.new(component)
         code = converter.convert
-        expect(code).to include('.hidden()')
+        expect(code).to include('.opacity(0).accessibilityHidden(true)')
       end
     end
 

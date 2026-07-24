@@ -318,7 +318,10 @@ module SjuiTools
         # gets just .accessibilityElement(children: .contain) +
         # .accessibilityIdentifier (2 flat modifier lines).
         def apply_accessibility_identifier
-          return if @component['visibility'] == 'invisible'
+          # hidden: true is the boolean shorthand for visibility:"invisible"
+          # (space-kept, not drawn, hidden from accessibility) — both static
+          # spellings must suppress the identifier for the same reason.
+          return if @component['visibility'] == 'invisible' || @component['hidden'] == true
 
           type_name = (@component['type'] || '').downcase
           if ACCESSIBILITY_CONTAINER_TYPES.include?(type_name)
@@ -482,14 +485,19 @@ module SjuiTools
             @modifier_bag.register(:offset, ".offset(x: #{offset_x}, y: #{offset_y})")
           end
 
-          # 表示/非表示
+          # 表示/非表示 — hidden は visibility:"invisible" のブールショートハンド:
+          # レイアウトスペースは保持したまま描画とアクセシビリティのみ消す
+          # (.hidden() や条件付き削除でスペースを潰さない)
           hidden_value = @component['hidden']
           if hidden_value == true
-            @modifier_bag.register(:hidden, ".hidden()")
+            @modifier_bag.register(:hidden, ".opacity(0).accessibilityHidden(true)")
           elsif is_binding?(hidden_value)
-            # Binding: "@{isErrorHidden}" -> .opacity(data.isErrorHidden ? 0 : 1)
-            # Binding: "@{!isVisible}" -> .opacity(!data.isVisible ? 0 : 1)
-            @modifier_bag.register(:hidden, ".opacity(#{binding_data_expr(hidden_value)} ? 0 : 1)")
+            # Binding: "@{isErrorHidden}" ->
+            #   .opacity(data.isErrorHidden ? 0 : 1).accessibilityHidden(data.isErrorHidden)
+            # Binding: "@{!isVisible}" ->
+            #   .opacity(!data.isVisible ? 0 : 1).accessibilityHidden(!data.isVisible)
+            hidden_expr = binding_data_expr(hidden_value)
+            @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
           end
 
           # safeAreaInsetPositions

@@ -425,8 +425,13 @@ module RjuiTools
           classes
         end
 
+        # `hidden: true` is the boolean shorthand for visibility:"invisible":
+        # the component keeps its layout space but is not drawn and is
+        # hidden from accessibility. Tailwind `invisible` (visibility:hidden)
+        # gives exactly that; `hidden` (display:none) would collapse the
+        # space, which is `visibility:"gone"` semantics — not this attribute.
         def map_visibility(hidden)
-          hidden ? 'hidden' : ''
+          hidden ? 'invisible' : ''
         end
 
         def map_direction(direction)

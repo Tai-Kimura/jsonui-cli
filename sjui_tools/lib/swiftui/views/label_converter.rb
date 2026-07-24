@@ -314,12 +314,14 @@ module SjuiTools
             end
           end
 
-          # Hidden
+          # Hidden — visibility:"invisible" shorthand: keep layout space,
+          # hide drawing + accessibility (never collapse)
           hidden_value = @component['hidden']
           if hidden_value == true
-            @modifier_bag.register(:hidden, ".hidden()")
+            @modifier_bag.register(:hidden, ".opacity(0).accessibilityHidden(true)")
           elsif is_binding?(hidden_value)
-            @modifier_bag.register(:hidden, ".opacity(#{binding_data_expr(hidden_value)} ? 0 : 1)")
+            hidden_expr = binding_data_expr(hidden_value)
+            @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
           end
 
           # onClick

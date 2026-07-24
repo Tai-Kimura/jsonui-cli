@@ -293,6 +293,26 @@ RSpec.describe 'container accessibilityIdentifier emission' do
       expect(code).not_to include('.accessibilityIdentifier(')
     end
 
+    # hidden: true = boolean shorthand for visibility:"invisible" (space-
+    # kept, not drawn, hidden from accessibility) — the identifier
+    # suppression must cover both static spellings.
+    it 'emits no identifier for a statically hidden container' do
+      code = convert({ 'type' => 'View', 'id' => 'ghost', 'hidden' => true,
+                       'child' => [{ 'type' => 'Label', 'text' => 'Hi' }] })
+
+      expect(code).not_to include('.accessibilityIdentifier(')
+      expect(code).not_to include('.accessibilityElement(children: .contain)')
+    end
+
+    it 'still emits the identifier when hidden is a binding' do
+      code = convert({ 'type' => 'View', 'id' => 'root',
+                       'hidden' => '@{isRootHidden}',
+                       'child' => [{ 'type' => 'Label', 'text' => 'Hi' }] })
+
+      expect(code).to include('.accessibilityIdentifier("root")')
+      expect(code).to include('.accessibilityElement(children: .contain)')
+    end
+
     it 'still emits the identifier when visibility is a binding' do
       code = convert({ 'type' => 'View', 'id' => 'root',
                        'visibility' => '@{rootVisibility}',

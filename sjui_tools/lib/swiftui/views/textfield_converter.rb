@@ -254,13 +254,14 @@ module SjuiTools
             @modifier_bag.register(:offset, ".offset(x: #{offset_x}, y: #{offset_y})")
           end
 
-          # Apply hidden state
+          # Apply hidden state — visibility:"invisible" shorthand: keep
+          # layout space, hide drawing + accessibility (never collapse)
           hidden_value = @component['hidden']
           if hidden_value == true
-            @modifier_bag.register(:hidden, ".hidden()")
+            @modifier_bag.register(:hidden, ".opacity(0).accessibilityHidden(true)")
           elsif hidden_value.is_a?(String) && hidden_value.start_with?('@{') && hidden_value.end_with?('}')
             hidden_expr = SwiftUI::Binding::BindingExpression.swift_bool_expr(hidden_value[2..-2])
-            @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1)")
+            @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
           end
 
           # Apply binding-specific modifiers

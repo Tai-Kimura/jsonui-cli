@@ -366,7 +366,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::SelectBoxConverter do
         converter = described_class.new(component)
         code = converter.convert
 
-        expect(code).to include('.hidden()')
+        expect(code).to include('.opacity(0).accessibilityHidden(true)')
       end
     end
   end

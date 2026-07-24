@@ -289,9 +289,11 @@ module RjuiTools
             end
           end
 
-          # Visibility (hidden attribute - static). A binding value is
-          # handled as a conditional class in wrap_with_visibility — mapping
-          # it here would bake an unconditional `hidden` into the className.
+          # Visibility (hidden attribute - static). hidden keeps the layout
+          # space (Tailwind `invisible`, i.e. visibility:"invisible"
+          # shorthand). A binding value is handled as a conditional class in
+          # wrap_with_visibility — mapping it here would bake an
+          # unconditional `invisible` into the className.
           if attributes['hidden'] && !has_binding?(attributes['hidden'])
             classes << TailwindMapper.map_visibility(attributes['hidden'])
           end
@@ -1102,8 +1104,10 @@ module RjuiTools
         end
 
         # `hidden` is ["boolean", "binding"] — a bound value toggles the
-        # Tailwind `hidden` class at runtime instead of baking it in
+        # Tailwind `invisible` class at runtime instead of baking it in
         # statically (static true/false is handled in build_class_name).
+        # hidden = visibility:"invisible" shorthand: the component keeps
+        # its layout space (visibility:hidden), it is NOT display:none.
         # `hidden` is a bool attribute, so canonical negation ("@{!flag}")
         # is legal here and emits `!data.flag` as the toggle condition.
         def apply_hidden_binding(jsx)
@@ -1115,7 +1119,7 @@ module RjuiTools
           return jsx unless binding_expr.match?(SIMPLE_BINDING_EXPR_RE)
 
           cond = add_viewmodel_data_prefix(binding_expr)
-          inject_class_expression(jsx, "${#{cond} ? \"hidden\" : \"\"}")
+          inject_class_expression(jsx, "${#{cond} ? \"invisible\" : \"\"}")
         end
 
         # Inject invisible class into JSX when visibility === "invisible"

@@ -26,9 +26,10 @@ RSpec.describe RjuiTools::React::Converters::ButtonConverter do
 
     # Regression: rjui-hidden-binding-renders-static-class — a bound
     # `hidden` toggles the Tailwind class at runtime; only static values
-    # bake `hidden` into the className.
+    # bake `invisible` into the className. hidden = visibility:"invisible"
+    # shorthand: keeps layout space (visibility:hidden), NOT display:none.
     context 'with hidden binding' do
-      it 'emits a conditional hidden class instead of a static one' do
+      it 'emits a conditional invisible class instead of a static one' do
         converter = create_converter({
           'type' => 'Button',
           'text' => 'Set default',
@@ -36,18 +37,20 @@ RSpec.describe RjuiTools::React::Converters::ButtonConverter do
         })
         result = converter.convert
         expect(result).to include('className={`')
-        expect(result).to include('${data.isDisabledFutureMethod ? "hidden" : ""}')
-        expect(result).not_to match(/className="[^"]*\bhidden\b/)
+        expect(result).to include('${data.isDisabledFutureMethod ? "invisible" : ""}')
+        expect(result).not_to match(/className="[^"]*\binvisible\b/)
       end
 
-      it 'keeps a static hidden class for hidden: true' do
+      it 'keeps a static invisible class for hidden: true' do
         converter = create_converter({
           'type' => 'Button',
           'text' => 'Hidden',
           'hidden' => true
         })
         result = converter.convert
-        expect(result).to match(/className="[^"]*\bhidden\b/)
+        expect(result).to match(/className="[^"]*\binvisible\b/)
+        # never the collapsing display:none class
+        expect(result).not_to match(/className="[^"]*\bhidden\b/)
         expect(result).not_to include('${')
       end
 
@@ -60,7 +63,7 @@ RSpec.describe RjuiTools::React::Converters::ButtonConverter do
         })
         result = converter.convert
         expect(result).to include('{data.buttonVisibility !== "gone" &&')
-        expect(result).to include('${data.isHidden ? "hidden" : ""}')
+        expect(result).to include('${data.isHidden ? "invisible" : ""}')
         expect(result).to include('${data.buttonVisibility === "invisible" ? "invisible" : ""}')
       end
     end

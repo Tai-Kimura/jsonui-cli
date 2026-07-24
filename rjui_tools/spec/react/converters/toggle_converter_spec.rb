@@ -15,11 +15,13 @@ RSpec.describe RjuiTools::React::Converters::ToggleConverter do
     # in base_converter, so it must hold for every component type
     # (CheckBox was the second reported reproduction).
     context 'with hidden binding' do
-      it 'emits a conditional hidden class instead of a static one' do
+      it 'emits a conditional invisible class instead of a static one' do
         converter = create_converter({ 'class' => 'CheckBox', 'hidden' => '@{isUnavailable}' })
         result = converter.convert
-        expect(result).to include('${data.isUnavailable ? "hidden" : ""}')
-        expect(result).not_to match(/className="[^"]*\bhidden\b/)
+        # hidden = visibility:"invisible" shorthand (keeps layout space),
+        # so the toggled class is `invisible`, never `hidden` (display:none)
+        expect(result).to include('${data.isUnavailable ? "invisible" : ""}')
+        expect(result).not_to match(/className="[^"]*\binvisible\b/)
       end
     end
 

@@ -117,7 +117,7 @@ module JsonUI
         { name: 'heightRaw', kind: :string }.freeze,
         # Height weight for flexible layouts (binding supported)
         { name: 'heightWeight', kind: :number, bindable: true }.freeze,
-        # Whether component is hidden (can be data binding)
+        # Whether the component is hidden: keeps its layout space but is not drawn and is hidden from accessibility (boolean shorthand for visibility:'invisible'; can be a data binding)
         { name: 'hidden', kind: :boolean, bindable: true }.freeze,
         # Background color when highlighted - hex string or color name from colors.json (binding supported)
         { name: 'highlightBackground', kind: :string, bindable: true }.freeze,

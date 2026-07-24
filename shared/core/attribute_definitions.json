@@ -269,7 +269,7 @@
         "boolean",
         "binding"
       ],
-      "description": "Whether component is hidden (can be data binding)"
+      "description": "Whether the component is hidden: keeps its layout space but is not drawn and is hidden from accessibility (boolean shorthand for visibility:'invisible'; can be a data binding)"
     },
     "padding": {
       "type": [

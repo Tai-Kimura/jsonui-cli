@@ -33,7 +33,8 @@ module KjuiTools
         end
 
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
-          # Check if component should be skipped entirely (static gone/hidden)
+          # Check if component should be skipped entirely (static gone only;
+          # hidden keeps its layout space and renders invisible)
           return "" if Helpers::VisibilityHelper.should_skip_render?(json_data)
 
           # Check if we need to use PartialAttributesText for partial attributes

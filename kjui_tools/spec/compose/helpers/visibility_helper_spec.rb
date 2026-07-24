@@ -45,6 +45,26 @@ RSpec.describe KjuiTools::Compose::Helpers::VisibilityHelper do
       expect(result).to include('hidden = data.isHidden')
     end
 
+    # hidden = visibility:"invisible" shorthand — the component keeps its
+    # layout space. Unlike a "gone"-capable visibility binding, a hidden
+    # binding with weight must NOT be wrapped in a conditional-composition
+    # guard: the weighted space stays allocated and VisibilityWrapper
+    # draws it invisible.
+    it 'does not emit a conditional guard for hidden binding with weight' do
+      json_data = { 'hidden' => '@{isHidden}', 'weight' => 1 }
+      component_code = <<~KOTLIN.chomp
+        Text(
+            "Hello",
+            modifier = Modifier
+                .weight(1f)
+        )
+      KOTLIN
+      result = described_class.wrap_with_visibility(json_data, component_code, 0, required_imports, 'Column')
+      expect(result).not_to include('if (')
+      expect(result).to include('hidden = data.isHidden')
+      expect(result).to include('modifier = Modifier.weight(1f)')
+    end
+
     it 'includes closing bracket' do
       json_data = { 'visibility' => 'visible' }
       component_code = 'Text("Hello")'
@@ -263,9 +283,12 @@ RSpec.describe KjuiTools::Compose::Helpers::VisibilityHelper do
       expect(described_class.should_skip_render?(json_data)).to be true
     end
 
-    it 'returns true for static hidden' do
+    # hidden = visibility:"invisible" shorthand: keeps its layout space,
+    # so a static hidden must still render (VisibilityWrapper draws it
+    # invisible) — only static "gone" skips composition entirely.
+    it 'returns false for static hidden (space-keeping, renders invisible)' do
       json_data = { 'hidden' => true }
-      expect(described_class.should_skip_render?(json_data)).to be true
+      expect(described_class.should_skip_render?(json_data)).to be false
     end
 
     it 'returns false for visibility binding' do

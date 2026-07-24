@@ -151,14 +151,13 @@ module KjuiTools
 
           # When weight + visibility binding are combined, wrap in if-block to prevent
           # Compose from allocating weight space when gone (Compose keeps composition slots
-          # even when a Composable returns early, so VisibilityWrapper's return doesn't help)
+          # even when a Composable returns early, so VisibilityWrapper's return doesn't help).
+          # This guard is for "gone" ONLY — `hidden` is the boolean shorthand for
+          # visibility:"invisible" (keeps its layout space), so a hidden binding must
+          # NOT conditionally drop the composable: the weighted space stays allocated
+          # and VisibilityWrapper draws it invisible.
           if has_weight_in_scope && visibility_info[:visibility_binding]
             gone_guard = indent("if (#{visibility_info[:visibility_binding]}.lowercase() != \"gone\") {", depth)
-            gone_guard += "\n" + wrapper_code
-            gone_guard += "\n" + indent("}", depth)
-            wrapper_code = gone_guard
-          elsif has_weight_in_scope && visibility_info[:hidden_binding]
-            gone_guard = indent("if (!(#{visibility_info[:hidden_binding]})) {", depth)
             gone_guard += "\n" + wrapper_code
             gone_guard += "\n" + indent("}", depth)
             wrapper_code = gone_guard
@@ -168,9 +167,11 @@ module KjuiTools
         end
         
         def self.should_skip_render?(json_data)
-          # Check if component should not be rendered at all (static gone/hidden)
+          # Check if component should not be rendered at all (static gone).
+          # `hidden: true` must NOT skip: hidden is the boolean shorthand for
+          # visibility:"invisible" — the component keeps its layout space
+          # (drawn invisible via VisibilityWrapper), only "gone" collapses.
           return true if json_data['visibility'] == 'gone' && !json_data['visibility'].to_s.include?('@{')
-          return true if json_data['hidden'] == true && !json_data['hidden'].to_s.include?('@{')
           false
         end
         
