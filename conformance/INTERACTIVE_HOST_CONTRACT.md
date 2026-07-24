@@ -60,16 +60,28 @@ fixture:
 
 2. **Handlers** — for every `state.handlers` entry, register a closure under
    `name` in the same state/data dictionary the runtime resolves `@{name}` /
-   selector-format handler references from. Invoking the closure sets the
-   single variable `set.var` to the literal string `set.value` and triggers
-   re-render of everything bound to it. **Any callback payload is ignored**
-   — this keeps the contract identical for `() -> Void`, `(T) -> Void` and
-   `(id, T) -> Void` shaped callbacks on every platform:
+   selector-format handler references from. **Any callback payload is
+   ignored** — this keeps the contract identical for `() -> Void`,
+   `(T) -> Void` and `(id, T) -> Void` shaped callbacks on every platform:
    - iOS: closures in the `data` dict; `DynamicEventHelper.call` /
      `callWithValue` already resolve by name and try the three signatures.
    - Android: closures in the `data` map; `ModifierBuilder.resolveEventHandler`
      resolves both `@{name}` and bare-selector strings.
    - web: `StateHost` assigns `() => setData(...)` closures into the data prop.
+
+   A handler declares exactly one of two operation kinds:
+
+   - `set: { var, value }` — invoking the closure sets the single variable
+     `set.var` to the literal string `set.value` and triggers re-render of
+     everything bound to it.
+   - `embed: { id, action, screen?, params? }` — invoking the closure drives
+     the private stack of the mounted isolated embed whose embedId is `id`,
+     looked up through the library's `EmbedNavigatorRegistry` (iOS
+     `EmbedNavigatorRegistry.shared.navigator(for:)`, Android
+     `EmbedNavigatorRegistry.get`, web template v2 `getEmbedNavigator`).
+     `action: "push"` pushes `screen` (with optional flat string `params`);
+     `action: "pop"` pops one entry (bounded at the embed root by the
+     navigator itself). No mounted embed with that id → no-op.
 
 3. **Two-way write-back** — vars bound into input components
    (`text: "@{var}"` on TextField/TextView) must update when the user (or
@@ -84,8 +96,9 @@ fixture:
 Determinism rules: no randomness, no time, no network. All state values are
 strings (`class: "String"`) in v2 — the most portable `defaultValue`
 representation across the three runtimes. The state vocabulary is fixed:
-`conformanceText`, `conformanceResult`, `conformanceVisibility` vars and the
-`conformanceFire` handler.
+`conformanceText`, `conformanceResult`, `conformanceVisibility` vars, the
+`conformanceFire` handler (`set` kind), and the `confPush` / `confPop`
+handlers (`embed` kind, Embed isolated fixtures).
 
 ## Fixture case types the host will encounter
 

@@ -454,7 +454,8 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
         summary.files_written += 1
     fixture_entries.extend(embed_entries)
     summary.fixture_count += len(embed_entries)
-    summary.assertable_count += len(embed_entries)
+    summary.assertable_count += sum(1 for e in embed_entries if e["class"] == "assertable")
+    summary.interactive_count += sum(1 for e in embed_entries if e["class"] == "interactive")
 
     skipped_entries = [
         {"component": s.section, "attribute": s.attribute, "reason": s.reason}

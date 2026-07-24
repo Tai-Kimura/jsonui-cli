@@ -21,7 +21,7 @@
 //   browser back button always drives the host router's history — both by
 //   design (cross-platform gesture delegation contract).
 
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 export type EmbedNavigationMode = 'delegate' | 'isolated';
 
@@ -119,6 +119,43 @@ function sortKeys(obj: Record<string, unknown>): Record<string, unknown> {
     }, {});
 }
 
+// ── Navigator registry (template v2) ────────────────────────────────────
+//
+// embedId-keyed lookup for the private navigators of mounted isolated
+// embeds, so code OUTSIDE the embed subtree (a parent VM resetting a pane
+// on tab switch, test hosts driving push/pop) can reach the stack without
+// context access. Containers register while mounted; last registration
+// wins when two embeds share an id.
+
+const navigatorRegistry = new Map<string, EmbedNavigator>();
+
+/**
+ * The navigator of the currently mounted isolated embed with this id, or
+ * null when no such embed is mounted (template v2 export).
+ */
+export function getEmbedNavigator(embedId: string): EmbedNavigator | null {
+  return navigatorRegistry.get(embedId) ?? null;
+}
+
+// ── Global screen table (template v2) ───────────────────────────────────
+//
+// App-wide screen-name → component table consulted by
+// `buildEmbedScreenResolver` when a pushed screen is missing from the
+// per-embed table. Lets an app register its pushable screens once (e.g. in
+// bootstrap) instead of enumerating them at every isolated call site.
+
+const globalEmbedScreenTable: Record<
+  string,
+  React.ComponentType<{ data?: Record<string, unknown> }>
+> = {};
+
+/** Merge entries into the app-wide pushable-screen table (template v2 export). */
+export function registerEmbedScreens(
+  table: Record<string, React.ComponentType<{ data?: Record<string, unknown> }>>,
+): void {
+  Object.assign(globalEmbedScreenTable, table);
+}
+
 /** Maps a pushed screen name to the component that renders it. */
 export type EmbedScreenResolver = (entry: EmbedStackEntry) => React.ReactNode;
 
@@ -132,7 +169,7 @@ export function buildEmbedScreenResolver(
   table: Record<string, React.ComponentType<{ data?: Record<string, unknown> }>>,
 ): EmbedScreenResolver {
   return (entry) => {
-    const Component = table[entry.screen];
+    const Component = table[entry.screen] ?? globalEmbedScreenTable[entry.screen];
     if (!Component) {
       return (
         <div style={{ background: '#c00', color: '#fff', padding: 8 }} data-embed-error="unresolved-screen">
@@ -197,6 +234,18 @@ export const EmbedContainer: React.FC<EmbedContainerProps> = ({
       popToRoot: () => setStack((prev) => (prev.length > 0 ? [] : prev)),
     };
   }, [navigationMode, stack]);
+
+  useEffect(() => {
+    if (!navigator) return undefined;
+    navigatorRegistry.set(embedId, navigator);
+    return () => {
+      // Remove only if this navigator is still the one registered — a later
+      // mount under the same id must not be clobbered by our teardown.
+      if (navigatorRegistry.get(embedId) === navigator) {
+        navigatorRegistry.delete(embedId);
+      }
+    };
+  }, [embedId, navigator]);
 
   const ctxValue = useMemo<EmbeddedScreenContextValue>(() => {
     const navigationDelegate: EmbeddedNavigationDelegate = {

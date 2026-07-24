@@ -1,0 +1,52 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Embed/navigationMode__isolated_push.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Embed.navigationMode (isolated_push)",
+    "description": "Embed semantic conformance fixture (isolated_push). Companion embedded screens live under fixtures/Embed/__screens/ — see manifest 'companions'.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "embed",
+      "Embed"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "navigationMode__isolated_push",
+      "description": "Embed semantic conformance fixture (isolated_push). Companion embedded screens live under fixtures/Embed/__screens/ — see manifest 'companions'.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "embed-root-label",
+          "equals": "embed-root"
+        },
+        {
+          "action": "tap",
+          "id": "push-button"
+        },
+        {
+          "action": "waitFor",
+          "id": "embed-second-label"
+        },
+        {
+          "assert": "text",
+          "id": "embed-second-label",
+          "equals": "embed-second"
+        },
+        {
+          "assert": "text",
+          "id": "host-marker",
+          "equals": "host"
+        }
+      ]
+    }
+  ]
+}

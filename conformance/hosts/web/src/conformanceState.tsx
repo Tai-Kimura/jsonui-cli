@@ -17,6 +17,7 @@
  *   rjui_tools/lib/react/hook_generator.rb semantics).
  */
 import React, { useMemo, useState } from 'react';
+import { getEmbedNavigator } from './components/extensions/EmbedContainer';
 
 export interface ConformanceStateVar {
   name: string;
@@ -26,7 +27,16 @@ export interface ConformanceStateVar {
 
 export interface ConformanceStateHandler {
   name: string;
-  set: { var: string; value: string };
+  /** Kind 1: set one state var to a literal value. */
+  set?: { var: string; value: string };
+  /**
+   * Kind 2: drive an isolated embed's private stack through the
+   * EmbedNavigatorRegistry (template v2 `getEmbedNavigator`). Exclusive
+   * with `set`. `action` is "push" | "pop" (typed as string because the
+   * generated registry inlines manifest JSON verbatim); unknown actions
+   * are no-ops.
+   */
+  embed?: { id: string; action: string; screen?: string; params?: Record<string, unknown> };
 }
 
 export interface ConformanceState {
@@ -52,8 +62,23 @@ export function StateHost({
   const merged = useMemo(() => {
     const out: DataDict = { ...data };
 
-    // Declared handlers: set one var to a literal (payload ignored).
+    // Declared handlers: set one var to a literal (payload ignored), or
+    // drive an isolated embed's stack via the navigator registry.
     for (const handler of state.handlers) {
+      if (handler.embed) {
+        const embedOp = handler.embed;
+        out[handler.name] = () => {
+          const navigator = getEmbedNavigator(embedOp.id);
+          if (!navigator) return;
+          if (embedOp.action === 'push' && embedOp.screen) {
+            navigator.push(embedOp.screen, embedOp.params ?? {});
+          } else if (embedOp.action === 'pop') {
+            navigator.pop();
+          }
+        };
+        continue;
+      }
+      if (!handler.set) continue;
       const { var: varName, value } = handler.set;
       out[handler.name] = () => setData((prev) => ({ ...prev, [varName]: value }));
     }

@@ -10,10 +10,10 @@
   "schemaVersion": 2,
   "generatedFrom": "ced1604d18e80a4e70bfd938fcc8858d56f19892cc036b3fb0c0870d0991ce99",
   "counts": {
-    "fixtures": 648,
+    "fixtures": 650,
     "assertable": 29,
     "visual": 600,
-    "interactive": 19,
+    "interactive": 21,
     "skipped": 166,
     "promoted": {
       "callback": 12
@@ -14272,6 +14272,89 @@
       "promotedFrom": null,
       "companions": [
         "fixtures/Embed/__screens/embed_root.layout.json"
+      ]
+    },
+    {
+      "id": "Embed/navigationMode__isolated_push",
+      "component": "Embed",
+      "attribute": "navigationMode",
+      "case": "isolated_push",
+      "class": "interactive",
+      "host": "Embed",
+      "writtenKey": "navigationMode",
+      "aliasOf": null,
+      "value": "isolated",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": false,
+      "layout": "fixtures/Embed/navigationMode__isolated_push.layout.json",
+      "test": "fixtures/Embed/navigationMode__isolated_push.test.json",
+      "state": {
+        "vars": [],
+        "handlers": [
+          {
+            "name": "confPush",
+            "embed": {
+              "id": "pane",
+              "action": "push",
+              "screen": "embed_second"
+            }
+          }
+        ]
+      },
+      "promotedFrom": null,
+      "companions": [
+        "fixtures/Embed/__screens/embed_root.layout.json",
+        "fixtures/Embed/__screens/embed_second.layout.json"
+      ]
+    },
+    {
+      "id": "Embed/navigationMode__isolated_pop_boundary",
+      "component": "Embed",
+      "attribute": "navigationMode",
+      "case": "isolated_pop_boundary",
+      "class": "interactive",
+      "host": "Embed",
+      "writtenKey": "navigationMode",
+      "aliasOf": null,
+      "value": "isolated",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": false,
+      "layout": "fixtures/Embed/navigationMode__isolated_pop_boundary.layout.json",
+      "test": "fixtures/Embed/navigationMode__isolated_pop_boundary.test.json",
+      "state": {
+        "vars": [],
+        "handlers": [
+          {
+            "name": "confPush",
+            "embed": {
+              "id": "pane",
+              "action": "push",
+              "screen": "embed_second"
+            }
+          },
+          {
+            "name": "confPop",
+            "embed": {
+              "id": "pane",
+              "action": "pop"
+            }
+          }
+        ]
+      },
+      "promotedFrom": null,
+      "companions": [
+        "fixtures/Embed/__screens/embed_root.layout.json",
+        "fixtures/Embed/__screens/embed_second.layout.json"
       ]
     },
     {

@@ -8,18 +8,22 @@ reference. Instead this module emits a small semantic fixture family with
 - ``navigationMode__delegate_baseline`` — delegate embed renders its root
 - ``navigationMode__isolated_root``     — isolated embed renders its root
   (the private-stack wrapper must not change root rendering)
+- ``navigationMode__isolated_push``     — tapping a HOST-side button pushes
+  onto the embed's private stack (host marker persists = push contained)
+- ``navigationMode__isolated_pop_boundary`` — pop returns to the embed
+  root and a second pop at the stack bottom is a bounded no-op (the embed
+  never closes itself)
 - ``params__nested_leaf``               — nested literal params reach the
   embedded screen and resolve via dot-path bindings
 - ``params__nested_leaf_binding``       — a nested leaf ``@{binding}``
   against the host VM resolves before hand-off
 
-Programmatic push/pop semantics are covered by runtime unit tests
-(EmbedNavigator on iOS/Android + the web template stack). Tap-driven
-push/pop conformance needs a host-side mechanism for reaching the embed's
-navigator from injected handlers (the ``state.handlers`` contract injects
-closures at the HOST screen scope, which cannot see the embed-ambient
-navigator) — tracked in docs/plans/2026-07-24-v1-unsupported/04a-design.md
-as the Step-4c host-wiring item.
+The push/pop fixtures use the second ``state.handlers`` kind
+(``embed: {id, action, screen?}`` — INTERACTIVE_HOST_CONTRACT.md): hosts
+build the injected closures on top of the library's EmbedNavigatorRegistry
+(embedId-keyed lookup of the mounted isolated embed's navigator), which is
+how a host-scope closure reaches the embed-ambient navigator without any
+Dynamic-runtime onclick changes.
 
 Manifest entries carry a ``companions`` list (repo-relative layout paths);
 hosts must make those layouts loadable by bare screen name (e.g.
@@ -41,8 +45,19 @@ HOST_MARKER_ID = "host-marker"
 HOST_MARKER_TEXT = "host"
 ROOT_LABEL_ID = "embed-root-label"
 ROOT_LABEL_TEXT = "embed-root"
+SECOND_LABEL_ID = "embed-second-label"
+SECOND_LABEL_TEXT = "embed-second"
 PARAMS_NAME_ID = "embed-params-name"
 PARAMS_AGE_ID = "embed-params-age"
+PUSH_BUTTON_ID = "push-button"
+POP_BUTTON_ID = "pop-button"
+
+# state.handlers declarations (embed kind) for the tap-driven fixtures.
+_PUSH_HANDLER = {
+    "name": "confPush",
+    "embed": {"id": "pane", "action": "push", "screen": "embed_second"},
+}
+_POP_HANDLER = {"name": "confPop", "embed": {"id": "pane", "action": "pop"}}
 
 
 def _marker(source_label: str) -> dict:
@@ -59,6 +74,20 @@ def _companion_root(source_label: str) -> dict:
         "orientation": "vertical",
         "child": [
             {"type": "Label", "id": ROOT_LABEL_ID, "text": ROOT_LABEL_TEXT},
+        ],
+    }
+
+
+def _companion_second(source_label: str) -> dict:
+    return {
+        "_generated": _marker(source_label),
+        "type": "View",
+        "id": "embed_second_container",
+        "width": "matchParent",
+        "height": "wrapContent",
+        "orientation": "vertical",
+        "child": [
+            {"type": "Label", "id": SECOND_LABEL_ID, "text": SECOND_LABEL_TEXT},
         ],
     }
 
@@ -95,6 +124,7 @@ def _host_layout(
     navigation_mode: str,
     params: dict | None = None,
     data: list | None = None,
+    buttons: list[dict] | None = None,
 ) -> dict:
     embed: dict[str, Any] = {
         "type": "Embed",
@@ -118,6 +148,7 @@ def _host_layout(
         layout["data"] = data
     layout["child"] = [
         {"type": "Label", "id": HOST_MARKER_ID, "text": HOST_MARKER_TEXT},
+        *(buttons or []),
         embed,
     ]
     return layout
@@ -128,7 +159,7 @@ def _test(
     attribute: str,
     case: str,
     layout_rel: str,
-    asserts: list[dict],
+    steps: list[dict],
 ) -> dict:
     case_id = f"{attribute}__{case}"
     description = (
@@ -149,7 +180,7 @@ def _test(
             {
                 "name": case_id,
                 "description": description,
-                "steps": [{"action": "waitFor", "id": "root"}] + asserts,
+                "steps": [{"action": "waitFor", "id": "root"}] + steps,
             }
         ],
     }
@@ -163,13 +194,14 @@ def _entry(
     layout_rel: str,
     test_rel: str,
     companions: list[str],
+    state: dict | None = None,
 ) -> dict:
     return {
         "id": f"Embed/{attribute}__{case}",
         "component": "Embed",
         "attribute": attribute,
         "case": case,
-        "class": "assertable",
+        "class": "interactive" if state else "assertable",
         "host": "Embed",
         "writtenKey": attribute,
         "aliasOf": None,
@@ -179,7 +211,7 @@ def _entry(
         "deprecated": False,
         "layout": layout_rel,
         "test": test_rel,
-        "state": None,
+        "state": state,
         "promotedFrom": None,
         "companions": companions,
     }
@@ -194,11 +226,16 @@ def build_embed_fixtures(source_label: str) -> tuple[list[tuple[str, dict]], lis
     """
     files: list[tuple[str, dict]] = [
         (f"{_SCREENS_DIR}/embed_root.layout.json", _companion_root(source_label)),
+        (f"{_SCREENS_DIR}/embed_second.layout.json", _companion_second(source_label)),
         (f"{_SCREENS_DIR}/embed_params.layout.json", _companion_params(source_label)),
     ]
     entries: list[dict] = []
 
     root_companion = [f"{_SCREENS_DIR}/embed_root.layout.json"]
+    stack_companions = [
+        f"{_SCREENS_DIR}/embed_root.layout.json",
+        f"{_SCREENS_DIR}/embed_second.layout.json",
+    ]
     params_companion = [f"{_SCREENS_DIR}/embed_params.layout.json"]
 
     def _add(
@@ -207,15 +244,16 @@ def build_embed_fixtures(source_label: str) -> tuple[list[tuple[str, dict]], lis
         case: str,
         value: Any,
         layout: dict,
-        asserts: list[dict],
+        steps: list[dict],
         companions: list[str],
+        state: dict | None = None,
     ) -> None:
         layout_rel = f"fixtures/Embed/{attribute}__{case}.layout.json"
         test_rel = f"fixtures/Embed/{attribute}__{case}.test.json"
         files.append((layout_rel, layout))
         files.append((
             test_rel,
-            _test(attribute=attribute, case=case, layout_rel=layout_rel, asserts=asserts),
+            _test(attribute=attribute, case=case, layout_rel=layout_rel, steps=steps),
         ))
         entries.append(_entry(
             attribute=attribute,
@@ -224,6 +262,7 @@ def build_embed_fixtures(source_label: str) -> tuple[list[tuple[str, dict]], lis
             layout_rel=layout_rel,
             test_rel=test_rel,
             companions=companions,
+            state=state,
         ))
 
     base_asserts = [
@@ -238,7 +277,7 @@ def build_embed_fixtures(source_label: str) -> tuple[list[tuple[str, dict]], lis
         layout=_host_layout(
             source_label, screen="embed_root", navigation_mode="delegate",
         ),
-        asserts=base_asserts,
+        steps=base_asserts,
         companions=root_companion,
     )
     _add(
@@ -248,8 +287,66 @@ def build_embed_fixtures(source_label: str) -> tuple[list[tuple[str, dict]], lis
         layout=_host_layout(
             source_label, screen="embed_root", navigation_mode="isolated",
         ),
-        asserts=base_asserts,
+        steps=base_asserts,
         companions=root_companion,
+    )
+    # Tap-driven stack semantics. The buttons live in the HOST layout: the
+    # injected closures reach the embed's private stack through the
+    # library's EmbedNavigatorRegistry (embed handler kind). Push must show
+    # the pushed screen while the host marker persists (containment); pop
+    # must return to the embed root, and popping at the stack bottom is a
+    # bounded no-op — the embed root and the host both stay up.
+    _add(
+        attribute="navigationMode",
+        case="isolated_push",
+        value="isolated",
+        layout=_host_layout(
+            source_label,
+            screen="embed_root",
+            navigation_mode="isolated",
+            buttons=[
+                {"type": "Button", "id": PUSH_BUTTON_ID, "text": "push", "onclick": "confPush"},
+            ],
+        ),
+        steps=[
+            {"assert": "text", "id": ROOT_LABEL_ID, "equals": ROOT_LABEL_TEXT},
+            {"action": "tap", "id": PUSH_BUTTON_ID},
+            {"action": "waitFor", "id": SECOND_LABEL_ID},
+            {"assert": "text", "id": SECOND_LABEL_ID, "equals": SECOND_LABEL_TEXT},
+            {"assert": "text", "id": HOST_MARKER_ID, "equals": HOST_MARKER_TEXT},
+        ],
+        companions=stack_companions,
+        state={"vars": [], "handlers": [_PUSH_HANDLER]},
+    )
+    _add(
+        attribute="navigationMode",
+        case="isolated_pop_boundary",
+        value="isolated",
+        layout=_host_layout(
+            source_label,
+            screen="embed_root",
+            navigation_mode="isolated",
+            buttons=[
+                {"type": "Button", "id": PUSH_BUTTON_ID, "text": "push", "onclick": "confPush"},
+                {"type": "Button", "id": POP_BUTTON_ID, "text": "pop", "onclick": "confPop"},
+            ],
+        ),
+        steps=[
+            {"action": "tap", "id": PUSH_BUTTON_ID},
+            {"action": "waitFor", "id": SECOND_LABEL_ID},
+            {"assert": "text", "id": SECOND_LABEL_ID, "equals": SECOND_LABEL_TEXT},
+            {"action": "tap", "id": POP_BUTTON_ID},
+            {"action": "waitFor", "id": ROOT_LABEL_ID},
+            {"assert": "text", "id": ROOT_LABEL_ID, "equals": ROOT_LABEL_TEXT},
+            # Second pop at the stack bottom: bounded no-op — the embed
+            # neither closes nor escapes into the host.
+            {"action": "tap", "id": POP_BUTTON_ID},
+            {"action": "waitFor", "id": ROOT_LABEL_ID},
+            {"assert": "text", "id": ROOT_LABEL_ID, "equals": ROOT_LABEL_TEXT},
+            {"assert": "text", "id": HOST_MARKER_ID, "equals": HOST_MARKER_TEXT},
+        ],
+        companions=stack_companions,
+        state={"vars": [], "handlers": [_PUSH_HANDLER, _POP_HANDLER]},
     )
     _add(
         attribute="params",
@@ -261,7 +358,7 @@ def build_embed_fixtures(source_label: str) -> tuple[list[tuple[str, dict]], lis
             navigation_mode="delegate",
             params={"profile": {"name": "Ada", "meta": {"age": "36"}}},
         ),
-        asserts=[
+        steps=[
             {"assert": "text", "id": PARAMS_NAME_ID, "equals": "Ada"},
             {"assert": "text", "id": PARAMS_AGE_ID, "equals": "36"},
             {"assert": "text", "id": HOST_MARKER_ID, "equals": HOST_MARKER_TEXT},
@@ -283,7 +380,7 @@ def build_embed_fixtures(source_label: str) -> tuple[list[tuple[str, dict]], lis
             params={"profile": {"name": "@{hostValue}", "meta": {"age": "36"}}},
             data=[{"name": "hostValue", "class": "String", "defaultValue": "from-host"}],
         ),
-        asserts=[
+        steps=[
             {"assert": "text", "id": PARAMS_NAME_ID, "equals": "from-host"},
             {"assert": "text", "id": PARAMS_AGE_ID, "equals": "36"},
             {"assert": "text", "id": HOST_MARKER_ID, "equals": HOST_MARKER_TEXT},
