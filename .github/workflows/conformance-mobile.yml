@@ -120,7 +120,11 @@ jobs:
   # ------------------------------------------------------------------ #
   android:
     runs-on: ubuntu-latest
-    # Suite duration (full 643-fixture set incl. interactive + screenshots)
+    # Suite duration (full 648-fixture set incl. interactive + screenshots;
+    # 2026-07-24: +4 assertable Embed fixtures + 2 companion layouts — local
+    # conf AVD assertable pass stayed ~58s/attempt, so +4 text-assert
+    # fixtures ≈ +5-10s local → ≪1 min even at the 5-7x CI multiplier;
+    # attempt/step/job budgets below unchanged)
     # varies WILDLY with the hosted runner drawn: ~7 min on a good runner
     # (401s, one attempt, run 28683440355) vs 6x slower on a bad one
     # (progress.jsonl: 330 outcomes after a full 20-min attempt, run
