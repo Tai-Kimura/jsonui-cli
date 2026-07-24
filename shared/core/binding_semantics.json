@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "title": "JsonUI binding resolution semantics (canonical)",
+  "notes": "Hand-authored canonical source (renderer SSoT track 15, declared 2026-07-24). This file IS the SSoT for how '@{...}' expressions resolve; runtimes and code generators conform to it, not the other way around. Companion test vectors: shared/core/binding_vectors.json. Canonical choices are design decisions, not majority votes of existing implementations.",
+  "syntax": {
+    "expression": "@{ inner }",
+    "inner": "path [ '??' default ] | '!' path (boolean value context only)",
+    "path": "identifier segments joined by '.', with optional bracket index: profile.name, items[0].title",
+    "whitespace": "Whitespace around 'inner', around '??', and around the default literal is insignificant."
+  },
+  "contexts": {
+    "text": {
+      "description": "Mixed-text interpolation. A string attribute may contain any number of '@{...}' occurrences with surrounding literal text; each occurrence is replaced by the stringified resolved value.",
+      "interpolation": true,
+      "features": ["path", "default"],
+      "unresolved": "emptyString"
+    },
+    "value": {
+      "description": "Whole-value binding for typed attributes (number / bool / color / enum / src / visibility / ...). The whole attribute value must be exactly one '@{...}' expression; no surrounding text.",
+      "interpolation": false,
+      "features": ["path", "default", "negationIfBool"],
+      "unresolved": "attributeDefault"
+    },
+    "embedParams": {
+      "description": "Embed 'params' leaf values. Leaves are scalar literals or one whole '@{...}' expression resolved against the PARENT screen's data. Intermediate nodes are literal objects; arrays are unsupported (validator error, established by the embed isolated+params track).",
+      "interpolation": false,
+      "features": ["path"],
+      "unresolved": "dropKey"
+    },
+    "nameRef": {
+      "description": "Event / handler name references (onclick etc.). '@{name}' and the bare name are equivalent spellings of a handler NAME; this is name extraction, not value resolution. Path, default, and negation are not applicable.",
+      "interpolation": false,
+      "features": [],
+      "unresolved": "platformEventContract"
+    },
+    "twoWay": {
+      "description": "Two-way bindings (TextField text, Switch isOn, ...). The expression must be a single flat identifier: no dots, no brackets, no '??', no '!'. This keeps write-back and change-handler wiring trivially derivable on every platform.",
+      "interpolation": false,
+      "features": [],
+      "unresolved": "attributeDefault"
+    }
+  },
+  "pathResolution": {
+    "order": ["flatKey", "pathTraversal"],
+    "rule": "Look up the raw inner string as a flat key in the data map first; if absent, split on '.' and traverse. A data map that literally contains the key 'a.b' therefore shadows the nested path a.b (determinism guarantee).",
+    "arrayIndex": {
+      "syntax": "name[index] with a non-negative integer literal",
+      "rule": "Canonical array access is bracket syntax (items[0].title). Out-of-range or non-array => the path is unresolved (never a crash).",
+      "nonCanonical": "Dot-numeric segments (items.0.title) are a frozen UIKit-runtime legacy; not canonical, not to be added elsewhere."
+    },
+    "intermediateMiss": "A missing or non-object intermediate node makes the whole path unresolved; it must never crash or throw (web: generated user data paths use optional chaining)."
+  },
+  "defaultOperator": {
+    "spelling": "@{path ?? default}",
+    "contexts": ["text", "value"],
+    "arity": "Exactly one '??' per expression. More than one is a validator error; runtimes split on the FIRST '??' only (the remainder is part of the default literal parse and fails closed to unresolved).",
+    "defaultLiteral": {
+      "string": "Quoted with double OR single quotes: \"x\" or 'x' (single quotes are canonical-new; historical KJUI accepted only double quotes).",
+      "boolean": "true | false",
+      "number": "Integer or decimal literal",
+      "null": "null => treated as unresolved (falls through to the context's unresolved behavior)"
+    },
+    "rule": "If the path resolves (including to false, 0, or empty string), the resolved value wins. Only an UNRESOLVED path yields the default. In 'value' context the default is typed (true stays a bool, 42 stays a number)."
+  },
+  "unresolved": {
+    "text": "Empty string per occurrence (plus a debug-level log listing available keys).",
+    "value": "The attribute's default value applies (component-defined). Never a crash, never a rendered error.",
+    "embedParams": "The key is OMITTED from the resolved params object so the embedded screen's own data-section defaultValue applies.",
+    "twoWay": "The attribute's default; write-back targets the declared identifier regardless."
+  },
+  "fallbackPrecedence": [
+    "1. data-section defaultValue (merged into the data map before any binding resolves)",
+    "2. inline '??' default (only reached when the key is absent after step 1)",
+    "3. context unresolved behavior (emptyString / attributeDefault / dropKey)"
+  ],
+  "negation": {
+    "spelling": "@{!path}",
+    "contexts": ["value (boolean attributes only)"],
+    "rule": "Resolve the path, coerce to bool (see coercion), then invert. An unresolved path stays unresolved (attribute default applies WITHOUT inversion). Any other context is a validator error; runtimes treat the token as an ordinary (unresolvable) key and fall through to the context's unresolved behavior."
+  },
+  "coercion": {
+    "bool": {
+      "accepts": ["bool", "int (non-zero => true)", "string 'true'/'1' => true, 'false'/'0' => false (case-insensitive)"],
+      "otherwise": "unresolved"
+    },
+    "number": {
+      "accepts": ["number", "numeric string"],
+      "otherwise": "unresolved"
+    },
+    "string": {
+      "accepts": ["any scalar via text stringification rules"],
+      "otherwise": "unresolved (objects/arrays do not stringify into value context)"
+    }
+  },
+  "textStringification": {
+    "number": "JSON-faithful: integral numbers render with no decimal point ('5', not '5.0'); non-integral render with their decimal digits.",
+    "bool": "'true' / 'false'",
+    "null": "unresolved (empty string)",
+    "objectOrArray": "unresolved (empty string) — never a platform debug dump"
+  },
+  "embedParamsTypes": "Resolved leaves keep native JSON types (bool stays bool, 5 stays integer 5). Unresolved leaves are dropped (see unresolved.embedParams).",
+  "collectionCellScope": {
+    "guaranteed": "The item object's own fields, flat, plus the reserved key 'index' (0-based).",
+    "parentData": "NOT guaranteed. Depending on parent-screen keys inside a cell is non-portable (validator warning).",
+    "itemPrefix": "'@{item.xxx}' is NOT canonical; scaffolds must emit flat field names."
+  },
+  "validatorRules": [
+    {"id": "binding-double-default", "severity": "error", "context": "any", "rule": "More than one '??' in a single binding expression."},
+    {"id": "binding-two-way-complex", "severity": "error", "context": "twoWay", "rule": "Two-way binding expression is not a single flat identifier (contains '.', '[', '??', or '!')."},
+    {"id": "binding-negation-context", "severity": "error", "context": "text|embedParams|nameRef|twoWay", "rule": "'!' negation used outside a boolean value context."},
+    {"id": "binding-default-in-params", "severity": "error", "context": "embedParams", "rule": "'??' default used in an embed params leaf (defaults belong to the embedded screen's data section)."},
+    {"id": "binding-params-array", "severity": "error", "context": "embedParams", "rule": "Array anywhere inside params (pre-existing rule from the embed isolated+params track; restated here)."},
+    {"id": "binding-cell-parent-scope", "severity": "warning", "context": "collectionCell", "rule": "Cell layout binds a key that is only present in the parent screen's data."}
+  ]
+}
