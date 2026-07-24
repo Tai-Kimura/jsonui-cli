@@ -874,6 +874,16 @@ module RjuiTools
           extract_binding_value(value)
         end
 
+        # Resolve a handler attribute (binding `@{name}` or bare selector `name`)
+        # to a `data.`-prefixed property reference
+        def resolve_handler_property(handler)
+          if is_binding_format?(handler)
+            extract_binding_property(handler)
+          else
+            add_viewmodel_data_prefix(handler)
+          end
+        end
+
         # Determine absolute position classes based on align attributes for overlay children
         def overlay_position_classes
           has_align = attributes['centerInParent'] || attributes['centerVertical'] || attributes['centerHorizontal'] ||

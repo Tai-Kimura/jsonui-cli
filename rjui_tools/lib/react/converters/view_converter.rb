@@ -144,30 +144,24 @@ module RjuiTools
 
           # onLongPress (using onContextMenu as fallback, or custom implementation)
           if attributes['onLongPress']
-            handler = attributes['onLongPress']
-            if handler.start_with?('@{')
-              attrs << " onContextMenu={(e) => { e.preventDefault(); #{handler.gsub(/@\{|\}/, '')}(e); }}"
-            else
-              attrs << " onContextMenu={(e) => { e.preventDefault(); #{handler}(e); }}"
-            end
+            prop = resolve_handler_property(attributes['onLongPress'])
+            attrs << " onContextMenu={(e) => { e.preventDefault(); #{prop}?.(e); }}"
           end
 
           # onPan (using pointer events for drag)
           if attributes['onPan']
-            handler = attributes['onPan']
-            handler_name = handler.start_with?('@{') ? handler.gsub(/@\{|\}/, '') : handler
-            attrs << " onPointerDown={(e) => #{handler_name}?.onStart?.(e)}"
-            attrs << " onPointerMove={(e) => #{handler_name}?.onMove?.(e)}"
-            attrs << " onPointerUp={(e) => #{handler_name}?.onEnd?.(e)}"
+            prop = resolve_handler_property(attributes['onPan'])
+            attrs << " onPointerDown={(e) => #{prop}?.onStart?.(e)}"
+            attrs << " onPointerMove={(e) => #{prop}?.onMove?.(e)}"
+            attrs << " onPointerUp={(e) => #{prop}?.onEnd?.(e)}"
           end
 
           # onPinch (using touch events)
           if attributes['onPinch']
-            handler = attributes['onPinch']
-            handler_name = handler.start_with?('@{') ? handler.gsub(/@\{|\}/, '') : handler
-            attrs << " onTouchStart={(e) => #{handler_name}?.onStart?.(e)}"
-            attrs << " onTouchMove={(e) => #{handler_name}?.onMove?.(e)}"
-            attrs << " onTouchEnd={(e) => #{handler_name}?.onEnd?.(e)}"
+            prop = resolve_handler_property(attributes['onPinch'])
+            attrs << " onTouchStart={(e) => #{prop}?.onStart?.(e)}"
+            attrs << " onTouchMove={(e) => #{prop}?.onMove?.(e)}"
+            attrs << " onTouchEnd={(e) => #{prop}?.onEnd?.(e)}"
           end
 
           # Drag and Drop

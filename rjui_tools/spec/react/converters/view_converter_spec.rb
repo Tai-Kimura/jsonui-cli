@@ -173,4 +173,61 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
       expect(classes).to include('min-h-0')
     end
   end
+
+  describe '#build_event_attrs gesture handlers' do
+    it 'emits data-prefixed guarded handler for onLongPress binding format' do
+      converter = create_converter({
+        'type' => 'View',
+        'onLongPress' => '@{handleLongPress}',
+        'child' => []
+      })
+      attrs = converter.send(:build_event_attrs)
+      expect(attrs).to include('onContextMenu={(e) => { e.preventDefault(); data.handleLongPress?.(e); }}')
+    end
+
+    it 'emits data-prefixed guarded handler for onLongPress selector format' do
+      converter = create_converter({
+        'type' => 'View',
+        'onLongPress' => 'handleLongPress',
+        'child' => []
+      })
+      attrs = converter.send(:build_event_attrs)
+      expect(attrs).to include('data.handleLongPress?.(e)')
+    end
+
+    it 'emits data-prefixed pointer handlers for onPan' do
+      converter = create_converter({
+        'type' => 'View',
+        'onPan' => '@{panHandler}',
+        'child' => []
+      })
+      attrs = converter.send(:build_event_attrs)
+      expect(attrs).to include('onPointerDown={(e) => data.panHandler?.onStart?.(e)}')
+      expect(attrs).to include('onPointerMove={(e) => data.panHandler?.onMove?.(e)}')
+      expect(attrs).to include('onPointerUp={(e) => data.panHandler?.onEnd?.(e)}')
+    end
+
+    it 'emits data-prefixed touch handlers for onPinch' do
+      converter = create_converter({
+        'type' => 'View',
+        'onPinch' => '@{pinchHandler}',
+        'child' => []
+      })
+      attrs = converter.send(:build_event_attrs)
+      expect(attrs).to include('onTouchStart={(e) => data.pinchHandler?.onStart?.(e)}')
+      expect(attrs).to include('onTouchEnd={(e) => data.pinchHandler?.onEnd?.(e)}')
+    end
+
+    it 'never emits a bare (un-prefixed) gesture handler identifier' do
+      converter = create_converter({
+        'type' => 'View',
+        'onLongPress' => '@{handleLongPress}',
+        'onPan' => '@{panHandler}',
+        'child' => []
+      })
+      attrs = converter.send(:build_event_attrs)
+      expect(attrs).not_to include(' handleLongPress(e)')
+      expect(attrs).not_to match(/[^.]\bpanHandler\?\./)
+    end
+  end
 end

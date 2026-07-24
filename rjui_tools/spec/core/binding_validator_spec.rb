@@ -523,5 +523,57 @@ RSpec.describe RjuiTools::Core::BindingValidator do
         expect(warnings.any? { |w| w.include?("'unused2'") }).to be true
       end
     end
+
+    context 'with dot-path bindings (root-segment resolution)' do
+      it 'does not warn when the root variable of a dot-path is defined' do
+        component = {
+          'type' => 'View',
+          'child' => [
+            { 'data' => [{ 'name' => 'user', 'type' => 'Object' }] },
+            { 'type' => 'Label', 'text' => '@{user.name}' }
+          ]
+        }
+        warnings = validator.validate(component)
+        expect(warnings.select { |w| w.include?('not defined in data') }).to be_empty
+      end
+
+      it 'marks the root variable as used (no unused-data warning for dot-path access)' do
+        component = {
+          'type' => 'View',
+          'child' => [
+            { 'data' => [{ 'name' => 'user', 'type' => 'Object' }] },
+            { 'type' => 'Label', 'text' => '@{user.name}' }
+          ]
+        }
+        warnings = validator.validate(component)
+        expect(warnings.any? { |w| w.include?('never used') && w.include?("'user'") }).to be false
+      end
+
+      it 'warns about the undefined root only, never the path segments' do
+        component = {
+          'type' => 'View',
+          'child' => [
+            { 'data' => [{ 'name' => 'other', 'type' => 'String' }] },
+            { 'type' => 'Label', 'text' => '@{user.name}' }
+          ]
+        }
+        warnings = validator.validate(component)
+        expect(warnings.any? { |w| w.include?("'user'") && w.include?('not defined in data') }).to be true
+        expect(warnings.any? { |w| w.include?("'name'") }).to be false
+      end
+
+      it 'resolves bracket-indexed paths to their root variable' do
+        component = {
+          'type' => 'View',
+          'child' => [
+            { 'data' => [{ 'name' => 'items', 'type' => 'Array' }] },
+            { 'type' => 'Label', 'text' => '@{items[0].title}' }
+          ]
+        }
+        warnings = validator.validate(component)
+        expect(warnings.select { |w| w.include?('not defined in data') }).to be_empty
+        expect(warnings.any? { |w| w.include?("'title'") }).to be false
+      end
+    end
   end
 end

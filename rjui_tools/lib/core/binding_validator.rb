@@ -356,14 +356,16 @@ module RjuiTools
         # Remove string literals to avoid false positives
         expr = binding_expr.gsub(/'[^']*'/, '').gsub(/"[^"]*"/, '')
 
-        # Match variable names (identifiers that are not keywords or literals)
+        # Match variable references. A dotted/indexed path (user.name, items[0].title)
+        # counts as its root variable only — data defines the root, not each segment.
         # Skip: numbers, true, false, null, undefined, visible, gone
         keywords = %w[true false null undefined visible gone]
 
-        expr.scan(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/).flatten.each do |match|
-          next if keywords.include?(match)
-          next if match =~ /^\d/ # Skip if starts with digit
-          variables << match
+        expr.scan(/\b[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*|\[\d+\])*/).each do |match|
+          root = match.split(/[.\[]/).first
+          next if keywords.include?(root)
+          next if root =~ /^\d/ # Skip if starts with digit
+          variables << root
         end
 
         variables.to_a

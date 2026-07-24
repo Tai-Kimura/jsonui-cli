@@ -392,7 +392,9 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         ]
       })
       result = converter.convert
-      expect(result).to include('onClick={handlePartialClick}')
+      # Intended change (2026-07-24): partial onclick now follows the base
+      # onclick contract — selector resolves to a data.-prefixed reference.
+      expect(result).to include('onClick={data.handlePartialClick}')
       expect(result).to include('cursor-pointer')
     end
 
@@ -479,6 +481,34 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       })
       result = converter.convert
       expect(result).to include('data-tag="custom-tag"')
+    end
+  end
+
+  describe 'partialAttributes onclick emit' do
+    it 'emits data-prefixed onClick for selector format' do
+      converter = create_converter({
+        'type' => 'Label',
+        'text' => 'Tap here now',
+        'partialAttributes' => [
+          { 'range' => [0, 3], 'fontColor' => '#FF0000', 'onclick' => 'handleTap' }
+        ]
+      })
+      result = converter.convert
+      expect(result).to include('onClick={data.handleTap}')
+      expect(result).not_to include('onClick={handleTap}')
+    end
+
+    it 'emits ERROR comment for binding-format onclick (selector required, matching base contract)' do
+      converter = create_converter({
+        'type' => 'Label',
+        'text' => 'Tap here now',
+        'partialAttributes' => [
+          { 'range' => [0, 3], 'onclick' => '@{handleTap}' }
+        ]
+      })
+      result = converter.convert
+      expect(result).to include('ERROR: onclick requires selector format')
+      expect(result).not_to include('onClick={@{handleTap}}')
     end
   end
 end
