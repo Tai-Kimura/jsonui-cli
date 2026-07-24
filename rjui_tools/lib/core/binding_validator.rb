@@ -68,6 +68,11 @@ module RjuiTools
           pattern: /\w+\([^)]+\)/,
           message: "function call with arguments - move to ViewModel"
         },
+        # Zero-argument function/method calls (getName(), items.first())
+        {
+          pattern: /\w+\(\s*\)/,
+          message: "function call - move to ViewModel computed property"
+        },
         # String interpolation (JavaScript template literals)
         {
           pattern: /`[^`]*\$\{/,

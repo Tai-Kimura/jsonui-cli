@@ -25,6 +25,7 @@ module SjuiTools
           # Store validation results
           @validation_warnings = []
           @validation_errors = 0
+          @binding_errors = []
 
           # Process all JSON files for string extraction
           begin
@@ -45,6 +46,13 @@ module SjuiTools
 
           # Print validation summary if there were warnings
           print_validation_summary if options[:validate] != false && @validation_warnings.any?
+
+          # Error-severity canonical binding rules (binding_semantics.json
+          # validatorRules) always fail the build, strict or not
+          if @binding_errors.any?
+            Core::Logger.error "Build failed: #{@binding_errors.size} binding error(s) (canonical severity: error)"
+            exit 1
+          end
 
           # Exit with error code if strict mode and there were validation errors
           if options[:strict] && @validation_errors > 0
@@ -210,6 +218,9 @@ module SjuiTools
           require_relative '../../uikit/json_loader'
           loader = UIKit::JsonLoader.new
           loader.start_analyze
+          # Error-severity canonical binding violations found during load
+          # (||= keeps direct build_uikit calls, e.g. from specs, working)
+          (@binding_errors ||= []).concat(loader.binding_errors)
         end
 
         def build_swiftui(options = {})
@@ -347,6 +358,9 @@ module SjuiTools
               # Validate bindings for business logic
               if binding_validator
                 binding_warnings = binding_validator.validate(json_data, relative_path)
+                # The validator resets per validate() call — collect
+                # error-severity canonical violations for build failure
+                @binding_errors.concat(binding_validator.errors)
                 if binding_warnings.any?
                   @validation_warnings.concat(binding_warnings)
                   Core::Logger.warn "  #{binding_warnings.length} binding warning(s) in #{relative_path}"
@@ -457,6 +471,7 @@ module SjuiTools
                 end
                 if binding_validator
                   binding_warnings = binding_validator.validate(variant_json, variant_rel)
+                  @binding_errors.concat(binding_validator.errors)
                   if binding_warnings.any?
                     @validation_warnings.concat(binding_warnings)
                     Core::Logger.warn "  #{binding_warnings.length} binding warning(s) in #{variant_rel}"

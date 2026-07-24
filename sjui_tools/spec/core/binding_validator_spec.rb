@@ -285,6 +285,28 @@ RSpec.describe SjuiTools::Core::BindingValidator do
       end
     end
 
+    context 'with zero-argument calls' do
+      let(:json_data) do
+        {
+          'type' => 'Label',
+          'data' => [
+            { 'name' => 'items', 'class' => '[String]' }
+          ],
+          'text' => '@{items.first()}'
+        }
+      end
+
+      it 'returns warning for zero-argument method call' do
+        warnings = validator.validate(json_data)
+        expect(warnings.any? { |w| w.include?('method call - move to ViewModel computed property') }).to be true
+      end
+
+      it 'returns warning for standalone zero-argument function call' do
+        warnings = validator.validate(json_data.merge('text' => '@{getName()}'))
+        expect(warnings.any? { |w| w.include?('method call - move to ViewModel computed property') }).to be true
+      end
+    end
+
     context 'with string interpolation' do
       let(:json_data) do
         {

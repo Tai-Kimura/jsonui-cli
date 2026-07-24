@@ -158,6 +158,7 @@ RSpec.describe SjuiTools::CLI::Commands::Build do
         loader_double = instance_double(SjuiTools::UIKit::JsonLoader)
         allow(SjuiTools::UIKit::JsonLoader).to receive(:new).and_return(loader_double)
         allow(loader_double).to receive(:start_analyze)
+        allow(loader_double).to receive(:binding_errors).and_return([])
         allow(SjuiTools::UIKit::JsonLoader).to receive(:view_type_set).and_return({})
         allow(SjuiTools::UIKit::ImportModuleManager).to receive(:add_type_import_mapping)
 

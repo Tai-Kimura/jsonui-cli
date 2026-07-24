@@ -23,6 +23,10 @@ require_relative '../core/layout_variant'
 module SjuiTools
   module UIKit
     class JsonLoader
+      # Error-severity canonical binding rule violations accumulated across
+      # all loaded layouts (the build command escalates these to exit 1)
+      attr_reader :binding_errors
+
       def initialize(project_root_path = nil, project_file_path = nil)
         # Setup project paths
         Core::ProjectFinder.setup_paths(project_file_path)
@@ -48,6 +52,7 @@ module SjuiTools
         @json_analyzer = JsonAnalyzer.new(@import_module_manager, @ui_control_event_manager, @layout_path, @style_path, nil, @@view_type_set)
         @including_files = {}
         @binding_validator = Core::BindingValidator.new
+        @binding_errors = []
 
         # Initialize StringManager and cache strings files
         @string_manager = Core::Resources::StringManager.new
@@ -138,6 +143,7 @@ module SjuiTools
             # Validate bindings for business logic
             relative_path = file.sub("#{@layout_path}/", "")
             binding_warnings = @binding_validator.validate(json, relative_path)
+            @binding_errors.concat(@binding_validator.errors)
             if binding_warnings.any?
               binding_warnings.each do |warning|
                 puts "\e[33m⚠️  [SJUI Warning] #{warning}\e[0m"

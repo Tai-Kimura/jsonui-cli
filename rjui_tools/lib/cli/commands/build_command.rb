@@ -30,6 +30,7 @@ module RjuiTools
           @binding_validator = Core::BindingValidator.new
           @all_warnings = []
           @binding_warnings = []
+          @binding_errors = []
         end
 
         def execute
@@ -225,6 +226,14 @@ module RjuiTools
           # Print all collected warnings at the end
           print_validation_summary
           print_binding_warnings
+          print_binding_errors
+
+          # Error-severity canonical binding rules (binding_semantics.json
+          # validatorRules) always fail the build
+          if @binding_errors.any?
+            Core::Logger.error("Build failed: #{@binding_errors.size} binding error(s)")
+            exit 1
+          end
 
           Core::Logger.success('Build completed!')
         end
@@ -409,10 +418,11 @@ module RjuiTools
         # Validate binding expressions for business logic
         def validate_bindings(json_content, file_path)
           file_name = File.basename(file_path)
-          warnings = @binding_validator.validate(json_content, file_name)
-          warnings.each do |warning|
-            @binding_warnings << warning
-          end
+          @binding_validator.validate(json_content, file_name)
+          # The validator resets its channels per validate() call — collect
+          # both here so errors survive across files
+          @binding_warnings.concat(@binding_validator.warnings)
+          @binding_errors.concat(@binding_validator.errors)
         end
 
         # Print binding warnings at the end of build
@@ -426,6 +436,21 @@ module RjuiTools
 
           @binding_warnings.each do |warning|
             puts "\e[33m  ⚠️  #{warning}\e[0m"
+          end
+          puts
+        end
+
+        # Print error-severity canonical rule violations at the end of build
+        def print_binding_errors
+          return if @binding_errors.empty?
+
+          puts
+          Core::Logger.error("Binding errors found: #{@binding_errors.size}")
+          puts "  Canonical binding rules (severity: error) were violated."
+          puts
+
+          @binding_errors.each do |error|
+            puts "\e[31m  ✖  #{error}\e[0m"
           end
           puts
         end

@@ -9,6 +9,9 @@ module KjuiTools
     # Warns when bindings contain business logic that should be in ViewModel
     class BindingValidator
       attr_reader :warnings
+      # Error-severity canonical rule violations (subset of the messages
+      # returned by #validate; kept separately so callers can escalate)
+      attr_reader :errors
 
       # Patterns that indicate business logic in bindings
       BUSINESS_LOGIC_PATTERNS = [
@@ -51,6 +54,11 @@ module KjuiTools
         {
           pattern: /\.\w+\([^)]+\)/,
           message: "method call with arguments - move to ViewModel"
+        },
+        # Zero-argument function/method calls (getName(), items.first())
+        {
+          pattern: /\w+\(\s*\)/,
+          message: "method call - move to ViewModel computed property"
         },
         # String interpolation
         {
@@ -117,6 +125,7 @@ module KjuiTools
 
       def initialize
         @warnings = []
+        @errors = []
         @data_properties = Set.new
         @used_properties = Set.new  # Track used properties for unused detection
         @data_types = {} # Store property name -> type mapping
@@ -132,6 +141,7 @@ module KjuiTools
       # @return [Array<String>] Array of warning messages
       def validate(json_data, file_name = nil)
         @warnings = []
+        @errors = []
         @current_file = file_name
         @data_properties = Set.new
         @used_properties = Set.new
@@ -153,6 +163,11 @@ module KjuiTools
       # Check if there are any warnings
       def has_warnings?
         !@warnings.empty?
+      end
+
+      # Check if there are any error-severity canonical rule violations
+      def has_errors?
+        !@errors.empty?
       end
 
       # Print all warnings to stdout
@@ -333,14 +348,14 @@ module KjuiTools
         # default containing '??' does not false-positive.
         stripped = expr.gsub(/'[^']*'/, '').gsub(/"[^"]*"/, '')
         if stripped.scan('??').size > 1
-          @warnings << "#{context}Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' uses more than one '??' (binding-double-default). Exactly one default per expression is allowed."
+          @warnings << canonical_error("#{context}Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' uses more than one '??' (binding-double-default). Exactly one default per expression is allowed.")
         end
 
         # binding-two-way-complex (error): two-way bindings must be a single
         # flat identifier — no '.', '[', '??', or '!'.
         if two_way_attribute?(component_type, attribute_name)
           unless expr.match?(CANONICAL_FLAT_IDENTIFIER)
-            @warnings << "#{context}Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' is a two-way binding and must be a single flat identifier (binding-two-way-complex). Remove '.', '[', '??' or '!' — compute derived values in the ViewModel."
+            @warnings << canonical_error("#{context}Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' is a two-way binding and must be a single flat identifier (binding-two-way-complex). Remove '.', '[', '??' or '!' — compute derived values in the ViewModel.")
           end
           return
         end
@@ -348,7 +363,7 @@ module KjuiTools
         # binding-negation-context (error): '!' negation is only canonical
         # in boolean value contexts.
         if expr.start_with?('!') && !bool_value_attribute?(component_type, attribute_name)
-          @warnings << "#{context}Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' uses '!' negation outside a boolean value context (binding-negation-context)."
+          @warnings << canonical_error("#{context}Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' uses '!' negation outside a boolean value context (binding-negation-context).")
         end
 
         # binding-cell-parent-scope (warning): inside a Collection/Table
@@ -371,12 +386,19 @@ module KjuiTools
 
         stripped = expr.gsub(/'[^']*'/, '').gsub(/"[^"]*"/, '')
         if stripped.scan('??').size > 1
-          @warnings << "#{context}Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' uses more than one '??' (binding-double-default). Exactly one default per expression is allowed."
+          @warnings << canonical_error("#{context}Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' uses more than one '??' (binding-double-default). Exactly one default per expression is allowed.")
         end
 
         if expr.start_with?('!')
-          @warnings << "#{context}Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' uses '!' negation in text context (binding-negation-context). Negation is only valid on boolean value attributes."
+          @warnings << canonical_error("#{context}Binding '@{#{binding_expr}}' in '#{component_type}.#{attribute_name}' uses '!' negation in text context (binding-negation-context). Negation is only valid on boolean value attributes.")
         end
+      end
+
+      # Record an error-severity canonical rule violation and return its
+      # message unchanged (so callers can also surface it as a warning line)
+      def canonical_error(message)
+        @errors << message unless @errors.include?(message)
+        message
       end
 
       # Two-way detection: binding_direction from attribute_definitions.json
@@ -600,7 +622,7 @@ module KjuiTools
           when Hash
             validate_embed_params_node(value, key_path, context)
           when Array
-            @warnings << "#{context}'Embed.#{key_path}' is an array — arrays are not supported in Embed params (binding-params-array). Nest literal objects or bind a scalar leaf instead."
+            @warnings << canonical_error("#{context}'Embed.#{key_path}' is an array — arrays are not supported in Embed params (binding-params-array). Nest literal objects or bind a scalar leaf instead.")
           when String
             if value.start_with?('@{') && value.end_with?('}')
               inner = value[2..-2].strip
@@ -610,13 +632,13 @@ module KjuiTools
               # data-section defaultValue is the canonical fallback
               # (unresolved leaves are dropped so it applies).
               if inner.gsub(/'[^']*'/, '').gsub(/"[^"]*"/, '').include?('??')
-                @warnings << "#{context}'Embed.#{key_path}' uses a '??' default inside Embed params (binding-default-in-params). Defaults belong to the embedded screen's data section — remove the '??' and declare a defaultValue there."
+                @warnings << canonical_error("#{context}'Embed.#{key_path}' uses a '??' default inside Embed params (binding-default-in-params). Defaults belong to the embedded screen's data section — remove the '??' and declare a defaultValue there.")
               end
 
               # binding-negation-context (error): params leaves are not a
               # boolean value context.
               if inner.start_with?('!')
-                @warnings << "#{context}'Embed.#{key_path}' uses '!' negation in Embed params (binding-negation-context). Negation is only valid on boolean value attributes."
+                @warnings << canonical_error("#{context}'Embed.#{key_path}' uses '!' negation in Embed params (binding-negation-context). Negation is only valid on boolean value attributes.")
               end
 
               prop = inner.sub(/\A!\s*/, '').split('??').first.to_s.strip

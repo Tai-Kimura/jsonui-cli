@@ -334,6 +334,27 @@ RSpec.describe RjuiTools::Core::BindingValidator do
         expect(warnings).not_to be_empty
         expect(warnings.first).to include('function call with arguments')
       end
+
+      it 'warns about zero-argument function call' do
+        component = {
+          'type' => 'View',
+          'child' => [
+            { 'data' => [{ 'name' => 'items', 'type' => '[String]' }] },
+            { 'type' => 'Label', 'text' => '@{items.first()}' }
+          ]
+        }
+        warnings = validator.validate(component)
+        expect(warnings.any? { |w| w.include?('function call - move to ViewModel computed property') }).to be true
+      end
+
+      it 'warns about standalone zero-argument function call' do
+        component = {
+          'type' => 'Label',
+          'text' => '@{getName()}'
+        }
+        warnings = validator.validate(component)
+        expect(warnings.any? { |w| w.include?('function call - move to ViewModel computed property') }).to be true
+      end
     end
 
     context 'with nested components' do

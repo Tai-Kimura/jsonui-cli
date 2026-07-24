@@ -229,6 +229,28 @@ RSpec.describe KjuiTools::Core::BindingValidator do
       end
     end
 
+    context 'with zero-argument calls' do
+      let(:json_data) do
+        {
+          'type' => 'Text',
+          'data' => [
+            { 'name' => 'items', 'class' => 'List<String>' }
+          ],
+          'text' => '@{items.first()}'
+        }
+      end
+
+      it 'returns warning for zero-argument method call' do
+        warnings = validator.validate(json_data)
+        expect(warnings.any? { |w| w.include?('method call - move to ViewModel computed property') }).to be true
+      end
+
+      it 'returns warning for standalone zero-argument function call' do
+        warnings = validator.validate(json_data.merge('text' => '@{getName()}'))
+        expect(warnings.any? { |w| w.include?('method call - move to ViewModel computed property') }).to be true
+      end
+    end
+
     context 'with string interpolation' do
       let(:json_data) do
         {
@@ -542,6 +564,43 @@ RSpec.describe KjuiTools::Core::BindingValidator do
         warnings = validator.validate(json_data)
         expect(warnings).to be_empty
       end
+    end
+  end
+
+  describe '#errors' do
+    it 'routes error-severity canonical rules to errors' do
+      json_data = {
+        'type' => 'Text',
+        'data' => [{ 'name' => 'a', 'class' => 'String' }],
+        'text' => "@{a ?? 'x' ?? 'y'}"
+      }
+      validator.validate(json_data)
+      expect(validator.has_errors?).to be true
+      expect(validator.errors.any? { |e| e.include?('binding-double-default') }).to be true
+    end
+
+    it 'keeps business-logic warnings out of errors' do
+      json_data = {
+        'type' => 'Text',
+        'data' => [{ 'name' => 'date', 'class' => 'Date' }],
+        'text' => '@{date.format("yyyy-MM-dd")}'
+      }
+      warnings = validator.validate(json_data)
+      expect(warnings).not_to be_empty
+      expect(validator.has_errors?).to be false
+    end
+
+    it 'resets errors on each validate call' do
+      bad = { 'type' => 'Text', 'text' => "@{a ?? 'x' ?? 'y'}" }
+      clean = {
+        'type' => 'Text',
+        'data' => [{ 'name' => 'a', 'class' => 'String' }],
+        'text' => '@{a}'
+      }
+      validator.validate(bad)
+      expect(validator.has_errors?).to be true
+      validator.validate(clean)
+      expect(validator.has_errors?).to be false
     end
   end
 
