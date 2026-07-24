@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -83,6 +84,11 @@ def cmd_build(args: argparse.Namespace) -> int:
     # markers. Hard error if any spec-declared handler has no matching Impl
     # function — catches drift before the platform build starts.
     if _sync_viewmodel_protocols(config_mgr, config, platforms, args) is False:
+        return 1
+
+    # Hard gate for navigationMode:"isolated" — the embedded screen's spec
+    # must not declare present-type transitions (sheet/modal/dialog/dismiss).
+    if _check_isolated_embed_constraints(config_mgr) is False:
         return 1
 
     should_build_ios = "ios" in platforms and not args.android_only and not args.web_only
@@ -823,6 +829,113 @@ def _load_all_specs(config_mgr: ConfigManager) -> list[tuple[Path, ScreenSpec]]:
             spec_data = merge_result.spec
         results.append((sf, extract_screen_spec(spec_data)))
     return results
+
+
+# Transition/action vocabulary that presents OUTSIDE the embed's bounds.
+# iOS sheets present on the parent window, so "a modal visually contained
+# in the embed" is not implementable — parity would break, hence the hard
+# error for screens hosted inside an isolated embed. Matched defensively
+# against several free-form spec keys (transitions are list[dict] with no
+# fixed schema).
+_PRESENT_LIKE = re.compile(
+    r"^(present|sheet|modal|dialog|fullscreencover|bottomsheet|dismiss)$",
+    re.IGNORECASE,
+)
+_PRESENT_KEYS = ("type", "style", "presentation", "mode", "action")
+
+
+def _walk_embed_nodes(node):
+    """Yield every Embed dict inside a layout JSON tree."""
+    if isinstance(node, dict):
+        if node.get("type") == "Embed":
+            yield node
+        for value in node.values():
+            yield from _walk_embed_nodes(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _walk_embed_nodes(item)
+
+
+def _spec_present_like_entries(spec: ScreenSpec) -> list[str]:
+    """Describe present-type transitions declared by a spec (empty = none)."""
+    found: list[str] = []
+    for idx, transition in enumerate(spec.transitions or []):
+        if not isinstance(transition, dict):
+            continue
+        for key in _PRESENT_KEYS:
+            value = transition.get(key)
+            if isinstance(value, str) and _PRESENT_LIKE.match(value):
+                found.append(f"transitions[{idx}].{key}='{value}'")
+    return found
+
+
+def _check_isolated_embed_constraints(config_mgr: ConfigManager) -> bool:
+    """Hard gate: screens hosted in an isolated Embed must not present.
+
+    Scans every layout for ``Embed`` nodes with ``navigationMode:"isolated"``
+    and rejects the build when the embedded screen's spec declares a
+    present-type transition (sheet/modal/dialog/dismiss/...). Returns False
+    on violation (build aborts), True otherwise.
+    """
+    layouts_dir = config_mgr.layouts_directory
+    if not layouts_dir.exists():
+        return True
+
+    isolated_targets: dict[str, list[str]] = {}
+    for layout_path in sorted(layouts_dir.rglob("*.json")):
+        if "Resources" in layout_path.parts:
+            continue
+        try:
+            layout = json.loads(layout_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        for embed in _walk_embed_nodes(layout):
+            if embed.get("navigationMode") != "isolated":
+                continue
+            screen = embed.get("screen")
+            if isinstance(screen, str) and screen:
+                isolated_targets.setdefault(screen, []).append(
+                    layout_path.name
+                )
+
+    if not isolated_targets:
+        return True
+
+    def _snake_to_pascal(name: str) -> str:
+        return "".join(part.capitalize() for part in name.split("_"))
+
+    errors: list[str] = []
+    specs = _load_all_specs(config_mgr)
+    for screen, host_layouts in sorted(isolated_targets.items()):
+        pascal = _snake_to_pascal(screen)
+        spec = next(
+            (
+                s
+                for _sf, s in specs
+                if s.name in (pascal, screen)
+                or Path(s.layout_file or "").stem == screen
+            ),
+            None,
+        )
+        if spec is None:
+            continue  # no spec — nothing to check (layout-only screens)
+        for entry in _spec_present_like_entries(spec):
+            errors.append(
+                f"'{screen}' is hosted in an isolated Embed "
+                f"({', '.join(sorted(set(host_layouts)))}) but its spec "
+                f"declares {entry}. Present-type transitions are forbidden "
+                f"inside navigationMode:\"isolated\" — iOS sheets present on "
+                f"the parent window, so visual containment cannot be "
+                f"guaranteed cross-platform. Use the params callback escape "
+                f"hatch and present from the host screen instead."
+            )
+
+    if errors:
+        print("\nERROR [embed-isolated]:")
+        for line in errors:
+            print(f"  - {line}")
+        return False
+    return True
 
 
 def _format_label_sig(name: str, labels: list[tuple[str, str]]) -> str:

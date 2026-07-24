@@ -1,0 +1,44 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Embed/params__nested_leaf.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Embed.params (nested_leaf)",
+    "description": "Embed semantic conformance fixture (nested_leaf). Companion embedded screens live under fixtures/Embed/__screens/ — see manifest 'companions'.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "embed",
+      "Embed"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "params__nested_leaf",
+      "description": "Embed semantic conformance fixture (nested_leaf). Companion embedded screens live under fixtures/Embed/__screens/ — see manifest 'companions'.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "embed-params-name",
+          "equals": "Ada"
+        },
+        {
+          "assert": "text",
+          "id": "embed-params-age",
+          "equals": "36"
+        },
+        {
+          "assert": "text",
+          "id": "host-marker",
+          "equals": "host"
+        }
+      ]
+    }
+  ]
+}

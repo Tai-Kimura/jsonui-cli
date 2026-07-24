@@ -1,0 +1,27 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "embed_params_container",
+  "width": "matchParent",
+  "height": "wrapContent",
+  "orientation": "vertical",
+  "child": [
+    {
+      "type": "Label",
+      "id": "embed-params-name",
+      "text": "@{profile.name}"
+    },
+    {
+      "type": "Label",
+      "id": "embed-params-age",
+      "text": "@{profile.meta.age}"
+    }
+  ]
+}

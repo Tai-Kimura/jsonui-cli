@@ -946,4 +946,36 @@ RSpec.describe RjuiTools::Core::AttributeValidator do
       expect(unknown_warnings(component)).to be_empty
     end
   end
+
+  describe 'Embed params tree grammar (v1.5)' do
+    def embed(attrs = {})
+      { 'type' => 'Embed', 'id' => 'pane', 'screen' => 'foo' }.merge(attrs)
+    end
+
+    it 'accepts isolated navigationMode without enum warnings' do
+      warnings = validator.validate(embed('navigationMode' => 'isolated'))
+      expect(warnings.select { |w| w.include?('navigationMode') }).to be_empty, warnings.inspect
+    end
+
+    it 'accepts nested literal objects with scalar/binding leaves' do
+      warnings = validator.validate(embed(
+        'params' => { 'profile' => { 'name' => '@{userName}', 'age' => 36 } }
+      ))
+      expect(warnings.select { |w| w.include?('Embed.params') }).to be_empty, warnings.inspect
+    end
+
+    it 'warns on arrays anywhere in params' do
+      warnings = validator.validate(embed(
+        'params' => { 'profile' => { 'tags' => %w[a b] } }
+      ))
+      expect(warnings).to include(a_string_matching(/Embed\.params\.profile\.tags.*array/))
+    end
+
+    it 'warns on non-camelCase keys at any level' do
+      warnings = validator.validate(embed(
+        'params' => { 'profile' => { 'UserName' => 'x' } }
+      ))
+      expect(warnings).to include(a_string_matching(/Embed\.params\.profile\.UserName.*camelCase/))
+    end
+  end
 end

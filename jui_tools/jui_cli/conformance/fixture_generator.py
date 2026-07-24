@@ -441,6 +441,21 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
             else:
                 summary.visual_count += 1
 
+    # Bespoke Embed semantic fixtures (cross-file: companion embedded-screen
+    # layouts under fixtures/Embed/__screens/). The generic per-attribute
+    # sweep for Embed stays skipped — see embed_fixtures module docstring.
+    from .embed_fixtures import build_embed_fixtures
+
+    embed_files, embed_entries = build_embed_fixtures(source_label)
+    for rel_path, payload in embed_files:
+        target = out_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_dump_json(payload), encoding="utf-8")
+        summary.files_written += 1
+    fixture_entries.extend(embed_entries)
+    summary.fixture_count += len(embed_entries)
+    summary.assertable_count += len(embed_entries)
+
     skipped_entries = [
         {"component": s.section, "attribute": s.attribute, "reason": s.reason}
         for s in skipped

@@ -43,9 +43,15 @@ module SjuiTools
 
           embed_id = @component['id'] || 'embed'
           navigation_mode = @component['navigationMode'] || 'delegate'
+          isolated = navigation_mode == 'isolated'
           params = @component['params'] || {}
           events = @component['events'] || {}
 
+          # Version-skew guard: the isolated call site references the
+          # isolatedNavigation: initializer (new in 10.5.0), so building
+          # against an older SwiftJsonUI fails at compile time instead of
+          # silently degrading to delegate mode.
+          add_line '// Requires SwiftJsonUI >= 10.5.0 (navigationMode: "isolated")' if isolated
           add_line 'EmbedContainer('
           indent do
             add_line "embedId: \"#{embed_id}\","
@@ -53,18 +59,16 @@ module SjuiTools
             unless params.empty?
               add_line 'params: ['
               indent do
-                params.each_with_index do |(key, value), idx|
-                  expr = render_param_value(value)
-                  comma = idx == params.size - 1 ? '' : ','
-                  add_line "\"#{key}\": #{expr}#{comma}"
-                end
+                render_params_entries(params)
               end
               add_line '],'
             end
-            if events.empty?
-              add_line "navigationMode: .#{navigation_mode}"
-            else
-              add_line "navigationMode: .#{navigation_mode},"
+            trailing = isolated || !events.empty?
+            add_line "navigationMode: .#{navigation_mode}#{trailing ? ',' : ''}"
+            if isolated
+              add_line "isolatedNavigation: .automatic#{events.empty? ? '' : ','}"
+            end
+            unless events.empty?
               add_line 'eventBridge: { event in'
               indent do
                 add_line 'if case .named(let name, let payload) = event {'
@@ -151,8 +155,20 @@ module SjuiTools
           "#{base}View"
         end
 
+        # Emit the top-level params entries one per line (keeps the delegate
+        # flat-params output byte-identical to the pre-nesting emitter).
+        def render_params_entries(params)
+          params.each_with_index do |(key, value), idx|
+            expr = render_param_value(value)
+            comma = idx == params.size - 1 ? '' : ','
+            add_line "\"#{key}\": #{expr}#{comma}"
+          end
+        end
+
         # Render a single params value as Swift expression. Supports literals
-        # (string/number/bool) and @{binding} → `data.{prop}`.
+        # (string/number/bool), @{binding} → `data.{prop}` (leaf-only — the
+        # validator rejects bindings at object positions), and nested literal
+        # objects → inline Swift dictionary literals (recursive).
         def render_param_value(value)
           if value.is_a?(String) && is_binding?(value)
             "data.#{extract_binding_property(value)}"
@@ -162,8 +178,13 @@ module SjuiTools
             value.to_s
           elsif value.is_a?(Numeric)
             value.to_s
+          elsif value.is_a?(Hash)
+            return '[:]' if value.empty?
+            entries = value.map { |k, v| "\"#{k}\": #{render_param_value(v)}" }
+            "[#{entries.join(', ')}]"
           else
-            # Fallback — emit as Any literal
+            # Fallback — emit as Any literal (arrays are a validate error
+            # upstream; this branch should be unreachable for valid layouts)
             value.inspect
           end
         end

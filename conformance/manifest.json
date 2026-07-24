@@ -10,8 +10,8 @@
   "schemaVersion": 2,
   "generatedFrom": "ced1604d18e80a4e70bfd938fcc8858d56f19892cc036b3fb0c0870d0991ce99",
   "counts": {
-    "fixtures": 644,
-    "assertable": 25,
+    "fixtures": 648,
+    "assertable": 29,
     "visual": 600,
     "interactive": 19,
     "skipped": 166,
@@ -14223,6 +14223,117 @@
       "test": "fixtures/TabView/showLabels__true.test.json",
       "state": null,
       "promotedFrom": null
+    },
+    {
+      "id": "Embed/navigationMode__delegate_baseline",
+      "component": "Embed",
+      "attribute": "navigationMode",
+      "case": "delegate_baseline",
+      "class": "assertable",
+      "host": "Embed",
+      "writtenKey": "navigationMode",
+      "aliasOf": null,
+      "value": "delegate",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": false,
+      "layout": "fixtures/Embed/navigationMode__delegate_baseline.layout.json",
+      "test": "fixtures/Embed/navigationMode__delegate_baseline.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "companions": [
+        "fixtures/Embed/__screens/embed_root.layout.json"
+      ]
+    },
+    {
+      "id": "Embed/navigationMode__isolated_root",
+      "component": "Embed",
+      "attribute": "navigationMode",
+      "case": "isolated_root",
+      "class": "assertable",
+      "host": "Embed",
+      "writtenKey": "navigationMode",
+      "aliasOf": null,
+      "value": "isolated",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": false,
+      "layout": "fixtures/Embed/navigationMode__isolated_root.layout.json",
+      "test": "fixtures/Embed/navigationMode__isolated_root.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "companions": [
+        "fixtures/Embed/__screens/embed_root.layout.json"
+      ]
+    },
+    {
+      "id": "Embed/params__nested_leaf",
+      "component": "Embed",
+      "attribute": "params",
+      "case": "nested_leaf",
+      "class": "assertable",
+      "host": "Embed",
+      "writtenKey": "params",
+      "aliasOf": null,
+      "value": {
+        "profile": {
+          "name": "Ada",
+          "meta": {
+            "age": "36"
+          }
+        }
+      },
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": false,
+      "layout": "fixtures/Embed/params__nested_leaf.layout.json",
+      "test": "fixtures/Embed/params__nested_leaf.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "companions": [
+        "fixtures/Embed/__screens/embed_params.layout.json"
+      ]
+    },
+    {
+      "id": "Embed/params__nested_leaf_binding",
+      "component": "Embed",
+      "attribute": "params",
+      "case": "nested_leaf_binding",
+      "class": "assertable",
+      "host": "Embed",
+      "writtenKey": "params",
+      "aliasOf": null,
+      "value": {
+        "profile": {
+          "name": "@{hostValue}"
+        }
+      },
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": false,
+      "layout": "fixtures/Embed/params__nested_leaf_binding.layout.json",
+      "test": "fixtures/Embed/params__nested_leaf_binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "companions": [
+        "fixtures/Embed/__screens/embed_params.layout.json"
+      ]
     }
   ],
   "skipped": [
@@ -15039,22 +15150,22 @@
     {
       "component": "Embed",
       "attribute": "screen",
-      "reason": "cross-file reference (embedded screen layout not available in single-file fixture)"
+      "reason": "cross-file reference — attribute sweep skipped; semantic Embed fixtures (navigationMode/params + companion screens) are emitted bespoke by conformance.embed_fixtures"
     },
     {
       "component": "Embed",
       "attribute": "params",
-      "reason": "cross-file reference (embedded screen layout not available in single-file fixture)"
+      "reason": "cross-file reference — attribute sweep skipped; semantic Embed fixtures (navigationMode/params + companion screens) are emitted bespoke by conformance.embed_fixtures"
     },
     {
       "component": "Embed",
       "attribute": "navigationMode",
-      "reason": "cross-file reference (embedded screen layout not available in single-file fixture)"
+      "reason": "cross-file reference — attribute sweep skipped; semantic Embed fixtures (navigationMode/params + companion screens) are emitted bespoke by conformance.embed_fixtures"
     },
     {
       "component": "Embed",
       "attribute": "events",
-      "reason": "cross-file reference (embedded screen layout not available in single-file fixture)"
+      "reason": "cross-file reference — attribute sweep skipped; semantic Embed fixtures (navigationMode/params + companion screens) are emitted bespoke by conformance.embed_fixtures"
     }
   ]
 }

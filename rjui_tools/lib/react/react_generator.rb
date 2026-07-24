@@ -310,9 +310,16 @@ module RjuiTools
         end
 
         # Generate imports for extension components
+        embed_isolated = extension_components.include?('EmbedContainer#isolated')
         extension_imports = extension_components.map do |comp_name|
-          "import { #{comp_name} } from '@/components/extensions/#{comp_name}';"
-        end.join("\n")
+          if comp_name == 'EmbedContainer#isolated'
+            nil # marker only — folded into the EmbedContainer import below
+          elsif comp_name == 'EmbedContainer' && embed_isolated
+            "import { EmbedContainer, buildEmbedScreenResolver } from '@/components/extensions/EmbedContainer';"
+          else
+            "import { #{comp_name} } from '@/components/extensions/#{comp_name}';"
+          end
+        end.compact.join("\n")
         extension_imports = "\n#{extension_imports}" unless extension_imports.empty?
 
         # Generate imports for included components using absolute paths
@@ -667,6 +674,11 @@ module RjuiTools
         # Embed type uses EmbedContainer runtime helper (init-emitted into extensions)
         if type == 'Embed'
           components << 'EmbedContainer'
+          # Marker (consumed by the import emitter, never rendered): isolated
+          # call sites also import buildEmbedScreenResolver — a template v2
+          # export, so type-checking against a v1 EmbedContainer.tsx fails
+          # instead of silently degrading to delegate (version-skew guard).
+          components << 'EmbedContainer#isolated' if json['navigationMode'] == 'isolated'
         end
 
         # Recurse into children (both 'child' and 'children' keys)

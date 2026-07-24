@@ -177,6 +177,12 @@ module KjuiTools
             # com.kotlinjsonui.embed.*.
             embed_container: ["import com.kotlinjsonui.embed.EmbedContainer",
                               "import com.kotlinjsonui.embed.EmbedNavigationMode"],
+            # Registered ONLY for navigationMode:"isolated" call sites (new in
+            # KotlinJsonUI 2.12.0) — keeping it out of :embed_container keeps
+            # delegate-mode generated files byte-identical AND makes isolated
+            # output fail to compile against pre-2.12.0 libraries (the
+            # version-skew guard).
+            embed_isolated_navigation: "import com.kotlinjsonui.embed.EmbedIsolatedNavigation",
             embedded_event: "import com.kotlinjsonui.embed.EmbeddedEvent",
             viewmodel_compose: "import androidx.lifecycle.viewmodel.compose.viewModel",
             # `hiltViewModel(viewModelStoreOwner, key)` from

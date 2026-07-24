@@ -196,9 +196,13 @@ RUNTIME_DATA_ATTRS = {
     ("SelectBox", "selectedDate"),
 }
 
-#: Whole sections that cannot be tested as single-file fixtures in v1.
+#: Whole sections excluded from the generic per-attribute sweep.
 UNTESTABLE_SECTIONS = {
-    "Embed": "cross-file reference (embedded screen layout not available in single-file fixture)",
+    "Embed": (
+        "cross-file reference — attribute sweep skipped; semantic Embed "
+        "fixtures (navigationMode/params + companion screens) are emitted "
+        "bespoke by conformance.embed_fixtures"
+    ),
 }
 
 # --------------------------------------------------------------------------- #

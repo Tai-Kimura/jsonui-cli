@@ -219,6 +219,9 @@ module SjuiTools
         # Track used properties from include's shared_data and data
         collect_used_from_include(component)
 
+        # Embed-specific structural rules (params tree grammar + navigationMode)
+        validate_embed_component(component) if component_type == 'Embed'
+
         # Check each attribute for bindings
         component.each do |key, value|
           next if key == 'type' || key == 'child' || key == 'children' || key == 'sections'
@@ -491,6 +494,47 @@ module SjuiTools
       end
 
       # Collect used properties and validate bindings from include's shared_data and data
+      # Embed structural rules (v1.5 nested params + isolated):
+      # - params is a tree: intermediate nodes are literal objects only,
+      #   @{} bindings may appear only at leaf scalar positions. Binding a
+      #   whole subtree (a dict-typed VM property) is rejected — reactivity
+      #   semantics for subtree bindings can't be guaranteed cross-platform.
+      # - arrays are unsupported anywhere in params.
+      # - keys must be camelCase at every level.
+      # - navigationMode must be a known enum value ('delegate'/'isolated').
+      def validate_embed_component(component)
+        mode = component['navigationMode']
+        if mode.is_a?(String) && !%w[delegate isolated].include?(mode)
+          @warnings << "#{build_context_prefix}'Embed.navigationMode' has unknown value '#{mode}'. Supported: 'delegate', 'isolated'."
+        end
+
+        params = component['params']
+        validate_embed_params_node(params, 'params') if params.is_a?(Hash)
+      end
+
+      def validate_embed_params_node(node, path)
+        node.each do |key, value|
+          key_path = "#{path}.#{key}"
+          unless key.match?(/\A[a-z][a-zA-Z0-9]*\z/)
+            @warnings << "#{build_context_prefix}'Embed.#{key_path}' key must be camelCase (at every nesting level)."
+          end
+          case value
+          when Hash
+            validate_embed_params_node(value, key_path)
+          when Array
+            @warnings << "#{build_context_prefix}'Embed.#{key_path}' is an array — arrays are not supported in Embed params. Nest literal objects or bind a scalar leaf instead."
+          when String
+            if value.start_with?('@{') && value.end_with?('}')
+              prop = value[2..-2]
+              type = @data_types[prop]
+              if type.is_a?(String) && type.match?(/\[\s*String\s*:|Dictionary\s*</)
+                @warnings << "#{build_context_prefix}'Embed.#{key_path}' binds dict-typed property '#{prop}' — bindings are leaf-only in Embed params (bind scalar leaves; intermediate nodes must be literal objects)."
+              end
+            end
+          end
+        end
+      end
+
       def collect_used_from_include(component)
         # Only process include elements (elements with 'include' key)
         return unless component.key?('include')

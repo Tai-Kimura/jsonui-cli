@@ -126,12 +126,52 @@ RSpec.describe RjuiTools::React::Converters::EmbedConverter do
         expect(converter.convert).to include('navigationMode="delegate"')
       end
 
-      it 'passes through explicit isolated value (v1.5 placeholder)' do
+      it 'passes through explicit isolated value' do
         converter = create_converter(
           'type' => 'Embed', 'id' => 'p', 'screen' => 'foo',
           'navigationMode' => 'isolated'
         )
         expect(converter.convert).to include('navigationMode="isolated"')
+      end
+    end
+
+    context 'isolated navigation mode (v1.5)' do
+      it 'emits screenResolver via buildEmbedScreenResolver and the skew-guard comment' do
+        converter = create_converter(
+          'type' => 'Embed', 'id' => 'pane', 'screen' => 'order_detail',
+          'navigationMode' => 'isolated'
+        )
+        result = converter.convert
+        expect(result).to include('{/* Requires EmbedContainer.tsx template v2 (navigationMode: "isolated") */}')
+        expect(result).to include("screenResolver={buildEmbedScreenResolver({ 'order_detail': OrderDetail })}")
+      end
+
+      it 'keeps the delegate call site free of isolated-only symbols (snapshot invariance)' do
+        converter = create_converter(
+          'type' => 'Embed', 'id' => 'p', 'screen' => 'foo'
+        )
+        result = converter.convert
+        expect(result).not_to include('screenResolver')
+        expect(result).not_to include('Requires EmbedContainer.tsx')
+      end
+    end
+
+    context 'nested params (v1.5)' do
+      it 'emits nested literal objects as JS object literals with leaf binding rewrite' do
+        converter = create_converter(
+          'type' => 'Embed', 'id' => 'p', 'screen' => 'foo',
+          'params' => { 'profile' => { 'name' => '@{userName}', 'meta' => { 'age' => 36 } } }
+        )
+        result = converter.convert
+        expect(result).to include('profile: { name: data.userName, meta: { age: 36 } }')
+      end
+
+      it 'emits {} for an empty nested object' do
+        converter = create_converter(
+          'type' => 'Embed', 'id' => 'p', 'screen' => 'foo',
+          'params' => { 'extra' => {} }
+        )
+        expect(converter.convert).to include('extra: {}')
       end
     end
   end

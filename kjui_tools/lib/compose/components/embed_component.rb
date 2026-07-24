@@ -22,7 +22,8 @@ module KjuiTools
 
           embed_id = json_data['id'] || 'embed'
           navigation_mode = json_data['navigationMode'] || 'delegate'
-          nav_mode_kotlin = navigation_mode == 'isolated' ? 'EmbedNavigationMode.Isolated' : 'EmbedNavigationMode.Delegate'
+          isolated = navigation_mode == 'isolated'
+          nav_mode_kotlin = isolated ? 'EmbedNavigationMode.Isolated' : 'EmbedNavigationMode.Delegate'
           params = json_data['params'] || {}
           events = json_data['events'] || {}
 
@@ -42,8 +43,16 @@ module KjuiTools
           # "HomeView" here would round-trip to "HomeViewView".
           required_imports&.add("tabview:#{embedded_screen_pascal(screen)}")
           required_imports&.add(:embedded_event) unless events.empty?
+          required_imports&.add(:embed_isolated_navigation) if isolated
 
           code  = indent("// Embed: #{screen}", depth)
+          if isolated
+            # Version-skew guard: the isolated call site references
+            # EmbedIsolatedNavigation (new in 2.12.0), so building against an
+            # older KotlinJsonUI fails at compile time instead of silently
+            # degrading to delegate mode.
+            code += "\n" + indent('// Requires KotlinJsonUI >= 2.12.0 (navigationMode: "isolated")', depth)
+          end
           code += "\n" + indent('EmbedContainer(', depth)
 
           # Build a modifier chain for the EmbedContainer call so authoring-
@@ -69,10 +78,12 @@ module KjuiTools
             end
             code += "\n" + indent('),', depth + 1)
           end
-          if events.empty?
-            code += "\n" + indent("navigationMode = #{nav_mode_kotlin}", depth + 1)
-          else
-            code += "\n" + indent("navigationMode = #{nav_mode_kotlin},", depth + 1)
+          trailing_after_mode = isolated || !events.empty?
+          code += "\n" + indent("navigationMode = #{nav_mode_kotlin}#{trailing_after_mode ? ',' : ''}", depth + 1)
+          if isolated
+            code += "\n" + indent("isolatedNavigation = EmbedIsolatedNavigation.Automatic#{events.empty? ? '' : ','}", depth + 1)
+          end
+          unless events.empty?
             code += "\n" + indent('eventBridge = { event ->', depth + 1)
             code += "\n" + indent('if (event is EmbeddedEvent.Named) {', depth + 2)
             code += "\n" + indent('when (event.name) {', depth + 3)
@@ -131,8 +142,10 @@ module KjuiTools
           end
         end
 
-        # Render a single params value as Kotlin expression. Supports literals
-        # and @{binding} → `data.{prop}`.
+        # Render a single params value as Kotlin expression. Supports literals,
+        # @{binding} → `data.{prop}` (leaf-only — the validator rejects
+        # bindings at object positions), and nested literal objects →
+        # inline `mapOf(...)` (recursive).
         def self.render_param_value(value)
           if value.is_a?(String) && value =~ /^@\{(.+)\}$/
             "data.#{Regexp.last_match(1)}"
@@ -144,7 +157,13 @@ module KjuiTools
             value.to_s
           elsif value.is_a?(Float)
             "#{value}f"
+          elsif value.is_a?(Hash)
+            return 'emptyMap<String, Any>()' if value.empty?
+            entries = value.map { |k, v| "\"#{k}\" to #{render_param_value(v)}" }
+            "mapOf(#{entries.join(', ')})"
           else
+            # Fallback (arrays are a validate error upstream; unreachable
+            # for valid layouts)
             value.inspect
           end
         end

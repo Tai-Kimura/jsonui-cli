@@ -674,4 +674,57 @@ RSpec.describe KjuiTools::Core::BindingValidator do
     end
   end
 
+  describe 'Embed structural rules (v1.5 nested params + isolated)' do
+    def embed_layout(embed_attrs, data: [])
+      {
+        'type' => 'View',
+        'id' => 'root',
+        'data' => data,
+        'child' => [
+          { 'type' => 'Embed', 'id' => 'pane', 'screen' => 'foo' }.merge(embed_attrs)
+        ]
+      }
+    end
+
+    it 'accepts nested literal objects with scalar/binding leaves' do
+      warnings = validator.validate(embed_layout(
+        { 'params' => { 'profile' => { 'name' => '@{userName}', 'age' => 36 } } },
+        data: [{ 'name' => 'userName', 'class' => 'String' }]
+      ))
+      expect(warnings.select { |w| w.include?('Embed.params') }).to be_empty, warnings.inspect
+    end
+
+    it 'warns on arrays anywhere in params' do
+      warnings = validator.validate(embed_layout({
+        'params' => { 'profile' => { 'tags' => %w[a b] } }
+      }))
+      expect(warnings).to include(a_string_matching(/Embed\.params\.profile\.tags.*array/))
+    end
+
+    it 'warns on non-camelCase keys at any level' do
+      warnings = validator.validate(embed_layout({
+        'params' => { 'profile' => { 'UserName' => 'x' } }
+      }))
+      expect(warnings).to include(a_string_matching(/Embed\.params\.profile\.UserName.*camelCase/))
+    end
+
+    it 'warns when a binding targets a map-typed property (subtree binding)' do
+      warnings = validator.validate(embed_layout(
+        { 'params' => { 'profile' => '@{profileMap}' } },
+        data: [{ 'name' => 'profileMap', 'class' => 'Map<String, Any>' }]
+      ))
+      expect(warnings).to include(a_string_matching(/Embed\.params\.profile.*leaf-only/))
+    end
+
+    it 'warns on unknown navigationMode values' do
+      warnings = validator.validate(embed_layout({ 'navigationMode' => 'floating' }))
+      expect(warnings).to include(a_string_matching(/navigationMode.*unknown value 'floating'/))
+    end
+
+    it 'accepts isolated navigationMode without warnings' do
+      warnings = validator.validate(embed_layout({ 'navigationMode' => 'isolated' }))
+      expect(warnings.select { |w| w.include?('navigationMode') }).to be_empty, warnings.inspect
+    end
+  end
+
 end

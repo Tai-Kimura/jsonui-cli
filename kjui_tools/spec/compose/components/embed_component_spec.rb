@@ -301,5 +301,75 @@ RSpec.describe KjuiTools::Compose::Components::EmbedComponent do
         expect(result).to include('navigationMode = EmbedNavigationMode.Isolated')
       end
     end
+
+    context 'isolated navigation mode (v1.5)' do
+      it 'emits isolatedNavigation, the skew-guard comment, and the import key' do
+        result = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'pane', 'screen' => 'order_detail',
+            'navigationMode' => 'isolated' },
+          0,
+          required_imports
+        )
+        expect(result).to include('// Requires KotlinJsonUI >= 2.12.0 (navigationMode: "isolated")')
+        expect(result).to include('navigationMode = EmbedNavigationMode.Isolated,')
+        expect(result).to include('isolatedNavigation = EmbedIsolatedNavigation.Automatic')
+        expect(required_imports).to include(:embed_isolated_navigation)
+      end
+
+      it 'orders isolatedNavigation before eventBridge when both present' do
+        result = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'pane', 'screen' => 'foo',
+            'navigationMode' => 'isolated',
+            'events' => { 'onClose' => 'handleClose' } },
+          0,
+          required_imports
+        )
+        expect(result).to include('isolatedNavigation = EmbedIsolatedNavigation.Automatic,')
+        expect(result.index('isolatedNavigation')).to be < result.index('eventBridge')
+      end
+
+      it 'keeps the delegate call site free of isolated-only symbols (snapshot invariance)' do
+        result = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'p', 'screen' => 'foo' },
+          0,
+          required_imports
+        )
+        expect(result).not_to include('isolatedNavigation')
+        expect(result).not_to include('Requires KotlinJsonUI')
+        expect(required_imports).not_to include(:embed_isolated_navigation)
+      end
+    end
+
+    context 'nested params (v1.5)' do
+      it 'emits nested literal objects as nested mapOf literals' do
+        result = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'p', 'screen' => 'foo',
+            'params' => { 'profile' => { 'name' => 'Ada', 'meta' => { 'age' => 36 } } } },
+          0,
+          required_imports
+        )
+        expect(result).to include('"profile" to mapOf("name" to "Ada", "meta" to mapOf("age" to 36))')
+      end
+
+      it 'rewrites @{binding} leaves at any depth' do
+        result = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'p', 'screen' => 'foo',
+            'params' => { 'profile' => { 'name' => '@{userName}' } } },
+          0,
+          required_imports
+        )
+        expect(result).to include('"profile" to mapOf("name" to data.userName)')
+      end
+
+      it 'emits emptyMap for an empty nested object' do
+        result = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'p', 'screen' => 'foo',
+            'params' => { 'extra' => {} } },
+          0,
+          required_imports
+        )
+        expect(result).to include('"extra" to emptyMap<String, Any>()')
+      end
+    end
   end
 end

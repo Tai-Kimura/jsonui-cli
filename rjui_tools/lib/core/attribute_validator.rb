@@ -116,7 +116,29 @@ module RjuiTools
         # Check for weight + dimension conflict
         check_weight_dimension_conflict(merged_component, type, parent_orientation)
 
+        # Embed params tree grammar (v1.5 nested params)
+        validate_embed_params(merged_component) if type == 'Embed'
+
         @warnings
+      end
+
+      # Embed params tree grammar: intermediate nodes are literal objects
+      # only, @{} bindings appear only at leaf scalar positions, arrays are
+      # unsupported, keys are camelCase at every level.
+      def validate_embed_params(component, node = nil, path = 'params')
+        node ||= component['params']
+        return unless node.is_a?(Hash)
+        node.each do |key, value|
+          key_path = "#{path}.#{key}"
+          unless key.to_s.match?(/\A[a-z][a-zA-Z0-9]*\z/)
+            add_warning("Embed.#{key_path} key must be camelCase (at every nesting level)")
+          end
+          if value.is_a?(Hash)
+            validate_embed_params(component, value, key_path)
+          elsif value.is_a?(Array)
+            add_warning("Embed.#{key_path} is an array — arrays are not supported in Embed params (nest literal objects or bind a scalar leaf)")
+          end
+        end
       end
 
       # Print all warnings to console

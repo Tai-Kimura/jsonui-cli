@@ -155,5 +155,69 @@ RSpec.describe SjuiTools::SwiftUI::Views::EmbedConverter do
         expect(code).not_to include('eventBridge:')
       end
     end
+
+    context 'isolated navigation mode (v1.5)' do
+      it 'emits isolatedNavigation and the min-version skew-guard comment' do
+        code = convert(
+          'type' => 'Embed', 'id' => 'pane', 'screen' => 'order_detail',
+          'navigationMode' => 'isolated'
+        )
+        expect(code).to include('// Requires SwiftJsonUI >= 10.5.0 (navigationMode: "isolated")')
+        expect(code).to include('navigationMode: .isolated,')
+        expect(code).to include('isolatedNavigation: .automatic')
+      end
+
+      it 'orders isolatedNavigation before eventBridge when both present' do
+        code = convert(
+          'type' => 'Embed', 'id' => 'pane', 'screen' => 'foo',
+          'navigationMode' => 'isolated',
+          'events' => { 'onClose' => 'handleClose' }
+        )
+        expect(code).to include('isolatedNavigation: .automatic,')
+        expect(code.index('isolatedNavigation: .automatic')).to be < code.index('eventBridge:')
+      end
+
+      it 'keeps the delegate call site free of isolated-only symbols (snapshot invariance)' do
+        code = convert('type' => 'Embed', 'id' => 'p', 'screen' => 'foo')
+        expect(code).not_to include('isolatedNavigation')
+        expect(code).not_to include('Requires SwiftJsonUI')
+      end
+    end
+
+    context 'nested params (v1.5)' do
+      it 'emits nested literal objects as nested Swift dict literals' do
+        code = convert(
+          'type' => 'Embed', 'id' => 'p', 'screen' => 'foo',
+          'params' => { 'profile' => { 'name' => 'Ada', 'meta' => { 'age' => 36 } } }
+        )
+        expect(code).to include('"profile": ["name": "Ada", "meta": ["age": 36]]')
+      end
+
+      it 'rewrites @{binding} leaves at any depth' do
+        code = convert(
+          'type' => 'Embed', 'id' => 'p', 'screen' => 'foo',
+          'params' => { 'profile' => { 'name' => '@{userName}' } }
+        )
+        expect(code).to include('"profile": ["name": data.userName]')
+      end
+
+      it 'emits [:] for an empty nested object' do
+        code = convert(
+          'type' => 'Embed', 'id' => 'p', 'screen' => 'foo',
+          'params' => { 'extra' => {} }
+        )
+        expect(code).to include('"extra": [:]')
+      end
+
+      it 'keeps flat params emission byte-stable (non-regression)' do
+        code = convert(
+          'type' => 'Embed', 'id' => 'p', 'screen' => 'foo',
+          'params' => { 'orderId' => 'abc', 'count' => 5, 'open' => true }
+        )
+        expect(code).to include('"orderId": "abc",')
+        expect(code).to include('"count": 5,')
+        expect(code).to include('"open": true')
+      end
+    end
   end
 end
