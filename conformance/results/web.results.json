@@ -1,6 +1,6 @@
 {
   "platform": "web",
-  "manifestHash": "74914410de7db000802381324b886618274ed430574935e1c28304d496472612",
+  "manifestHash": "b209f120984714ec79c7453763a1fa07197df0733e3b71874dc69aa245e973c1",
   "runner": {
     "name": "playwright",
     "version": "1.61.1"
@@ -3790,6 +3790,46 @@
     },
     {
       "id": "Embed/params__nested_leaf_binding",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/variantfile__regular_on_regular_tier",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/variantfile__regular_on_compact_tier",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "common/variantfile__compact_on_compact_tier",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "common/variantfile__compact_on_regular_tier",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/variantfile__medium_no_promotion",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/variantfile__medium_fold_ios",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "common/variantfile__viewport_switch",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/variantfile__state_vm_survives",
       "status": "pass",
       "detail": ""
     }

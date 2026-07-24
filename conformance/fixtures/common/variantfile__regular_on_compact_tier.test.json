@@ -1,0 +1,39 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/variantfile__regular_on_compact_tier.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.variantfile (regular_on_compact_tier)",
+    "description": "Responsive variant-file semantic fixture (regular_on_compact_tier). Companion screens with @-suffixed variants live under fixtures/common/__screens/ — see manifest 'companions'.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "variantfile",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "base_on_compact_tier",
+      "description": "variant-file: base_on_compact_tier",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "variant-which",
+          "equals": "base"
+        },
+        {
+          "assert": "text",
+          "id": "variant-host-marker",
+          "equals": "host"
+        }
+      ]
+    }
+  ]
+}

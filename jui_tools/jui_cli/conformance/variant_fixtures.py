@@ -10,9 +10,12 @@ media-query dispatch, the mobile hosts route through the Dynamic
 loaders' ``<name>@<tier>`` probing.
 
 Lane tiers are fixed (iOS simulator = compact, Android pixel_tablet =
-regular, web 1024x768 = regular), so per-case ``platform`` filters carry
-the expectation for each lane; the web-only viewport fixtures cover the
-remaining tiers and the live tier-switch via ``setViewport``.
+regular, web 1024x768 = regular). Each fixture carries ONE lane's
+expectation and targets that lane via manifest ``platforms`` — the
+mobile conformance hosts filter at the manifest level but do not apply
+per-case ``platform`` gates, so a fixture never mixes lane-specific
+cases. The web-only viewport fixtures cover the remaining tiers and the
+live tier-switch via ``setViewport``.
 
 Resolution table under test (06a-design.md D1):
 - tier X renders ``<base>@X`` when present, else the base
@@ -241,46 +244,64 @@ def build_variant_fixtures(source_label: str) -> tuple[list[tuple[str, dict]], l
         f"{_SCREENS_DIR}/variant_host@regular.layout.json",
     ]
 
+    compact_companions = [
+        f"{_SCREENS_DIR}/variant_host_c.layout.json",
+        f"{_SCREENS_DIR}/variant_host_c@compact.layout.json",
+    ]
+    medium_companions = [
+        f"{_SCREENS_DIR}/variant_host_m.layout.json",
+        f"{_SCREENS_DIR}/variant_host_m@medium.layout.json",
+    ]
+
     # @regular resolution: regular-tier lanes render the variant, the
     # compact-tier lane keeps the base (no promotion downward either).
     _add(
         attribute="variantfile",
-        case="regular_resolution",
+        case="regular_on_regular_tier",
         value="@regular",
         layout=_host_layout(source_label, screen="variant_host"),
-        cases=[
-            _case("resolves_regular_tier", [
-                {"assert": "text", "id": WHICH_ID, "equals": "regular"},
-                {"assert": "text", "id": HOST_MARKER_ID, "equals": HOST_MARKER_TEXT},
-            ], platform=_REGULAR_LANES),
-            _case("base_on_compact_tier", [
-                {"assert": "text", "id": WHICH_ID, "equals": "base"},
-                {"assert": "text", "id": HOST_MARKER_ID, "equals": HOST_MARKER_TEXT},
-            ], platform=_COMPACT_LANES),
-        ],
+        cases=[_case("resolves_regular_tier", [
+            {"assert": "text", "id": WHICH_ID, "equals": "regular"},
+            {"assert": "text", "id": HOST_MARKER_ID, "equals": HOST_MARKER_TEXT},
+        ])],
         companions=host_companions,
-        platforms=["ios", "android", "web"],
+        platforms=_REGULAR_LANES,
     )
-
-    # @compact resolution: mirror image of the case above.
     _add(
         attribute="variantfile",
-        case="compact_resolution",
+        case="regular_on_compact_tier",
+        value="@regular",
+        layout=_host_layout(source_label, screen="variant_host"),
+        cases=[_case("base_on_compact_tier", [
+            {"assert": "text", "id": WHICH_ID, "equals": "base"},
+            {"assert": "text", "id": HOST_MARKER_ID, "equals": HOST_MARKER_TEXT},
+        ])],
+        companions=host_companions,
+        platforms=_COMPACT_LANES,
+    )
+
+    # @compact resolution: mirror image of the pair above.
+    _add(
+        attribute="variantfile",
+        case="compact_on_compact_tier",
         value="@compact",
         layout=_host_layout(source_label, screen="variant_host_c"),
-        cases=[
-            _case("resolves_compact_tier", [
-                {"assert": "text", "id": WHICH_ID, "equals": "compact"},
-            ], platform=_COMPACT_LANES),
-            _case("base_on_regular_tier", [
-                {"assert": "text", "id": WHICH_ID, "equals": "base"},
-            ], platform=_REGULAR_LANES),
-        ],
-        companions=[
-            f"{_SCREENS_DIR}/variant_host_c.layout.json",
-            f"{_SCREENS_DIR}/variant_host_c@compact.layout.json",
-        ],
-        platforms=["ios", "android", "web"],
+        cases=[_case("resolves_compact_tier", [
+            {"assert": "text", "id": WHICH_ID, "equals": "compact"},
+        ])],
+        companions=compact_companions,
+        platforms=_COMPACT_LANES,
+    )
+    _add(
+        attribute="variantfile",
+        case="compact_on_regular_tier",
+        value="@compact",
+        layout=_host_layout(source_label, screen="variant_host_c"),
+        cases=[_case("base_on_regular_tier", [
+            {"assert": "text", "id": WHICH_ID, "equals": "base"},
+        ])],
+        companions=compact_companions,
+        platforms=_REGULAR_LANES,
     )
 
     # @medium: never promoted to the regular tier; iOS (no medium size
@@ -291,19 +312,22 @@ def build_variant_fixtures(source_label: str) -> tuple[list[tuple[str, dict]], l
         case="medium_no_promotion",
         value="@medium",
         layout=_host_layout(source_label, screen="variant_host_m"),
-        cases=[
-            _case("no_promotion_to_regular", [
-                {"assert": "text", "id": WHICH_ID, "equals": "base"},
-            ], platform=_REGULAR_LANES),
-            _case("medium_folds_into_ios_compact", [
-                {"assert": "text", "id": WHICH_ID, "equals": "medium"},
-            ], platform=_COMPACT_LANES),
-        ],
-        companions=[
-            f"{_SCREENS_DIR}/variant_host_m.layout.json",
-            f"{_SCREENS_DIR}/variant_host_m@medium.layout.json",
-        ],
-        platforms=["ios", "android", "web"],
+        cases=[_case("no_promotion_to_regular", [
+            {"assert": "text", "id": WHICH_ID, "equals": "base"},
+        ])],
+        companions=medium_companions,
+        platforms=_REGULAR_LANES,
+    )
+    _add(
+        attribute="variantfile",
+        case="medium_fold_ios",
+        value="@medium",
+        layout=_host_layout(source_label, screen="variant_host_m"),
+        cases=[_case("medium_folds_into_ios_compact", [
+            {"assert": "text", "id": WHICH_ID, "equals": "medium"},
+        ])],
+        companions=medium_companions,
+        platforms=_COMPACT_LANES,
     )
 
     # Live tier switch (web only — the only lane with a resizable window):

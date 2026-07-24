@@ -1,11 +1,11 @@
 {
   "type": "screen",
   "source": {
-    "layout": "fixtures/common/variantfile__medium_no_promotion.layout.json"
+    "layout": "fixtures/common/variantfile__compact_on_regular_tier.layout.json"
   },
   "metadata": {
-    "name": "conformance common.variantfile (medium_no_promotion)",
-    "description": "Responsive variant-file semantic fixture (medium_no_promotion). Companion screens with @-suffixed variants live under fixtures/common/__screens/ — see manifest 'companions'.",
+    "name": "conformance common.variantfile (compact_on_regular_tier)",
+    "description": "Responsive variant-file semantic fixture (compact_on_regular_tier). Companion screens with @-suffixed variants live under fixtures/common/__screens/ — see manifest 'companions'.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,8 +16,8 @@
   "platform": "all",
   "cases": [
     {
-      "name": "no_promotion_to_regular",
-      "description": "variant-file: no_promotion_to_regular",
+      "name": "base_on_regular_tier",
+      "description": "variant-file: base_on_regular_tier",
       "steps": [
         {
           "action": "waitFor",
