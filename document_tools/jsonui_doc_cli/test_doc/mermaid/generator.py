@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from datetime import datetime
 from typing import Any
@@ -12,9 +13,22 @@ from .flow_graph import (
     EDGE_BACK,
     ScreenResolver,
     flow_edges,
+    import_jui_cli_module,
     load_flow,
     normalize_screen_ref,
 )
+
+
+@dataclass
+class TestTreeIndex:
+    """Everything one walk of the test tree tells the diagram."""
+
+    #: screen id -> the screen tests covering it (label, group, document)
+    by_screen_id: dict[str, list[dict]] = field(default_factory=dict)
+    #: screen test FILE name -> the screen id it covers
+    file_ref_screen_ids: dict[str, str] = field(default_factory=dict)
+    #: screen id -> groups declared in jui.config.json for app-owned screens
+    app_owned_groups: dict[str, list[str]] = field(default_factory=dict)
 
 
 def _collect_flow_graph(
@@ -29,8 +43,8 @@ def _collect_flow_graph(
     pass — the combined and grouped builders both consume it, so their
     node sets can no longer drift apart.
     """
-    resolver = ScreenResolver(layouts_dir)
-    screen_lookup = _build_screen_test_lookup(screens_path, flows_path)
+    tree = _walk_test_tree(screens_path, flows_path)
+    resolver = ScreenResolver(layouts_dir, tree.file_ref_screen_ids)
 
     nodes: dict[str, str] = {}
     node_metadata: dict[str, dict] = {}
@@ -55,7 +69,7 @@ def _collect_flow_graph(
         for screen_id in flow_nodes:
             if screen_id in nodes:
                 continue
-            meta = _resolve_screen_metadata(screen_id, screen_lookup)
+            meta = _resolve_screen_metadata(screen_id, tree)
             nodes[screen_id] = meta["label"]
             node_metadata[screen_id] = {
                 "entry_screen": meta["entry_screen"],
@@ -342,20 +356,29 @@ def _make_node_id(file_ref: str, case_name: str | None) -> str:
     return base
 
 
-def _build_screen_test_lookup(screens_path: Path, flows_path: Path) -> dict[str, list[dict]]:
-    """Index every screen test by the canonical screen id it covers.
+#: Sentinel for a file name several screen tests claim with DIFFERENT
+#: screens. Resolving it would pick one at random, so it resolves to none.
+_AMBIGUOUS = object()
 
-    The id comes from ``source.layout``'s basename — the file's own name is
-    unreliable because one screen commonly has several test files
-    (``login_smoke``, ``login_tier2a_scroll_conditions``, ...) and because
-    a test whose steps start on another screen legitimately points its
-    ``source.layout`` elsewhere.
+
+def _walk_test_tree(screens_path: Path, flows_path: Path) -> TestTreeIndex:
+    """One walk over the test tree, producing everything the diagram needs.
+
+    Reading each test file once and returning all three indexes keeps the
+    node ids, their metadata and the file-reference resolution derived from
+    the SAME view of the tree — three separate walks are how a node used to
+    exist with metadata that belonged to a different file.
     """
-    lookup: dict[str, list[dict]] = {}
+    by_screen: dict[str, list[dict]] = {}
+    by_file: dict[str, object] = {}
+    app_owned: dict[str, list[str]] = {}
+    config_cache: dict[Path, dict | None] = {}
+
     for base in (screens_path, flows_path):
         if not base or not Path(base).is_dir():
             continue
         for path in sorted(Path(base).rglob("*.test.json")):
+            _merge_app_owned_groups(path.parent, config_cache, app_owned)
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
@@ -366,11 +389,52 @@ def _build_screen_test_lookup(screens_path: Path, flows_path: Path) -> dict[str,
             layout = (data.get("source") or {}).get("layout")
             if not isinstance(layout, str) or not layout:
                 continue
-            lookup.setdefault(normalize_screen_ref(layout), []).append(data)
-    return lookup
+            screen_id = normalize_screen_ref(layout)
+            by_screen.setdefault(screen_id, []).append(data)
+
+            stem = path.name[: -len(".test.json")]
+            known = by_file.get(stem)
+            if known is not None and known != screen_id:
+                by_file[stem] = _AMBIGUOUS
+            elif known is None:
+                by_file[stem] = screen_id
+
+    return TestTreeIndex(
+        by_screen_id=by_screen,
+        file_ref_screen_ids={k: v for k, v in by_file.items() if isinstance(v, str)},
+        app_owned_groups=app_owned,
+    )
 
 
-def _resolve_screen_metadata(screen_id: str, lookup: dict[str, list[dict]]) -> dict:
+def _merge_app_owned_groups(
+    directory: Path, cache: dict[Path, dict[str, list[str]]], out: dict[str, list[str]]
+) -> None:
+    """Collect ``test.appOwnedScreens`` groups from the config owning a test.
+
+    Resolved per test DIRECTORY rather than once for the tree: a multi-app
+    project has one config per app, and a diagram spanning both apps needs
+    both declarations. An app-owned screen has no layout, so it has no test
+    file to carry ``metadata.group`` — the declaration is the only place it
+    can say which group it belongs to.
+
+    Both the config location and the declaration shape come from jui_cli;
+    when jui is not installed there are simply no declared groups, which is
+    the same graceful degradation the classifier already has.
+    """
+    if directory not in cache:
+        project_config = import_jui_cli_module("jui_cli.core.project_config")
+        screen_identity = import_jui_cli_module("jui_cli.core.screen_identity")
+        if project_config is None or screen_identity is None:
+            cache[directory] = {}
+        else:
+            config, _path = project_config.find_project_config(directory)
+            declared = project_config.declared_app_owned_screens(config)
+            cache[directory] = screen_identity.app_owned_groups(declared)
+    for screen_id, groups in cache[directory].items():
+        out.setdefault(screen_id, groups)
+
+
+def _resolve_screen_metadata(screen_id: str, tree: TestTreeIndex) -> dict:
     """Label / entry_screen / group / document for one screen id.
 
     With several tests covering one screen, the display name is left as the
@@ -385,8 +449,11 @@ def _resolve_screen_metadata(screen_id: str, lookup: dict[str, list[dict]]) -> d
         "document": None,
     }
 
-    tests = lookup.get(screen_id) or []
+    tests = tree.by_screen_id.get(screen_id) or []
     if not tests:
+        # No test covers it — the only remaining source of a group is a
+        # jui.config.json declaration, which is exactly the app-owned case.
+        result["groups"] = list(tree.app_owned_groups.get(screen_id) or [])
         return result
 
     names = {
@@ -413,7 +480,11 @@ def _resolve_screen_metadata(screen_id: str, lookup: dict[str, list[dict]]) -> d
                 result["document"] = document
 
     seen: set[str] = set()
-    result["groups"] = [g for g in groups if not (g in seen or seen.add(g))]
+    # A test's own group wins: one screen, one place to look. The
+    # declaration only fills in for a screen whose tests declare none.
+    result["groups"] = [g for g in groups if not (g in seen or seen.add(g))] or list(
+        tree.app_owned_groups.get(screen_id) or []
+    )
     return result
 
 

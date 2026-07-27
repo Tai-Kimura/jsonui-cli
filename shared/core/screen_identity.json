@@ -89,12 +89,28 @@
     "declaration": {
       "location": "jui.config.json",
       "key": "test.appOwnedScreens",
-      "shape": "array of screen ids",
+      "shape": "Array of entries. An entry is a screen id, or an object { id, group } when the screen also needs diagram metadata. Both forms are equivalent for classification.",
       "example": [
         "tokushoho",
-        "company",
-        "licenses"
-      ]
+        {
+          "id": "company",
+          "group": "static"
+        },
+        {
+          "id": "licenses",
+          "group": [
+            "static",
+            "legal"
+          ]
+        }
+      ],
+      "group": {
+        "value": "A group name, or an array of them — the same shape a screen test's metadata.group takes.",
+        "readBy": "The flow-diagram generator only. Classification and code generation read the id and ignore the rest of the object.",
+        "rationale": "Every other screen declares its diagram group in its screen test (metadata.group). An app-owned screen has no layout, so there is nothing to write a screen test against, so the declaration is the only place it can carry one. Without it such a screen sits in the ungrouped bucket permanently — and that bucket has to keep meaning 'nobody declared this yet', or the screens that genuinely need attention are hidden among the ones that can never leave.",
+        "precedence": "A screen test's own metadata.group wins; the declaration only fills in for a screen whose tests declare none. One screen, one place to look."
+      },
+      "readerCompatibility": "Both canon readers must TOLERATE the object form even though only the doc tool uses the group: a reader that skipped non-string entries would leave a declared screen unknown to the validator while code generation still saw it."
     },
     "marker": "Hand-written by the app, using the same marker spelling code generation emits, so drivers cannot tell the two apart. On web that is the data-screen attribute on the page's root element.",
     "libraryApi": "None. No mobile app-owned screen exists in any consumer today; when one appears, expose the mechanism from marker.platforms as a function then — not before.",
@@ -278,7 +294,17 @@
       "Self-loops are discarded (they are the collapse of a screen onto itself).",
       "An edge caused by a 'back' action is a return edge and is rendered distinctly from a forward transition.",
       "Node ids are sanitized for the diagram language; a screen id is never emitted raw into a diagram identifier position."
-    ]
+    ],
+    "fileReferences": {
+      "rule": "A file-reference step ({ file, case }) becomes a node for the SCREEN the referenced test covers — resolved through that test's own source.layout — not for the referenced file's name.",
+      "rationale": "A test file NAME is not a screen id. One screen routinely has several test files (login_smoke, booking_complete--bank_pending), so naming the node after the file splits one screen into several nodes; the split-off node also carries no metadata, so it loses the group its test declared and drops into the ungrouped bucket. The basename only looked right because it usually happens to equal the screen id.",
+      "fallback": "A reference that resolves to no indexed test — broken, or pointing at a test with no source.layout — falls back to the basename, so it still draws a node rather than silently dropping the edge.",
+      "ambiguity": "When one file name is claimed by several tests covering DIFFERENT screens, nothing is resolved: picking one would silently label the node with the wrong screen."
+    },
+    "groups": {
+      "source": "A node's group comes from the screen tests covering it (metadata.group). For an app-owned screen, which has no test, it comes from its jui.config.json declaration (appOwnedScreens.declaration.group).",
+      "ungrouped": "Nodes with no group land in a catch-all bucket, which must keep reading as 'undeclared'. A screen with no way to declare a group would otherwise live there forever and hide the ones that simply have not been declared yet."
+    }
   },
   "validatorRules": [
     {

@@ -10,7 +10,9 @@ Canonical rules (``shared/core/screen_identity.json`` → ``diagram``):
 
 * Nodes come from a flow's inline ``screen`` values AND from ``file:``
   references — both normalized into the SAME id space, so a mixed flow
-  cannot produce two nodes for one screen.
+  cannot produce two nodes for one screen. A ``file:`` reference resolves
+  through the referenced test's own ``source.layout``, because a test file
+  name is not a screen id (one screen has many test files).
 * Values that resolve to a non-screen layout (a Collection cell, a
   partial) are dropped rather than drawn: they are sub-areas of the
   screen the step already runs on, and drawing them both invents edges
@@ -22,6 +24,7 @@ Canonical rules (``shared/core/screen_identity.json`` → ``diagram``):
 
 from __future__ import annotations
 
+import importlib
 import json
 import sys
 from pathlib import Path
@@ -34,17 +37,28 @@ EDGE_FORWARD = "forward"
 EDGE_BACK = "back"
 
 
-def normalize_screen_ref(ref: str) -> str:
-    """Canonical screen id for a raw test value or file reference.
+def file_ref_stem(ref: str) -> str:
+    """Basename of a ``file:`` reference, without the test suffix.
 
-    ``../screens/home/home.test.json`` → ``home``; ``home@regular`` →
-    ``home``; ``mypage`` → ``mypage``.
+    ``../screens/booking_complete--bank_pending.test.json`` →
+    ``booking_complete--bank_pending``. This is a FILE name, not a screen
+    id — see :meth:`ScreenResolver.canonical_file_ref`.
     """
     name = str(ref).split("/")[-1]
     if name.endswith(".test.json"):
         name = name[: -len(".test.json")]
     elif name.endswith(".json"):
         name = name[: -len(".json")]
+    return name
+
+
+def normalize_screen_ref(ref: str) -> str:
+    """Canonical screen id for a raw test value or file reference.
+
+    ``../screens/home/home.test.json`` → ``home``; ``home@regular`` →
+    ``home``; ``mypage`` → ``mypage``.
+    """
+    name = file_ref_stem(ref)
     # Variant files are alternate renderings of one screen, never a screen
     # of their own (screen_identity.json → screenId.variantNormalization).
     if "@" in name:
@@ -59,15 +73,42 @@ class ScreenResolver:
     Classification needs the project's layout tree. When it is not
     available the resolver stays permissive (every value is a screen) so
     the diagram degrades to "draws what the tests say" instead of failing.
+
+    ``file_ref_screen_ids`` maps a screen test's FILE name to the screen it
+    covers, which is what lets a ``file:`` step land in the same id space
+    as an inline ``screen`` value.
     """
 
-    def __init__(self, layouts_dir: Path | str | None = None):
+    def __init__(
+        self,
+        layouts_dir: Path | str | None = None,
+        file_ref_screen_ids: dict[str, str] | None = None,
+    ):
         self._index = None
         if layouts_dir:
             self._index = _load_screen_index(layouts_dir)
+        self._file_ref_screen_ids = dict(file_ref_screen_ids or {})
 
     def canonical(self, ref: str) -> str:
         return normalize_screen_ref(ref)
+
+    def canonical_file_ref(self, ref: str) -> str:
+        """Screen id a ``file:`` step runs on.
+
+        A test file's NAME is not a screen id. One screen routinely has
+        several test files — ``login_smoke``, ``booking_complete--
+        bank_pending`` — so naming the node after the file splits one
+        screen into several, and the split node loses the group its test
+        declared. The referenced test already says which screen it covers
+        (``source.layout``), so resolve through that.
+
+        Falls back to the basename when the reference resolves to nothing
+        we indexed: a broken reference, or a test with no ``source.layout``.
+        That is the old behaviour, kept so an unresolvable reference still
+        draws something rather than dropping an edge silently.
+        """
+        resolved = self._file_ref_screen_ids.get(file_ref_stem(ref))
+        return resolved or normalize_screen_ref(ref)
 
     def is_screen(self, screen_id: str) -> bool:
         if self._index is None:
@@ -80,14 +121,15 @@ class ScreenResolver:
         return self._index.is_screen(screen_id)
 
 
-def _import_build_screen_index():
-    """Import the shared screen classifier.
+def import_jui_cli_module(name: str):
+    """Import a ``jui_cli`` module, or None when jui is not installed.
 
-    The classification rules live in ``jui_cli.core.screen_identity`` — the
-    single implementation of the canon, deliberately not duplicated here.
-    jsonui-doc is packaged separately from jui but always ships beside it
-    (``<root>/document_tools`` and ``<root>/jui_tools``), so fall back to
-    the sibling path before giving up.
+    The rules the diagram obeys — screen classification, where a project's
+    config lives — live in jui_cli, the single implementation of the canon,
+    deliberately not duplicated here. jsonui-doc is packaged separately
+    from jui but always ships beside it (``<root>/document_tools`` and
+    ``<root>/jui_tools``), so fall back to the sibling path before giving
+    up.
     """
     sibling = Path(__file__).resolve().parents[4] / "jui_tools"
     if (sibling / "jui_cli" / "core" / "screen_identity.py").is_file():
@@ -99,15 +141,21 @@ def _import_build_screen_index():
         cached = sys.modules.get("jui_cli")
         cached_file = str(getattr(cached, "__file__", "") or "")
         if cached is not None and not cached_file.startswith(str(sibling)):
-            for name in [n for n in sys.modules if n == "jui_cli" or n.startswith("jui_cli.")]:
-                del sys.modules[name]
+            for cached_name in [
+                n for n in sys.modules if n == "jui_cli" or n.startswith("jui_cli.")
+            ]:
+                del sys.modules[cached_name]
 
     try:
-        from jui_cli.core.screen_identity import build_screen_index
-
-        return build_screen_index
+        return importlib.import_module(name)
     except ImportError:
         return None
+
+
+def _import_build_screen_index():
+    """The shared screen classifier, or None when jui is not installed."""
+    module = import_jui_cli_module("jui_cli.core.screen_identity")
+    return getattr(module, "build_screen_index", None)
 
 
 def _load_screen_index(layouts_dir: Path | str):
@@ -124,7 +172,7 @@ def _load_screen_index(layouts_dir: Path | str):
 def _step_screen(step: dict, resolver: ScreenResolver) -> str | None:
     """Canonical screen id a step runs on, or None when it carries none."""
     if "file" in step and isinstance(step["file"], str):
-        return resolver.canonical(step["file"])
+        return resolver.canonical_file_ref(step["file"])
     screen = step.get("screen")
     if isinstance(screen, str) and screen:
         return resolver.canonical(screen)

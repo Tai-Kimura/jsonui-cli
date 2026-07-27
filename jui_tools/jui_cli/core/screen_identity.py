@@ -70,6 +70,21 @@ def screen_id_for_path(path: Path | str) -> str:
 
 
 @dataclass(frozen=True)
+class AppOwnedScreen:
+    """One normalized ``test.appOwnedScreens`` declaration.
+
+    An app-owned screen has no layout, so it also has no test file — which
+    is where every other screen declares its diagram group. The declaration
+    is therefore the only place such a screen can carry one, and the entry
+    accepts an object form to hold it. Canon: ``appOwnedScreens.declaration``.
+    """
+
+    screen_id: str
+    #: Diagram groups, from the object form's ``group``. Empty for a bare id.
+    groups: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class ScreenEntry:
     """One layout, classified."""
 
@@ -230,16 +245,59 @@ def _explicit_role(data: Any) -> str | None:
     return None
 
 
+def _as_groups(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str) and value:
+        return (value,)
+    if isinstance(value, list):
+        return tuple(v for v in value if isinstance(v, str) and v)
+    return ()
+
+
+def parse_app_owned_screens(declared: Iterable[Any] | None) -> list[AppOwnedScreen]:
+    """Normalize a ``test.appOwnedScreens`` list.
+
+    Accepts both declaration forms — a bare id, or ``{"id": ..., "group":
+    ...}`` — because the group is diagram metadata that only some
+    declarations need. Entries that carry no usable id are skipped rather
+    than raised on: the list is hand-written config, and one malformed
+    entry must not take down a build.
+    """
+    parsed: list[AppOwnedScreen] = []
+    for raw in declared or ():
+        if isinstance(raw, str):
+            screen_id, groups = raw, ()
+        elif isinstance(raw, dict):
+            screen_id = raw.get("id")
+            groups = _as_groups(raw.get("group"))
+        else:
+            continue
+        if not isinstance(screen_id, str) or not screen_id:
+            continue
+        parsed.append(AppOwnedScreen(screen_id_for_path(screen_id), groups))
+    return parsed
+
+
+def app_owned_groups(declared: Iterable[Any] | None) -> dict[str, list[str]]:
+    """``{screen_id: [group, ...]}`` for declarations that name a group."""
+    return {
+        entry.screen_id: list(entry.groups)
+        for entry in parse_app_owned_screens(declared)
+        if entry.groups
+    }
+
+
 def build_screen_index(
     layouts_dir: Path | str,
-    app_owned_screens: Iterable[str] | None = None,
+    app_owned_screens: Iterable[Any] | None = None,
 ) -> ScreenIndex:
     """Classify every layout under ``layouts_dir`` (recursive).
 
     ``app_owned_screens`` are ids the app implements without a JsonUI
     layout (a hand-written page). They are real navigation destinations, so
     they enter the index as screens — otherwise a legitimate test value
-    would be rejected as unknown.
+    would be rejected as unknown. Entries may be a bare id or the object
+    form (see :func:`parse_app_owned_screens`); classification uses only
+    the id.
     """
     layouts_path = Path(layouts_dir)
     index = ScreenIndex()
@@ -290,14 +348,11 @@ def build_screen_index(
     return index
 
 
-def _app_owned_entries(screen_ids: Iterable[str] | None) -> dict[str, ScreenEntry]:
-    entries: dict[str, ScreenEntry] = {}
-    for raw in screen_ids or ():
-        if not isinstance(raw, str) or not raw:
-            continue
-        screen_id = screen_id_for_path(raw)
-        entries[screen_id] = ScreenEntry(screen_id, Path(), "screen", "app-owned")
-    return entries
+def _app_owned_entries(declared: Iterable[Any] | None) -> dict[str, ScreenEntry]:
+    return {
+        entry.screen_id: ScreenEntry(entry.screen_id, Path(), "screen", "app-owned")
+        for entry in parse_app_owned_screens(declared)
+    }
 
 
 def load_canon(shared_core_dir: Path | str | None = None) -> dict:

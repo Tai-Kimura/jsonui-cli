@@ -17,9 +17,11 @@ from pathlib import Path
 from jui_cli.core.screen_identity import (
     MARKER_PREFIX,
     VALID_ROLES,
+    app_owned_groups,
     build_screen_index,
     load_canon,
     marker_name,
+    parse_app_owned_screens,
     screen_id_for_path,
 )
 
@@ -121,6 +123,25 @@ class ScreenIdentityAssetTests(unittest.TestCase):
         self.assertEqual(section["declaration"]["key"], "test.appOwnedScreens")
         # No library API until a real mobile case exists.
         self.assertIn("None", section["libraryApi"])
+
+    def test_app_owned_declaration_documents_both_entry_forms(self):
+        declaration = self.canon["appOwnedScreens"]["declaration"]
+        example = declaration["example"]
+        self.assertTrue(any(isinstance(entry, str) for entry in example))
+        objects = [entry for entry in example if isinstance(entry, dict)]
+        self.assertTrue(objects)
+        for entry in objects:
+            self.assertIn("id", entry)
+        # The group is diagram metadata; a screen test's own group wins.
+        self.assertIn("metadata.group", declaration["group"]["precedence"])
+
+    def test_diagram_declares_how_file_references_resolve(self):
+        file_refs = self.canon["diagram"]["fileReferences"]
+        self.assertIn("source.layout", file_refs["rule"])
+        # A fallback and an ambiguity rule are what keep the resolution from
+        # dropping edges or mislabelling nodes.
+        self.assertTrue(file_refs["fallback"])
+        self.assertTrue(file_refs["ambiguity"])
 
     def test_diagram_pipeline_order_is_declared(self):
         self.assertEqual(
@@ -288,6 +309,49 @@ class AppOwnedScreenTests(unittest.TestCase):
     def test_blank_declarations_are_ignored(self):
         index = self._index({"a.json": {"type": "View"}}, ["", None, 3])
         self.assertEqual(index.screen_ids, ["a"])
+
+    def test_object_form_declares_the_same_screen(self):
+        # The object form exists to carry a diagram group; classification
+        # must read it exactly like the bare id.
+        index = self._index(
+            {"a.json": {"type": "View"}}, [{"id": "tokushoho", "group": "static"}]
+        )
+        self.assertTrue(index.is_screen("tokushoho"))
+        self.assertEqual(index.get("tokushoho").reason, "app-owned")
+
+    def test_object_without_an_id_is_ignored(self):
+        index = self._index({"a.json": {"type": "View"}}, [{"group": "static"}, {"id": ""}])
+        self.assertEqual(index.screen_ids, ["a"])
+
+
+class AppOwnedDeclarationParsingTests(unittest.TestCase):
+    """An app-owned screen has no layout, hence no test file, hence nowhere
+    else to declare the diagram group its node should sit in."""
+
+    def test_bare_id_carries_no_group(self):
+        parsed = parse_app_owned_screens(["tokushoho"])
+        self.assertEqual([(e.screen_id, e.groups) for e in parsed], [("tokushoho", ())])
+
+    def test_object_form_carries_one_or_many_groups(self):
+        parsed = parse_app_owned_screens(
+            [{"id": "a", "group": "static"}, {"id": "b", "group": ["static", "legal"]}]
+        )
+        self.assertEqual(parsed[0].groups, ("static",))
+        self.assertEqual(parsed[1].groups, ("static", "legal"))
+
+    def test_group_of_a_wrong_type_is_dropped_not_raised(self):
+        # Hand-written config: one bad entry must not take down a build.
+        parsed = parse_app_owned_screens([{"id": "a", "group": 7}, {"id": "b", "group": [1, "ok"]}])
+        self.assertEqual(parsed[0].groups, ())
+        self.assertEqual(parsed[1].groups, ("ok",))
+
+    def test_groups_mapping_omits_declarations_without_a_group(self):
+        mapping = app_owned_groups(["plain", {"id": "grouped", "group": "static"}])
+        self.assertEqual(mapping, {"grouped": ["static"]})
+
+    def test_none_is_an_empty_declaration(self):
+        self.assertEqual(parse_app_owned_screens(None), [])
+        self.assertEqual(app_owned_groups(None), {})
 
 
 class CanonLoaderTests(unittest.TestCase):

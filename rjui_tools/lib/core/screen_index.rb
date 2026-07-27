@@ -73,7 +73,8 @@ module JsonUIShared
     #
     # +app_owned_screens+ are ids the app implements without a JsonUI
     # layout (a hand-written page). They are real navigation destinations,
-    # so they enter the index as screens.
+    # so they enter the index as screens. Each entry is a bare id or the
+    # object form `{ "id" => ..., "group" => ... }`.
     def self.build(layouts_dir, app_owned_screens: nil)
       index = new
       index.send(:load!, layouts_dir, app_owned_screens)
@@ -224,11 +225,20 @@ module JsonUIShared
       merge_app_owned!(app_owned_screens)
     end
 
-    def merge_app_owned!(screen_ids)
-      Array(screen_ids).each do |raw|
-        next unless raw.is_a?(String) && !raw.empty?
+    # Register declared app-owned screens.
+    #
+    # An entry is either a bare id or the object form
+    # `{ "id": ..., "group": ... }`. The group is diagram metadata — an
+    # app-owned screen has no test file to declare one in — and code
+    # generation has no use for it, so only the id is read here. The object
+    # form must still be TOLERATED: dropping it would leave a declared
+    # screen unknown to the validator that shares this index.
+    def merge_app_owned!(declared)
+      Array(declared).each do |raw|
+        id = raw.is_a?(Hash) ? raw['id'] : raw
+        next unless id.is_a?(String) && !id.empty?
 
-        screen_id = self.class.screen_id_for_path(raw)
+        screen_id = self.class.screen_id_for_path(id)
         # A declared id that also has a layout keeps its layout entry: the
         # declaration is for screens the app owns INSTEAD of a layout.
         @entries[screen_id] ||= Entry.new(screen_id, '', 'screen', 'app-owned')

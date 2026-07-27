@@ -100,7 +100,7 @@ def _write_fixture(root: Path) -> None:
         path.write_text(json.dumps(payload), encoding="utf-8")
 
 
-def _python_result(layouts: Path, app_owned: list[str]) -> dict:
+def _python_result(layouts: Path, app_owned: list) -> dict:
     index = build_screen_index(layouts, app_owned_screens=app_owned)
     return {
         "report": [
@@ -117,7 +117,7 @@ def _python_result(layouts: Path, app_owned: list[str]) -> dict:
     }
 
 
-def _ruby_result(layouts: Path, app_owned: list[str]) -> dict:
+def _ruby_result(layouts: Path, app_owned: list) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         driver = Path(tmp) / "driver.rb"
         driver.write_text(RUBY_DRIVER, encoding="utf-8")
@@ -186,6 +186,29 @@ class CrossLanguageAgreementTests(unittest.TestCase):
             _ruby_result(self.layouts, app_owned),
             _python_result(self.layouts, app_owned),
         )
+
+    def test_object_form_app_owned_declarations_match(self):
+        # The object form carries a diagram group only the doc tool reads,
+        # but BOTH readers have to register the id: a reader that skipped
+        # non-string entries would leave a declared screen unknown to the
+        # validator while code generation still saw it.
+        app_owned = [
+            {"id": "tokushoho", "group": "static"},
+            {"id": "company", "group": ["static", "legal"]},
+            "licenses",
+        ]
+        ruby = _ruby_result(self.layouts, app_owned)
+        python = _python_result(self.layouts, app_owned)
+        self.assertEqual(ruby, python)
+        for screen_id in ("tokushoho", "company", "licenses"):
+            self.assertIn(screen_id, ruby["screen_ids"])
+            self.assertIn(screen_id, python["screen_ids"])
+
+    def test_unusable_app_owned_entries_are_skipped_by_both(self):
+        app_owned = [{"group": "static"}, {"id": ""}, 42, None, "tokushoho"]
+        ruby = _ruby_result(self.layouts, app_owned)
+        self.assertEqual(ruby, _python_result(self.layouts, app_owned))
+        self.assertIn("tokushoho", ruby["screen_ids"])
 
     def test_collisions_match(self):
         (self.layouts / "nested" / "settings.json").write_text("{}", encoding="utf-8")

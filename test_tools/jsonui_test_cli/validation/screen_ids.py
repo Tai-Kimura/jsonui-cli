@@ -19,31 +19,32 @@ false "unknown screen" error would block their install pipeline.
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
-#: Config files that may declare where layouts live and which screens the
-#: app owns without a layout.
-CONFIG_CANDIDATES = ("jui.config.json", "jsonui-test.config.json")
 
-
-def _import_build_screen_index():
-    """Import the shared classifier, preferring this tree's copy.
+def _prefer_sibling_jui_cli() -> None:
+    """Put the jui_cli from THIS tree ahead of any separately installed one.
 
     jsonui-test ships separately from jui but always sits beside it
     (``<root>/test_tools`` and ``<root>/jui_tools``). Preferring the sibling
     keeps the validator and the build tool on identical rules.
     """
     sibling = Path(__file__).resolve().parents[3] / "jui_tools"
-    if (sibling / "jui_cli" / "core" / "screen_identity.py").is_file():
-        if str(sibling) not in sys.path:
-            sys.path.insert(0, str(sibling))
-        cached = sys.modules.get("jui_cli")
-        cached_file = str(getattr(cached, "__file__", "") or "")
-        if cached is not None and not cached_file.startswith(str(sibling)):
-            for name in [n for n in sys.modules if n == "jui_cli" or n.startswith("jui_cli.")]:
-                del sys.modules[name]
+    if not (sibling / "jui_cli" / "core" / "screen_identity.py").is_file():
+        return
+    if str(sibling) not in sys.path:
+        sys.path.insert(0, str(sibling))
+    cached = sys.modules.get("jui_cli")
+    cached_file = str(getattr(cached, "__file__", "") or "")
+    if cached is not None and not cached_file.startswith(str(sibling)):
+        for name in [n for n in sys.modules if n == "jui_cli" or n.startswith("jui_cli.")]:
+            del sys.modules[name]
+
+
+def _import_build_screen_index():
+    """Import the shared classifier, preferring this tree's copy."""
+    _prefer_sibling_jui_cli()
     try:
         from jui_cli.core.screen_identity import build_screen_index
 
@@ -52,45 +53,31 @@ def _import_build_screen_index():
         return None
 
 
-def _read_config(path: Path) -> dict | None:
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return None
-
-
 def _find_project_config(start: Path) -> tuple[dict, Path] | tuple[None, None]:
     """Locate the project config that owns a test file.
 
-    Single-app projects keep the config above their tests, so walking up
-    finds it. Multi-app projects put each app beside a shared test tree
-    (``tests/<app>/...`` next to ``<app>/jui.config.json``); there the
-    config is a SIBLING, never an ancestor, so try the app directory too.
+    Delegates to ``jui_cli.core.project_config`` — the doc generator needs
+    the same answer for its test tree, and two copies of the multi-app
+    sibling probe would drift. When jui_cli cannot be imported the whole
+    check is skipped anyway (the classifier is unavailable too), so
+    returning "no config" here loses nothing.
     """
-    for directory in [start, *start.parents]:
-        for name in CONFIG_CANDIDATES:
-            candidate = directory / name
-            if not candidate.is_file():
-                continue
-            config = _read_config(candidate)
-            if config is not None:
-                return config, candidate
+    _prefer_sibling_jui_cli()
+    try:
+        from jui_cli.core.project_config import find_project_config
+    except ImportError:
+        return None, None
+    return find_project_config(start)
 
-    parts = start.parts
-    for index in range(len(parts) - 1, 0, -1):
-        if parts[index - 1] != "tests":
-            continue
-        app_root = Path(*parts[:index - 1]) / parts[index]
-        for name in CONFIG_CANDIDATES:
-            candidate = app_root / name
-            if not candidate.is_file():
-                continue
-            config = _read_config(candidate)
-            if config is not None:
-                return config, candidate
 
-    return None, None
+def _declared_app_owned(config: dict) -> list:
+    """The raw ``test.appOwnedScreens`` list; ``build_screen_index`` parses it."""
+    _prefer_sibling_jui_cli()
+    try:
+        from jui_cli.core.project_config import declared_app_owned_screens
+    except ImportError:
+        return []
+    return declared_app_owned_screens(config)
 
 
 def _layouts_dir_from_config(config: dict, config_path: Path) -> Path | None:
@@ -162,7 +149,7 @@ def load_screen_index(test_file_path: Path | None) -> ScreenIdIndex:
         return _CACHE[cache_key]
 
     layouts_dir = _layouts_dir_from_config(config, config_path)
-    app_owned = ((config.get("test") or {}).get("appOwnedScreens")) or []
+    app_owned = _declared_app_owned(config)
     build_screen_index = _import_build_screen_index()
 
     if layouts_dir is None or build_screen_index is None:

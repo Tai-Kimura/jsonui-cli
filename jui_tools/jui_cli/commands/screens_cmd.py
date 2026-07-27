@@ -19,6 +19,7 @@ import json
 from pathlib import Path
 
 from ..core.config_manager import ConfigManager
+from ..core.project_config import declared_app_owned_screens
 from ..core.screen_identity import build_screen_index, marker_name
 
 
@@ -50,16 +51,18 @@ def _layouts_dir(args: argparse.Namespace) -> Path | None:
     return config_mgr.project_root / layouts
 
 
-def _app_owned(args: argparse.Namespace) -> list[str]:
+def _app_owned(args: argparse.Namespace) -> list:
+    """The raw declaration list, passed on unfiltered.
+
+    Entries may be a bare id or the object form carrying a diagram group;
+    ``build_screen_index`` normalizes both. Filtering to strings here is
+    what would make a grouped declaration silently vanish and its screen
+    report as unknown.
+    """
     config_mgr = ConfigManager()
     if not config_mgr.exists():
         return []
-    config = config_mgr.load()
-    test_config = config.get("test")
-    if not isinstance(test_config, dict):
-        return []
-    declared = test_config.get("appOwnedScreens")
-    return [s for s in declared if isinstance(s, str)] if isinstance(declared, list) else []
+    return declared_app_owned_screens(config_mgr.load())
 
 
 def cmd_screens(args: argparse.Namespace) -> int:

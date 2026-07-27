@@ -274,5 +274,164 @@ class DiagramRenderingTests(unittest.TestCase):
         self.assertTrue(out_file.exists())
 
 
+class FileReferenceResolutionTests(unittest.TestCase):
+    """A ``file:`` step names a FILE, and a file name is not a screen id.
+
+    One screen routinely has several test files (``login_smoke``,
+    ``booking_complete--bank_pending``), so naming the node after the file
+    splits one screen into several — and the split-off node loses the group
+    its test declared, landing in 'その他'.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.flows = self.root / "flows"
+        self.screens = self.root / "screens"
+        self.flows.mkdir()
+        self.screens.mkdir()
+
+    def _write_flow(self, name: str, steps: list[dict]):
+        payload = {"type": "flow", "metadata": {"name": name}, "steps": steps}
+        (self.flows / f"{name}.test.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    def _write_screen_test(self, name: str, layout: str, metadata: dict, subdir: str = ""):
+        payload = {
+            "type": "screen",
+            "metadata": metadata,
+            "source": {"layout": f"Layouts/{layout}.json"},
+            "cases": [],
+        }
+        directory = self.screens / subdir if subdir else self.screens
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / f"{name}.test.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    def test_variant_test_file_folds_onto_the_screen_it_covers(self):
+        self._write_screen_test(
+            "booking_complete--bank_pending", "booking_complete", {"name": "銀行振込"}
+        )
+        self._write_flow(
+            "bank",
+            [
+                _step("booking_confirm", action="tap", id="submit"),
+                {"file": "booking_complete--bank_pending", "case": "bank_transfer_block"},
+            ],
+        )
+        out = generate_mermaid_diagram(self.flows, self.screens)
+        self.assertIn("booking_confirm --> booking_complete", out)
+        self.assertNotIn("booking_complete__bank_pending", out)
+
+    def test_file_reference_inherits_the_referenced_tests_group(self):
+        self._write_screen_test(
+            "booking_complete--bank_pending",
+            "booking_complete",
+            {"name": "銀行振込", "group": "booking"},
+        )
+        self._write_screen_test("booking_confirm_t", "booking_confirm", {"group": "booking"})
+        self._write_flow(
+            "bank",
+            [
+                _step("booking_confirm", action="tap", id="submit"),
+                {"file": "booking_complete--bank_pending"},
+            ],
+        )
+        groups = generate_grouped_mermaid_diagrams(self.flows, self.screens)
+        self.assertEqual(sorted(groups), ["booking"])
+
+    def test_a_differently_named_test_file_also_folds_onto_its_screen(self):
+        # The bug is not specific to the `--variant` spelling: any test file
+        # whose name is not the screen id used to become its own node.
+        self._write_screen_test("login_smoke", "login", {"name": "ログイン"})
+        self._write_flow("nav", [{"file": "login_smoke"}, _step("mypage")])
+        out = generate_mermaid_diagram(self.flows, self.screens)
+        self.assertIn("login --> mypage", out)
+        self.assertNotIn("login_smoke", out)
+
+    def test_unresolvable_reference_still_draws_the_basename(self):
+        # Nothing indexed under that name (a broken reference, or a test
+        # with no source.layout): keep drawing something rather than
+        # dropping the edge.
+        self._write_flow("nav", [{"file": "../screens/ghost.test.json"}, _step("mypage")])
+        out = generate_mermaid_diagram(self.flows, self.screens)
+        self.assertIn("ghost --> mypage", out)
+
+    def test_one_file_name_claiming_two_screens_is_not_resolved(self):
+        # Resolving would pick one at random and silently mislabel the node.
+        self._write_screen_test("home", "user_home", {}, subdir="user")
+        self._write_screen_test("home", "admin_home", {}, subdir="admin")
+        self._write_flow("nav", [{"file": "home"}, _step("mypage")])
+        out = generate_mermaid_diagram(self.flows, self.screens)
+        self.assertIn("home --> mypage", out)
+
+
+class AppOwnedScreenGroupTests(unittest.TestCase):
+    """An app-owned screen has no layout, so it has no test file — and
+    ``metadata.group`` lives in test files. Its jui.config.json declaration
+    is the only place it can name a group, so without this it is pinned to
+    'その他' forever, where genuinely ungrouped screens need to be visible."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.flows = self.root / "tests" / "flows"
+        self.screens = self.root / "tests" / "screens"
+        self.flows.mkdir(parents=True)
+        self.screens.mkdir(parents=True)
+
+    def _write_config(self, app_owned: list):
+        (self.root / "jui.config.json").write_text(
+            json.dumps({"test": {"appOwnedScreens": app_owned}}), encoding="utf-8"
+        )
+
+    def _write_flow(self, steps: list[dict]):
+        payload = {"type": "flow", "metadata": {"name": "footer_nav"}, "steps": steps}
+        (self.flows / "footer_nav.test.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    def _write_screen_test(self, name: str, layout: str, metadata: dict):
+        payload = {
+            "type": "screen",
+            "metadata": metadata,
+            "source": {"layout": f"Layouts/{layout}.json"},
+            "cases": [],
+        }
+        (self.screens / f"{name}.test.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    def test_declared_group_is_used(self):
+        self._write_config([{"id": "tokushoho", "group": "static"}])
+        self._write_screen_test("top_t", "top", {"group": "booking"})
+        self._write_flow([_step("top", action="tap", id="footer"), _step("tokushoho")])
+        groups = generate_grouped_mermaid_diagrams(self.flows, self.screens)
+        self.assertIn("static", groups)
+        self.assertNotIn("その他", groups)
+
+    def test_a_bare_id_declares_no_group(self):
+        # The negative half: the object form is what adds a group, so the
+        # string form must still land in 'その他' rather than inventing one.
+        self._write_config(["tokushoho"])
+        self._write_screen_test("top_t", "top", {"group": "booking"})
+        self._write_flow([_step("top", action="tap", id="footer"), _step("tokushoho")])
+        groups = generate_grouped_mermaid_diagrams(self.flows, self.screens)
+        self.assertIn("その他", groups)
+
+    def test_a_tests_own_group_wins_over_the_declaration(self):
+        # One screen, one place to look: a declaration must not silently
+        # override what a test file says.
+        self._write_config([{"id": "top", "group": "static"}])
+        self._write_screen_test("top_t", "top", {"group": "booking"})
+        self._write_flow([_step("top", action="tap", id="x"), _step("mypage")])
+        groups = generate_grouped_mermaid_diagrams(self.flows, self.screens)
+        self.assertIn("booking", groups)
+        self.assertNotIn("static", groups)
+
+    def test_multiple_groups_may_be_declared(self):
+        self._write_config([{"id": "tokushoho", "group": ["static", "legal"]}])
+        self._write_flow([_step("top", action="tap", id="footer"), _step("tokushoho")])
+        groups = generate_grouped_mermaid_diagrams(self.flows, self.screens)
+        self.assertIn("static", groups)
+        self.assertIn("legal", groups)
+
+
 if __name__ == "__main__":
     unittest.main()
