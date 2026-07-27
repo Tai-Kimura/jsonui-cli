@@ -138,6 +138,7 @@ module RjuiTools
           lines << "#{indent_str(indent)}<button#{id_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>"
 
           # Sort partials by range start position
+          warn_unsupported_partial_ranges(partials, text)
           sorted_partials = partials.select { |p| p['range'].is_a?(Array) }.sort_by { |p| p['range'][0] }
 
           current_pos = 0

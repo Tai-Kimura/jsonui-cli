@@ -1157,6 +1157,40 @@ module RjuiTools
         def get_value(key, component_type = nil)
           json[key] || defaults(component_type)[key]
         end
+        # partialAttributes on web is rendered at BUILD time by slicing the
+        # literal `text`, so two shapes the canon allows cannot work here and
+        # used to be dropped in silence — no error, no warning, just a label
+        # with the styling and the click handler missing.
+        #
+        # iOS and Android hand the partials to their runtime, which sees the
+        # resolved string, so both shapes work there. Until web does the
+        # same, say so at build time instead of emitting something wrong.
+        def warn_unsupported_partial_ranges(partials, text)
+          return unless defined?(Core::Logger)
+
+          dropped = partials.reject { |p| p['range'].is_a?(Array) }
+          unless dropped.empty?
+            shapes = dropped.map { |p| p['range'].inspect }.join(', ')
+            Core::Logger.warn(
+              "Label partialAttributes: #{dropped.length} partial(s) with a non-array range " \
+              "(#{shapes}) are NOT rendered on web and were dropped. Web slices the literal " \
+              'text at build time, so pattern and binding ranges cannot be resolved; only ' \
+              '[start, end] works. iOS and Android render these at runtime.'
+            )
+          end
+
+          # A string-resource key or a binding is not the text the user sees,
+          # so slicing it produces sliced key fragments in the output.
+          if text.is_a?(String) && (has_binding?(text) || convert_string_key(text))
+            Core::Logger.warn(
+              "Label partialAttributes combined with a localized/bound text ('#{text}') — " \
+              'web slices the raw key at build time, so the string table is bypassed and ' \
+              'the key itself is emitted. Use a literal text here, or move the emphasis out ' \
+              'of the Label, until web renders partials at runtime.'
+            )
+          end
+        end
+
       end
     end
   end

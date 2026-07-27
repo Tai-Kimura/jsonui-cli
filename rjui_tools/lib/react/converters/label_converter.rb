@@ -174,6 +174,8 @@ module RjuiTools
           lines = []
           lines << "#{indent_str(indent)}<span#{id_attr} className=\"#{class_name}\"#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>"
 
+          warn_unsupported_partial_ranges(partials, text)
+
           # Sort partials by range start position
           sorted_partials = partials.select { |p| p['range'].is_a?(Array) }.sort_by { |p| p['range'][0] }
 
