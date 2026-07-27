@@ -10,6 +10,7 @@ require_relative '../core/type_converter'
 require_relative '../core/layout_validator'
 require_relative '../core/normalization'
 require_relative '../core/layout_variant'
+require_relative '../core/screen_index'
 require_relative 'style_loader'
 require_relative 'include_expander'
 require_relative 'data_model_updater'
@@ -51,6 +52,12 @@ module KjuiTools
   module Compose
     # Refactored ComposeBuilder - under 300 lines
     class ComposeBuilder
+      # Version-skew guard: generated code that carries a screen marker will
+      # not compile against a library without ScreenMarker, which is the
+      # point — a silent "static has a marker, dynamic doesn't" split is far
+      # harder to diagnose than a build error.
+      SCREEN_MARKER_MIN_LIBRARY_VERSION = '2.15.0'
+
       def initialize
         @config = Core::ConfigManager.load_config
         @source_path = Core::ProjectFinder.get_full_source_path || Dir.pwd
@@ -60,6 +67,22 @@ module KjuiTools
         @package_name = @config['package_name'] || Core::ProjectFinder.get_package_name || 'com.example.app'
 
         FileUtils.mkdir_p(@view_dir) unless File.exist?(@view_dir)
+      end
+
+      # Screen identity: only screens carry a marker (cells and partials
+      # render inside a host and would each grow a false one). Built once
+      # over the WHOLE layout tree — a layout's classification depends on
+      # how OTHER layouts reference it, so it cannot be decided per file.
+      def screen_index
+        @screen_index ||= JsonUIShared::ScreenIndex.build(@layouts_dir)
+      end
+
+      # Marker for a layout, or nil when it is not a screen.
+      def screen_marker_for(json_file)
+        screen_id = JsonUIShared::ScreenIndex.screen_id_for_path(json_file)
+        return nil unless screen_index.screen?(screen_id)
+
+        screen_index.marker_for(screen_id)
       end
 
       def build(options = {})
@@ -179,7 +202,8 @@ module KjuiTools
             # Calculate the layout name for dynamic mode (relative path without .json)
             dynamic_layout_name = relative_path.sub(/\.json$/, '')
             update_generated_file(generated_view_file, json_data, dynamic_layout_name,
-                                  variant_structs: variant_structs)
+                                  variant_structs: variant_structs,
+                                  screen_marker: screen_marker_for(json_file))
           else
             Core::Logger.warn "GeneratedView file not found: #{generated_view_file}"
           end
@@ -912,7 +936,7 @@ module KjuiTools
         result
       end
 
-      def update_generated_file(file_path, json_data, dynamic_layout_name = nil, fun_stem: nil, types_stem: nil, variant_structs: {})
+      def update_generated_file(file_path, json_data, dynamic_layout_name = nil, fun_stem: nil, types_stem: nil, variant_structs: {}, screen_marker: nil)
         existing_content = File.read(file_path)
 
         if existing_content.include?('// >>> GENERATED_CODE_START') &&
@@ -958,7 +982,7 @@ module KjuiTools
           end
 
           # Create content that switches based on DynamicModeManager
-          composable_content = generate_mode_aware_content(layout_name, static_content, dynamic_content, 1)
+          composable_content = generate_mode_aware_content(layout_name, static_content, dynamic_content, 1, screen_marker: screen_marker)
 
           # Block form: a STRING replacement would interpret backslash
           # sequences (\&, \', \`, \0-\9) inside the generated Kotlin and
@@ -1317,7 +1341,41 @@ module KjuiTools
         end
       end
 
-      def generate_mode_aware_content(layout_name, static_content, dynamic_content, depth)
+      def generate_mode_aware_content(layout_name, static_content, dynamic_content, depth, screen_marker: nil)
+        indent_str = "    " * depth
+
+        # Screen marker: a sibling node placed inside a TRANSPARENT Box that
+        # wraps both rendering branches.
+        #
+        # The Box is not decoration. Measured on API 35: a zero-size node is
+        # absent from the accessibility tree, and so is a sized child placed
+        # outside a zero-size parent — the marker has to occupy real space to
+        # be findable. Emitted as a bare sibling it would cost 1.dp of layout
+        # in the (dominant) Column-shaped callers and shift every screenshot;
+        # inside a Box it overlays the content and costs nothing, because a
+        # Box sizes to its largest child.
+        #
+        # The Box deliberately takes NO modifier: the caller's `modifier`
+        # keeps flowing into the inner root exactly as before, so the content
+        # this wraps is byte-identical to the unmarked output.
+        # propagateMinConstraints keeps a non-filling root sized as it was.
+        if screen_marker
+          body = generate_mode_aware_body(layout_name, static_content, dynamic_content, depth)
+          inner = body.lines.map { |line| line.strip.empty? ? line : "    #{line}" }.join
+          @required_imports.add(:box)
+          @required_imports.add(:screen_marker)
+          code = "#{indent_str}Box(propagateMinConstraints = true) {\n"
+          code += inner
+          code += "#{indent_str}    // Requires KotlinJsonUI >= #{SCREEN_MARKER_MIN_LIBRARY_VERSION} (screen marker)\n"
+          code += "#{indent_str}    ScreenMarker(\"#{screen_marker}\")\n"
+          code += "#{indent_str}}\n"
+          return code
+        end
+
+        generate_mode_aware_body(layout_name, static_content, dynamic_content, depth)
+      end
+
+      def generate_mode_aware_body(layout_name, static_content, dynamic_content, depth)
         indent_str = "    " * depth
 
         code = ""

@@ -95,13 +95,23 @@
       },
       "android-compose": {
         "mechanism": "sibling node",
-        "detail": "A 1.dp Box sibling carrying Modifier.testTag(marker), under an ancestor that sets semantics { testTagsAsResourceId = true }. The size is NOT cosmetic: a zero-size node is absent from the accessibility tree and unfindable by resource id (measured). clearAndSetSemantics is forbidden on or above the marker — it erases the node. mergeDescendants was measured NOT to erase it on API 35.",
-        "minimumSize": "1.dp"
+        "detail": "A 1.dp Box sibling carrying Modifier.testTag(marker) AND its own semantics { testTagsAsResourceId = true }, emitted inside a transparent Box(propagateMinConstraints = true) that wraps both rendering branches. The size is NOT cosmetic: a zero-size node is absent from the accessibility tree, and so is a sized child placed outside a zero-size parent (both measured) — the marker has to occupy real space. The wrapping Box is what makes that free: a Box sizes to its largest child, so the marker overlays the content instead of costing 1.dp of layout in the (dominant) Column-shaped screens. clearAndSetSemantics is forbidden on or above the marker — it erases the node. mergeDescendants was measured NOT to erase it on API 35.",
+        "minimumSize": "1.dp",
+        "selfSufficient": "The marker sets testTagsAsResourceId on ITSELF, so it does not depend on an ancestor opting in. Measured: under an ancestor with testTagsAsResourceId = false the marker was still found by resource id while a sibling relying on the ancestor was not."
       },
       "web-react": {
         "mechanism": "data attribute",
-        "detail": "A data-screen=\"<screenId>\" attribute on the generated root element. The root 'id' is NOT usable: it is an externally supplied prop and callers already override it. Server-side rendering emits the attribute into the initial markup, so the marker is present before hydration (measured)."
+        "detail": "A data-screen=\"<screenId>\" attribute on the generated root element — the same element that carries the root id, so the marker is visible exactly when the screen is. A dedicated node would need its own non-empty box to satisfy the driver's visibility predicate and would join the parent's flex/grid flow. The root 'id' itself is NOT usable: it is an externally supplied prop and callers already override it. Server-side rendering emits the attribute into the initial markup, so the marker is present before hydration (measured)."
       }
+    },
+    "buildGating": {
+      "rule": "The marker is test scaffolding and must not reach a shipped app. Every platform emits it in development builds only.",
+      "platforms": {
+        "ios": "#if DEBUG inside the library modifier — the same gate ViewSwitcher uses for Dynamic mode. SwiftJsonUI is distributed as source (SPM / CocoaPods), so this follows the CONSUMER's build configuration.",
+        "android": "A RUNTIME check of the host application's ApplicationInfo.FLAG_DEBUGGABLE, not a compile-time one: KotlinJsonUI ships as an AAR, so its own BuildConfig.DEBUG describes how the library was built rather than how the app was. This is the same reason DynamicModeManager resolves availability from the host app's debuggable flag.",
+        "web": "The generated attribute's value is `process.env.NODE_ENV === 'production' ? undefined : \"<marker>\"`. React omits an attribute whose value is undefined, so a production bundle renders no data-screen at all."
+      },
+      "consequence": "UI tests must run against a debug / development build. This is not a new constraint — Dynamic mode already requires it on both mobile platforms."
     },
     "placement": {
       "rule": "The marker must be a sibling of the screen's scrollable, never a child of the scrolling content.",

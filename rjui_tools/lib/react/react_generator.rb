@@ -158,7 +158,7 @@ module RjuiTools
         candidates.find { |dir| File.directory?(dir) }
       end
 
-      def generate(component_name, json, subdir: '', variants: {}, data_type: nil, source_rel: nil, namespace_stem: nil)
+      def generate(component_name, json, subdir: '', variants: {}, data_type: nil, source_rel: nil, namespace_stem: nil, screen_marker: nil)
         # Store current JSON file name (snake_case) for StringManager resolution.
         # strings.json groups keys by directory-qualified namespace — e.g. a
         # layout at `learn/installation.json` lives under the `learn_installation`
@@ -190,7 +190,8 @@ module RjuiTools
 
         generate_component_file(component_name, jsx_content, json,
                                 subdir: subdir, variants: variants,
-                                data_type: data_type, source_rel: source_rel)
+                                data_type: data_type, source_rel: source_rel,
+                                screen_marker: screen_marker)
       end
 
       private
@@ -211,7 +212,7 @@ module RjuiTools
         converter.convert(indent)
       end
 
-      def generate_component_file(name, jsx_content, json, subdir: '', variants: {}, data_type: nil, source_rel: nil)
+      def generate_component_file(name, jsx_content, json, subdir: '', variants: {}, data_type: nil, source_rel: nil, screen_marker: nil)
         # Variant screens (home@regular.json) reuse the BASE screen's Data
         # type — the variant-file data contract is base-canonical.
         data_name = data_type || name
@@ -405,6 +406,12 @@ module RjuiTools
         # root can't carry an id, so injection is skipped there.
         jsx_content, root_id_injected = inject_root_id_prop(jsx_content)
 
+        # Screen marker: a data attribute on the SAME root element, so it is
+        # visible exactly when the screen is. A dedicated node would need a
+        # non-empty box to satisfy the driver's visibility predicate, and a
+        # stray 1x1 element would join the parent's flex/grid flow.
+        jsx_content = inject_root_screen_marker(jsx_content, screen_marker)
+
         # A root element with a visibility binding arrives here as a bare
         # JSX expression container (`{cond && (...)}` from
         # BaseConverter#wrap_with_visibility). That form is only legal as a
@@ -502,6 +509,25 @@ module RjuiTools
         else
           [jsx_content.sub(/\A(\s*)<([A-Za-z][\w.]*)/) { "#{Regexp.last_match(1)}<#{Regexp.last_match(2)} id={id}" }, true]
         end
+      end
+
+      # Inject `data-screen` into the root element's tag for SCREEN layouts
+      # (never cells or partials). Skipped for an expression-container root
+      # (visibility binding), exactly like `id` injection.
+      #
+      # The value is gated on NODE_ENV: the marker is test scaffolding, and
+      # React drops an attribute whose value is `undefined`, so a production
+      # bundle renders no `data-screen` at all. This mirrors the DEBUG-only
+      # markers on iOS and Android.
+      def inject_root_screen_marker(jsx_content, screen_marker)
+        return jsx_content unless screen_marker
+
+        stripped = jsx_content.lstrip
+        return jsx_content unless stripped.start_with?('<') && stripped[1] =~ /[A-Za-z]/
+        return jsx_content unless jsx_content[/\A\s*<[^>]*>/m]
+
+        attribute = %(data-screen={process.env.NODE_ENV === 'production' ? undefined : "#{screen_marker}"})
+        jsx_content.sub(/\A(\s*)<([A-Za-z][\w.]*)/) { "#{Regexp.last_match(1)}<#{Regexp.last_match(2)} #{attribute}" }
       end
 
       def capitalize_first(str)

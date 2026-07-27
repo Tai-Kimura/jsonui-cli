@@ -19,6 +19,7 @@ require_relative "../core/logger"
 require_relative "../core/binding_validator"
 require_relative "../core/resources/string_manager"
 require_relative '../core/layout_variant'
+require_relative '../core/screen_index'
 
 module SjuiTools
   module UIKit
@@ -78,7 +79,12 @@ module SjuiTools
         all_including_files = {}
         
         Core::Logger.debug "Layout path: #{@layout_path}"
-        
+
+        # Screen identity: only screens carry a marker. Built once over the
+        # whole tree — a layout's classification depends on how OTHER
+        # layouts reference it, so it cannot be decided file by file.
+        @screen_index = JsonUIShared::ScreenIndex.build(@layout_path)
+
         # ディレクトリが存在しない場合は警告を表示して終了
         unless Dir.exist?(@layout_path)
           Core::Logger.error "Layouts directory not found: #{@layout_path}"
@@ -124,6 +130,13 @@ module SjuiTools
           # ファイル情報のセットアップ
           file_name = File.basename(file, ".*")
           binding_info = @binding_file_manager.setup_binding_file_info(file_name)
+
+          # nil for cells and partials — they render inside a host and must
+          # not each grow a marker of their own.
+          screen_id = JsonUIShared::ScreenIndex.screen_id_for_path(file)
+          @screen_marker = if @screen_index&.screen?(screen_id)
+            @screen_index.marker_for(screen_id)
+          end
           
           # JSONアナライザーの初期化（各ファイルごとに新しいID登録で開始）
           @json_analyzer = JsonAnalyzer.new(
@@ -305,11 +318,18 @@ module SjuiTools
         # Get the base bindView content from UI control event manager
         base_content = @ui_control_event_manager.generate_bind_view_method
         
-        # Check if we need to generate bindView
-        needs_bind_view = !@json_analyzer.partial_bindings.empty? || !@json_analyzer.view_variables.empty?
-        
+        # Check if we need to generate bindView. A screen marker is reason
+        # enough on its own: a screen with no bound views still has to be
+        # findable by the drivers.
+        needs_bind_view = !@json_analyzer.partial_bindings.empty? ||
+                          !@json_analyzer.view_variables.empty? ||
+                          !@screen_marker.nil?
+
         # If there's nothing to add, return the base content
         return base_content unless needs_bind_view
+
+        # Requires SwiftJsonUI >= 10.9.0 (screen marker)
+        marker_line = @screen_marker ? "        applyScreenMarker(\"#{@screen_marker}\")\n" : ""
         
         # If there's already a bindView method, we need to add to it
         if base_content.empty?
@@ -332,7 +352,8 @@ module SjuiTools
           @json_analyzer.partial_bindings.each do |partial|
             content << "        #{partial[:property_name]}Binding.bindView()\n"
           end
-          
+
+          content << marker_line
           content << "    }\n"
           content
         else
@@ -358,6 +379,8 @@ module SjuiTools
             @json_analyzer.partial_bindings.each do |partial|
               insert_content << "        #{partial[:property_name]}Binding.bindView()\n"
             end
+
+            insert_content << marker_line
 
             # Make a mutable copy of base_content before inserting
             base_content = base_content.dup

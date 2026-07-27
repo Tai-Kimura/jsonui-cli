@@ -18,6 +18,7 @@ require_relative '../../react/data_model_generator'
 require_relative '../../react/viewmodel_generator'
 require_relative '../../react/hook_generator'
 require_relative '../../core/layout_variant'
+require_relative '../../core/screen_index'
 
 module RjuiTools
   module CLI
@@ -99,6 +100,12 @@ module RjuiTools
 
           generator = React::ReactGenerator.new(@config)
 
+          # Screen identity: only screens carry a marker (cells and partials
+          # render inside a host and would each grow a false one). Built once
+          # over the WHOLE layout tree — a layout's classification depends on
+          # how OTHER layouts reference it, so it cannot be decided per file.
+          screen_index = JsonUIShared::ScreenIndex.build(layouts_dir)
+
           expected_component_paths = []
           json_files.each do |json_file|
             Core::Logger.info("Processing: #{json_file}")
@@ -142,8 +149,12 @@ module RjuiTools
                 map[cls] = "#{component_name}#{cls.capitalize}Variant"
               end
 
+              screen_id = JsonUIShared::ScreenIndex.screen_id_for_path(json_file)
+              screen_marker = screen_index.screen?(screen_id) ? screen_index.marker_for(screen_id) : nil
+
               output = generator.generate(component_name, json_content, subdir: nested_subdir,
-                                          variants: variant_comps)
+                                          variants: variant_comps,
+                                          screen_marker: screen_marker)
 
               # Use .tsx for TypeScript, .jsx for JavaScript
               extension = @config['typescript'] ? '.tsx' : '.jsx'

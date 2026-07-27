@@ -187,6 +187,12 @@ module KjuiTools
             # the top of every GeneratedView body (no-op when the screen is
             # not embedded). New in KotlinJsonUI 2.13.0.
             drive_embed_init_params: "import com.kotlinjsonui.embed.DriveEmbedInitParams",
+            # Screen identity beacon, emitted for SCREEN layouts only (never
+            # cells or partials). New in KotlinJsonUI 2.15.0 — registering it
+            # only at marked call sites keeps unmarked output byte-identical
+            # and makes marked output fail to compile against an older
+            # library (the version-skew guard).
+            screen_marker: "import com.kotlinjsonui.core.ScreenMarker",
             embedded_event: "import com.kotlinjsonui.embed.EmbeddedEvent",
             viewmodel_compose: "import androidx.lifecycle.viewmodel.compose.viewModel",
             # `hiltViewModel(viewModelStoreOwner, key)` from
