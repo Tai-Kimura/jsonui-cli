@@ -56,7 +56,13 @@ module KjuiTools
       # not compile against a library without ScreenMarker, which is the
       # point — a silent "static has a marker, dynamic doesn't" split is far
       # harder to diagnose than a build error.
-      SCREEN_MARKER_MIN_LIBRARY_VERSION = '2.15.0'
+      #
+      # 2.15.1 is a floor for CORRECTNESS, not for compilation: 2.15.0 places
+      # the marker at the window origin, where the status bar covers it and
+      # UiAutomator's By.res cannot find it, so every screen-transition
+      # assertion on Android fails against it. Generated code compiles fine
+      # either way, which is exactly why the version is named here.
+      SCREEN_MARKER_MIN_LIBRARY_VERSION = '2.15.1'
 
       def initialize
         @config = Core::ConfigManager.load_config
