@@ -65,6 +65,18 @@ def register_lint_generated_command(subparsers: argparse._SubParsersAction) -> N
         action="store_true",
         help="List every checked file, not just failures",
     )
+    parser.add_argument(
+        "--max-depth",
+        type=int,
+        default=5,
+        help="Per-function brace-nesting bound for generated view code (default 5)",
+    )
+    parser.add_argument(
+        "--max-lines",
+        type=int,
+        default=250,
+        help="Per-function line-count bound for generated view code (default 250)",
+    )
     parser.set_defaults(func=cmd_lint_generated)
 
 
@@ -86,6 +98,7 @@ def cmd_lint_generated(args: argparse.Namespace) -> int:
 
     missing_header: list[Path] = []
     missing_footer: list[Path] = []
+    oversized: list[tuple[Path, str, int, int]] = []
     ok: list[Path] = []
 
     for kind, path in targets:
@@ -97,15 +110,37 @@ def cmd_lint_generated(args: argparse.Namespace) -> int:
         elif status == "missing_footer":
             missing_footer.append(path)
 
+    # Generated VIEW files carry no sentinel (they hold hand-edit markers
+    # inside instead), so they get their own walk for the size gate.
+    view_files = _view_targets(config_mgr)
+    for path in view_files:
+        oversized.extend(
+            (path, name, depth, lines)
+            for name, depth, lines in _oversized_functions(
+                path, args.max_depth, args.max_lines
+            )
+        )
+
     total = len(targets)
-    print(f"Checked {total} generated file{'s' if total != 1 else ''}.")
+    print(f"Checked {total} generated file{'s' if total != 1 else ''} "
+          f"(+{len(view_files)} generated views for the size gate).")
     print(f"  OK:              {len(ok)}")
     print(f"  Missing header:  {len(missing_header)}")
     print(f"  Missing footer:  {len(missing_footer)}")
+    print(f"  Oversized fns:   {len(oversized)} (depth > {args.max_depth} or lines > {args.max_lines})")
 
     if args.verbose:
         for p in ok:
             print(f"  [OK] {_rel(p, project_root)}")
+
+    if oversized:
+        print(
+            "\nOversized generated functions (depth-bounding batch 2026-07-28; "
+            "these are the extractor's declared waivers — informational, "
+            "regenerate with current tools if the list grew):"
+        )
+        for path, name, depth, lines in oversized:
+            print(f"  - {_rel(path, project_root)} {name}: depth {depth} / {lines} lines")
 
     if missing_header:
         print("\nMissing @generated sentinel:")
@@ -127,6 +162,113 @@ def cmd_lint_generated(args: argparse.Namespace) -> int:
             )
         return 1
     return 0
+
+
+def _strip_code_noise(line: str) -> str:
+    """Strip string literals and // comments (brace counting must not see
+    either — Swift interpolations and Kotlin templates carry braces)."""
+    out: list[str] = []
+    in_string = False
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if in_string:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch == "/" and i + 1 < len(line) and line[i + 1] == "/":
+            break
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+_FUNC_RE = None
+
+
+def _oversized_functions(path: Path, max_depth: int, max_lines: int):
+    """Yield (name, body_depth, line_count) for generated view functions over
+    the size bounds. The metric matches the codegen bounders (sjui
+    SectionBounder / kjui SectionExtractor): per-function BODY brace peak,
+    strings stripped — never indentation, which the generators deepen far
+    past the structural level."""
+    global _FUNC_RE
+    import re
+
+    if _FUNC_RE is None:
+        _FUNC_RE = re.compile(
+            r"^\s*(?:@\w+(?:\([^)]*\))?\s+)*"
+            r"(?:public\s+|private\s+|internal\s+|fileprivate\s+)?"
+            r"(?:func|fun)\s+(?:[\w.]+\.)?(\w+)"
+            r"|^\s*(?:public\s+|private\s+)?var\s+(body)\s*:\s*some\s+View\s*\{"
+        )
+
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").split("\n")
+    except OSError:
+        return
+
+    open_funcs: list[dict] = []
+    depth = 0
+    for idx, raw in enumerate(lines):
+        code = _strip_code_noise(raw)
+        match = _FUNC_RE.match(code)
+        if match:
+            open_funcs.append({
+                "name": match.group(1) or match.group(2),
+                "start": idx,
+                "base": depth,
+                "peak": 0,
+                "opened": False,
+            })
+        for ch in code:
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+        still_open = []
+        for fn in open_funcs:
+            if depth > fn["base"]:
+                fn["opened"] = True
+                fn["peak"] = max(fn["peak"], depth - fn["base"])
+            if fn["opened"] and depth <= fn["base"]:
+                body_depth = fn["peak"] - 1  # the decl's own brace
+                line_count = idx - fn["start"] + 1
+                if body_depth > max_depth or line_count > max_lines:
+                    yield (fn["name"], body_depth, line_count)
+            else:
+                still_open.append(fn)
+        open_funcs = still_open
+
+
+def _view_targets(config_mgr) -> list[Path]:
+    """Every *GeneratedView.swift / *.kt under the project's platform roots
+    (build dirs excluded) — the per-function size gate's subjects."""
+    roots: list[Path] = []
+    config = config_mgr.load()
+    platforms = config.get("platforms")
+    if isinstance(platforms, dict):
+        for platform in platforms.values():
+            root = platform.get("root") if isinstance(platform, dict) else None
+            if isinstance(root, str) and root:
+                candidate = config_mgr.project_root / root
+                roots.append(candidate) if candidate.is_dir() else None
+    if not roots:
+        roots = [config_mgr.project_root]
+
+    out: list[Path] = []
+    for root in roots:
+        for pattern in ("*GeneratedView.swift", "*GeneratedView.kt"):
+            for path in root.rglob(pattern):
+                if _is_excluded(path, DEFAULT_EXCLUDED_DIR_NAMES):
+                    continue
+                out.append(path)
+    return sorted(set(out))
 
 
 def _collect_targets(config_mgr) -> list[tuple[str, Path]]:

@@ -975,13 +975,23 @@ module KjuiTools
           # lambda crosses the JVM 65,536 byte / method bytecode limit.
           # Mirrors sjui's view_updater section extraction. Helpers join
           # the same RESPONSIVE_HELPERS marker block below.
-          static_content, section_functions = Helpers::SectionExtractor.extract(
+          static_content, section_functions, section_waivers = Helpers::SectionExtractor.extract(
             static_content,
             view_name: view_name,
             data_type: "#{types_name}Data",
-            viewmodel_type: "#{types_name}ViewModel"
+            viewmodel_type: "#{types_name}ViewModel",
+            # The emitted wrapper (marker Box + Dynamic-mode if/else) adds
+            # two brace levels around this body inside the main function.
+            enclosing_depth: 2
           )
           @responsive_functions.concat(section_functions) if section_functions.any?
+          # A waiver is a function the extractor could not bound below the
+          # depth/line gate without an unsafe cut. Loud, never silent — a
+          # silent oversized survivor is how 1,327-line sections shipped.
+          Array(section_waivers).each do |w|
+            puts "warning: [section-extractor] #{view_name}: #{w.function} " \
+                 "depth #{w.depth} / #{w.lines} lines exceeds the bound and has no safe cut."
+          end
 
           # Variant-file dispatch: replace the static tree with a window
           # width `when` that selects the matching variant composable.

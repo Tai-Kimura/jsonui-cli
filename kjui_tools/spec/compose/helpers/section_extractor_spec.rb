@@ -670,4 +670,79 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
       expect(new_body.scan('Text(text = data.line1)').size).to eq(0)
     end
   end
+
+  # ---- depth bounding (2026-07-28 batch) ------------------------------------
+
+  describe 'depth-bounded extraction' do
+    let(:opts) do
+      { view_name: 'DeepView', data_type: 'DeepViewData', viewmodel_type: 'DeepViewViewModel' }
+    end
+
+    def spine(levels, leaf: 'Text("leaf")')
+      lines = []
+      levels.times { |i| lines << ('    ' * i) + (i.zero? ? 'Box(modifier = Modifier.fillMaxSize()) {' : 'Column {') }
+      lines << ('    ' * levels) + leaf
+      (levels - 1).downto(0) { |i| lines << ('    ' * i) + '}' }
+      lines.join("\n")
+    end
+
+    def functions_within_bounds?(fns)
+      fns.all? do |fn|
+        depth = described_class.body_depth(fn) - 1
+        depth <= described_class::HARD_BODY_DEPTH
+      end
+    end
+
+    it 'triggers on depth even when the body is under the line threshold' do
+      body = spine(10)
+      expect(body.lines.size).to be < 100
+      new_body, fns, waivers = described_class.extract(body, **opts)
+      expect(fns).not_to be_empty
+      expect(waivers).to be_empty
+      expect(described_class.body_depth(new_body)).to be <= described_class::HARD_BODY_DEPTH
+      expect(functions_within_bounds?(fns)).to be true
+    end
+
+    it 'packs several levels per function instead of one wrapper per level' do
+      _new_body, fns, = described_class.extract(spine(12), **opts)
+      expect(fns.size).to be <= 4
+    end
+
+    it 'measures depth on braces, ignoring template braces inside strings' do
+      expect(described_class.body_depth('Text("${a} { } ${b}")')).to eq(0)
+    end
+
+    it 'reports a waiver instead of silently shipping an unboundable body' do
+      # Lazy DSL all the way down: the chunk cannot be lifted.
+      lines = ['LazyColumn {']
+      8.times { |i| lines << ('    ' * (i + 1)) + 'items(10) { cellIndex ->' }
+      lines << ('    ' * 9) + 'Text("deep $cellIndex")'
+      8.downto(1) { |i| lines << ('    ' * i) + '}' }
+      lines << '}'
+      body = lines.join("\n")
+      new_body, _fns, waivers = described_class.extract(body, **opts)
+      expect(described_class.body_depth(new_body)).to be > described_class::HARD_BODY_DEPTH
+      expect(waivers).not_to be_empty
+    end
+
+    it 'lifts a scope-bound spine as a receiver extension' do
+      lines = ['Column {']
+      lines << '    Box(modifier = Modifier.weight(1f)) {'
+      8.times { |i| lines << ('    ' * (i + 2)) + 'Column {' }
+      lines << ('    ' * 10) + 'Text("deep")'
+      7.downto(0) { |i| lines << ('    ' * (i + 2)) + '}' }
+      lines << '    }'
+      lines << '}'
+      new_body, fns, waivers = described_class.extract(lines.join("\n"), **opts)
+      expect(waivers).to be_empty
+      expect(described_class.body_depth(new_body)).to be <= described_class::HARD_BODY_DEPTH
+      expect(functions_within_bounds?(fns)).to be true
+      # The .weight-carrying segment must ride a ColumnScope receiver if lifted whole.
+      scoped = fns.select { |f| f.include?('.weight(') }
+      scoped.each do |f|
+        expect(f).to include('androidx.compose.foundation.layout.ColumnScope.') if f.match?(/private fun \S*Section/)
+      end
+    end
+  end
+
 end
