@@ -14,6 +14,7 @@ from .commands.ls_cmd import register_ls_command, cmd_ls
 from .commands.sync_tool_cmd import register_sync_tool_command, cmd_sync_tool
 from .commands.hotload_cmd import register_hotload_command, cmd_hotload
 from .commands.conformance_cmd import register_conformance_command, cmd_conformance
+from .commands.screens_cmd import register_screens_command, cmd_screens
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -57,6 +58,9 @@ def main(argv: list[str] | None = None) -> int:
     # jui conformance
     register_conformance_command(subparsers)
 
+    # jui screens — screen-identity classification (MCP consumes --json)
+    register_screens_command(subparsers)
+
     args = parser.parse_args(argv)
 
     if args.command is None:
@@ -77,6 +81,7 @@ def main(argv: list[str] | None = None) -> int:
         "sync_tool": cmd_sync_tool,
         "hotload": cmd_hotload,
         "conformance": cmd_conformance,
+        "screens": cmd_screens,
     }
 
     handler = command_map.get(args.command)
