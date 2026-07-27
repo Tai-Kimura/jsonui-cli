@@ -203,7 +203,8 @@
     },
     "optOut": {
       "config": "TestRunnerConfig.verifyScreenTransitions",
-      "default": true
+      "default": true,
+      "rollout": "Ships as false and is flipped to the canonical true once consumers have rebuilt. Implicit verification requires generated code new enough to emit markers, so turning it on before a project rebuilds would fail EVERY screen change with marker-absent — an infrastructure failure dressed up as a test failure. The flag exists so the flip is a one-line change per project rather than a driver release."
     },
     "failureClasses": [
       {
