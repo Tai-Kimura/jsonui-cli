@@ -343,7 +343,11 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       # build emits the spec rather than pre-sliced spans.
       expect(result).to include('partialText(`Hello World`,')
       expect(result).to include("range: [0, 5]")
-      expect(result).to include("style: { color: '#FF0000', fontWeight: 'bold' }")
+      # Colors route through TailwindMapper like the main fontColor path,
+      # so a palette TOKEN survives as a class instead of becoming an
+      # invalid inline `color: 'accent'`.
+      expect(result).to include("style: { fontWeight: 'bold' }")
+      expect(result).to include("className: 'text-[#FF0000]'")
     end
 
     it 'handles multiple partial attributes' do
@@ -357,9 +361,9 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         ]
       })
       result = converter.convert
-      expect(result).to include("color: '#FF0000'")
-      expect(result).to include("color: '#00FF00'")
-      expect(result).to include("color: '#0000FF'")
+      expect(result).to include("text-[#FF0000]")
+      expect(result).to include("text-[#00FF00]")
+      expect(result).to include("text-[#0000FF]")
     end
 
     it 'applies underline to partial' do
@@ -422,7 +426,7 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         ]
       })
       result = converter.convert
-      expect(result).to include("backgroundColor: '#FFFF00'")
+      expect(result).to include("bg-[#FFFF00]")
     end
   end
 
@@ -540,6 +544,26 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       result = converter.convert
       expect(result.scan('partialText(').length).to eq(1)
       expect(result).not_to include('>Red<')
+    end
+  end
+
+  describe 'partialAttributes palette colors' do
+    it 'emits a palette token as a class, never as an inline CSS color' do
+      converter = create_converter({
+        'type' => 'Label',
+        'text' => 'See the guide',
+        'partialAttributes' => [
+          { 'range' => 'guide', 'fontColor' => 'accent', 'background' => 'surface' }
+        ]
+      })
+      result = converter.convert
+      # L1 normalization rewrites a palette hex to its token name, and
+      # `color: 'accent'` is not a CSS color — the browser drops it and the
+      # text comes out unstyled.
+      expect(result).to include('text-accent')
+      expect(result).to include('bg-surface')
+      expect(result).not_to include("color: 'accent'")
+      expect(result).not_to include("backgroundColor: 'surface'")
     end
   end
 

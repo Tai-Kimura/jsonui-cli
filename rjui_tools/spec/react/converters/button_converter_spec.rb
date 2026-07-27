@@ -273,7 +273,7 @@ RSpec.describe RjuiTools::React::Converters::ButtonConverter do
       # as the iOS/Android runtimes.
       expect(result).to include('partialText(`Hello World`,')
       expect(result).to include('range: [0, 5]')
-      expect(result).to include("style: { color: '#FF0000' }")
+      expect(result).to include("className: 'text-[#FF0000]'")
     end
 
     it 'handles multiple partial attributes' do
@@ -287,7 +287,7 @@ RSpec.describe RjuiTools::React::Converters::ButtonConverter do
       })
       result = converter.convert
       expect(result).to include("fontWeight: 'bold'")
-      expect(result).to include("color: '#666666'")
+      expect(result).to include("text-[#666666]")
     end
 
     it 'applies underline to partial' do

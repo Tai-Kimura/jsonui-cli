@@ -385,6 +385,7 @@ module RjuiTools
 
         # Track auto-generated onChange handlers from text/selectedValue bindings
         collect_auto_generated_handlers(component, component_type)
+        collect_partial_attribute_handlers(component)
 
         # Check each attribute for bindings
         component.each do |key, value|
@@ -748,6 +749,36 @@ module RjuiTools
             else
               # Direct property name reference
               @used_properties << value if @data_properties.include?(value)
+            end
+          end
+        end
+      end
+
+      # A handler named by a partialAttributes entry IS a use.
+      #
+      # These are ordinary handler references, just nested one level deeper
+      # than the node's own onclick, and the scan never descended into them.
+      # A consumer who declared the handler got "defined but never used";
+      # one who omitted it got a generated Data type without the property.
+      # There was no spelling that satisfied both, so the zero-warning gate
+      # made partial handlers unusable.
+      def collect_partial_attribute_handlers(component)
+        partials = component['partialAttributes']
+        return unless partials.is_a?(Array)
+
+        partials.each do |partial|
+          next unless partial.is_a?(Hash)
+
+          %w[onclick onClick].each do |key|
+            handler = partial[key]
+            next unless handler.is_a?(String) && !handler.empty?
+
+            if handler.start_with?('@{') && handler.end_with?('}')
+              extract_variables(handler[2..-2]).each do |var|
+                @used_properties << var if @data_properties.include?(var)
+              end
+            elsif @data_properties.include?(handler)
+              @used_properties << handler
             end
           end
         end

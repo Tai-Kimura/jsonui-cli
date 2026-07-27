@@ -538,6 +538,38 @@ RSpec.describe RjuiTools::Core::BindingValidator do
   end
 
   describe 'unused data property detection' do
+    context 'with a handler referenced only from partialAttributes' do
+      let(:component) do
+        {
+          'type' => 'View',
+          'data' => [
+            { 'name' => 'onNavigate', 'class' => '() => void' },
+            { 'name' => 'reallyUnused', 'class' => 'string' }
+          ],
+          'child' => [
+            {
+              'type' => 'Label', 'text' => 'See the guide',
+              'partialAttributes' => [{ 'range' => 'guide', 'onclick' => 'onNavigate' }]
+            }
+          ]
+        }
+      end
+
+      # A partial handler is an ordinary handler reference, just nested one
+      # level deeper. The scan did not descend into partialAttributes, so
+      # declaring the handler warned and omitting it broke the generated
+      # Data type — no spelling satisfied the zero-warning gate.
+      it 'counts a partial onclick as a use' do
+        warnings = validator.validate(component, 'Test.json')
+        expect(warnings.none? { |w| w.include?("'onNavigate'") && w.include?('never used') }).to be true
+      end
+
+      it 'still reports a genuinely unused property' do
+        warnings = validator.validate(component, 'Test.json')
+        expect(warnings.any? { |w| w.include?("'reallyUnused'") && w.include?('never used') }).to be true
+      end
+    end
+
     context 'with unused data property' do
       let(:component) do
         {

@@ -145,21 +145,31 @@ module RjuiTools
           lines.join("\n")
         end
 
+        # Colors are deliberately NOT emitted inline here: they go through
+        # build_partial_class -> TailwindMapper.map_color, the same route the
+        # main fontColor path takes. L1 normalization rewrites a palette hex
+        # to its TOKEN name (#2563EB -> accent), and a token is not a CSS
+        # color — `style: { color: 'accent' }` is silently ignored by the
+        # browser, so the text simply came out unstyled.
         def build_partial_style(partial)
           styles = []
-          styles << "color: '#{partial['fontColor']}'" if partial['fontColor']
           styles << "fontSize: '#{partial['fontSize']}px'" if partial['fontSize']
           styles << "fontWeight: '#{partial['fontWeight']}'" if partial['fontWeight']
-          styles << "backgroundColor: '#{partial['background']}'" if partial['background']
           styles.join(', ')
         end
 
         def build_partial_class(partial)
           classes = []
+          # Same color resolution as the main fontColor / background path:
+          # a palette TOKEN becomes a Tailwind class, an off-palette name is
+          # reported once. Emitting the raw value inline would produce
+          # `color: 'accent'`, which no browser understands.
+          classes << TailwindMapper.map_color(partial['fontColor'], 'text') if partial['fontColor']
+          classes << TailwindMapper.map_color(partial['background'], 'bg') if partial['background']
           classes << 'underline' if partial['underline']
           classes << 'line-through' if partial['strikethrough']
           classes << 'cursor-pointer' if partial['onclick']
-          classes.join(' ')
+          classes.reject { |c| c.nil? || c.empty? }.join(' ')
         end
 
         def escape_jsx_text(text)
