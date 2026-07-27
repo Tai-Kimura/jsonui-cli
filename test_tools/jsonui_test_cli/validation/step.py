@@ -9,6 +9,7 @@ from pathlib import Path
 from .models import ValidationMessage, ValidationResult
 from .mock import find_mock_index, validate_mock_reference
 from .responsive import validate_responsive_field
+from .screen_ids import check_screen_value, load_screen_index
 from ..schema import (
     CONDITION_PLATFORMS,
     CONDITION_PLATFORM_ARRAY_ITEMS,
@@ -34,6 +35,18 @@ class StepValidator:
     def set_test_file_path(self, path: Path | None):
         """Set the test file path for resolving relative paths."""
         self._test_file_path = path
+
+    def _validate_screen_id(self, screen_id: str, path: str, result: ValidationResult):
+        """Check a screen id against the project's layout vocabulary.
+
+        Silently passes when the project's layouts cannot be located — this
+        validator also runs on trees it knows nothing about, and inventing
+        "unknown screen" errors there would block their install pipeline.
+        """
+        index = load_screen_index(self._test_file_path)
+        message = check_screen_value(screen_id, index)
+        if message:
+            result.errors.append(ValidationMessage(path=path, message=message))
 
     def validate_step(self, step: dict, path: str, result: ValidationResult, is_flow: bool = False):
         """Validate a test step."""
@@ -80,8 +93,16 @@ class StepValidator:
             if not isinstance(screen, str) or not screen.strip():
                 result.errors.append(ValidationMessage(
                     path=path,
-                    message="Inline flow step must have a non-empty 'screen' (the source alias this step runs on)"
+                    message="Inline flow step must have a non-empty 'screen' (the canonical id of the screen this step runs on)"
                 ))
+            else:
+                self._validate_screen_id(screen.strip(), path, result)
+
+        # assert:screen names its target screen — validate that id too.
+        if assertion == "screen":
+            target = step.get("name")
+            if isinstance(target, str) and target.strip():
+                self._validate_screen_id(target.strip(), path, result)
 
         if action and assertion:
             result.errors.append(ValidationMessage(

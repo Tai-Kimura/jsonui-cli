@@ -244,6 +244,16 @@ SUPPORTED_ASSERTIONS = {
                        "gate with 'when.platform: web' in cross-platform tests.",
         "required": [],
         "optional": ["equals", "contains", "timeout"]
+    },
+    "screen": {
+        "description": "Assert the named screen is displayed (matched through the "
+                       "screen marker code generation emits). Does NOT assert "
+                       "exclusivity: embedded screens, split panes and tab hosts "
+                       "legitimately show several screens at once. The target is "
+                       "'name' — the step-level 'screen' key says where the step "
+                       "runs, and during a transition the two differ.",
+        "required": ["name"],
+        "optional": ["timeout"]
     }
 }
 
@@ -335,7 +345,7 @@ PARAMETER_DESCRIPTIONS = {
     "duration": "Duration in milliseconds (for longPress)",
     "timeout": "Maximum wait time in milliseconds (default: 5000)",
     "ms": "Wait duration in milliseconds",
-    "name": "Name for screenshot file / baseline",
+    "name": "Name for screenshot file / baseline; on assert:screen the expected screen id",
     "equals": "Exact value to match. Supports @{varName} syntax for variable substitution",
     "contains": "Substring to match. Supports @{varName} syntax for variable substitution",
     "amount": "Scroll amount (platform-specific)",

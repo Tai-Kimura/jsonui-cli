@@ -23,6 +23,11 @@
       "type": "string",
       "description": "Human-readable step name used in logs and reports"
     },
+    "stepScreen": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Canonical id of the screen this step runs on (flow tests only). Declared on every step shape because a flow's inlineStep composes this key with an action/assertion through allOf, and each branch closes itself with additionalProperties:false."
+    },
     "optional": {
       "type": "boolean",
       "default": false,
@@ -309,6 +314,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -334,6 +342,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -365,6 +376,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -394,6 +408,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -427,6 +444,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -452,6 +472,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -485,6 +508,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -527,6 +553,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -555,6 +584,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -587,6 +619,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -623,6 +658,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -650,6 +688,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -672,6 +713,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -694,6 +738,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -720,6 +767,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -753,6 +803,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -794,6 +847,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -831,6 +887,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -869,6 +928,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -906,6 +968,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -945,6 +1010,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -993,6 +1061,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -1025,6 +1096,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -1067,6 +1141,9 @@
           "type": "integer",
           "minimum": 1,
           "description": "Wait for the target element in ms (Web)"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -1103,6 +1180,9 @@
         },
         {
           "$ref": "#/definitions/openedUrlAssertion"
+        },
+        {
+          "$ref": "#/definitions/screenAssertion"
         }
       ]
     },
@@ -1131,6 +1211,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -1159,6 +1242,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -1187,6 +1273,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -1215,6 +1304,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -1251,6 +1343,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -1296,6 +1391,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -1330,6 +1428,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -1369,6 +1470,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -1413,6 +1517,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -1446,6 +1553,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -1478,6 +1588,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -1510,6 +1623,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -1544,6 +1660,9 @@
         },
         "when": {
           "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
         }
       },
       "required": [
@@ -1562,6 +1681,42 @@
         }
       ],
       "additionalProperties": false
+    },
+    "screenAssertion": {
+      "type": "object",
+      "properties": {
+        "assert": {
+          "const": "screen"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Canonical id of the screen expected to be displayed. Distinct from the step-level 'screen' key, which says where the step runs: during a transition the two legitimately differ."
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Max wait in ms for the screen to appear (default: screenTransitionTimeout)"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "assert",
+        "name"
+      ],
+      "additionalProperties": false,
+      "description": "Assert the named screen is displayed. Does NOT assert exclusivity: embedded screens, split panes and tab hosts legitimately show several at once."
     }
   }
 }
