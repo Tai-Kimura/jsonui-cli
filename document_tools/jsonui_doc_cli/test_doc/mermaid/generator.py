@@ -8,11 +8,72 @@ from datetime import datetime
 from typing import Any
 
 from ..html.sidebar import escape_html
+from .flow_graph import (
+    EDGE_BACK,
+    ScreenResolver,
+    flow_edges,
+    load_flow,
+    normalize_screen_ref,
+)
+
+
+def _collect_flow_graph(
+    flows_path: Path,
+    screens_path: Path,
+    layouts_dir: Path | None = None,
+) -> tuple[dict[str, str], dict[str, dict], list[tuple[str, str, str, str]], dict[str, list[str]]]:
+    """Walk every flow test once and return the whole graph.
+
+    Returns ``(nodes, node_metadata, edges, flow_subgraphs)`` where an edge
+    is ``(from_id, to_id, flow_name, kind)``. This is the single collection
+    pass — the combined and grouped builders both consume it, so their
+    node sets can no longer drift apart.
+    """
+    resolver = ScreenResolver(layouts_dir)
+    screen_lookup = _build_screen_test_lookup(screens_path, flows_path)
+
+    nodes: dict[str, str] = {}
+    node_metadata: dict[str, dict] = {}
+    edges: list[tuple[str, str, str, str]] = []
+    flow_subgraphs: dict[str, list[str]] = {}
+
+    for flow_file in sorted(flows_path.rglob("*.test.json")):
+        flow_data = load_flow(flow_file)
+        if flow_data is None:
+            continue
+
+        flow_name = flow_data.get("metadata", {}).get("name", flow_file.stem)
+        try:
+            flow_nodes, flow_transitions = flow_edges(flow_data.get("steps", []), resolver)
+        except Exception as e:  # pragma: no cover - defensive, mirrors old behaviour
+            print(f"  Warning: Error processing {flow_file}: {e}")
+            continue
+
+        if not flow_nodes:
+            continue
+
+        for screen_id in flow_nodes:
+            if screen_id in nodes:
+                continue
+            meta = _resolve_screen_metadata(screen_id, screen_lookup)
+            nodes[screen_id] = meta["label"]
+            node_metadata[screen_id] = {
+                "entry_screen": meta["entry_screen"],
+                "groups": meta["groups"],
+                "document": meta["document"],
+            }
+
+        flow_subgraphs[flow_name] = flow_nodes
+        for from_id, to_id, kind in flow_transitions:
+            edges.append((from_id, to_id, flow_name, kind))
+
+    return nodes, node_metadata, edges, flow_subgraphs
 
 
 def generate_mermaid_diagram(
     flows_dir: Path,
-    screens_dir: Path | None = None
+    screens_dir: Path | None = None,
+    layouts_dir: Path | None = None,
 ) -> str:
     """
     Generate a Mermaid flowchart diagram from all flow tests in a directory.
@@ -20,6 +81,8 @@ def generate_mermaid_diagram(
     Args:
         flows_dir: Directory containing flow test files
         screens_dir: Optional directory containing screen test files (defaults to sibling screens/)
+        layouts_dir: Optional layout tree; enables screen/cell classification
+            so Collection cells stop appearing as screens.
 
     Returns:
         Mermaid diagram string
@@ -32,74 +95,12 @@ def generate_mermaid_diagram(
     else:
         screens_path = Path(screens_dir)
 
-    # Collect all flow test files
-    flow_files = sorted(flows_path.rglob("*.test.json"))
-
-    if not flow_files:
+    if not sorted(flows_path.rglob("*.test.json")):
         return "flowchart LR\n    NO_FLOWS[No flow tests found]"
 
-    # Parse all flows and build node/edge data
-    all_nodes: dict[str, str] = {}  # node_id -> display label
-    node_metadata: dict[str, dict] = {}  # node_id -> {entry_screen, group}
-    all_edges: list[tuple[str, str, str]] = []  # (from_id, to_id, flow_name)
-    flow_subgraphs: dict[str, list[str]] = {}  # flow_name -> list of node_ids in order
-
-    for flow_file in flow_files:
-        try:
-            with open(flow_file, 'r', encoding='utf-8') as f:
-                flow_data = json.load(f)
-
-            if flow_data.get("type") != "flow":
-                continue
-
-            metadata = flow_data.get("metadata", {})
-            flow_name = metadata.get("name", flow_file.stem)
-            steps = flow_data.get("steps", [])
-
-            # Extract screen references from steps (skip inline actions)
-            screen_refs = _extract_screen_references(steps)
-
-            if not screen_refs:
-                continue
-
-            # Build nodes for this flow (screen level only, ignore case names)
-            flow_nodes = []
-            prev_screen = None
-            for screen_ref in screen_refs:
-                file_ref = screen_ref["file"]
-
-                # Skip if same screen as previous (consecutive same-screen steps)
-                if file_ref == prev_screen:
-                    continue
-                prev_screen = file_ref
-
-                # Create node ID from screen name only (no case)
-                node_id = _make_node_id(file_ref, None)
-
-                # Get display label and metadata from screen test
-                if node_id not in all_nodes:
-                    screen_meta = _get_screen_metadata(file_ref, screens_path, flows_path)
-                    all_nodes[node_id] = screen_meta["label"]
-                    node_metadata[node_id] = {
-                        "entry_screen": screen_meta["entry_screen"],
-                        "groups": screen_meta["groups"],  # Now a list
-                        "document": screen_meta["document"]
-                    }
-
-                flow_nodes.append(node_id)
-
-            # Store flow nodes
-            flow_subgraphs[flow_name] = flow_nodes
-
-            # Build edges (consecutive screen transitions)
-            for i in range(len(flow_nodes) - 1):
-                from_node = flow_nodes[i]
-                to_node = flow_nodes[i + 1]
-                all_edges.append((from_node, to_node, flow_name))
-
-        except Exception as e:
-            print(f"  Warning: Error processing {flow_file}: {e}")
-            continue
+    all_nodes, node_metadata, all_edges, flow_subgraphs = _collect_flow_graph(
+        flows_path, screens_path, layouts_dir
+    )
 
     # Generate Mermaid diagram
     return _build_mermaid_diagram(all_nodes, all_edges, flow_subgraphs, node_metadata)
@@ -107,7 +108,8 @@ def generate_mermaid_diagram(
 
 def generate_grouped_mermaid_diagrams(
     flows_dir: Path,
-    screens_dir: Path | None = None
+    screens_dir: Path | None = None,
+    layouts_dir: Path | None = None,
 ) -> dict[str, str]:
     """
     Generate separate Mermaid diagrams for each group.
@@ -115,9 +117,12 @@ def generate_grouped_mermaid_diagrams(
     Args:
         flows_dir: Directory containing flow test files
         screens_dir: Optional directory containing screen test files
+        layouts_dir: Optional layout tree; enables screen/cell classification
 
     Returns:
-        Dict of group_name -> mermaid_code
+        Dict of group_name -> mermaid_code. Empty when no flow yields a
+        screen — callers use that to suppress the diagram link instead of
+        publishing an empty page.
     """
     flows_path = Path(flows_dir)
 
@@ -131,55 +136,12 @@ def generate_grouped_mermaid_diagrams(
     if not flow_files:
         return {"All": "flowchart LR\n    NO_FLOWS[No flow tests found]"}
 
-    # Collect all data
-    all_nodes: dict[str, str] = {}
-    node_metadata: dict[str, dict] = {}
-    all_edges: list[tuple[str, str, str]] = []
+    all_nodes, node_metadata, all_edges, _flow_subgraphs = _collect_flow_graph(
+        flows_path, screens_path, layouts_dir
+    )
 
-    for flow_file in flow_files:
-        try:
-            with open(flow_file, 'r', encoding='utf-8') as f:
-                flow_data = json.load(f)
-
-            if flow_data.get("type") != "flow":
-                continue
-
-            metadata = flow_data.get("metadata", {})
-            flow_name = metadata.get("name", flow_file.stem)
-            steps = flow_data.get("steps", [])
-
-            screen_refs = _extract_screen_references(steps)
-            if not screen_refs:
-                continue
-
-            flow_nodes = []
-            prev_screen = None
-            for screen_ref in screen_refs:
-                file_ref = screen_ref["file"]
-                if file_ref == prev_screen:
-                    continue
-                prev_screen = file_ref
-
-                node_id = _make_node_id(file_ref, None)
-                if node_id not in all_nodes:
-                    screen_meta = _get_screen_metadata(file_ref, screens_path, flows_path)
-                    all_nodes[node_id] = screen_meta["label"]
-                    node_metadata[node_id] = {
-                        "entry_screen": screen_meta["entry_screen"],
-                        "groups": screen_meta["groups"],  # Now a list
-                        "document": screen_meta["document"]
-                    }
-
-                flow_nodes.append(node_id)
-
-            for i in range(len(flow_nodes) - 1):
-                from_node = flow_nodes[i]
-                to_node = flow_nodes[i + 1]
-                all_edges.append((from_node, to_node, flow_name))
-
-        except Exception as e:
-            print(f"  Warning: Error processing {flow_file}: {e}")
-            continue
+    if not all_nodes:
+        return {}
 
     # Group nodes by their groups metadata (nodes can belong to multiple groups)
     groups: dict[str, set[str]] = {}
@@ -205,18 +167,18 @@ def generate_grouped_mermaid_diagrams(
         # Include entry nodes in the diagram if they connect to this group
         relevant_entry_nodes = set()
         for entry_node in entry_nodes:
-            for from_id, to_id, _ in all_edges:
+            for from_id, to_id, _flow_name, _kind in all_edges:
                 if from_id == entry_node and to_id in group_nodes:
                     relevant_entry_nodes.add(entry_node)
                     break
 
         # Get edges within this group or from entry nodes to this group
         group_edges = []
-        for from_id, to_id, flow_name in all_edges:
+        for from_id, to_id, _flow_name, kind in all_edges:
             from_in_group = from_id in group_nodes or from_id in relevant_entry_nodes
             to_in_group = to_id in group_nodes
             if from_in_group and to_in_group:
-                group_edges.append((from_id, to_id))
+                group_edges.append((from_id, to_id, kind))
 
         # Build mermaid for this group
         lines = ["flowchart LR"]
@@ -226,9 +188,9 @@ def generate_grouped_mermaid_diagrams(
             lines.append("")
             lines.append("    %% Entry screens")
             for node_id in sorted(relevant_entry_nodes):
-                label = all_nodes[node_id]
-                safe_label = label.replace('"', "'").replace("\n", " ")
-                lines.append(f'    {node_id}(["{safe_label}"]):::entryNode')
+                lines.append(
+                    f'    {_emit_node_id(node_id)}(["{_escape_label(all_nodes[node_id])}"]):::entryNode'
+                )
             lines.append("")
             lines.append("    classDef entryNode fill:#e8f5e9,stroke:#4caf50,stroke-width:3px")
 
@@ -237,20 +199,16 @@ def generate_grouped_mermaid_diagrams(
         lines.append(f"    %% {group_name}")
         for node_id in sorted(group_nodes):
             if node_id not in relevant_entry_nodes:
-                label = all_nodes[node_id]
-                safe_label = label.replace('"', "'").replace("\n", " ")
-                lines.append(f'    {node_id}["{safe_label}"]')
+                lines.append(
+                    f'    {_emit_node_id(node_id)}["{_escape_label(all_nodes[node_id])}"]'
+                )
 
         # Add edges
         if group_edges:
             lines.append("")
             lines.append("    %% Transitions")
-            seen_edges = set()
-            for from_id, to_id in group_edges:
-                edge_key = (from_id, to_id)
-                if edge_key not in seen_edges:
-                    seen_edges.add(edge_key)
-                    lines.append(f"    {from_id} --> {to_id}")
+            for from_id, to_id, kind in _dedupe_edges(group_edges):
+                lines.append(_edge_line(from_id, to_id, kind))
 
         # Add click events for nodes with document links
         click_lines = []
@@ -259,9 +217,10 @@ def generate_grouped_mermaid_diagrams(
             meta = node_metadata.get(node_id, {})
             document = meta.get("document")
             if document:
-                label = all_nodes[node_id]
-                safe_tooltip = label.replace('"', "'")
-                click_lines.append(f'    click {node_id} "{document}" "{safe_tooltip}"')
+                safe_tooltip = all_nodes[node_id].replace('"', "'")
+                click_lines.append(
+                    f'    click {_emit_node_id(node_id)} "{document}" "{safe_tooltip}"'
+                )
 
         if click_lines:
             lines.append("")
@@ -324,6 +283,55 @@ def _sanitize_id(name: str) -> str:
     return f"group_{hash_suffix}"
 
 
+#: Mermaid keywords that cannot stand alone as a node identifier.
+_MERMAID_RESERVED = frozenset(
+    {"end", "graph", "subgraph", "class", "classDef", "click", "style", "linkStyle", "o", "x"}
+)
+
+
+def _emit_node_id(screen_id: str) -> str:
+    """Diagram-safe identifier for a screen id.
+
+    Screen ids reach us straight from test files, so a space, a non-ASCII
+    name or a Mermaid keyword would otherwise emit a broken diagram.
+    """
+    safe = _sanitize_id(screen_id)
+    if safe in _MERMAID_RESERVED:
+        return f"{safe}_node"
+    return safe
+
+
+def _escape_label(label: str) -> str:
+    """Escape a display label for use inside a Mermaid node bracket."""
+    out = str(label).replace('"', "'").replace("\n", " ")
+    for char in ("[", "]", "(", ")", "{", "}", "|"):
+        out = out.replace(char, " ")
+    return out.strip()
+
+
+def _dedupe_edges(edges) -> list[tuple[str, str, str]]:
+    """Collapse duplicate (from, to) pairs, keeping the first kind seen.
+
+    A pair that occurs both as a forward transition and as a back
+    transition stays forward: the forward arrow is the one that carries
+    navigational meaning.
+    """
+    kinds: dict[tuple[str, str], str] = {}
+    for from_id, to_id, kind in edges:
+        key = (from_id, to_id)
+        if key not in kinds or kinds[key] == EDGE_BACK:
+            kinds[key] = kind
+    return [(from_id, to_id, kind) for (from_id, to_id), kind in sorted(kinds.items())]
+
+
+def _edge_line(from_id: str, to_id: str, kind: str) -> str:
+    """Render one edge. Back navigation uses a dotted arrow so a screen
+    pair linked by "go forward, then go back" reads as one round trip
+    rather than two equivalent transitions."""
+    arrow = "-.->" if kind == EDGE_BACK else "-->"
+    return f"    {_emit_node_id(from_id)} {arrow} {_emit_node_id(to_id)}"
+
+
 def _make_node_id(file_ref: str, case_name: str | None) -> str:
     """Create a unique node ID from file reference and case name."""
     # Sanitize for Mermaid node IDs (alphanumeric and underscore only)
@@ -332,6 +340,81 @@ def _make_node_id(file_ref: str, case_name: str | None) -> str:
         case_part = case_name.replace("-", "_").replace(".", "_")
         return f"{base}_{case_part}"
     return base
+
+
+def _build_screen_test_lookup(screens_path: Path, flows_path: Path) -> dict[str, list[dict]]:
+    """Index every screen test by the canonical screen id it covers.
+
+    The id comes from ``source.layout``'s basename — the file's own name is
+    unreliable because one screen commonly has several test files
+    (``login_smoke``, ``login_tier2a_scroll_conditions``, ...) and because
+    a test whose steps start on another screen legitimately points its
+    ``source.layout`` elsewhere.
+    """
+    lookup: dict[str, list[dict]] = {}
+    for base in (screens_path, flows_path):
+        if not base or not Path(base).is_dir():
+            continue
+        for path in sorted(Path(base).rglob("*.test.json")):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(data, dict) or data.get("type") != "screen":
+                continue
+            layout = (data.get("source") or {}).get("layout")
+            if not isinstance(layout, str) or not layout:
+                continue
+            lookup.setdefault(normalize_screen_ref(layout), []).append(data)
+    return lookup
+
+
+def _resolve_screen_metadata(screen_id: str, lookup: dict[str, list[dict]]) -> dict:
+    """Label / entry_screen / group / document for one screen id.
+
+    With several tests covering one screen, the display name is left as the
+    derived title: picking "the first" silently labels a node with another
+    screen's test name. Flags and links are merged instead, since those are
+    screen-level facts every test on that screen agrees about.
+    """
+    result = {
+        "label": screen_id.replace("_", " ").title(),
+        "entry_screen": False,
+        "groups": [],
+        "document": None,
+    }
+
+    tests = lookup.get(screen_id) or []
+    if not tests:
+        return result
+
+    names = {
+        (t.get("metadata") or {}).get("name")
+        for t in tests
+        if (t.get("metadata") or {}).get("name")
+    }
+    if len(names) == 1:
+        result["label"] = names.pop()
+
+    groups: list[str] = []
+    for test in tests:
+        metadata = test.get("metadata") or {}
+        if metadata.get("entry_screen"):
+            result["entry_screen"] = True
+        group_val = metadata.get("group")
+        if isinstance(group_val, list):
+            groups.extend(str(g) for g in group_val)
+        elif isinstance(group_val, str) and group_val:
+            groups.append(group_val)
+        if result["document"] is None:
+            document = (test.get("source") or {}).get("document")
+            if isinstance(document, str) and document:
+                result["document"] = document
+
+    seen: set[str] = set()
+    result["groups"] = [g for g in groups if not (g in seen or seen.add(g))]
+    return result
 
 
 def _get_screen_metadata(
@@ -502,9 +585,9 @@ def _build_mermaid_diagram(
         lines.append("")
         lines.append("    %% Entry screens")
         for node_id in sorted(entry_nodes):
-            label = nodes[node_id]
-            safe_label = label.replace('"', "'").replace("\n", " ")
-            lines.append(f'    {node_id}(["{safe_label}"]):::entryNode')
+            lines.append(
+                f'    {_emit_node_id(node_id)}(["{_escape_label(nodes[node_id])}"]):::entryNode'
+            )
         lines.append("")
         lines.append("    classDef entryNode fill:#e8f5e9,stroke:#4caf50,stroke-width:3px")
 
@@ -514,11 +597,11 @@ def _build_mermaid_diagram(
         # Sanitize group name for subgraph ID (must be alphanumeric + underscore only)
         group_id = _sanitize_id(group_name)
         lines.append("")
-        lines.append(f'    subgraph {group_id}["{group_name}"]')
+        lines.append(f'    subgraph {group_id}["{_escape_label(group_name)}"]')
         for node_id in sorted(group_node_ids):
-            label = nodes[node_id]
-            safe_label = label.replace('"', "'").replace("\n", " ")
-            lines.append(f'        {node_id}["{safe_label}"]')
+            lines.append(
+                f'        {_emit_node_id(node_id)}["{_escape_label(nodes[node_id])}"]'
+            )
         lines.append("    end")
 
     # Define ungrouped nodes
@@ -526,45 +609,33 @@ def _build_mermaid_diagram(
         lines.append("")
         lines.append("    %% Other screens")
         for node_id in sorted(ungrouped_nodes):
-            label = nodes[node_id]
-            safe_label = label.replace('"', "'").replace("\n", " ")
-            lines.append(f'    {node_id}["{safe_label}"]')
+            lines.append(f'    {_emit_node_id(node_id)}["{_escape_label(nodes[node_id])}"]')
 
     # Build unique edges (deduplicate same source->target pairs)
-    unique_edges: dict[tuple[str, str], list[str]] = {}
-    for from_id, to_id, flow_name in edges:
-        key = (from_id, to_id)
-        if key not in unique_edges:
-            unique_edges[key] = []
-        if flow_name not in unique_edges[key]:
-            unique_edges[key].append(flow_name)
+    unique_edges = _dedupe_edges((from_id, to_id, kind) for from_id, to_id, _flow, kind in edges)
 
     # Separate entry screen edges (output first for LR layout positioning)
-    entry_edges = []
-    other_edges = []
-    for (from_id, to_id), flow_names in sorted(unique_edges.items()):
-        if from_id in entry_nodes:
-            entry_edges.append((from_id, to_id))
-        else:
-            other_edges.append((from_id, to_id))
+    entry_edges = [e for e in unique_edges if e[0] in entry_nodes]
+    other_edges = [e for e in unique_edges if e[0] not in entry_nodes]
 
     # Add edges - entry screen edges first for left positioning in LR layout
     lines.append("")
     lines.append("    %% Transitions")
-    for from_id, to_id in entry_edges:
-        lines.append(f"    {from_id} --> {to_id}")
-    for from_id, to_id in other_edges:
-        lines.append(f"    {from_id} --> {to_id}")
+    for from_id, to_id, kind in entry_edges:
+        lines.append(_edge_line(from_id, to_id, kind))
+    for from_id, to_id, kind in other_edges:
+        lines.append(_edge_line(from_id, to_id, kind))
 
     # Add click events for nodes with document links
     click_lines = []
-    for node_id in nodes:
+    for node_id in sorted(nodes):
         meta = node_metadata.get(node_id, {})
         document = meta.get("document")
         if document:
-            label = nodes[node_id]
-            safe_tooltip = label.replace('"', "'")
-            click_lines.append(f'    click {node_id} "{document}" "{safe_tooltip}"')
+            safe_tooltip = nodes[node_id].replace('"', "'")
+            click_lines.append(
+                f'    click {_emit_node_id(node_id)} "{document}" "{safe_tooltip}"'
+            )
 
     if click_lines:
         lines.append("")
@@ -578,7 +649,8 @@ def generate_mermaid_html(
     flows_dir: Path,
     output_path: Path,
     title: str = "Flow Diagram",
-    screens_dir: Path | None = None
+    screens_dir: Path | None = None,
+    layouts_dir: Path | None = None,
 ) -> str:
     """
     Generate an HTML page with embedded Mermaid diagrams (one per group).
@@ -588,12 +660,22 @@ def generate_mermaid_html(
         output_path: Path to write HTML file
         title: Page title
         screens_dir: Optional directory containing screen test files
+        layouts_dir: Optional layout tree; enables screen/cell classification
 
     Returns:
-        The generated Mermaid diagram string (combined)
+        The generated Mermaid diagram string (combined), or an empty string
+        when no flow yields a screen. Callers MUST treat the empty string as
+        "no diagram" and suppress the link: publishing a page with zero tabs
+        used to render a blank page (its tab script has no tab to select).
+
+    Raises:
+        Nothing — an empty result is a normal outcome, not an error.
     """
     # Generate grouped diagrams
-    grouped_diagrams = generate_grouped_mermaid_diagrams(flows_dir, screens_dir)
+    grouped_diagrams = generate_grouped_mermaid_diagrams(flows_dir, screens_dir, layouts_dir)
+
+    if not grouped_diagrams:
+        return ""
 
     html_content = _generate_tabbed_mermaid_html_page(grouped_diagrams, title)
 

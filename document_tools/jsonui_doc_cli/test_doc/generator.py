@@ -869,9 +869,16 @@ def generate_html_directory(
             flows_dir = input_path / "flows" if (input_path / "flows").exists() else input_path
             screens_dir = input_path / "screens" if (input_path / "screens").exists() else flows_dir.parent / "screens"
             mermaid_output = output_path / "diagram.html"
-            generate_mermaid_html(flows_dir, mermaid_output, "Flow Diagram", screens_dir)
-            mermaid_generated = True
-            print(f"  Generated: {mermaid_output}")
+            diagram = generate_mermaid_html(
+                flows_dir, mermaid_output, "Flow Diagram", screens_dir, layouts_dir
+            )
+            # An empty result means no flow produced a screen — link nothing
+            # rather than publishing a page the tab script cannot render.
+            mermaid_generated = bool(diagram)
+            if mermaid_generated:
+                print(f"  Generated: {mermaid_output}")
+            else:
+                print("  Skipped: flow diagram has no screens")
         except Exception as e:
             print(f"  Warning: Could not generate Mermaid diagram: {e}")
 

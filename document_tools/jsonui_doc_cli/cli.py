@@ -232,16 +232,23 @@ def cmd_generate_mermaid(args):
     print(f"  Flows: {flows_dir}")
     print(f"  Screens: {screens_dir}")
 
+    # Layout tree (optional): lets the generator tell screens from cells so
+    # Collection cells stop being drawn as screens.
+    layouts_dir = Path(args.layouts_dir) if getattr(args, "layouts_dir", None) else _resolve_layouts_dir_from_config()
+
     try:
         if output_path:
             # Generate HTML with embedded Mermaid
-            mermaid_code = generate_mermaid_html(flows_dir, output_path, title, screens_dir)
+            mermaid_code = generate_mermaid_html(flows_dir, output_path, title, screens_dir, layouts_dir)
             print()
-            print(f"Generated: {output_path}")
-            print(f"Open in browser to view the diagram")
+            if mermaid_code:
+                print(f"Generated: {output_path}")
+                print(f"Open in browser to view the diagram")
+            else:
+                print("No screen transitions found — no diagram written")
         else:
             # Output Mermaid code to stdout
-            mermaid_code = generate_mermaid_diagram(flows_dir, screens_dir)
+            mermaid_code = generate_mermaid_diagram(flows_dir, screens_dir, layouts_dir)
             print()
             print(mermaid_code)
 
@@ -1292,6 +1299,14 @@ def main():
     gen_mermaid_parser.add_argument(
         "-s", "--screens",
         help="Path to screens directory (default: auto-detect)"
+    )
+    gen_mermaid_parser.add_argument(
+        "--layouts-dir",
+        help=(
+            "Path to the layout tree (default: auto-detect from jui.config.json). "
+            "Used to tell screens from Collection cells / partials so sub-areas "
+            "are not drawn as screens."
+        )
     )
 
     # Generate adapter subcommand

@@ -1,0 +1,161 @@
+{
+  "version": 1,
+  "title": "JsonUI screen identity and navigation-assertion semantics (canonical)",
+  "notes": "Hand-authored canonical source (screen-identity track, declared 2026-07-25). This file IS the SSoT for what a 'screen' is, how a screen is identified across specs / layouts / tests / generated code, and how a screen's presence is asserted at runtime. Generators, validators, drivers and the flow-diagram generator conform to it, not the other way around. Canonical choices are design decisions, not majority votes of existing implementations.",
+
+  "screenId": {
+    "source": "layoutBasename",
+    "description": "A screen's canonical id is the basename of its layout file with the '.json' extension removed, kept verbatim (snake_case). The same id is used by spec files, screen/flow tests, generated markers and diagram nodes.",
+    "collection": "recursive",
+    "collectionNote": "Layout directories are scanned RECURSIVELY (Layouts/**/*.json). A flat glob under-collects: real projects nest sheets and cells one level deep (measured: 108 layouts, only 40 at the top level).",
+    "uniqueness": "projectWide",
+    "uniquenessNote": "Basenames must be unique across the whole layout tree; a collision makes the id ambiguous and is a validator error (rule: screen-id-collision).",
+    "variantNormalization": {
+      "pattern": "<base>@<class>.json",
+      "classes": ["compact", "medium", "regular"],
+      "rule": "Variant files normalize to the base id ('home@regular' -> 'home'). Variants are alternate renderings of the same screen, never a separate screen."
+    }
+  },
+
+  "screenClassification": {
+    "description": "Not every layout is a screen. Only screens carry a marker, are valid 'screen' values in tests, and become diagram nodes.",
+    "roles": ["screen", "cell", "partial"],
+    "resolutionOrder": [
+      {
+        "step": 1,
+        "rule": "explicitRole",
+        "detail": "If the layout root declares \"role\": \"screen\" | \"cell\" | \"partial\", that declaration wins. The explicit declaration is canonical; derivation only fills in what is not declared."
+      },
+      {
+        "step": 2,
+        "rule": "referencedAsNonScreen",
+        "detail": "A layout referenced by ANY other layout through 'cell', 'header', 'footer', 'cellClasses' or 'include' is not a screen (it is instantiated inside another layout, potentially once per data row).",
+        "referenceKeys": ["cell", "header", "footer", "cellClasses", "include"]
+      },
+      {
+        "step": 3,
+        "rule": "partialFlag",
+        "detail": "A layout with \"partial\": true is not a screen. This is a sufficient condition only — it is under-used in practice (measured: 2 of 108 layouts), so it must never be treated as the necessary condition."
+      },
+      {
+        "step": 4,
+        "rule": "defaultScreen",
+        "detail": "Anything left over is classified as a screen. Derivation is deliberately imperfect: tools MUST report the derived classification so authors can correct outliers with an explicit role (step 1)."
+      }
+    ]
+  },
+
+  "marker": {
+    "namePattern": "__screen_<screenId>",
+    "prefix": "__screen_",
+    "description": "Runtime identity beacon emitted by code generation into every screen, and only into screens. Tests never spell the marker: it is an implementation detail owned by the drivers.",
+    "invariants": [
+      "A rendered screen exposes EXACTLY ONE marker. Zero markers means the generated code or the library pin is stale; two or more means a generator bug (variant struct, double-drive) — both are hard errors, not warnings.",
+      "The marker is a DEDICATED NODE, never an identifier applied to the layout's root node. Every platform has a single identifier slot per node (iOS accessibilityIdentifier, Compose testTag, web root id), and the root's own id is load-bearing for existing tests (measured: 73 of 108 layouts declare a root id).",
+      "The marker is emitted on every rendered branch of a screen (a root-level responsive split produces more than one static branch).",
+      "Variant structs do NOT emit a marker; the base emits it once.",
+      "Static and dynamic (hot reload) rendering paths must both emit the marker; a mode-dependent marker splits test results by rendering mode.",
+      "Dynamic renderers receive the marker from the screen call site. Auto-attaching it at the DynamicView entry point is forbidden: cells, tabs, embeds, includes and dialogs re-enter the same entry point and would each grow a false marker."
+    ],
+    "platforms": {
+      "ios-swiftui": {
+        "mechanism": "overlay leaf",
+        "detail": "A 0.5x0.5 Color.clear leaf in an overlay(alignment: .topLeading) carrying .accessibilityElement(children: .ignore) + .accessibilityIdentifier(marker). Deliberately NOT an accessibility container: making the screen root a container merges single-child subtrees and drops the inner element's identifier (measured regression, 2026-07-21)."
+      },
+      "ios-uikit": {
+        "mechanism": "sibling view",
+        "detail": "A 1x1 empty UIView added to the root view with accessibilityIdentifier = marker. UIKit exposes a flat accessibility tree, so no container semantics are involved."
+      },
+      "android-compose": {
+        "mechanism": "sibling node",
+        "detail": "A zero-size Box sibling carrying Modifier.testTag(marker).semantics { testTagsAsResourceId = true }. mergeDescendants and clearAndSetSemantics are forbidden on or above the marker: both erase descendant test tags."
+      },
+      "web-react": {
+        "mechanism": "data attribute",
+        "detail": "A data-screen=\"<screenId>\" attribute on the generated root element. The root 'id' is NOT usable: it is an externally supplied prop and callers already override it."
+      }
+    }
+  },
+
+  "assertion": {
+    "vocabulary": {
+      "assert": "screen",
+      "targetKey": "name",
+      "optionalKeys": ["timeout", "label", "optional", "when"],
+      "example": { "assert": "screen", "name": "mypage", "timeout": 10000 }
+    },
+    "targetKeyNote": "The target key is 'name' (mirroring screenshotAssertion). The step-level 'screen' key means 'the screen this step runs on' and must not be overloaded as the assertion target — during a transition the two legitimately differ.",
+    "semantics": "The named screen IS DISPLAYED. It does not assert that the screen is displayed EXCLUSIVELY: embedded screens, split-pane layouts and tab hosts legitimately show several markers at once.",
+    "timing": "A marker means the destination has been CONSTRUCTED, not that the transition animation has settled. Both iOS NavigationStack and Android NavHost compose source and destination simultaneously for the duration of the transition.",
+    "rejected": {
+      "waitForScreen": "Assertions already auto-wait; a separate wait action would be a second spelling of one concept.",
+      "should_navigate_to": "Vocabulary is camelCase with action/assert separated.",
+      "exclusive": "No measured demand; asserting exclusivity requires window scoping that no driver has."
+    }
+  },
+
+  "predicates": {
+    "note": "Per-platform predicates for 'the marker is displayed'. Platform differences live here because the underlying accessibility runtimes genuinely differ; everything above this section is platform-neutral.",
+    "ios": {
+      "predicate": "exists && !frame.isEmpty && frame intersects app.frame",
+      "rationale": "isHittable is unusable as a visibility signal for accessibility containers (hit-testing resolves to a child), and a pushed-away screen can remain in the hierarchy with exists == true.",
+      "status": "provisional"
+    },
+    "android": {
+      "predicate": "found from rootInActiveWindow && visibleBounds is non-empty",
+      "rationale": "Dialogs and modal bottom sheets live in separate windows; a whole-device search would report a covered screen as present.",
+      "status": "provisional"
+    },
+    "web": {
+      "predicate": "attached && hydration complete",
+      "rationale": "Server-rendered markup exposes the marker before hydration attaches handlers, so 'visible' alone is a false positive.",
+      "status": "provisional"
+    },
+    "statusNote": "'provisional' predicates must be confirmed by device measurement before default-on verification is enabled; the measured result replaces the predicate here."
+  },
+
+  "implicitVerification": {
+    "scope": "flowInlineStepScreenChange",
+    "description": "In a flow test, the driver verifies the marker at each point where the inline step's 'screen' differs from the previously executed step's screen.",
+    "rules": [
+      "Steps skipped by a 'when' condition do not advance the tracked screen.",
+      "A file-reference step carries no screen: reset the tracker to unknown so the next inline step is verified.",
+      "Steps inside a block continue the enclosing screen.",
+      "Screens that legitimately co-present (split-pane hosts, tab hosts) may opt out per screen."
+    ],
+    "timeout": {
+      "key": "screenTransitionTimeout",
+      "defaultMs": 10000,
+      "rationale": "Distinct from defaultTimeout (5000ms): real cross-screen assertions in production suites already use 15000-20000ms after a cold start."
+    },
+    "optOut": {
+      "config": "TestRunnerConfig.verifyScreenTransitions",
+      "default": true
+    },
+    "failureClasses": [
+      { "id": "marker-absent", "meaning": "No marker anywhere — stale generated code or stale library pin (infrastructure, not a test failure)." },
+      { "id": "previous-screen-only", "meaning": "Only the previous screen's marker is present — the navigation did not happen (a real test failure)." },
+      { "id": "marker-not-displayed", "meaning": "Expected marker exists but fails the platform predicate — transition animation or predicate problem." },
+      { "id": "children-unresolvable", "meaning": "Marker present but the screen's own element ids cannot be resolved — accessibility regression." }
+    ]
+  },
+
+  "diagram": {
+    "description": "The screen-transition diagram is derived from the same ids.",
+    "nodeSource": "flow test inline step 'screen' values, plus file-reference steps normalized to the same id space",
+    "pipeline": ["resolve", "canonicalize", "collapseConsecutiveDuplicates", "buildEdges"],
+    "rules": [
+      "Self-loops are discarded (they are the collapse of a screen onto itself).",
+      "An edge caused by a 'back' action is a return edge and is rendered distinctly from a forward transition.",
+      "Node ids are sanitized for the diagram language; a screen id is never emitted raw into a diagram identifier position."
+    ]
+  },
+
+  "validatorRules": [
+    { "id": "screen-unknown", "severity": "error", "message": "A test's 'screen' value does not resolve to a known screen id." },
+    { "id": "screen-not-a-screen", "severity": "error", "message": "A test's 'screen' value resolves to a layout classified as a cell or partial. Use the owning screen." },
+    { "id": "screen-id-collision", "severity": "error", "message": "Two layouts share a basename, making the screen id ambiguous." },
+    { "id": "screen-source-layout-missing", "severity": "error", "message": "A flow 'sources[].layout' path does not exist." },
+    { "id": "screen-alias-unreferenced", "severity": "warning", "message": "A flow declares a 'sources[].alias' that no step references." }
+  ]
+}
