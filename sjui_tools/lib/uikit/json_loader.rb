@@ -327,7 +327,7 @@ module SjuiTools
         # If there's nothing to add, return the base content
         return base_content unless needs_bind_view
 
-        # Requires SwiftJsonUI >= 10.9.0 (screen marker)
+        # Requires SwiftJsonUI >= 10.8.0 (screen marker)
         marker_line = @screen_marker ? "        applyScreenMarker(\"#{@screen_marker}\")\n" : ""
         
         # If there's already a bindView method, we need to add to it
