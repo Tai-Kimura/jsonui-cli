@@ -1157,37 +1157,75 @@ module RjuiTools
         def get_value(key, component_type = nil)
           json[key] || defaults(component_type)[key]
         end
-        # partialAttributes on web is rendered at BUILD time by slicing the
-        # literal `text`, so two shapes the canon allows cannot work here and
-        # used to be dropped in silence — no error, no warning, just a label
-        # with the styling and the click handler missing.
+        # Bare JS expression that evaluates to the RESOLVED text at runtime.
         #
-        # iOS and Android hand the partials to their runtime, which sees the
-        # resolved string, so both shapes work there. Until web does the
-        # same, say so at build time instead of emitting something wrong.
-        def warn_unsupported_partial_ranges(partials, text)
-          return unless defined?(Core::Logger)
+        # convert_text_binding hands back a JSX-embeddable form ("{expr}",
+        # a bare run of text, or a <>...</> fragment). partialText needs the
+        # expression itself, and it must resolve at runtime so a localized
+        # key becomes the translated string before ranges are applied.
+        def text_runtime_expression(value)
+          return "''" unless value.is_a?(String)
 
-          dropped = partials.reject { |p| p['range'].is_a?(Array) }
-          unless dropped.empty?
-            shapes = dropped.map { |p| p['range'].inspect }.join(', ')
-            Core::Logger.warn(
-              "Label partialAttributes: #{dropped.length} partial(s) with a non-array range " \
-              "(#{shapes}) are NOT rendered on web and were dropped. Web slices the literal " \
-              'text at build time, so pattern and binding ranges cannot be resolved; only ' \
-              '[start, end] works. iOS and Android render these at runtime.'
-            )
+          if (resolved = convert_string_key(value))
+            return resolved.sub(/\A\{/, '').sub(/\}\z/, '')
           end
 
-          # A string-resource key or a binding is not the text the user sees,
-          # so slicing it produces sliced key fragments in the output.
-          if text.is_a?(String) && (has_binding?(text) || convert_string_key(text))
-            Core::Logger.warn(
-              "Label partialAttributes combined with a localized/bound text ('#{text}') — " \
-              'web slices the raw key at build time, so the string table is bypassed and ' \
-              'the key itself is emitted. Use a literal text here, or move the emphasis out ' \
-              'of the Label, until web renders partials at runtime.'
-            )
+          if value.match?(/@\{[^}]+\}/)
+            return convert_text_binding(value).sub(/\A\{/, '').sub(/\}\z/, '')
+          end
+
+          "`#{escape_template_literal_segment(value)}`"
+        end
+
+        # JS array literal of PartialSpec objects for the partialText helper.
+        #
+        # Styling is static, so it is resolved here; the RANGE is not — a
+        # pattern or a binding can only be matched against the resolved
+        # string, which is why this is handed to the runtime rather than
+        # sliced during the build.
+        def build_partial_specs(partials)
+          specs = partials.map do |partial|
+            parts = []
+            parts << "range: #{partial_range_expression(partial)}"
+
+            style = build_partial_style(partial)
+            parts << "style: { #{style} }" unless style.empty?
+
+            klass = build_partial_class(partial)
+            parts << "className: '#{klass}'" unless klass.empty?
+
+            if partial['onclick']
+              parts << if is_binding_format?(partial['onclick'])
+                         # Same contract as every other handler site: a
+                         # handler is a selector, not a binding. Kept as an
+                         # inline comment so the marker survives into the
+                         # emitted object literal instead of vanishing.
+                         '/* ERROR: onclick requires selector format (string) */'
+                       else
+                         "onClick: #{add_viewmodel_data_prefix(partial['onclick'])}"
+                       end
+            end
+
+            "{ #{parts.join(', ')} }"
+          end
+          "[#{specs.join(', ')}]"
+        end
+
+        # An array stays an array literal; a binding becomes the expression
+        # (it may yield either shape at runtime, and the helper accepts
+        # both); anything else is a text pattern to find.
+        def partial_range_expression(partial)
+          range = partial['range']
+          case range
+          when Array then "[#{range.join(', ')}]"
+          when String
+            if is_binding_format?(range)
+              inner = range[/\A@\{(.+)\}\z/, 1] || range
+              add_viewmodel_data_prefix(inner)
+            else
+              "'#{range.gsub("\\", "\\\\").gsub("'", "\\'")}'"
+            end
+          else "''"
           end
         end
 

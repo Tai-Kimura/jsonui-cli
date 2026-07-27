@@ -165,59 +165,19 @@ module RjuiTools
 
         private
 
-        # Render text with partial attributes (styled spans within text)
+        # Render text with partial attributes.
+        #
+        # The partials are handed to the generated `partialText` helper and
+        # applied at RUNTIME, against the resolved string. Slicing here at
+        # build time could not support a pattern range or a localized text,
+        # and iOS/Android have always done this at runtime.
         def render_partial_attributes(indent, id_attr, class_name, style_attr, onclick_attr, testid_attr, tag_attr)
-          text = attributes['text'] || ''
-          partials = attributes['partialAttributes']
+          text_expr = text_runtime_expression(attributes['text'] || '')
+          specs = build_partial_specs(attributes['partialAttributes'])
 
-          # Build JSX with styled spans
           lines = []
           lines << "#{indent_str(indent)}<span#{id_attr} className=\"#{class_name}\"#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>"
-
-          warn_unsupported_partial_ranges(partials, text)
-
-          # Sort partials by range start position
-          sorted_partials = partials.select { |p| p['range'].is_a?(Array) }.sort_by { |p| p['range'][0] }
-
-          current_pos = 0
-          sorted_partials.each do |partial|
-            range_start = partial['range'][0]
-            range_end = partial['range'][1]
-
-            # Add text before this partial
-            if current_pos < range_start
-              before_text = text[current_pos...range_start]
-              lines << "#{indent_str(indent + 2)}#{escape_jsx_text(before_text)}"
-            end
-
-            # Add the styled span
-            partial_text = text[range_start...range_end]
-            partial_style = build_partial_style(partial)
-            partial_class = build_partial_class(partial)
-            partial_onclick = if partial['onclick']
-                                if is_binding_format?(partial['onclick'])
-                                  " {/* ERROR: onclick requires selector format (string) */}"
-                                else
-                                  " onClick={#{add_viewmodel_data_prefix(partial['onclick'])}}"
-                                end
-                              else
-                                ''
-                              end
-
-            class_attr = partial_class.empty? ? '' : " className=\"#{partial_class}\""
-            style_inline = partial_style.empty? ? '' : " style={{ #{partial_style} }}"
-
-            lines << "#{indent_str(indent + 2)}<span#{class_attr}#{style_inline}#{partial_onclick}>#{escape_jsx_text(partial_text)}</span>"
-
-            current_pos = range_end
-          end
-
-          # Add remaining text after last partial
-          if current_pos < text.length
-            remaining_text = text[current_pos..]
-            lines << "#{indent_str(indent + 2)}#{escape_jsx_text(remaining_text)}"
-          end
-
+          lines << "#{indent_str(indent + 2)}{partialText(#{text_expr}, #{specs})}"
           lines << "#{indent_str(indent)}</span>"
           lines.join("\n")
         end

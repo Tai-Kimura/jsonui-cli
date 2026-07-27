@@ -339,8 +339,11 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         ]
       })
       result = converter.convert
-      expect(result).to include("<span style={{ color: '#FF0000', fontWeight: 'bold' }}>Hello</span>")
-      expect(result).to include(' World')
+      # Partials are applied at RUNTIME against the resolved string, so the
+      # build emits the spec rather than pre-sliced spans.
+      expect(result).to include('partialText(`Hello World`,')
+      expect(result).to include("range: [0, 5]")
+      expect(result).to include("style: { color: '#FF0000', fontWeight: 'bold' }")
     end
 
     it 'handles multiple partial attributes' do
@@ -368,7 +371,7 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         ]
       })
       result = converter.convert
-      expect(result).to include('className="underline"')
+      expect(result).to include("className: 'underline'")
     end
 
     it 'applies strikethrough to partial' do
@@ -380,7 +383,7 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         ]
       })
       result = converter.convert
-      expect(result).to include('className="line-through"')
+      expect(result).to include("className: 'line-through'")
     end
 
     it 'applies onclick to partial' do
@@ -394,7 +397,7 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       result = converter.convert
       # Intended change (2026-07-24): partial onclick now follows the base
       # onclick contract — selector resolves to a data.-prefixed reference.
-      expect(result).to include('onClick={data.handlePartialClick}')
+      expect(result).to include('onClick: data.handlePartialClick')
       expect(result).to include('cursor-pointer')
     end
 
@@ -484,6 +487,62 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
     end
   end
 
+  # The reason partials moved to runtime rendering: these three shapes are
+  # impossible to resolve during the build, and iOS/Android have always
+  # supported them. Each was silently broken on web before.
+  describe 'partialAttributes runtime resolution' do
+    it 'keeps a text-pattern range instead of dropping it' do
+      converter = create_converter({
+        'type' => 'Label',
+        'text' => 'Go to screen identity now',
+        'partialAttributes' => [
+          { 'range' => 'screen identity', 'fontColor' => '#2563EB', 'onclick' => 'onNavigate' }
+        ]
+      })
+      result = converter.convert
+      # Used to vanish entirely — no span, no handler, no warning.
+      expect(result).to include("range: 'screen identity'")
+      expect(result).to include('onClick: data.onNavigate')
+    end
+
+    it 'resolves a bound text at runtime rather than slicing the expression' do
+      converter = create_converter({
+        'type' => 'Label',
+        'text' => '@{bodyText}',
+        'partialAttributes' => [{ 'range' => [0, 6], 'fontColor' => '#2563EB' }]
+      })
+      result = converter.convert
+      # Used to emit `{`@{body`}` + `{`Text}`}` — the expression itself cut
+      # in half at offset 6.
+      expect(result).to include('partialText(`${data.bodyText ?? ""}`')
+      expect(result).not_to include('@{body`')
+    end
+
+    it 'passes a binding range through to the runtime' do
+      converter = create_converter({
+        'type' => 'Label',
+        'text' => 'Highlight some of this',
+        'partialAttributes' => [{ 'range' => '@{highlightRange}', 'underline' => true }]
+      })
+      result = converter.convert
+      expect(result).to include('range: data.highlightRange')
+    end
+
+    it 'emits one runtime call, not pre-sliced spans' do
+      converter = create_converter({
+        'type' => 'Label',
+        'text' => 'Red Green Blue',
+        'partialAttributes' => [
+          { 'range' => [0, 3], 'fontColor' => '#FF0000' },
+          { 'range' => [4, 9], 'fontColor' => '#00FF00' }
+        ]
+      })
+      result = converter.convert
+      expect(result.scan('partialText(').length).to eq(1)
+      expect(result).not_to include('>Red<')
+    end
+  end
+
   describe 'partialAttributes onclick emit' do
     it 'emits data-prefixed onClick for selector format' do
       converter = create_converter({
@@ -494,7 +553,7 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         ]
       })
       result = converter.convert
-      expect(result).to include('onClick={data.handleTap}')
+      expect(result).to include('onClick: data.handleTap')
       expect(result).not_to include('onClick={handleTap}')
     end
 

@@ -279,6 +279,12 @@ module RjuiTools
         cell_id_import = uses_auto_cell_id ? "\nimport { enrichCellIds } from '@/generated/cellIdGenerator';" : ''
         screen_marker_import = screen_id ? "\nimport { screenMarker } from '@/generated/screenMarker';" : ''
 
+        # partialAttributes are applied at runtime against the resolved
+        # string (a pattern range or a localized text cannot be resolved
+        # during the build), so a component that uses them imports the
+        # generated renderer.
+        partial_text_import = uses_partial_attributes?(json) ? "\nimport { partialText } from '@/generated/partialText';" : ''
+
         # Generate Configuration (FontSpec / fontProvider) import when any
         # text site routed its font through Configuration.Font.resolve(...).
         # The template lives at `<lib_directory>/Configuration.ts`; the
@@ -459,7 +465,7 @@ module RjuiTools
 
         <<~JSX
           #{use_client}#{marker_header}
-          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{screen_marker_import}#{configuration_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
+          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{screen_marker_import}#{partial_text_import}#{configuration_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
 
           #{props_interface if @config['typescript']}
           export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}
@@ -805,6 +811,23 @@ module RjuiTools
       end
 
       # Detect a Collection node with autoChangeTrackingId enabled anywhere in the tree.
+      # Any node carrying a non-empty partialAttributes array, at any depth.
+      def uses_partial_attributes?(json)
+        case json
+        when Hash
+          partials = json['partialAttributes']
+          return true if partials.is_a?(Array) && !partials.empty?
+
+          json.each_value { |value| return true if uses_partial_attributes?(value) }
+          false
+        when Array
+          json.each { |item| return true if uses_partial_attributes?(item) }
+          false
+        else
+          false
+        end
+      end
+
       def uses_auto_cell_id?(json)
         return false unless json.is_a?(Hash)
         return true if json['type'] == 'Collection' &&

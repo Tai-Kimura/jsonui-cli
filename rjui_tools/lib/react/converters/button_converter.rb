@@ -129,49 +129,18 @@ module RjuiTools
 
         private
 
-        # Render button with partial attributes (styled spans within text)
+        # Render button with partial attributes.
+        #
+        # Same runtime path as Label: the partials go to the generated
+        # `partialText` helper so a pattern range and a localized text work,
+        # matching iOS and Android.
         def render_partial_attributes_button(indent, id_attr, class_name, style_attr, on_click, disabled_attr, testid_attr, tag_attr)
-          text = attributes['text'] || ''
-          partials = attributes['partialAttributes']
+          text_expr = text_runtime_expression(attributes['text'] || '')
+          specs = build_partial_specs(attributes['partialAttributes'])
 
           lines = []
           lines << "#{indent_str(indent)}<button#{id_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>"
-
-          # Sort partials by range start position
-          warn_unsupported_partial_ranges(partials, text)
-          sorted_partials = partials.select { |p| p['range'].is_a?(Array) }.sort_by { |p| p['range'][0] }
-
-          current_pos = 0
-          sorted_partials.each do |partial|
-            range_start = partial['range'][0]
-            range_end = partial['range'][1]
-
-            # Add text before this partial
-            if current_pos < range_start
-              before_text = text[current_pos...range_start]
-              lines << "#{indent_str(indent + 2)}#{escape_jsx_text(before_text)}"
-            end
-
-            # Add the styled span
-            partial_text = text[range_start...range_end]
-            partial_style = build_partial_style(partial)
-            partial_class = build_partial_class(partial)
-            partial_onclick = partial['onclick'] ? " onClick={#{partial['onclick']}}" : ''
-
-            class_attr = partial_class.empty? ? '' : " className=\"#{partial_class}\""
-            style_inline = partial_style.empty? ? '' : " style={{ #{partial_style} }}"
-
-            lines << "#{indent_str(indent + 2)}<span#{class_attr}#{style_inline}#{partial_onclick}>#{escape_jsx_text(partial_text)}</span>"
-
-            current_pos = range_end
-          end
-
-          # Add remaining text after last partial
-          if current_pos < text.length
-            remaining_text = text[current_pos..]
-            lines << "#{indent_str(indent + 2)}#{escape_jsx_text(remaining_text)}"
-          end
-
+          lines << "#{indent_str(indent + 2)}{partialText(#{text_expr}, #{specs})}"
           lines << "#{indent_str(indent)}</button>"
           lines.join("\n")
         end

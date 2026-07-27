@@ -269,8 +269,11 @@ RSpec.describe RjuiTools::React::Converters::ButtonConverter do
         ]
       })
       result = converter.convert
-      expect(result).to include("<span style={{ color: '#FF0000' }}>Hello</span>")
-      expect(result).to include(' World')
+      # Applied at RUNTIME against the resolved string, same as Label and
+      # as the iOS/Android runtimes.
+      expect(result).to include('partialText(`Hello World`,')
+      expect(result).to include('range: [0, 5]')
+      expect(result).to include("style: { color: '#FF0000' }")
     end
 
     it 'handles multiple partial attributes' do
@@ -296,7 +299,7 @@ RSpec.describe RjuiTools::React::Converters::ButtonConverter do
         ]
       })
       result = converter.convert
-      expect(result).to include('className="underline"')
+      expect(result).to include("className: 'underline'")
     end
 
     it 'applies onclick to partial' do
@@ -308,7 +311,11 @@ RSpec.describe RjuiTools::React::Converters::ButtonConverter do
         ]
       })
       result = converter.convert
-      expect(result).to include('onClick={handleInfo}')
+      # Intended change: Button used to emit a bare `onClick={handleInfo}`,
+      # which resolves to nothing — Label already applied the data. prefix.
+      # Both now go through the shared spec builder, so the base onclick
+      # contract holds for Button too.
+      expect(result).to include('onClick: data.handleInfo')
     end
   end
 

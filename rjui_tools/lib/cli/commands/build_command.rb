@@ -61,6 +61,7 @@ module RjuiTools
 
           # Emit the screen-marker helper (screen identity / test support)
           emit_screen_marker_helper
+          emit_partial_text_helper
 
           all_json_files = Dir.glob(File.join(layouts_dir, '**', '*.json')).reject do |file|
             # Skip Resources folder (colors.json, strings.json, etc.)
@@ -1083,6 +1084,142 @@ module RjuiTools
                 return {};
               }
               return { 'data-screen': screenId };
+            }
+
+            #{marker_footer}
+          JS
+
+          File.write(path, content)
+          Core::Logger.info("Generated: #{path}")
+        end
+
+        # Runtime renderer for `partialAttributes`.
+        #
+        # Web used to slice the literal `text` at BUILD time, which made two
+        # shapes impossible: a pattern range (the text is not known yet) and
+        # a localized or bound `text` (the key was sliced instead of the
+        # resolved string). iOS and Android both hand the partials to their
+        # runtime, so this brings web to the same semantics rather than
+        # inventing new ones — see the canon note on Label.partialAttributes.
+        def emit_partial_text_helper
+          generated_dir = @config['generated_directory'] || 'src/generated'
+          FileUtils.mkdir_p(generated_dir)
+          is_ts = @config['typescript']
+          extension = is_ts ? 'ts' : 'js'
+          path = File.join(generated_dir, "partialText.#{extension}")
+
+          types = if is_ts
+                    <<~TS.rstrip
+                      import type { CSSProperties, ReactNode } from 'react';
+
+                      export type PartialSpec = {
+                        /** [start, end) character offsets, or a text pattern to find. */
+                        range: [number, number] | string;
+                        style?: CSSProperties;
+                        className?: string;
+                        onClick?: () => void;
+                      };
+                    TS
+                  else
+                    ''
+                  end
+
+          sig = if is_ts
+                  'export function partialText(text: string, partials: PartialSpec[]): ReactNode'
+                else
+                  'export function partialText(text, partials)'
+                end
+          resolved_decl = is_ts ? 'const resolved: Array<{ start: number; end: number; spec: PartialSpec }> = [];' : 'const resolved = [];'
+          nodes_decl = is_ts ? 'const nodes: ReactNode[] = [];' : 'const nodes = [];'
+          style_decl = is_ts ? 'let style: CSSProperties = {};' : 'let style = {};'
+          classes_decl = is_ts ? 'let classes: string[] = [];' : 'let classes = [];'
+          click_decl = is_ts ? 'let onClick: (() => void) | undefined;' : 'let onClick;'
+
+          marker_header = Core::GeneratedMarker.comment_header(
+            source: 'partialText (partialAttributes runtime renderer)',
+            generator: 'rjui build'
+          )
+          marker_footer = Core::GeneratedMarker.comment_footer
+
+          content = <<~JS
+            #{marker_header}
+            // Renders `partialAttributes` against the RESOLVED text, at runtime.
+            //
+            // Semantics are taken from the iOS and Android runtimes so the same
+            // layout behaves identically on all three:
+            //   * an array range is [start, end), end exclusive
+            //   * a string range is the FIRST occurrence (indexOf); if the
+            //     pattern is absent the partial is skipped, not an error
+            //   * a range outside the text, or inverted, is skipped
+            //   * partials apply in declaration order and MERGE where they
+            //     overlap, later declarations winning per property — matching
+            //     NSAttributedString / AnnotatedString rather than exclusive spans
+            import { createElement } from 'react';
+            #{types}
+
+            #{sig} {
+              if (!text || !partials || partials.length === 0) return text;
+
+              #{resolved_decl}
+              for (const spec of partials) {
+                let start;
+                let end;
+                if (Array.isArray(spec.range)) {
+                  start = spec.range[0];
+                  end = spec.range[1];
+                } else if (typeof spec.range === 'string') {
+                  const found = text.indexOf(spec.range);
+                  if (found < 0) continue;
+                  start = found;
+                  end = found + spec.range.length;
+                } else {
+                  continue;
+                }
+                if (!(start >= 0 && end <= text.length && start < end)) continue;
+                resolved.push({ start, end, spec });
+              }
+              if (resolved.length === 0) return text;
+
+              // Cut the string at every boundary, then merge whatever covers
+              // each piece. This is what makes overlap behave like the mobile
+              // runtimes instead of the last writer replacing the span.
+              const cuts = Array.from(
+                new Set([0, text.length].concat(resolved.map((r) => r.start), resolved.map((r) => r.end)))
+              ).sort((a, b) => a - b);
+
+              #{nodes_decl}
+              for (let i = 0; i < cuts.length - 1; i += 1) {
+                const from = cuts[i];
+                const to = cuts[i + 1];
+                if (from >= to) continue;
+                const chunk = text.slice(from, to);
+                const covering = resolved.filter((r) => r.start <= from && r.end >= to);
+                if (covering.length === 0) {
+                  nodes.push(chunk);
+                  continue;
+                }
+                #{style_decl}
+                #{classes_decl}
+                #{click_decl}
+                for (const c of covering) {
+                  if (c.spec.style) style = { ...style, ...c.spec.style };
+                  if (c.spec.className) classes.push(c.spec.className);
+                  if (c.spec.onClick) onClick = c.spec.onClick;
+                }
+                nodes.push(
+                  createElement(
+                    'span',
+                    {
+                      key: `jui-partial-${from}-${to}`,
+                      className: classes.length > 0 ? classes.join(' ') : undefined,
+                      style: Object.keys(style).length > 0 ? style : undefined,
+                      onClick,
+                    },
+                    chunk
+                  )
+                );
+              }
+              return nodes;
             }
 
             #{marker_footer}
