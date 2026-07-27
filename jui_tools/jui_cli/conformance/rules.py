@@ -105,6 +105,9 @@ METADATA_ATTRS = {
     # build directive consumed (and removed) at distribution time by
     # PlatformResolver — never reaches any renderer
     "platform",
+    # layout-root screen classification, read by the screen-identity
+    # resolver at build time — never reaches any renderer
+    "role",
     "propertyName",
     "binding_id",
     "binding_group",
