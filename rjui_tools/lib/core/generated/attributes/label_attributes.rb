@@ -48,11 +48,11 @@ module JsonUI
         { name: 'lineSpacing', kind: :number, bindable: true }.freeze,
         # Maximum number of lines (0 for unlimited) (binding supported)
         { name: 'lines', kind: :number, bindable: true }.freeze,
-        # Enable URL/phone detection
+        # Enable URL/phone detection. Auto-links BARE http(s) URLs and phone numbers found in the text. It does not parse markdown, and relative paths are deliberately never linked: a path like "/guides/x" only means something to a web router, so linkifying it would produce a control that is dead on iOS and Android. A cross-document reference is expressed with partialAttributes 'range' + 'onclick', where the handler performs the navigation itself — including scrolling to the target position, which an href cannot express on mobile anyway.
         { name: 'linkable', kind: :boolean, bindable: true }.freeze,
         # Minimum scale factor for auto-shrink (binding supported)
         { name: 'minimumScaleFactor', kind: :number, bindable: true }.freeze,
-        # Partial text styling
+        # Partial text styling: apply font/size/color/underline/shadow to a substring selected by 'range' (a [start, end] pair, a text pattern, or a binding), and optionally make it tappable with 'onclick'. This is the supported way to get emphasis or a link inside a Label, since 'text' is plain text and markdown is not interpreted. It is also the PORTABLE way to express a cross-reference: the handler navigates (and scrolls to the target position) in host code, so the same layout works on iOS, Android and web, where a URL-based link would only work on web.
         { name: 'partialAttributes', kind: :array }.freeze,
         # Placeholder text when empty (alias for hint)
         { name: 'placeholder', kind: :string }.freeze,
@@ -60,7 +60,7 @@ module JsonUI
         { name: 'selected', kind: :boolean, bindable: true }.freeze,
         # Strikethrough styling (boolean for simple, object for styled) [accepts: boolean | object]
         { name: 'strikethrough', kind: :raw }.freeze,
-        # Text content (can be data binding, supports interpolation)
+        # Text content (can be data binding, supports interpolation). PLAIN TEXT: markdown is not interpreted, so "[label](/path)", "**bold**" and backticks render literally, brackets and all. To emphasise or link part of the string, use partialAttributes ('range' plus font/color/underline, and 'onclick' for a tappable span). Rendering real markdown is out of scope for Label — write a custom component.
         { name: 'text', kind: :string, bindable: true }.freeze,
         # Text alignment (binding supported)
         { name: 'textAlign', kind: :enum, bindable: true, values: ['Left', 'Center', 'Right', 'left', 'center', 'right'].freeze }.freeze,
