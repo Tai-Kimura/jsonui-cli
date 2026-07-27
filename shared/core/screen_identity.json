@@ -7,6 +7,11 @@
     "description": "A screen's canonical id is the basename of its layout file with the '.json' extension removed, kept verbatim (snake_case). The same id is used by spec files, screen/flow tests, generated markers and diagram nodes.",
     "collection": "recursive",
     "collectionNote": "Layout directories are scanned RECURSIVELY (Layouts/**/*.json). A flat glob under-collects: real projects nest sheets and cells one level deep (measured: 108 layouts, only 40 at the top level).",
+    "nonLayoutSubtrees": [
+      "Resources",
+      "Styles"
+    ],
+    "nonLayoutSubtreesNote": "Directories under the layout root that hold resources, not layouts: 'Resources/' (strings.json, colors.json, and the per-locale files a build generates beside them) and 'Styles/'. A JSON file at any depth inside one is skipped entirely — neither classified nor scanned for references. Without this, nothing references them, so step 4 defaults them to SCREEN. Measured on a real project: two phantom screens ('strings', 'colors') in the authored tree and four in the generated tree, which also made the generator's count disagree with 'jui screens' by exactly the two generated locale files. Every other place in the toolchain that collects layouts already excludes these subtrees — spelled ten different ways; the screen resolver is the reader that has to agree with them, so the rule is named here once. Depth is ANY depth under the layout root, matching the majority of those spellings: a directory called Resources means resources wherever it sits, and the cost of being wrong that way (an excluded file the author can rename) is smaller than the cost of the alternative (a phantom screen that grows a runtime marker). Known divergence: the build's copy/prune step still skips only TOP-LEVEL Resources/Styles. The two agree on every project surveyed, where these directories only ever appear at the layout root; unifying the remaining spellings on this rule is follow-up work.",
     "uniqueness": "projectWide",
     "uniquenessNote": "Basenames must be unique across the whole layout tree; a collision makes the id ambiguous and is a validator error (rule: screen-id-collision).",
     "variantNormalization": {
@@ -206,15 +211,20 @@
       "default": true,
       "note": "ON by default from driver ios 1.9.0 / android 1.8.0 / web 1.8.0. An app whose generated code predates screen markers fails every screen change with marker-absent — that is the intended signal that it needs `jui build` and a current library pin, not a reason to soften the check. A project mid-migration opts out by setting this to false."
     },
+    "failureHandling": {
+      "severity": "failure",
+      "note": "Every class below fails the step through the ordinary assertion path. There is no warning tier and no per-class severity: a class is a prefix on the thrown failure message that names the likely CAUSE, so the reader knows what to fix — not how seriously to take it. This is what the three drivers implement (ScreenMarker.diagnosis on ios/android, AssertionExecutor.screenDiagnosis on web): they choose a string, then throw.",
+      "rationale": "A class was briefly considered for demotion to a warning (marker-absent, since its cause is the build rather than the app). Rejected: a suite that reports success while verifying nothing is worse than one that fails loudly on a stale build."
+    },
     "failureClasses": [
       {
         "id": "marker-absent",
-        "meaning": "No marker anywhere — stale generated code or stale library pin (infrastructure, not a test failure).",
+        "meaning": "No marker anywhere. The cause is the build, not the navigation: a production build (markers are development-only), stale generated code, or a stale library pin. Fix with `jui build` and a current pin — the failure itself is not softened.",
         "note": "Only reportable after the timeout expires. A suspending navigation legitimately shows NO marker while it is pending (measured on web: ~1.2s with the source unmounted to a fallback), so an instantaneous zero-marker reading is not evidence of stale code."
       },
       {
         "id": "previous-screen-only",
-        "meaning": "Only the previous screen's marker is present — the navigation did not happen (a real test failure)."
+        "meaning": "Only the previous screen's marker is present — the navigation did not happen. The cause is in the app or the test, not the build."
       },
       {
         "id": "marker-not-displayed",

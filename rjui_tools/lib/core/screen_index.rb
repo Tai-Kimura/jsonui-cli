@@ -39,6 +39,12 @@ module JsonUIShared
     # Roles a layout may declare explicitly on its root node.
     VALID_ROLES = %w[screen cell partial].freeze
 
+    # Directories under the layout root that hold resources rather than
+    # layouts. Their contents are skipped entirely — a resource file is
+    # referenced by nobody, so without this it would default to a screen and
+    # grow a marker. Canon: screenId.nonLayoutSubtrees.
+    NON_LAYOUT_SUBTREES = %w[Resources Styles].freeze
+
     MARKER_PREFIX = '__screen_'
 
     Entry = Struct.new(:screen_id, :path, :role, :reason) do
@@ -207,7 +213,11 @@ module JsonUIShared
     end
 
     def layout_files(layouts_dir)
-      Dir.glob(File.join(layouts_dir.to_s, '**', '*.json')).sort
+      root = layouts_dir.to_s
+      Dir.glob(File.join(root, '**', '*.json')).sort.reject do |path|
+        dirs = File.dirname(path).delete_prefix(root).split(File::SEPARATOR)
+        (dirs & NON_LAYOUT_SUBTREES).any?
+      end
     end
 
     def load_json(path)

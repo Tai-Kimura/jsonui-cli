@@ -53,7 +53,20 @@ FIXTURE: dict[str, dict] = {
     "declared_cell.json": {"type": "View", "role": "cell"},
     "nested/detail.json": {"type": "View"},
     "nested/deep/profile.json": {"type": "View"},
+    # Resource files, not layouts. Nothing references them, so a reader that
+    # collects them classifies them as screens by the step-4 default. The
+    # "cell" key in strings.json is a trap: a reader that scans these files
+    # for references would demote the real screen 'settings' to a cell.
+    "Resources/strings.json": {"cell": "settings", "greeting": "hi"},
+    "Resources/colors.json": {"primary": "#112233"},
+    "Resources/ja.json": {"greeting": "こんにちは"},
+    "Resources/nested/deep_resource.json": {"key": "value"},
+    "Styles/common.json": {"type": "View", "background": "#fff"},
 }
+
+#: Ids that must never appear in the index — they live under a non-layout
+#: subtree (canon: screenId.nonLayoutSubtrees).
+EXCLUDED_IDS = frozenset({"strings", "colors", "ja", "deep_resource", "common"})
 
 RUBY_DRIVER = r"""
 require 'json'
@@ -172,6 +185,20 @@ class CrossLanguageAgreementTests(unittest.TestCase):
             _ruby_result(self.layouts, []),
             _python_result(self.layouts, []),
         )
+
+    def test_non_layout_subtrees_are_excluded_by_both_readers(self):
+        # Agreement alone would be satisfied if BOTH readers collected these,
+        # so assert the actual rule on each side rather than only comparing.
+        for label, result in (
+            ("python", _python_result(self.layouts, [])),
+            ("ruby", _ruby_result(self.layouts, [])),
+        ):
+            with self.subTest(reader=label):
+                ids = set(result["screen_ids"]) | set(result["non_screen_ids"])
+                self.assertEqual(ids & EXCLUDED_IDS, set())
+                # The trap: 'settings' stays a screen because the reference
+                # inside Resources/strings.json was never read.
+                self.assertIn("settings", result["screen_ids"])
 
     def test_the_fixture_actually_exercises_every_reason(self):
         # A guard on the guard: if the fixture stops covering a branch, the

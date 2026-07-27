@@ -42,6 +42,12 @@ NON_SCREEN_REFERENCE_LIST_KEYS: tuple[str, ...] = ("cellClasses",)
 #: Roles a layout may declare explicitly on its root node.
 VALID_ROLES: tuple[str, ...] = ("screen", "cell", "partial")
 
+#: Directories under the layout root that hold resources rather than layouts.
+#: Their contents are skipped entirely — a resource file is referenced by
+#: nobody, so without this it would default to a screen and grow a marker.
+#: Canon: screenId.nonLayoutSubtrees.
+NON_LAYOUT_SUBTREES: frozenset[str] = frozenset({"Resources", "Styles"})
+
 MARKER_PREFIX = "__screen_"
 
 #: Name shapes that almost always mean "renders inside a host". Used ONLY to
@@ -152,7 +158,10 @@ class ScreenIndex:
 
 
 def _iter_layout_files(layouts_dir: Path) -> Iterable[Path]:
-    yield from sorted(layouts_dir.rglob("*.json"))
+    for path in sorted(layouts_dir.rglob("*.json")):
+        if NON_LAYOUT_SUBTREES.intersection(path.relative_to(layouts_dir).parts[:-1]):
+            continue
+        yield path
 
 
 def _load(path: Path) -> Any:
