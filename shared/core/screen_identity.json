@@ -116,7 +116,7 @@
     "platforms": {
       "ios-swiftui": {
         "mechanism": "overlay leaf",
-        "detail": "A 0.5x0.5 Color.clear leaf in an overlay(alignment: .topLeading) carrying .accessibilityElement(children: .ignore) + .accessibilityIdentifier(marker). Deliberately NOT an accessibility container: making the screen root a container merges single-child subtrees and drops the inner element's identifier (measured regression, 2026-07-21)."
+        "detail": "A 0.5x0.5 Color.clear leaf in an overlay(alignment: .center) carrying .accessibilityElement(children: .ignore) + .accessibilityIdentifier(marker), plus .allowsHitTesting(false) so it never takes a real touch. Deliberately NOT an accessibility container: making the screen root a container merges single-child subtrees and drops the inner element's identifier (measured regression, 2026-07-21)."
       },
       "ios-uikit": {
         "mechanism": "sibling view",
@@ -144,7 +144,10 @@
     },
     "placement": {
       "rule": "The marker must be a sibling of the screen's scrollable, never a child of the scrolling content.",
-      "rationale": "A marker inside the scrolling content leaves the viewport when the user scrolls, and a node outside the viewport is absent from the accessibility tree: the screen would stop reporting itself as displayed halfway down a long page. Measured on Android (API 35) — after scrolling to the bottom, an in-content marker returned findObjects=0 / findObject=null / not-in-tree, while a sibling marker was unaffected. On iOS the overlay modifier applies to the screen root, which places the marker outside the scroll content by construction."
+      "rationale": "A marker inside the scrolling content leaves the viewport when the user scrolls, and a node outside the viewport is absent from the accessibility tree: the screen would stop reporting itself as displayed halfway down a long page. Measured on Android (API 35) — after scrolling to the bottom, an in-content marker returned findObjects=0 / findObject=null / not-in-tree, while a sibling marker was unaffected. On iOS the overlay modifier applies to the screen root, which places the marker outside the scroll content by construction.",
+      "alignment": "center",
+      "alignmentRule": "The marker sits at the CENTRE of the screen root, never at a corner. A generated screen root fills the screen, so its top-left corner lies under the navigation bar and hit-testing there resolves to the chrome, not the marker — which fails the `exists && isHittable` predicate on every screen assertion. Measured on iOS 18.6, one run, one screen: the same 0.5pt leaf reported isHittable=false at .topLeading and isHittable=true at .center, while a sheet covering the screen still reported isHittable=false from the centre. The centre placement therefore fixes the false negative without costing the predicate its ability to detect a covered screen.",
+      "regressionNote": "This shipped as .topLeading in SwiftJsonUI 10.8.0 and broke every iOS screen assertion in a real app while the library's own probe stayed green — the probe marked a small view in the middle of a stack, where the corner is clear, and asserted only existence. Any probe for a runtime marker MUST assert the driver's exact predicate on a screen shaped the way code generation emits one; existence checks cannot catch a predicate bug."
     },
     "shapeEvidence": "Measured on iOS 18.6 (2026-07-27) over identical content: the LEAF shape keeps the screen's own root identifier and its children addressable; the CONTAINER shape wrapping the same subtree makes the screen's root identifier disappear (root_id_visible=false). The container shape is therefore rejected, not merely discouraged. On Android (API 35, 2026-07-27) the same probe measured the size floor and the ancestor-semantics hazards recorded above."
   },

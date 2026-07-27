@@ -12,7 +12,7 @@ module SjuiTools
       # not compile against a library without the modifier, which is the
       # point — a silent "static has a marker, dynamic doesn't" split is far
       # harder to diagnose than a build error.
-      SCREEN_MARKER_MIN_LIBRARY_VERSION = '10.8.0'
+      SCREEN_MARKER_MIN_LIBRARY_VERSION = '10.8.1'
 
       def update_generated_body(swift_file_path, new_body_code, state_variables: [], root_children: nil, responsive_functions: [], variant_dispatch: nil, force_typed_view_model: false, view_model_type: nil, source_name: nil, screen_id: nil)
         unless File.exist?(swift_file_path)
