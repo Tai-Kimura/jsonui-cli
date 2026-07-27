@@ -204,7 +204,7 @@
     "optOut": {
       "config": "TestRunnerConfig.verifyScreenTransitions",
       "default": true,
-      "rollout": "Ships as false and is flipped to the canonical true once consumers have rebuilt. Implicit verification requires generated code new enough to emit markers, so turning it on before a project rebuilds would fail EVERY screen change with marker-absent — an infrastructure failure dressed up as a test failure. The flag exists so the flip is a one-line change per project rather than a driver release."
+      "note": "ON by default from driver ios 1.9.0 / android 1.8.0 / web 1.8.0. An app whose generated code predates screen markers fails every screen change with marker-absent — that is the intended signal that it needs `jui build` and a current library pin, not a reason to soften the check. A project mid-migration opts out by setting this to false."
     },
     "failureClasses": [
       {
