@@ -179,16 +179,19 @@
   "predicates": {
     "note": "Per-platform predicates for 'the marker is displayed'. Platform differences live here because the underlying accessibility runtimes genuinely differ; everything above this section is platform-neutral.",
     "ios": {
-      "predicate": "exists && isHittable",
-      "rationale": "Measured on iOS 18.6 (ConformanceHost screen-marker probe, 2026-07-27). A pushed-away screen and an inactive tab leave the accessibility tree entirely (exists == false); a screen covered by a sheet or a fullScreenCover STAYS in the tree but reports isHittable == false, while the covering screen reports true. isHittable works here only because the marker is a LEAF: an accessibility container would report false even when fully visible, which is why the container marker shape is rejected.",
+      "predicate": "exists && (isHittable || no OTHER screen marker is hittable)",
+      "rationale": "Measured on iOS 18.6 (ConformanceHost screen-marker probe, 2026-07-27). A pushed-away screen and an inactive tab leave the accessibility tree entirely (exists == false); a screen covered by a sheet or a fullScreenCover STAYS in the tree but reports isHittable == false, while the covering screen reports true. isHittable works here only because the marker is a LEAF: an accessibility container would report false even when fully visible, which is why the container marker shape is rejected. isHittable ALONE is not sufficient, and the second clause is not a softening. The marker sits inside the generated view by construction, so any overlay the app layers OUTSIDE that view — a coach mark, a loading scrim, a hand-rolled modal — always covers the marker even when it is fully transparent, and the screen is plainly still the one on display. What distinguishes the two cases is not reachability but whether something else CLAIMS to be the displayed screen: a sheet or cover is another screen and carries its own marker, an app overlay carries none. Measured both ways in one run: with a full-screen tap-catching overlay the marker reports isHittable=false and no other screen marker is hittable (=> displayed); with a sheet the presenter reports isHittable=false and the sheet's own marker IS hittable (=> not displayed).",
       "measurements": {
         "push": "covered screen: exists=false | covering: exists=true hittable=true",
         "sheet": "covered: exists=true hittable=false | covering: exists=true hittable=true",
         "fullScreenCover": "covered: exists=true hittable=false | covering: exists=true hittable=true",
         "tabSwitch": "inactive tab: exists=false | active tab: exists=true hittable=true",
-        "splitPane": "both panes: exists=true hittable=true (both are displayed — this is correct)"
+        "splitPane": "both panes: exists=true hittable=true (both are displayed — this is correct)",
+        "appLevelOverlay": "generated view wrapped from outside by a full-screen contentShape(Rectangle()) overlay: marker exists=true isHittable=false, other hittable screens = [] => displayed",
+        "sheetUnderNewPredicate": "presenter: exists=true isHittable=false, other hittable screens = ['fullbleed_sheet'] => not displayed"
       },
-      "status": "measured"
+      "status": "measured",
+      "appliesTo": "iOS only. Android's predicate is existence in the accessibility tree and web's is Playwright visibility (CSS/bounding box); neither is occlusion-sensitive, so neither needs the second clause."
     },
     "android": {
       "predicate": "device.findObject(By.res(marker)) != null",
