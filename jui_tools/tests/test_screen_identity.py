@@ -46,6 +46,7 @@ class ScreenIdentityAssetTests(unittest.TestCase):
         for section in (
             "screenId",
             "screenClassification",
+            "appOwnedScreens",
             "marker",
             "assertion",
             "predicates",
@@ -113,6 +114,13 @@ class ScreenIdentityAssetTests(unittest.TestCase):
         for rule in rules:
             self.assertIn(rule["severity"], ("error", "warning"))
             self.assertTrue(rule["message"])
+
+    def test_app_owned_screens_declare_where_and_how(self):
+        section = self.canon["appOwnedScreens"]
+        self.assertEqual(section["declaration"]["location"], "jui.config.json")
+        self.assertEqual(section["declaration"]["key"], "test.appOwnedScreens")
+        # No library API until a real mobile case exists.
+        self.assertIn("None", section["libraryApi"])
 
     def test_diagram_pipeline_order_is_declared(self):
         self.assertEqual(
@@ -241,6 +249,45 @@ class ScreenIndexTests(unittest.TestCase):
 
     def test_missing_directory_yields_empty_index(self):
         self.assertEqual(build_screen_index(Path("/nonexistent/layouts")).screen_ids, [])
+
+
+class AppOwnedScreenTests(unittest.TestCase):
+    """Screens the app implements without a JsonUI layout (hand-written
+    pages). They are real navigation destinations, so an undeclared id must
+    stay unknown while a declared one must be a screen."""
+
+    def _index(self, layouts: dict[str, dict], declared):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        for rel, payload in layouts.items():
+            _write(root, rel, payload)
+        return build_screen_index(root, declared)
+
+    def test_declared_id_becomes_a_screen(self):
+        index = self._index({"product_page.json": {"type": "View"}}, ["tokushoho"])
+        self.assertTrue(index.is_screen("tokushoho"))
+        self.assertEqual(index.get("tokushoho").reason, "app-owned")
+
+    def test_undeclared_id_stays_unknown(self):
+        index = self._index({"product_page.json": {"type": "View"}}, [])
+        self.assertFalse(index.is_known("tokushoho"))
+
+    def test_declaration_does_not_override_a_real_layout(self):
+        index = self._index(
+            {"chat.json": {"type": "Collection", "cell": "chat/row"}, "chat/row.json": {"type": "View"}},
+            ["row"],
+        )
+        self.assertEqual(index.get("row").reason, "referenced")
+        self.assertFalse(index.is_screen("row"))
+
+    def test_declarations_apply_without_a_layout_directory(self):
+        index = build_screen_index(Path("/nonexistent/layouts"), ["company"])
+        self.assertTrue(index.is_screen("company"))
+
+    def test_blank_declarations_are_ignored(self):
+        index = self._index({"a.json": {"type": "View"}}, ["", None, 3])
+        self.assertEqual(index.screen_ids, ["a"])
 
 
 class CanonLoaderTests(unittest.TestCase):

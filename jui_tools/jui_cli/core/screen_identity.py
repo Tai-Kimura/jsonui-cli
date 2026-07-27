@@ -160,11 +160,21 @@ def _explicit_role(data: Any) -> str | None:
     return None
 
 
-def build_screen_index(layouts_dir: Path | str) -> ScreenIndex:
-    """Classify every layout under ``layouts_dir`` (recursive)."""
+def build_screen_index(
+    layouts_dir: Path | str,
+    app_owned_screens: Iterable[str] | None = None,
+) -> ScreenIndex:
+    """Classify every layout under ``layouts_dir`` (recursive).
+
+    ``app_owned_screens`` are ids the app implements without a JsonUI
+    layout (a hand-written page). They are real navigation destinations, so
+    they enter the index as screens — otherwise a legitimate test value
+    would be rejected as unknown.
+    """
     layouts_path = Path(layouts_dir)
     index = ScreenIndex()
     if not layouts_path.is_dir():
+        index.entries.update(_app_owned_entries(app_owned_screens))
         return index
 
     documents: dict[str, tuple[Path, Any]] = {}
@@ -202,7 +212,22 @@ def build_screen_index(layouts_dir: Path | str) -> ScreenIndex:
             continue
         index.entries[screen_id] = ScreenEntry(screen_id, path, "screen", "default")
 
+    for screen_id, entry in _app_owned_entries(app_owned_screens).items():
+        # A declared id that also has a layout keeps its layout entry: the
+        # declaration is for screens the app owns INSTEAD of a layout.
+        index.entries.setdefault(screen_id, entry)
+
     return index
+
+
+def _app_owned_entries(screen_ids: Iterable[str] | None) -> dict[str, ScreenEntry]:
+    entries: dict[str, ScreenEntry] = {}
+    for raw in screen_ids or ():
+        if not isinstance(raw, str) or not raw:
+            continue
+        screen_id = screen_id_for_path(raw)
+        entries[screen_id] = ScreenEntry(screen_id, Path(), "screen", "app-owned")
+    return entries
 
 
 def load_canon(shared_core_dir: Path | str | None = None) -> dict:

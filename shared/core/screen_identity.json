@@ -45,6 +45,19 @@
     ]
   },
 
+  "appOwnedScreens": {
+    "description": "Screens the app owns outright — a hand-written page with no JsonUI layout behind it. They are real navigation destinations (a test navigates to them and asserts there), so they must be declarable, otherwise the screen-unknown rule rejects a legitimate id.",
+    "declaration": {
+      "location": "jui.config.json",
+      "key": "test.appOwnedScreens",
+      "shape": "array of screen ids",
+      "example": ["tokushoho", "company", "licenses"]
+    },
+    "marker": "Hand-written by the app, using the same marker spelling code generation emits, so drivers cannot tell the two apart. On web that is the data-screen attribute on the page's root element.",
+    "libraryApi": "None. No mobile app-owned screen exists in any consumer today; when one appears, expose the mechanism from marker.platforms as a function then — not before.",
+    "classification": "app-owned"
+  },
+
   "marker": {
     "namePattern": "__screen_<screenId>",
     "prefix": "__screen_",
@@ -152,7 +165,7 @@
   },
 
   "validatorRules": [
-    { "id": "screen-unknown", "severity": "error", "message": "A test's 'screen' value does not resolve to a known screen id." },
+    { "id": "screen-unknown", "severity": "error", "message": "A test's 'screen' value resolves to neither a layout nor a declared app-owned screen." },
     { "id": "screen-not-a-screen", "severity": "error", "message": "A test's 'screen' value resolves to a layout classified as a cell or partial. Use the owning screen." },
     { "id": "screen-id-collision", "severity": "error", "message": "Two layouts share a basename, making the screen id ambiguous." },
     { "id": "screen-source-layout-missing", "severity": "error", "message": "A flow 'sources[].layout' path does not exist." },
