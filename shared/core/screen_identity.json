@@ -110,7 +110,7 @@
       "platforms": {
         "ios": "#if DEBUG inside the library modifier — the same gate ViewSwitcher uses for Dynamic mode. SwiftJsonUI is distributed as source (SPM / CocoaPods), so this follows the CONSUMER's build configuration.",
         "android": "A RUNTIME check of the host application's ApplicationInfo.FLAG_DEBUGGABLE, not a compile-time one: KotlinJsonUI ships as an AAR, so its own BuildConfig.DEBUG describes how the library was built rather than how the app was. This is the same reason DynamicModeManager resolves availability from the host app's debuggable flag.",
-        "web": "The generated attribute's value is `process.env.NODE_ENV === 'production' ? undefined : \"<marker>\"`. React omits an attribute whose value is undefined, so a production bundle renders no data-screen at all."
+        "web": "A generated `screenMarker(id)` helper returns `{'data-screen': id}` in development and `{}` in production; the screen's root element spreads it. The check lives in ONE generated module rather than inline in every screen because a bare `process.env` reference fails to typecheck in a Vite project without @types/node (measured: TS2580) — the module declares the shape it needs. It must keep the literal `process.env.NODE_ENV` form: bundlers statically replace exactly that expression, so a production build folds the branch away, whereas a `globalThis.process` lookup would typecheck but NOT be replaced, and the marker would ship."
       },
       "consequence": "UI tests must run against a debug / development build. This is not a new constraint — Dynamic mode already requires it on both mobile platforms."
     },

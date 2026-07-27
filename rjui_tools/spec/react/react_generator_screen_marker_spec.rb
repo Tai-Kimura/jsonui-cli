@@ -24,9 +24,8 @@ RSpec.describe RjuiTools::React::ReactGenerator do
     it 'puts data-screen on the root element, gated on NODE_ENV' do
       output = generator.generate('Home', layout, screen_id: 'home')
 
-      expect(output).to include(
-        %(data-screen={process.env.NODE_ENV === 'production' ? undefined : "home"})
-      )
+      expect(output).to include(%({...screenMarker("home")}))
+      expect(output).to include("import { screenMarker } from '@/generated/screenMarker';")
     end
 
 
@@ -45,12 +44,14 @@ RSpec.describe RjuiTools::React::ReactGenerator do
       # A separate node would need its own non-empty box to satisfy the
       # driver's visibility predicate; riding the root means the marker is
       # visible exactly when the screen is.
-      expect(root_tag).to include('data-screen=')
+      expect(root_tag).to include('screenMarker("home")')
       expect(root_tag).to include('id={id')
     end
 
     it 'emits nothing for a non-screen layout' do
-      expect(generator.generate('ItemCell', layout)).not_to include('data-screen')
+      output = generator.generate('ItemCell', layout)
+      expect(output).not_to include('screenMarker')
+      expect(output).not_to include('data-screen')
     end
 
     it 'leaves unmarked output byte-identical to the pre-marker generator' do
@@ -69,7 +70,7 @@ RSpec.describe RjuiTools::React::ReactGenerator do
       output = generator.generate('Home', hidden, screen_id: 'home')
 
       # No crash, and nothing injected into a fragment.
-      expect(output).not_to include('<> data-screen')
+      expect(output).not_to include('<> {...screenMarker')
     end
   end
 end

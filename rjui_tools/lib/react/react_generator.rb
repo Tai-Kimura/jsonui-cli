@@ -277,6 +277,7 @@ module RjuiTools
         # Generate cellIdGenerator import if needed
         uses_auto_cell_id = uses_auto_cell_id?(json)
         cell_id_import = uses_auto_cell_id ? "\nimport { enrichCellIds } from '@/generated/cellIdGenerator';" : ''
+        screen_marker_import = screen_id ? "\nimport { screenMarker } from '@/generated/screenMarker';" : ''
 
         # Generate Configuration (FontSpec / fontProvider) import when any
         # text site routed its font through Configuration.Font.resolve(...).
@@ -458,7 +459,7 @@ module RjuiTools
 
         <<~JSX
           #{use_client}#{marker_header}
-          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{configuration_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
+          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{screen_marker_import}#{configuration_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
 
           #{props_interface if @config['typescript']}
           export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}
@@ -526,7 +527,7 @@ module RjuiTools
         return jsx_content unless stripped.start_with?('<') && stripped[1] =~ /[A-Za-z]/
         return jsx_content unless jsx_content[/\A\s*<[^>]*>/m]
 
-        attribute = %(data-screen={process.env.NODE_ENV === 'production' ? undefined : "#{screen_id}"})
+        attribute = %({...screenMarker("#{screen_id}")})
         jsx_content.sub(/\A(\s*)<([A-Za-z][\w.]*)/) { "#{Regexp.last_match(1)}<#{Regexp.last_match(2)} #{attribute}" }
       end
 

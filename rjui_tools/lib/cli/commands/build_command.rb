@@ -59,6 +59,9 @@ module RjuiTools
           # Emit shared cellIdGenerator helper
           emit_cell_id_generator
 
+          # Emit the screen-marker helper (screen identity / test support)
+          emit_screen_marker_helper
+
           all_json_files = Dir.glob(File.join(layouts_dir, '**', '*.json')).reject do |file|
             # Skip Resources folder (colors.json, strings.json, etc.)
             # Skip Styles folder (reusable style definitions, not components)
@@ -1038,6 +1041,55 @@ module RjuiTools
 
             #{marker_footer}
           TS
+        end
+
+        # The screen marker's production gate lives in ONE generated module
+        # rather than inline in every screen, because the environment check
+        # needs `process`, and a Vite project without @types/node fails to
+        # typecheck a bare `process.env` reference (measured: TS2580). A
+        # module-scoped `declare` satisfies the compiler without pulling in
+        # Node types, and does not collide when @types/node IS present.
+        #
+        # The literal `process.env.NODE_ENV` form is deliberate: bundlers
+        # statically replace exactly that expression, so a production build
+        # constant-folds the branch away. A `globalThis.process` lookup would
+        # typecheck too, but bundlers do NOT replace it — the marker would
+        # then ship in production, which is the thing being prevented.
+        def emit_screen_marker_helper
+          generated_dir = @config['generated_directory'] || 'src/generated'
+          FileUtils.mkdir_p(generated_dir)
+          is_ts = @config['typescript']
+          extension = is_ts ? 'ts' : 'js'
+          path = File.join(generated_dir, "screenMarker.#{extension}")
+
+          declare = is_ts ? "declare const process: { env?: { NODE_ENV?: string } } | undefined;\n\n" : ''
+          id_type = is_ts ? ': string' : ''
+          ret_type = is_ts ? ': Record<string, string>' : ''
+
+          marker_header = Core::GeneratedMarker.comment_header(
+            source: "screenMarker (screen identity helper)",
+            generator: "rjui build"
+          )
+          marker_footer = Core::GeneratedMarker.comment_footer
+
+          content = <<~JS
+            #{marker_header}
+            // Screen identity beacon for the test drivers: `data-screen` on a
+            // generated screen's root element. Development builds only — the
+            // marker is test scaffolding and has no place in a shipped app,
+            // matching the DEBUG-only markers on iOS and Android.
+            #{declare}export function screenMarker(screenId#{id_type})#{ret_type} {
+              if (typeof process !== 'undefined' && process?.env?.NODE_ENV === 'production') {
+                return {};
+              }
+              return { 'data-screen': screenId };
+            }
+
+            #{marker_footer}
+          JS
+
+          File.write(path, content)
+          Core::Logger.info("Generated: #{path}")
         end
 
         def emit_cell_id_generator
