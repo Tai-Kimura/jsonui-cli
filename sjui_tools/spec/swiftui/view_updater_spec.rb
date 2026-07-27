@@ -144,6 +144,106 @@ RSpec.describe SjuiTools::SwiftUI::ViewUpdater do
     end
   end
 
+  describe 'private #generate_split_code (WeightedStack root closing-line contract)' do
+    # The closing line is part of the rendering contract, not decoration:
+    # `], hasMatchParentCrossAxis: true)` toggles the library's inner
+    # .fixedSize, and everything after the closing line is the root's
+    # modifier chain. Re-emitting a hardcoded "])" dropped the flag, and the
+    # old exact-match scan (`== '])'`) then never found the closing line, so
+    # every trailing modifier was deleted too — both silently, and both
+    # triggered purely by the body crossing LINE_THRESHOLD.
+    let(:root_children) do
+      [
+        { code: "VStack {\n  Text(\"left\")\n}", weight: 1.0, fixed_size: nil },
+        { code: "VStack {\n  Text(\"right\")\n}", weight: 2.0,
+          fixed_size: '.fixedSize(horizontal: false, vertical: true)' },
+      ]
+    end
+
+    def weighted_body(closing_line)
+      [
+        'WeightedHStack(alignment: .top, spacing: 8, children: [',
+        '    (',
+        '      view: AnyView(',
+        '        VStack {',
+        '          Text("left")',
+        '        }',
+        '      ),',
+        '      weight: 1.0',
+        '    ),',
+        '    (',
+        '      view: AnyView(',
+        '        VStack {',
+        '          Text("right")',
+        '        }',
+        '      ),',
+        '      weight: 2.0',
+        '    )',
+        closing_line,
+        '.background(Color.red)',
+        '.padding(16)',
+      ].join("\n")
+    end
+
+    it 'preserves hasMatchParentCrossAxis on the closing line' do
+      body, _functions = updater.send(
+        :generate_split_code, weighted_body('], hasMatchParentCrossAxis: true)'), root_children
+      )
+      expect(body).to include('], hasMatchParentCrossAxis: true)')
+    end
+
+    it 'keeps the root trailing modifiers when the closing line carries the flag' do
+      body, _functions = updater.send(
+        :generate_split_code, weighted_body('], hasMatchParentCrossAxis: true)'), root_children
+      )
+      expect(body).to include('.background(Color.red)')
+      expect(body).to include('.padding(16)')
+    end
+
+    it 'still handles the bare closing line with trailing modifiers' do
+      body, _functions = updater.send(:generate_split_code, weighted_body('])'), root_children)
+      expect(body).to include('])')
+      expect(body).not_to include('hasMatchParentCrossAxis')
+      expect(body).to include('.background(Color.red)')
+      expect(body).to include('.padding(16)')
+    end
+
+    it 'preserves the call-site fixedSize contract alongside the flag' do
+      body, _functions = updater.send(
+        :generate_split_code, weighted_body('], hasMatchParentCrossAxis: true)'), root_children
+      )
+      expect(body).to include('AnyView(section1().fixedSize(horizontal: false, vertical: true))')
+    end
+
+    it 'is not fooled by an inner line that starts with "])" while the children array is open' do
+      # A nested config array (e.g. constraints: [ ... ]) can legitimately
+      # close as "])" inside a child; the bracket-depth guard must keep
+      # scanning until the ROOT array closes.
+      inner = [
+        'WeightedHStack(alignment: .top, spacing: 8, children: [',
+        '    (',
+        '      view: AnyView(',
+        '        RelativePositionContainer(children: [',
+        '          RelativeChildConfig(view: AnyView(Text("x")), constraints: [',
+        '            RelativePositionConstraint(type: .top)',
+        '          ])',
+        '        ])',
+        '      ),',
+        '      weight: 1.0',
+        '    ),',
+        '    (',
+        '      view: AnyView(Text("y")),',
+        '      weight: 2.0',
+        '    )',
+        '], hasMatchParentCrossAxis: true)',
+        '.padding(4)',
+      ].join("\n")
+      body, _functions = updater.send(:generate_split_code, inner, root_children)
+      expect(body).to include('], hasMatchParentCrossAxis: true)')
+      expect(body).to include('.padding(4)')
+    end
+  end
+
   describe 'private #generate_swiftui_code' do
     context 'with View type' do
       it 'generates VStack for vertical orientation' do

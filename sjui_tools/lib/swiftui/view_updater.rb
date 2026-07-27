@@ -231,6 +231,32 @@ module SjuiTools
         container_type = container_match[1]
         container_params = container_match[2]
 
+        # Find the line that closes the WeightedStack BEFORE rebuilding the
+        # body, and keep its exact text. The closing line is not always a bare
+        # "])": a horizontal weighted root with height matchParent closes as
+        # "], hasMatchParentCrossAxis: true)" (view_converter emits the flag on
+        # the closing line because it is the last named arg of the init).
+        # Re-emitting a hardcoded "])" here silently dropped that flag — which
+        # toggles the library's inner .fixedSize and collapses fill-height
+        # children — and, because the old scan matched only the exact string
+        # "])", the flagged line was never found, so every root trailing
+        # modifier after it was silently deleted as well. Both regressions
+        # fired purely on the body crossing LINE_THRESHOLD.
+        full_lines = full_body_code.lines.map(&:chomp)
+        closing_index = nil
+        bracket_depth = 0
+        full_lines.each_with_index do |line, idx|
+          stripped = line.strip
+          bracket_depth += stripped.count('[') - stripped.count(']')
+          # Both emitted forms: "])" (bare) and "], hasMatchParentCrossAxis:
+          # true)" (flag appended after the array close).
+          if bracket_depth <= 0 && (stripped.start_with?('])') || stripped.start_with?('],'))
+            closing_index = idx
+            break
+          end
+        end
+        closing_line = closing_index ? full_lines[closing_index].strip : '])'
+
         # Build compact body with section function calls
         body_lines = []
         body_lines << "#{container_type}(#{container_params}, children: ["
@@ -250,22 +276,7 @@ module SjuiTools
           body_lines << "      weight: #{weight}"
           body_lines << "    )#{comma}"
         end
-        body_lines << "])"
-
-        # Detect modifiers after the root container closing "])"
-        # They appear after the children array in the original code
-        full_lines = full_body_code.lines.map(&:chomp)
-        # Find the "])" line that closes the WeightedStack
-        closing_index = nil
-        bracket_depth = 0
-        full_lines.each_with_index do |line, idx|
-          stripped = line.strip
-          bracket_depth += stripped.count('[') - stripped.count(']')
-          if bracket_depth <= 0 && stripped == '])'
-            closing_index = idx
-            break
-          end
-        end
+        body_lines << closing_line
 
         # Append any modifiers after "])" (e.g., .modifier(...), .background(...))
         if closing_index && closing_index < full_lines.size - 1
