@@ -95,14 +95,19 @@
       },
       "android-compose": {
         "mechanism": "sibling node",
-        "detail": "A zero-size Box sibling carrying Modifier.testTag(marker).semantics { testTagsAsResourceId = true }. mergeDescendants and clearAndSetSemantics are forbidden on or above the marker: both erase descendant test tags."
+        "detail": "A 1.dp Box sibling carrying Modifier.testTag(marker), under an ancestor that sets semantics { testTagsAsResourceId = true }. The size is NOT cosmetic: a zero-size node is absent from the accessibility tree and unfindable by resource id (measured). clearAndSetSemantics is forbidden on or above the marker — it erases the node. mergeDescendants was measured NOT to erase it on API 35.",
+        "minimumSize": "1.dp"
       },
       "web-react": {
         "mechanism": "data attribute",
-        "detail": "A data-screen=\"<screenId>\" attribute on the generated root element. The root 'id' is NOT usable: it is an externally supplied prop and callers already override it."
+        "detail": "A data-screen=\"<screenId>\" attribute on the generated root element. The root 'id' is NOT usable: it is an externally supplied prop and callers already override it. Server-side rendering emits the attribute into the initial markup, so the marker is present before hydration (measured)."
       }
     },
-    "shapeEvidence": "Measured on iOS 18.6 (2026-07-27) over identical content: the LEAF shape keeps the screen's own root identifier and its children addressable; the CONTAINER shape wrapping the same subtree makes the screen's root identifier disappear (root_id_visible=false). The container shape is therefore rejected, not merely discouraged."
+    "placement": {
+      "rule": "The marker must be a sibling of the screen's scrollable, never a child of the scrolling content.",
+      "rationale": "A marker inside the scrolling content leaves the viewport when the user scrolls, and a node outside the viewport is absent from the accessibility tree: the screen would stop reporting itself as displayed halfway down a long page. Measured on Android (API 35) — after scrolling to the bottom, an in-content marker returned findObjects=0 / findObject=null / not-in-tree, while a sibling marker was unaffected. On iOS the overlay modifier applies to the screen root, which places the marker outside the scroll content by construction."
+    },
+    "shapeEvidence": "Measured on iOS 18.6 (2026-07-27) over identical content: the LEAF shape keeps the screen's own root identifier and its children addressable; the CONTAINER shape wrapping the same subtree makes the screen's root identifier disappear (root_id_visible=false). The container shape is therefore rejected, not merely discouraged. On Android (API 35, 2026-07-27) the same probe measured the size floor and the ancestor-semantics hazards recorded above."
   },
   "assertion": {
     "vocabulary": {
@@ -144,16 +149,32 @@
       "status": "measured"
     },
     "android": {
-      "predicate": "found from rootInActiveWindow && visibleBounds is non-empty",
-      "rationale": "Dialogs and modal bottom sheets live in separate windows; a whole-device search would report a covered screen as present.",
-      "status": "provisional"
+      "predicate": "device.findObject(By.res(marker)) != null",
+      "rationale": "Measured on Android 15 / API 35 (KotlinJsonUI conformance-host screen-marker probe, 2026-07-27), identically with animations on and off. A covered screen leaves the search ENTIRELY: under an AlertDialog and under a ModalBottomSheet the presenter's marker reported findObjects=0, findObject=null and was absent from rootInActiveWindow — Android drops the obscured window's content from the accessibility tree. A NavHost destination likewise replaces its source. No visibleBounds test and no active-window scoping are needed, so the predicate is exactly the primitive the driver already uses for every other element.",
+      "measurements": {
+        "navHostPush": "source: not found | destination: found (identical with animation scales 1 and 0)",
+        "dialog": "covered: findObjects=0 findObject=null inTree=false | covering: found",
+        "modalBottomSheet": "covered: findObjects=0 findObject=null inTree=false | covering: found",
+        "splitPane": "both panes found (both are displayed — this is correct)",
+        "scrolledOutOfViewport": "marker inside the scrolling content: not found after scrolling to the bottom | sibling marker: unaffected (see marker.placement)"
+      },
+      "supersedes": "The earlier provisional predicate assumed a whole-device search would report a covered screen as present. Measurement refuted it: the covered screen is not reachable by any of the three search modes.",
+      "transitionNote": "UiAutomator queries synchronize on window idle, so the interval in which NavHost has both source and destination composed is not observable through the driver's own API; sampling immediately after the click already showed the source gone.",
+      "status": "measured"
     },
     "web": {
-      "predicate": "attached && hydration complete",
-      "rationale": "Server-rendered markup exposes the marker before hydration attaches handlers, so 'visible' alone is a false positive.",
-      "status": "provisional"
+      "predicate": "[data-screen=\"<screenId>\"] attached && Playwright-visible",
+      "rationale": "Measured with React 19 SSR + hydration under Playwright/Chromium (conformance web host screen-marker probe, 2026-07-27). Neither a plain client-side swap nor a suspending transition ever exposed two screens' markers at once, and a suspending transition never mounted the destination's marker early — while it was pending, NO marker was present at all. So the predicate needs no exclusivity test and no transition handling.",
+      "measurements": {
+        "ssrBeforeHydration": "data-screen is in the server markup: count=1, isVisible=true, hydrated=false",
+        "interactivityGap": "a click in that window is DROPPED (counter stayed 0); the same click after hydration works",
+        "clientSideSwap": "per-frame sampling: probe_home -> detail_screen, never both",
+        "suspendingTransition": "source unmounts to the Suspense fallback (no marker at all for ~1.2s), then the destination appears; the destination marker never appears early"
+      },
+      "hydrationLimitation": "The marker is visible before the page is interactive, so on the FIRST document load a screen assertion can pass while clicks are still being dropped. This is deliberately NOT part of the predicate: React exposes no standard 'hydrated' signal, and canonizing a gate no driver can implement would be worse than naming the gap. It does not recur on client-side navigation, which happens after hydration.",
+      "status": "measured"
     },
-    "statusNote": "'provisional' predicates must be confirmed by device measurement before default-on verification is enabled; the measured result replaces the predicate here."
+    "statusNote": "'provisional' predicates must be confirmed by device measurement before default-on verification is enabled; the measured result replaces the predicate here. As of 2026-07-27 all three platforms are measured."
   },
   "implicitVerification": {
     "scope": "flowInlineStepScreenChange",
@@ -176,7 +197,8 @@
     "failureClasses": [
       {
         "id": "marker-absent",
-        "meaning": "No marker anywhere — stale generated code or stale library pin (infrastructure, not a test failure)."
+        "meaning": "No marker anywhere — stale generated code or stale library pin (infrastructure, not a test failure).",
+        "note": "Only reportable after the timeout expires. A suspending navigation legitimately shows NO marker while it is pending (measured on web: ~1.2s with the source unmounted to a fallback), so an instantaneous zero-marker reading is not evidence of stale code."
       },
       {
         "id": "previous-screen-only",

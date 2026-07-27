@@ -7,6 +7,7 @@
   "scripts": {
     "generate": "node scripts/generate.mjs",
     "conformance": "node scripts/run.ts",
+    "screen-marker-probe": "node scripts/screen_marker_probe.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",

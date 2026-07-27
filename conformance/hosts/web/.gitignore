@@ -13,3 +13,6 @@ rjui-build.log
 
 # local playwright traces / screenshots
 screenshots/
+
+# screen-marker probe scratch (screen-identity Phase 0)
+.screen-marker-probe/
