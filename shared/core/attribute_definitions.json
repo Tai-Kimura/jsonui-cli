@@ -22,6 +22,11 @@
       "type": ["string", "object"],
       "description": "Build directive consumed at distribution time (never present in distributed output). String form ('ios', 'android', 'web', comma-separated; language tokens like 'swift'/'kotlin'/'compose'/'react' also accepted) removes the whole node on non-matching platforms. Object form ({\"ios\": {...}, \"web\": {...}}) merges the matching platform's map into the node (override wins). Distinct from the layout-root 'platforms' array, which whitelists the distribution targets of the entire file."
     },
+    "role": {
+      "type": "string",
+      "enum": ["screen", "cell", "partial"],
+      "description": "Layout-root screen classification (canonical: shared/core/screen_identity.json). Metadata only, never rendered. It is the explicit declaration that wins over derivation, so a non-screen role suppresses the screen marker on that layout. Declare it when derivation gets a layout wrong — most often a cell instantiated from host-language code, which no layout JSON references and which therefore defaults to being a screen."
+    },
     "type": {
       "type": "string",
       "required": true,

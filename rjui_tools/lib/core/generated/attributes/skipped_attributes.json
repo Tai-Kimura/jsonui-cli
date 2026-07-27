@@ -31,6 +31,12 @@
       "attribute": "platform",
       "type": "[\"string\", \"object\"]",
       "reason": "metadata — not rendered by any platform"
+    },
+    {
+      "component": "common",
+      "attribute": "role",
+      "type": "\"string\"",
+      "reason": "metadata — not rendered by any platform"
     }
   ]
 }

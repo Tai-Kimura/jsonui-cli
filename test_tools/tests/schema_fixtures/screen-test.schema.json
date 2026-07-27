@@ -19,11 +19,11 @@
       "properties": {
         "layout": {
           "type": "string",
-          "description": "Path to the JsonUI layout file (e.g., 'Layouts/Login.json')"
+          "description": "Path to the JsonUI layout file (e.g., 'Layouts/Login.json'). Provenance metadata: it is displayed in the generated docs but never opened, so no base directory applies and any spelling is accepted. Contrast 'document', which IS opened and therefore has a defined base."
         },
         "document": {
           "type": "string",
-          "description": "Path to the specification document file (e.g., 'docs/screens/login.html' or 'docs/screens/login.md'). Used for linking from Mermaid flow diagrams."
+          "description": "Path to the specification document file (e.g., 'docs/screens/login.html' or 'docs/screens/login.md'). Used for linking from Mermaid flow diagrams. Resolved from the doc generator's INPUT DIRECTORY (or its parent) — a different base from 'layout', because this value also becomes the page's location inside the generated site and the URL the diagram links to. Write it as a forward path from the input directory or the project root; a '../'-leading value cannot work, since the page would land outside the output directory."
         }
       },
       "required": [

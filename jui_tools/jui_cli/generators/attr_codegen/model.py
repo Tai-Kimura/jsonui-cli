@@ -52,7 +52,7 @@ class AttrKind(str, Enum):
 #: Attributes that are pure metadata (never rendered) — skipped from codegen.
 #: `platform` is a build directive consumed (and removed) at distribution
 #: time by PlatformResolver, so no runtime extraction code should exist.
-METADATA_ATTRS = frozenset({"generatedBy", "platform"})
+METADATA_ATTRS = frozenset({"generatedBy", "platform", "role"})
 
 
 @dataclass(frozen=True)

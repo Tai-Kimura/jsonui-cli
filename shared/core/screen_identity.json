@@ -59,7 +59,30 @@
         "rule": "defaultScreen",
         "detail": "Anything left over is classified as a screen. Derivation is deliberately imperfect: tools MUST report the derived classification so authors can correct outliers with an explicit role (step 1)."
       }
-    ]
+    ],
+    "derivationBlindSpot": {
+      "description": "Step 2 only sees references written in layout JSON. A cell instantiated from host-language code — a CellBuilder, or a ViewModel assembling cellClasses at runtime — is referenced by no layout, so it reaches step 4 and becomes a screen. It then carries a marker inside its host screen's tree, which breaks marker.invariants[0] (exactly one marker per rendered screen). This is a blind spot of the derivation, not a bug in it: the information is not present in the layouts.",
+      "resolution": "Declare \"role\": \"cell\" on the layout. Step 1 exists for exactly this case.",
+      "reportingRule": "The set a tool must present for review is EVERY screen whose reason is 'default' (derivedScreens). A name-based hint over that set (screens_needing_review) may be offered as a convenience, but never as a complete list: measured on a real project it flagged 7 while missing 8 more wrongly-derived screens, and a consumer who fixed only the 7 was left with markers on non-screens and no way to notice.",
+      "rejectedSignals": [
+        {
+          "signal": "layout name shape (_cell, _row, _item …)",
+          "verdict": "hint only",
+          "measurement": "Catches 7 of 15 wrongly-derived screens on the measured project. Cells built from host code are named bar_card / holidays_section / indicator_dot and are missed."
+        },
+        {
+          "signal": "a screen spec exists with the same basename",
+          "verdict": "rejected",
+          "measurement": "0 of 55 screens on the measured project had a spec whose basename matched, so the signal separates nothing."
+        },
+        {
+          "signal": "the layout id appears in host-language source",
+          "verdict": "rejected",
+          "measurement": "48 of 55 derived screens are named in host source — every screen has a ViewModel named after it, exactly as every code-built cell does. 6 of 8 known cells hit, but so did 42 non-cells: ~12% precision."
+        }
+      ],
+      "preciseDetection": "The only exact detector is runtime: a screen whose tree exposes markers for two or more ids has at least one non-screen among them. Legitimate co-presentation (split-pane and tab hosts, see assertion semantics) means this must be reported as a warning with the ids listed, not a failure. Not yet implemented — follow-up on the driver side."
+    }
   },
   "appOwnedScreens": {
     "description": "Screens the app owns outright — a hand-written page with no JsonUI layout behind it. They are real navigation destinations (a test navigates to them and asserts there), so they must be declarable, otherwise the screen-unknown rule rejects a legitimate id.",

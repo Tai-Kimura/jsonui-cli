@@ -122,10 +122,26 @@ module JsonUIShared
     # to flag a derived classification for human review — never to classify.
     REVIEW_SUFFIXES = /_(cell|header|footer|row|item)\z/
 
-    # Screens the derivation is least sure about: nothing referenced them, so
-    # they defaulted to `screen`, yet they are named like a fragment. This is
-    # the case the explicit `role` key exists for, and the canon requires
-    # tools to surface it rather than silently marking the wrong layouts.
+    # Screens whose role was DERIVED, not declared.
+    #
+    # This is the COMPLETE set of classifications the derivation could have
+    # got wrong. `screens_needing_review` is only a name-based hint inside
+    # it, so anything that reports "what needs checking" has to start here —
+    # a hint presented as a complete list is what lets a wrongly-derived
+    # screen keep its marker unnoticed.
+    def derived_screen_ids
+      @entries.values.select { |e| e.screen? && e.reason == 'default' }.map(&:screen_id).sort
+    end
+
+    # The subset of derived screens that are NAMED like a fragment.
+    #
+    # A hint, never a complete list: it only catches `_cell` / `_row` style
+    # names. A cell instantiated from host-language code (CellBuilder, a
+    # ViewModel assembling cellClasses) is referenced by no layout JSON and
+    # is usually not named like one either, so it defaults to `screen` and
+    # this misses it. Measured on a real project: 7 flagged here, 8 more
+    # wrongly derived screens not flagged. Callers must present it as a hint
+    # and surface `derived_screen_ids` as the set that actually needs review.
     def screens_needing_review
       @entries.values
               .select { |e| e.screen? && e.reason == 'default' && e.screen_id =~ REVIEW_SUFFIXES }
@@ -136,8 +152,15 @@ module JsonUIShared
     # One-line summary plus any review hints, for a build to print.
     def report_lines
       lines = ["Screen identity: #{screen_ids.length} screen(s), #{non_screen_ids.length} non-screen(s)"]
+      derived = derived_screen_ids
+      unless derived.empty?
+        lines << "  #{derived.length} of #{screen_ids.length} screen(s) DERIVED, not declared. " \
+                 'Derivation cannot see cells built from host code; declare ' \
+                 "\"role\": \"cell\" on any that are not screens " \
+                 "('jui screens --json' lists them under derivedScreens)."
+      end
       screens_needing_review.each do |id|
-        lines << "  '#{id}' is treated as a SCREEN (nothing references it as a cell/include). " \
+        lines << "  hint: '#{id}' is treated as a SCREEN (nothing references it as a cell/include). " \
                  "If that is wrong, add \"role\": \"cell\" to its layout root."
       end
       lines

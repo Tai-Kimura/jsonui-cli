@@ -116,12 +116,33 @@ class ScreenIndex:
     def non_screen_ids(self) -> list[str]:
         return sorted(k for k, v in self.entries.items() if not v.is_screen)
 
+    def derived_screen_ids(self) -> list[str]:
+        """Screens whose role was DERIVED, not declared.
+
+        This is the COMPLETE set of classifications the derivation could
+        have got wrong. ``screens_needing_review`` is only a name-based
+        hint inside it, so anything that reports "what needs checking"
+        has to start here — a hint presented as a complete list is what
+        lets a wrongly-derived screen keep its marker unnoticed.
+        """
+        return sorted(
+            entry.screen_id
+            for entry in self.entries.values()
+            if entry.is_screen and entry.reason == "default"
+        )
+
     def screens_needing_review(self) -> list[str]:
-        """Screens the derivation is least sure about: nothing referenced
-        them, so they defaulted to ``screen``, yet they are named like a
-        fragment. This is the case the explicit ``role`` key exists for, and
-        the canon requires tools to surface it rather than silently marking
-        the wrong layouts."""
+        """The subset of derived screens that are NAMED like a fragment.
+
+        A hint, never a complete list: it only catches ``_cell`` / ``_row``
+        style names. A cell instantiated from host-language code
+        (CellBuilder, a ViewModel assembling cellClasses) is referenced by
+        no layout JSON and is usually not named like one either, so it
+        defaults to ``screen`` and this misses it. Measured on a real
+        project: 7 flagged here, 8 more wrongly derived screens not
+        flagged. Callers must present it as a hint and surface
+        :meth:`derived_screen_ids` as the set that actually needs review.
+        """
         return sorted(
             entry.screen_id
             for entry in self.entries.values()
@@ -136,9 +157,17 @@ class ScreenIndex:
             f"Screen identity: {len(self.screen_ids)} screen(s), "
             f"{len(self.non_screen_ids)} non-screen(s)"
         ]
+        derived = self.derived_screen_ids()
+        if derived:
+            lines.append(
+                f"  {len(derived)} of {len(self.screen_ids)} screen(s) DERIVED, not declared. "
+                "Derivation cannot see cells built from host code; declare "
+                '"role": "cell" on any that are not screens '
+                "('jui screens --json' lists them under derivedScreens)."
+            )
         for screen_id in self.screens_needing_review():
             lines.append(
-                f"  '{screen_id}' is treated as a SCREEN (nothing references it as a "
+                f"  hint: '{screen_id}' is treated as a SCREEN (nothing references it as a "
                 f'cell/include). If that is wrong, add "role": "cell" to its layout root.'
             )
         return lines

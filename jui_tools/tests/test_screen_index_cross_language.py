@@ -53,6 +53,8 @@ FIXTURE: dict[str, dict] = {
     "declared_cell.json": {"type": "View", "role": "cell"},
     "nested/detail.json": {"type": "View"},
     "nested/deep/profile.json": {"type": "View"},
+    # Unreferenced and NAMED like a fragment: the name-based hint catches it.
+    "orphan_row.json": {"type": "View"},
     # Resource files, not layouts. Nothing references them, so a reader that
     # collects them classifies them as screens by the step-4 default. The
     # "cell" key in strings.json is a trap: a reader that scans these files
@@ -79,7 +81,10 @@ puts JSON.generate(
   'screen_ids' => index.screen_ids,
   'non_screen_ids' => index.non_screen_ids,
   'collisions' => index.collisions.keys.sort,
-  'markers' => index.screen_ids.map { |id| index.marker_for(id) }
+  'markers' => index.screen_ids.map { |id| index.marker_for(id) },
+  'derived' => index.derived_screen_ids,
+  'needs_review' => index.screens_needing_review,
+  'report_lines' => index.report_lines
 )
 """
 
@@ -106,6 +111,9 @@ def _python_result(layouts: Path, app_owned: list[str]) -> dict:
         "non_screen_ids": index.non_screen_ids,
         "collisions": sorted(index.collisions),
         "markers": [index.entries[i].marker for i in index.screen_ids],
+        "derived": index.derived_screen_ids(),
+        "needs_review": index.screens_needing_review(),
+        "report_lines": index.report_lines(),
     }
 
 
@@ -199,6 +207,23 @@ class CrossLanguageAgreementTests(unittest.TestCase):
                 # The trap: 'settings' stays a screen because the reference
                 # inside Resources/strings.json was never read.
                 self.assertIn("settings", result["screen_ids"])
+
+    def test_review_hint_is_a_strict_subset_of_the_derived_set(self):
+        # The hint is name-based, so it necessarily misses wrongly-derived
+        # screens that are not named like fragments. Pinning the gap here
+        # keeps callers from re-reading the hint as a complete list — the
+        # mistake that let cells built from host code keep their markers.
+        for label, result in (
+            ("python", _python_result(self.layouts, [])),
+            ("ruby", _ruby_result(self.layouts, [])),
+        ):
+            with self.subTest(reader=label):
+                derived, hint = set(result["derived"]), set(result["needs_review"])
+                self.assertEqual(hint, {"orphan_row"})
+                self.assertTrue(hint < derived, "hint must be a STRICT subset")
+                # 'settings' is derived and not named like a fragment: the
+                # exact shape the hint cannot see.
+                self.assertIn("settings", derived - hint)
 
     def test_the_fixture_actually_exercises_every_reason(self):
         # A guard on the guard: if the fixture stops covering a branch, the

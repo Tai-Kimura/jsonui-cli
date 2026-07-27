@@ -1083,13 +1083,26 @@ def _generate_document_pages(
 
     for doc_path, test_name in documents_to_process.items():
         try:
-            # Resolve source document path
+            # Resolve source document path.
+            #
+            # 'document' is resolved from the input directory (or its
+            # parent), NOT from the test file like 'source.layout' is. The
+            # bases differ for a reason: this value doubles as the page's
+            # path inside the generated site and as the URL the flow
+            # diagram links to, so it has to be a forward path from a
+            # stable root. A test-file-relative '../../..' value would
+            # write the page outside the output directory.
             source_path = input_path / doc_path
             if not source_path.exists():
                 # Try relative to parent
                 source_path = input_path.parent / doc_path
             if not source_path.exists():
-                print(f"    Warning: Document not found: {doc_path}")
+                print(
+                    f"    Warning: Document not found: {doc_path}\n"
+                    f"      'document' is resolved from {input_path} or {input_path.parent}, "
+                    f"not from the test file (unlike 'source.layout'). "
+                    f"Write it as a forward path from one of those."
+                )
                 continue
 
             # Determine output path (preserve relative structure)

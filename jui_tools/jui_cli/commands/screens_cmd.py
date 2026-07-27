@@ -80,6 +80,10 @@ def cmd_screens(args: argparse.Namespace) -> int:
                 for row in index.classification_report()
             ],
             "collisions": {k: [str(p) for p in v] for k, v in index.collisions.items()},
+            # The complete set whose role was derived rather than declared —
+            # what an audit has to walk. needsReview is only the name-based
+            # hint inside it and must not be read as a complete list.
+            "derivedScreens": index.derived_screen_ids(),
             "needsReview": index.screens_needing_review(),
         }
         print(json.dumps(payload, indent=2, ensure_ascii=False))
