@@ -74,15 +74,20 @@ module KjuiTools
       # over the WHOLE layout tree — a layout's classification depends on
       # how OTHER layouts reference it, so it cannot be decided per file.
       def screen_index
-        @screen_index ||= JsonUIShared::ScreenIndex.build(@layouts_dir)
+        @screen_index ||= begin
+          index = JsonUIShared::ScreenIndex.build(@layouts_dir)
+          index.report_lines.each { |line| Core::Logger.info line }
+          index
+        end
       end
 
-      # Marker for a layout, or nil when it is not a screen.
-      def screen_marker_for(json_file)
+      # Canonical screen id for a layout, or nil when it is not a screen.
+      # The bare ID is what travels: the `__screen_` prefix is the runtime
+      # layer's business (the library's ScreenMarker forms the test tag), so
+      # passing an already-prefixed marker would double it.
+      def screen_id_for(json_file)
         screen_id = JsonUIShared::ScreenIndex.screen_id_for_path(json_file)
-        return nil unless screen_index.screen?(screen_id)
-
-        screen_index.marker_for(screen_id)
+        screen_index.screen?(screen_id) ? screen_id : nil
       end
 
       def build(options = {})
@@ -203,7 +208,7 @@ module KjuiTools
             dynamic_layout_name = relative_path.sub(/\.json$/, '')
             update_generated_file(generated_view_file, json_data, dynamic_layout_name,
                                   variant_structs: variant_structs,
-                                  screen_marker: screen_marker_for(json_file))
+                                  screen_id: screen_id_for(json_file))
           else
             Core::Logger.warn "GeneratedView file not found: #{generated_view_file}"
           end
@@ -936,7 +941,7 @@ module KjuiTools
         result
       end
 
-      def update_generated_file(file_path, json_data, dynamic_layout_name = nil, fun_stem: nil, types_stem: nil, variant_structs: {}, screen_marker: nil)
+      def update_generated_file(file_path, json_data, dynamic_layout_name = nil, fun_stem: nil, types_stem: nil, variant_structs: {}, screen_id: nil)
         existing_content = File.read(file_path)
 
         if existing_content.include?('// >>> GENERATED_CODE_START') &&
@@ -982,7 +987,7 @@ module KjuiTools
           end
 
           # Create content that switches based on DynamicModeManager
-          composable_content = generate_mode_aware_content(layout_name, static_content, dynamic_content, 1, screen_marker: screen_marker)
+          composable_content = generate_mode_aware_content(layout_name, static_content, dynamic_content, 1, screen_id: screen_id)
 
           # Block form: a STRING replacement would interpret backslash
           # sequences (\&, \', \`, \0-\9) inside the generated Kotlin and
@@ -1341,7 +1346,7 @@ module KjuiTools
         end
       end
 
-      def generate_mode_aware_content(layout_name, static_content, dynamic_content, depth, screen_marker: nil)
+      def generate_mode_aware_content(layout_name, static_content, dynamic_content, depth, screen_id: nil)
         indent_str = "    " * depth
 
         # Screen marker: a sibling node placed inside a TRANSPARENT Box that
@@ -1359,7 +1364,7 @@ module KjuiTools
         # keeps flowing into the inner root exactly as before, so the content
         # this wraps is byte-identical to the unmarked output.
         # propagateMinConstraints keeps a non-filling root sized as it was.
-        if screen_marker
+        if screen_id
           body = generate_mode_aware_body(layout_name, static_content, dynamic_content, depth)
           inner = body.lines.map { |line| line.strip.empty? ? line : "    #{line}" }.join
           @required_imports.add(:box)
@@ -1367,7 +1372,7 @@ module KjuiTools
           code = "#{indent_str}Box(propagateMinConstraints = true) {\n"
           code += inner
           code += "#{indent_str}    // Requires KotlinJsonUI >= #{SCREEN_MARKER_MIN_LIBRARY_VERSION} (screen marker)\n"
-          code += "#{indent_str}    ScreenMarker(\"#{screen_marker}\")\n"
+          code += "#{indent_str}    ScreenMarker(\"#{screen_id}\")\n"
           code += "#{indent_str}}\n"
           return code
         end

@@ -14,7 +14,7 @@ module SjuiTools
       # harder to diagnose than a build error.
       SCREEN_MARKER_MIN_LIBRARY_VERSION = '10.9.0'
 
-      def update_generated_body(swift_file_path, new_body_code, state_variables: [], root_children: nil, responsive_functions: [], variant_dispatch: nil, force_typed_view_model: false, view_model_type: nil, source_name: nil, screen_marker: nil)
+      def update_generated_body(swift_file_path, new_body_code, state_variables: [], root_children: nil, responsive_functions: [], variant_dispatch: nil, force_typed_view_model: false, view_model_type: nil, source_name: nil, screen_id: nil)
         unless File.exist?(swift_file_path)
           puts "Error: Swift file not found: #{swift_file_path}"
           return false
@@ -134,9 +134,9 @@ module SjuiTools
         # would split test results by rendering mode. Applying it here also
         # keeps it off DynamicView's entry point, which cells, tabs, embeds
         # and dialogs re-enter (each would grow a false marker).
-        screen_marker_line = if screen_marker
+        screen_marker_line = if screen_id
           "\n            // Requires SwiftJsonUI >= #{SCREEN_MARKER_MIN_LIBRARY_VERSION} (screen marker)" \
-          "\n            .jsonUIScreenMarker(\"#{screen_marker}\")"
+          "\n            .jsonUIScreenMarker(\"#{screen_id}\")"
         else
           ""
         end

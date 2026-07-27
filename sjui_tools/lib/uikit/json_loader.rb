@@ -134,9 +134,8 @@ module SjuiTools
           # nil for cells and partials — they render inside a host and must
           # not each grow a marker of their own.
           screen_id = JsonUIShared::ScreenIndex.screen_id_for_path(file)
-          @screen_marker = if @screen_index&.screen?(screen_id)
-            @screen_index.marker_for(screen_id)
-          end
+          # The bare ID: SwiftJsonUI's applyScreenMarker adds the prefix.
+          @screen_marker = screen_id if @screen_index&.screen?(screen_id)
           
           # JSONアナライザーの初期化（各ファイルごとに新しいID登録で開始）
           @json_analyzer = JsonAnalyzer.new(

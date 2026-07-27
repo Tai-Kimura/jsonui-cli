@@ -33,10 +33,10 @@ RSpec.describe SjuiTools::SwiftUI::ViewUpdater do
     it 'applies the marker to the outer Group so both rendering modes carry it' do
       Dir.mktmpdir do |dir|
         path = write_stub(dir)
-        updater.update_generated_body(path, 'Text("base")', screen_marker: '__screen_home')
+        updater.update_generated_body(path, 'Text("base")', screen_id: 'home')
         content = File.read(path)
 
-        expect(content).to include('.jsonUIScreenMarker("__screen_home")')
+        expect(content).to include('.jsonUIScreenMarker("home")')
 
         # The marker must sit OUTSIDE the DEBUG dynamic/static switch: a
         # mode-dependent marker would split test results by rendering mode.
@@ -46,10 +46,23 @@ RSpec.describe SjuiTools::SwiftUI::ViewUpdater do
       end
     end
 
+
+    it 'passes the BARE screen id — the runtime layer owns the __screen_ prefix' do
+      # Regression: codegen used to pass the already-prefixed marker while
+      # the library prefixed again, producing __screen___screen_<id> on a
+      # real device.
+      Dir.mktmpdir do |dir|
+        path = write_stub(dir)
+        updater.update_generated_body(path, 'Text("base")', screen_id: 'home')
+
+        expect(File.read(path)).not_to include('jsonUIScreenMarker("__screen_')
+      end
+    end
+
     it 'names the minimum library version so a stale pin fails loudly' do
       Dir.mktmpdir do |dir|
         path = write_stub(dir)
-        updater.update_generated_body(path, 'Text("base")', screen_marker: '__screen_home')
+        updater.update_generated_body(path, 'Text("base")', screen_id: 'home')
 
         expect(File.read(path)).to include(
           "// Requires SwiftJsonUI >= #{described_class::SCREEN_MARKER_MIN_LIBRARY_VERSION} (screen marker)"
@@ -75,7 +88,7 @@ RSpec.describe SjuiTools::SwiftUI::ViewUpdater do
           explicit_nil = write_stub(b)
 
           updater.update_generated_body(without, 'Text("base")')
-          updater.update_generated_body(explicit_nil, 'Text("base")', screen_marker: nil)
+          updater.update_generated_body(explicit_nil, 'Text("base")', screen_id: nil)
 
           expect(File.read(explicit_nil)).to eq(File.read(without))
         end
@@ -85,9 +98,9 @@ RSpec.describe SjuiTools::SwiftUI::ViewUpdater do
     it 'is idempotent — regenerating twice produces the same file' do
       Dir.mktmpdir do |dir|
         path = write_stub(dir)
-        updater.update_generated_body(path, 'Text("base")', screen_marker: '__screen_home')
+        updater.update_generated_body(path, 'Text("base")', screen_id: 'home')
         first = File.read(path)
-        updater.update_generated_body(path, 'Text("base")', screen_marker: '__screen_home')
+        updater.update_generated_body(path, 'Text("base")', screen_id: 'home')
 
         expect(File.read(path)).to eq(first)
       end

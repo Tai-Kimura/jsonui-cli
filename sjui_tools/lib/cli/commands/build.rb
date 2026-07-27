@@ -176,16 +176,18 @@ module SjuiTools
           warnings
         end
 
-        # Marker identifier for a layout, or nil when the layout is not a
+        # Canonical screen id for a layout, or nil when it is not a
         # screen. Returning nil is the whole gate: cells, partials and
         # variant structs must emit nothing.
-        def screen_marker_for(screen_index, json_file)
+        #
+        # The bare ID is what travels: the `__screen_` prefix is the runtime
+        # layer's business (SwiftJsonUI's modifier forms the identifier), so
+        # passing an already-prefixed marker would double it.
+        def screen_id_for(screen_index, json_file)
           return nil unless screen_index
 
           screen_id = JsonUIShared::ScreenIndex.screen_id_for_path(json_file)
-          return nil unless screen_index.screen?(screen_id)
-
-          screen_index.marker_for(screen_id)
+          screen_index.screen?(screen_id) ? screen_id : nil
         end
 
         def build_uikit(options = {})
@@ -350,6 +352,7 @@ module SjuiTools
             layouts_dir,
             app_owned_screens: (config.dig('test', 'appOwnedScreens') rescue nil)
           )
+          screen_index.report_lines.each { |line| Core::Logger.info line }
 
           files_to_update.each do |json_file|
             # Get relative path from layouts directory
@@ -427,7 +430,7 @@ module SjuiTools
               swiftui_code, _, state_variables, root_children, responsive_functions = converter.convert_json_to_view(json_file)
 
               # Update the existing Swift file's generatedBody
-              updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [], screen_marker: screen_marker_for(screen_index, json_file), **variant_kwargs)
+              updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [], screen_id: screen_id_for(screen_index, json_file), **variant_kwargs)
 
               Core::Logger.info "  Updated: #{swift_file}"
             else
@@ -466,7 +469,7 @@ module SjuiTools
 
               # Now process the newly created file
               swiftui_code, _, state_variables, root_children, responsive_functions = converter.convert_json_to_view(json_file)
-              updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [], screen_marker: screen_marker_for(screen_index, json_file), **variant_kwargs)
+              updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [], screen_id: screen_id_for(screen_index, json_file), **variant_kwargs)
               Core::Logger.info "  Created and updated: #{swift_file}"
             end
 

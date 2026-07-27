@@ -105,6 +105,7 @@ module RjuiTools
           # over the WHOLE layout tree — a layout's classification depends on
           # how OTHER layouts reference it, so it cannot be decided per file.
           screen_index = JsonUIShared::ScreenIndex.build(layouts_dir)
+          screen_index.report_lines.each { |line| Core::Logger.info(line) }
 
           expected_component_paths = []
           json_files.each do |json_file|
@@ -149,12 +150,12 @@ module RjuiTools
                 map[cls] = "#{component_name}#{cls.capitalize}Variant"
               end
 
-              screen_id = JsonUIShared::ScreenIndex.screen_id_for_path(json_file)
-              screen_marker = screen_index.screen?(screen_id) ? screen_index.marker_for(screen_id) : nil
+              layout_screen_id = JsonUIShared::ScreenIndex.screen_id_for_path(json_file)
+              layout_screen_id = nil unless screen_index.screen?(layout_screen_id)
 
               output = generator.generate(component_name, json_content, subdir: nested_subdir,
                                           variants: variant_comps,
-                                          screen_marker: screen_marker)
+                                          screen_id: layout_screen_id)
 
               # Use .tsx for TypeScript, .jsx for JavaScript
               extension = @config['typescript'] ? '.tsx' : '.jsx'

@@ -75,6 +75,7 @@
   "marker": {
     "namePattern": "__screen_<screenId>",
     "prefix": "__screen_",
+    "prefixOwnership": "The RUNTIME layer forms the marker name from a bare screen id: SwiftJsonUI's .jsonUIScreenMarker(id), KotlinJsonUI's ScreenMarker(id). Code generation therefore passes the SCREEN ID, never an already-prefixed marker — doing both produced __screen___screen_<id> on a real device (caught by the Android smoke test, 2026-07-27). On web there is no runtime layer, so the generated data-screen attribute carries the bare id and the driver matches [data-screen=\"<screenId>\"].",
     "description": "Runtime identity beacon emitted by code generation into every screen, and only into screens. Tests never spell the marker: it is an implementation detail owned by the drivers.",
     "invariants": [
       "A rendered screen exposes EXACTLY ONE marker. Zero markers means the generated code or the library pin is stale; two or more means a generator bug (variant struct, double-drive) — both are hard errors, not warnings.",

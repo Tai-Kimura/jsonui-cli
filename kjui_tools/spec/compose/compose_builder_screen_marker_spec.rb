@@ -62,12 +62,21 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       body = body_of(gen_path('home', 'HomeGeneratedView.kt'))
 
       expect(body).to include('Box(propagateMinConstraints = true) {')
-      expect(body).to include('ScreenMarker("__screen_home")')
+      expect(body).to include('ScreenMarker("home")')
 
       # Outside the mode switch: a mode-dependent marker would split test
       # results by rendering mode.
       expect(body.index('Box(propagateMinConstraints = true)'))
         .to be < body.index('if (DynamicModeManager.isActive())')
+    end
+
+
+    it 'passes the BARE screen id — the runtime layer owns the __screen_ prefix' do
+      # Regression: codegen used to pass the already-prefixed marker while
+      # the library prefixed again, producing __screen___screen_<id> on a
+      # real device.
+      expect(body_of(gen_path('home', 'HomeGeneratedView.kt')))
+        .not_to include('ScreenMarker("__screen_')
     end
 
     it 'imports ScreenMarker and names the minimum library version' do

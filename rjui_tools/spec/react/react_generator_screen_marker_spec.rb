@@ -22,15 +22,24 @@ RSpec.describe RjuiTools::React::ReactGenerator do
 
   describe 'screen marker' do
     it 'puts data-screen on the root element, gated on NODE_ENV' do
-      output = generator.generate('Home', layout, screen_marker: '__screen_home')
+      output = generator.generate('Home', layout, screen_id: 'home')
 
       expect(output).to include(
-        %(data-screen={process.env.NODE_ENV === 'production' ? undefined : "__screen_home"})
+        %(data-screen={process.env.NODE_ENV === 'production' ? undefined : "home"})
       )
     end
 
+
+    it 'passes the BARE screen id — the runtime layer owns the __screen_ prefix' do
+      # Regression: codegen used to pass the already-prefixed marker while
+      # the library prefixed again, producing __screen___screen_<id> on a
+      # real device.
+      expect(generator.generate('Home', layout, screen_id: 'home'))
+        .not_to include('"__screen_')
+    end
+
     it 'marks the SAME element that carries the root id' do
-      output = generator.generate('Home', layout, screen_marker: '__screen_home')
+      output = generator.generate('Home', layout, screen_id: 'home')
       root_tag = output[/return \(\s*(<[^>]*>)/m, 1]
 
       # A separate node would need its own non-empty box to satisfy the
@@ -45,19 +54,19 @@ RSpec.describe RjuiTools::React::ReactGenerator do
     end
 
     it 'leaves unmarked output byte-identical to the pre-marker generator' do
-      expect(generator.generate('Home', layout, screen_marker: nil))
+      expect(generator.generate('Home', layout, screen_id: nil))
         .to eq(described_class.new(config).generate('Home', layout))
     end
 
     it 'is deterministic — generating twice produces the same output' do
-      first = generator.generate('Home', layout, screen_marker: '__screen_home')
-      expect(described_class.new(config).generate('Home', layout, screen_marker: '__screen_home'))
+      first = generator.generate('Home', layout, screen_id: 'home')
+      expect(described_class.new(config).generate('Home', layout, screen_id: 'home'))
         .to eq(first)
     end
 
     it 'skips an expression-container root, like id injection does' do
       hidden = layout.merge('visibility' => '@{isVisible}')
-      output = generator.generate('Home', hidden, screen_marker: '__screen_home')
+      output = generator.generate('Home', hidden, screen_id: 'home')
 
       # No crash, and nothing injected into a fragment.
       expect(output).not_to include('<> data-screen')

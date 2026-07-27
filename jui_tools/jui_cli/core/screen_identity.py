@@ -19,6 +19,7 @@ Canonical rules implemented (see the JSON asset for the full text):
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
@@ -42,6 +43,10 @@ NON_SCREEN_REFERENCE_LIST_KEYS: tuple[str, ...] = ("cellClasses",)
 VALID_ROLES: tuple[str, ...] = ("screen", "cell", "partial")
 
 MARKER_PREFIX = "__screen_"
+
+#: Name shapes that almost always mean "renders inside a host". Used ONLY to
+#: flag a derived classification for human review — never to classify.
+REVIEW_SUFFIXES = re.compile(r"_(cell|header|footer|row|item)\Z")
 
 
 def marker_name(screen_id: str) -> str:
@@ -104,6 +109,33 @@ class ScreenIndex:
     @property
     def non_screen_ids(self) -> list[str]:
         return sorted(k for k, v in self.entries.items() if not v.is_screen)
+
+    def screens_needing_review(self) -> list[str]:
+        """Screens the derivation is least sure about: nothing referenced
+        them, so they defaulted to ``screen``, yet they are named like a
+        fragment. This is the case the explicit ``role`` key exists for, and
+        the canon requires tools to surface it rather than silently marking
+        the wrong layouts."""
+        return sorted(
+            entry.screen_id
+            for entry in self.entries.values()
+            if entry.is_screen
+            and entry.reason == "default"
+            and REVIEW_SUFFIXES.search(entry.screen_id)
+        )
+
+    def report_lines(self) -> list[str]:
+        """One-line summary plus any review hints, for a build to print."""
+        lines = [
+            f"Screen identity: {len(self.screen_ids)} screen(s), "
+            f"{len(self.non_screen_ids)} non-screen(s)"
+        ]
+        for screen_id in self.screens_needing_review():
+            lines.append(
+                f"  '{screen_id}' is treated as a SCREEN (nothing references it as a "
+                f'cell/include). If that is wrong, add "role": "cell" to its layout root.'
+            )
+        return lines
 
     def classification_report(self) -> list[dict[str, str]]:
         """Derived classification, for tools to surface so authors can

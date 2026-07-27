@@ -112,6 +112,31 @@ module JsonUIShared
       @entries.reject { |_, v| v.screen? }.keys.sort
     end
 
+    # Name shapes that almost always mean "renders inside a host". Used ONLY
+    # to flag a derived classification for human review — never to classify.
+    REVIEW_SUFFIXES = /_(cell|header|footer|row|item)\z/
+
+    # Screens the derivation is least sure about: nothing referenced them, so
+    # they defaulted to `screen`, yet they are named like a fragment. This is
+    # the case the explicit `role` key exists for, and the canon requires
+    # tools to surface it rather than silently marking the wrong layouts.
+    def screens_needing_review
+      @entries.values
+              .select { |e| e.screen? && e.reason == 'default' && e.screen_id =~ REVIEW_SUFFIXES }
+              .map(&:screen_id)
+              .sort
+    end
+
+    # One-line summary plus any review hints, for a build to print.
+    def report_lines
+      lines = ["Screen identity: #{screen_ids.length} screen(s), #{non_screen_ids.length} non-screen(s)"]
+      screens_needing_review.each do |id|
+        lines << "  '#{id}' is treated as a SCREEN (nothing references it as a cell/include). " \
+                 "If that is wrong, add \"role\": \"cell\" to its layout root."
+      end
+      lines
+    end
+
     # Derived classification, for tools to surface so authors can correct
     # outliers with an explicit `role`.
     def classification_report
