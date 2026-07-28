@@ -7,12 +7,20 @@ failure signal on every platform is the waiver set GROWING — the ratchet.
 """
 from __future__ import annotations
 
+import argparse
+import json
+import os
 from pathlib import Path
 
 from jui_cli.commands.lint_generated_cmd import (
     BASELINE_FILENAME,
+    EXIT_HEALTH,
+    EXIT_OK,
+    EXIT_RATCHET,
+    _exit_code,
     _oversized_functions,
     _ratchet_size_baseline,
+    cmd_lint_generated,
 )
 
 
@@ -100,3 +108,84 @@ class TestRatchet:
         _ratchet_size_baseline(tmp_path, oversized, update=True)
         wobbled = [(p, n, d + 1, l + 30) for p, n, d, l in oversized]
         assert _ratchet_size_baseline(tmp_path, wobbled, update=False) == []
+
+
+class TestExitCodes:
+    """A permanently-red gate is ignored like a permanent warning, so the two
+    signals get distinct codes and either can gate alone
+    (jui-lint-generated-exit-code-cannot-gate-the-size-ratchet).
+    """
+
+    def test_clean_is_zero(self):
+        assert _exit_code("any", {"size-ratchet": False, "health": False}) == EXIT_OK
+
+    def test_ratchet_and_health_have_distinct_codes(self):
+        assert _exit_code(
+            "any", {"size-ratchet": True, "health": False}) == EXIT_RATCHET
+        assert _exit_code(
+            "any", {"size-ratchet": False, "health": True}) == EXIT_HEALTH
+
+    def test_health_alone_does_not_mask_the_ratchet(self):
+        assert _exit_code(
+            "size-ratchet", {"size-ratchet": False, "health": True}) == EXIT_OK
+        assert _exit_code(
+            "size-ratchet", {"size-ratchet": True, "health": True}) == EXIT_RATCHET
+
+    def test_ratchet_alone_does_not_mask_health(self):
+        assert _exit_code(
+            "health", {"size-ratchet": True, "health": False}) == EXIT_OK
+        assert _exit_code(
+            "health", {"size-ratchet": True, "health": True}) == EXIT_HEALTH
+
+    def test_non_gating_finding_is_announced(self, capsys):
+        _exit_code("size-ratchet", {"size-ratchet": False, "health": True})
+        assert "Not gating on" in capsys.readouterr().out
+
+
+class TestCommandExitCodes:
+    """End to end: a real project tree, straight through the command."""
+
+    def _project(self, tmp_path: Path) -> Path:
+        (tmp_path / "jui.config.json").write_text(json.dumps({
+            "platforms": {"web": {"root": "web"}},
+        }), encoding="utf-8")
+        gen = tmp_path / "web" / "src" / "generated" / "hooks"
+        gen.mkdir(parents=True)
+        (gen / "useThing.ts").write_text(
+            "// @generated AUTO-GENERATED FILE — DO NOT EDIT\n"
+            "export const thing = 1;\n"
+            "// ══ END AUTO-GENERATED — DO NOT APPEND BELOW THIS LINE ══\n",
+            encoding="utf-8",
+        )
+        return tmp_path
+
+    def _run(self, root: Path, **overrides) -> int:
+        args = argparse.Namespace(
+            fix=False, verbose=False, max_depth=5, max_lines=250,
+            update_size_baseline=False, fail_on="any",
+        )
+        for key, value in overrides.items():
+            setattr(args, key, value)
+        cwd = os.getcwd()
+        os.chdir(root)
+        try:
+            return cmd_lint_generated(args)
+        finally:
+            os.chdir(cwd)
+
+    def test_healthy_project_exits_zero(self, tmp_path):
+        assert self._run(self._project(tmp_path)) == EXIT_OK
+
+    def test_missing_sentinel_exits_health(self, tmp_path):
+        root = self._project(tmp_path)
+        hook = root / "web" / "src" / "generated" / "hooks" / "useThing.ts"
+        hook.write_text("export const thing = 1;\n", encoding="utf-8")
+        assert self._run(root) == EXIT_HEALTH
+
+    def test_missing_sentinel_does_not_gate_a_ratchet_run(self, tmp_path):
+        """The reported failure: one stale sentinel made every run exit
+        non-zero, so the ratchet's own verdict was invisible."""
+        root = self._project(tmp_path)
+        hook = root / "web" / "src" / "generated" / "hooks" / "useThing.ts"
+        hook.write_text("export const thing = 1;\n", encoding="utf-8")
+        assert self._run(root, fail_on="size-ratchet") == EXIT_OK

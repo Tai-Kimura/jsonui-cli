@@ -4,6 +4,19 @@ Scans known auto-generated output directories and confirms each file starts
 with the @generated header and (for text files) ends with the END footer.
 The sentinel is shared across jui/sjui/kjui/rjui; see
 ``jui_tools.jui_cli.core.generated_marker`` for the source of truth.
+
+Two independent signals share this command, so they get distinct exit codes
+and CI can gate on one without the other holding the gate permanently red
+(jui-lint-generated-exit-code-cannot-gate-the-size-ratchet):
+
+    0  clean
+    1  the command could not run (no jui.config.json)
+    2  size-ratchet regression — a generated function grew past the bounds
+       and is not in .jui-size-waivers
+    3  generated-artifact health — a file lost its @generated marker
+
+``--fail-on`` narrows which signal sets the code; the other is still
+reported, just not gating.
 """
 from __future__ import annotations
 
@@ -83,7 +96,34 @@ def register_lint_generated_command(subparsers: argparse._SubParsersAction) -> N
         help="Write the current oversized-function set to .jui-size-waivers "
              "(the ratchet baseline)",
     )
+    parser.add_argument(
+        "--fail-on",
+        choices=("any", "size-ratchet", "health"),
+        default="any",
+        help="Which finding sets a non-zero exit code (default: any). "
+             "Exit 2 = size-ratchet regression, 3 = generated-artifact "
+             "health; non-gating findings are still printed.",
+    )
     parser.set_defaults(func=cmd_lint_generated)
+
+
+EXIT_OK = 0
+EXIT_RATCHET = 2
+EXIT_HEALTH = 3
+
+_SIGNAL_CODES = {"size-ratchet": EXIT_RATCHET, "health": EXIT_HEALTH}
+_SIGNAL_REASONS = {
+    "size-ratchet": "size-ratchet regression (NEW oversized functions)",
+    "health": "generated-artifact health (missing @generated markers)",
+}
+# Under --fail-on any, the ratchet is reported first: it means today's build
+# got worse than yesterday's, which is the signal a run is most likely to be
+# gating on. Health still gets its own code once the ratchet is clean.
+_GATED_SIGNALS = {
+    "any": ("size-ratchet", "health"),
+    "size-ratchet": ("size-ratchet",),
+    "health": ("health",),
+}
 
 
 def cmd_lint_generated(args: argparse.Namespace) -> int:
@@ -171,18 +211,40 @@ def cmd_lint_generated(args: argparse.Namespace) -> int:
         for p in missing_footer:
             print(f"  - {_rel(p, project_root)}")
 
-    if missing_header or missing_footer:
-        if args.fix:
-            print(
-                "\nTo restore markers, regenerate from specs:\n"
-                "  jui g project --force\n"
-                "  jui build\n"
-                "  # Then re-run 'jui lint-generated'."
-            )
-        return 1
-    if new_waivers:
-        return 1
-    return 0
+    if (missing_header or missing_footer) and args.fix:
+        print(
+            "\nTo restore markers, regenerate from specs:\n"
+            "  jui g project --force\n"
+            "  jui build\n"
+            "  # Then re-run 'jui lint-generated'."
+        )
+
+    return _exit_code(
+        fail_on=getattr(args, "fail_on", "any"),
+        found={
+            "size-ratchet": bool(new_waivers),
+            "health": bool(missing_header or missing_footer),
+        },
+    )
+
+
+def _exit_code(fail_on: str, found: dict[str, bool]) -> int:
+    """Map the findings to an exit code under the requested gate.
+
+    Findings outside the gate are announced rather than silently dropped —
+    a run that prints problems and exits 0 has to say why.
+    """
+    gated = _GATED_SIGNALS[fail_on]
+    for signal, hit in found.items():
+        if hit and signal not in gated:
+            print(f"\nNot gating on {_SIGNAL_REASONS[signal]} "
+                  f"(--fail-on {fail_on}).")
+    for signal in gated:
+        if found[signal]:
+            code = _SIGNAL_CODES[signal]
+            print(f"\nFAIL (exit {code}): {_SIGNAL_REASONS[signal]}.")
+            return code
+    return EXIT_OK
 
 
 BASELINE_FILENAME = ".jui-size-waivers"
