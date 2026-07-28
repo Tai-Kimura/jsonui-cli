@@ -100,11 +100,26 @@ module SjuiTools
       # One future function: ordered code lines / placeholders, plus the
       # typed environment it inherits (its own parameters).
       class Chunk
-        attr_accessor :items, :env
+        attr_reader :items
+        attr_accessor :env
 
         def initialize(items, env = {})
           @items = items
           @env = env
+        end
+
+        # Every pass rewrites items wholesale; the measurement cache rides
+        # on that. Without it, find_violating_chunk re-measured EVERY chunk
+        # of the tree on EVERY loop iteration — O(cuts x tree lines), which
+        # cost seconds per large screen (2.1s for one 2.5k-line file,
+        # measured; 7s on an efficiency core).
+        def items=(new_items)
+          @items = new_items
+          @measure = nil
+        end
+
+        def cached_measure
+          @measure ||= yield
         end
 
         def placeholders
@@ -118,6 +133,24 @@ module SjuiTools
 
       def initialize
         @waivers = []
+        # Item Strings survive across rounds untouched (cuts REPLACE ranges,
+        # they never mutate a line), so noise-stripping and brace counts are
+        # memoized by object identity. frames_per_item + measure walk every
+        # line once per round; without this the same regex work re-ran
+        # hundreds of times per large screen.
+        @line_cache = {}.compare_by_identity
+      end
+
+      def line_info(line)
+        @line_cache[line] ||= begin
+          code = self.class.strip_noise(line)
+          {
+            code: code,
+            stripped: code.strip,
+            opens_brace: code.count('{'),
+            closes_brace: code.count('}'),
+          }
+        end
       end
 
       # Splits `body_code` (a dedented multi-line String) until every
@@ -226,8 +259,30 @@ module SjuiTools
       end
 
       def measure(chunk)
-        lines = rendered_lines(chunk)
-        [self.class.max_brace_depth(lines), lines.size]
+        chunk.cached_measure do
+          depth = 0
+          peak = 0
+          count = 0
+          chunk.items.each do |item|
+            count += 1
+            next if item.is_a?(Placeholder) # call sites are brace-flat
+
+            info = line_info(item)
+            # Character order matters for the peak: `} else {` must close
+            # before it reopens (opens-first overcounts by one), while
+            # `VStack { }` must still register its momentary +1.
+            info[:code].each_char do |ch|
+              case ch
+              when '{'
+                depth += 1
+                peak = depth if depth > peak
+              when '}'
+                depth -= 1
+              end
+            end
+          end
+          [peak, count]
+        end
       end
 
       # Placeholders render as their (balanced, single-line) call sites.
@@ -270,6 +325,9 @@ module SjuiTools
 
       def try_passes(chunk)
         depth, = measure(chunk)
+        # One frame analysis per round, shared by every pass — recomputing
+        # it per pass tripled the dominant cost on large screens.
+        frames = frames_per_item(chunk)
         if depth > BODY_DEPTH_MAX
           # Depth violation: erase existing AnyView slots first (free), then
           # pack brace levels with a chain cut — per-child extraction would
@@ -277,16 +335,16 @@ module SjuiTools
           # near-empty sections, each an extra erased boundary at runtime.
           # When no container cut exists (the collection skeleton is scopes
           # all the way down), lift a whole `if` statement instead.
-          pass_anyview_slots(chunk) ||
-            pass_chain_cut(chunk) ||
-            pass_if_block(chunk) ||
-            pass_container_children(chunk)
+          pass_anyview_slots(chunk, frames) ||
+            pass_chain_cut(chunk, frames) ||
+            pass_if_block(chunk, frames) ||
+            pass_container_children(chunk, frames)
         else
           # Lines-only violation: distribute children; chain cuts last.
-          pass_anyview_slots(chunk) ||
-            pass_container_children(chunk) ||
-            pass_chain_cut(chunk) ||
-            pass_if_block(chunk)
+          pass_anyview_slots(chunk, frames) ||
+            pass_container_children(chunk, frames) ||
+            pass_chain_cut(chunk, frames) ||
+            pass_if_block(chunk, frames)
         end
       end
 
@@ -300,9 +358,11 @@ module SjuiTools
         per_item = []
         items.each_with_index do |item, idx|
           per_item << stack.dup
-          line = item.is_a?(Placeholder) ? "#{item.prefix}AnyView(x())#{item.suffix}" : item
-          code = self.class.strip_noise(line)
-          stripped = code.strip
+          next if item.is_a?(Placeholder) # call sites open and bind nothing
+
+          info = line_info(item)
+          code = info[:code]
+          stripped = info[:stripped]
 
           # Line-level let bindings join the innermost frame's bindings so
           # later segments inside the same scope see them.
@@ -436,9 +496,8 @@ module SjuiTools
 
       # ---- pass 1: extract multi-line AnyView( interiors -------------------
 
-      def pass_anyview_slots(chunk)
+      def pass_anyview_slots(chunk, frames)
         items = chunk.items
-        frames = frames_per_item(chunk)
 
         items.each_with_index do |item, idx|
           next if item.is_a?(Placeholder)
@@ -470,9 +529,8 @@ module SjuiTools
 
       # ---- pass 2: extract a container's multi-line children ---------------
 
-      def pass_container_children(chunk)
+      def pass_container_children(chunk, frames)
         items = chunk.items
-        frames = frames_per_item(chunk)
 
         best = nil
         items.each_with_index do |item, idx|
@@ -561,9 +619,8 @@ module SjuiTools
 
       # ---- pass 3: cut a single-child chain --------------------------------
 
-      def pass_chain_cut(chunk)
+      def pass_chain_cut(chunk, frames)
         items = chunk.items
-        frames = frames_per_item(chunk)
 
         deep_idx = deepest_line_index(items)
         return false unless deep_idx
@@ -622,9 +679,8 @@ module SjuiTools
       # can move into its own @ViewBuilder function. This is the only cut
       # that reduces the collection skeleton (wrapper > multi-line init >
       # if > if-let > ForEach), which contains no container to chain-cut.
-      def pass_if_block(chunk)
+      def pass_if_block(chunk, frames)
         items = chunk.items
-        frames = frames_per_item(chunk)
 
         deep_idx = deepest_line_index(items)
         return false unless deep_idx
