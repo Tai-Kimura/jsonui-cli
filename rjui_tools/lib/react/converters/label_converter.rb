@@ -15,7 +15,7 @@ module RjuiTools
           tag_attr = build_tag_attr
 
           # Check if we need partialAttributes rendering
-          jsx = if attributes['partialAttributes'] && attributes['partialAttributes'].is_a?(Array) && !attributes['partialAttributes'].empty?
+          jsx = if partial_attributes_list
             render_partial_attributes(indent, id_attr, class_name, style_attr, onclick_attr, testid_attr, tag_attr)
           elsif attributes['linkable']
             render_linkable_text(indent, id_attr, class_name, style_attr, onclick_attr, testid_attr, tag_attr)
@@ -29,33 +29,62 @@ module RjuiTools
 
         protected
 
+        # The partialAttributes entries, or nil when the label has none. One
+        # definition so the render branch and the class builder can't disagree
+        # about whether this label is multi-run.
+        def partial_attributes_list
+          partials = attributes['partialAttributes']
+          return nil unless partials.is_a?(Array) && !partials.empty?
+
+          partials
+        end
+
+        # True when the label renders as several sibling nodes rather than one
+        # text node: partialText returns a node per run, and linkable splits
+        # the text around each detected URL.
+        def multi_run_text?
+          !partial_attributes_list.nil? || !!attributes['linkable']
+        end
+
         def build_class_name
           classes = [super]
 
-          # Vertical/horizontal alignment with flex
-          # Default: vertically centered. gravity overrides vertical, textAlign overrides horizontal.
-          classes << 'flex'
-          if attributes['gravity']
-            gravity_str = attributes['gravity'].is_a?(Array) ? attributes['gravity'].join('|') : attributes['gravity'].to_s
-            if gravity_str.include?('top')
-              classes << 'items-start'
-            elsif gravity_str.include?('bottom')
-              classes << 'items-end'
+          if multi_run_text?
+            # partialText / linkable emit one node per run (text, span, text…).
+            # As flex items every run becomes its own line box, so the whole
+            # paragraph lays out as a single row and stops wrapping — the text
+            # after a link shoots off past the column
+            # (web-partial-labels-render-inside-a-flex-row). A multi-run label
+            # is a paragraph and wants normal block flow; horizontal alignment
+            # already arrives from textAlign as text-* via the base converter,
+            # and vertical centering means nothing once the text wraps.
+            classes << 'block'
+          else
+            # Vertical/horizontal alignment with flex
+            # Default: vertically centered. gravity overrides vertical, textAlign overrides horizontal.
+            classes << 'flex'
+            if attributes['gravity']
+              gravity_str = attributes['gravity'].is_a?(Array) ? attributes['gravity'].join('|') : attributes['gravity'].to_s
+              if gravity_str.include?('top')
+                classes << 'items-start'
+              elsif gravity_str.include?('bottom')
+                classes << 'items-end'
+              else
+                classes << 'items-center'
+              end
             else
               classes << 'items-center'
             end
-          else
-            classes << 'items-center'
-          end
 
-          # textAlign → justify-* for horizontal alignment within flex
-          case attributes['textAlign']&.downcase
-          when 'center'
-            classes << 'justify-center'
-          when 'right'
-            classes << 'justify-end'
-          when 'left'
-            classes << 'justify-start'
+            # textAlign → justify-* for horizontal alignment within flex
+            case attributes['textAlign']&.downcase
+            when 'center'
+              classes << 'justify-center'
+            when 'right'
+              classes << 'justify-end'
+            when 'left'
+              classes << 'justify-start'
+            end
           end
 
           # Line clamp for multiple lines

@@ -325,6 +325,53 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
     end
   end
 
+  # web-partial-labels-render-inside-a-flex-row: partialText returns one node
+  # per run, so a flex wrapper turns every run into its own line box and the
+  # paragraph lays out as a single unwrapping row.
+  describe 'multi-run labels lay out as paragraphs, not flex rows' do
+    it 'drops the flex wrapper when partialAttributes are present' do
+      converter = create_converter({
+        'type' => 'Label',
+        'text' => 'See the docs for details.',
+        'partialAttributes' => [{ 'range' => [4, 12], 'onclick' => 'openDocs' }]
+      })
+      result = converter.convert
+      expect(result).not_to match(/className="[^"]*\bflex\b/)
+      expect(result).not_to match(/className="[^"]*\bitems-center\b/)
+      expect(result).to match(/className="[^"]*\bblock\b/)
+    end
+
+    it 'drops the flex wrapper for linkable text' do
+      converter = create_converter({
+        'type' => 'Label',
+        'text' => 'Visit https://example.com now',
+        'linkable' => true
+      })
+      result = converter.convert
+      expect(result).not_to match(/className="[^"]*\bflex\b/)
+      expect(result).to match(/className="[^"]*\bblock\b/)
+    end
+
+    it 'keeps horizontal alignment via text-* instead of flex justify-*' do
+      converter = create_converter({
+        'type' => 'Label',
+        'text' => 'Centered paragraph',
+        'textAlign' => 'center',
+        'partialAttributes' => [{ 'range' => [0, 8], 'underline' => true }]
+      })
+      result = converter.convert
+      expect(result).to include('text-center')
+      expect(result).not_to include('justify-center')
+    end
+
+    it 'still centers a single-run label with flex' do
+      converter = create_converter({ 'type' => 'Label', 'text' => 'Plain' })
+      result = converter.convert
+      expect(result).to match(/className="[^"]*\bflex\b/)
+      expect(result).to match(/className="[^"]*\bitems-center\b/)
+    end
+  end
+
   describe 'partialAttributes rendering' do
     it 'renders styled spans for text ranges' do
       converter = create_converter({
