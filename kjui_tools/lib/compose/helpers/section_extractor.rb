@@ -49,7 +49,7 @@ module KjuiTools
 
         # Depth bound (2026-07-28 depth-bounding batch, shared with sjui's
         # SectionBounder): the acceptance gate measures a function BODY's
-        # brace peak (item's measure_view_depth.py) at <= 5. TARGET is one
+        # brace peak (the consumer measure_view_depth.py) at <= 5. TARGET is one
         # stricter and drives cutting — margin is the point, "one modifier
         # from the limit" is the disease. Bodies stuck between TARGET and
         # HARD are accepted silently; over HARD (or over the line bound with
