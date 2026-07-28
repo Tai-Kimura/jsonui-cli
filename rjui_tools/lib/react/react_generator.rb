@@ -200,7 +200,7 @@ module RjuiTools
         # Check if this is an include component
         if json['include']
           converter = Converters::IncludeConverter.new(json, @config)
-          return converter.convert(indent)
+          return converter.convert_node(indent)
         end
 
         type = json['type'] || 'View'
@@ -209,7 +209,7 @@ module RjuiTools
         converter_class = @extension_converters[type] || CONVERTERS[type] || Converters::ViewConverter
 
         converter = converter_class.new(json, @config)
-        converter.convert(indent)
+        converter.convert_node(indent)
       end
 
       def generate_component_file(name, jsx_content, json, subdir: '', variants: {}, data_type: nil, source_rel: nil, screen_id: nil)

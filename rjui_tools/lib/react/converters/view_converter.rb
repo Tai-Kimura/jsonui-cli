@@ -128,7 +128,7 @@ module RjuiTools
               # Inject absolute positioning for overlay children
               overlay_child = child.merge('_overlay' => true)
               converter = create_converter_for_child(overlay_child)
-              converter.convert(indent + 2)
+              converter.convert_node(indent + 2)
             end.join("\n")
           else
             super
