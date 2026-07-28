@@ -1183,19 +1183,66 @@ module RjuiTools
           inject_class_expression(jsx, "${#{condition} === \"invisible\" ? \"invisible\" : \"\"}")
         end
 
-        # Append a `${...}` expression to the first className attribute,
-        # upgrading a static className="..." to a template literal.
+        # Append a `${...}` expression to the className of the SUBTREE ROOT's
+        # opening tag, upgrading a static className="..." to a template
+        # literal.
+        #
+        # Scoping to that one tag is the whole point: `jsx` is the converter's
+        # entire subtree, so a plain `sub` over the string finds whichever
+        # className comes first *anywhere*. Template literals were tried
+        # before static strings, so once a descendant carried a template
+        # literal — which is exactly what a child with its own visibility
+        # binding produces — the parent silently donated its invisible class
+        # to that child and rendered fully visible
+        # (rjui-parent-invisible-class-lands-on-a-descendant).
         def inject_class_expression(jsx, class_expr)
-          # Case 1: className={`...`} (template literal)
-          result = jsx.sub(/className=\{`([^`]*)`\}/) do
-            "className={`#{$1} #{class_expr}`}"
-          end
-          return result if result != jsx
+          open_tag = root_open_tag_range(jsx)
+          return jsx unless open_tag
 
-          # Case 2: className="..." (static string)
-          jsx.sub(/className="([^"]*)"/) do
+          head = jsx[open_tag]
+          # Template literal first, then static string — within this tag the
+          # two forms are mutually exclusive, so the order is not a priority.
+          patched = head.sub(/className=\{`([^`]*)`\}/) do
             "className={`#{$1} #{class_expr}`}"
           end
+          if patched == head
+            patched = head.sub(/className="([^"]*)"/) do
+              "className={`#{$1} #{class_expr}`}"
+            end
+          end
+          return jsx if patched == head
+
+          jsx[0...open_tag.first] + patched + jsx[(open_tag.last + 1)..]
+        end
+
+        # Range covering the first `<...>` opening tag, or nil when the
+        # subtree does not start with an element (an expression-container
+        # root, say). Brace depth and quoting are tracked so an arrow
+        # function or a template literal in an earlier prop — `onChange={(e)
+        # => …}` — does not end the tag at its own `>`.
+        def root_open_tag_range(jsx)
+          start = jsx.index('<')
+          return nil unless start
+
+          depth = 0
+          quote = nil
+          i = start
+          while i < jsx.length
+            ch = jsx[i]
+            if quote
+              i += 1 if ch == '\\'
+              quote = nil if ch == quote
+            else
+              case ch
+              when '"', "'", '`' then quote = ch
+              when '{' then depth += 1
+              when '}' then depth -= 1
+              when '>' then return (start..i) if depth.zero?
+              end
+            end
+            i += 1
+          end
+          nil
         end
 
         # Get default value from config
