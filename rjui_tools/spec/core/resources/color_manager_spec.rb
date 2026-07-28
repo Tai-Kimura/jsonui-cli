@@ -713,6 +713,34 @@ RSpec.describe RjuiTools::Core::Resources::ColorManager do
         expect(content).to include('export type ColorMode')
       end
 
+      # rjui-dynamic-color-binding-emits-raw-token: a color attribute that
+      # lands in an inline style has to resolve its colors.json key at
+      # runtime, the way iOS and Android already do.
+      it 'emits resolveColor: palette lookup with quiet pass-through' do
+        m = described_class.new(config, source_path, resources_dir)
+        m.send(:generate_color_manager)
+
+        content = File.read(File.join(source_path, 'src', 'generated', 'ColorManager.js'))
+        expect(content).to include('resolveColor(value)')
+        # token -> current mode, then the fallback mode
+        expect(content).to include('if (p && p[value] !== undefined) return p[value];')
+        expect(content).to include('if (fb && fb[value] !== undefined) return fb[value];')
+        # anything else is handed back untouched, and without a warning:
+        # a caller cannot tell a typo from a valid CSS color name
+        expect(content).to include('    return value;')
+        resolve_body = content[/resolveColor\(value\).*?\n  \}/m]
+        expect(resolve_body).not_to include('console.warn')
+      end
+
+      it 'types resolveColor for TS' do
+        ts_config = config.merge('typescript' => true)
+        m = described_class.new(ts_config, source_path, resources_dir)
+        m.send(:generate_color_manager)
+
+        content = File.read(File.join(source_path, 'src', 'generated', 'ColorManager.ts'))
+        expect(content).to include('resolveColor(value: unknown): string | undefined')
+      end
+
       it 'annotates _rawPalettes with a loose index type under TS (strict-mode safe)' do
         # Without the explicit type, `Object.freeze({literal})` infers a
         # tight readonly type with no string index signature, so

@@ -89,7 +89,7 @@ module RjuiTools
 
           # Caret (cursor) color
           if attributes['caretAttributes'] && attributes['caretAttributes']['fontColor']
-            @dynamic_styles['caretColor'] = "'#{attributes['caretAttributes']['fontColor']}'"
+            @dynamic_styles['caretColor'] = color_style_expr(attributes['caretAttributes']['fontColor'])
           end
 
           # Text padding left

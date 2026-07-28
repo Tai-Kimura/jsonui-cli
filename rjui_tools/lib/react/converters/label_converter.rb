@@ -149,7 +149,7 @@ module RjuiTools
 
           # Disabled font color
           if attributes['enabled'] == false && attributes['disabledFontColor']
-            @dynamic_styles['color'] = "'#{attributes['disabledFontColor']}'"
+            @dynamic_styles['color'] = color_style_expr(attributes['disabledFontColor'])
           end
 
           # lineBreakMode (truncation)

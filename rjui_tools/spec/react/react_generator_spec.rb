@@ -155,6 +155,26 @@ RSpec.describe RjuiTools::React::ReactGenerator do
     end
   end
 
+  describe '#generate_component_file ColorManager import emission' do
+    # Read off the emitted JSX for the same reason the Configuration import
+    # is: the emitter's own output cannot drift from itself, whereas a second
+    # walk of the tree deciding "does this need resolving?" could
+    # (rjui-dynamic-color-binding-emits-raw-token).
+    let(:minimal_json) { { 'type' => 'View' } }
+
+    it 'emits the ColorManager import when the JSX resolves a color at runtime' do
+      jsx = '      <span style={{ color: ColorManager.resolveColor(data.badgeColor) }}>Hi</span>'
+      result = generator.send(:generate_component_file, 'Badge', jsx, minimal_json)
+      expect(result).to include("import { ColorManager } from '@/generated/ColorManager';")
+    end
+
+    it 'omits it when every color resolved to a class or a CSS literal' do
+      jsx = '      <span className="text-warn">Hi</span>'
+      result = generator.send(:generate_component_file, 'Plain', jsx, minimal_json)
+      expect(result).not_to include("from '@/generated/ColorManager'")
+    end
+  end
+
   describe '#generate_component_file Configuration (FontSpec) import emission' do
     # The generator scans the already-converted JSX for the
     # Configuration.Font.resolve(...) emission BaseConverter produces when

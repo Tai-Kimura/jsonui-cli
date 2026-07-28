@@ -114,7 +114,7 @@ module RjuiTools
           # Border
           if attributes['borderWidth'] && attributes['borderColor']
             @dynamic_styles['borderWidth'] = "'#{attributes['borderWidth']}px'"
-            @dynamic_styles['borderColor'] = "'#{attributes['borderColor']}'"
+            @dynamic_styles['borderColor'] = color_style_expr(attributes['borderColor'])
             @dynamic_styles['borderStyle'] = "'solid'"
           end
 

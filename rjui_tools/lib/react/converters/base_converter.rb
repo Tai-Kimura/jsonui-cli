@@ -150,7 +150,7 @@ module RjuiTools
           # Background - check for dynamic binding or gradient
           if attributes['background']
             if has_binding?(attributes['background'])
-              @dynamic_styles['backgroundColor'] = convert_binding(attributes['background'])
+              @dynamic_styles['backgroundColor'] = color_style_expr(attributes['background'])
             elsif attributes['background'].to_s.include?('gradient')
               # CSS gradients must be inline styles
               @dynamic_styles['background'] = "'#{attributes['background']}'"
@@ -165,7 +165,7 @@ module RjuiTools
           # Text color - check for dynamic binding
           if attributes['fontColor']
             if has_binding?(attributes['fontColor'])
-              @dynamic_styles['color'] = convert_binding(attributes['fontColor'])
+              @dynamic_styles['color'] = color_style_expr(attributes['fontColor'])
             else
               classes << TailwindMapper.map_color(attributes['fontColor'], 'text')
             end
@@ -265,9 +265,9 @@ module RjuiTools
                 @dynamic_styles['borderWidth'] = "'#{attributes['borderWidth']}px'"
               end
               if border_color_binding
-                @dynamic_styles['borderColor'] = convert_binding(attributes['borderColor'])
+                @dynamic_styles['borderColor'] = color_style_expr(attributes['borderColor'])
               elsif attributes['borderColor']
-                @dynamic_styles['borderColor'] = "'#{attributes['borderColor']}'"
+                @dynamic_styles['borderColor'] = color_style_expr(attributes['borderColor'])
               end
               if border_style_binding
                 @dynamic_styles['borderStyle'] = convert_binding(attributes['borderStyle'])
@@ -361,7 +361,7 @@ module RjuiTools
 
           # Tint color (accent color for interactive elements)
           if attributes['tintColor']
-            @dynamic_styles['accentColor'] = "'#{attributes['tintColor']}'"
+            @dynamic_styles['accentColor'] = color_style_expr(attributes['tintColor'])
           end
 
           # Append responsive Tailwind classes (breakpoint-prefixed overrides)
@@ -374,6 +374,42 @@ module RjuiTools
 
         def has_binding?(value)
           value.is_a?(String) && value.include?('@{')
+        end
+
+        # `convert_binding` returns a JSX-braced expression (`{data.x}`).
+        # Inside an object literal or a call argument the braces have to come
+        # off; only the outer pair, so a template literal's `${…}` survives.
+        def unwrap_jsx_braces(expr)
+          expr.to_s.gsub(/\A\{|\}\z/, '')
+        end
+
+        # Values CSS already understands. Everything else in a color
+        # attribute is a colors.json key.
+        CSS_COLOR_LITERAL = /\A(?:#[0-9A-Fa-f]{3,8}|(?:rgba?|hsla?|color|var|linear-gradient|radial-gradient)\(.*\)|transparent|currentColor|inherit|initial|unset|none)\z/
+
+        # Inline-style expression for a color attribute.
+        #
+        # A color attribute takes colors.json keys — the class path maps them
+        # to bg-* / text-* / border-*. When the same attribute has to land in
+        # an inline style instead (a binding, or a static value sharing a
+        # branch with one), the key must still be resolved, at runtime, the
+        # way iOS (Configuration.getColor) and Android
+        # (ColorManager.compose.color) resolve theirs. Emitting the key raw
+        # produced `background-color: warn_subtle`, which is not CSS and which
+        # browsers drop without a word — the author sees an unstyled element
+        # and no build warning (rjui-dynamic-color-binding-emits-raw-token).
+        #
+        # Literal CSS values are emitted as-is so nothing pays for a runtime
+        # call it does not need.
+        def color_style_expr(value)
+          if has_binding?(value)
+            return "ColorManager.resolveColor(#{unwrap_jsx_braces(convert_binding(value))})"
+          end
+
+          literal = value.to_s
+          return "'#{literal}'" if literal.match?(CSS_COLOR_LITERAL)
+
+          "ColorManager.resolveColor('#{literal}')"
         end
 
         # Component type for typed attribute extraction when the node
@@ -459,7 +495,7 @@ module RjuiTools
           end
 
           # Remove braces from the value since we're inside a JSX expression
-          clean_value = value.gsub(/^\{|\}$/, '')
+          clean_value = unwrap_jsx_braces(value)
           # CSS custom properties (starting with --) need to be quoted in JSX
           key_str = key.start_with?('--') ? "'#{key}'" : key
           "#{key_str}: #{clean_value}"

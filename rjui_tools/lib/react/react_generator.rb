@@ -300,6 +300,13 @@ module RjuiTools
         lucide_import = lucide_icons.empty? ? '' :
                         "\nimport { #{lucide_icons.join(', ')} } from 'lucide-react';"
 
+        # A color attribute that lands in an inline style resolves its
+        # colors.json key at runtime (BaseConverter#color_style_expr). Read
+        # the requirement off the emitted JSX rather than re-deriving it from
+        # the tree: the emitter's own output cannot drift from itself.
+        color_manager_import = jsx_content.include?('ColorManager.') ?
+                               "\nimport { ColorManager } from '@/generated/ColorManager';" : ''
+
         # Determined early because the Data import shape depends on it:
         # data-consuming components also import the createXxxData factory
         # for the Partial-merge call convention (see props emission below).
@@ -465,7 +472,7 @@ module RjuiTools
 
         <<~JSX
           #{use_client}#{marker_header}
-          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{screen_marker_import}#{partial_text_import}#{configuration_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
+          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{screen_marker_import}#{partial_text_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
 
           #{props_interface if @config['typescript']}
           export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}

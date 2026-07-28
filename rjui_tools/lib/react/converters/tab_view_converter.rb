@@ -55,7 +55,7 @@ module RjuiTools
           if attributes['background']
             if has_binding?(attributes['background'])
               @dynamic_styles ||= {}
-              @dynamic_styles['backgroundColor'] = convert_binding(attributes['background'])
+              @dynamic_styles['backgroundColor'] = color_style_expr(attributes['background'])
             else
               classes << TailwindMapper.map_color(attributes['background'], 'bg')
             end

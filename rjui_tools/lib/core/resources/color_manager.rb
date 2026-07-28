@@ -761,6 +761,30 @@ module RjuiTools
           lines << '  }'
           lines << ''
 
+          # resolveColor(value) — what a color ATTRIBUTE means at runtime.
+          # A colors.json key becomes the current mode's value; anything else
+          # (hex, rgb(), a CSS color name) is handed back untouched so CSS
+          # keeps accepting everything it accepted before. This is the inline
+          # -style counterpart of the build-time bg-*/text-* mapping, and it
+          # matches iOS Configuration.getColor / Android ColorManager.color:
+          # a bound color is resolved BY NAME
+          # (rjui-dynamic-color-binding-emits-raw-token).
+          #
+          # Unlike color(), an unresolved value is not a warning here: the
+          # caller cannot tell a mistyped key from a valid CSS color name, so
+          # warning on every render would cry wolf over working code.
+          lines << "  resolveColor(value#{typescript ? ': unknown' : ''})#{typescript ? ': string | undefined' : ''} {"
+          lines << "    if (typeof value !== 'string' || value.length === 0) return undefined;"
+          lines << "    if (value.startsWith('@{') && value.endsWith('}')) return undefined;"
+          lines << '    const m = this._currentMode;'
+          lines << '    const p = _rawPalettes[m];'
+          lines << '    if (p && p[value] !== undefined) return p[value];'
+          lines << '    const fb = _rawPalettes[FALLBACK_MODE];'
+          lines << '    if (fb && fb[value] !== undefined) return fb[value];'
+          lines << '    return value;'
+          lines << '  }'
+          lines << ''
+
           lines << "  isHexColor(value#{typescript ? ': unknown' : ''})#{typescript ? ': boolean' : ''} {"
           lines << "    if (typeof value !== 'string') return false;"
           lines << '    return /^#?([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(value);'
