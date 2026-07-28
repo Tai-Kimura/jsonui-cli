@@ -22,6 +22,42 @@ concurrency:
 
 jobs:
   # ------------------------------------------------------------------ #
+  # Publication hygiene. Two structural rules, stated without naming any
+  # downstream identifier — spelling the vocabulary out here would be the
+  # leak it is meant to prevent. The vocabulary check itself runs in the
+  # pre-commit hook, whose pattern list lives outside every repository.
+  #
+  #   1. docs/ is gitignored because bug reports quote downstream app names
+  #      and local paths; a force-add slips past the ignore rule silently,
+  #      so the tracked set is asserted here instead.
+  #   2. No absolute home paths: they carry a username and a machine layout.
+  # ------------------------------------------------------------------ #
+  publication-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: docs/ stays untracked
+        run: |
+          tracked=$(git ls-files docs/ || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::docs/ is ignored but these files are tracked:"
+            echo "$tracked"
+            exit 1
+          fi
+      - name: No absolute home paths in tracked files
+        run: |
+          # Anchored so a directory that merely ends in /home/ (a layout
+          # folder, say) is not mistaken for an absolute home path.
+          hits=$(git grep -I -n -E '(^|[^A-Za-z0-9_./-])/(Users|home)/[a-z0-9._-]+/' -- . \
+                 ':(exclude).github/workflows/*' || true)
+          if [ -n "$hits" ]; then
+            echo "::error::absolute home paths are machine-specific:"
+            echo "$hits"
+            exit 1
+          fi
+
+  # ------------------------------------------------------------------ #
   # jui_tools unit suite + protocol-sync idempotency (folded from the
   # old protocol-sync.yml — CI intentionally uses unittest discovery).
   # ------------------------------------------------------------------ #

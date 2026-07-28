@@ -26,6 +26,14 @@ from pathlib import Path
 
 
 CODE_EXTENSIONS = {".swift", ".kt", ".ts", ".tsx", ".js", ".jsx"}
+
+# The bounds the generators themselves cut at (sjui SectionBounder / kjui
+# SectionExtractor). They are calibrated to a device constraint — SwiftUI
+# type-metadata decoding on a 1MB main-thread stack — so a project may ask
+# the linter to be STRICTER, never looser: loosening here would just stop
+# reporting screens the generator already failed to bound.
+DEFAULT_MAX_DEPTH = 5
+DEFAULT_MAX_LINES = 250
 HEAD_SCAN_LINES = 30
 TAIL_SCAN_LINES = 5
 
@@ -78,17 +86,24 @@ def register_lint_generated_command(subparsers: argparse._SubParsersAction) -> N
         action="store_true",
         help="List every checked file, not just failures",
     )
+    # default=None, not the number: it has to stay possible to tell "flag
+    # omitted" from "flag set to the same number", or jui.config.json could
+    # never win over an unset flag.
     parser.add_argument(
         "--max-depth",
         type=int,
-        default=5,
-        help="Per-function brace-nesting bound for generated view code (default 5)",
+        default=None,
+        help=f"Per-function brace-nesting bound for generated view code "
+             f"(default {DEFAULT_MAX_DEPTH}; jui.config.json lint.max_depth "
+             f"overrides that)",
     )
     parser.add_argument(
         "--max-lines",
         type=int,
-        default=250,
-        help="Per-function line-count bound for generated view code (default 250)",
+        default=None,
+        help=f"Per-function line-count bound for generated view code "
+             f"(default {DEFAULT_MAX_LINES}; jui.config.json lint.max_lines "
+             f"overrides that)",
     )
     parser.add_argument(
         "--update-size-baseline",
@@ -136,6 +151,7 @@ def cmd_lint_generated(args: argparse.Namespace) -> int:
         return 1
 
     project_root = config_mgr.project_root
+    max_depth, max_lines = _resolve_size_bounds(args, config_mgr)
     targets = list(_collect_targets(config_mgr))
 
     if not targets:
@@ -163,7 +179,7 @@ def cmd_lint_generated(args: argparse.Namespace) -> int:
         oversized.extend(
             (path, name, depth, lines)
             for name, depth, lines in _oversized_functions(
-                path, args.max_depth, args.max_lines
+                path, max_depth, max_lines
             )
         )
 
@@ -173,7 +189,7 @@ def cmd_lint_generated(args: argparse.Namespace) -> int:
     print(f"  OK:              {len(ok)}")
     print(f"  Missing header:  {len(missing_header)}")
     print(f"  Missing footer:  {len(missing_footer)}")
-    print(f"  Oversized fns:   {len(oversized)} (depth > {args.max_depth} or lines > {args.max_lines})")
+    print(f"  Oversized fns:   {len(oversized)} (depth > {max_depth} or lines > {max_lines})")
 
     if args.verbose:
         for p in ok:
@@ -245,6 +261,39 @@ def _exit_code(fail_on: str, found: dict[str, bool]) -> int:
             print(f"\nFAIL (exit {code}): {_SIGNAL_REASONS[signal]}.")
             return code
     return EXIT_OK
+
+
+def _resolve_size_bounds(args, config_mgr) -> tuple[int, int]:
+    """Flag > jui.config.json ``lint`` > the generators' own bounds.
+
+    A project may gate on STRICTER numbers than the generators cut at; a
+    looser number is reported, because it would only hide screens the
+    generator itself failed to bound. Standing slack belongs in
+    .jui-size-waivers, which records each accepted function by name
+    (jui-lint-generated-size-bounds-not-configurable).
+    """
+    config = config_mgr.load()
+    lint_cfg = config.get("lint", {}) if isinstance(config, dict) else {}
+    if not isinstance(lint_cfg, dict):
+        lint_cfg = {}
+
+    def pick(flag_value, config_key, builtin, label):
+        if flag_value is not None:
+            return flag_value
+        configured = lint_cfg.get(config_key)
+        if not isinstance(configured, int) or isinstance(configured, bool):
+            return builtin
+        if configured > builtin:
+            print(f"WARNING: lint.{config_key}={configured} is looser than the "
+                  f"bound the generators cut at ({builtin}); using {builtin}. "
+                  f"Record accepted {label} in {BASELINE_FILENAME} instead.")
+            return builtin
+        return configured
+
+    return (
+        pick(args.max_depth, "max_depth", DEFAULT_MAX_DEPTH, "depths"),
+        pick(args.max_lines, "max_lines", DEFAULT_MAX_LINES, "sizes"),
+    )
 
 
 BASELINE_FILENAME = ".jui-size-waivers"

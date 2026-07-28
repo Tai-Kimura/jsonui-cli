@@ -20,6 +20,7 @@ from jui_cli.commands.lint_generated_cmd import (
     _exit_code,
     _oversized_functions,
     _ratchet_size_baseline,
+    _resolve_size_bounds,
     cmd_lint_generated,
 )
 
@@ -140,6 +141,47 @@ class TestExitCodes:
     def test_non_gating_finding_is_announced(self, capsys):
         _exit_code("size-ratchet", {"size-ratchet": False, "health": True})
         assert "Not gating on" in capsys.readouterr().out
+
+
+class TestSizeBoundResolution:
+    """Flag > jui.config.json > the generators' own bounds, and never looser
+    than the generators (jui-lint-generated-size-bounds-not-configurable)."""
+
+    class _Cfg:
+        def __init__(self, lint):
+            self._lint = lint
+
+        def load(self):
+            return {"lint": self._lint} if self._lint is not None else {}
+
+    def _args(self, depth=None, lines=None):
+        return argparse.Namespace(max_depth=depth, max_lines=lines)
+
+    def test_builtin_defaults_when_nothing_is_declared(self):
+        assert _resolve_size_bounds(self._args(), self._Cfg(None)) == (5, 250)
+
+    def test_config_supplies_stricter_defaults(self):
+        cfg = self._Cfg({"max_depth": 4, "max_lines": 200})
+        assert _resolve_size_bounds(self._args(), cfg) == (4, 200)
+
+    def test_flag_beats_config(self):
+        cfg = self._Cfg({"max_depth": 4, "max_lines": 200})
+        assert _resolve_size_bounds(self._args(depth=3, lines=150), cfg) == (3, 150)
+
+    def test_flag_equal_to_the_builtin_still_beats_config(self):
+        """The reason the flags default to None rather than to the number."""
+        cfg = self._Cfg({"max_depth": 4, "max_lines": 200})
+        assert _resolve_size_bounds(self._args(depth=5, lines=250), cfg) == (5, 250)
+
+    def test_looser_config_is_refused_and_warned(self, capsys):
+        cfg = self._Cfg({"max_depth": 9, "max_lines": 900})
+        assert _resolve_size_bounds(self._args(), cfg) == (5, 250)
+        out = capsys.readouterr().out
+        assert "looser" in out and BASELINE_FILENAME in out
+
+    def test_junk_config_values_fall_back(self):
+        cfg = self._Cfg({"max_depth": "four", "max_lines": True})
+        assert _resolve_size_bounds(self._args(), cfg) == (5, 250)
 
 
 class TestCommandExitCodes:
