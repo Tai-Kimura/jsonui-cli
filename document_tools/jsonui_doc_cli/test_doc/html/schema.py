@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from .sidebar import escape_html
+from .styles import get_nav_sidebar_scroll_script, get_nav_sidebar_styles
 
 
 def has_api_paths(swagger_data: dict) -> bool:
@@ -39,7 +40,7 @@ def _generate_sidebar(
     parts = [
         "  <aside class='sidebar'>",
         "    <div class='sidebar-header'>",
-        f"      <a href='{rel_root}index.html' class='sidebar-title'>&larr; Back to Index</a>",
+        f"      <a href='{rel_root}index.html' class='back-link'>&larr; Back to Index</a>",
         "    </div>",
         "    <nav class='sidebar-nav'>",
         "      <div class='nav-section'>",
@@ -126,8 +127,9 @@ def generate_schema_html(
     for schema_name, schema_def in schemas.items():
         html_parts.extend(_render_schema(schema_name, schema_def))
 
+    html_parts.append("  </main>")
+    html_parts.extend(get_nav_sidebar_scroll_script())
     html_parts.extend([
-        "  </main>",
         "</body>",
         "</html>",
     ])
@@ -418,67 +420,7 @@ def _get_html_header(title: str) -> list[str]:
         "      line-height: 1.6;",
         "      display: flex;",
         "    }",
-        "    .sidebar {",
-        "      width: 280px;",
-        "      min-width: 280px;",
-        "      height: 100vh;",
-        "      position: fixed;",
-        "      top: 0;",
-        "      left: 0;",
-        "      background: #f8f9fa;",
-        "      border-right: 1px solid #e0e0e0;",
-        "      overflow-y: auto;",
-        "      padding: 20px;",
-        "    }",
-        "    .sidebar-header {",
-        "      padding-bottom: 15px;",
-        "      margin-bottom: 15px;",
-        "      border-bottom: 1px solid #e0e0e0;",
-        "    }",
-        "    .sidebar-title {",
-        "      color: #007AFF;",
-        "      text-decoration: none;",
-        "      font-size: 0.9em;",
-        "    }",
-        "    .sidebar-title:hover {",
-        "      text-decoration: underline;",
-        "    }",
-        "    .sidebar-nav {",
-        "      padding: 0;",
-        "    }",
-        "    .nav-list {",
-        "      list-style: none;",
-        "    }",
-        "    .nav-list li {",
-        "      margin: 2px 0;",
-        "    }",
-        "    .nav-list li.active a {",
-        "      background: #007AFF;",
-        "      color: white;",
-        "    }",
-        "    .nav-list li a {",
-        "      display: block;",
-        "      padding: 6px 12px;",
-        "      color: #555;",
-        "      text-decoration: none;",
-        "      border-radius: 4px;",
-        "      font-size: 0.85em;",
-        "    }",
-        "    .nav-list li a:hover {",
-        "      background: #e9ecef;",
-        "      color: #007AFF;",
-        "    }",
-        "    .nav-section {",
-        "      margin-bottom: 20px;",
-        "    }",
-        "    .nav-section-title {",
-        "      font-size: 0.75em;",
-        "      font-weight: 600;",
-        "      color: #888;",
-        "      text-transform: uppercase;",
-        "      letter-spacing: 0.5px;",
-        "      margin-bottom: 8px;",
-        "    }",
+        *get_nav_sidebar_styles(),
         "    .main-content {",
         "      margin-left: 280px;",
         "      flex: 1;",

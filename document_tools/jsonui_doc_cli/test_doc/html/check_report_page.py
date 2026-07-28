@@ -9,6 +9,7 @@ simply means the page is not generated.
 from __future__ import annotations
 
 from .sidebar import escape_html
+from .styles import get_nav_sidebar_scroll_script, get_nav_sidebar_styles
 
 
 def _rel_root(doc_path: str) -> str:
@@ -50,16 +51,7 @@ def generate_check_report_html(
         "    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',"
         " Roboto, sans-serif; background: #f5f5f5; color: #333;"
         " line-height: 1.6; display: flex; }",
-        "    .sidebar { width: 280px; min-width: 280px; height: 100vh;"
-        " position: fixed; top: 0; left: 0; background: #f8f9fa;"
-        " border-right: 1px solid #e0e0e0; overflow-y: auto; padding: 20px; }",
-        "    .sidebar a { color: #007AFF; text-decoration: none;"
-        " font-size: 0.9em; }",
-        "    .sidebar a:hover { text-decoration: underline; }",
-        "    .sidebar ul { list-style: none; margin-top: 10px; }",
-        "    .sidebar li { margin: 2px 0; }",
-        "    .sidebar li a { display: block; padding: 4px 10px; color: #555;"
-        " border-radius: 4px; font-size: 0.85em; }",
+        *get_nav_sidebar_styles(),
         "    .main { margin-left: 280px; padding: 30px 40px; max-width: 1100px;"
         " width: 100%; }",
         "    h1 { font-size: 1.5em; margin-bottom: 6px; }",
@@ -95,18 +87,31 @@ def generate_check_report_html(
         "</head>",
         "<body>",
         "  <aside class='sidebar'>",
-        f"    <a href='{rel_root}index.html'>&larr; Back to Index</a>",
+        "    <div class='sidebar-header'>",
+        f"      <a href='{rel_root}index.html' class='back-link'>"
+        "&larr; Back to Index</a>",
+        "    </div>",
     ]
     if category_docs:
-        parts.append("    <ul>")
+        section_title = "Tables" if report.target_kind == "db" else "Documents"
+        parts.extend([
+            "    <nav class='sidebar-nav'>",
+            "      <div class='nav-section'>",
+            f"        <div class='nav-section-title'>{section_title}</div>",
+            "        <ul class='nav-list'>",
+        ])
         for doc in category_docs:
             if doc.get("path") == current_doc_path:
                 continue
             parts.append(
-                f"      <li><a href='{rel_root}{doc['path']}'>"
+                f"          <li><a href='{rel_root}{doc['path']}'>"
                 f"{escape_html(doc.get('name', ''))}</a></li>"
             )
-        parts.append("    </ul>")
+        parts.extend([
+            "        </ul>",
+            "      </div>",
+            "    </nav>",
+        ])
     parts.append("  </aside>")
     parts.append("  <main class='main'>")
     parts.append(f"    <h1>{escape_html(title)}</h1>")
@@ -172,5 +177,7 @@ def generate_check_report_html(
             parts.append(f"      <li>{escape_html(w)}</li>")
         parts.append("    </ul></div>")
 
-    parts.extend(["  </main>", "</body>", "</html>"])
+    parts.append("  </main>")
+    parts.extend(get_nav_sidebar_scroll_script())
+    parts.extend(["</body>", "</html>"])
     return "\n".join(parts)

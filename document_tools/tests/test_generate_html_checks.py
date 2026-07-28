@@ -9,6 +9,7 @@ Covers the acceptance conditions from the impl plan:
 """
 
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -174,6 +175,40 @@ class CheckReportPageTests(GenerateHtmlChecksTestBase):
         self.generate()  # must not raise
         self.assertTrue((self.out / "db" / "users.html").is_file())
         self.assertFalse((self.out / "db" / "contract-check.html").exists())
+
+
+class SidebarConsistencyTests(GenerateHtmlChecksTestBase):
+    """One sidebar look across the whole site, and the DB pages put the
+    current table in view on load (the table list is long enough to scroll).
+    """
+
+    SIDEBAR_RULE = re.compile(r"\.sidebar\s*\{[^}]*\}")
+
+    def setUp(self):
+        super().setUp()
+        for table in ("users", "orders", "payments"):
+            self.write(f"docs/db/{table}.json", table_json(table.capitalize()))
+        self.generate()
+
+    def test_every_page_uses_the_shared_dark_sidebar(self):
+        checked = 0
+        for page in sorted(self.out.rglob("*.html")):
+            for rule in self.SIDEBAR_RULE.findall(page.read_text()):
+                if "display: none" in rule:  # responsive override
+                    continue
+                self.assertIn("background: #1e293b", rule, page.name)
+                checked += 1
+        self.assertGreater(checked, 0)
+
+    def test_current_table_is_marked_active(self):
+        html = (self.out / "db" / "orders.html").read_text()
+        self.assertIn("<li class='active'><a href='orders.html'>", html)
+
+    def test_active_entry_is_scrolled_into_view(self):
+        for name in ("orders.html", "erd.html"):
+            html = (self.out / "db" / name).read_text()
+            self.assertIn(".nav-list li.active a", html, name)
+            self.assertIn("sidebar.scrollTop =", html, name)
 
 
 if __name__ == "__main__":

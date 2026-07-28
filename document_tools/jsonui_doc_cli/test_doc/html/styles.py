@@ -49,6 +49,53 @@ def get_sidebar_base_styles() -> list[str]:
     ]
 
 
+def get_nav_sidebar_styles() -> list[str]:
+    """Get sidebar styles for the nav-list page family (DB tables, ERD,
+    contract check).
+
+    Same palette as get_sidebar_base_styles(); only the markup differs
+    (nav-section / nav-list instead of collapsible sidebar-section), so the
+    whole generated site shares one sidebar look.
+    """
+    return [
+        "    /* Sidebar - dark theme (nav-list markup) */",
+        "    .sidebar { width: 280px; min-width: 280px; height: 100vh; position: fixed; top: 0; left: 0; background: #1e293b; color: #e2e8f0; overflow-y: auto; padding: 20px; box-shadow: 2px 0 5px rgba(0,0,0,0.1); }",
+        "    .sidebar-header { padding-bottom: 15px; margin-bottom: 15px; border-bottom: 1px solid #475569; }",
+        "    .sidebar .back-link { display: block; color: #94a3b8; text-decoration: none; font-size: 0.9em; padding: 4px 0; transition: color 0.2s; }",
+        "    .sidebar .back-link:hover { color: #f8fafc; }",
+        "    .sidebar-nav { padding: 0; }",
+        "    .nav-section { margin-bottom: 20px; }",
+        "    .nav-section-title { font-size: 0.75em; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }",
+        "    .nav-list { list-style: none; }",
+        "    .nav-list li { margin: 2px 0; }",
+        "    .nav-list li a { display: block; padding: 6px 12px; color: #cbd5e1; text-decoration: none; border-radius: 4px; font-size: 0.85em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background-color 0.2s; }",
+        "    .nav-list li a:hover { background: #334155; color: #f8fafc; }",
+        "    .nav-list li.active a { background: #3b82f6; color: #fff; }",
+    ]
+
+
+def get_nav_sidebar_scroll_script() -> list[str]:
+    """Bring the active nav entry into view inside the sidebar on load.
+
+    scrollTop is set directly instead of calling scrollIntoView: the sidebar
+    is position:fixed, so letting the browser walk scrollable ancestors can
+    move the document rather than the list.
+    """
+    return [
+        "  <script>",
+        "    document.addEventListener('DOMContentLoaded', function () {",
+        "      var sidebar = document.querySelector('.sidebar');",
+        "      var active = sidebar && sidebar.querySelector('.nav-list li.active a');",
+        "      if (!active) return;",
+        "      var top = active.getBoundingClientRect().top",
+        "        - sidebar.getBoundingClientRect().top + sidebar.scrollTop;",
+        "      sidebar.scrollTop = Math.max(",
+        "        0, top - sidebar.clientHeight / 2 + active.offsetHeight / 2);",
+        "    });",
+        "  </script>",
+    ]
+
+
 def get_responsive_styles() -> list[str]:
     """Get responsive CSS styles."""
     return [
