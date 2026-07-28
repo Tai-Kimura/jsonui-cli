@@ -985,12 +985,26 @@ module KjuiTools
             enclosing_depth: 2
           )
           @responsive_functions.concat(section_functions) if section_functions.any?
-          # A waiver is a function the extractor could not bound below the
-          # depth/line gate without an unsafe cut. Loud, never silent — a
-          # silent oversized survivor is how 1,327-line sections shipped.
-          Array(section_waivers).each do |w|
-            puts "warning: [section-extractor] #{view_name}: #{w.function} " \
-                 "depth #{w.depth} / #{w.lines} lines exceeds the bound and has no safe cut."
+          # Waivers (functions the extractor could not bound without an
+          # unsafe cut) are computed and surfaced by `jui lint-generated` —
+          # NOT printed as build warnings on Android. The depth/line bound is
+          # calibrated to iOS's failure mechanism (SwiftUI composes one
+          # generic type and the device decodes its metadata on a 1MB
+          # stack); Compose folds nothing into types, and the constraint
+          # that does exist here — the dex 65,535 code-unit method limit —
+          # is a HARD compile error, so a passing build already proves it.
+          # Measured on the shipped waivers: worst 12.6% of the dex limit
+          # and 4,369 ART instructions (huge-method line is 10,000), smaller
+          # than hand-written ViewModels that warn about nothing. A warning
+          # that is permanently present destroys the zero-warning gate it
+          # was meant to serve (kjui-android-size-warning-uses-ios-
+          # calibrated-bound, 2026-07-28). Set KJUI_SECTION_WAIVER_WARNINGS=1
+          # to print them while debugging the extractor itself.
+          if ENV['KJUI_SECTION_WAIVER_WARNINGS'] == '1'
+            Array(section_waivers).each do |w|
+              puts "warning: [section-extractor] #{view_name}: #{w.function} " \
+                   "depth #{w.depth} / #{w.lines} lines exceeds the bound and has no safe cut."
+            end
           end
 
           # Variant-file dispatch: replace the static tree with a window

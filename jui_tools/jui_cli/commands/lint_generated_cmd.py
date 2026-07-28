@@ -77,6 +77,12 @@ def register_lint_generated_command(subparsers: argparse._SubParsersAction) -> N
         default=250,
         help="Per-function line-count bound for generated view code (default 250)",
     )
+    parser.add_argument(
+        "--update-size-baseline",
+        action="store_true",
+        help="Write the current oversized-function set to .jui-size-waivers "
+             "(the ratchet baseline)",
+    )
     parser.set_defaults(func=cmd_lint_generated)
 
 
@@ -133,14 +139,27 @@ def cmd_lint_generated(args: argparse.Namespace) -> int:
         for p in ok:
             print(f"  [OK] {_rel(p, project_root)}")
 
-    if oversized:
+    new_waivers: list[str] = []
+    if oversized or args.update_size_baseline:
         print(
-            "\nOversized generated functions (depth-bounding batch 2026-07-28; "
-            "these are the extractor's declared waivers — informational, "
-            "regenerate with current tools if the list grew):"
+            "\nOversized generated functions (the extractors' declared "
+            "waivers — the size bound is iOS-calibrated; on Android the dex "
+            "method limit is a hard compile error a passing build already "
+            "proves):"
         )
         for path, name, depth, lines in oversized:
             print(f"  - {_rel(path, project_root)} {name}: depth {depth} / {lines} lines")
+        new_waivers = _ratchet_size_baseline(
+            project_root, oversized, update=args.update_size_baseline
+        )
+        if new_waivers:
+            print(
+                "\nNEW oversized functions (not in .jui-size-waivers — the "
+                "waiver set is a ratchet; investigate the regression or, if "
+                "reviewed and accepted, re-run with --update-size-baseline):"
+            )
+            for entry in new_waivers:
+                print(f"  - {entry}")
 
     if missing_header:
         print("\nMissing @generated sentinel:")
@@ -161,7 +180,48 @@ def cmd_lint_generated(args: argparse.Namespace) -> int:
                 "  # Then re-run 'jui lint-generated'."
             )
         return 1
+    if new_waivers:
+        return 1
     return 0
+
+
+BASELINE_FILENAME = ".jui-size-waivers"
+
+
+def _ratchet_size_baseline(project_root, oversized, update: bool) -> list[str]:
+    """Compare the oversized set against the project's checked-in baseline.
+
+    The baseline is a ratchet: entries may leave freely (the tools improved),
+    but a NEW entry means the extractors regressed into shipping something
+    oversized that yesterday's build bounded — that is a failure signal even
+    though the standing waivers are not. Without a baseline file the check is
+    purely informational, so projects opt in by committing one
+    (--update-size-baseline writes it). Identity is path + function name;
+    depth/line numbers wobble with content edits and deliberately don't
+    participate.
+    """
+    baseline_path = project_root / BASELINE_FILENAME
+    current = sorted({f"{_rel(path, project_root)} {name}" for path, name, _d, _l in oversized})
+
+    if update:
+        baseline_path.write_text(
+            "# jui lint-generated size-waiver baseline (ratchet).\n"
+            "# One entry per accepted oversized generated function.\n"
+            + "".join(f"{entry}\n" for entry in current),
+            encoding="utf-8",
+        )
+        print(f"\nBaseline written: {_rel(baseline_path, project_root)} ({len(current)} entries)")
+        return []
+
+    if not baseline_path.is_file():
+        return []
+
+    known = {
+        line.strip()
+        for line in baseline_path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    }
+    return [entry for entry in current if entry not in known]
 
 
 def _strip_code_noise(line: str) -> str:
