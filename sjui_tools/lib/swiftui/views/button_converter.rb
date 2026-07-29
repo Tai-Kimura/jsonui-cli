@@ -20,7 +20,17 @@ module SjuiTools
         private
 
         def convert_state_aware_button
-          text = @component['text'] || "Button"
+          image = @component['image']
+          has_image = !image.nil? && !image.to_s.empty?
+          # "Button" is the placeholder for a button with nothing in it. An
+          # icon-only button has content, so it must not render the word
+          # "Button" beside its icon. Without an icon the fallback is
+          # unchanged (including the explicit empty-string case).
+          text = if has_image
+                   @component['text'].to_s
+                 else
+                   @component['text'] || "Button"
+                 end
           action = @component['onClick']
 
           # Use StateAwareButtonView for state-dependent styling
@@ -151,6 +161,24 @@ module SjuiTools
             end
             if @component['background']
               add_line "backgroundColor: #{get_swiftui_color(@component['background'])},"
+            end
+
+            # Icon. `image` was declared for Button but no SwiftUI converter
+            # read it, so an icon-only button rendered as an empty button.
+            # Resolution follows Image#srcName: a bare name is an asset name,
+            # a binding resolves through data.
+            #
+            # The tint is only passed when the layout asked for one — a
+            # template rendering mode would flatten a multi-colour asset to a
+            # single colour. Same rule as the Compose and web converters.
+            if has_image
+              if is_binding?(image)
+                add_line "image: data.#{extract_binding_property(image)},"
+              else
+                add_line "image: \"#{image}\","
+              end
+              image_tint = @component['tintColor'] || @component['fontColor']
+              add_line "imageTint: #{get_swiftui_color(image_tint)}," if image_tint
             end
 
             # State-dependent colors

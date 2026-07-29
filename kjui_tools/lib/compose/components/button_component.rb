@@ -24,7 +24,16 @@ module KjuiTools
 
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           # Button uses 'text' attribute per SwiftJsonUI spec
-          text = Helpers::ResourceResolver.process_text(json_data['text'] || 'Button', required_imports)
+          image_name = json_data['image']
+          has_image = !image_name.nil? && !image_name.to_s.empty?
+          # "Button" is the placeholder for a button with nothing in it. An
+          # icon-only button has content, so it must not render the word
+          # "Button" beside its icon. Without an icon the fallback is
+          # unchanged (including the explicit empty-string case).
+          show_text = !has_image || !json_data['text'].to_s.empty?
+          text = if show_text
+                   Helpers::ResourceResolver.process_text(json_data['text'] || 'Button', required_imports)
+                 end
 
           code = indent("Button(", depth)
 
@@ -207,31 +216,131 @@ module KjuiTools
           end
           
           code += "\n" + indent(") {", depth)
-          code += "\n" + indent("Text(#{text})", depth + 1)
 
-          # Apply text attributes if specified (fontColor handled in ButtonDefaults.buttonColors).
-          # All font attrs (fontFamily/font/fontWeight/fontSize) flow through the unified
-          # Configuration.Font.resolve(FontSpec(...)) hook so the app's fontProvider sees
-          # the full context.
-          font_args = Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports)
-          if font_args[:has_any]
-            var_name = next_resolved_var
-            resolve_block = Helpers::FontSpecHelper.emit_resolve_block(var_name, font_args, depth + 1, required_imports)
-            text_arg_lines = Helpers::FontSpecHelper.text_arg_lines(var_name, depth + 1, required_imports)
-
-            text_code = resolve_block + "\n" + indent("Text(", depth + 1) +
-                        "\n" + indent("text = #{text},", depth + 2) +
-                        "\n" + text_arg_lines +
-                        "\n" + indent(")", depth + 1)
-            code = code.sub(/Text\(#{Regexp.escape(text)}\)/, text_code.strip)
+          # Content lambda. Icon + label sit in a Row; either one alone is
+          # emitted on its own so a text-only button keeps its previous
+          # output byte for byte.
+          if has_image && show_text
+            code += "\n" + indent("Row(verticalAlignment = Alignment.CenterVertically) {", depth + 1)
+            code += "\n" + build_icon_code(json_data, image_name, depth + 2, required_imports,
+                                           decorative: true, spacer_after: true)
+            code += "\n" + build_text_code(json_data, text, depth + 2, required_imports)
+            code += "\n" + indent("}", depth + 1)
+          elsif has_image
+            code += "\n" + build_icon_code(json_data, image_name, depth + 1, required_imports,
+                                           decorative: false, spacer_after: false)
+          else
+            code += "\n" + build_text_code(json_data, text, depth + 1, required_imports)
           end
-          
+
           code += "\n" + indent("}", depth)
           code
         end
-        
+
+        # Gap between the icon and the label. Fixed on purpose: `spacing` is
+        # not declared for Button in attribute_definitions.json, so reading it
+        # here would consume an undeclared attribute (same call as the web
+        # converter's `gap-2`).
+        ICON_LABEL_SPACING = 8
+
+        # Icon box, matching the dynamic component's default.
+        ICON_SIZE = 18
+
+        # `image` was declared for Button but no Compose codegen read it, so
+        # the icon simply never rendered — while the dynamic component (which
+        # the hot-reload preview uses) did render it. Static/dynamic parity is
+        # the contract, so this mirrors DynamicButtonComponent.
+        #
+        # Tinting follows the icon's own attributes rather than always
+        # flattening: `Icon` forces a single colour, which would destroy a
+        # multi-colour asset. Only an explicit `tintColor` / `fontColor` asks
+        # for a tint — the same rule the web converter applies.
+        def self.build_icon_code(json_data, image_name, depth, required_imports, decorative:, spacer_after:)
+          required_imports&.add(:painter_resource)
+          content_desc = decorative ? 'null' : quote(humanize_image_name(image_name))
+          spacer = indent("Spacer(modifier = Modifier.width(#{ICON_LABEL_SPACING}.dp))", depth)
+
+          if Helpers::ModifierBuilder.is_binding?(image_name)
+            required_imports&.add(:local_context)
+            property = to_camel_case(Helpers::ModifierBuilder.extract_binding_property(image_name))
+            # An unresolvable name yields id 0; drop the icon rather than
+            # crash on a missing resource (DynamicButtonComponent's takeIf).
+            # The gap goes inside the branch so an unresolved icon does not
+            # leave a stray 8dp indent in front of the label.
+            lines = [
+              indent("val iconResId = LocalContext.current.let { ctx ->", depth),
+              indent("ctx.resources.getIdentifier(data.#{property}, \"drawable\", ctx.packageName)", depth + 1),
+              indent("}", depth),
+              indent("if (iconResId != 0) {", depth),
+              build_icon_call('painterResource(id = iconResId)', content_desc, depth + 1, json_data, required_imports)
+            ]
+            lines << indent("Spacer(modifier = Modifier.width(#{ICON_LABEL_SPACING}.dp))", depth + 1) if spacer_after
+            lines << indent("}", depth)
+            lines.join("\n")
+          else
+            required_imports&.add(:r_class)
+            painter = "painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(image_name)})"
+            icon = build_icon_call(painter, content_desc, depth, json_data, required_imports)
+            spacer_after ? "#{icon}\n#{spacer}" : icon
+          end
+        end
+
+        def self.build_icon_call(painter, content_desc, depth, json_data, required_imports)
+          tint = json_data['tintColor'] || json_data['fontColor']
+          composable = tint ? 'Icon' : 'Image'
+          required_imports&.add(:image) unless tint
+
+          lines = [indent("#{composable}(", depth),
+                   indent("painter = #{painter},", depth + 1),
+                   indent("contentDescription = #{content_desc},", depth + 1)]
+          if tint
+            tint_color = Helpers::ResourceResolver.process_color(tint, required_imports)
+            lines << indent("modifier = Modifier.size(#{ICON_SIZE}.dp),", depth + 1)
+            lines << indent("tint = #{tint_color}", depth + 1)
+          else
+            lines << indent("modifier = Modifier.size(#{ICON_SIZE}.dp)", depth + 1)
+          end
+          lines << indent(")", depth)
+          lines.join("\n")
+        end
+
+        # Apply text attributes if specified (fontColor handled in ButtonDefaults.buttonColors).
+        # All font attrs (fontFamily/font/fontWeight/fontSize) flow through the unified
+        # Configuration.Font.resolve(FontSpec(...)) hook so the app's fontProvider sees
+        # the full context.
+        def self.build_text_code(json_data, text, depth, required_imports)
+          font_args = Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports)
+          return indent("Text(#{text})", depth) unless font_args[:has_any]
+
+          var_name = next_resolved_var
+          resolve_block = Helpers::FontSpecHelper.emit_resolve_block(var_name, font_args, depth, required_imports)
+          text_arg_lines = Helpers::FontSpecHelper.text_arg_lines(var_name, depth, required_imports)
+
+          resolve_block + "\n" + indent("Text(", depth) +
+            "\n" + indent("text = #{text},", depth + 1) +
+            "\n" + text_arg_lines +
+            "\n" + indent(")", depth)
+        end
+
+        # An icon-only button has no accessible name unless the icon carries
+        # one, so the asset name becomes the contentDescription. Alongside a
+        # label the icon is decorative and stays out of the a11y tree.
+        def self.humanize_image_name(image_name)
+          image_name.to_s.sub(/\.[a-z0-9]+\z/i, '').tr('_-', '  ')
+        end
+
         private
-        
+
+        def self.to_camel_case(snake_case_string)
+          return snake_case_string unless snake_case_string.include?('_')
+          parts = snake_case_string.split('_')
+          parts[0] + parts[1..-1].map(&:capitalize).join
+        end
+
+        def self.quote(text)
+          "\"#{text.gsub('"', '\\"')}\""
+        end
+
         def self.indent(text, level)
           return text if level == 0
           spaces = '    ' * level
