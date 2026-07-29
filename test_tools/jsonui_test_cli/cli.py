@@ -143,7 +143,8 @@ def _check_mocks_against_swagger(config_path):
             print(f"\nRegenerated {len(built.created)} mock file(s) "
                   f"into {mock_dir}/{GENERATED_DIR}/")
 
-    report = generate(resolved, mock_path, check=True)
+    report = generate(resolved, mock_path, check=True,
+                      strict=bool(config.get("checkOptionalFields", False)))
     if not isinstance(report, CheckReport) or not report.has_drift:
         return 0
 
@@ -482,7 +483,8 @@ def cmd_mock_generate(args):
         print("Other scenarios were left untouched — review them by hand.")
         return 0
 
-    report = generate(swaggers, mock_dir, check=args.check)
+    report = generate(swaggers, mock_dir, check=args.check,
+                      strict=getattr(args, "strict", False))
 
     if isinstance(report, CheckReport):
         for rel in report.missing:
@@ -491,8 +493,12 @@ def cmd_mock_generate(args):
             print(f"  [ORPHAN]  {rel} (mock file, not in swagger)")
         for msg in report.drifted:
             print(f"  [DRIFT]   {msg}")
-        for drift in report.bodies:
+        for drift in report.errors:
             print(f"  [BODY]    {drift}")
+        notes = [d for d in report.bodies
+                 if d.is_note_only and not d.generated and not report.strict]
+        for drift in notes:
+            print(f"  [NOTE]    {drift}")
         for rel in report.misnamed:
             print(f"  [NAME]    {rel}")
         for note in report.unmatched:
@@ -502,8 +508,8 @@ def cmd_mock_generate(args):
         if report.has_drift:
             print(f"\nDrift detected: {len(report.missing)} missing, "
                   f"{len(report.orphaned)} orphaned, {len(report.drifted)} drifted, "
-                  f"{len(report.bodies)} stale body(ies)")
-            if report.bodies:
+                  f"{len(report.errors)} stale body(ies)")
+            if report.errors:
                 print("Refresh the generated bodies with "
                       "`jsonui-test mock generate --update-default` "
                       "(hand-grown scenarios are preserved).")
@@ -1016,6 +1022,13 @@ def main():
     mock_gen_parser.add_argument("--out", help="Output mock dir (default: mock.mockDir or tests/mocks)")
     mock_gen_parser.add_argument("--config", help="Config file (default: jui.config.json)")
     mock_gen_parser.add_argument("--check", action="store_true", help="Report drift vs swagger, do not write")
+    mock_gen_parser.add_argument(
+        "--strict", action="store_true",
+        help="With --check, treat a missing OPTIONAL field as drift too "
+             "(same as mock.checkOptionalFields=true). Off by default: "
+             "omitting an optional field is a valid instance, and failing on "
+             "it buries the real violations",
+    )
     mock_gen_parser.add_argument(
         "--update-default", action="store_true",
         help="Rewrite each existing mock's default body + source from swagger, "

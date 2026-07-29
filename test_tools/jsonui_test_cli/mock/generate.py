@@ -198,6 +198,7 @@ def generate(
     swagger_paths: list[str],
     mock_dir: str | Path,
     check: bool = False,
+    strict: bool = False,
 ) -> GenerateReport | "CheckReport":
     """Regenerate `<mockDir>/generated/`, or (check=True) diff without writing.
 
@@ -207,7 +208,7 @@ def generate(
     """
     mock_dir = Path(mock_dir)
     if check:
-        return _check(swagger_paths, mock_dir)
+        return _check(swagger_paths, mock_dir, strict=strict)
 
     created: list[str] = []
     skipped: list[str] = []
@@ -367,27 +368,105 @@ def _drop_under(paths: set, prefixes: set) -> set:
     return {p for p in paths if not any(p.startswith(pref) for pref in prefixes)}
 
 
+def required_paths(doc: OpenApiDoc, schema, path: str = "", _depth: int = 0) -> set:
+    """Dotted paths a schema marks `required`, in `key_paths` notation."""
+    out: set = set()
+    if _depth > 12:
+        return out
+    schema = doc.resolve_schema(schema, _depth)
+    if not isinstance(schema, dict):
+        return out
+
+    stype = schema.get("type")
+    if stype is None and "properties" in schema:
+        stype = "object"
+    if isinstance(stype, list):
+        stype = next((t for t in stype if t != "null"), None)
+
+    if stype == "object":
+        required = set(schema.get("required") or [])
+        for name, child in (schema.get("properties") or {}).items():
+            child_path = f"{path}.{name}"
+            if name in required:
+                out.add(child_path)
+            out |= required_paths(doc, child, child_path, _depth + 1)
+    elif stype == "array":
+        items = schema.get("items")
+        if items is not None:
+            out |= required_paths(doc, items, f"{path}[]", _depth + 1)
+    return out
+
+
+def _ancestors(path: str) -> list:
+    """Ancestor paths of *path*, shallowest first, in both `.a` and `.a[]` form."""
+    out = []
+    cur = path
+    while True:
+        index = cur.rfind(".")
+        if index <= 0:
+            break
+        cur = cur[:index]
+        out.append(cur)
+        if cur.endswith("[]"):
+            out.append(cur[:-2])
+    return list(reversed(out))
+
+
+def split_missing(missing: set, required: set) -> tuple:
+    """`(required_missing, optional_missing)`.
+
+    A path under an omitted OPTIONAL parent is optional too, however the
+    schema marks it: leaving out `price_plan` legitimately leaves out
+    `price_plan.id`, and reporting the child as a contract violation would be
+    wrong. Classification therefore follows the shallowest omitted ancestor.
+    """
+    missing_set = set(missing)
+    req: list = []
+    opt: list = []
+    for path in missing:
+        anchor = path
+        for ancestor in _ancestors(path):
+            if ancestor in missing_set:
+                anchor = ancestor
+                break
+        (req if anchor in required else opt).append(path)
+    return sorted(req), sorted(opt)
+
+
 @dataclass
 class BodyDrift:
     """One scenario whose body no longer matches the schema it came from."""
 
     rel: str
     scenario: str
-    missing: list[str]  # swagger has, mock lacks
+    missing: list[str]  # required by the contract, mock lacks
     extra: list[str]    # mock has, swagger lacks
     violations: list = field(default_factory=list)  # right keys, invalid values
+    #: Optional fields the mock simply does not spell out. A note, not drift:
+    #: omitting an optional field is a valid instance of the schema, and
+    #: filling them in to silence the check is actively harmful — a
+    #: mechanical merge puts null into non-nullable slots and manufactures
+    #: real violations.
+    optional: list = field(default_factory=list)
     #: A finding in generated/ is a warning — regenerating fixes it. One in a
     #: hand-written mock is an error: a person has to decide what it should be.
     generated: bool = False
 
+    @property
+    def is_note_only(self) -> bool:
+        """True when nothing here is a contract violation."""
+        return not (self.missing or self.extra or self.violations)
+
     def __str__(self) -> str:
         lines = [f"{self.rel}  {self.scenario}"]
         if self.missing:
-            lines.append(f"    swagger has, mock lacks: {', '.join(self.missing)}")
+            lines.append(f"    missing (required): {', '.join(self.missing)}")
         if self.extra:
             lines.append(f"    mock has, swagger lacks: {', '.join(self.extra)}")
         for violation in self.violations:
             lines.append(f"    {violation}")
+        if self.optional:
+            lines.append(f"    missing (optional): {', '.join(self.optional)}")
         return "\n".join(lines)
 
 
@@ -401,18 +480,27 @@ class CheckReport:
     misnamed: list[str] = field(default_factory=list)  # right route, other filename
     #: Findings in generated/: reported, but they do not fail the check.
     warnings: list[str] = field(default_factory=list)
+    #: When set, a scenario that only omits optional fields counts as drift.
+    strict: bool = False
 
     @property
     def errors(self) -> list:
-        """Findings a person has to act on."""
-        return [b for b in self.bodies if not b.generated]
+        """Findings a person has to act on.
+
+        Not every entry in `bodies` is one: a scenario that merely does not
+        spell out some optional fields is recorded so it is visible, but a
+        check that fails on it is a check that gets switched off — and then
+        the real violations it also reports go with it.
+        """
+        return [b for b in self.bodies
+                if not b.generated and (self.strict or not b.is_note_only)]
 
     @property
     def has_drift(self) -> bool:
         return bool(self.missing or self.orphaned or self.drifted or self.errors)
 
 
-def _check(swagger_paths: list[str], mock_dir: Path) -> CheckReport:
+def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False) -> CheckReport:
     expected: dict[tuple, tuple[OpenApiDoc, Operation]] = {}
     for swagger in swagger_paths:
         doc = OpenApiDoc.load(swagger)
@@ -496,7 +584,7 @@ def _check(swagger_paths: list[str], mock_dir: Path) -> CheckReport:
     return CheckReport(
         missing=missing, orphaned=orphaned, drifted=drifted,
         bodies=bodies, unmatched=unmatched, misnamed=misnamed,
-        warnings=warnings,
+        warnings=warnings, strict=strict,
     )
 
 
@@ -551,11 +639,15 @@ def _check_bodies(
         want = _drop_under(want, empty_array_prefixes(actual_body))
         got = _drop_under(got, empty_array_prefixes(expected_body))
         violations = validate_against_schema(doc, schema, actual_body)
-        if want != got or violations:
+        missing_required, missing_optional = split_missing(
+            want - got, required_paths(doc, schema)
+        )
+        if missing_required or missing_optional or want != got or violations:
             bodies.append(
                 BodyDrift(
-                    rel, name, sorted(want - got), sorted(got - want),
+                    rel, name, sorted(missing_required), sorted(got - want),
                     violations=violations, generated=generated,
+                    optional=sorted(missing_optional),
                 )
             )
 

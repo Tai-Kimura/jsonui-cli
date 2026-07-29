@@ -119,9 +119,12 @@ class TestBodyDrift:
         assert len(report.bodies) == 1
         drift = report.bodies[0]
         assert drift.scenario == "default"
-        assert drift.missing == [".bar_id", ".new_arrival_notification", ".status"]
+        # `bar_id` is optional in the contract, so it is a note, not drift.
+        assert drift.missing == [".new_arrival_notification", ".status"]
+        assert drift.optional == [".bar_id"]
         assert drift.extra == [".message"]
-        assert "swagger has, mock lacks" in str(drift)
+        assert "missing (required)" in str(drift)
+        assert "missing (optional)" in str(drift)
 
     def test_scenarios_are_matched_by_status_not_by_name(self, tmp_path):
         # The trap the report called out: a name-based rule mangles a
@@ -153,7 +156,8 @@ class TestBodyDrift:
             "items": [{"id": "1", "brand": "x"}]}}})
         report = generate([spec], out, check=True)
         drift = report.bodies[0]
-        assert drift.missing == [".items[].series"]
+        # `series` is optional; the undeclared `brand` is the real problem.
+        assert drift.optional == [".items[].series"]
         assert drift.extra == [".items[].brand"]
 
     def test_an_empty_array_is_a_valid_instance_not_drift(self, tmp_path):
@@ -406,3 +410,88 @@ class TestGeneratedTree:
         assert report.bodies and report.bodies[0].generated
         assert report.errors == []
         assert not report.has_drift
+
+
+class TestOptionalFields:
+    """Regression: mock-check-treats-optional-fields-as-drift.
+
+    Omitting an optional field is a valid instance of the schema. Failing on
+    it made the gate unusable — one project measured 53 scenarios of purely
+    optional omissions against 0 real violations, another 13 against 0 — so
+    consumers switched the check off and lost the real signal with it. Worse,
+    filling them in mechanically puts null into non-nullable slots and
+    manufactures violations that were not there.
+    """
+
+    def test_a_missing_optional_field_is_a_note_not_drift(self, tmp_path):
+        spec, out = _setup(tmp_path)
+        mock = out / "bars" / "followBar.mock.json"
+        _write(mock, {"default": {"status": 200, "body": {
+            "status": "followed", "new_arrival_notification": True}}})
+        report = generate([spec], out, check=True)
+        assert report.bodies[0].optional == [".bar_id"]
+        assert report.bodies[0].is_note_only
+        assert not report.has_drift
+
+    def test_a_missing_required_field_still_fails(self, tmp_path):
+        spec, out = _setup(tmp_path)
+        mock = out / "bars" / "followBar.mock.json"
+        _write(mock, {"default": {"status": 200, "body": {"status": "followed"}}})
+        report = generate([spec], out, check=True)
+        assert report.bodies[0].missing == [".new_arrival_notification"]
+        assert report.has_drift
+
+    def test_a_field_the_contract_does_not_have_still_fails(self, tmp_path):
+        # The front end reading a value the server never sends is exactly
+        # what the previous report was about.
+        spec, out = _setup(tmp_path)
+        mock = out / "bars" / "followBar.mock.json"
+        _write(mock, {"default": {"status": 200, "body": {
+            "status": "followed", "new_arrival_notification": True, "extra": 1}}})
+        report = generate([spec], out, check=True)
+        assert report.bodies[0].extra == [".extra"]
+        assert report.has_drift
+
+    def test_a_required_field_under_an_omitted_optional_parent_is_optional(self, tmp_path):
+        # Leaving out an optional object legitimately leaves out its required
+        # children; reporting those as violations would be wrong.
+        spec = tmp_path / "spec.json"
+        spec.write_text(json.dumps({
+            "openapi": "3.0.0",
+            "paths": {"/api/x": {"get": {
+                "tags": ["X"], "operationId": "getX",
+                "responses": {"200": {"content": {"application/json": {"schema": {
+                    "type": "object", "required": ["id"], "properties": {
+                        "id": {"type": "string"},
+                        "price_plan": {"type": "object", "required": ["plan_id"],
+                                     "properties": {"plan_id": {"type": "string"}}},
+                    }}}}}},
+            }}},
+        }), encoding="utf-8")
+        out = tmp_path / "mocks"
+        generate([str(spec)], out)
+        mock = out / GENERATED_DIR / "x" / "getX.mock.json"
+        _write(mock, {"default": {"status": 200, "body": {"id": "1"}}})
+        report = generate([str(spec)], out, check=True)
+        drift = report.bodies[0]
+        assert drift.missing == []
+        assert ".price_plan.plan_id" in drift.optional
+
+    def test_notes_and_violations_are_labelled_separately(self, tmp_path):
+        spec, out = _setup(tmp_path)
+        mock = out / "bars" / "followBar.mock.json"
+        _write(mock, {"default": {"status": 200, "body": {"status": "followed"}}})
+        rendered = str(generate([spec], out, check=True).bodies[0])
+        assert "missing (required): .new_arrival_notification" in rendered
+        assert "missing (optional): .bar_id" in rendered
+
+    def test_strict_promotes_optional_omissions_without_relabelling_them(self, tmp_path):
+        spec, out = _setup(tmp_path)
+        mock = out / "bars" / "followBar.mock.json"
+        _write(mock, {"default": {"status": 200, "body": {
+            "status": "followed", "new_arrival_notification": True}}})
+        report = generate([spec], out, check=True, strict=True)
+        assert report.has_drift
+        # Still reported as optional — strict changes the weight, not the fact.
+        assert report.bodies[0].optional == [".bar_id"]
+        assert report.errors == report.bodies
