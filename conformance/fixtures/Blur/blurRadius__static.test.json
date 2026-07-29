@@ -13,7 +13,8 @@
     ]
   },
   "platform": [
-    "android"
+    "android",
+    "web"
   ],
   "cases": [
     {
