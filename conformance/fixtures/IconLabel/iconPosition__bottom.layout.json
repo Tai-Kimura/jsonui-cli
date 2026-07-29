@@ -15,7 +15,7 @@
     {
       "type": "IconLabel",
       "id": "target",
-      "width": "wrapContent",
+      "width": 200,
       "height": "wrapContent",
       "text": "Sample",
       "iconPosition": "Bottom"

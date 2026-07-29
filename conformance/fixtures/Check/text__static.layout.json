@@ -15,7 +15,7 @@
     {
       "type": "Check",
       "id": "target",
-      "width": "wrapContent",
+      "width": 200,
       "height": "wrapContent",
       "text": "Conformance Text"
     }

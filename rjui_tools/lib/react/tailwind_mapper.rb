@@ -448,15 +448,20 @@ module RjuiTools
           hidden ? 'invisible' : ''
         end
 
-        def map_direction(direction)
-          case direction&.downcase
-          when 'rtl'
-            'rtl'
-          when 'ltr'
-            'ltr'
-          else
-            ''
-          end
+        # Layout direction: reverse the children of an oriented container.
+        #
+        # `direction` alone means nothing — the canonical semantics (SJUIView,
+        # kjui container_component) are "vertical + bottomToTop reverses" and
+        # "horizontal + rightToLeft reverses"; every other combination is normal
+        # order. So the reverse value has to agree with the orientation, which is
+        # why this takes both.
+        def map_direction(direction, orientation = nil)
+          d = direction.to_s.downcase
+          o = orientation.to_s.downcase
+          return 'flex-col-reverse' if o == 'vertical' && d == 'bottomtotop'
+          return 'flex-row-reverse' if o == 'horizontal' && d == 'righttoleft'
+
+          ''
         end
 
         def map_overflow(clip_to_bounds)

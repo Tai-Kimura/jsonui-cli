@@ -15,7 +15,7 @@
     {
       "type": "Segment",
       "id": "target",
-      "width": "wrapContent",
+      "width": 200,
       "height": "wrapContent",
       "items": [
         "One",

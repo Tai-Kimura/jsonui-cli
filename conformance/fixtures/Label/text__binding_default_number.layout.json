@@ -17,7 +17,7 @@
     {
       "type": "Label",
       "id": "target",
-      "width": "wrapContent",
+      "width": 200,
       "height": "wrapContent",
       "text": "@{conformanceMissing ?? 42}"
     }

@@ -39,6 +39,34 @@
           "width": 40,
           "height": 40,
           "background": "#0000FF"
+        },
+        {
+          "type": "View",
+          "id": "box_c",
+          "width": 40,
+          "height": 40,
+          "background": "#00AA00"
+        },
+        {
+          "type": "View",
+          "id": "box_d",
+          "width": 40,
+          "height": 40,
+          "background": "#FFAA00"
+        },
+        {
+          "type": "View",
+          "id": "box_e",
+          "width": 40,
+          "height": 40,
+          "background": "#AA00AA"
+        },
+        {
+          "type": "View",
+          "id": "box_f",
+          "width": 40,
+          "height": 40,
+          "background": "#00AAAA"
         }
       ],
       "alignCenterHorizontalView": "anchor"

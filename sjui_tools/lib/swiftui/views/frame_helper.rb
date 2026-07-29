@@ -4,7 +4,36 @@ module SjuiTools
   module SwiftUI
     module Views
       module FrameHelper
+        # idealWidth / idealHeight — the SwiftUI layout system's preferred size.
+        #
+        # Emitted as SEPARATE `.frame()` calls, deliberately, because that is
+        # exactly what the SwiftUI Dynamic runtime does
+        # (DynamicModifierHelper: `result.frame(idealWidth: iw)`). SwiftUI
+        # composes nested frames, so an explicit idealHeight next to a fixed
+        # `height` is simply inert rather than conflicting — merging it into the
+        # width/height frame instead would fight the auto-derived
+        # `.frame(minHeight:idealHeight:maxHeight:)` that the matchParent branch
+        # below already emits.
+        # Written out per attribute rather than looped on purpose: the
+        # attribute-coverage scan looks for a literal `@component['name']`, so a
+        # loop over a name list reads as "nobody consumes this" and the ledger
+        # keeps counting the attribute as unimplemented after it is implemented.
+        def apply_ideal_size
+          if @component['idealWidth']
+            @modifier_bag.append(:frame_size, ".frame(idealWidth: #{ideal_size_param(@component['idealWidth'])})")
+          end
+          if @component['idealHeight']
+            @modifier_bag.append(:frame_size, ".frame(idealHeight: #{ideal_size_param(@component['idealHeight'])})")
+          end
+        end
+
+        def ideal_size_param(value)
+          is_binding?(value) ? extract_binding_value(value) : value
+        end
+
         def apply_frame_constraints
+          apply_ideal_size
+
           # サイズ制約（minWidth, maxWidth, minHeight, maxHeight）
           if @component['minWidth'] || @component['maxWidth'] || @component['minHeight'] || @component['maxHeight']
             min_width = @component['minWidth']

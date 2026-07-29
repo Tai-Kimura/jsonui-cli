@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "a8649989c24b3b9deb9d92fb3512b00e75a3fc167790afdd52d95d1ba670067d",
   "counts": {
-    "fixtures": 703,
+    "fixtures": 708,
     "assertable": 36,
     "visual": 602,
     "interactive": 36,
-    "control": 29,
+    "control": 34,
     "skipped": 168,
     "promoted": {
       "callback": 12
@@ -1016,7 +1016,7 @@
       "test": "fixtures/common/padding__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/paddings__static",
@@ -1044,7 +1044,7 @@
       "test": "fixtures/common/paddings__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/paddingTop__static",
@@ -1067,7 +1067,7 @@
       "test": "fixtures/common/paddingTop__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/paddingBottom__static",
@@ -1090,7 +1090,7 @@
       "test": "fixtures/common/paddingBottom__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/paddingLeft__static",
@@ -1113,7 +1113,7 @@
       "test": "fixtures/common/paddingLeft__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/paddingRight__static",
@@ -1136,7 +1136,7 @@
       "test": "fixtures/common/paddingRight__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/paddingStart__static",
@@ -1159,7 +1159,7 @@
       "test": "fixtures/common/paddingStart__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/paddingEnd__static",
@@ -1182,7 +1182,7 @@
       "test": "fixtures/common/paddingEnd__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/rightPadding__static",
@@ -2635,7 +2635,7 @@
       "test": "fixtures/common/gravity__top.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/gravity__bottom",
@@ -2658,7 +2658,7 @@
       "test": "fixtures/common/gravity__bottom.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/gravity__centervertical",
@@ -2681,7 +2681,7 @@
       "test": "fixtures/common/gravity__centervertical.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/gravity__left",
@@ -2704,7 +2704,7 @@
       "test": "fixtures/common/gravity__left.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/gravity__right",
@@ -2727,7 +2727,7 @@
       "test": "fixtures/common/gravity__right.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/gravity__centerhorizontal",
@@ -2750,7 +2750,7 @@
       "test": "fixtures/common/gravity__centerhorizontal.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/gravity__center",
@@ -2773,7 +2773,7 @@
       "test": "fixtures/common/gravity__center.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/onAppear__callback_fire",
@@ -3032,7 +3032,7 @@
       "test": "fixtures/common/distribution__fill.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/distribution__fillequally",
@@ -3054,7 +3054,7 @@
       "test": "fixtures/common/distribution__fillequally.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/distribution__equalspacing",
@@ -3076,7 +3076,7 @@
       "test": "fixtures/common/distribution__equalspacing.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/distribution__equalcentering",
@@ -3098,7 +3098,7 @@
       "test": "fixtures/common/distribution__equalcentering.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/minStartMargin__static",
@@ -5019,7 +5019,7 @@
       "test": "fixtures/TextField/input__default.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/input__alphabet",
@@ -5042,7 +5042,7 @@
       "test": "fixtures/TextField/input__alphabet.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/input__allphabet",
@@ -5065,7 +5065,7 @@
       "test": "fixtures/TextField/input__allphabet.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/input__email",
@@ -5088,7 +5088,7 @@
       "test": "fixtures/TextField/input__email.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/input__number",
@@ -5111,7 +5111,7 @@
       "test": "fixtures/TextField/input__number.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/input__phone",
@@ -5134,7 +5134,7 @@
       "test": "fixtures/TextField/input__phone.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/input__url",
@@ -5157,7 +5157,7 @@
       "test": "fixtures/TextField/input__url.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/input__password",
@@ -5180,7 +5180,7 @@
       "test": "fixtures/TextField/input__password.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/input__decimal",
@@ -5203,7 +5203,7 @@
       "test": "fixtures/TextField/input__decimal.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/returnKeyType__done",
@@ -5226,7 +5226,7 @@
       "test": "fixtures/TextField/returnKeyType__done.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/returnKeyType__go",
@@ -5249,7 +5249,7 @@
       "test": "fixtures/TextField/returnKeyType__go.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/returnKeyType__next",
@@ -5272,7 +5272,7 @@
       "test": "fixtures/TextField/returnKeyType__next.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/returnKeyType__return",
@@ -5295,7 +5295,7 @@
       "test": "fixtures/TextField/returnKeyType__return.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/returnKeyType__search",
@@ -5318,7 +5318,7 @@
       "test": "fixtures/TextField/returnKeyType__search.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/returnKeyType__send",
@@ -5341,7 +5341,7 @@
       "test": "fixtures/TextField/returnKeyType__send.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/returnKeyType__continue",
@@ -5364,7 +5364,7 @@
       "test": "fixtures/TextField/returnKeyType__continue.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/returnKeyType__join",
@@ -5387,7 +5387,7 @@
       "test": "fixtures/TextField/returnKeyType__join.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/returnKeyType__route",
@@ -5410,7 +5410,7 @@
       "test": "fixtures/TextField/returnKeyType__route.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/returnKeyType__yahoo",
@@ -5433,7 +5433,7 @@
       "test": "fixtures/TextField/returnKeyType__yahoo.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/returnKeyType__google",
@@ -5456,7 +5456,7 @@
       "test": "fixtures/TextField/returnKeyType__google.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/contentType__static",
@@ -5818,7 +5818,7 @@
       "test": "fixtures/TextField/autocapitalizationType__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/autocorrectionType__static",
@@ -5841,7 +5841,7 @@
       "test": "fixtures/TextField/autocorrectionType__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/spellCheckingType__static",
@@ -6548,7 +6548,7 @@
       "test": "fixtures/TextView/input__default.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/input__alphabet",
@@ -6571,7 +6571,7 @@
       "test": "fixtures/TextView/input__alphabet.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/input__allphabet",
@@ -6594,7 +6594,7 @@
       "test": "fixtures/TextView/input__allphabet.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/input__email",
@@ -6617,7 +6617,7 @@
       "test": "fixtures/TextView/input__email.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/input__number",
@@ -6640,7 +6640,7 @@
       "test": "fixtures/TextView/input__number.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/input__phone",
@@ -6663,7 +6663,7 @@
       "test": "fixtures/TextView/input__phone.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/input__url",
@@ -6686,7 +6686,7 @@
       "test": "fixtures/TextView/input__url.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/input__password",
@@ -6709,7 +6709,7 @@
       "test": "fixtures/TextView/input__password.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/input__decimal",
@@ -6732,7 +6732,7 @@
       "test": "fixtures/TextView/input__decimal.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/returnKeyType__done",
@@ -6755,7 +6755,7 @@
       "test": "fixtures/TextView/returnKeyType__done.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/returnKeyType__go",
@@ -6778,7 +6778,7 @@
       "test": "fixtures/TextView/returnKeyType__go.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/returnKeyType__next",
@@ -6801,7 +6801,7 @@
       "test": "fixtures/TextView/returnKeyType__next.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/returnKeyType__return",
@@ -6824,7 +6824,7 @@
       "test": "fixtures/TextView/returnKeyType__return.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/returnKeyType__search",
@@ -6847,7 +6847,7 @@
       "test": "fixtures/TextView/returnKeyType__search.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/returnKeyType__send",
@@ -6870,7 +6870,7 @@
       "test": "fixtures/TextView/returnKeyType__send.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/returnKeyType__continue",
@@ -6893,7 +6893,7 @@
       "test": "fixtures/TextView/returnKeyType__continue.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/returnKeyType__join",
@@ -6916,7 +6916,7 @@
       "test": "fixtures/TextView/returnKeyType__join.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/returnKeyType__route",
@@ -6939,7 +6939,7 @@
       "test": "fixtures/TextView/returnKeyType__route.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/returnKeyType__yahoo",
@@ -6962,7 +6962,7 @@
       "test": "fixtures/TextView/returnKeyType__yahoo.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/returnKeyType__google",
@@ -6985,7 +6985,7 @@
       "test": "fixtures/TextView/returnKeyType__google.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/editable__true",
@@ -7054,7 +7054,7 @@
       "test": "fixtures/TextView/keyboardType__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": null
     },
     {
       "id": "TextView/onTextChange__callback_fire",
@@ -7490,7 +7490,7 @@
       "test": "fixtures/EditText/inputType__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/EditText"
+      "control": null
     },
     {
       "id": "Input/text__static",
@@ -11601,7 +11601,7 @@
       "test": "fixtures/View/direction__toptobottom.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-vertical"
     },
     {
       "id": "View/direction__bottomtotop",
@@ -11624,7 +11624,7 @@
       "test": "fixtures/View/direction__bottomtotop.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-vertical"
     },
     {
       "id": "View/direction__lefttoright",
@@ -11647,7 +11647,7 @@
       "test": "fixtures/View/direction__lefttoright.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-vertical"
     },
     {
       "id": "View/direction__righttoleft",
@@ -11670,7 +11670,7 @@
       "test": "fixtures/View/direction__righttoleft.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-vertical"
     },
     {
       "id": "View/direction__none",
@@ -11693,7 +11693,7 @@
       "test": "fixtures/View/direction__none.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-vertical"
     },
     {
       "id": "View/alignment__static",
@@ -11743,7 +11743,7 @@
       "test": "fixtures/View/distribution__fill.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "View/distribution__fillequally",
@@ -11770,7 +11770,7 @@
       "test": "fixtures/View/distribution__fillequally.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "View/distribution__equalspacing",
@@ -11797,7 +11797,7 @@
       "test": "fixtures/View/distribution__equalspacing.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "View/distribution__equalcentering",
@@ -11824,7 +11824,7 @@
       "test": "fixtures/View/distribution__equalcentering.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "View/spacing__static",
@@ -11851,7 +11851,7 @@
       "test": "fixtures/View/spacing__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "View/gradient__static",
@@ -11964,7 +11964,7 @@
       "test": "fixtures/View/flexWrap__nowrap.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "View/flexWrap__wrap",
@@ -11985,7 +11985,7 @@
       "test": "fixtures/View/flexWrap__wrap.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "View/flexWrap__wrap-reverse",
@@ -12006,7 +12006,7 @@
       "test": "fixtures/View/flexWrap__wrap-reverse.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "View/draggable__true",
@@ -13331,7 +13331,7 @@
       "test": "fixtures/Radio/spacing__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Radio"
+      "control": "__control/Radio__orientation-horizontal"
     },
     {
       "id": "Radio/checkedColor__static",
@@ -13807,7 +13807,7 @@
       "test": "fixtures/CheckBox/spacing__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/CheckBox"
+      "control": "__control/CheckBox__orientation-horizontal"
     },
     {
       "id": "CheckBox/onValueChange__callback_fire",
@@ -14254,7 +14254,7 @@
       "test": "fixtures/Check/spacing__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Check"
+      "control": "__control/Check__orientation-horizontal"
     },
     {
       "id": "Check/onValueChange__callback_fire",
@@ -15329,6 +15329,30 @@
       "isControl": true
     },
     {
+      "id": "__control/Check__orientation-horizontal",
+      "component": "__control",
+      "attribute": null,
+      "case": "Check",
+      "class": "visual",
+      "host": "Check",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Check__orientation-horizontal.layout.json",
+      "test": "fixtures/__control/Check__orientation-horizontal.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/CheckBox",
       "component": "__control",
       "attribute": null,
@@ -15347,6 +15371,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/CheckBox.layout.json",
       "test": "fixtures/__control/CheckBox.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/CheckBox__orientation-horizontal",
+      "component": "__control",
+      "attribute": null,
+      "case": "CheckBox",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/CheckBox__orientation-horizontal.layout.json",
+      "test": "fixtures/__control/CheckBox__orientation-horizontal.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -15611,6 +15659,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/Radio.layout.json",
       "test": "fixtures/__control/Radio.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Radio__orientation-horizontal",
+      "component": "__control",
+      "attribute": null,
+      "case": "Radio",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Radio__orientation-horizontal.layout.json",
+      "test": "fixtures/__control/Radio__orientation-horizontal.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -15899,6 +15971,54 @@
       "deprecated": null,
       "layout": "fixtures/__control/View.layout.json",
       "test": "fixtures/__control/View.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/View__orientation-horizontal",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__orientation-horizontal.layout.json",
+      "test": "fixtures/__control/View__orientation-horizontal.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/View__orientation-vertical",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__orientation-vertical.layout.json",
+      "test": "fixtures/__control/View__orientation-vertical.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

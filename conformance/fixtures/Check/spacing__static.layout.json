@@ -15,9 +15,10 @@
     {
       "type": "Check",
       "id": "target",
-      "width": "wrapContent",
+      "width": 200,
       "height": "wrapContent",
       "text": "Sample",
+      "orientation": "horizontal",
       "spacing": 8
     }
   ]

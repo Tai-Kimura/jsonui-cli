@@ -15,7 +15,7 @@
     {
       "type": "CheckBox",
       "id": "target",
-      "width": "wrapContent",
+      "width": 200,
       "height": "wrapContent",
       "text": "Sample",
       "value": 0.5

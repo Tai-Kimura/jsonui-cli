@@ -359,8 +359,28 @@ module RjuiTools
           # Gravity alignment - pass orientation for correct flexbox mapping
           classes.concat(TailwindMapper.map_gravity(attributes['gravity'], attributes['orientation'])) if attributes['gravity']
 
-          # Direction (RTL/LTR)
-          classes << TailwindMapper.map_direction(attributes['direction']) if attributes['direction']
+          # Layout direction — child ORDER, not text direction.
+          #
+          # The declared enum is topToBottom / bottomToTop / leftToRight /
+          # rightToLeft / none, and both other platforms read it the same way:
+          # it reverses the children of a container that already has an
+          # `orientation` (SJUIView switches on orientation then direction;
+          # kjui's container_component reverses the child array). Anything that
+          # is not the reverse value, or a container with no orientation, means
+          # normal order.
+          #
+          # This used to map to `rtl` / `ltr` classes — a different attribute's
+          # semantics, and dead twice over: those values are not in the enum, so
+          # the mapper always returned "", and Tailwind has no `.rtl` utility
+          # anyway (`rtl:` is a variant, `[dir="rtl"] &`). The control-diff check
+          # is what surfaced it: every direction fixture rendered pixel-identical
+          # to its control.
+          if attributes['direction'] && attributes['orientation']
+            reversed_class = TailwindMapper.map_direction(
+              attributes['direction'], attributes['orientation']
+            )
+            classes << reversed_class unless reversed_class.empty?
+          end
 
           # Additional className from JSON
           classes << attributes['className'] if attributes['className']

@@ -121,7 +121,8 @@ def plan_definitions(
 
 def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> dict:
     """One minimal layout: root View + (anchor?) + target component."""
-    base = rules.BASE_ATTRS.get(plan.host, {})
+    base = dict(rules.BASE_ATTRS.get(plan.host, {}))
+    base.update(rules.BASE_ATTRS_BY_ATTRIBUTE.get(plan.attribute, {}))
 
     target: dict[str, Any] = {"type": plan.host, "id": rules.TARGET_ID}
     target["width"] = base.get("width", "wrapContent")
@@ -322,10 +323,12 @@ def build_manifest_entry(
         "state": None,
         "promotedFrom": None,
         # The fixture this one must NOT look like. Visual fixtures only:
-        # an assertable fixture already states its expectation.
+        # an assertable fixture already states its expectation, and an
+        # off-screen effect (soft-keyboard configuration) cannot be compared.
         "control": (
-            control_id(plan.host, plan.needs_anchor)
+            control_id(plan.host, plan.needs_anchor, control_shape(plan.attribute))
             if plan.cls == rules.CLASS_VISUAL
+            and plan.attribute not in rules.NON_OBSERVABLE_ATTRS
             else None
         ),
     }
@@ -351,13 +354,33 @@ def build_manifest_entry(
 # all 600 visual fixtures instead of doubling the suite.
 
 
-def control_id(host: str, needs_anchor: bool) -> str:
-    return f"__control/{host}{'__anchored' if needs_anchor else ''}"
+def control_id(host: str, needs_anchor: bool, shape: str = "") -> str:
+    """Identity of the control a fixture is compared against.
+
+    `shape` distinguishes controls that carry different extra base attributes.
+    A fixture whose base was widened (`flexWrap` gets an `orientation`) must be
+    compared against a control with the SAME widening, or the comparison also
+    measures the orientation and every such fixture reads as active for the
+    wrong reason.
+    """
+    suffix = f"__{shape}" if shape else ""
+    return f"__control/{host}{'__anchored' if needs_anchor else ''}{suffix}"
 
 
-def build_control_layout(host: str, needs_anchor: bool, *, source_label: str) -> dict:
+def control_shape(attribute: str) -> str:
+    """Stable name for the extra-base variant an attribute's fixture uses."""
+    extra = rules.BASE_ATTRS_BY_ATTRIBUTE.get(attribute)
+    if not extra:
+        return ""
+    return "_".join(f"{k}-{v}" for k, v in sorted(extra.items()))
+
+
+def build_control_layout(
+    host: str, needs_anchor: bool, extra: dict | None = None, *, source_label: str
+) -> dict:
     """The target component with its base attributes and nothing else."""
-    base = rules.BASE_ATTRS.get(host, {})
+    base = dict(rules.BASE_ATTRS.get(host, {}))
+    base.update(extra or {})
 
     target: dict[str, Any] = {"type": host, "id": rules.TARGET_ID}
     target["width"] = base.get("width", "wrapContent")
@@ -385,8 +408,10 @@ def build_control_layout(host: str, needs_anchor: bool, *, source_label: str) ->
     }
 
 
-def build_control_test(host: str, needs_anchor: bool, layout_rel: str) -> dict:
-    cid = control_id(host, needs_anchor)
+def build_control_test(
+    host: str, needs_anchor: bool, layout_rel: str, shape: str = ""
+) -> dict:
+    cid = control_id(host, needs_anchor, shape)
     name = cid.split("/", 1)[1]
     description = (
         f"Control for {host}: base attributes only, no attribute under test. "
@@ -417,10 +442,10 @@ def build_control_test(host: str, needs_anchor: bool, layout_rel: str) -> dict:
 
 
 def build_control_manifest_entry(
-    host: str, needs_anchor: bool, layout_rel: str, test_rel: str
+    host: str, needs_anchor: bool, layout_rel: str, test_rel: str, shape: str = ""
 ) -> dict:
     return {
-        "id": control_id(host, needs_anchor),
+        "id": control_id(host, needs_anchor, shape),
         "component": "__control",
         "attribute": None,
         "case": host,
@@ -570,26 +595,37 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
                 summary.assertable_count += 1
             else:
                 summary.visual_count += 1
-                needed_controls.add((plan.host, plan.needs_anchor))
+                if plan.attribute not in rules.NON_OBSERVABLE_ATTRS:
+                    needed_controls.add(
+                        (plan.host, plan.needs_anchor, control_shape(plan.attribute))
+                    )
 
     # One control per shape the visual fixtures actually used. Generated after
     # the sweep so an unused host does not get a control nobody compares to.
     control_dir = fixtures_dir / "__control"
-    for host, needs_anchor in sorted(needed_controls):
+    shape_extras = {
+        control_shape(a): e for a, e in rules.BASE_ATTRS_BY_ATTRIBUTE.items()
+    }
+    for host, needs_anchor, shape in sorted(needed_controls):
         control_dir.mkdir(exist_ok=True)
-        stem = f"{host}{'__anchored' if needs_anchor else ''}"
+        stem = control_id(host, needs_anchor, shape).split("/", 1)[1]
         layout_rel = f"fixtures/__control/{stem}.layout.json"
         test_rel = f"fixtures/__control/{stem}.test.json"
 
-        layout = build_control_layout(host, needs_anchor, source_label=source_label)
-        test = build_control_test(host, needs_anchor, layout_rel)
+        extra = shape_extras.get(shape, {})
+        layout = build_control_layout(
+            host, needs_anchor, extra, source_label=source_label
+        )
+        test = build_control_test(host, needs_anchor, layout_rel, shape)
 
         (out_dir / layout_rel).write_text(_dump_json(layout), encoding="utf-8")
         (out_dir / test_rel).write_text(_dump_json(test), encoding="utf-8")
         summary.files_written += 2
 
         fixture_entries.append(
-            build_control_manifest_entry(host, needs_anchor, layout_rel, test_rel)
+            build_control_manifest_entry(
+                host, needs_anchor, layout_rel, test_rel, shape
+            )
         )
         summary.fixture_count += 1
         summary.control_count += 1

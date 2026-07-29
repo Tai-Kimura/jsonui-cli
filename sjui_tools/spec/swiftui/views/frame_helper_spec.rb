@@ -105,6 +105,50 @@ RSpec.describe SjuiTools::SwiftUI::Views::FrameHelper do
     end
   end
 
+  describe 'idealWidth / idealHeight' do
+    it 'emits a separate .frame(idealWidth:) call' do
+      helper = helper_class.new({ 'type' => 'View', 'idealWidth' => 120 })
+      helper.apply_frame_constraints
+
+      expect(helper.generated_code).to include('.frame(idealWidth: 120)')
+    end
+
+    it 'emits a separate .frame(idealHeight:) call' do
+      helper = helper_class.new({ 'type' => 'View', 'idealHeight' => 80 })
+      helper.apply_frame_constraints
+
+      expect(helper.generated_code).to include('.frame(idealHeight: 80)')
+    end
+
+    it 'keeps them out of the min/max frame, matching the Dynamic runtime' do
+      # DynamicModifierHelper applies each as its own `.frame()`; SwiftUI
+      # composes nested frames, so merging them here would change semantics
+      # AND collide with the auto-derived matchParent frame.
+      helper = helper_class.new({
+        'type' => 'View', 'idealWidth' => 120, 'minWidth' => 50
+      })
+      helper.apply_frame_constraints
+      code = helper.generated_code
+
+      expect(code).to include('.frame(idealWidth: 120)')
+      expect(code.grep(/minWidth: 50/).first).not_to include('idealWidth')
+    end
+
+    it 'supports a binding' do
+      helper = helper_class.new({ 'type' => 'View', 'idealHeight' => '@{rowHeight}' })
+      helper.apply_frame_constraints
+
+      expect(helper.generated_code.join("\n")).to include('idealHeight: data.rowHeight')
+    end
+
+    it 'emits nothing when absent' do
+      helper = helper_class.new({ 'type' => 'View' })
+      helper.apply_frame_constraints
+
+      expect(helper.generated_code.join("\n")).not_to include('ideal')
+    end
+  end
+
   describe '#apply_frame_size' do
     context 'with fixed width and height' do
       let(:component) { { 'type' => 'View', 'width' => 100, 'height' => 50 } }

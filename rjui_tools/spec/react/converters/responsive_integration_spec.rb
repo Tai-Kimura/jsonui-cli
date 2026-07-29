@@ -191,6 +191,49 @@ RSpec.describe 'Responsive integration with converters' do
     end
   end
 
+  # `direction` is child-order reversal on an oriented container, matching
+  # SJUIView and kjui's container_component. It used to be mapped to `rtl` /
+  # `ltr` classes: values outside the declared enum, and not Tailwind utilities
+  # either, so `direction` did nothing at all on web.
+  describe 'View direction (child order)' do
+    def tokens(json)
+      out = RjuiTools::React::Converters::ViewConverter
+            .new(json, { 'use_tailwind' => true }).convert(2)
+      out[/className="([^"]*)"/, 1].to_s.split(' ')
+    end
+
+    it 'reverses a vertical container for bottomToTop' do
+      cls = tokens({ 'type' => 'View', 'orientation' => 'vertical',
+                     'direction' => 'bottomToTop', 'child' => [] })
+      expect(cls).to include('flex-col-reverse')
+    end
+
+    it 'reverses a horizontal container for rightToLeft' do
+      cls = tokens({ 'type' => 'View', 'orientation' => 'horizontal',
+                     'direction' => 'rightToLeft', 'child' => [] })
+      expect(cls).to include('flex-row-reverse')
+    end
+
+    it 'ignores a direction that does not match the orientation' do
+      cls = tokens({ 'type' => 'View', 'orientation' => 'vertical',
+                     'direction' => 'rightToLeft', 'child' => [] })
+      expect(cls).not_to include('flex-col-reverse')
+      expect(cls).not_to include('flex-row-reverse')
+    end
+
+    it 'ignores direction with no orientation, where child order is not a flow' do
+      cls = tokens({ 'type' => 'View', 'direction' => 'bottomToTop', 'child' => [] })
+      expect(cls.grep(/reverse/)).to be_empty
+    end
+
+    it 'never emits the old rtl/ltr classes, which are not utilities' do
+      cls = tokens({ 'type' => 'View', 'orientation' => 'horizontal',
+                     'direction' => 'rightToLeft', 'child' => [] })
+      expect(cls).not_to include('rtl')
+      expect(cls).not_to include('ltr')
+    end
+  end
+
   # The reported case: a header hamburger that is hidden by default and shown
   # only in `compact`. Both halves of it were broken — PC showed the button
   # because `.inline-flex` outranks `.hidden` in Tailwind's output, and phone

@@ -15,8 +15,8 @@
     {
       "type": "NetworkImage",
       "id": "target",
-      "width": 100,
-      "height": 100,
+      "width": 140,
+      "height": 80,
       "defaultImage": "conformance_sample",
       "contentMode": "left"
     }

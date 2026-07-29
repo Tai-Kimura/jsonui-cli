@@ -272,6 +272,27 @@ VIEW_REF_ATTRS = {
     "referenceView",
 }
 
+#: Attributes whose entire effect is OFF the screen, so no screenshot can
+#: show it. They configure the soft keyboard / IME, which is not part of the
+#: captured frame (and does not exist at all in a headless browser).
+#:
+#: They still get fixtures — a converter that crashes or drops the key is worth
+#: catching — but the fixture-vs-control check must not count them as
+#: "identical to control, investigate". Without this they were the single
+#: largest block of inert results on web (39 of 235) and pure noise.
+NON_OBSERVABLE_ATTRS = {
+    "returnKeyType",
+    "input",
+    "inputType",
+    "keyboardType",
+    "autocapitalizationType",
+    "autocorrectionType",
+    "autocapitalize",
+    "enterKeyHint",
+    "nextFocus",
+}
+
+
 #: Attributes that reference a bundled image asset. Platform host apps
 #: (plans 02/03/04) must bundle an asset with this name.
 IMAGE_ASSET_NAME = "conformance_sample"
@@ -398,30 +419,79 @@ BASE_ATTRS: dict[str, dict[str, Any]] = {
     "Blur": {"width": 100, "height": 100},
     "Collection": {"width": 200, "height": 200, "background": "#DDDDDD"},
     "TabView": {"width": "matchParent", "height": "matchParent", "tabs": [{"title": "One"}, {"title": "Two"}]},
-    "Label": {"text": "Sample"},
-    "IconLabel": {"text": "Sample"},
-    "Button": {"text": "Sample"},
+    # An explicit width wider than the text is what makes `textAlign` /
+    # `gravity` observable. On wrapContent these hosts are exactly as wide as
+    # their content, so every alignment value renders the same pixels and the
+    # fixture cannot tell a working implementation from a dropped attribute.
+    "Label": {"text": "Sample", "width": 200},
+    "IconLabel": {"text": "Sample", "width": 200},
+    "Button": {"text": "Sample", "width": 200},
     "TextField": {"hint": "Sample", "width": 200},
     "TextView": {"hint": "Sample", "width": 200, "height": 100},
     "EditText": {"hint": "Sample", "width": 200},
     "Input": {"hint": "Sample", "width": 200},
-    "Radio": {"text": "Sample"},
-    "CheckBox": {"text": "Sample"},
-    "Check": {"text": "Sample"},
-    "Segment": {"items": ["One", "Two"]},
+    "Radio": {"text": "Sample", "width": 200},
+    "CheckBox": {"text": "Sample", "width": 200},
+    "Check": {"text": "Sample", "width": 200},
+    "Segment": {"items": ["One", "Two"], "width": 200},
     "SelectBox": {"items": ["One", "Two"], "width": 200},
     "Slider": {"width": 200},
     "Progress": {"width": 200},
-    "Image": {"src": IMAGE_ASSET_NAME, "width": 100, "height": 100},
-    "NetworkImage": {"defaultImage": IMAGE_ASSET_NAME, "width": 100, "height": 100},
+    # Deliberately NOT square: the bundled asset is 96x96, so in a square box
+    # fit / fill / aspectFit / aspectFill / center all render the same image and
+    # `contentMode` is untestable. A 140x80 box makes each mode distinguishable.
+    "Image": {"src": IMAGE_ASSET_NAME, "width": 140, "height": 80},
+    "NetworkImage": {"defaultImage": IMAGE_ASSET_NAME, "width": 140, "height": 80},
     "Web": {"html": "<p>Sample</p>", "width": 200, "height": 200},
 }
 
+#: Extra base attributes for specific attributes, so the fixture gives the
+#: attribute under test something to act on.
+#:
+#: A View with no `orientation` is an OVERLAY: the converters stack children on
+#: top of each other (web emits `relative` + `absolute inset-0`). Nothing that
+#: depends on flow — wrapping, distribution, gravity, padding reflow, child
+#: order — can be observed in that mode, and the fixture-vs-control check
+#: measured exactly that: `flexWrap`, `distribution`, `gravity` and `padding`
+#: all rendered pixel-identical to a fixture without them.
+#:
+#: Overlay mode is worth testing, but not by the fixture for a flow attribute.
+BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
+    # Flow attributes need a flex container. `horizontal` is the direction that
+    # makes wrapping visible with the standard 6-box child set (240px of boxes
+    # in a 200px host).
+    "flexWrap": {"orientation": "horizontal"},
+    "distribution": {"orientation": "horizontal"},
+    "gravity": {"orientation": "horizontal"},
+    "spacing": {"orientation": "horizontal"},
+    "padding": {"orientation": "horizontal"},
+    "paddings": {"orientation": "horizontal"},
+    "paddingTop": {"orientation": "horizontal"},
+    "paddingBottom": {"orientation": "horizontal"},
+    "paddingLeft": {"orientation": "horizontal"},
+    "paddingRight": {"orientation": "horizontal"},
+    "paddingStart": {"orientation": "horizontal"},
+    "paddingEnd": {"orientation": "horizontal"},
+    # `direction` reverses the children of an ORIENTED container; with no
+    # orientation the canonical answer is "no effect", so the fixture has to
+    # supply one or it can never show anything.
+    "direction": {"orientation": "vertical"},
+}
+
+
 #: Children injected into container hosts so layout attributes are observable.
 BASE_CHILDREN: dict[str, list[dict[str, Any]]] = {
+    # Six 40px boxes total 240px inside a 200px host, i.e. they OVERFLOW one
+    # row. Two boxes fitted comfortably, which left `flexWrap` nothing to wrap,
+    # `distribution` no free space to distribute, and `padding` no reflow to
+    # cause — all three rendered pixel-identical to a fixture without them.
     "View": [
         {"type": "View", "id": "box_a", "width": 40, "height": 40, "background": "#FF0000"},
         {"type": "View", "id": "box_b", "width": 40, "height": 40, "background": "#0000FF"},
+        {"type": "View", "id": "box_c", "width": 40, "height": 40, "background": "#00AA00"},
+        {"type": "View", "id": "box_d", "width": 40, "height": 40, "background": "#FFAA00"},
+        {"type": "View", "id": "box_e", "width": 40, "height": 40, "background": "#AA00AA"},
+        {"type": "View", "id": "box_f", "width": 40, "height": 40, "background": "#00AAAA"},
     ],
     "SafeAreaView": [
         {"type": "View", "id": "box_a", "width": 40, "height": 40, "background": "#FF0000"},
