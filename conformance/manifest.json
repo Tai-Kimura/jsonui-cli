@@ -8,11 +8,11 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "4106835503081440e76759898d917f7943d842da3abfc3fa8e44e3bf5b1809cf",
+  "generatedFrom": "a8649989c24b3b9deb9d92fb3512b00e75a3fc167790afdd52d95d1ba670067d",
   "counts": {
-    "fixtures": 672,
+    "fixtures": 674,
     "assertable": 36,
-    "visual": 600,
+    "visual": 602,
     "interactive": 36,
     "skipped": 168,
     "promoted": {
@@ -12612,6 +12612,27 @@
       "promotedFrom": null
     },
     {
+      "id": "Radio/selectedIcon__alias_selected_icon",
+      "component": "Radio",
+      "attribute": "selectedIcon",
+      "case": "alias_selected_icon",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": "selected_icon",
+      "aliasOf": "Radio/selectedIcon__static",
+      "value": "conformance_sample",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Radio/selectedIcon__alias_selected_icon.layout.json",
+      "test": "fixtures/Radio/selectedIcon__alias_selected_icon.test.json",
+      "state": null,
+      "promotedFrom": null
+    },
+    {
       "id": "Radio/selected_icon__static",
       "component": "Radio",
       "attribute": "selected_icon",
@@ -13020,6 +13041,27 @@
       "deprecated": null,
       "layout": "fixtures/CheckBox/selectedIcon__static.layout.json",
       "test": "fixtures/CheckBox/selectedIcon__static.test.json",
+      "state": null,
+      "promotedFrom": null
+    },
+    {
+      "id": "CheckBox/selectedIcon__alias_onSrc",
+      "component": "CheckBox",
+      "attribute": "selectedIcon",
+      "case": "alias_onSrc",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": "onSrc",
+      "aliasOf": "CheckBox/selectedIcon__static",
+      "value": "conformance_sample",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/selectedIcon__alias_onSrc.layout.json",
+      "test": "fixtures/CheckBox/selectedIcon__alias_onSrc.test.json",
       "state": null,
       "promotedFrom": null
     },

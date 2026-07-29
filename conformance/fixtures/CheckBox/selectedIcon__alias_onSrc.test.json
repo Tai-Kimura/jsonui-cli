@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/CheckBox/selectedIcon__alias_onSrc.layout.json"
+  },
+  "metadata": {
+    "name": "conformance CheckBox.selectedIcon (alias_onSrc)",
+    "description": "Conformance fixture for 'selectedIcon' on CheckBox (section: CheckBox, class: visual). Value under test: \"conformance_sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "CheckBox"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "selectedIcon__alias_onSrc",
+      "description": "Conformance fixture for 'selectedIcon' on CheckBox (section: CheckBox, class: visual). Value under test: \"conformance_sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "CheckBox_selectedIcon__alias_onSrc"
+        }
+      ]
+    }
+  ]
+}

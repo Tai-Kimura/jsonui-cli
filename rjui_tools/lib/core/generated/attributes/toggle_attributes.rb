@@ -34,7 +34,7 @@ module JsonUI
         # Toggle handler function - binding only (@{functionName}). Alias of onValueChange.
         { name: 'onToggle', kind: :binding }.freeze,
         # Value change handler - binding only (@{functionName})
-        { name: 'onValueChange', kind: :binding }.freeze,
+        { name: 'onValueChange', kind: :binding, aliases: ['onToggle'].freeze }.freeze,
         # Thumb tint color - hex string or color name from colors.json (binding supported)
         { name: 'thumbTintColor', kind: :string, bindable: true }.freeze,
         # Tint color - hex string or color name from colors.json (binding supported)

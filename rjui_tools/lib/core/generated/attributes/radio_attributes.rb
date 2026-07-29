@@ -37,7 +37,7 @@ module JsonUI
         # Value change handler - binding only (@{functionName})
         { name: 'onValueChange', kind: :binding }.freeze,
         # Selected icon name
-        { name: 'selectedIcon', kind: :string }.freeze,
+        { name: 'selectedIcon', kind: :string, aliases: ['selected_icon'].freeze }.freeze,
         # Selected value of the radio group (binding for two-way)
         { name: 'selectedValue', kind: :string, bindable: true }.freeze,
         # Selected icon name (underscore alias)

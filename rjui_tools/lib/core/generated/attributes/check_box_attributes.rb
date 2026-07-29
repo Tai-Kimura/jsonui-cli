@@ -44,7 +44,7 @@ module JsonUI
         # Value change handler - binding only (@{functionName})
         { name: 'onValueChange', kind: :binding }.freeze,
         # Selected icon name
-        { name: 'selectedIcon', kind: :string }.freeze,
+        { name: 'selectedIcon', kind: :string, aliases: ['onSrc'].freeze }.freeze,
         # Space between icon and text (binding supported)
         { name: 'spacing', kind: :number, bindable: true }.freeze,
         # Icon name for unchecked state (alias)

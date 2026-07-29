@@ -2851,7 +2851,10 @@
     },
     "onValueChange": {
       "type": "binding",
-      "description": "Value change handler - binding only (@{functionName})"
+      "description": "Value change handler - binding only (@{functionName})",
+      "aliases": [
+        "onToggle"
+      ]
     },
     "labelAttributes": {
       "type": "object",
@@ -2970,7 +2973,10 @@
     },
     "onValueChange": {
       "type": "binding",
-      "description": "Value change handler - binding only (@{functionName})"
+      "description": "Value change handler - binding only (@{functionName})",
+      "aliases": [
+        "onToggle"
+      ]
     },
     "labelAttributes": {
       "type": "object",
@@ -3796,6 +3802,9 @@
       "platform": [
         "swift",
         "kotlin"
+      ],
+      "aliases": [
+        "selected_icon"
       ]
     },
     "selected_icon": {
@@ -3941,6 +3950,9 @@
       "platform": [
         "swift",
         "kotlin"
+      ],
+      "aliases": [
+        "onSrc"
       ]
     },
     "onSrc": {
@@ -4288,11 +4300,13 @@
     },
     "allowsBackForwardNavigationGestures": {
       "type": "boolean",
-      "description": "Enable swipe navigation"
+      "description": "Enable swipe navigation",
+      "platform": "swift"
     },
     "allowsLinkPreview": {
       "type": "boolean",
-      "description": "Enable link preview"
+      "description": "Enable link preview",
+      "platform": "swift"
     },
     "sandbox": {
       "type": "string",

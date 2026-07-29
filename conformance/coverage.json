@@ -94,15 +94,8 @@
         "android",
         "web"
       ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Collection",
-      "attribute": "contentInsetAdjustmentBehavior",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
+      "reason": "legacy",
+      "note": "alias — normalized to its canonical spelling before conversion"
     },
     {
       "component": "Collection",
@@ -158,8 +151,6 @@
       "component": "Collection",
       "attribute": "onPageChanged",
       "platforms": [
-        "ios",
-        "android",
         "web"
       ],
       "reason": "legacy",
@@ -218,16 +209,7 @@
       "attribute": "inputType",
       "platforms": [
         "ios",
-        "android",
         "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "GradientView",
-      "attribute": "gradientDirection",
-      "platforms": [
-        "android"
       ],
       "reason": "unimplemented"
     },
@@ -286,14 +268,6 @@
       "platforms": [
         "ios",
         "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Image",
-      "attribute": "canTap",
-      "platforms": [
-        "ios"
       ],
       "reason": "unimplemented"
     },
@@ -431,14 +405,6 @@
       "reason": "unimplemented"
     },
     {
-      "component": "Progress",
-      "attribute": "progress",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
       "component": "Radio",
       "attribute": "iconColor",
       "platforms": [
@@ -463,7 +429,8 @@
         "android",
         "web"
       ],
-      "reason": "unimplemented"
+      "reason": "legacy",
+      "note": "alias — normalized to its canonical spelling before conversion"
     },
     {
       "component": "SafeAreaView",
@@ -476,14 +443,6 @@
     {
       "component": "ScrollView",
       "attribute": "bounces",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "ScrollView",
-      "attribute": "contentInsetAdjustmentBehavior",
       "platforms": [
         "android"
       ],
@@ -619,8 +578,6 @@
       "component": "Slider",
       "attribute": "maxValue",
       "platforms": [
-        "ios",
-        "android",
         "web"
       ],
       "reason": "legacy",
@@ -630,8 +587,6 @@
       "component": "Slider",
       "attribute": "minValue",
       "platforms": [
-        "ios",
-        "android",
         "web"
       ],
       "reason": "legacy",
@@ -659,7 +614,8 @@
       "platforms": [
         "web"
       ],
-      "reason": "unimplemented"
+      "reason": "legacy",
+      "note": "alias — normalized to its canonical spelling before conversion"
     },
     {
       "component": "Switch",
@@ -676,16 +632,6 @@
         "web"
       ],
       "reason": "unimplemented"
-    },
-    {
-      "component": "TabView",
-      "attribute": "onTabChange",
-      "platforms": [
-        "android",
-        "web"
-      ],
-      "reason": "legacy",
-      "note": "alias — normalized to its canonical spelling before conversion"
     },
     {
       "component": "TabView",
@@ -765,8 +711,7 @@
       "component": "TextField",
       "attribute": "maxLength",
       "platforms": [
-        "ios",
-        "android"
+        "ios"
       ],
       "reason": "unimplemented"
     },
@@ -851,8 +796,7 @@
       "component": "TextView",
       "attribute": "editable",
       "platforms": [
-        "ios",
-        "android"
+        "ios"
       ],
       "reason": "unimplemented"
     },
@@ -951,7 +895,8 @@
       "platforms": [
         "web"
       ],
-      "reason": "unimplemented"
+      "reason": "legacy",
+      "note": "alias — normalized to its canonical spelling before conversion"
     },
     {
       "component": "Toggle",
@@ -1015,9 +960,7 @@
       "component": "Web",
       "attribute": "allowsBackForwardNavigationGestures",
       "platforms": [
-        "ios",
-        "android",
-        "web"
+        "ios"
       ],
       "reason": "unimplemented"
     },
@@ -1025,9 +968,7 @@
       "component": "Web",
       "attribute": "allowsLinkPreview",
       "platforms": [
-        "ios",
-        "android",
-        "web"
+        "ios"
       ],
       "reason": "unimplemented"
     },
@@ -1060,7 +1001,6 @@
       "component": "common",
       "attribute": "alignCenterHorizontalView",
       "platforms": [
-        "ios",
         "web"
       ],
       "reason": "unimplemented"
@@ -1069,7 +1009,6 @@
       "component": "common",
       "attribute": "alignCenterVerticalView",
       "platforms": [
-        "ios",
         "web"
       ],
       "reason": "unimplemented"
@@ -1160,7 +1099,6 @@
       "component": "common",
       "attribute": "canTap",
       "platforms": [
-        "ios",
         "android"
       ],
       "reason": "unimplemented"
