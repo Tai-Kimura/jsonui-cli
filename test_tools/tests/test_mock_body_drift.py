@@ -602,3 +602,50 @@ class TestArrayElementShape:
         violations = report.bodies[0].violations
         assert any(".stalls[1].name" in v for v in violations)
         assert not any(".stalls[0].name" in v for v in violations)
+
+
+class TestSourceIdentityIsPreserved:
+    """Regression: mock-update-default-renames-source-operationid-…
+
+    `operationId` is the key test files select a scenario with
+    (`mocks: { "<operationId>": ... }`). The server routes by method+path and
+    only *reports* a naming difference, so rewriting the id detaches every
+    reference to it — and `scenario-set` answered 200 for the now-unknown
+    key, so a caller checking `res.ok()` ran on `default` and went green.
+    """
+
+    def _renamed_id(self, tmp_path):
+        spec, out = _setup(tmp_path)
+        mock = out / "bars" / "followBar.mock.json"
+        data = json.loads(mock.read_text(encoding="utf-8"))
+        data["source"]["operationId"] = "post_api-bars-by-uuid-follow"
+        data["scenarios"] = {"default": {"status": 200, "body": {"status": "followed"}}}
+        mock.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        return spec, out, mock
+
+    def test_update_default_keeps_the_projects_operation_id(self, tmp_path):
+        spec, out, mock = self._renamed_id(tmp_path)
+        update_default([spec], out)
+        source = json.loads(mock.read_text(encoding="utf-8"))["source"]
+        assert source["operationId"] == "post_api-bars-by-uuid-follow"
+
+    def test_update_default_still_repairs_a_drifted_route(self, tmp_path):
+        spec, out, mock = self._renamed_id(tmp_path)
+        data = json.loads(mock.read_text(encoding="utf-8"))
+        data["source"]["path"] = "/api/old/follow"
+        mock.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        update_default([spec], out)
+        source = json.loads(mock.read_text(encoding="utf-8"))["source"]
+        assert source["path"] == "/api/bars/{bar_uuid}/follow"
+        assert source["operationId"] == "post_api-bars-by-uuid-follow"
+
+    def test_a_file_needing_no_repair_is_not_rewritten(self, tmp_path):
+        # Rewriting re-serialises the whole file; doing it for nothing buries
+        # the one repaired field in a reformatting diff.
+        spec, out = _setup(tmp_path)
+        mock = out / "bars" / "followBar.mock.json"
+        mock.write_text(mock.read_text(encoding="utf-8").replace("\n  ", "\n\t"),
+                        encoding="utf-8")
+        before = mock.read_bytes()
+        update_default([spec], out)
+        assert mock.read_bytes() == before

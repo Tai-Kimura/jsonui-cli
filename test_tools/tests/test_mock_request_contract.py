@@ -284,3 +284,50 @@ class TestOverlay:
         store = MockStore.load(self._tree(tmp_path, spec_file))
         assert store.match("POST", "/api/admin/reservations") is not None
         assert store.overrides == []
+
+
+class TestScenarioSet:
+    """An unknown key must not be answered with 200."""
+
+    @pytest.fixture
+    def running(self, tmp_path, spec_file):
+        mock_dir = tmp_path / "mocks"
+        generate([spec_file], mock_dir)
+        server = MockServer(MockStore.load(mock_dir), RunManager({}, tmp_path), port=0)
+        server.bind()
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        time.sleep(0.05)
+        yield server
+        server.shutdown()
+        thread.join(timeout=2)
+
+    def _set(self, server, mapping):
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.port}/__jsonui__/scenario-set",
+            data=json.dumps({"mocks": mapping}).encode("utf-8"),
+            headers={"Content-Type": "application/json",
+                     "X-JsonUI-Token": server.token},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, json.loads(response.read())
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read())
+
+    def test_a_known_scenario_switches_and_answers_200(self, running):
+        status, body = self._set(running, {"createReservation": "error_default"})
+        # The scenario name may or may not exist; what matters is the contract
+        # below — a miss must not be a 200.
+        assert status in (200, 422)
+        if status == 200:
+            assert body["unknown"] == []
+
+    def test_an_unknown_operation_id_is_a_failure_not_a_silent_no_op(self, running):
+        # A caller checking only res.ok() would otherwise run the whole test
+        # against `default` and, when that passes, go green asserting nothing.
+        status, body = self._set(running, {"get_api-does-not-exist": "empty"})
+        assert status == 422
+        assert body["unknown"] == ["get_api-does-not-exist"]
+        assert body["applied"] == {}

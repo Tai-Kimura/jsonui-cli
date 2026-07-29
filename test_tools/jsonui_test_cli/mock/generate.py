@@ -346,13 +346,17 @@ def update_default(
             fresh = build_mock_definition(doc, op)
             before = json.dumps(data, ensure_ascii=False, sort_keys=True)
 
-            # `swagger` records where the file was authored from and is not
-            # drift — rewriting it would churn every mock the moment someone
-            # runs this from a different directory.
-            source = dict(fresh["source"])
-            existing_swagger = (data.get("source") or {}).get("swagger")
-            if existing_swagger is not None:
-                source["swagger"] = existing_swagger
+            # Only the ROUTE is regenerated. `swagger` records where the file
+            # was authored from, and `operationId` is the key test files use
+            # to select a scenario (`mocks: { "<operationId>": ... }`) — the
+            # server routes by method+path and only reports a naming
+            # difference, so renaming it here silently detaches every
+            # reference to it while `scenario-set` still answers 200.
+            source = dict(data.get("source") or {})
+            source["method"] = fresh["source"]["method"]
+            source["path"] = fresh["source"]["path"]
+            source.setdefault("operationId", fresh["source"]["operationId"])
+            source.setdefault("swagger", fresh["source"]["swagger"])
             data["source"] = source
 
             scenarios = data.get("scenarios")

@@ -178,6 +178,13 @@ class MockStore:
             return True
 
     def scenario_set(self, mapping: dict) -> dict:
+        """Activate a scenario per operationId. Unknown keys are a failure.
+
+        Answering 200 for a key that matched nothing let a caller checking
+        only `res.ok()` sail past a scenario that never switched — the test
+        then ran against `default` and, when that happened to pass, went
+        green while asserting nothing it meant to.
+        """
         applied, unknown = {}, []
         with self._lock:
             for op_id, scenario in mapping.items():
@@ -495,7 +502,10 @@ def _make_handler(server: "MockServer"):
                 self._send(200, server.store.list_summary())
             elif sub == "/scenario-set" and method == "POST":
                 body = self._read_body() or {}
-                self._send(200, server.store.scenario_set(body.get("mocks", body)))
+                result = server.store.scenario_set(body.get("mocks", body))
+                # 422, not 200: a caller that only checks res.ok() must not
+                # be told a scenario switched when it did not.
+                self._send(422 if result["unknown"] else 200, result)
             elif sub == "/reset" and method == "POST":
                 server.store.reset()
                 self._send(200, {"ok": True})

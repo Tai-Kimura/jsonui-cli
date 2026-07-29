@@ -97,19 +97,32 @@ REASONS = {
 
 #: How a converter reads an attribute. Anything not matched here reads as a
 #: gap — false gaps are recoverable (add a ledger entry), a missed gap is not.
+#: The forms below were not guessed at: each one was found by grepping the
+#: attributes a first pass reported as gaps and seeing them read anyway.
 READ_PATTERNS = (
-    # attributes['x'] / @component['x'] / json_data['x'] / json['x']
+    # attributes['x'] / @component['x'] / json_data['x'] / child['x']
     re.compile(
-        r"(?:attributes|@component|component|json_data|json|attrs)"
+        r"(?:attributes|@component|component|json_data|json|attrs|child)"
         r"\['([A-Za-z_$][A-Za-z0-9_]*)'\]"
     ),
-    # canonical + alias pairs resolved through a helper
-    re.compile(r"attr_with_alias\(\s*'([^']+)'\s*,\s*'([^']+)'"),
-    re.compile(r"attr_lookup\([^,]+,\s*'([^']+)'\s*,\s*'([^']+)'"),
     re.compile(r"\.dig\(\s*'([^']+)'"),
     re.compile(r"\.fetch\(\s*'([^']+)'"),
     re.compile(r"\.key\?\(\s*'([^']+)'"),
 )
+
+#: Helpers that resolve a canonical name plus any number of aliases in one
+#: call. Capturing only the first two arguments missed every third alias —
+#: `attr_with_alias('maximum', 'maximumValue', 'maxValue')` reads three.
+ALIAS_HELPERS = re.compile(r"(?:attr_with_alias|attr_lookup)\(([^)]*)\)")
+_QUOTED = re.compile(r"'([^']+)'")
+
+#: `case key` / `case attribute_name` dispatch over attribute names is a read.
+#: The subject matters: `case type.downcase` … `when 'alignment'` is a TYPE
+#: name that happens to collide with an attribute, and counting it would
+#: silently close a real gap.
+ATTRIBUTE_CASE_SUBJECTS = frozenset({"key", "attribute_name"})
+_CASE = re.compile(r"^(\s*)case\s+([A-Za-z_@][\w.\[\]'\"@]*)\s*$")
+_WHEN = re.compile(r"^(\s*)when\s+(.+?)(?:\s+then\b.*)?$")
 
 
 @dataclass(frozen=True)
@@ -167,6 +180,33 @@ def scan_reads(source_root) -> set:
                     keys.update(match)
                 else:
                     keys.add(match)
+        for args in ALIAS_HELPERS.findall(src):
+            keys.update(_QUOTED.findall(args))
+        keys |= _attribute_case_reads(src)
+    return keys
+
+
+def _attribute_case_reads(src: str) -> set:
+    """Names dispatched on by a `case key` / `case attribute_name` block."""
+    keys: set = set()
+    subject_indent = None
+    for line in src.splitlines():
+        case_match = _CASE.match(line)
+        if case_match:
+            indent, subject = case_match.groups()
+            subject_indent = len(indent) if subject in ATTRIBUTE_CASE_SUBJECTS else None
+            continue
+        if subject_indent is None:
+            continue
+        when_match = _WHEN.match(line)
+        if when_match:
+            indent, values = when_match.groups()
+            if len(indent) >= subject_indent:
+                keys.update(_QUOTED.findall(values))
+            continue
+        stripped = line.strip()
+        if stripped == "end" and len(line) - len(line.lstrip()) <= subject_indent:
+            subject_indent = None
     return keys
 
 
