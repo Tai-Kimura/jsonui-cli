@@ -244,11 +244,11 @@ class TestMockIdentity:
 
     def test_update_default_finds_a_renamed_mock(self, tmp_path):
         spec, out, dst = self._renamed(tmp_path)
-        _write(dst, {"default": {"status": 200, "body": {"message": "string"}}})
+        _write(dst, {"default": {"status": 200, "body": {"status": "followed"}}})
         report = update_default([spec], out)
         assert report.updated == ["bars/post_api-bars-by-uuid-follow.mock.json"]
         body = json.loads(dst.read_text(encoding="utf-8"))["scenarios"]["default"]["body"]
-        assert set(body) == {"status", "bar_id", "new_arrival_notification"}
+        assert "new_arrival_notification" in body
 
 
 class TestSchemaConformance:
@@ -297,16 +297,62 @@ class TestSchemaConformance:
 
 
 class TestUpdateDefault:
-    def test_refreshes_the_default_body_and_clears_the_check(self, tmp_path):
+    def test_adds_the_missing_required_fields(self, tmp_path):
         spec, out = _setup(tmp_path)
         mock = out / "bars" / "followBar.mock.json"
-        _write(mock, {"default": {"status": 200, "body": {"message": "string"}}})
+        _write(mock, {"default": {"status": 200, "body": {"status": "followed"}}})
 
         report = update_default([spec], out)
         assert report.updated == ["bars/followBar.mock.json"]
+        assert report.added["bars/followBar.mock.json"] == [".new_arrival_notification"]
         body = json.loads(mock.read_text(encoding="utf-8"))["scenarios"]["default"]["body"]
-        assert set(body) == {"status", "bar_id", "new_arrival_notification"}
+        assert body["new_arrival_notification"] is not None
         assert not generate([spec], out, check=True).has_drift
+
+    def test_never_overwrites_data_the_tests_read(self, tmp_path):
+        # The `default` scenario is where a project grows its fixtures —
+        # `mock generate` only ever scaffolds `default`, so there is nowhere
+        # else for them to live. Replacing it reds out every assertion.
+        spec, out = _setup(tmp_path)
+        mock = out / "bars" / "followBar.mock.json"
+        _write(mock, {"default": {"status": 200, "body": {
+            "status": "followed", "bar_id": "R-2026-04871"}}})
+
+        update_default([spec], out)
+        body = json.loads(mock.read_text(encoding="utf-8"))["scenarios"]["default"]["body"]
+        assert body["bar_id"] == "R-2026-04871"
+        assert body["status"] == "followed"
+
+    def test_removes_nothing(self, tmp_path):
+        spec, out = _setup(tmp_path)
+        mock = out / "bars" / "followBar.mock.json"
+        _write(mock, {"default": {"status": 200, "body": {
+            "status": "followed", "new_arrival_notification": True,
+            "receipt_available": True}}})
+        update_default([spec], out)
+        body = json.loads(mock.read_text(encoding="utf-8"))["scenarios"]["default"]["body"]
+        assert body["receipt_available"] is True
+
+    def test_a_violation_a_merge_cannot_decide_is_reported_not_guessed(self, tmp_path):
+        spec, out = _setup(tmp_path)
+        mock = out / "bars" / "followBar.mock.json"
+        _write(mock, {"default": {"status": 200, "body": {
+            "status": 42, "new_arrival_notification": True}}})
+        report = update_default([spec], out)
+        assert report.needs_review
+        rel, problems = report.needs_review[0]
+        assert any("contract says string" in p for p in problems)
+        body = json.loads(mock.read_text(encoding="utf-8"))["scenarios"]["default"]["body"]
+        assert body["status"] == 42  # left for a person
+
+    def test_dry_run_writes_nothing(self, tmp_path):
+        spec, out = _setup(tmp_path)
+        mock = out / "bars" / "followBar.mock.json"
+        _write(mock, {"default": {"status": 200, "body": {"status": "followed"}}})
+        before = mock.read_bytes()
+        report = update_default([spec], out, dry_run=True)
+        assert report.updated == ["bars/followBar.mock.json"]
+        assert mock.read_bytes() == before
 
     def test_leaves_hand_grown_scenarios_untouched(self, tmp_path):
         # 50 of 151 mocks in the reporting project carry scenarios the tests

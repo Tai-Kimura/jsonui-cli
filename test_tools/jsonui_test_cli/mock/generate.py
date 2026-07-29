@@ -252,23 +252,77 @@ def generate(
 
 @dataclass
 class UpdateReport:
-    updated: list[str]    # files whose default body (or source) was refreshed
+    updated: list[str]    # files whose default scenario or source changed
     unchanged: list[str]
     skipped: list[str]    # in swagger, no mock file — `generate` creates those
+    #: `rel -> [added paths]`, so the caller can say what it actually did.
+    added: dict = field(default_factory=dict)
+    #: Findings a merge cannot fix — wrong types, undeclared fields.
+    needs_review: list = field(default_factory=list)
 
 
-def update_default(swagger_paths: list[str], mock_dir: str | Path) -> UpdateReport:
-    """Refresh the generated parts of existing mocks, keeping the hand-grown ones.
+def add_missing_required(doc: OpenApiDoc, schema, body, path: str = "", _depth: int = 0) -> list:
+    """Fill in required fields the body lacks. Never touches a value it finds.
 
-    Only the `default` scenario body and the `source` block are rewritten.
-    Every other scenario is left byte-for-byte alone: those carry the data the
-    tests drive (`real_id`, `rich_flavor`, `empty`, …) and regenerating them
-    from the schema would replace deliberate fixtures with placeholders.
+    A repair, not a regeneration. The `default` scenario is where a project
+    grows the data its tests read — `mock generate` only ever scaffolds
+    `default`, so there is nowhere else for that data to live — and replacing
+    it with schema samples turns `"R-2026-04871"` back into `"string"` and
+    reds out every assertion on it.
+    """
+    added: list = []
+    if _depth > 12:
+        return added
+    schema = doc.resolve_schema(schema, _depth)
+    if not isinstance(schema, dict):
+        return added
+
+    stype = schema.get("type")
+    if stype is None and "properties" in schema:
+        stype = "object"
+    if isinstance(stype, list):
+        stype = next((t for t in stype if t != "null"), None)
+
+    if stype == "object" and isinstance(body, dict):
+        properties = schema.get("properties") or {}
+        for name in schema.get("required") or []:
+            if name not in body and name in properties:
+                body[name] = doc.sample_for_schema(properties[name])
+                added.append(f"{path}.{name}")
+        for name, child in properties.items():
+            if name in body:
+                added += add_missing_required(
+                    doc, child, body[name], f"{path}.{name}", _depth + 1)
+    elif stype == "array" and isinstance(body, list):
+        items = schema.get("items")
+        if items is not None:
+            for index, element in enumerate(body):
+                added += add_missing_required(
+                    doc, items, element, f"{path}[{index}]", _depth + 1)
+    return added
+
+
+def update_default(
+    swagger_paths: list[str],
+    mock_dir: str | Path,
+    dry_run: bool = False,
+) -> UpdateReport:
+    """Repair the `default` scenario of each existing mock, in place.
+
+    Adds the required fields the contract has and the body lacks, refreshes
+    the `source` route, and **changes nothing else** — no existing value is
+    overwritten and no field is removed. Other scenarios are not touched at
+    all.
+
+    Violations a merge cannot decide — a value of the wrong type, a field the
+    contract does not have — are reported rather than guessed at.
     """
     mock_dir = Path(mock_dir)
     updated: list[str] = []
     unchanged: list[str] = []
     skipped: list[str] = []
+    added: dict = {}
+    needs_review: list = []
     existing = index_existing(mock_dir)
 
     for swagger in swagger_paths:
@@ -300,27 +354,48 @@ def update_default(swagger_paths: list[str], mock_dir: str | Path) -> UpdateRepo
             if existing_swagger is not None:
                 source["swagger"] = existing_swagger
             data["source"] = source
+
             scenarios = data.get("scenarios")
-            if isinstance(scenarios, dict) and isinstance(scenarios.get("default"), dict):
-                fresh_default = fresh["scenarios"]["default"]
-                current = scenarios["default"]
-                for key in ("status", "body", "contentType", "bodyFile"):
-                    if key in fresh_default:
-                        current[key] = fresh_default[key]
+            if isinstance(scenarios, dict):
+                current = scenarios.get("default")
+                if not isinstance(current, dict):
+                    # Nothing to repair in place — scaffold the whole scenario.
+                    scenarios["default"] = fresh["scenarios"]["default"]
+                else:
+                    fresh_default = fresh["scenarios"]["default"]
+                    schema, content_type = _response_schema(
+                        op, current.get("status", fresh_default.get("status")))
+                    if "body" not in current and "body" in fresh_default:
+                        current["body"] = fresh_default["body"]
+                        report_added = ["<body>"]
+                    elif (schema is not None
+                          and content_type == "application/json"
+                          and current.get("body") is not None):
+                        report_added = add_missing_required(
+                            doc, schema, current["body"])
                     else:
-                        current.pop(key, None)
-            elif isinstance(scenarios, dict):
-                scenarios["default"] = fresh["scenarios"]["default"]
+                        report_added = []
+                    if report_added:
+                        added[rel] = report_added
+                    if schema is not None and current.get("body") is not None:
+                        problems = validate_against_schema(
+                            doc, schema, current["body"])
+                        # Everything the merge just fixed is gone from this
+                        # list; what remains needs a person.
+                        if problems:
+                            needs_review.append((rel, problems))
 
             if json.dumps(data, ensure_ascii=False, sort_keys=True) == before:
                 unchanged.append(rel)
                 continue
-            with open(target, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-                f.write("\n")
+            if not dry_run:
+                with open(target, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                    f.write("\n")
             updated.append(rel)
 
-    return UpdateReport(updated=updated, unchanged=unchanged, skipped=skipped)
+    return UpdateReport(updated=updated, unchanged=unchanged, skipped=skipped,
+                        added=added, needs_review=needs_review)
 
 
 def key_paths(value, prefix: str = "") -> set:

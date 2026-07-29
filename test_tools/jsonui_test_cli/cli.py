@@ -474,13 +474,25 @@ def cmd_mock_generate(args):
         return 1
 
     if getattr(args, "update_default", False):
-        upd = update_default(swaggers, mock_dir)
+        dry_run = getattr(args, "dry_run", False)
+        upd = update_default(swaggers, mock_dir, dry_run=dry_run)
         for rel in upd.updated:
-            print(f"  [UPDATED] {rel}")
-        print(f"\nRefreshed the default body of {len(upd.updated)} mock file(s), "
+            paths = upd.added.get(rel)
+            detail = f" (+{', '.join(paths)})" if paths else " (source route)"
+            print(f"  [{'WOULD UPDATE' if dry_run else 'UPDATED'}] {rel}{detail}")
+        verb = "Would repair" if dry_run else "Repaired"
+        print(f"\n{verb} the default scenario of {len(upd.updated)} mock file(s), "
               f"{len(upd.unchanged)} already current, {len(upd.skipped)} not present "
               f"(run without --update-default to scaffold those).")
-        print("Other scenarios were left untouched — review them by hand.")
+        print("Only missing required fields were added — no existing value was "
+              "overwritten, nothing was removed, and other scenarios were not touched.")
+        if upd.needs_review:
+            print(f"\n{len(upd.needs_review)} mock(s) have violations a merge cannot "
+                  "decide — fix these by hand, keeping your test data:")
+            for rel, problems in upd.needs_review:
+                print(f"  {rel}")
+                for problem in problems:
+                    print(f"    {problem}")
         return 0
 
     report = generate(swaggers, mock_dir, check=args.check,
@@ -1030,9 +1042,14 @@ def main():
              "it buries the real violations",
     )
     mock_gen_parser.add_argument(
+        "--dry-run", action="store_true",
+        help="With --update-default, report what would change without writing",
+    )
+    mock_gen_parser.add_argument(
         "--update-default", action="store_true",
-        help="Rewrite each existing mock's default body + source from swagger, "
-             "keeping every other scenario",
+        help="Repair each existing mock's default scenario: add the required "
+             "fields the contract has and the body lacks, refresh the source "
+             "route, and change nothing else. No existing value is overwritten",
     )
 
     mock_serve_parser = mock_subparsers.add_parser("serve", help="Run the mock server + panel")
