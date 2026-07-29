@@ -9,15 +9,56 @@ schema drift without writing.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .openapi import OpenApiDoc, Operation, slugify
 
 
 def mock_relpath(op: Operation) -> str:
-    """Relative path (from mockDir) for an operation's mock file."""
+    """Relative path (from mockDir) a freshly scaffolded mock is written to.
+
+    A *naming convention*, not an identity. Files are matched by their
+    `source` route — see `route_key` — because that is what the server routes
+    on, and a project is free to name them however it likes.
+    """
     return f"{slugify(op.tag)}/{op.operation_id}.mock.json"
+
+
+def route_key(method, path) -> tuple:
+    """The identity of a mock: the route it serves.
+
+    `mock serve` resolves a request by `source.method` + `source.path` and
+    only falls back to the filename for a display id. The checker used to
+    identify mocks by filename instead, so a project that names its files
+    after the path rather than the operationId had every mock reported as
+    both MISSING and ORPHAN — and the body comparison, which only runs on
+    files matched to an operation, never executed at all.
+    """
+    return ((method or "GET").upper(), path or "/")
+
+
+def read_route(path: Path) -> tuple | None:
+    """`route_key` of a mock file, or None when it is unreadable."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    src = data.get("source") or {}
+    return route_key(src.get("method"), src.get("path"))
+
+
+def index_existing(mock_dir: Path) -> dict:
+    """`route_key -> relative path` for every mock file under `mock_dir`."""
+    out: dict = {}
+    if not mock_dir.exists():
+        return out
+    for path in sorted(mock_dir.rglob("*.mock.json")):
+        key = read_route(path)
+        if key is not None:
+            out[key] = str(path.relative_to(mock_dir))
+    return out
 
 
 def build_mock_definition(doc: OpenApiDoc, op: Operation) -> dict:
@@ -131,6 +172,10 @@ def generate(
     created: list[str] = []
     skipped: list[str] = []
     warnings: list[str] = []
+    # Existing mocks are recognised by the route they serve, not by filename,
+    # so scaffolding never duplicates a mock a project chose to name its own
+    # way.
+    existing = index_existing(mock_dir)
 
     for swagger in swagger_paths:
         doc = OpenApiDoc.load(swagger)
@@ -144,6 +189,10 @@ def generate(
                 warnings.append(
                     f"{op.method} {op.path}: missing operationId -> synthesized '{op.operation_id}'"
                 )
+            already = existing.get(route_key(op.method, op.path))
+            if already is not None:
+                skipped.append(already)
+                continue
             if target.exists():
                 skipped.append(rel)
                 continue
@@ -176,13 +225,15 @@ def update_default(swagger_paths: list[str], mock_dir: str | Path) -> UpdateRepo
     updated: list[str] = []
     unchanged: list[str] = []
     skipped: list[str] = []
+    existing = index_existing(mock_dir)
 
     for swagger in swagger_paths:
         doc = OpenApiDoc.load(swagger)
         if not doc.is_api_spec():
             continue
         for op in doc.operations():
-            rel = mock_relpath(op)
+            # Located by route, so a project's own file naming is honoured.
+            rel = existing.get(route_key(op.method, op.path)) or mock_relpath(op)
             target = mock_dir / rel
             if not target.exists():
                 skipped.append(rel)
@@ -281,6 +332,7 @@ class BodyDrift:
     scenario: str
     missing: list[str]  # swagger has, mock lacks
     extra: list[str]    # mock has, swagger lacks
+    violations: list = field(default_factory=list)  # right keys, invalid values
 
     def __str__(self) -> str:
         lines = [f"{self.rel}  {self.scenario}"]
@@ -288,6 +340,8 @@ class BodyDrift:
             lines.append(f"    swagger has, mock lacks: {', '.join(self.missing)}")
         if self.extra:
             lines.append(f"    mock has, swagger lacks: {', '.join(self.extra)}")
+        for violation in self.violations:
+            lines.append(f"    {violation}")
         return "\n".join(lines)
 
 
@@ -295,9 +349,10 @@ class BodyDrift:
 class CheckReport:
     missing: list[str]   # in swagger, no mock file
     orphaned: list[str]  # mock file, not in swagger
-    drifted: list[str]   # path/method mismatch between mock source and swagger
+    drifted: list[str]   # unreadable mock files
     bodies: list        # scenario bodies that no longer match the schema
     unmatched: list[str]  # scenarios whose status is not declared — not compared
+    misnamed: list[str] = field(default_factory=list)  # right route, other filename
 
     @property
     def has_drift(self) -> bool:
@@ -305,44 +360,81 @@ class CheckReport:
 
 
 def _check(swagger_paths: list[str], mock_dir: Path) -> CheckReport:
-    expected: dict[str, tuple[OpenApiDoc, Operation]] = {}
+    expected: dict[tuple, tuple[OpenApiDoc, Operation]] = {}
     for swagger in swagger_paths:
         doc = OpenApiDoc.load(swagger)
         if not doc.is_api_spec():
             continue
         for op in doc.operations():
-            expected[mock_relpath(op)] = (doc, op)
-
-    existing = {
-        str(p.relative_to(mock_dir))
-        for p in mock_dir.rglob("*.mock.json")
-    } if mock_dir.exists() else set()
-
-    missing = sorted(set(expected) - existing)
-    orphaned = sorted(existing - set(expected))
+            expected[route_key(op.method, op.path)] = (doc, op)
 
     drifted: list[str] = []
+    existing: dict = {}
+    op_ids: dict = {}
+    if mock_dir.exists():
+        for path in sorted(mock_dir.rglob("*.mock.json")):
+            rel = str(path.relative_to(mock_dir))
+            key = read_route(path)
+            if key is None:
+                drifted.append(f"{rel}: unreadable")
+                continue
+            existing[key] = rel
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    op_id = (json.load(f).get("source") or {}).get("operationId")
+            except (OSError, json.JSONDecodeError):
+                op_id = None
+            if op_id:
+                op_ids.setdefault(op_id, key)
+
+    missing_keys = [k for k in expected if k not in existing]
+    orphan_keys = [k for k in existing if k not in expected]
+
+    # An endpoint whose path changed upstream would otherwise read as one
+    # deleted mock plus one new one. Pairing them by operationId keeps the
+    # old, more actionable message.
+    paired: set = set()
+    for key in sorted(missing_keys):
+        _doc, op = expected[key]
+        was = op_ids.get(op.operation_id)
+        if was is not None and was in set(orphan_keys):
+            drifted.append(
+                f"{existing[was]}: source {was[0]} {was[1]} "
+                f"!= swagger {key[0]} {key[1]}"
+            )
+            paired.add(key)
+            paired.add(was)
+
+    missing = sorted(
+        f"{mock_relpath(expected[k][1])} ({k[0]} {k[1]})"
+        for k in missing_keys if k not in paired
+    )
+    orphaned = sorted(
+        f"{existing[k]} ({k[0]} {k[1]})"
+        for k in orphan_keys if k not in paired
+    )
+
     bodies: list[BodyDrift] = []
     unmatched: list[str] = []
-    for rel in sorted(set(expected) & existing):
+    misnamed: list[str] = []
+    for key in sorted(set(expected) & set(existing)):
+        rel = existing[key]
+        doc, op = expected[key]
+        # Naming is a convention, not identity — reported so a rename is
+        # visible, never as drift.
+        if rel != mock_relpath(op):
+            misnamed.append(f"{rel} (scaffolding would name it {mock_relpath(op)})")
         try:
             with open(mock_dir / rel, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except (OSError, json.JSONDecodeError):
             drifted.append(f"{rel}: unreadable")
             continue
-        src = data.get("source", {})
-        doc, op = expected[rel]
-        if src.get("method") != op.method or src.get("path") != op.path:
-            drifted.append(
-                f"{rel}: source {src.get('method')} {src.get('path')} "
-                f"!= swagger {op.method} {op.path}"
-            )
         _check_bodies(doc, op, rel, data, bodies, unmatched)
 
     return CheckReport(
         missing=missing, orphaned=orphaned, drifted=drifted,
-        bodies=bodies, unmatched=unmatched,
+        bodies=bodies, unmatched=unmatched, misnamed=misnamed,
     )
 
 
@@ -395,7 +487,87 @@ def _check_bodies(
         # none of, so an empty array on either side excuses the other.
         want = _drop_under(want, empty_array_prefixes(actual_body))
         got = _drop_under(got, empty_array_prefixes(expected_body))
-        if want != got:
+        violations = validate_against_schema(doc, schema, actual_body)
+        if want != got or violations:
             bodies.append(
-                BodyDrift(rel, name, sorted(want - got), sorted(got - want))
+                BodyDrift(
+                    rel, name, sorted(want - got), sorted(got - want),
+                    violations=violations,
+                )
             )
+
+
+#: JSON types a schema `type` accepts, for the shape check below.
+_TYPE_CHECKS = {
+    "string": lambda v: isinstance(v, str),
+    "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
+    "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
+    "boolean": lambda v: isinstance(v, bool),
+    "array": lambda v: isinstance(v, list),
+    "object": lambda v: isinstance(v, dict),
+}
+
+
+def validate_against_schema(doc: OpenApiDoc, schema, value, path: str = "", _depth: int = 0) -> list:
+    """Schema violations in *value*: wrong types, missing `required`, bad enums.
+
+    The key-set comparison above answers "does this mock still have the same
+    shape". This answers "is it a valid instance" — a mock with `name: 42`
+    where the contract says `string` has the right keys and is still a lie the
+    tests will happily believe.
+
+    Deliberately partial: `oneOf`/`anyOf` resolve to their first branch (the
+    same simplification `sample_for_schema` makes), and unconstrained schemas
+    pass. Reporting a real violation matters more than proving full
+    conformance.
+    """
+    out: list = []
+    if _depth > 12:
+        return out
+    schema = doc.resolve_schema(schema, _depth)
+    if not isinstance(schema, dict):
+        return out
+
+    if value is None:
+        # `nullable` is OpenAPI 3.0; 3.1 spells it as a `null` type member.
+        types = schema.get("type")
+        types = types if isinstance(types, list) else [types]
+        if schema.get("nullable") or "null" in types:
+            return out
+        if schema.get("type") is not None:
+            out.append(f"{path or '.'}: null, contract says {schema['type']}")
+        return out
+
+    stype = schema.get("type")
+    if stype is None and "properties" in schema:
+        stype = "object"
+    if isinstance(stype, list):
+        stype = next((t for t in stype if t != "null"), None)
+
+    check = _TYPE_CHECKS.get(stype)
+    if check is not None and not check(value):
+        out.append(f"{path or '.'}: {type(value).__name__}, contract says {stype}")
+        return out  # a wrong container makes everything under it noise
+
+    enum = schema.get("enum")
+    if isinstance(enum, list) and enum and value not in enum:
+        out.append(f"{path or '.'}: {value!r} is not one of {enum}")
+
+    if stype == "object":
+        properties = schema.get("properties") or {}
+        for name in schema.get("required") or []:
+            if name not in value:
+                out.append(f"{path}.{name}: required by the contract, missing")
+        for name, child in value.items():
+            if name in properties:
+                out += validate_against_schema(
+                    doc, properties[name], child, f"{path}.{name}", _depth + 1
+                )
+    elif stype == "array":
+        items = schema.get("items")
+        if items is not None:
+            for index, item in enumerate(value):
+                out += validate_against_schema(
+                    doc, items, item, f"{path}[{index}]", _depth + 1
+                )
+    return out

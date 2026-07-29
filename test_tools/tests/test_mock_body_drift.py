@@ -47,16 +47,20 @@ SPEC = {
         },
     },
     "components": {"schemas": {
-        "FollowStatus": {"type": "object", "properties": {
-            "status": {"type": "string"},
-            "bar_id": {"type": "string", "format": "uuid"},
-            "new_arrival_notification": {"type": "boolean"},
-        }},
+        "FollowStatus": {
+            "type": "object",
+            "required": ["status", "new_arrival_notification"],
+            "properties": {
+                "status": {"type": "string", "enum": ["followed", "unfollowed"]},
+                "bar_id": {"type": "string", "format": "uuid", "nullable": True},
+                "new_arrival_notification": {"type": "boolean"},
+            },
+        },
         "Detail": {"type": "object", "properties": {"detail": {"type": "string"}}},
         "BottleList": {"type": "object", "properties": {
             "items": {"type": "array", "items": {"$ref": "#/components/schemas/Bottle"}},
         }},
-        "Bottle": {"type": "object", "properties": {
+        "Bottle": {"type": "object", "required": ["id"], "properties": {
             "id": {"type": "string"}, "series": {"type": "string"},
         }},
     }},
@@ -174,7 +178,107 @@ class TestBodyDrift:
         data = json.loads(mock.read_text(encoding="utf-8"))
         data["source"]["path"] = "/api/old/follow"
         mock.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-        assert any("/api/old/follow" in d for d in generate([spec], out, check=True).drifted)
+        # Under route identity this is one deleted route plus one new one;
+        # pairing by operationId keeps the actionable message.
+        report = generate([spec], out, check=True)
+        assert any("/api/old/follow" in d for d in report.drifted)
+        assert report.missing == []
+        assert report.orphaned == []
+
+
+class TestMockIdentity:
+    """Regression: mock-contract-validation-does-not-run.
+
+    `mock serve` routes on source.method + source.path; the checker matched
+    on filename. A project naming its mocks after the path had all 166
+    reported as ORPHAN, all 188 operations as MISSING, and the body
+    comparison — which only runs on matched files — never executed once.
+    """
+
+    def _renamed(self, tmp_path):
+        spec, out = _setup(tmp_path)
+        src = out / "bars" / "followBar.mock.json"
+        dst = out / "bars" / "post_api-bars-by-uuid-follow.mock.json"
+        src.rename(dst)
+        return spec, out, dst
+
+    def test_a_mock_named_anything_is_matched_by_its_route(self, tmp_path):
+        spec, out, _ = self._renamed(tmp_path)
+        report = generate([spec], out, check=True)
+        assert report.missing == []
+        assert report.orphaned == []
+
+    def test_a_renamed_mock_is_still_body_checked(self, tmp_path):
+        # The whole point: the body comparison must actually run.
+        spec, out, dst = self._renamed(tmp_path)
+        _write(dst, {"default": {"status": 200, "body": {"message": "string"}}})
+        report = generate([spec], out, check=True)
+        assert [d.scenario for d in report.bodies] == ["default"]
+
+    def test_the_naming_difference_is_reported_but_is_not_drift(self, tmp_path):
+        spec, out, _ = self._renamed(tmp_path)
+        report = generate([spec], out, check=True)
+        assert any("post_api-bars-by-uuid-follow" in m for m in report.misnamed)
+        assert not report.has_drift
+
+    def test_scaffolding_does_not_duplicate_a_renamed_mock(self, tmp_path):
+        spec, out, _ = self._renamed(tmp_path)
+        report = generate([spec], out)
+        assert report.created == []
+        assert not (out / "bars" / "followBar.mock.json").exists()
+
+    def test_update_default_finds_a_renamed_mock(self, tmp_path):
+        spec, out, dst = self._renamed(tmp_path)
+        _write(dst, {"default": {"status": 200, "body": {"message": "string"}}})
+        report = update_default([spec], out)
+        assert report.updated == ["bars/post_api-bars-by-uuid-follow.mock.json"]
+        body = json.loads(dst.read_text(encoding="utf-8"))["scenarios"]["default"]["body"]
+        assert set(body) == {"status", "bar_id", "new_arrival_notification"}
+
+
+class TestSchemaConformance:
+    """Right keys is not the same as valid values."""
+
+    def test_a_wrong_type_is_reported(self, tmp_path):
+        spec, out = _setup(tmp_path)
+        mock = out / "bottles" / "listBottles.mock.json"
+        _write(mock, {"default": {"status": 200, "body": {
+            "items": [{"id": "1", "series": 42}]}}})
+        report = generate([spec], out, check=True)
+        assert report.has_drift
+        assert any("series" in v and "contract says string" in v
+                   for v in report.bodies[0].violations)
+
+    def test_a_missing_required_field_is_reported(self, tmp_path):
+        spec, out = _setup(tmp_path)
+        mock = out / "bars" / "followBar.mock.json"
+        _write(mock, {"default": {"status": 200, "body": {
+            "status": "followed", "bar_id": "x"}}})
+        report = generate([spec], out, check=True)
+        assert any("new_arrival_notification: required by the contract, missing" in v
+                   for v in report.bodies[0].violations)
+
+    def test_a_value_outside_an_enum_is_reported(self, tmp_path):
+        spec, out = _setup(tmp_path)
+        mock = out / "bars" / "followBar.mock.json"
+        _write(mock, {"default": {"status": 200, "body": {
+            "status": "sideways", "bar_id": "x", "new_arrival_notification": True}}})
+        report = generate([spec], out, check=True)
+        assert any("sideways" in v for v in report.bodies[0].violations)
+
+    def test_a_nullable_field_accepts_null(self, tmp_path):
+        spec, out = _setup(tmp_path)
+        mock = out / "bars" / "followBar.mock.json"
+        _write(mock, {"default": {"status": 200, "body": {
+            "status": "followed", "bar_id": None, "new_arrival_notification": True}}})
+        assert not generate([spec], out, check=True).has_drift
+
+    def test_a_valid_body_passes(self, tmp_path):
+        spec, out = _setup(tmp_path)
+        mock = out / "bottles" / "listBottles.mock.json"
+        _write(mock, {"default": {"status": 200, "body": {
+            "items": [{"id": "1", "series": "Yamazaki"}]}}})
+        assert not generate([spec], out, check=True).has_drift
 
 
 class TestUpdateDefault:

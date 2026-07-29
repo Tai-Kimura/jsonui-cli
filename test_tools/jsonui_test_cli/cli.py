@@ -390,6 +390,8 @@ def cmd_mock_generate(args):
             print(f"  [DRIFT]   {msg}")
         for drift in report.bodies:
             print(f"  [BODY]    {drift}")
+        for rel in report.misnamed:
+            print(f"  [NAME]    {rel}")
         for note in report.unmatched:
             print(f"  [NOTE]    {note} — not compared")
         if report.has_drift:
