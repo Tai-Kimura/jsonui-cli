@@ -34,6 +34,12 @@ class Operation:
     tag: str               # first tag, or "default"
     id_was_synthesized: bool = False
     responses: dict = field(default_factory=dict)  # raw responses object
+    # Request side, for `mock serve` contract checking. Path-level
+    # parameters are merged in — OpenAPI lets them be declared once for
+    # every method on a path, and a checker that only read the operation
+    # level would miss the required ones.
+    parameters: list = field(default_factory=list)
+    request_body: dict = field(default_factory=dict)
 
 
 class OpenApiDoc:
@@ -74,6 +80,8 @@ class OpenApiDoc:
                 if not op_id:
                     op_id = _fallback_operation_id(method, path)
                     synthesized = True
+                parameters = list(item.get("parameters") or [])
+                parameters += list(op.get("parameters") or [])
                 ops.append(Operation(
                     method=method.upper(),
                     path=path,
@@ -81,6 +89,8 @@ class OpenApiDoc:
                     tag=tag,
                     id_was_synthesized=synthesized,
                     responses=op.get("responses") or {},
+                    parameters=[self.resolve_schema(p) for p in parameters],
+                    request_body=op.get("requestBody") or {},
                 ))
         return ops
 

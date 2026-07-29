@@ -191,8 +191,13 @@ class RequestLog:
 class RunManager:
     """Runs a single configured test target at a time, streaming its output."""
 
-    def __init__(self, run_targets: dict, project_root: Path, post_run_hook=None):
+    def __init__(self, run_targets: dict, project_root: Path, post_run_hook=None,
+                 contract_log=None):
         self._targets = run_targets or {}
+        # Request-contract violations recorded while the run was executing
+        # are reported at the end of it and force a non-zero exit — see
+        # mock/contract.py for why they do not fail the request itself.
+        self._contract_log = contract_log
         self._root = project_root
         self._lock = threading.Lock()
         self._proc: subprocess.Popen | None = None
@@ -256,6 +261,7 @@ class RunManager:
         return True, "started"
 
     def _run(self, target: str, command: str, cwd: Path):
+        contract_mark = self._contract_log.count() if self._contract_log else 0
         try:
             proc = subprocess.Popen(
                 command, shell=True, cwd=str(cwd),
@@ -273,6 +279,13 @@ class RunManager:
             with self._lock:
                 self._lines.append(f"[run error] {e}")
             rc = 1
+        if self._contract_log is not None:
+            summary = self._contract_log.summary(contract_mark)
+            if summary:
+                with self._lock:
+                    self._lines.extend(summary)
+                # The suite itself may well have passed — that is the point.
+                rc = rc or 1
         with self._lock:
             self._running = False
             self._returncode = rc
@@ -306,12 +319,15 @@ def _panel_html(token: str) -> bytes:
 
 
 class MockServer:
-    def __init__(self, store: MockStore, run_manager: RunManager, port: int = 8790):
+    def __init__(self, store: MockStore, run_manager: RunManager, port: int = 8790,
+                 contract=None, contract_log=None):
         self.store = store
         self.run = run_manager
         self.port = port
         self.token = secrets.token_urlsafe(24)
         self.requests = RequestLog()
+        self.contract = contract
+        self.contract_log = contract_log
         self._httpd: ThreadingHTTPServer | None = None
 
     def bind(self):
@@ -438,6 +454,13 @@ def _make_handler(server: "MockServer"):
                 self._send(200, {"ok": True})
             elif sub == "/requests" and method == "GET":
                 self._send(200, server.requests.all())
+            elif sub == "/contract-violations" and method == "GET":
+                log = server.contract_log
+                self._send(200, [
+                    {"method": v.method, "path": v.path,
+                     "operationId": v.operation_id, "problems": v.problems}
+                    for v in (log.all() if log else [])
+                ])
             elif sub == "/run/status" and method == "GET":
                 self._send(200, {**server.run.status(), "targets": server.run.targets})
             elif sub == "/run/results" and method == "GET":
@@ -508,6 +531,19 @@ def _make_handler(server: "MockServer"):
                 self._send(404, {"error": "no mock for this route", "path": path}, cors=True)
                 return
             scenario = ep.scenarios.get(ep.active_scenario, {})
+            # Contract check on what the app SENT. Recorded, never enforced:
+            # a 422 here would turn "the implementation is wrong" into "this
+            # screen should show an error" in every test that touches it.
+            if (server.contract and server.contract_log is not None
+                    and not scenario.get("skipRequestValidation")):
+                problems = server.contract.check(
+                    method, ep.path, parse_qs(parsed.query), body)
+                if problems:
+                    from .contract import RequestViolation
+                    server.contract_log.record(RequestViolation(
+                        method=method, path=ep.path,
+                        operation_id=ep.operation_id, problems=problems,
+                    ))
             delay = scenario.get("delayMs")
             if delay:
                 time.sleep(min(delay, 30000) / 1000.0)

@@ -80,6 +80,14 @@ def cmd_validate(args):
     if total_errors > 0:
         return 1
 
+    # Mock contract drift, on the same gate. `--check` existed but nothing
+    # called it, so a mock encoding a contract the server does not have kept
+    # the suite green (mock-contract-validation-does-not-run).
+    if not getattr(args, "no_mock_check", False):
+        mock_rc = _check_mocks_against_swagger(getattr(args, "config", None))
+        if mock_rc != 0:
+            return mock_rc
+
     # Success-gated flatten-install: distribute validated tests to the platform
     # locations declared in config (no-op when nothing is configured).
     if not getattr(args, "no_install", False):
@@ -88,6 +96,46 @@ def cmd_validate(args):
             return install_rc
 
     return 0
+
+
+def _check_mocks_against_swagger(config_path):
+    """Run the mock drift check for the configured swagger + mockDir.
+
+    Silent no-op when the project has no mock config, so this stays free for
+    projects that do not use mocks.
+    """
+    from .mock.generate import generate, CheckReport
+
+    config, cfg_path = _load_mock_config(config_path)
+    swaggers = config.get("swagger") or []
+    mock_dir = config.get("mockDir")
+    if not swaggers or not mock_dir:
+        return 0
+    root = cfg_path.parent if cfg_path else Path(".")
+    mock_path = Path(mock_dir)
+    if not mock_path.is_absolute():
+        mock_path = root / mock_path
+    if not mock_path.exists():
+        return 0
+
+    report = generate([str(root / s) if not Path(s).is_absolute() else s
+                       for s in swaggers], mock_path, check=True)
+    if not isinstance(report, CheckReport) or not report.has_drift:
+        return 0
+
+    print(f"\n{'='*50}")
+    print("Mock contract drift:")
+    for rel in report.missing:
+        print(f"  [MISSING] {rel} (in swagger, no mock file)")
+    for rel in report.orphaned:
+        print(f"  [ORPHAN]  {rel} (mock file, not in swagger)")
+    for msg in report.drifted:
+        print(f"  [DRIFT]   {msg}")
+    for drift in report.bodies:
+        print(f"  [BODY]    {drift}")
+    print("Fix with `jsonui-test mock generate --update-default`, "
+          "or pass --no-mock-check to skip this gate.")
+    return 1
 
 
 def _load_test_config(explicit_path=None):
@@ -444,6 +492,7 @@ def _make_artifacts_post_run_hook(explicit_config):
 
 def cmd_mock_serve(args):
     """Start the local mock server + control panel."""
+    from .mock.contract import ContractIndex, ContractLog
     from .mock.server import MockStore, MockServer, RunManager
 
     config, config_path = _load_mock_config(getattr(args, "config", None))
@@ -462,9 +511,21 @@ def cmd_mock_serve(args):
     if getattr(args, "artifacts", False):
         post_run_hook = _make_artifacts_post_run_hook(getattr(args, "config", None))
 
+    # Request-contract checking. On by default: a mock that answers a
+    # request the real API would reject is the failure mode this exists for,
+    # and an opt-in check is one nobody opts into.
+    contract = ContractIndex()
+    contract_log = ContractLog()
+    if config.get("validateRequests", True) and not getattr(args, "no_validate_requests", False):
+        contract = ContractIndex.load(config.get("swagger", []))
+        if not contract:
+            print("  request validation: off (no swagger configured)")
+
     store = MockStore.load(mock_dir)
     server = MockServer(store, RunManager(run_targets, project_root,
-                                          post_run_hook=post_run_hook), port=port)
+                                          post_run_hook=post_run_hook,
+                                          contract_log=contract_log),
+                        port=port, contract=contract, contract_log=contract_log)
     # Bind BEFORE printing the banner: consumers parse the URL/token from
     # stdout as the "server is up" signal, so a banner followed by a bind
     # failure reads as a successful start. Bind also resolves port 0 to
@@ -487,6 +548,14 @@ def cmd_mock_serve(args):
     except KeyboardInterrupt:
         print("\nshutting down")
         server.shutdown()
+    # Violations from requests made outside a panel-driven run (a suite
+    # pointed straight at the server) would otherwise go unreported.
+    summary = contract_log.summary()
+    if summary:
+        print()
+        for line in summary:
+            print(line)
+        return 1
     return 0
 
 
@@ -738,6 +807,12 @@ def main():
         help="Validate only; skip flatten-install even if test.install is configured"
     )
     validate_parser.add_argument(
+        "--no-mock-check",
+        action="store_true",
+        help="Skip the mock-vs-swagger contract check (runs when mock.swagger "
+             "and mock.mockDir are configured)"
+    )
+    validate_parser.add_argument(
         "--config",
         help="Config file for test.install destinations (default: jui.config.json)"
     )
@@ -885,6 +960,11 @@ def main():
     mock_serve_parser.add_argument("--port", type=int, help="Port (default: mock.server.port or 8790)")
     mock_serve_parser.add_argument("--mock-dir", help="Mock dir (default: mock.mockDir or tests/mocks)")
     mock_serve_parser.add_argument("--config", help="Config file (default: jui.config.json)")
+    mock_serve_parser.add_argument(
+        "--no-validate-requests", action="store_true",
+        help="Do not check requests against the swagger contract "
+             "(same as mock.validateRequests=false)",
+    )
     mock_serve_parser.add_argument("--artifacts", action="store_true",
                                    help="After an ios/android run target finishes, pull its artifacts automatically")
 
