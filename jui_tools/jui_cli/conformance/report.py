@@ -60,6 +60,11 @@ class ReportSummary:
     unknown_ids: dict[str, list[str]] = field(default_factory=dict)
     visual_regressions: dict[str, int] = field(default_factory=dict)  # platform -> count
     no_baseline: dict[str, int] = field(default_factory=dict)  # platform -> count
+    #: platform -> why its screenshots could not be compared at all. A gate
+    #: that ignores this reports "0 regressions" for a comparison that never
+    #: ran — which is how the whole visual check sat inert in CI (Pillow was
+    #: not installed) while an iOS runner upgrade re-rendered every fixture.
+    baseline_errors: dict[str, str] = field(default_factory=dict)
 
 
 class ReportError(RuntimeError):
@@ -268,6 +273,7 @@ def render_report(
             summary.visual_regressions[p.platform] = len(comparison.regressions)
             summary.no_baseline[p.platform] = len(comparison.no_baseline)
             if comparison.error:
+                summary.baseline_errors[p.platform] = comparison.error
                 lines.append(
                     f"| {p.platform} | ⚠️ {_escape_cell(comparison.error)} | | | | |"
                 )
@@ -279,6 +285,10 @@ def render_report(
                 )
                 continue
             if comparison.algorithm_mismatch is not None:
+                summary.baseline_errors[p.platform] = (
+                    f"baseline hashed with `{comparison.algorithm_mismatch}`, "
+                    f"current algorithm is `{baseline_mod.ALGORITHM}` — nothing was compared"
+                )
                 lines.append(
                     f"| {p.platform} | ⚠️ STALE algorithm `{comparison.algorithm_mismatch}` "
                     f"(current `{baseline_mod.ALGORITHM}`) — re-run baseline update | | | | |"

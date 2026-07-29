@@ -313,6 +313,57 @@ class VisualRegressionSectionTest(unittest.TestCase):
         summary = generate_report(self.out_dir)
         self.assertEqual(summary.visual_regressions.get("web"), 0)
 
+    def test_a_comparison_that_could_not_run_is_surfaced_not_counted_as_clean(self):
+        # The gate reads visual_regressions; when Pillow is missing every
+        # comparison is skipped and that dict is all zeros, so the gate
+        # reported a clean run for a check that never executed. Both mobile
+        # baselines drifted wholesale under that silence.
+        from jui_cli.conformance import baseline
+
+        artifacts = self.out_dir / "artifacts" / "web"
+        artifacts.mkdir(parents=True, exist_ok=True)
+        (artifacts / "shot_one.png").write_bytes(b"not really a png")
+        self._write_results_with_screenshots(
+            {self.all_ids[0]: "artifacts/web/shot_one.png"}
+        )
+
+        original = baseline.compare_platform
+
+        def _unavailable(*args, **kwargs):
+            comparison = baseline.VisualComparison(platform="web")
+            comparison.error = "Pillow is required for screenshot baselines"
+            return comparison
+
+        baseline.compare_platform = _unavailable
+        try:
+            summary = generate_report(self.out_dir)
+        finally:
+            baseline.compare_platform = original
+
+        self.assertIn("web", summary.baseline_errors)
+        self.assertIn("Pillow", summary.baseline_errors["web"])
+        self.assertEqual(summary.visual_regressions.get("web"), 0)
+
+    def test_a_stale_hash_algorithm_is_surfaced_the_same_way(self):
+        from jui_cli.conformance import baseline
+
+        artifacts = self.out_dir / "artifacts" / "web"
+        artifacts.mkdir(parents=True, exist_ok=True)
+        (artifacts / "shot_one.png").write_bytes(b"not really a png")
+        baseline.baseline_path(self.out_dir, "web").parent.mkdir(
+            parents=True, exist_ok=True
+        )
+        baseline.baseline_path(self.out_dir, "web").write_text(
+            json.dumps({"algorithm": "dhash-16", "threshold": 8, "hashes": {}}),
+            encoding="utf-8",
+        )
+        self._write_results_with_screenshots(
+            {self.all_ids[0]: "artifacts/web/shot_one.png"}
+        )
+        summary = generate_report(self.out_dir)
+        self.assertIn("web", summary.baseline_errors)
+        self.assertIn("dhash-16", summary.baseline_errors["web"])
+
 
 class CommittedDummyResultsTest(unittest.TestCase):
     """The hand-written dummy results under tests/fixtures/ obey the contract."""
