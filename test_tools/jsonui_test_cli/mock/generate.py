@@ -1,9 +1,23 @@
 """Scaffold mock definition files from OpenAPI specs, and report drift (--check).
 
-Layout: <mockDir>/<tag-slug>/<operationId>.mock.json — one endpoint per file,
-multiple scenarios inside. Regeneration SKIPS existing files (they are grown by
-hand, like VM stubs), adding only new endpoints. --check reports adds/removes/
-schema drift without writing.
+Layout::
+
+    <mockDir>/<tag-slug>/<operationId>.mock.json             hand-written
+    <mockDir>/generated/<tag-slug>/<operationId>.mock.json   generated
+
+`generated/` is a pure function of the swagger: it is wiped and rewritten on
+every `mock generate`, so a contract change shows up as a regeneration rather
+than as a hand-merge, and the directory can be gitignored — what a repository
+owes is the input (the swagger), not 188 placeholder bodies.
+
+Anything outside `generated/` is hand-written and is never touched. `mock
+serve` reads both and lets the hand-written side win, scenario by scenario:
+a hand-written file carries only the scenarios its tests drive, and the
+routine `error_403` / `empty` variants come from the generated side.
+
+--check reports adds/removes/schema drift without writing. Findings on the
+generated side are warnings (regenerating fixes them); findings on the
+hand-written side are errors (a person has to decide).
 """
 
 from __future__ import annotations
@@ -23,6 +37,15 @@ def mock_relpath(op: Operation) -> str:
     on, and a project is free to name them however it likes.
     """
     return f"{slugify(op.tag)}/{op.operation_id}.mock.json"
+
+
+#: Subdirectory of mockDir that `mock generate` owns outright.
+GENERATED_DIR = "generated"
+
+
+def is_generated(rel) -> bool:
+    """True for a path inside the generated tree (relative to mockDir)."""
+    return Path(rel).parts[:1] == (GENERATED_DIR,)
 
 
 def route_key(method, path) -> tuple:
@@ -154,9 +177,21 @@ def _empty_variant(body: dict):
 
 @dataclass
 class GenerateReport:
-    created: list[str]
-    skipped: list[str]
+    created: list[str]     # written into generated/
+    skipped: list[str]     # a hand-written mock already serves that route
     warnings: list[str]
+
+
+def _clear_generated(gen_root: Path) -> None:
+    """Empty the generated tree, leaving anything that is not a mock alone."""
+    if not gen_root.is_dir():
+        return
+    for path in gen_root.rglob("*.mock.json"):
+        path.unlink()
+    # Prune the directories that emptied out, deepest first.
+    for path in sorted(gen_root.rglob("*"), key=lambda p: -len(p.parts)):
+        if path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
 
 
 def generate(
@@ -164,7 +199,12 @@ def generate(
     mock_dir: str | Path,
     check: bool = False,
 ) -> GenerateReport | "CheckReport":
-    """Scaffold (or, with check=True, diff) mock files for every operation."""
+    """Regenerate `<mockDir>/generated/`, or (check=True) diff without writing.
+
+    Deterministic: the same swagger and the same tool version produce the same
+    bytes, which is what lets `generated/` be gitignored and rebuilt on a
+    fresh clone rather than committed.
+    """
     mock_dir = Path(mock_dir)
     if check:
         return _check(swagger_paths, mock_dir)
@@ -172,10 +212,16 @@ def generate(
     created: list[str] = []
     skipped: list[str] = []
     warnings: list[str] = []
-    # Existing mocks are recognised by the route they serve, not by filename,
-    # so scaffolding never duplicates a mock a project chose to name its own
-    # way.
-    existing = index_existing(mock_dir)
+    # Hand-written mocks are recognised by the route they serve, not by
+    # filename, so a project's own naming keeps working and generation never
+    # produces a duplicate of one.
+    hand_written = {
+        key: rel for key, rel in index_existing(mock_dir).items()
+        if not is_generated(rel)
+    }
+
+    gen_root = mock_dir / GENERATED_DIR
+    _clear_generated(gen_root)
 
     for swagger in swagger_paths:
         doc = OpenApiDoc.load(swagger)
@@ -183,19 +229,16 @@ def generate(
             warnings.append(f"{swagger}: no paths (DB-model spec?) — skipped")
             continue
         for op in doc.operations():
-            rel = mock_relpath(op)
-            target = mock_dir / rel
             if op.id_was_synthesized:
                 warnings.append(
                     f"{op.method} {op.path}: missing operationId -> synthesized '{op.operation_id}'"
                 )
-            already = existing.get(route_key(op.method, op.path))
-            if already is not None:
-                skipped.append(already)
+            covered = hand_written.get(route_key(op.method, op.path))
+            if covered is not None:
+                skipped.append(covered)
                 continue
-            if target.exists():
-                skipped.append(rel)
-                continue
+            rel = f"{GENERATED_DIR}/{mock_relpath(op)}"
+            target = mock_dir / rel
             definition = build_mock_definition(doc, op)
             target.parent.mkdir(parents=True, exist_ok=True)
             with open(target, "w", encoding="utf-8") as f:
@@ -333,6 +376,9 @@ class BodyDrift:
     missing: list[str]  # swagger has, mock lacks
     extra: list[str]    # mock has, swagger lacks
     violations: list = field(default_factory=list)  # right keys, invalid values
+    #: A finding in generated/ is a warning — regenerating fixes it. One in a
+    #: hand-written mock is an error: a person has to decide what it should be.
+    generated: bool = False
 
     def __str__(self) -> str:
         lines = [f"{self.rel}  {self.scenario}"]
@@ -353,10 +399,17 @@ class CheckReport:
     bodies: list        # scenario bodies that no longer match the schema
     unmatched: list[str]  # scenarios whose status is not declared — not compared
     misnamed: list[str] = field(default_factory=list)  # right route, other filename
+    #: Findings in generated/: reported, but they do not fail the check.
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def errors(self) -> list:
+        """Findings a person has to act on."""
+        return [b for b in self.bodies if not b.generated]
 
     @property
     def has_drift(self) -> bool:
-        return bool(self.missing or self.orphaned or self.drifted or self.bodies)
+        return bool(self.missing or self.orphaned or self.drifted or self.errors)
 
 
 def _check(swagger_paths: list[str], mock_dir: Path) -> CheckReport:
@@ -405,13 +458,20 @@ def _check(swagger_paths: list[str], mock_dir: Path) -> CheckReport:
             paired.add(key)
             paired.add(was)
 
+    warnings: list[str] = []
     missing = sorted(
         f"{mock_relpath(expected[k][1])} ({k[0]} {k[1]})"
         for k in missing_keys if k not in paired
     )
+    # A stale entry in generated/ is fixed by regenerating, so it is reported
+    # rather than failed. One outside it needs a decision.
     orphaned = sorted(
         f"{existing[k]} ({k[0]} {k[1]})"
-        for k in orphan_keys if k not in paired
+        for k in orphan_keys if k not in paired and not is_generated(existing[k])
+    )
+    warnings += sorted(
+        f"{existing[k]} ({k[0]} {k[1]}) — stale generated mock, regenerate"
+        for k in orphan_keys if k not in paired and is_generated(existing[k])
     )
 
     bodies: list[BodyDrift] = []
@@ -421,8 +481,8 @@ def _check(swagger_paths: list[str], mock_dir: Path) -> CheckReport:
         rel = existing[key]
         doc, op = expected[key]
         # Naming is a convention, not identity — reported so a rename is
-        # visible, never as drift.
-        if rel != mock_relpath(op):
+        # visible, never as drift. Generated files always follow it.
+        if not is_generated(rel) and rel != mock_relpath(op):
             misnamed.append(f"{rel} (scaffolding would name it {mock_relpath(op)})")
         try:
             with open(mock_dir / rel, "r", encoding="utf-8") as f:
@@ -430,11 +490,13 @@ def _check(swagger_paths: list[str], mock_dir: Path) -> CheckReport:
         except (OSError, json.JSONDecodeError):
             drifted.append(f"{rel}: unreadable")
             continue
-        _check_bodies(doc, op, rel, data, bodies, unmatched)
+        _check_bodies(doc, op, rel, data, bodies, unmatched,
+                      generated=is_generated(rel))
 
     return CheckReport(
         missing=missing, orphaned=orphaned, drifted=drifted,
         bodies=bodies, unmatched=unmatched, misnamed=misnamed,
+        warnings=warnings,
     )
 
 
@@ -445,6 +507,7 @@ def _check_bodies(
     data: dict,
     bodies: list,
     unmatched: list[str],
+    generated: bool = False,
 ) -> None:
     """Compare every scenario body against the schema for its status code.
 
@@ -478,7 +541,7 @@ def _check_bodies(
         expected_body = doc.sample_for_schema(schema)
         actual_body = scenario.get("body")
         if actual_body is None:
-            bodies.append(BodyDrift(rel, name, ["<body>"], []))
+            bodies.append(BodyDrift(rel, name, ["<body>"], [], generated=generated))
             continue
 
         want = key_paths(expected_body)
@@ -492,7 +555,7 @@ def _check_bodies(
             bodies.append(
                 BodyDrift(
                     rel, name, sorted(want - got), sorted(got - want),
-                    violations=violations,
+                    violations=violations, generated=generated,
                 )
             )
 

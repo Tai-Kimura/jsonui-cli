@@ -220,3 +220,67 @@ class TestServing:
         endpoint.scenarios[endpoint.active_scenario]["skipRequestValidation"] = True
         self._post(server, {"slot_id": ""})
         assert log.count() == 0
+
+
+class TestOverlay:
+    """A hand-written mock overlays the generated one, scenario by scenario."""
+
+    def _tree(self, tmp_path, spec_file):
+        mock_dir = tmp_path / "mocks"
+        generate([spec_file], mock_dir)
+        return mock_dir
+
+    def test_a_thin_hand_written_file_adds_one_scenario(self, tmp_path, spec_file):
+        # The point of the split: hand-written files carry only what the
+        # tests drive; `empty` / `error_*` keep coming from the generated side.
+        mock_dir = self._tree(tmp_path, spec_file)
+        generated = json.loads(
+            (mock_dir / "generated" / "adminreservations" / "createReservation.mock.json")
+            .read_text(encoding="utf-8"))
+        assert "default" in generated["scenarios"]
+
+        thin = mock_dir / "adminreservations" / "createReservation.mock.json"
+        thin.parent.mkdir(parents=True, exist_ok=True)
+        thin.write_text(json.dumps({
+            "source": {"operationId": "createReservation",
+                       "method": "POST", "path": "/api/admin/reservations"},
+            "activeScenario": "real_id",
+            "scenarios": {"real_id": {"status": 201, "body": {"id": "res-42"}}},
+        }), encoding="utf-8")
+
+        store = MockStore.load(mock_dir)
+        endpoint = store.match("POST", "/api/admin/reservations")
+        assert set(endpoint.scenarios) >= {"default", "real_id"}
+        assert endpoint.active_scenario == "real_id"
+        assert endpoint.scenarios["real_id"]["body"]["id"] == "res-42"
+
+    def test_a_hand_written_scenario_wins_over_the_generated_one(self, tmp_path, spec_file):
+        mock_dir = self._tree(tmp_path, spec_file)
+        thin = mock_dir / "adminreservations" / "createReservation.mock.json"
+        thin.parent.mkdir(parents=True, exist_ok=True)
+        thin.write_text(json.dumps({
+            "source": {"operationId": "createReservation",
+                       "method": "POST", "path": "/api/admin/reservations"},
+            "scenarios": {"default": {"status": 201, "body": {"id": "mine"}}},
+        }), encoding="utf-8")
+
+        store = MockStore.load(mock_dir)
+        endpoint = store.match("POST", "/api/admin/reservations")
+        assert endpoint.scenarios["default"]["body"] == {"id": "mine"}
+
+    def test_the_overlay_is_recorded_for_the_startup_log(self, tmp_path, spec_file):
+        mock_dir = self._tree(tmp_path, spec_file)
+        thin = mock_dir / "adminreservations" / "createReservation.mock.json"
+        thin.parent.mkdir(parents=True, exist_ok=True)
+        thin.write_text(json.dumps({
+            "source": {"operationId": "createReservation",
+                       "method": "POST", "path": "/api/admin/reservations"},
+            "scenarios": {"default": {"status": 201, "body": {}}},
+        }), encoding="utf-8")
+        store = MockStore.load(mock_dir)
+        assert store.overrides == ["adminreservations/createReservation.mock.json"]
+
+    def test_a_generated_only_tree_serves_normally(self, tmp_path, spec_file):
+        store = MockStore.load(self._tree(tmp_path, spec_file))
+        assert store.match("POST", "/api/admin/reservations") is not None
+        assert store.overrides == []

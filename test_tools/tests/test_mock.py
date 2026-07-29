@@ -108,23 +108,45 @@ class TestGenerate:
         out = tmp_path / "mocks"
         report = generate([str(spec_file)], out)
         assert len(report.created) == 3
-        # tag slug dir
-        assert (out / "stocks" / "listStocks.mock.json").exists()
-        assert (out / "import-customs").exists()
+        # tag slug dir, under the generated tree the tool owns outright
+        assert (out / "generated" / "stocks" / "listStocks.mock.json").exists()
+        assert (out / "generated" / "import-customs").exists()
         # error + empty scenarios synthesized
-        data = json.loads((out / "stocks" / "listStocks.mock.json").read_text())
+        data = json.loads((out / "generated" / "stocks" / "listStocks.mock.json").read_text())
         assert "empty" in data["scenarios"]
         assert "error_500" in data["scenarios"]
         assert data["scenarios"]["empty"]["body"]["items"] == []
 
-    def test_regenerate_skips_existing(self, tmp_path):
+    def test_regeneration_is_byte_identical(self, tmp_path):
+        # generated/ is a pure function of the swagger — it is wiped and
+        # rewritten, and gitignoring it is only safe if two runs agree.
         spec_file = tmp_path / "spec.json"
         spec_file.write_text(json.dumps(SPEC))
         out = tmp_path / "mocks"
         generate([str(spec_file)], out)
+        first = {p.relative_to(out): p.read_bytes()
+                 for p in sorted(out.rglob("*.mock.json"))}
         report2 = generate([str(spec_file)], out)
-        assert report2.created == []
-        assert len(report2.skipped) == 3
+        second = {p.relative_to(out): p.read_bytes()
+                  for p in sorted(out.rglob("*.mock.json"))}
+        assert first == second
+        assert len(report2.created) == 3
+        assert report2.skipped == []
+
+    def test_a_hand_written_mock_is_never_regenerated(self, tmp_path):
+        spec_file = tmp_path / "spec.json"
+        spec_file.write_text(json.dumps(SPEC))
+        out = tmp_path / "mocks"
+        generate([str(spec_file)], out)
+        adopted = out / "stocks" / "listStocks.mock.json"
+        adopted.parent.mkdir(parents=True, exist_ok=True)
+        (out / "generated" / "stocks" / "listStocks.mock.json").rename(adopted)
+        before = adopted.read_bytes()
+
+        report = generate([str(spec_file)], out)
+        assert adopted.read_bytes() == before
+        assert "stocks/listStocks.mock.json" in report.skipped
+        assert not (out / "generated" / "stocks" / "listStocks.mock.json").exists()
 
     def test_check_detects_drift(self, tmp_path):
         spec_file = tmp_path / "spec.json"
@@ -134,7 +156,7 @@ class TestGenerate:
         report = generate([str(spec_file)], out, check=True)
         assert not report.has_drift
         # remove one file -> missing
-        (out / "stocks" / "listStocks.mock.json").unlink()
+        (out / "generated" / "stocks" / "listStocks.mock.json").unlink()
         report2 = generate([str(spec_file)], out, check=True)
         assert report2.has_drift
         assert any("listStocks" in m for m in report2.missing)

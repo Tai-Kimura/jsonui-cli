@@ -99,12 +99,12 @@ def cmd_validate(args):
 
 
 def _check_mocks_against_swagger(config_path):
-    """Run the mock drift check for the configured swagger + mockDir.
+    """Regenerate `generated/` if needed, then check the mocks against swagger.
 
     Silent no-op when the project has no mock config, so this stays free for
     projects that do not use mocks.
     """
-    from .mock.generate import generate, CheckReport
+    from .mock.generate import GENERATED_DIR, generate, CheckReport
 
     config, cfg_path = _load_mock_config(config_path)
     swaggers = config.get("swagger") or []
@@ -118,8 +118,30 @@ def _check_mocks_against_swagger(config_path):
     if not mock_path.exists():
         return 0
 
-    report = generate([str(root / s) if not Path(s).is_absolute() else s
-                       for s in swaggers], mock_path, check=True)
+    resolved = [str(root / s) if not Path(s).is_absolute() else s for s in swaggers]
+
+    # generated/ is meant to be gitignorable, so it has to rebuild itself on a
+    # fresh clone or a first CI run. Rebuilding when it is missing or older
+    # than the swagger keeps `validate` the single entry point.
+    gen_root = mock_path / GENERATED_DIR
+    newest_swagger = max(
+        (Path(s).stat().st_mtime for s in resolved if Path(s).exists()), default=0)
+    generated_at = max(
+        (p.stat().st_mtime for p in gen_root.rglob("*.mock.json")), default=0)
+    if generated_at < newest_swagger:
+        try:
+            built = generate(resolved, mock_path)
+        except (OSError, ValueError, KeyError) as e:
+            # Running the suite against an empty generated/ turns every
+            # unmocked operation into a 404 and a confusing red.
+            print(f"\n{'='*50}")
+            print(f"Mock generation failed: {e}")
+            return 1
+        if built.created:
+            print(f"\nRegenerated {len(built.created)} mock file(s) "
+                  f"into {mock_dir}/{GENERATED_DIR}/")
+
+    report = generate(resolved, mock_path, check=True)
     if not isinstance(report, CheckReport) or not report.has_drift:
         return 0
 
@@ -131,7 +153,7 @@ def _check_mocks_against_swagger(config_path):
         print(f"  [ORPHAN]  {rel} (mock file, not in swagger)")
     for msg in report.drifted:
         print(f"  [DRIFT]   {msg}")
-    for drift in report.bodies:
+    for drift in report.errors:
         print(f"  [BODY]    {drift}")
     print("Fix with `jsonui-test mock generate --update-default`, "
           "or pass --no-mock-check to skip this gate.")
@@ -442,6 +464,8 @@ def cmd_mock_generate(args):
             print(f"  [NAME]    {rel}")
         for note in report.unmatched:
             print(f"  [NOTE]    {note} — not compared")
+        for warning in report.warnings:
+            print(f"  [WARN]    {warning}")
         if report.has_drift:
             print(f"\nDrift detected: {len(report.missing)} missing, "
                   f"{len(report.orphaned)} orphaned, {len(report.drifted)} drifted, "
@@ -456,8 +480,9 @@ def cmd_mock_generate(args):
 
     for w in report.warnings:
         print(f"  [WARN] {w}")
-    print(f"\nGenerated {len(report.created)} mock file(s), "
-          f"skipped {len(report.skipped)} existing, into {mock_dir}/")
+    print(f"\nGenerated {len(report.created)} mock file(s) into "
+          f"{mock_dir}/generated/ (rewritten each run — safe to gitignore); "
+          f"{len(report.skipped)} route(s) already served by a hand-written mock.")
     return 0
 
 
@@ -538,6 +563,14 @@ def cmd_mock_serve(args):
         return 1
     print(f"JsonUI mock server: http://127.0.0.1:{server.port}")
     print(f"  loaded {len(store.endpoints)} endpoint(s) from {mock_dir}/")
+    if store.overrides:
+        # A hand-written mock silently shadowing a generated one is the
+        # confusing case, so say so.
+        print(f"  {len(store.overrides)} hand-written mock(s) overlay the generated tree:")
+        for rel in store.overrides[:10]:
+            print(f"    {rel}")
+        if len(store.overrides) > 10:
+            print(f"    ... and {len(store.overrides) - 10} more")
     print(f"  control panel: http://127.0.0.1:{server.port}/__jsonui__/panel")
     # flush: piped stdout is block-buffered and serve_forever() never
     # returns — without an explicit flush the banner (and the admin token,

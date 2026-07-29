@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from jsonui_test_cli.mock.generate import (
+    GENERATED_DIR,
     empty_array_prefixes,
     generate,
     key_paths,
@@ -68,10 +69,20 @@ SPEC = {
 
 
 def _setup(tmp_path):
+    """Generate, then adopt both mocks as hand-written.
+
+    Most of these tests are about drift a person has to fix, which lives
+    outside `generated/` — that tree is a pure function of the swagger and
+    its findings are warnings. `TestGeneratedTree` covers the split itself.
+    """
     spec = tmp_path / "spec.json"
     spec.write_text(json.dumps(SPEC), encoding="utf-8")
     out = tmp_path / "mocks"
     generate([str(spec)], out)
+    for src in sorted((out / GENERATED_DIR).rglob("*.mock.json")):
+        dst = out / src.relative_to(out / GENERATED_DIR)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        src.rename(dst)
     return str(spec), out
 
 
@@ -224,8 +235,8 @@ class TestMockIdentity:
     def test_scaffolding_does_not_duplicate_a_renamed_mock(self, tmp_path):
         spec, out, _ = self._renamed(tmp_path)
         report = generate([spec], out)
-        assert report.created == []
-        assert not (out / "bars" / "followBar.mock.json").exists()
+        assert "bars/post_api-bars-by-uuid-follow.mock.json" in report.skipped
+        assert not any("followBar" in c for c in report.created)
 
     def test_update_default_finds_a_renamed_mock(self, tmp_path):
         spec, out, dst = self._renamed(tmp_path)
@@ -337,3 +348,61 @@ class TestUpdateDefault:
         report = update_default([spec], out)
         assert report.updated == []
         assert len(report.unchanged) == 2
+
+
+class TestGeneratedTree:
+    """`generated/` is the tool's; everything else belongs to the project."""
+
+    def _fresh(self, tmp_path):
+        spec = tmp_path / "spec.json"
+        spec.write_text(json.dumps(SPEC), encoding="utf-8")
+        out = tmp_path / "mocks"
+        generate([str(spec)], out)
+        return str(spec), out
+
+    def test_generation_writes_only_under_generated(self, tmp_path):
+        _spec, out = self._fresh(tmp_path)
+        written = sorted(p.relative_to(out) for p in out.rglob("*.mock.json"))
+        assert written and all(p.parts[0] == GENERATED_DIR for p in written)
+
+    def test_regeneration_drops_a_mock_whose_operation_is_gone(self, tmp_path):
+        # Wipe-and-rewrite is what makes a contract change show up as a
+        # regeneration instead of a hand-merge.
+        spec, out = self._fresh(tmp_path)
+        stale = out / GENERATED_DIR / "bars" / "goneAway.mock.json"
+        stale.write_text(json.dumps({
+            "source": {"operationId": "goneAway", "method": "GET", "path": "/api/gone"},
+            "scenarios": {"default": {"status": 200, "body": {}}},
+        }), encoding="utf-8")
+        generate([spec], out)
+        assert not stale.exists()
+
+    def test_a_stale_generated_mock_is_a_warning_not_a_failure(self, tmp_path):
+        spec, out = self._fresh(tmp_path)
+        (out / GENERATED_DIR / "bars" / "extra.mock.json").write_text(json.dumps({
+            "source": {"operationId": "extra", "method": "GET", "path": "/api/extra"},
+            "scenarios": {"default": {"status": 200, "body": {}}},
+        }), encoding="utf-8")
+        report = generate([spec], out, check=True)
+        assert not report.has_drift
+        assert any("regenerate" in w for w in report.warnings)
+
+    def test_a_stale_hand_written_mock_is_a_failure(self, tmp_path):
+        spec, out = self._fresh(tmp_path)
+        (out / "bars").mkdir(parents=True, exist_ok=True)
+        (out / "bars" / "extra.mock.json").write_text(json.dumps({
+            "source": {"operationId": "extra", "method": "GET", "path": "/api/extra"},
+            "scenarios": {"default": {"status": 200, "body": {}}},
+        }), encoding="utf-8")
+        report = generate([spec], out, check=True)
+        assert report.has_drift
+        assert any("extra" in o for o in report.orphaned)
+
+    def test_body_drift_inside_generated_does_not_fail_the_check(self, tmp_path):
+        spec, out = self._fresh(tmp_path)
+        mock = out / GENERATED_DIR / "bars" / "followBar.mock.json"
+        _write(mock, {"default": {"status": 200, "body": {"message": "x"}}})
+        report = generate([spec], out, check=True)
+        assert report.bodies and report.bodies[0].generated
+        assert report.errors == []
+        assert not report.has_drift

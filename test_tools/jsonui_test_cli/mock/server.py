@@ -44,6 +44,8 @@ class MockStore:
     """In-memory mock state, loaded from <mockDir>/**/*.mock.json."""
     mock_dir: Path
     endpoints: list[MockEndpoint] = field(default_factory=list)
+    #: Hand-written files that overlaid a generated mock, for the startup log.
+    overrides: list = field(default_factory=list)
     _lock: threading.RLock = field(default_factory=threading.RLock)
 
     @classmethod
@@ -53,8 +55,23 @@ class MockStore:
         return store
 
     def reload(self):
-        endpoints: list[MockEndpoint] = []
-        for f in sorted(Path(self.mock_dir).rglob("*.mock.json")):
+        """Load generated/ as the base and overlay the hand-written mocks.
+
+        A hand-written file carries only the scenarios its tests drive; the
+        routine `empty` / `error_404` variants come from the generated side,
+        so hand-written files stay thin and follow the contract for free.
+        Overlay is per scenario name, and the hand-written `activeScenario`
+        wins when it names one that exists.
+        """
+        from .generate import GENERATED_DIR
+
+        root = Path(self.mock_dir)
+        merged: dict = {}
+        overrides: list[str] = []
+        # generated first, so the hand-written pass overwrites it.
+        files = sorted(root.rglob("*.mock.json"),
+                       key=lambda f: (GENERATED_DIR not in f.relative_to(root).parts, str(f)))
+        for f in files:
             try:
                 with open(f, "r", encoding="utf-8") as fh:
                     data = json.load(fh)
@@ -63,23 +80,56 @@ class MockStore:
             src = data.get("source", {})
             method = (src.get("method") or "GET").upper()
             path = src.get("path") or "/"
-            op_id = src.get("operationId") or f.stem.replace(".mock", "")
-            scenarios = data.get("scenarios", {})
-            active = data.get("activeScenario", "default")
+            key = (method, path)
+            scenarios = data.get("scenarios", {}) or {}
+            generated = GENERATED_DIR in f.relative_to(root).parts
+
+            entry = merged.get(key)
+            if entry is None:
+                merged[key] = {
+                    "operation_id": src.get("operationId") or f.stem.replace(".mock", ""),
+                    "method": method,
+                    "path": path,
+                    "scenarios": dict(scenarios),
+                    "active": data.get("activeScenario", "default"),
+                    "file_path": f,
+                    "generated": generated,
+                }
+                continue
+            if generated:
+                # Two generated files for one route cannot happen (the tree is
+                # rewritten from the swagger); if it somehow does, first wins.
+                continue
+            # Hand-written overlay.
+            entry["scenarios"].update(scenarios)
+            if data.get("activeScenario"):
+                entry["active"] = data["activeScenario"]
+            if src.get("operationId"):
+                entry["operation_id"] = src["operationId"]
+            entry["file_path"] = f
+            entry["generated"] = False
+            overrides.append(str(f.relative_to(root)))
+
+        endpoints: list[MockEndpoint] = []
+        for entry in merged.values():
+            scenarios = entry["scenarios"]
+            active = entry["active"]
             endpoints.append(MockEndpoint(
-                operation_id=op_id,
-                method=method,
-                path=path,
+                operation_id=entry["operation_id"],
+                method=entry["method"],
+                path=entry["path"],
                 active_scenario=active if active in scenarios else next(iter(scenarios), "default"),
                 scenarios=scenarios,
-                file_path=f,
-                regex=_path_to_regex(path),
-                is_static="{" not in path,
+                file_path=entry["file_path"],
+                regex=_path_to_regex(entry["path"]),
+                is_static="{" not in entry["path"],
             ))
-        # Static paths first so they win over parameterized ones.
         endpoints.sort(key=lambda e: (not e.is_static, e.path))
         with self._lock:
             self.endpoints = endpoints
+            # Which side won is never left silent — a hand-written mock
+            # quietly shadowing a generated one is the confusing case.
+            self.overrides = sorted(overrides)
 
     def match(self, method: str, path: str) -> MockEndpoint | None:
         with self._lock:
