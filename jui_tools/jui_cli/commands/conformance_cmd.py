@@ -152,6 +152,38 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         help="Rewrite coverage.json from the current gaps (reasons are preserved)",
     )
 
+    eff = sub.add_parser(
+        "effect",
+        help="Record/check which fixtures render differently from their control",
+    )
+    eff.add_argument(
+        "--platform",
+        required=True,
+        choices=list(_PLATFORMS),
+        help="Platform whose artifacts to measure",
+    )
+    eff.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory (default: {_DEFAULT_OUT})",
+    )
+    eff.add_argument(
+        "--artifacts",
+        default=None,
+        help="Directory holding this platform's screenshots (default: <dir>/artifacts/<platform>)",
+    )
+    eff.add_argument(
+        "--update",
+        action="store_true",
+        help=(
+            "Record every fixture that currently differs from its control into "
+            "control_diff.json. Existing entries are kept: an attribute that "
+            "used to have an effect must not lose it because one run measured "
+            "nothing."
+        ),
+    )
+
 
 def cmd_conformance(args: argparse.Namespace) -> int:
     """Dispatch to the right ``conformance`` subcommand."""
@@ -166,7 +198,11 @@ def cmd_conformance(args: argparse.Namespace) -> int:
         return _cmd_baseline(args)
     if target == "coverage":
         return _cmd_coverage(args)
-    print("Usage: jui conformance <generate|report|baseline|coverage> [options]")
+    if target == "effect":
+        return _cmd_effect(args)
+    print(
+        "Usage: jui conformance <generate|report|baseline|coverage|effect> [options]"
+    )
     return 1
 
 
@@ -186,7 +222,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     print(
         f"  fixtures: {summary.fixture_count} "
         f"(assertable: {summary.assertable_count}, visual: {summary.visual_count}, "
-        f"interactive: {summary.interactive_count})"
+        f"interactive: {summary.interactive_count}, control: {summary.control_count})"
     )
     print(f"  skipped attributes (with reason): {summary.skipped_count}")
     if summary.promoted:
@@ -239,6 +275,84 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
 
     print(f"baseline written to {summary.out_path}")
     print(f"  platform: {summary.platform}, screenshots hashed: {summary.hashed}")
+    return 0
+
+
+def _cmd_effect(args: argparse.Namespace) -> int:
+    """Measure fixture-vs-control renders, and record or check the ledger."""
+    import json as _json
+
+    from ..conformance import control_diff as cd
+
+    conformance_dir = Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    manifest_path = conformance_dir / "manifest.json"
+    results_path = conformance_dir / "results" / f"{args.platform}.results.json"
+
+    for path, hint in (
+        (manifest_path, "run `jui conformance generate` first"),
+        (results_path, f"run the {args.platform} conformance host first"),
+    ):
+        if not path.is_file():
+            print(f"ERROR: not found: {path} — {hint}")
+            return 1
+
+    manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+    raw = _json.loads(results_path.read_text(encoding="utf-8"))
+    results = {
+        entry["id"]: entry
+        for entry in raw.get("fixtures", raw.get("results", [])) or []
+        if isinstance(entry, dict) and entry.get("id")
+    }
+
+    artifacts = Path(args.artifacts) if args.artifacts else None
+    result = cd.compare(
+        conformance_dir, args.platform, manifest, results, artifacts_dir=artifacts
+    )
+    if result.error:
+        print(f"ERROR: nothing was compared: {result.error}")
+        return 1
+
+    compared = len(result.active) + len(result.inert)
+    print(f"attribute effect ({args.platform}): {compared} fixture(s) compared to their control")
+    print(f"  differ from control (attribute took effect): {len(result.active)}")
+    print(f"  identical to control (no effect measured):   {len(result.inert)}")
+    if result.no_control:
+        print(f"  no usable control screenshot: {len(result.no_control)}")
+
+    path = cd.ledger_path(conformance_dir)
+    if args.update:
+        # Union, not replace: a run on a device where one fixture failed to
+        # screenshot would otherwise quietly drop that attribute's guarantee.
+        kept = cd.load_ledger(path)
+        merged = kept | set(result.active)
+        path.write_text(cd.render_ledger(merged), encoding="utf-8")
+        print(f"  ledger written to {path} ({len(merged)} fixture(s), +{len(merged - kept)} new)")
+        return 0
+
+    if result.regressions:
+        print()
+        print(
+            f"{len(result.regressions)} fixture(s) recorded as expected-to-differ now "
+            "render identically to their control — the attribute stopped taking effect:"
+        )
+        for fid in result.regressions[:30]:
+            print(f"  {fid}")
+        if len(result.regressions) > 30:
+            print(f"  … {len(result.regressions) - 30} more")
+        return 1
+
+    if result.unmeasured:
+        print()
+        print(
+            f"{len(result.unmeasured)} recorded fixture(s) produced no screenshot, so "
+            "their effect was not verified (not a pass):"
+        )
+        for fid in result.unmeasured[:30]:
+            print(f"  {fid}")
+        return 1
+
+    print()
+    print("No regression: every recorded attribute still changes what is rendered.")
     return 0
 
 

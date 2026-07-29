@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/__control/Progress.layout.json"
+  },
+  "metadata": {
+    "name": "conformance control Progress",
+    "description": "Control for Progress: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "control"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "Progress",
+      "description": "Control for Progress: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "control_Progress"
+        }
+      ]
+    }
+  ]
+}

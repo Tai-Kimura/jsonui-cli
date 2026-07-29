@@ -249,9 +249,49 @@ class ConformanceGeneratorTest(unittest.TestCase):
         self.assertEqual(
             counts["assertable"], sum(1 for f in fixtures if f["class"] == "assertable")
         )
+        # A control carries class "visual" too — the runner has to screenshot
+        # it — so the visual tally is the non-control ones.
         self.assertEqual(
-            counts["visual"], sum(1 for f in fixtures if f["class"] == "visual")
+            counts["visual"],
+            sum(1 for f in fixtures if f["class"] == "visual" and not f.get("isControl")),
         )
+        self.assertEqual(
+            counts["control"], sum(1 for f in fixtures if f.get("isControl"))
+        )
+
+    def test_every_visual_fixture_has_a_control(self):
+        """Without one, a dropped attribute renders the default, matches the
+        default it recorded last time, and passes forever."""
+        controls = {f["id"] for f in self.manifest["fixtures"] if f.get("isControl")}
+        self.assertTrue(controls, "no control fixtures were generated")
+        for f in self.manifest["fixtures"]:
+            if f["class"] != "visual" or f.get("isControl"):
+                continue
+            self.assertIn(f.get("control"), controls, f["id"])
+
+    def test_control_differs_from_the_fixture_in_the_attribute_under_test(self):
+        """The control has to be a different input, or the comparison is empty.
+
+        Usually that means the control simply lacks the attribute. When the
+        attribute is one of the host's BASE attributes (`background` on View),
+        the control keeps the base value and the fixture overrides it — still a
+        difference, but only if the two values are not equal. A fixture whose
+        test value happens to match the base value would render identically to
+        its control and be indistinguishable from a dropped attribute.
+        """
+        by_id = {f["id"]: f for f in self.manifest["fixtures"]}
+        for f in self.manifest["fixtures"]:
+            if f["class"] != "visual" or f.get("isControl"):
+                continue
+            control = by_id[f["control"]]
+            layout = json.loads(
+                (self.out_dir / control["layout"]).read_text(encoding="utf-8")
+            )
+            target = next(c for c in layout["child"] if c.get("id") == "target")
+            self.assertEqual(target["type"], f["host"], f["id"])
+            key = f["writtenKey"]
+            if key in target:
+                self.assertNotEqual(target[key], f["value"], f["id"])
 
     def test_screen_test_shape(self):
         """Structural conformance with the screen-test schema (no jsonschema dep)."""

@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from . import baseline as baseline_mod
+from . import control_diff as control_diff_mod
 
 REPORT_GENERATOR = "jui conformance report"
 
@@ -65,6 +66,14 @@ class ReportSummary:
     #: ran — which is how the whole visual check sat inert in CI (Pillow was
     #: not installed) while an iOS runner upgrade re-rendered every fixture.
     baseline_errors: dict[str, str] = field(default_factory=dict)
+    #: platform -> fixtures that render identically to their control despite
+    #: being recorded as expected-to-differ. The attribute stopped doing
+    #: anything, which no baseline comparison can see: a dropped attribute
+    #: renders the default and matches the default it recorded last time.
+    inert_regressions: dict[str, list] = field(default_factory=dict)
+    #: platform -> count of fixtures indistinguishable from their control and
+    #: NOT yet recorded. Reported, not failed — see control_diff.
+    inert_unrecorded: dict[str, int] = field(default_factory=dict)
 
 
 class ReportError(RuntimeError):
@@ -155,6 +164,7 @@ def render_report(
     manifest_hash: str,
     platforms: list[PlatformResults],
     visual: dict[str, "baseline_mod.VisualComparison"] | None = None,
+    diffs: dict[str, "control_diff_mod.DiffResult"] | None = None,
 ) -> tuple[str, ReportSummary]:
     """Render REPORT.md content. Pure function of its inputs (deterministic).
 
@@ -324,6 +334,63 @@ def render_report(
                 )
     lines.append("")
 
+    # --- 1d. Attribute effect (fixture vs its control) --- #
+    lines.append("## Attribute effect (fixture vs control)")
+    lines.append("")
+    lines.append(
+        "Each visual fixture is compared against its **control** — the same layout "
+        "with the attribute under test removed. An identical render means the "
+        "attribute did nothing on this platform. Both images come from THIS run, "
+        "so no baseline is involved and a runner upgrade cannot mask it."
+    )
+    lines.append("")
+    if not diffs:
+        lines.append("_No results to compare._")
+    else:
+        lines.append("| Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |")
+        lines.append("|---|---|---|---|---|---|")
+        for p in platforms:
+            d = diffs.get(p.platform)
+            if d is None:
+                lines.append(f"| {p.platform} | — | | | | |")
+                continue
+            if d.error:
+                summary.baseline_errors.setdefault(p.platform, d.error)
+                lines.append(f"| {p.platform} | **not compared**: {_escape_cell(d.error)} | | | | |")
+                continue
+            summary.inert_unrecorded[p.platform] = len(d.inert) - len(d.regressions)
+            if d.regressions:
+                summary.inert_regressions[p.platform] = list(d.regressions)
+            compared = len(d.active) + len(d.inert)
+            flagged = f"**{len(d.regressions)}**" if d.regressions else "0"
+            lines.append(
+                f"| {p.platform} | {compared} | {len(d.active)} | {len(d.inert)} "
+                f"| {flagged} | {len(d.unmeasured)} |"
+            )
+        for p in platforms:
+            d = diffs.get(p.platform)
+            if d is None or d.error:
+                continue
+            if d.regressions:
+                lines.append("")
+                lines.append(
+                    f"**{p.platform}: {len(d.regressions)} fixture(s) recorded as "
+                    "expected-to-differ now render identically to their control — "
+                    "the attribute stopped taking effect.**"
+                )
+                lines.append("")
+                for fid in d.regressions[:20]:
+                    lines.append(f"- `{fid}`")
+                if len(d.regressions) > 20:
+                    lines.append(f"- … {len(d.regressions) - 20} more")
+            if d.no_control:
+                lines.append("")
+                lines.append(
+                    f"> {p.platform}: {len(d.no_control)} fixture(s) had no usable "
+                    "control screenshot (not compared — NOT a pass)"
+                )
+    lines.append("")
+
     # --- 2. Platform summaries + staleness --- #
     lines.append("## Platforms")
     lines.append("")
@@ -450,7 +517,18 @@ def generate_report(
             conformance_dir, p.platform, screenshot_names
         )
 
-    content, summary = render_report(manifest, manifest_hash, platforms, visual=visual)
+    # Fixture-vs-control comparison: does the attribute change anything on
+    # this platform at all? Independent of baselines — both images come from
+    # this run — so it survives a runner upgrade that invalidates every hash.
+    diffs: dict[str, control_diff_mod.DiffResult] = {}
+    for p in platforms:
+        diffs[p.platform] = control_diff_mod.compare(
+            conformance_dir, p.platform, manifest, p.results
+        )
+
+    content, summary = render_report(
+        manifest, manifest_hash, platforms, visual=visual, diffs=diffs
+    )
 
     if out_path is None:
         out_path = conformance_dir / "REPORT.md"

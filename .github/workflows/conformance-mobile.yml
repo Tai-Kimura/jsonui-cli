@@ -301,6 +301,24 @@ jobs:
           # what let the visual check sit inert for weeks.
           for platform, why in summary.baseline_errors.items():
               problems.append(f"{platform}: screenshots were not compared — {why}")
+          # Attribute effect: every fixture is also compared against its
+          # control (same layout, attribute removed). The baseline check
+          # cannot see a dropped attribute — the fixture renders the default
+          # and matches the default it recorded last time — so this is the
+          # only gate that notices an attribute going inert. Both images come
+          # from this run, so a runner upgrade cannot mask it.
+          for platform, ids in summary.inert_regressions.items():
+              problems.append(
+                  f"{platform}: {len(ids)} attribute(s) no longer change what is "
+                  f"rendered (identical to their control): {', '.join(ids[:5])}"
+                  + (" …" if len(ids) > 5 else "")
+              )
+          for platform, count in summary.inert_unrecorded.items():
+              if count:
+                  print(
+                      f"::notice::{platform}: {count} fixture(s) render identically to "
+                      "their control and are not yet recorded in control_diff.json"
+                  )
 
           for platform in sorted(expected - missing):
               data = json.loads(Path(f"conformance/results/{platform}.results.json").read_text())
