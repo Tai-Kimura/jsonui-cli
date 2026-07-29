@@ -118,7 +118,9 @@ def _check_mocks_against_swagger(config_path):
     if not mock_path.exists():
         return 0
 
-    resolved = [str(root / s) if not Path(s).is_absolute() else s for s in swaggers]
+    resolved = _resolve_swaggers(swaggers, root, cfg_path)
+    if not resolved:
+        return 0
 
     # generated/ is meant to be gitignorable, so it has to rebuild itself on a
     # fresh clone or a first CI run. Rebuilding when it is missing or older
@@ -414,7 +416,14 @@ def cmd_report(args):
 
 
 def _load_mock_config(explicit_path=None):
-    """Read the 'mock' section from jui.config.json (or an explicit config path)."""
+    """Read the 'mock' section from jui.config.json (or an explicit config path).
+
+    `swagger` is normalised to a list here rather than at each call site: a
+    bare string is the obvious thing to write, and every consumer of this
+    config iterates the value — so a string was opened one character at a
+    time and failed with `Is a directory: '.'`, an error that points at the
+    filesystem instead of at the key.
+    """
     candidates = [Path(explicit_path)] if explicit_path else [
         Path("jui.config.json"), Path("jsonui-test.config.json")]
     for c in candidates:
@@ -422,10 +431,34 @@ def _load_mock_config(explicit_path=None):
             try:
                 with open(c, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                return data.get("mock", data), c
+                config = dict(data.get("mock", data))
+                swagger = config.get("swagger")
+                if isinstance(swagger, str):
+                    config["swagger"] = [swagger]
+                elif swagger is not None and not isinstance(swagger, list):
+                    print(f"Warning: mock.swagger in {c} is "
+                          f"{type(swagger).__name__}; expected a path or a list "
+                          "of paths — ignoring", file=sys.stderr)
+                    config["swagger"] = []
+                return config, c
             except (OSError, json.JSONDecodeError):
                 pass
     return {}, None
+
+
+def _resolve_swaggers(swaggers, root, config_path):
+    """Absolute swagger paths, reporting the ones the config points nowhere at."""
+    resolved = []
+    for entry in swaggers:
+        path = Path(entry)
+        if not path.is_absolute():
+            path = root / path
+        if not path.is_file():
+            where = f" (mock.swagger in {config_path})" if config_path else ""
+            print(f"Warning: swagger not found: {path}{where}", file=sys.stderr)
+            continue
+        resolved.append(str(path))
+    return resolved
 
 
 def cmd_mock_generate(args):
@@ -433,7 +466,7 @@ def cmd_mock_generate(args):
     from .mock.generate import generate, update_default, GenerateReport, CheckReport
 
     config, _ = _load_mock_config(getattr(args, "config", None))
-    swaggers = list(args.swagger) if args.swagger else config.get("swagger", [])
+    swaggers = list(args.swagger) if args.swagger else list(config.get("swagger") or [])
     mock_dir = args.out or config.get("mockDir", "tests/mocks")
     if not swaggers:
         print("Error: no swagger specified (use --swagger or set mock.swagger in jui.config.json)", file=sys.stderr)
@@ -542,7 +575,7 @@ def cmd_mock_serve(args):
     contract = ContractIndex()
     contract_log = ContractLog()
     if config.get("validateRequests", True) and not getattr(args, "no_validate_requests", False):
-        contract = ContractIndex.load(config.get("swagger", []))
+        contract = ContractIndex.load(list(config.get("swagger") or []))
         if not contract:
             print("  request validation: off (no swagger configured)")
 
