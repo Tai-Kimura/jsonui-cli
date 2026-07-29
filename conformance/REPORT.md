@@ -10,7 +10,9 @@ Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
 
 ## Cross-platform mismatches
 
-_No cross-platform mismatches._
+| Fixture | Class | android | ios | web | Detail |
+|---|---|---|---|---|---|
+| `Check/onValueChange__callback_fire` | interactive | ✅ | ⚠️ | ✅ | ios: assert text(mirror): Assertion 'text' failed - Expected: equals 'fired', Actual: 'ready' for 'mirror' |
 
 ## Interactive fixtures
 
@@ -50,7 +52,7 @@ _No cross-platform mismatches._
 | `Switch/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
 | `Toggle/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
 | `CheckBox/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
-| `Check/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
+| `Check/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ⚠️ | ✅ | ios: assert text(mirror): Assertion 'text' failed - Expected: equals 'fired', Actual: 'ready' for 'mirror' |
 | `Embed/navigationMode__isolated_push` | `isolated_push` | — | ✅ | ✅ | ✅ |  |
 | `Embed/navigationMode__isolated_pop_boundary` | `isolated_pop_boundary` | — | ✅ | ✅ | ✅ |  |
 | `common/variantfile__state_vm_survives` | `state_vm_survives` | — | – | – | ✅ | android: not applicable to android<br>ios: not applicable to ios |
@@ -70,7 +72,7 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | Platform | Runner | Results | pass | fail | error | skipped | Manifest |
 |---|---|---|---|---|---|---|---|
 | android | uiautomator 2.3.0 | 672 | 535 | 0 | 0 | 137 | current |
-| ios | xcuitest ios-26.2 | 672 | 557 | 0 | 0 | 115 | current |
+| ios | xcuitest ios-26.2 | 672 | 556 | 0 | 1 | 115 | current |
 | web | playwright 1.61.1 | 672 | 534 | 0 | 0 | 138 | current |
 
 ## Matrix
@@ -794,7 +796,7 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `spacing` | `static` | visual | ✅ | ✅ | ✅ |
-| `onValueChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
+| `onValueChange` | `callback_fire` | interactive | ✅ | ⚠️ | ✅ |
 | `checkedColor` | `static` | visual | ✅ | ✅ | – |
 | `uncheckedColor` | `static` | visual | ✅ | ✅ | – |
 | `iconSize` | `static` | visual | ✅ | ✅ | – |

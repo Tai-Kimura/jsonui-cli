@@ -3531,9 +3531,9 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "assert text(mirror): Assertion 'text' failed - Expected: equals 'fired', Actual: 'ready' for 'mirror'",
       "id" : "Check/onValueChange__callback_fire",
-      "status" : "pass"
+      "status" : "error"
     },
     {
       "detail" : "",
