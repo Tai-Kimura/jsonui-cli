@@ -9,7 +9,8 @@
         "ios",
         "android"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (android: Kotlin Dynamic; ios: UIKit+SwiftUI Dynamic) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Button",
@@ -103,7 +104,8 @@
       "platforms": [
         "ios"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Collection",
@@ -129,7 +131,8 @@
         "ios",
         "web"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Collection",
@@ -137,7 +140,8 @@
       "platforms": [
         "ios"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Collection",
@@ -220,7 +224,8 @@
         "ios",
         "android"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit+SwiftUI Dynamic) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "IconLabel",
@@ -236,7 +241,8 @@
       "platforms": [
         "android"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (android: Kotlin Dynamic) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "IconLabel",
@@ -269,7 +275,8 @@
         "ios",
         "web"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Image",
@@ -277,7 +284,8 @@
       "platforms": [
         "ios"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Image",
@@ -285,7 +293,8 @@
       "platforms": [
         "ios"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Image",
@@ -294,7 +303,8 @@
         "ios",
         "android"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Image",
@@ -302,7 +312,8 @@
       "platforms": [
         "ios"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Image",
@@ -326,7 +337,8 @@
       "platforms": [
         "ios"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Label",
@@ -336,7 +348,8 @@
         "android",
         "web"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Label",
@@ -361,7 +374,8 @@
         "ios",
         "web"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Label",
@@ -377,7 +391,8 @@
       "platforms": [
         "ios"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "NetworkImage",
@@ -394,7 +409,8 @@
         "ios",
         "android"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Progress",
@@ -402,7 +418,8 @@
       "platforms": [
         "ios"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Radio",
@@ -473,7 +490,8 @@
         "android",
         "web"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "ScrollView",
@@ -514,7 +532,8 @@
       "platforms": [
         "ios"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit+SwiftUI Dynamic) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Segment",
@@ -522,7 +541,8 @@
       "platforms": [
         "ios"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit+SwiftUI Dynamic) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Segment",
@@ -532,7 +552,8 @@
         "android",
         "web"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "SelectBox",
@@ -606,7 +627,8 @@
       "platforms": [
         "android"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (android: Kotlin Dynamic) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Switch",
@@ -655,7 +677,8 @@
       "platforms": [
         "ios"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "TextField",
@@ -663,7 +686,8 @@
       "platforms": [
         "ios"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "TextField",
@@ -697,7 +721,8 @@
       "platforms": [
         "ios"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "TextField",
@@ -705,7 +730,8 @@
       "platforms": [
         "ios"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "TextField",
@@ -887,7 +913,8 @@
       "platforms": [
         "android"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (android: Kotlin Dynamic) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Toggle",
@@ -929,7 +956,8 @@
       "platforms": [
         "ios"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "View",
@@ -938,7 +966,8 @@
         "ios",
         "android"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "View",
@@ -1127,7 +1156,8 @@
         "android",
         "web"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "common",
@@ -1202,7 +1232,8 @@
       "platforms": [
         "ios"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "common",

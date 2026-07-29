@@ -58,6 +58,16 @@ PLATFORM_TAGS = {"swift": "ios", "kotlin": "android", "react": "web"}
 #: 85 attributes are outside this repository, so a source scan here would
 #: report every one of them as a gap. UIKit coverage is therefore a known
 #: blind spot of this check, not a silently clean result.
+#:
+#: The blind spot is WIDER than the `uikit` tag, and that is the part which
+#: misleads: an attribute with NO mode declared is still measured against the
+#: Ruby codegen alone, so a feature the SwiftJsonUI UIKit runtime fully
+#: implements reads here as an iOS gap. 32 recorded gaps are that shape
+#: (28 in `SJUI*` / `SJUIViewCreator`, 4 in the KotlinJsonUI dynamic
+#: components); each carries a ledger `note` naming the surface.
+#:
+#: Read a gap as "the codegen does not emit this", never as "the platform
+#: cannot do this" — the two differ by a working reference implementation.
 MODE_TAGS = {
     "uikit": set(),
     "swiftui": {"ios"},
