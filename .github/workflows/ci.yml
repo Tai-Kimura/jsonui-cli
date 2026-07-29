@@ -172,6 +172,14 @@ jobs:
         # rjui_tools vendors the generated ruby extraction tables; README.md
         # is the (hand-written) provenance note and is excluded.
         run: diff -r -x README.md build/attr_codegen/ruby rjui_tools/lib/core/generated/attributes
+      - name: Attribute coverage ratchet (declared attributes each platform reads)
+        # The conformance suite compares each platform against its own previous
+        # screenshot, so an attribute no converter reads renders blank, matches
+        # its blank baseline and passes. This is the static backstop: a newly
+        # declared attribute nobody wired up, or a closed gap left in the
+        # ledger, fails here. See conformance/coverage.json.
+        run: |
+          python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','coverage']))"
 
   # ------------------------------------------------------------------ #
   # Web conformance: the full generated fixture suite through the real

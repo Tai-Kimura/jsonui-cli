@@ -1,0 +1,1278 @@
+{
+  "schemaVersion": 1,
+  "_comment": "Declared attributes no platform converter reads. Hand-maintained: close a gap by implementing it (then delete the entry) or by narrowing platform/mode in attribute_definitions.json. reason is one of: dynamic-key, legacy, platform-na, runtime-only, unimplemented.",
+  "entries": [
+    {
+      "component": "Blur",
+      "attribute": "effectStyle",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Button",
+      "attribute": "buttonType",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Button",
+      "attribute": "hilightColor",
+      "platforms": [
+        "web"
+      ],
+      "reason": "legacy",
+      "note": "alias — normalized to its canonical spelling before conversion"
+    },
+    {
+      "component": "Check",
+      "attribute": "bind",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Check",
+      "attribute": "iconColor",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Check",
+      "attribute": "iconSize",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Check",
+      "attribute": "onSrc",
+      "platforms": [
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "CheckBox",
+      "attribute": "bind",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "CheckBox",
+      "attribute": "iconColor",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "CheckBox",
+      "attribute": "iconSize",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "CheckBox",
+      "attribute": "onSrc",
+      "platforms": [
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Collection",
+      "attribute": "contentInsetAdjustmentBehavior",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Collection",
+      "attribute": "contentInsets",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Collection",
+      "attribute": "currentPage",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Collection",
+      "attribute": "defaultScrollAnchor",
+      "platforms": [
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Collection",
+      "attribute": "insetVertical",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Collection",
+      "attribute": "itemWeight",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Collection",
+      "attribute": "onItemAppear",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Collection",
+      "attribute": "onPageChanged",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "reason": "legacy",
+      "note": "alias — normalized to its canonical spelling before conversion"
+    },
+    {
+      "component": "Collection",
+      "attribute": "scrollAnchor",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Collection",
+      "attribute": "scrollAnimated",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Collection",
+      "attribute": "scrollTo",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Collection",
+      "attribute": "sectionSticky",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Collection",
+      "attribute": "showsHorizontalScrollIndicator",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Collection",
+      "attribute": "showsVerticalScrollIndicator",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "EditText",
+      "attribute": "inputType",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "GradientView",
+      "attribute": "gradientDirection",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "GradientView",
+      "attribute": "locations",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "IconLabel",
+      "attribute": "iconMargin",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "IconLabel",
+      "attribute": "iconPosition",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "IconLabel",
+      "attribute": "icon_off",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "IconLabel",
+      "attribute": "icon_on",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "IconLabel",
+      "attribute": "selectedFontColor",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "IconLabel",
+      "attribute": "textShadow",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Image",
+      "attribute": "canTap",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Image",
+      "attribute": "errorImage",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Image",
+      "attribute": "highlightSrc",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Image",
+      "attribute": "loadingImage",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Image",
+      "attribute": "minZoom",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Image",
+      "attribute": "renderingMode",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Image",
+      "attribute": "systemIcon",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Indicator",
+      "attribute": "hidesWhenStopped",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Label",
+      "attribute": "highlightAttributes",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Label",
+      "attribute": "hintAttributes",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Label",
+      "attribute": "lineHeight",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Label",
+      "attribute": "textShadow",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Label",
+      "attribute": "textTransform",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "NetworkImage",
+      "attribute": "errorImage",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "NetworkImage",
+      "attribute": "headers",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "NetworkImage",
+      "attribute": "loadingImage",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Progress",
+      "attribute": "hidesWhenStopped",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Progress",
+      "attribute": "progress",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Radio",
+      "attribute": "iconColor",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Radio",
+      "attribute": "iconSize",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Radio",
+      "attribute": "selected_icon",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "SafeAreaView",
+      "attribute": "safeAreaInsetPositions",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "ScrollView",
+      "attribute": "bounces",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "ScrollView",
+      "attribute": "contentInsetAdjustmentBehavior",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "ScrollView",
+      "attribute": "keyboardDismissMode",
+      "platforms": [
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "ScrollView",
+      "attribute": "maxZoom",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "ScrollView",
+      "attribute": "minZoom",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "ScrollView",
+      "attribute": "scrollBehavior",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "ScrollView",
+      "attribute": "scrollMode",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "ScrollView",
+      "attribute": "showsHorizontalScrollIndicator",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "ScrollView",
+      "attribute": "showsVerticalScrollIndicator",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Segment",
+      "attribute": "normalColor",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Segment",
+      "attribute": "selectedColor",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Segment",
+      "attribute": "valueChange",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "SelectBox",
+      "attribute": "datePickerStyle",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "SelectBox",
+      "attribute": "dateStringFormat",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "SelectBox",
+      "attribute": "labelAttributes",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "SelectBox",
+      "attribute": "minuteInterval",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "SelectBox",
+      "attribute": "multiple",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Slider",
+      "attribute": "maxValue",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "reason": "legacy",
+      "note": "alias — normalized to its canonical spelling before conversion"
+    },
+    {
+      "component": "Slider",
+      "attribute": "minValue",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "reason": "legacy",
+      "note": "alias — normalized to its canonical spelling before conversion"
+    },
+    {
+      "component": "Switch",
+      "attribute": "bind",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Switch",
+      "attribute": "labelPosition",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Switch",
+      "attribute": "onToggle",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Switch",
+      "attribute": "thumbTintColor",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Switch",
+      "attribute": "tint",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TabView",
+      "attribute": "onTabChange",
+      "platforms": [
+        "android",
+        "web"
+      ],
+      "reason": "legacy",
+      "note": "alias — normalized to its canonical spelling before conversion"
+    },
+    {
+      "component": "TabView",
+      "attribute": "showLabels",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TabView",
+      "attribute": "unselectedColor",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextField",
+      "attribute": "accessoryBackground",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextField",
+      "attribute": "accessoryTextColor",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextField",
+      "attribute": "autocapitalizationType",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextField",
+      "attribute": "autocorrectionType",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextField",
+      "attribute": "clearButtonMode",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextField",
+      "attribute": "doneText",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextField",
+      "attribute": "fieldPadding",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextField",
+      "attribute": "maxLength",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextField",
+      "attribute": "nextFocus",
+      "platforms": [
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextField",
+      "attribute": "onBeginEditing",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextField",
+      "attribute": "onBlur",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextField",
+      "attribute": "onEndEditing",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextField",
+      "attribute": "onFocus",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextField",
+      "attribute": "onSubmit",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextField",
+      "attribute": "pattern",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextField",
+      "attribute": "required",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextView",
+      "attribute": "cols",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextView",
+      "attribute": "editable",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextView",
+      "attribute": "hideOnFocused",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextView",
+      "attribute": "hintAttributes",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextView",
+      "attribute": "hintFont",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextView",
+      "attribute": "hintFontSize",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextView",
+      "attribute": "hintLineHeightMultiple",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextView",
+      "attribute": "keyboardType",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextView",
+      "attribute": "pattern",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextView",
+      "attribute": "required",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "TextView",
+      "attribute": "selectable",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Toggle",
+      "attribute": "bind",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Toggle",
+      "attribute": "labelPosition",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Toggle",
+      "attribute": "onToggle",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Toggle",
+      "attribute": "thumbTintColor",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Toggle",
+      "attribute": "tint",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "View",
+      "attribute": "alignment",
+      "platforms": [
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "View",
+      "attribute": "direction",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "View",
+      "attribute": "highlighted",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "View",
+      "attribute": "safeAreaInsetPositions",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Web",
+      "attribute": "allow",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Web",
+      "attribute": "allowsBackForwardNavigationGestures",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Web",
+      "attribute": "allowsLinkPreview",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Web",
+      "attribute": "html",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "alignBottomOfView",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "alignBottomView",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "alignCenterHorizontalView",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "alignCenterVerticalView",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "alignLeftOfView",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "alignLeftView",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "alignRightOfView",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "alignRightView",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "alignTopOfView",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "alignTopView",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "alignment",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "alpha",
+      "platforms": [
+        "web"
+      ],
+      "reason": "legacy",
+      "note": "alias — normalized to its canonical spelling before conversion"
+    },
+    {
+      "component": "common",
+      "attribute": "bind",
+      "platforms": [
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "binding",
+      "platforms": [
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "canTap",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "idealHeight",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "idealWidth",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "indexAbove",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "indexBelow",
+      "platforms": [
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "maxEndMargin",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "maxStartMargin",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "minEndMargin",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "minStartMargin",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "onLongPress",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "onPan",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "onPinch",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "onclick",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "common",
+      "attribute": "userInteractionEnabled",
+      "platforms": [
+        "android"
+      ],
+      "reason": "unimplemented"
+    }
+  ]
+}

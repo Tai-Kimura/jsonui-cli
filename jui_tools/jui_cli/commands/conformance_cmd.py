@@ -18,6 +18,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_DEFINITIONS = _REPO_ROOT / "shared" / "core" / "attribute_definitions.json"
 _DEFAULT_OUT = _REPO_ROOT / "conformance"
+_PLATFORMS = ("ios", "android", "web")
 
 
 def register_conformance_command(subparsers: argparse._SubParsersAction) -> None:
@@ -119,6 +120,38 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         help="Artifacts directory (default: <dir>/artifacts/<platform>)",
     )
 
+    cov = sub.add_parser(
+        "coverage",
+        help="Check declared attributes against what each platform's converters read",
+    )
+    cov.add_argument(
+        "--platform",
+        action="append",
+        choices=list(_PLATFORMS),
+        help="Limit the check to a platform (repeatable; default: all)",
+    )
+    cov.add_argument(
+        "--definitions",
+        default=None,
+        help=f"Path to attribute_definitions.json (default: {_DEFAULT_DEFINITIONS})",
+    )
+    cov.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory holding coverage.json (default: {_DEFAULT_OUT})",
+    )
+    cov.add_argument(
+        "--repo-root",
+        default=None,
+        help=f"Repo root holding the converter sources (default: {_REPO_ROOT})",
+    )
+    cov.add_argument(
+        "--update",
+        action="store_true",
+        help="Rewrite coverage.json from the current gaps (reasons are preserved)",
+    )
+
 
 def cmd_conformance(args: argparse.Namespace) -> int:
     """Dispatch to the right ``conformance`` subcommand."""
@@ -131,7 +164,9 @@ def cmd_conformance(args: argparse.Namespace) -> int:
         return _cmd_compat_doc(args)
     if target == "baseline":
         return _cmd_baseline(args)
-    print("Usage: jui conformance <generate|report|baseline> [options]")
+    if target == "coverage":
+        return _cmd_coverage(args)
+    print("Usage: jui conformance <generate|report|baseline|coverage> [options]")
     return 1
 
 
@@ -205,6 +240,62 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
     print(f"baseline written to {summary.out_path}")
     print(f"  platform: {summary.platform}, screenshots hashed: {summary.hashed}")
     return 0
+
+
+def _cmd_coverage(args: argparse.Namespace) -> int:
+    import json
+
+    from ..conformance import coverage as cov
+
+    definitions_path = Path(args.definitions) if args.definitions else _DEFAULT_DEFINITIONS
+    conformance_dir = Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    repo_root = Path(args.repo_root) if args.repo_root else _REPO_ROOT
+    platforms = tuple(args.platform) if args.platform else cov.PLATFORMS
+
+    if not definitions_path.is_file():
+        print(f"ERROR: attribute definitions not found: {definitions_path}")
+        return 1
+    definitions = json.loads(definitions_path.read_text(encoding="utf-8"))
+
+    result = cov.check(definitions, repo_root, conformance_dir, platforms=platforms)
+    ledger_path = cov.coverage_path(conformance_dir)
+
+    if args.update:
+        existing = cov.load_ledger(ledger_path)
+        ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        ledger_path.write_text(
+            cov.render_ledger(result.gaps, existing=existing, definitions=definitions),
+            encoding="utf-8",
+        )
+        print(f"coverage ledger written to {ledger_path}")
+        print(f"  {len(result.gaps)} gap(s) over {result.checked} declared attribute/platform pairs")
+        return 0
+
+    print(f"attribute coverage: {result.checked} declared attribute/platform pairs checked")
+    print(f"  recorded gaps: {len(result.gaps) - len(result.unrecorded)}")
+    for reason, count in sorted(result.by_reason.items()):
+        print(f"    {reason}: {count}")
+
+    if result.unrecorded:
+        print(f"\n{len(result.unrecorded)} declared attribute(s) no converter reads:")
+        for gap in result.unrecorded:
+            print(f"  {gap}")
+        print(
+            "\nImplement it, narrow platform/mode in attribute_definitions.json, or "
+            f"record it with `jui conformance coverage --update` (then set a reason in "
+            f"{ledger_path.name})."
+        )
+
+    if result.stale:
+        print(f"\n{len(result.stale)} stale ledger entr(y/ies) — the gap is closed or the")
+        print("attribute is gone; drop them with `jui conformance coverage --update`:")
+        for entry in result.stale:
+            print(f"  {entry}")
+
+    if result.ok:
+        print("\nNo unrecorded gaps.")
+        return 0
+    return 1
 
 
 def _cmd_report(args: argparse.Namespace) -> int:
