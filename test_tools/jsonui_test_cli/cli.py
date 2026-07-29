@@ -360,7 +360,7 @@ def _load_mock_config(explicit_path=None):
 
 def cmd_mock_generate(args):
     """Scaffold or diff mock definition files from OpenAPI specs."""
-    from .mock.generate import generate, GenerateReport, CheckReport
+    from .mock.generate import generate, update_default, GenerateReport, CheckReport
 
     config, _ = _load_mock_config(getattr(args, "config", None))
     swaggers = list(args.swagger) if args.swagger else config.get("swagger", [])
@@ -368,6 +368,16 @@ def cmd_mock_generate(args):
     if not swaggers:
         print("Error: no swagger specified (use --swagger or set mock.swagger in jui.config.json)", file=sys.stderr)
         return 1
+
+    if getattr(args, "update_default", False):
+        upd = update_default(swaggers, mock_dir)
+        for rel in upd.updated:
+            print(f"  [UPDATED] {rel}")
+        print(f"\nRefreshed the default body of {len(upd.updated)} mock file(s), "
+              f"{len(upd.unchanged)} already current, {len(upd.skipped)} not present "
+              f"(run without --update-default to scaffold those).")
+        print("Other scenarios were left untouched — review them by hand.")
+        return 0
 
     report = generate(swaggers, mock_dir, check=args.check)
 
@@ -378,9 +388,18 @@ def cmd_mock_generate(args):
             print(f"  [ORPHAN]  {rel} (mock file, not in swagger)")
         for msg in report.drifted:
             print(f"  [DRIFT]   {msg}")
+        for drift in report.bodies:
+            print(f"  [BODY]    {drift}")
+        for note in report.unmatched:
+            print(f"  [NOTE]    {note} — not compared")
         if report.has_drift:
             print(f"\nDrift detected: {len(report.missing)} missing, "
-                  f"{len(report.orphaned)} orphaned, {len(report.drifted)} drifted")
+                  f"{len(report.orphaned)} orphaned, {len(report.drifted)} drifted, "
+                  f"{len(report.bodies)} stale body(ies)")
+            if report.bodies:
+                print("Refresh the generated bodies with "
+                      "`jsonui-test mock generate --update-default` "
+                      "(hand-grown scenarios are preserved).")
             return 1
         print("No drift: mocks are in sync with swagger.")
         return 0
@@ -854,6 +873,11 @@ def main():
     mock_gen_parser.add_argument("--out", help="Output mock dir (default: mock.mockDir or tests/mocks)")
     mock_gen_parser.add_argument("--config", help="Config file (default: jui.config.json)")
     mock_gen_parser.add_argument("--check", action="store_true", help="Report drift vs swagger, do not write")
+    mock_gen_parser.add_argument(
+        "--update-default", action="store_true",
+        help="Rewrite each existing mock's default body + source from swagger, "
+             "keeping every other scenario",
+    )
 
     mock_serve_parser = mock_subparsers.add_parser("serve", help="Run the mock server + panel")
     mock_serve_parser.add_argument("--port", type=int, help="Port (default: mock.server.port or 8790)")
