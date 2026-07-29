@@ -70,6 +70,13 @@ RSpec.describe SjuiTools::SwiftUI::Views::ButtonConverter do
       code = convert('text' => 'Save')
       expect(code).not_to include('image:')
       expect(code).not_to include('imageTint:')
+      expect(code).not_to include('Requires SwiftJsonUI')
+    end
+
+    it 'records the library version the emitted call needs' do
+      # image:/imageTint: are new parameters — icon output does not compile
+      # against an older SwiftJsonUI.
+      expect(convert('image' => 'menu')).to include('// Requires SwiftJsonUI >= 10.9.0 (Button image)')
     end
   end
 end

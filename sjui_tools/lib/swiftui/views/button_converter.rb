@@ -34,6 +34,9 @@ module SjuiTools
           action = @component['onClick']
 
           # Use StateAwareButtonView for state-dependent styling
+          # `image:` / `imageTint:` are new parameters, so generated output
+          # for an icon button does not compile against an older library.
+          add_line '// Requires SwiftJsonUI >= 10.9.0 (Button image)' if has_image
           add_line "StateAwareButtonView("
           indent do
             # Process text with binding support

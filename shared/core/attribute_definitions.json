@@ -2197,8 +2197,11 @@
       "description": "Background when highlighted - hex string or color name from colors.json"
     },
     "image": {
-      "type": "string",
-      "description": "Button image"
+      "type": [
+        "string",
+        "binding"
+      ],
+      "description": "Button image - asset name (binding supported)"
     },
     "textAlign": {
       "type": "string",
