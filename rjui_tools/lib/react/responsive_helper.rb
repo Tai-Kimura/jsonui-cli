@@ -89,6 +89,10 @@ module RjuiTools
           raw = TailwindMapper.map_corner_radius(v)
           raw.empty? ? nil : "#{prefix}#{raw}"
         },
+        'flexWrap' => ->(v, prefix) {
+          raw = TailwindMapper.map_flex_wrap(v)
+          raw.empty? ? nil : "#{prefix}#{raw}"
+        },
         'textAlign' => ->(v, prefix) {
           raw = TailwindMapper.map_text_align(v)
           raw.empty? ? nil : "#{prefix}#{raw}"

@@ -56,6 +56,13 @@ module RjuiTools
             end
           end
 
+          # Wrapping. Only meaningful on a flex container, which every View
+          # with an orientation is.
+          if attributes['flexWrap']
+            wrap = TailwindMapper.map_flex_wrap(attributes['flexWrap'])
+            classes << wrap unless wrap.empty?
+          end
+
           # Center alignment
           classes << 'items-center' if attributes['centerHorizontal']
           classes << 'justify-center' if attributes['centerVertical']

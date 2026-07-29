@@ -25,7 +25,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
   CONSUMED = {
     'base_converter.rb' => %w[accessibilityLabel alignBottom alignLeft alignRight alignTop alt background borderColor borderStyle borderWidth bottomMargin bottomPadding centerHorizontal centerInParent centerVertical className clipToBounds cornerRadius direction enabled endMargin font fontColor fontFamily fontSize fontWeight gravity height hidden id insetHorizontal insets key leftMargin leftPadding margins maxHeight maxWidth minHeight minWidth offsetX offsetY onClick onclick opacity orientation padding paddingBottom paddingEnd paddingLeft paddingRight paddingStart paddingTop paddings propertyName rightMargin rightPadding shadow startMargin tag testId textAlign tintColor topMargin topPadding userInteractionEnabled visibility weight width zIndex],
     'blur_converter.rb' => %w[backgroundColor blurRadius cornerRadius effectStyle intensity onClick onclick],
-    'button_converter.rb' => %w[cornerRadius disabledBackground disabledFontColor enabled highlightBackground highlightColor href partialAttributes tapBackground text],
+    'button_converter.rb' => %w[cornerRadius disabledBackground disabledFontColor enabled fontColor highlightBackground highlightColor href image partialAttributes tapBackground text tintColor],
     'circle_view_converter.rb' => %w[background backgroundColor borderColor borderStyle borderWidth fillColor onClick onclick shadow strokeColor strokeWidth],
     'collection_converter.rb' => %w[autoChangeTrackingId cellClasses cellIdProperty columnCount columnSpacing columns contentInset footerClasses headerClasses id itemSpacing items layout lazy lineSpacing orientation scrollDirection scrollEnabled sections spacing],
     'embed_converter.rb' => %w[events id navigationMode params screen],
@@ -47,7 +47,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'text_field_converter.rb' => %w[autoFocus background becomeFirstResponder borderStyle borderWidth caretAttributes contentType cornerRadius disabledBackground editable enabled fontColor hint hintColor input maxLength name onChange onTextChange padding placeholder placeholderColor readOnly returnKeyType secure shadow text textPaddingLeft],
     'text_view_converter.rb' => %w[autoFocus background becomeFirstResponder borderColor borderWidth containerInset cornerRadius disabledBackground editable enabled flexible fontColor hint hintAttributes hintColor lines maxHeight maxLength minHeight name onChange onTextChange padding placeholder placeholderColor readOnly resize rows scrollEnabled text],
     'toggle_converter.rb' => %w[checked enabled isOn label onTintColor onValueChange text tintColor],
-    'view_converter.rb' => %w[centerHorizontal centerInParent centerVertical distribution draggable height highlightBackground highlighted onClick onDragEnter onDragLeave onDragOver onDragStart onDrop onLongPress onPan onPinch onclick orientation spacing tapBackground],
+    'view_converter.rb' => %w[centerHorizontal centerInParent centerVertical distribution draggable flexWrap height highlightBackground highlighted onClick onDragEnter onDragLeave onDragOver onDragStart onDrop onLongPress onPan onPinch onclick orientation spacing tapBackground],
     'web_converter.rb' => %w[accessibilityLabel allowCamera allowDownloads allowGeolocation allowMicrophone allowModals allowPopupsToEscapeSandbox allowsFullScreen allowsInlineMediaPlayback html htmlContent javaScriptCanOpenWindowsAutomatically javaScriptEnabled lazyLoad loading sandbox scrollEnabled src title url]
   }.freeze
 

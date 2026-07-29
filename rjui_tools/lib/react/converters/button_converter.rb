@@ -20,13 +20,14 @@ module RjuiTools
             render_partial_attributes_button(indent, id_attr, class_name, style_attr, on_click, disabled_attr, testid_attr, tag_attr)
           else
             text = convert_text_binding(attributes['text'] || '')
+            body = "#{build_image_markup}#{text}"
 
             # If href is specified, wrap with Next.js Link
             if attributes['href']
               href = attributes['href']
-              "#{indent_str(indent)}<Link href=\"#{href}\"><button#{id_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>#{text}</button></Link>"
+              "#{indent_str(indent)}<Link href=\"#{href}\"><button#{id_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>#{body}</button></Link>"
             else
-              "#{indent_str(indent)}<button#{id_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>#{text}</button>"
+              "#{indent_str(indent)}<button#{id_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>#{body}</button>"
             end
           end
 
@@ -37,6 +38,17 @@ module RjuiTools
 
         def build_class_name
           classes = [super]
+
+          # An icon needs a layout box to sit in, and an icon+label pair needs
+          # a gap. A text-only button keeps its previous class list exactly.
+          if attributes['image']
+            classes << 'inline-flex items-center justify-center'
+            # Fixed gap on purpose: `spacing` is not declared for Button in
+            # attribute_definitions.json, and reading it here would add one
+            # more undeclared consumption instead of shrinking the list.
+            # Declaring it is an SSoT change that affects all three platforms.
+            classes << 'gap-2' if attributes['text']
+          end
 
           # Default button styles
           classes << 'cursor-pointer'
@@ -125,6 +137,64 @@ module RjuiTools
           else
             ''
           end
+        end
+
+        # `image` was in the attribute tables but no converter read it, so an
+        # icon-only Button rendered as an empty <button>: clickable, sized,
+        # invisible (rjui-button-image-attribute-dropped). Resolution follows
+        # Image#srcName — a bare name becomes /images/<name>.<ext>.
+        #
+        # A tinted icon is emitted as a masked box rather than an <img>: an
+        # <img> cannot take the button's colour, so a `currentColor` SVG on a
+        # dark toolbar stays black. The mask + bg-current pair inherits
+        # `fontColor`, which is the class BaseConverter already emitted.
+        def build_image_markup
+          image = attributes['image']
+          return '' if image.nil? || image.to_s.empty?
+
+          src = build_image_src(image)
+          size = 'w-[1.25em] h-[1.25em] shrink-0'
+
+          if tinted_icon?
+            styles = [
+              "maskImage: `url(#{src})`",
+              "WebkitMaskImage: `url(#{src})`",
+              "maskSize: 'contain'",
+              "WebkitMaskSize: 'contain'",
+              "maskRepeat: 'no-repeat'",
+              "WebkitMaskRepeat: 'no-repeat'",
+              "maskPosition: 'center'",
+              "WebkitMaskPosition: 'center'",
+            ].join(', ')
+            %(<span aria-hidden="true" className="#{size} bg-current" ) +
+              %(style={{ #{styles} }} />)
+          else
+            %(<img src={`#{src}`} alt="#{image_alt(image)}" ) +
+              %(className="#{size} object-contain" />)
+          end
+        end
+
+        # `/images/<name>.<ext>` for a bare name, the binding for a bound one.
+        def build_image_src(image)
+          if has_binding?(image)
+            "/images/${#{extract_binding_property(image)}}"
+          else
+            "/images/#{resolve_image_extension(image.to_s)}"
+          end
+        end
+
+        # A button with no text has no accessible name, so the icon carries
+        # it. Alongside text the icon is decorative and stays out of the
+        # accessibility tree.
+        def image_alt(image)
+          return '' if attributes['text']
+          return '' if has_binding?(image)
+
+          image.to_s.sub(/\.[a-z0-9]+\z/i, '').tr('_-', '  ')
+        end
+
+        def tinted_icon?
+          !!(attributes['tintColor'] || attributes['fontColor'])
         end
 
         private

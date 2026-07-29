@@ -89,18 +89,6 @@ module RjuiTools
         end
 
 
-        # Resolve image file extension by checking public/images/ directory
-        def resolve_image_extension(name)
-          return name if name.include?('.')
-
-          images_dir = File.join(Dir.pwd, 'public', 'images')
-          %w[.svg .png .jpg .webp].each do |ext|
-            return "#{name}#{ext}" if File.exist?(File.join(images_dir, "#{name}#{ext}"))
-          end
-          # Fallback to .svg if file not found
-          "#{name}.svg"
-        end
-
         def build_class_name
           classes = [super]
 

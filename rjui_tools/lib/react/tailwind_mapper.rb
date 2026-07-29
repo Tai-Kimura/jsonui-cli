@@ -430,6 +430,20 @@ module RjuiTools
         # hidden from accessibility. Tailwind `invisible` (visibility:hidden)
         # gives exactly that; `hidden` (display:none) would collapse the
         # space, which is `visibility:"gone"` semantics — not this attribute.
+        # `flexWrap` was defined in the attribute tables but nothing in the
+        # web codegen read it, so "wrap" silently stayed nowrap
+        # (rjui-view-flexwrap-attribute-dropped). The three enum values come
+        # from view_attributes.rb.
+        FLEX_WRAP_MAP = {
+          'nowrap' => 'flex-nowrap',
+          'wrap' => 'flex-wrap',
+          'wrap-reverse' => 'flex-wrap-reverse',
+        }.freeze
+
+        def map_flex_wrap(value)
+          FLEX_WRAP_MAP[value.to_s] || ''
+        end
+
         def map_visibility(hidden)
           hidden ? 'invisible' : ''
         end
