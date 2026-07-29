@@ -2,9 +2,9 @@
 
 # JsonUI Conformance Report
 
-- Manifest: `18edf3354224d62bca07d35cb2b014ee2308e6375a623dd125aec35cfa334f56` (sha256)
-- Definitions: `bfebdac10d8e897fa6a08ac8c89e511420a6e0d4b6235b1638c9322baf943194` (sha256)
-- Fixtures: 643 (assertable: 25, visual: 599, interactive: 19) / skipped attributes: 165
+- Manifest: `7fb88dcba38f5cf656ce2bb5b6a3dc891deaaf43241a73850974b3137cff9b11` (sha256)
+- Definitions: `4106835503081440e76759898d917f7943d842da3abfc3fa8e44e3bf5b1809cf` (sha256)
+- Fixtures: 672 (assertable: 36, visual: 600, interactive: 36) / skipped attributes: 168
 
 Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
 
@@ -14,29 +14,46 @@ _No cross-platform mismatches._
 
 ## Interactive fixtures
 
-- Interactive fixtures: 19 · attributes promoted out of skip reasons: callback: 12 · still skipped: binding-only: 9, callback: 38
+- Interactive fixtures: 36 · attributes promoted out of skip reasons: callback: 12 · still skipped: binding-only: 9, callback: 39
 
 | Fixture | Case | Promoted from | android | ios | web | Detail |
 |---|---|---|---|---|---|---|
-| `common/visibility__binding_visible` | `binding_visible` | — |  |  | ✅ |  |
-| `common/visibility__binding_invisible` | `binding_invisible` | — |  |  | ✅ |  |
-| `common/visibility__binding_gone` | `binding_gone` | — |  |  | ✅ |  |
-| `common/onclick__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
-| `common/onClick__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
-| `common/onLongPress__callback_fire` | `callback_fire` | callback |  |  | – | web: not applicable to web |
-| `common/onAppear__callback_fire` | `callback_fire` | callback |  |  | – | web: mode: compose (host renders react mode) |
-| `Label/text__binding_initial` | `binding_initial` | — |  |  | ✅ |  |
-| `TextField/text__binding_twoway` | `binding_twoway` | — |  |  | ✅ |  |
-| `TextField/onTextChange__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
-| `TextView/text__binding_twoway` | `binding_twoway` | — |  |  | ✅ |  |
-| `TextView/onTextChange__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
-| `Button/text__binding_initial` | `binding_initial` | — |  |  | ✅ |  |
-| `SelectBox/onValueChange__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
-| `SelectBox/onValueChanged__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
-| `Switch/onValueChange__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
-| `Toggle/onValueChange__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
-| `CheckBox/onValueChange__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
-| `Check/onValueChange__callback_fire` | `callback_fire` | callback |  |  | ✅ |  |
+| `common/visibility__binding_visible` | `binding_visible` | — | ✅ | ✅ | ✅ |  |
+| `common/visibility__binding_invisible` | `binding_invisible` | — | ✅ | ✅ | ✅ |  |
+| `common/visibility__binding_gone` | `binding_gone` | — | ✅ | ✅ | ✅ |  |
+| `common/hidden__binding_negation` | `binding_negation` | — | ✅ | ✅ | ✅ |  |
+| `common/onclick__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
+| `common/onClick__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
+| `common/onLongPress__callback_fire` | `callback_fire` | callback | ✅ | ✅ | – | web: not applicable to web |
+| `common/onAppear__callback_fire` | `callback_fire` | callback | ✅ | – | – | ios: mode compose not hosted (SwiftUI dynamic host)<br>web: mode: compose (host renders react mode) |
+| `Label/text__binding_initial` | `binding_initial` | — | ✅ | ✅ | ✅ |  |
+| `Label/text__binding_mixed` | `binding_mixed` | — | ✅ | ✅ | ✅ |  |
+| `Label/text__binding_dot_path` | `binding_dot_path` | — | ✅ | ✅ | ✅ |  |
+| `Label/text__binding_deep_path` | `binding_deep_path` | — | ✅ | ✅ | ✅ |  |
+| `Label/text__binding_bracket_index` | `binding_bracket_index` | — | ✅ | ✅ | ✅ |  |
+| `Label/text__binding_bracket_scalar` | `binding_bracket_scalar` | — | ✅ | ✅ | ✅ |  |
+| `Label/text__binding_default_double` | `binding_default_double` | — | ✅ | ✅ | ✅ |  |
+| `Label/text__binding_default_single` | `binding_default_single` | — | ✅ | ✅ | ✅ |  |
+| `Label/text__binding_default_number` | `binding_default_number` | — | ✅ | ✅ | ✅ |  |
+| `Label/text__binding_default_resolved` | `binding_default_resolved` | — | ✅ | ✅ | ✅ |  |
+| `Label/text__binding_unresolved_flat` | `binding_unresolved_flat` | — | ✅ | ✅ | ✅ |  |
+| `Label/text__binding_unresolved_path` | `binding_unresolved_path` | — | ✅ | ✅ | ✅ |  |
+| `Label/text__binding_number_int` | `binding_number_int` | — | ✅ | ✅ | ✅ |  |
+| `Label/text__binding_bool_text` | `binding_bool_text` | — | ✅ | ✅ | ✅ |  |
+| `TextField/text__binding_twoway` | `binding_twoway` | — | ✅ | ✅ | ✅ |  |
+| `TextField/onTextChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
+| `TextView/text__binding_twoway` | `binding_twoway` | — | ✅ | ✅ | ✅ |  |
+| `TextView/onTextChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
+| `Button/text__binding_initial` | `binding_initial` | — | ✅ | ✅ | ✅ |  |
+| `SelectBox/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
+| `SelectBox/onValueChanged__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
+| `Switch/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
+| `Toggle/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
+| `CheckBox/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
+| `Check/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
+| `Embed/navigationMode__isolated_push` | `isolated_push` | — | ✅ | ✅ | ✅ |  |
+| `Embed/navigationMode__isolated_pop_boundary` | `isolated_pop_boundary` | — | ✅ | ✅ | ✅ |  |
+| `common/variantfile__state_vm_survives` | `state_vm_survives` | — | – | – | ✅ | android: not applicable to android<br>ios: not applicable to ios |
 
 ## Visual regression (same-platform baselines)
 
@@ -44,25 +61,17 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 
 | Platform | Baseline | Compared | Regressions | No baseline | Missing artifact |
 |---|---|---|---|---|---|
-| android | threshold 8 | 472 | 0 | 0 | 0 |
-| ios | threshold 8 | 495 | 0 | 0 | 0 |
-| web | threshold 8 | 466 | 0 | 0 | 0 |
+| android | threshold 8 | 468 | 0 | 0 | 0 |
+| ios | threshold 8 | 491 | 0 | 0 | 0 |
+| web | threshold 8 | 467 | 0 | 0 | 0 |
 
 ## Platforms
 
 | Platform | Runner | Results | pass | fail | error | skipped | Manifest |
 |---|---|---|---|---|---|---|---|
-| android | uiautomator 2.3.0 | 629 | 497 | 0 | 0 | 132 | ⚠️ STALE |
-| ios | xcuitest ios-18.6 | 629 | 520 | 0 | 0 | 109 | ⚠️ STALE |
-| web | playwright 1.61.1 | 643 | 508 | 0 | 0 | 135 | current |
-
-> ⚠️ `android.results.json` was produced against manifest `4f679408f1028dcaa83afc8dbccc7ea72716b67c3e55bd46a4bc200c9c78d577` but the current manifest is `18edf3354224d62bca07d35cb2b014ee2308e6375a623dd125aec35cfa334f56` — results are stale; re-run the android suite.
-
-> ⚠️ `android.results.json` contains 5 fixture id(s) not present in the manifest: `Button/tapBackground__alias_highlightBackground`, `common/alignBottomOfView__alias_alignBottomView`, `common/alignLeftOfView__alias_alignLeftView`, `common/alignRightOfView__alias_alignRightView`, `common/alignTopOfView__alias_alignTopView`
-
-> ⚠️ `ios.results.json` was produced against manifest `4f679408f1028dcaa83afc8dbccc7ea72716b67c3e55bd46a4bc200c9c78d577` but the current manifest is `18edf3354224d62bca07d35cb2b014ee2308e6375a623dd125aec35cfa334f56` — results are stale; re-run the ios suite.
-
-> ⚠️ `ios.results.json` contains 5 fixture id(s) not present in the manifest: `Button/tapBackground__alias_highlightBackground`, `common/alignBottomOfView__alias_alignBottomView`, `common/alignLeftOfView__alias_alignLeftView`, `common/alignRightOfView__alias_alignRightView`, `common/alignTopOfView__alias_alignTopView`
+| android | uiautomator 2.3.0 | 672 | 535 | 0 | 0 | 137 | current |
+| ios | xcuitest ios-26.2 | 672 | 557 | 0 | 0 | 115 | current |
+| web | playwright 1.61.1 | 672 | 534 | 0 | 0 | 138 | current |
 
 ## Matrix
 
@@ -106,11 +115,12 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | `visibility` | `visible` | assertable | ✅ | ✅ | ✅ |
 | `visibility` | `invisible` | assertable | ✅ | ✅ | ✅ |
 | `visibility` | `gone` | assertable | ✅ | ✅ | ✅ |
-| `visibility` | `binding_visible` | interactive |  |  | ✅ |
-| `visibility` | `binding_invisible` | interactive |  |  | ✅ |
-| `visibility` | `binding_gone` | interactive |  |  | ✅ |
+| `visibility` | `binding_visible` | interactive | ✅ | ✅ | ✅ |
+| `visibility` | `binding_invisible` | interactive | ✅ | ✅ | ✅ |
+| `visibility` | `binding_gone` | interactive | ✅ | ✅ | ✅ |
 | `hidden` | `true` | assertable | ✅ | ✅ | ✅ |
 | `hidden` | `false` | assertable | ✅ | ✅ | ✅ |
+| `hidden` | `binding_negation` | interactive | ✅ | ✅ | ✅ |
 | `padding` | `static` | visual | ✅ | ✅ | ✅ |
 | `paddings` | `static` | visual | ✅ | ✅ | ✅ |
 | `paddingTop` | `static` | visual | ✅ | ✅ | ✅ |
@@ -166,9 +176,9 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | `toView` | `static` | visual | – | – | – |
 | `shadow` | `static` | visual | ✅ | ✅ | ✅ |
 | `clipToBounds` | `true` | visual | ✅ | ✅ | ✅ |
-| `onclick` | `callback_fire` | interactive |  |  | ✅ |
-| `onClick` | `callback_fire` | interactive |  |  | ✅ |
-| `onLongPress` | `callback_fire` | interactive |  |  | – |
+| `onclick` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
+| `onClick` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
+| `onLongPress` | `callback_fire` | interactive | ✅ | ✅ | – |
 | `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `compressHorizontal` | `static` | visual | – | – | – |
 | `compressVertical` | `static` | visual | – | – | – |
@@ -188,7 +198,7 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | `gravity` | `right` | visual | ✅ | ✅ | ✅ |
 | `gravity` | `centerhorizontal` | visual | ✅ | ✅ | ✅ |
 | `gravity` | `center` | visual | ✅ | ✅ | ✅ |
-| `onAppear` | `callback_fire` | interactive |  |  | – |
+| `onAppear` | `callback_fire` | interactive | ✅ | – | – |
 | `alignment` | `topleading` | visual | ✅ | ✅ | – |
 | `alignment` | `top` | visual | ✅ | ✅ | – |
 | `alignment` | `toptrailing` | visual | ✅ | ✅ | – |
@@ -214,7 +224,20 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `text` | `static` | assertable | ✅ | ✅ | ✅ |
-| `text` | `binding_initial` | interactive |  |  | ✅ |
+| `text` | `binding_initial` | interactive | ✅ | ✅ | ✅ |
+| `text` | `binding_mixed` | interactive | ✅ | ✅ | ✅ |
+| `text` | `binding_dot_path` | interactive | ✅ | ✅ | ✅ |
+| `text` | `binding_deep_path` | interactive | ✅ | ✅ | ✅ |
+| `text` | `binding_bracket_index` | interactive | ✅ | ✅ | ✅ |
+| `text` | `binding_bracket_scalar` | interactive | ✅ | ✅ | ✅ |
+| `text` | `binding_default_double` | interactive | ✅ | ✅ | ✅ |
+| `text` | `binding_default_single` | interactive | ✅ | ✅ | ✅ |
+| `text` | `binding_default_number` | interactive | ✅ | ✅ | ✅ |
+| `text` | `binding_default_resolved` | interactive | ✅ | ✅ | ✅ |
+| `text` | `binding_unresolved_flat` | interactive | ✅ | ✅ | ✅ |
+| `text` | `binding_unresolved_path` | interactive | ✅ | ✅ | ✅ |
+| `text` | `binding_number_int` | interactive | ✅ | ✅ | ✅ |
+| `text` | `binding_bool_text` | interactive | ✅ | ✅ | ✅ |
 | `hint` | `static` | visual | ✅ | ✅ | ✅ |
 | `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
 | `font` | `static` | visual | ✅ | ✅ | ✅ |
@@ -258,7 +281,7 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `text` | `static` | assertable | ✅ | ✅ | ✅ |
-| `text` | `binding_twoway` | interactive |  |  | ✅ |
+| `text` | `binding_twoway` | interactive | ✅ | ✅ | ✅ |
 | `hint` | `static` | visual | ✅ | ✅ | ✅ |
 | `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
 | `hintColor` | `static` | visual | ✅ | ✅ | ✅ |
@@ -314,7 +337,7 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | `accessoryTextColor` | `static` | visual | – | ✅ | – |
 | `doneText` | `static` | visual | – | ✅ | – |
 | `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
-| `onTextChange` | `callback_fire` | interactive |  |  | ✅ |
+| `onTextChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `autocapitalizationType` | `static` | visual | ✅ | ✅ | ✅ |
 | `autocorrectionType` | `static` | visual | ✅ | ✅ | ✅ |
 | `spellCheckingType` | `static` | visual | – | ✅ | – |
@@ -334,7 +357,7 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `text` | `static` | assertable | ✅ | ✅ | ✅ |
-| `text` | `binding_twoway` | interactive |  |  | ✅ |
+| `text` | `binding_twoway` | interactive | ✅ | ✅ | ✅ |
 | `hint` | `static` | visual | ✅ | ✅ | ✅ |
 | `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
 | `hintColor` | `static` | visual | ✅ | ✅ | ✅ |
@@ -375,7 +398,7 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | `editable` | `true` | visual | ✅ | ✅ | ✅ |
 | `lineBreakMode` | `static` | visual | ✅ | ✅ | ✅ |
 | `keyboardType` | `static` | visual | ✅ | ✅ | ✅ |
-| `onTextChange` | `callback_fire` | interactive |  |  | ✅ |
+| `onTextChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `maxLength` | `static` | visual | – | – | ✅ |
 | `pattern` | `static` | visual | – | – | ✅ |
 | `required` | `true` | visual | – | – | ✅ |
@@ -414,7 +437,7 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `text` | `static` | assertable | ✅ | ✅ | ✅ |
-| `text` | `binding_initial` | interactive |  |  | ✅ |
+| `text` | `binding_initial` | interactive | ✅ | ✅ | ✅ |
 | `font` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
@@ -533,8 +556,8 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `inView` | `static` | visual | – | – | – |
 | `referenceView` | `static` | visual | – | – | – |
-| `onValueChange` | `callback_fire` | interactive |  |  | ✅ |
-| `onValueChanged` | `callback_fire` | interactive |  |  | ✅ |
+| `onValueChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
+| `onValueChanged` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `colorScheme` | `light` | visual | – | – | ✅ |
 | `colorScheme` | `dark` | visual | – | – | ✅ |
 | `multiple` | `true` | visual | – | – | ✅ |
@@ -555,7 +578,7 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | `onTintColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `thumbTintColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `offTintColor` | `static` | visual | – | – | – |
-| `onValueChange` | `callback_fire` | interactive |  |  | ✅ |
+| `onValueChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `labelPosition` | `leading` | visual | ✅ | – | – |
 | `labelPosition` | `trailing` | visual | ✅ | – | – |
 | `trackTintColor` | `static` | visual | ✅ | ✅ | ✅ |
@@ -574,7 +597,7 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | `onTintColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `thumbTintColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `offTintColor` | `static` | visual | – | – | – |
-| `onValueChange` | `callback_fire` | interactive |  |  | ✅ |
+| `onValueChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `labelPosition` | `leading` | visual | ✅ | – | – |
 | `labelPosition` | `trailing` | visual | ✅ | – | – |
 | `trackTintColor` | `static` | visual | ✅ | ✅ | ✅ |
@@ -726,6 +749,7 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | `uncheckedColor` | `static` | visual | ✅ | ✅ | – |
 | `iconSize` | `static` | visual | ✅ | ✅ | – |
 | `iconColor` | `static` | visual | ✅ | ✅ | – |
+| `selectedValue` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### CheckBox
 
@@ -746,7 +770,7 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `spacing` | `static` | visual | ✅ | ✅ | ✅ |
-| `onValueChange` | `callback_fire` | interactive |  |  | ✅ |
+| `onValueChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `checkedColor` | `static` | visual | ✅ | ✅ | – |
 | `uncheckedColor` | `static` | visual | ✅ | ✅ | – |
 | `iconSize` | `static` | visual | ✅ | ✅ | – |
@@ -770,7 +794,7 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `spacing` | `static` | visual | ✅ | ✅ | ✅ |
-| `onValueChange` | `callback_fire` | interactive |  |  | ✅ |
+| `onValueChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `checkedColor` | `static` | visual | ✅ | ✅ | – |
 | `uncheckedColor` | `static` | visual | ✅ | ✅ | – |
 | `iconSize` | `static` | visual | ✅ | ✅ | – |
@@ -849,6 +873,30 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | `tabBarBackground` | `static` | visual | ✅ | ✅ | ✅ |
 | `showLabels` | `true` | visual | ✅ | ✅ | ✅ |
 
+### Embed
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `navigationMode` | `delegate_baseline` | assertable | ✅ | ✅ | ✅ |
+| `navigationMode` | `isolated_root` | assertable | ✅ | ✅ | ✅ |
+| `navigationMode` | `isolated_push` | interactive | ✅ | ✅ | ✅ |
+| `navigationMode` | `isolated_pop_boundary` | interactive | ✅ | ✅ | ✅ |
+| `params` | `nested_leaf` | assertable | ✅ | ✅ | ✅ |
+| `params` | `nested_leaf_binding` | assertable | ✅ | ✅ | ✅ |
+
+### common
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `variantfile` | `regular_on_regular_tier` | assertable | ✅ | – | ✅ |
+| `variantfile` | `regular_on_compact_tier` | assertable | – | ✅ | – |
+| `variantfile` | `compact_on_compact_tier` | assertable | – | ✅ | – |
+| `variantfile` | `compact_on_regular_tier` | assertable | ✅ | – | ✅ |
+| `variantfile` | `medium_no_promotion` | assertable | ✅ | – | ✅ |
+| `variantfile` | `medium_fold_ios` | assertable | – | ✅ | – |
+| `variantfile` | `viewport_switch` | assertable | – | – | ✅ |
+| `variantfile` | `state_vm_survives` | interactive | – | – | ✅ |
+
 ## Skipped attributes
 
 | Component | Attribute | Reason |
@@ -858,6 +906,8 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | common | `id` | metadata (not rendered) |
 | common | `generatedBy` | metadata (not rendered) |
 | common | `partial` | metadata (not rendered) |
+| common | `platform` | metadata (not rendered) |
+| common | `role` | metadata (not rendered) |
 | common | `type` | metadata (not rendered) |
 | common | `responsive` | metadata (not rendered) |
 | common | `onPan` | callback |
@@ -999,6 +1049,7 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | Collection | `currentPage` | binding-only |
 | Collection | `onPageChanged` | callback |
 | Collection | `onValueChange` | callback |
+| Radio | `onValueChange` | callback |
 | CheckBox | `_alias` | definition metadata, not an attribute |
 | CheckBox | `_comment` | definition metadata, not an attribute |
 | CheckBox | `bind` | binding-only |
@@ -1014,7 +1065,7 @@ Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `
 | TabView | `onTabChange` | callback |
 | TabView | `onValueChange` | callback |
 | Embed | `_comment` | definition metadata, not an attribute |
-| Embed | `screen` | cross-file reference (embedded screen layout not available in single-file fixture) |
-| Embed | `params` | cross-file reference (embedded screen layout not available in single-file fixture) |
-| Embed | `navigationMode` | cross-file reference (embedded screen layout not available in single-file fixture) |
-| Embed | `events` | cross-file reference (embedded screen layout not available in single-file fixture) |
+| Embed | `screen` | cross-file reference — attribute sweep skipped; semantic Embed fixtures (navigationMode/params + companion screens) are emitted bespoke by conformance.embed_fixtures |
+| Embed | `params` | cross-file reference — attribute sweep skipped; semantic Embed fixtures (navigationMode/params + companion screens) are emitted bespoke by conformance.embed_fixtures |
+| Embed | `navigationMode` | cross-file reference — attribute sweep skipped; semantic Embed fixtures (navigationMode/params + companion screens) are emitted bespoke by conformance.embed_fixtures |
+| Embed | `events` | cross-file reference — attribute sweep skipped; semantic Embed fixtures (navigationMode/params + companion screens) are emitted bespoke by conformance.embed_fixtures |
