@@ -202,5 +202,28 @@ RSpec.describe SjuiTools::SwiftUI::Views::NetworkImageConverter do
         expect(code).to include('url: ""')
       end
     end
+
+    # The NetworkImage view has taken all three since it was written; the
+    # codegen passed none of them, so a layout that set them got the built-in
+    # ProgressView and broken-photo glyph on the SwiftUI path only.
+    describe 'defaultImage / loadingImage / errorImage' do
+      it 'passes each one through' do
+        code = described_class.new({
+          'type' => 'NetworkImage', 'src' => 'http://x/y.png',
+          'defaultImage' => 'ph', 'loadingImage' => 'spin', 'errorImage' => 'broken'
+        }).convert
+
+        expect(code).to include('defaultImage: "ph"')
+        expect(code).to include('loadingImage: "spin"')
+        expect(code).to include('errorImage: "broken"')
+      end
+
+      it 'omits them when absent' do
+        code = described_class.new({ 'type' => 'NetworkImage', 'src' => 'http://x/y.png' }).convert
+
+        expect(code).not_to include('loadingImage:')
+        expect(code).not_to include('errorImage:')
+      end
+    end
   end
 end

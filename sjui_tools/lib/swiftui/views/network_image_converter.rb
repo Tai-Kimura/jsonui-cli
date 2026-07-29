@@ -27,6 +27,24 @@ module SjuiTools
               add_line "placeholder: \"#{@component['placeholder']}\","
             end
 
+            # defaultImage / loadingImage / errorImage.
+            #
+            # The NetworkImage view has taken all three since it was written —
+            # loadingImage while the request is in flight, errorImage on
+            # failure, placeholder/defaultImage as the fallback for both — and
+            # the codegen passed none of them. A layout that set them got the
+            # built-in ProgressView and the built-in broken-photo glyph instead,
+            # on the SwiftUI path only; the UIKit runtime honours all three.
+            if @component['defaultImage']
+              add_line "defaultImage: \"#{@component['defaultImage']}\","
+            end
+            if @component['loadingImage']
+              add_line "loadingImage: \"#{@component['loadingImage']}\","
+            end
+            if @component['errorImage']
+              add_line "errorImage: \"#{@component['errorImage']}\","
+            end
+
             # contentMode
             if @component['contentMode']
               content_mode = map_content_mode_enum(@component['contentMode'])

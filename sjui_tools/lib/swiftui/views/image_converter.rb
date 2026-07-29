@@ -36,6 +36,8 @@ module SjuiTools
 
           @modifier_bag.append(:component_specific, ".resizable()")
 
+          apply_highlight_src
+
           # contentMode
           if @component['contentMode']
             content_mode = map_content_mode(@component['contentMode'])
@@ -94,6 +96,42 @@ module SjuiTools
         def build_on_tap_gesture(handler_call)
           indent_str = "    " * (@indent_level + 1)
           ".onTapGesture {\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}"
+        end
+        private
+
+        # highlightSrc — the image shown while the view is pressed.
+        #
+        # UIKit gets this for free: UIImageView has `highlightedImage`, and
+        # SJUIImageView sets it (SJUIImageView.swift:84). SwiftUI has no such
+        # property, so the swap has to be driven by a press gesture, which is
+        # what this emits. Local `@State` rather than the data object: it is
+        # transient view state, not screen state, and adding a data property for
+        # it would change the generated ViewModel.
+        def apply_highlight_src
+          highlight = @component['highlightSrc']
+          return if highlight.nil?
+
+          state_var = "#{(@component['id'] || 'image').gsub(/[^A-Za-z0-9]/, '_')}IsPressed"
+          @state_variables ||= []
+          @state_variables << "@State private var #{state_var} = false"
+
+          resolved = if is_binding?(highlight)
+                       "data.#{extract_binding_property(highlight)}"
+                     else
+                       "\"#{highlight}\""
+                     end
+          # The highlighted image replaces the base one entirely, so it is an
+          # overlay with the base hidden underneath rather than a second layer.
+          @modifier_bag.append(:component_specific, ".opacity(#{state_var} ? 0 : 1)")
+          @modifier_bag.append(:component_specific, ".overlay(")
+          @modifier_bag.append(:component_specific, "    Image(#{resolved})")
+          @modifier_bag.append(:component_specific, "        .resizable()")
+          @modifier_bag.append(:component_specific, "        .opacity(#{state_var} ? 1 : 0)")
+          @modifier_bag.append(:component_specific, ")")
+          @modifier_bag.append(
+            :component_specific,
+            ".onLongPressGesture(minimumDuration: 0, pressing: { #{state_var} = $0 }, perform: {})"
+          )
         end
       end
     end

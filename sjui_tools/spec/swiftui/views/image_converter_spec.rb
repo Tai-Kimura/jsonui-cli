@@ -234,5 +234,43 @@ RSpec.describe SjuiTools::SwiftUI::Views::ImageConverter do
         expect(code).to include('data.imageLoaded?()')
       end
     end
+
+    # UIKit gets this free — UIImageView has `highlightedImage`, set by
+    # SJUIImageView. SwiftUI has no such property, so the swap has to be driven
+    # by a press gesture; the codegen emitted nothing at all.
+    describe 'highlightSrc' do
+      let(:component) do
+        { 'type' => 'Image', 'id' => 'hero', 'src' => 'photo', 'highlightSrc' => 'photo_hl' }
+      end
+
+      it 'overlays the highlighted image and swaps on press' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('Image("photo_hl")')
+        expect(code).to include('.onLongPressGesture(minimumDuration: 0')
+      end
+
+      it 'hides the base image while pressed, so the two do not stack' do
+        code = described_class.new(component).convert
+
+        expect(code).to include('.opacity(heroIsPressed ? 0 : 1)')
+        expect(code).to include('.opacity(heroIsPressed ? 1 : 0)')
+      end
+
+      it 'declares the press flag as local view state, not a data property' do
+        converter = described_class.new(component)
+        converter.convert
+
+        expect(converter.state_variables)
+          .to include('@State private var heroIsPressed = false')
+      end
+
+      it 'emits nothing when absent' do
+        code = described_class.new({ 'type' => 'Image', 'src' => 'photo' }).convert
+
+        expect(code).not_to include('onLongPressGesture')
+      end
+    end
   end
 end
