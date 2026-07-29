@@ -161,7 +161,7 @@ def _render_schema(schema_name: str, schema_def: dict) -> list[str]:
     # Custom validations
     custom_validations = schema_def.get('x-custom-validations', [])
     if custom_validations:
-        parts.extend(_render_custom_validations(custom_validations))
+        parts.extend(_render_custom_validations(custom_validations, schema_name))
 
     # Composite indexes / composite UNIQUE (x-indexes, plan 04 §3)
     indexes = schema_def.get('x-indexes', [])
@@ -240,15 +240,45 @@ def _render_enum_schema(schema_name: str, schema_def: dict) -> list[str]:
     return parts
 
 
-def _render_custom_validations(validations: list[dict]) -> list[str]:
+def _in(schema_name: str) -> str:
+    """` in <schema>` when the schema is known, else nothing."""
+    return f" in {schema_name}" if schema_name else ""
+
+
+class SchemaExtensionError(ValueError):
+    """An `x-*` extension is present but not in the documented shape.
+
+    Raised instead of letting the raw `AttributeError` escape: `'str' object
+    has no attribute 'get'` says nothing about which key, which entry, or
+    what was expected (doc-html-generation-swallows-page-errors).
+    """
+
+
+def _render_custom_validations(
+    validations: list[dict], schema_name: str = ''
+) -> list[str]:
     """Render custom validations section."""
+    if not isinstance(validations, list):
+        raise SchemaExtensionError(
+            f"x-custom-validations{_in(schema_name)} is "
+            f"{type(validations).__name__}; expected a list of objects with "
+            "{name, conditions, description}"
+        )
+
     parts = [
         "      <div class='custom-validations'>",
         "        <h4>Custom Validations</h4>",
         "        <ul>",
     ]
 
-    for v in validations:
+    for i, v in enumerate(validations):
+        if not isinstance(v, dict):
+            raise SchemaExtensionError(
+                f"x-custom-validations[{i}]{_in(schema_name)} is "
+                f"{type(v).__name__} ({v!r}); expected an object with "
+                "{name, conditions, description} — see the jsonui-swagger "
+                "skill's examples/db-extensions.json"
+            )
         name = v.get('name', '')
         desc = v.get('description', '')
         conditions = v.get('conditions', '')

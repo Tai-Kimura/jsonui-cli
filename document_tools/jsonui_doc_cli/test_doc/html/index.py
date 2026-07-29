@@ -542,7 +542,8 @@ def generate_index_html(
     with open(index_path, 'w', encoding='utf-8') as f:
         f.write("\n".join(html_parts))
 
-    print(f"  Generated: {index_path}")
+    from ..generator import note_page_generated  # late: avoids a cycle
+    note_page_generated(index_path, indent="  ")
 
 
 def _get_html_header(title: str) -> list[str]:

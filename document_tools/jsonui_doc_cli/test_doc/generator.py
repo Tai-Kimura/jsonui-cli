@@ -27,6 +27,113 @@ from .markdown import generate_markdown, generate_schema_markdown
 from .mermaid import generate_mermaid_html
 
 
+# ── Page-level failure accounting ────────────────────────────────────────
+#
+# A page that fails to render used to disappear silently: the run still
+# exited 0, the index and sidebar kept linking to it, and the gap surfaced
+# only when a human clicked the dead link — a week later, in the report that
+# prompted this (doc-html-generation-swallows-page-errors).
+#
+# Every `except` that abandons a WHOLE PAGE funnels through
+# `record_page_failure`, which also writes a placeholder in the page's place
+# so the link resolves and states what went wrong. Failures that only
+# degrade part of a page (an unreadable description file rendered as an
+# inline error) are deliberately not counted here — those are visible where
+# they happen.
+#
+# Module-level state is safe: one CLI invocation renders one site, and
+# `generate_html_directory` resets it on entry.
+_page_failures: list[dict] = []
+_pages_written = 0
+
+
+def reset_page_failures() -> None:
+    """Start a fresh accounting run."""
+    global _pages_written
+    _page_failures.clear()
+    _pages_written = 0
+
+
+def get_page_failures() -> list[dict]:
+    """Failures recorded since the last reset, oldest first."""
+    return list(_page_failures)
+
+
+def get_pages_written() -> int:
+    """Number of files reported as generated since the last reset."""
+    return _pages_written
+
+
+def note_page_generated(path: Path | str, suffix: str = "", indent: str = "    ") -> None:
+    """Report a successfully written page and count it."""
+    global _pages_written
+    _pages_written += 1
+    print(f"{indent}Generated: {path}{suffix}")
+
+
+def record_page_failure(
+    kind: str,
+    name: str,
+    error: BaseException | str,
+    *,
+    source: Path | str | None = None,
+    output: Path | str | None = None,
+    indent: str = "    ",
+) -> None:
+    """Record that one page could not be generated.
+
+    `source` is the input file — without it the operator has to guess which
+    of dozens of inputs to fix, since `name` is only the display title.
+    `output`, when given, gets a placeholder page so navigation does not
+    dead-end on a 404.
+    """
+    failure = {
+        'kind': kind,
+        'name': name,
+        'error': str(error),
+        'source': str(source) if source is not None else None,
+        'output': str(output) if output is not None else None,
+    }
+    _page_failures.append(failure)
+
+    where = f" [{source}]" if source else ""
+    print(f"{indent}Error processing {kind} {name}{where}: {error}")
+
+    if output is not None:
+        try:
+            _write_failure_placeholder(Path(output), failure)
+        except Exception as placeholder_error:  # noqa: BLE001
+            print(f"{indent}  (could not write placeholder: {placeholder_error})")
+
+
+def _write_failure_placeholder(output_path: Path, failure: dict) -> None:
+    """Write a page that says why the real page is missing."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    source_line = (
+        f"<p><strong>Source:</strong> <code>{escape_html(failure['source'])}</code></p>"
+        if failure['source'] else ""
+    )
+    output_path.write_text(
+        "<!DOCTYPE html>\n"
+        "<html lang='en'><head><meta charset='utf-8'>"
+        f"<title>Generation failed — {escape_html(failure['name'])}</title>"
+        "<style>body{font-family:system-ui,sans-serif;max-width:48rem;margin:4rem auto;"
+        "padding:0 1rem;line-height:1.6}code{background:#f1f5f9;padding:.1rem .3rem;"
+        "border-radius:3px}.err{background:#fef2f2;border-left:4px solid #dc2626;"
+        "padding:1rem;margin:1.5rem 0}</style></head><body>"
+        f"<h1>This page could not be generated</h1>"
+        f"<p><strong>{escape_html(failure['kind'])}:</strong> "
+        f"{escape_html(failure['name'])}</p>"
+        f"{source_line}"
+        f"<div class='err'><code>{escape_html(failure['error'])}</code></div>"
+        "<p>Fix the input and regenerate. This placeholder exists so the link "
+        "that brought you here is not a 404 — the documentation is incomplete, "
+        "not merely mis-linked.</p>"
+        "</body></html>\n",
+        encoding='utf-8',
+    )
+
+
 def _validator_for(spec_file: Path) -> SpecValidator:
     """Build a :class:`SpecValidator` whose custom rules are discovered from
     *spec_file*'s own location.
@@ -648,6 +755,9 @@ def generate_html_directory(
     input_path = Path(input_dir)
     output_path = Path(output_dir)
 
+    # One run, one tally: the CLI reads these back to decide the exit code.
+    reset_page_failures()
+
     # Create output directory
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -730,7 +840,8 @@ def generate_html_directory(
                 'document': source.get('document'),
             })
         except Exception as e:
-            print(f"  Error processing {test_file}: {e}")
+            record_page_failure('test file', test_file.name, e,
+                                source=test_file, indent="  ")
 
     # Build documents list from file_infos that have document paths
     document_files = []
@@ -856,10 +967,12 @@ def generate_html_directory(
                 'document': file_info.get('document'),
             })
 
-            print(f"  Generated: {html_path}")
+            note_page_generated(html_path, indent="  ")
 
         except Exception as e:
-            print(f"  Error processing {file_info['test_file']}: {e}")
+            record_page_failure('test page', str(file_info['test_file']), e,
+                                source=file_info['test_file'],
+                                output=html_path, indent="  ")
 
     # Generate Mermaid diagram if there are flow files
     mermaid_generated = False
@@ -1082,6 +1195,10 @@ def _generate_document_pages(
     print("  Generating document pages...")
 
     for doc_path, test_name in documents_to_process.items():
+        # Bound before the try so the failure record can name them even when
+        # the exception fires before they are assigned.
+        source_path = None
+        output_doc_path = output_path / Path(doc_path)
         try:
             # Resolve source document path.
             #
@@ -1122,10 +1239,12 @@ def _generate_document_pages(
             with open(output_doc_path, 'w', encoding='utf-8') as f:
                 f.write(html_content)
 
-            print(f"    Generated: {output_doc_path}")
+            note_page_generated(output_doc_path)
 
         except Exception as e:
-            print(f"    Error processing document {doc_path}: {e}")
+            record_page_failure('document', str(doc_path), e,
+                                source=source_path,
+                                output=output_doc_path)
 
 
 def _generate_swagger_pages(
@@ -1193,10 +1312,17 @@ def _generate_swagger_pages(
             with open(output_doc_path, 'w', encoding='utf-8') as f:
                 f.write(html_content)
 
-            print(f"    Generated: {output_doc_path}")
+            note_page_generated(output_doc_path)
 
         except Exception as e:
-            print(f"    Error processing API doc {api_doc.get('name', 'unknown')}: {e}")
+            rel = api_doc.get('path')
+            record_page_failure(
+                'API doc',
+                api_doc.get('name', 'unknown'),
+                e,
+                source=api_doc.get('source_file'),
+                output=(output_path / rel) if rel else None,
+            )
 
     # Generate ER diagrams for each schema category
     for category, schema_files in schema_files_by_category.items():
@@ -1220,10 +1346,15 @@ def _generate_swagger_pages(
             with open(output_erd_path, 'w', encoding='utf-8') as f:
                 f.write(erd_html)
 
-            print(f"    Generated: {output_erd_path} (ER Diagram)")
+            note_page_generated(output_erd_path, suffix=" (ER Diagram)")
 
         except Exception as e:
-            print(f"    Error generating ER diagram for {category}: {e}")
+            record_page_failure(
+                'ER diagram',
+                category,
+                e,
+                output=output_path / f"{category}/erd.html",
+            )
 
 
 def _discover_check_reports(
@@ -1304,7 +1435,7 @@ def _generate_check_report_pages(
         out_file.parent.mkdir(parents=True, exist_ok=True)
         with open(out_file, "w", encoding="utf-8") as f:
             f.write(html)
-        print(f"    Generated: {out_file}")
+        note_page_generated(out_file)
 
 
 def _generate_spec_pages(
@@ -1412,11 +1543,12 @@ def _generate_spec_pages(
                 with open(output_spec_path, 'w', encoding='utf-8') as f:
                     f.write(content)
 
-                print(f"    Generated: {output_spec_path}")
+                note_page_generated(output_spec_path)
                 success_count += 1
 
             except Exception as e:
-                print(f"    Error processing {spec_file.name}: {e}")
+                record_page_failure('screen spec', spec_file.name, e,
+                                    source=spec_file, output=output_spec_path)
                 error_count += 1
 
         if not collect_only and (success_count > 0 or error_count > 0):
@@ -1481,11 +1613,12 @@ def _generate_spec_pages(
                 with open(output_comp_path, 'w', encoding='utf-8') as f:
                     f.write(content)
 
-                print(f"    Generated: {output_comp_path}")
+                note_page_generated(output_comp_path)
                 success_count += 1
 
             except Exception as e:
-                print(f"    Error processing {comp_file.name}: {e}")
+                record_page_failure('component spec', comp_file.name, e,
+                                    source=comp_file, output=output_comp_path)
                 error_count += 1
 
         if not collect_only and (success_count > 0 or error_count > 0):
@@ -1555,7 +1688,8 @@ def _pre_generate_spec_docs(
                     print(f"    OK: {spec_file.name} -> html, md")
 
                 except Exception as e:
-                    print(f"    ERROR: {spec_file.name}: {e}")
+                    record_page_failure('screen spec', spec_file.name, e,
+                                        source=spec_file)
 
     # Process component specifications
     comp_json_dir = docs_base / "components" / "json"
@@ -1592,7 +1726,8 @@ def _pre_generate_spec_docs(
                     print(f"    OK: {comp_file.name} -> html, md")
 
                 except Exception as e:
-                    print(f"    ERROR: {comp_file.name}: {e}")
+                    record_page_failure('component spec', comp_file.name, e,
+                                        source=comp_file)
 
 
 def _collect_markdown_files(
@@ -1711,11 +1846,14 @@ def _generate_markdown_pages(
                 with open(output_html_path, 'w', encoding='utf-8') as f:
                     f.write(html_content)
 
-                print(f"    Generated: {output_html_path}")
+                note_page_generated(output_html_path)
                 success_count += 1
 
             except Exception as e:
-                print(f"    Error processing {file_info.get('name', 'unknown')}: {e}")
+                record_page_failure(
+                    'page', file_info.get('name', 'unknown'), e,
+                    source=file_info.get('source_file') or file_info.get('path'),
+                    output=output_html_path)
                 error_count += 1
 
     if success_count > 0 or error_count > 0:
@@ -1778,7 +1916,7 @@ def _generate_figma_pages(
             all_figma_files.extend(screens)
             print(f"    {json_file.name}: {len(screens)} screens")
         except Exception as e:
-            print(f"    Error processing {json_file.name}: {e}")
+            record_page_failure('figma file', json_file.name, e, source=json_file)
 
     if all_figma_files:
         print(f"  Figma pages: {len(all_figma_files)} screens generated")

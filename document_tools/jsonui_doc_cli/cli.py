@@ -49,6 +49,8 @@ from .test_doc import (
     DocumentGenerator,
     generate_schema_reference,
     generate_html_directory,
+    get_page_failures,
+    get_pages_written,
     generate_mermaid_diagram,
     generate_mermaid_html,
     generate_adapter,
@@ -194,10 +196,38 @@ def cmd_generate_html(args):
     print()
 
     try:
-        files = generate_html_directory(input_dir, output_dir, title, docs_dirs if docs_dirs else None, figma_dir=figma_dir, apps=apps, layouts_dir=layouts_dir_override)
+        generate_html_directory(input_dir, output_dir, title, docs_dirs if docs_dirs else None, figma_dir=figma_dir, apps=apps, layouts_dir=layouts_dir_override)
         print()
-        print(f"Generated {len(files)} HTML files")
+        # Count every page written, not just the test pages in the return
+        # value — the old number was smaller than the lines printed above it,
+        # so it could not serve as a "did everything come out?" signal.
+        print(f"Generated {get_pages_written()} HTML files")
         print(f"Open {output_dir}/index.html to view documentation")
+
+        failures = get_page_failures()
+        if failures:
+            # The summary goes to stderr; flush stdout first so it lands
+            # after the generation log instead of ahead of it.
+            sys.stdout.flush()
+            print()
+            print(f"{len(failures)} page(s) failed to generate:", file=sys.stderr)
+            for f in failures:
+                where = f" [{f['source']}]" if f['source'] else ""
+                print(f"  {f['kind']} {f['name']}{where}", file=sys.stderr)
+                print(f"      {f['error']}", file=sys.stderr)
+            if getattr(args, 'allow_partial', False):
+                print(
+                    "Continuing anyway (--allow-partial). Placeholder pages "
+                    "were written in their place.",
+                    file=sys.stderr,
+                )
+                return 0
+            print(
+                "The documentation is incomplete. Fix the inputs above, or "
+                "pass --allow-partial to accept a partial site.",
+                file=sys.stderr,
+            )
+            return 1
         return 0
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -1267,6 +1297,17 @@ def main():
     gen_html_parser.add_argument(
         "--layouts-dir",
         help="Override layouts directory for layoutFile import (default: auto-detect per spec via jui.config.json)"
+    )
+    gen_html_parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        dest="allow_partial",
+        help=(
+            "Exit 0 even when some pages failed to generate. Without it a "
+            "failed page fails the command: an exit-0 run that quietly "
+            "dropped a page leaves the index linking to a 404 nobody "
+            "notices. Unrelated to --with-checks, which is about drift."
+        ),
     )
     gen_html_parser.add_argument(
         "--with-checks",
