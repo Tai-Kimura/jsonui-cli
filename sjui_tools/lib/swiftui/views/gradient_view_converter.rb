@@ -83,7 +83,25 @@ module SjuiTools
             end
           end
           
-          add_modifier_line ".background(LinearGradient(colors: [#{colors.join(', ')}], #{gradient_params}))"
+          # `locations` places each colour along the axis (0.0-1.0), the
+          # SwiftUI equivalent of CAGradientLayer.locations which UIKit already
+          # honours (SJUIView: `layer.locations = locationNumbers`). Without it
+          # the colours are always evenly spaced, so a two-stop gradient meant
+          # to break at 20% rendered as a 50/50 fade.
+          #
+          # LinearGradient has no `colors:` + `locations:` form — stops are the
+          # only way to express it — so the two initialisers are separate here.
+          # A count mismatch falls back to even spacing rather than emitting a
+          # gradient with fewer stops than colours.
+          locations = @component['locations']
+          if locations.is_a?(Array) && locations.length == colors.length && !colors.empty?
+            stops = colors.each_with_index.map do |color, i|
+              ".init(color: #{color}, location: #{locations[i]})"
+            end
+            add_modifier_line ".background(LinearGradient(stops: [#{stops.join(', ')}], #{gradient_params}))"
+          else
+            add_modifier_line ".background(LinearGradient(colors: [#{colors.join(', ')}], #{gradient_params}))"
+          end
         end
         
         def gradient_point(point)

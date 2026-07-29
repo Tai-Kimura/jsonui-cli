@@ -27,6 +27,50 @@ RSpec.describe SjuiTools::SwiftUI::Views::GradientViewConverter do
       end
     end
 
+    # `locations` is CAGradientLayer.locations, which UIKit already honours.
+    # Without it every gradient is evenly spaced, so a two-stop gradient meant
+    # to break at 20% rendered as a 50/50 fade.
+    context 'with locations' do
+      let(:component) do
+        {
+          'type' => 'GradientView',
+          'colors' => ['#FF0000', '#0000FF'],
+          'locations' => [0.2, 0.8]
+        }
+      end
+
+      it 'emits gradient stops at the given positions' do
+        code = described_class.new(component, 0, nil, factory).convert
+
+        expect(code).to include('LinearGradient(stops:')
+        expect(code).to include('location: 0.2')
+        expect(code).to include('location: 0.8')
+      end
+
+      it 'does not also emit the evenly spaced colors form' do
+        code = described_class.new(component, 0, nil, factory).convert
+
+        expect(code).not_to include('LinearGradient(colors:')
+      end
+    end
+
+    context 'with a locations count that does not match the colors' do
+      let(:component) do
+        {
+          'type' => 'GradientView',
+          'colors' => ['#FF0000', '#0000FF', '#00FF00'],
+          'locations' => [0.2, 0.8]
+        }
+      end
+
+      it 'falls back to even spacing rather than dropping a color' do
+        code = described_class.new(component, 0, nil, factory).convert
+
+        expect(code).to include('LinearGradient(colors:')
+        expect(code).not_to include('stops:')
+      end
+    end
+
     context 'with colors array' do
       let(:component) do
         {

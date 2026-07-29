@@ -39,6 +39,9 @@ module SjuiTools
           end
           add_line "}"
           add_modifier_line ".pickerStyle(.segmented)"
+          apply_segment_appearance
+
+          # (appearance emitted above; see apply_segment_appearance)
 
           # onValueChange handler - called when selection changes
           # onValueChange (camelCase) -> binding format only (@{functionName})
@@ -62,6 +65,35 @@ module SjuiTools
           apply_modifiers
           
           generated_code
+        end
+        private
+
+        # normalColor / selectedColor — unselected and selected title colours.
+        #
+        # SwiftUI's segmented Picker exposes no per-state colour modifier, so
+        # both the UIKit runtime and the SwiftUI Dynamic runtime reach through to
+        # `UISegmentedControl.appearance()`. This emits the same thing from the
+        # codegen (SegmentConverter.configureSegmentAppearance is the reference).
+        #
+        # `.appearance()` is process-wide, which is why it is applied in
+        # `.onAppear` rather than at build time: a screen that sets it should not
+        # restyle segments on screens that do not.
+        def apply_segment_appearance
+          normal_color = @component['normalColor']
+          selected_color = @component['selectedColor'] || @component['selectedSegmentTintColor']
+          return if normal_color.nil? && selected_color.nil?
+
+          add_modifier_line ".onAppear {"
+          indent do
+            add_line "let appearance = UISegmentedControl.appearance()"
+            if selected_color
+              add_line "appearance.selectedSegmentTintColor = UIColor(#{get_swiftui_color(selected_color)})"
+            end
+            if normal_color
+              add_line "appearance.setTitleTextAttributes([.foregroundColor: UIColor(#{get_swiftui_color(normal_color)})], for: .normal)"
+            end
+          end
+          add_line "}"
         end
       end
     end

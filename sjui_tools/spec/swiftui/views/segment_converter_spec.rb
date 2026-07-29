@@ -218,5 +218,42 @@ RSpec.describe SjuiTools::SwiftUI::Views::SegmentConverter do
 
       expect(code).to include('data.onTabChange?("segment", newValue)')
     end
+
+    # SwiftUI's segmented Picker has no per-state colour modifier, so both the
+    # UIKit runtime and the SwiftUI Dynamic runtime go through
+    # UISegmentedControl.appearance(). The codegen read neither attribute.
+    describe 'normalColor / selectedColor' do
+      it 'sets the selected segment tint' do
+        code = described_class.new(
+          { 'type' => 'Segment', 'items' => %w[One Two], 'selectedColor' => '#FF0000' }
+        ).convert
+
+        expect(code).to include('UISegmentedControl.appearance()')
+        expect(code).to include('selectedSegmentTintColor')
+      end
+
+      it 'sets the unselected title colour' do
+        code = described_class.new(
+          { 'type' => 'Segment', 'items' => %w[One Two], 'normalColor' => '#0000FF' }
+        ).convert
+
+        expect(code).to include('setTitleTextAttributes')
+        expect(code).to include('for: .normal')
+      end
+
+      it 'applies in onAppear, since appearance() is process-wide' do
+        code = described_class.new(
+          { 'type' => 'Segment', 'items' => %w[One Two], 'normalColor' => '#0000FF' }
+        ).convert
+
+        expect(code).to include('.onAppear {')
+      end
+
+      it 'emits nothing when neither is set' do
+        code = described_class.new({ 'type' => 'Segment', 'items' => %w[One Two] }).convert
+
+        expect(code).not_to include('UISegmentedControl.appearance()')
+      end
+    end
   end
 end
