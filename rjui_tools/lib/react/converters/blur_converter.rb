@@ -118,7 +118,12 @@ module RjuiTools
         end
 
         def get_effect_style
-          (attributes['effectStyle'] || json['style'] || 'regular').downcase.gsub(/\s+/, '')
+          # `effectStyle` only. The `json['style']` fallback used to be here was
+          # reading `common.style` — the STYLE FILE name — so a Blur inside a
+          # styled screen matched its style-file reference against blur
+          # appearances. sjui had the same misread and no `effectStyle` read at
+          # all.
+          attributes['effectStyle'].to_s.downcase.gsub(/\s+/, '').then { |v| v.empty? ? 'regular' : v }
         end
       end
     end

@@ -40,11 +40,15 @@ RSpec.describe SjuiTools::SwiftUI::Views::BlurConverter do
       end
     end
 
-    context 'with dark style' do
+    # `effectStyle` is the declared attribute. This used to read `style`, which
+    # is `common.style` — the STYLE FILE name — so a Blur inside a styled screen
+    # had its style-file reference matched against blur appearances while the
+    # declared attribute was ignored.
+    context 'with effectStyle Dark' do
       let(:component) do
         {
           'type' => 'Blur',
-          'style' => 'dark'
+          'effectStyle' => 'Dark'
         }
       end
 
@@ -56,11 +60,11 @@ RSpec.describe SjuiTools::SwiftUI::Views::BlurConverter do
       end
     end
 
-    context 'with light style' do
+    context 'with effectStyle Light' do
       let(:component) do
         {
           'type' => 'Blur',
-          'style' => 'light'
+          'effectStyle' => 'Light'
         }
       end
 
@@ -69,6 +73,25 @@ RSpec.describe SjuiTools::SwiftUI::Views::BlurConverter do
         code = converter.convert
 
         expect(code).to include('.preferredColorScheme(.light)')
+      end
+    end
+
+    context 'with effectStyle ExtraLight' do
+      let(:component) { { 'type' => 'Blur', 'effectStyle' => 'ExtraLight' } }
+
+      it 'is a light scheme, matching the Dynamic runtime' do
+        expect(described_class.new(component).convert)
+          .to include('.preferredColorScheme(.light)')
+      end
+    end
+
+    context 'with a style FILE reference' do
+      let(:component) { { 'type' => 'Blur', 'style' => 'glass_panel' } }
+
+      it 'does not treat the style file name as a blur appearance' do
+        code = described_class.new(component).convert
+
+        expect(code).not_to include('.preferredColorScheme')
       end
     end
 

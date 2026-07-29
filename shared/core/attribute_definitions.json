@@ -4224,6 +4224,11 @@
         "ExtraLight"
       ],
       "description": "Blur effect style"
+    },
+    "blurRadius": {
+      "type": "number",
+      "description": "Blur radius in dp. Android only: Compose has no material-blur equivalent of UIVisualEffectView, so effectStyle resolves to a radius there and this overrides it.",
+      "platform": "kotlin"
     }
   },
   "IconLabel": {

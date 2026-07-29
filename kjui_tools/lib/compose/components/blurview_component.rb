@@ -21,9 +21,22 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
 
-          # Add blur effect
-          blur_radius = json_data['blurRadius'] || 10
-          
+          # Add blur effect.
+          #
+          # `effectStyle` is the declared attribute (enum Light / Dark /
+          # ExtraLight) and was not read at all here. Compose has no
+          # material-blur equivalent of UIVisualEffectView, so the appearance is
+          # expressed as radius + overlay: ExtraLight is the softest blur over a
+          # bright scrim, Dark the strongest over a dark one. `blurRadius` stays
+          # supported as an explicit override, and it now WINS over the style —
+          # it is the more specific instruction.
+          effect_style = json_data['effectStyle'].to_s.downcase
+          blur_radius = json_data['blurRadius'] || case effect_style
+                                                   when 'extralight' then 6
+                                                   when 'dark' then 14
+                                                   else 10
+                                                   end
+
           # Try to use real blur modifier (available in Compose 1.3+)
           required_imports&.add(:blur)
           modifiers << ".blur(#{blur_radius}.dp)"

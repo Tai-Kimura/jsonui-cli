@@ -16,7 +16,12 @@ module SjuiTools
           child_data = @component['child'] || []
           # childが単一要素の場合は配列に変換
           children = child_data.is_a?(Array) ? child_data : [child_data]
-          style = @component['style'] || 'regular'
+          # `effectStyle` is the declared attribute (enum Light / Dark /
+          # ExtraLight). This used to read `style`, which is `common.style` —
+          # the STYLE FILE name — so a Blur inside a styled screen had its
+          # style-file reference matched against blur appearances, and the
+          # declared attribute was ignored entirely.
+          effect_style = @component['effectStyle'] || 'regular'
           
           # 子要素を生成
           if children.any?
@@ -60,10 +65,13 @@ module SjuiTools
           add_modifier_line ".background(.ultraThinMaterial)"
           
           # スタイルに応じて調整
-          case style
+          # Case-insensitive: the enum is declared capitalised (Light / Dark /
+          # ExtraLight) and the SwiftUI Dynamic runtime lowercases before
+          # matching, so a layout written either way behaves the same.
+          case effect_style.to_s.downcase
           when 'dark'
             add_modifier_line ".preferredColorScheme(.dark)"
-          when 'light'
+          when 'light', 'extralight'
             add_modifier_line ".preferredColorScheme(.light)"
           end
           

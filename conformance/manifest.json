@@ -8,11 +8,11 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "a8649989c24b3b9deb9d92fb3512b00e75a3fc167790afdd52d95d1ba670067d",
+  "generatedFrom": "a6525b8c901d8f2a748ed9f64b6ca9924c99fd73722fb2259658f1a7408766ca",
   "counts": {
-    "fixtures": 708,
+    "fixtures": 709,
     "assertable": 36,
-    "visual": 602,
+    "visual": 603,
     "interactive": 36,
     "control": 34,
     "skipped": 168,
@@ -14653,6 +14653,27 @@
       "deprecated": null,
       "layout": "fixtures/Blur/effectStyle__extralight.layout.json",
       "test": "fixtures/Blur/effectStyle__extralight.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Blur"
+    },
+    {
+      "id": "Blur/blurRadius__static",
+      "component": "Blur",
+      "attribute": "blurRadius",
+      "case": "static",
+      "class": "visual",
+      "host": "Blur",
+      "writtenKey": "blurRadius",
+      "aliasOf": null,
+      "value": 8,
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Blur/blurRadius__static.layout.json",
+      "test": "fixtures/Blur/blurRadius__static.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Blur"

@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Blur/blurRadius__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Blur.blurRadius (static)",
+    "description": "Conformance fixture for 'blurRadius' on Blur (section: Blur, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Blur"
+    ]
+  },
+  "platform": [
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "blurRadius__static",
+      "description": "Conformance fixture for 'blurRadius' on Blur (section: Blur, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Blur_blurRadius__static"
+        }
+      ]
+    }
+  ]
+}
