@@ -389,6 +389,33 @@ The mock server (`jsonui-test mock serve`) accepts an `--artifacts` flag: after 
 jsonui-test mock serve --artifacts
 ```
 
+### API path scope
+
+When one swagger is shared by several front-ends, `mock generate` only
+scaffolds and checks the endpoints this project declares it consumes. It reads
+the same keys the DTO codegen already filters on, so the scope is stated once:
+
+```jsonc
+{
+  "api": { "schemas": {
+    "include_paths": ["/api/user/*"],
+    "exclude_paths": []
+  }}
+}
+```
+
+Endpoints outside the scope are not scaffolded and are not counted as
+`[MISSING]` — another realm's endpoints are not this project's missing mocks.
+A mock file that serves an out-of-scope route is reported as `[SCOPE]` (an
+unused file you can delete) rather than `[ORPHAN]`, and does not fail the
+check; `[ORPHAN]` keeps its meaning of "no such endpoint in the swagger at
+all". Glob semantics match the codegen filter: `*` matches any characters
+including `/`, patterns are case-sensitive and match the whole path.
+
+Set `mock.includePaths` / `mock.excludePaths` to give the mocks a different
+scope from the DTOs (`"includePaths": ["*"]` opts out of narrowing entirely).
+With no declaration anywhere, the whole swagger is in scope, as before.
+
 ### Legacy Syntax
 
 For backwards compatibility, the old syntax still works:

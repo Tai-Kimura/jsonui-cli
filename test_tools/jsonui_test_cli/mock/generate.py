@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .openapi import OpenApiDoc, Operation, slugify
+from .scope import PathScope
 
 
 def mock_relpath(op: Operation) -> str:
@@ -180,6 +181,8 @@ class GenerateReport:
     created: list[str]     # written into generated/
     skipped: list[str]     # a hand-written mock already serves that route
     warnings: list[str]
+    #: routes the project's path scope excludes — not scaffolded
+    out_of_scope: list[str] = field(default_factory=list)
 
 
 def _clear_generated(gen_root: Path) -> None:
@@ -199,20 +202,27 @@ def generate(
     mock_dir: str | Path,
     check: bool = False,
     strict: bool = False,
+    scope: PathScope | None = None,
 ) -> GenerateReport | "CheckReport":
     """Regenerate `<mockDir>/generated/`, or (check=True) diff without writing.
 
     Deterministic: the same swagger and the same tool version produce the same
     bytes, which is what lets `generated/` be gitignored and rebuilt on a
     fresh clone rather than committed.
+
+    `scope` narrows the swagger to the endpoints the project declares it
+    consumes. Endpoints outside it are neither scaffolded nor counted as
+    missing: a shared swagger's other realms are not this project's debt.
     """
     mock_dir = Path(mock_dir)
+    scope = scope or PathScope()
     if check:
-        return _check(swagger_paths, mock_dir, strict=strict)
+        return _check(swagger_paths, mock_dir, strict=strict, scope=scope)
 
     created: list[str] = []
     skipped: list[str] = []
     warnings: list[str] = []
+    out_of_scope: list[str] = []
     # Hand-written mocks are recognised by the route they serve, not by
     # filename, so a project's own naming keeps working and generation never
     # produces a duplicate of one.
@@ -230,6 +240,9 @@ def generate(
             warnings.append(f"{swagger}: no paths (DB-model spec?) — skipped")
             continue
         for op in doc.operations():
+            if not scope.covers(op.path):
+                out_of_scope.append(f"{op.method} {op.path}")
+                continue
             if op.id_was_synthesized:
                 warnings.append(
                     f"{op.method} {op.path}: missing operationId -> synthesized '{op.operation_id}'"
@@ -247,7 +260,8 @@ def generate(
                 f.write("\n")
             created.append(rel)
 
-    return GenerateReport(created=created, skipped=skipped, warnings=warnings)
+    return GenerateReport(created=created, skipped=skipped, warnings=warnings,
+                          out_of_scope=sorted(out_of_scope))
 
 
 @dataclass
@@ -306,6 +320,7 @@ def update_default(
     swagger_paths: list[str],
     mock_dir: str | Path,
     dry_run: bool = False,
+    scope: PathScope | None = None,
 ) -> UpdateReport:
     """Repair the `default` scenario of each existing mock, in place.
 
@@ -316,8 +331,12 @@ def update_default(
 
     Violations a merge cannot decide — a value of the wrong type, a field the
     contract does not have — are reported rather than guessed at.
+
+    `scope` keeps endpoints the project does not consume out of `skipped`,
+    which otherwise reads as "you are missing these mocks".
     """
     mock_dir = Path(mock_dir)
+    scope = scope or PathScope()
     updated: list[str] = []
     unchanged: list[str] = []
     skipped: list[str] = []
@@ -331,10 +350,13 @@ def update_default(
             continue
         for op in doc.operations():
             # Located by route, so a project's own file naming is honoured.
-            rel = existing.get(route_key(op.method, op.path)) or mock_relpath(op)
+            key = route_key(op.method, op.path)
+            rel = existing.get(key) or mock_relpath(op)
             target = mock_dir / rel
             if not target.exists():
-                skipped.append(rel)
+                # Out of scope and absent is the correct state, not a gap.
+                if scope.covers(op.path):
+                    skipped.append(rel)
                 continue
             try:
                 with open(target, "r", encoding="utf-8") as f:
@@ -547,6 +569,14 @@ class CheckReport:
     misnamed: list[str] = field(default_factory=list)  # right route, other filename
     #: Findings in generated/: reported, but they do not fail the check.
     warnings: list[str] = field(default_factory=list)
+    #: Mocks for routes the swagger declares but this project's scope excludes.
+    #: Reported so an unused file is visible, never failed: the mirror image of
+    #: the noise this scoping exists to remove.
+    out_of_scope: list[str] = field(default_factory=list)
+    #: How many swagger endpoints the scope filtered out, for the summary line.
+    scope_excluded: int = 0
+    #: Human-readable scope, echoed when it is in effect.
+    scope_note: str = ""
     #: When set, a scenario that only omits optional fields counts as drift.
     strict: bool = False
 
@@ -567,14 +597,21 @@ class CheckReport:
         return bool(self.missing or self.orphaned or self.drifted or self.errors)
 
 
-def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False) -> CheckReport:
+def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
+           scope: PathScope | None = None) -> CheckReport:
+    scope = scope or PathScope()
     expected: dict[tuple, tuple[OpenApiDoc, Operation]] = {}
+    excluded: dict[tuple, Operation] = {}
     for swagger in swagger_paths:
         doc = OpenApiDoc.load(swagger)
         if not doc.is_api_spec():
             continue
         for op in doc.operations():
-            expected[route_key(op.method, op.path)] = (doc, op)
+            key = route_key(op.method, op.path)
+            if scope.covers(op.path):
+                expected[key] = (doc, op)
+            else:
+                excluded[key] = op
 
     drifted: list[str] = []
     existing: dict = {}
@@ -618,6 +655,16 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False) -> Ch
         f"{mock_relpath(expected[k][1])} ({k[0]} {k[1]})"
         for k in missing_keys if k not in paired
     )
+    # A mock for a route the scope excludes is not an orphan — the swagger
+    # still declares it, the project just does not consume it. Saying so
+    # separately keeps ORPHAN meaning "no such endpoint any more", and lets
+    # the file read as deletable without turning the gate red for it.
+    out_of_scope = sorted(
+        f"{existing[k]} ({k[0]} {k[1]})"
+        for k in orphan_keys if k not in paired and k in excluded
+    )
+    orphan_keys = [k for k in orphan_keys if k not in excluded]
+
     # A stale entry in generated/ is fixed by regenerating, so it is reported
     # rather than failed. One outside it needs a decision.
     orphaned = sorted(
@@ -651,7 +698,10 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False) -> Ch
     return CheckReport(
         missing=missing, orphaned=orphaned, drifted=drifted,
         bodies=bodies, unmatched=unmatched, misnamed=misnamed,
-        warnings=warnings, strict=strict,
+        warnings=warnings, out_of_scope=out_of_scope,
+        scope_excluded=len(excluded),
+        scope_note=scope.describe() if scope.is_active() else "",
+        strict=strict,
     )
 
 

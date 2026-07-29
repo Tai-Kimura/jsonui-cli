@@ -122,6 +122,8 @@ def _check_mocks_against_swagger(config_path):
     if not resolved:
         return 0
 
+    scope = _load_path_scope(config_path)
+
     # generated/ is meant to be gitignorable, so it has to rebuild itself on a
     # fresh clone or a first CI run. Rebuilding when it is missing or older
     # than the swagger keeps `validate` the single entry point.
@@ -132,7 +134,7 @@ def _check_mocks_against_swagger(config_path):
         (p.stat().st_mtime for p in gen_root.rglob("*.mock.json")), default=0)
     if generated_at < newest_swagger:
         try:
-            built = generate(resolved, mock_path)
+            built = generate(resolved, mock_path, scope=scope)
         except (OSError, ValueError, KeyError) as e:
             # Running the suite against an empty generated/ turns every
             # unmocked operation into a 404 and a confusing red.
@@ -143,7 +145,7 @@ def _check_mocks_against_swagger(config_path):
             print(f"\nRegenerated {len(built.created)} mock file(s) "
                   f"into {mock_dir}/{GENERATED_DIR}/")
 
-    report = generate(resolved, mock_path, check=True,
+    report = generate(resolved, mock_path, check=True, scope=scope,
                       strict=bool(config.get("checkOptionalFields", False)))
     if not isinstance(report, CheckReport) or not report.has_drift:
         return 0
@@ -416,6 +418,20 @@ def cmd_report(args):
     return 0
 
 
+def _read_config_doc(explicit_path=None):
+    """The whole jui.config.json document, or ({}, None) when there is none."""
+    candidates = [Path(explicit_path)] if explicit_path else [
+        Path("jui.config.json"), Path("jsonui-test.config.json")]
+    for c in candidates:
+        if c.exists():
+            try:
+                with open(c, "r", encoding="utf-8") as f:
+                    return json.load(f), c
+            except (OSError, json.JSONDecodeError):
+                pass
+    return {}, None
+
+
 def _load_mock_config(explicit_path=None):
     """Read the 'mock' section from jui.config.json (or an explicit config path).
 
@@ -425,26 +441,32 @@ def _load_mock_config(explicit_path=None):
     time and failed with `Is a directory: '.'`, an error that points at the
     filesystem instead of at the key.
     """
-    candidates = [Path(explicit_path)] if explicit_path else [
-        Path("jui.config.json"), Path("jsonui-test.config.json")]
-    for c in candidates:
-        if c.exists():
-            try:
-                with open(c, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                config = dict(data.get("mock", data))
-                swagger = config.get("swagger")
-                if isinstance(swagger, str):
-                    config["swagger"] = [swagger]
-                elif swagger is not None and not isinstance(swagger, list):
-                    print(f"Warning: mock.swagger in {c} is "
-                          f"{type(swagger).__name__}; expected a path or a list "
-                          "of paths — ignoring", file=sys.stderr)
-                    config["swagger"] = []
-                return config, c
-            except (OSError, json.JSONDecodeError):
-                pass
-    return {}, None
+    data, c = _read_config_doc(explicit_path)
+    if c is None:
+        return {}, None
+    config = dict(data.get("mock", data))
+    swagger = config.get("swagger")
+    if isinstance(swagger, str):
+        config["swagger"] = [swagger]
+    elif swagger is not None and not isinstance(swagger, list):
+        print(f"Warning: mock.swagger in {c} is "
+              f"{type(swagger).__name__}; expected a path or a list "
+              "of paths — ignoring", file=sys.stderr)
+        config["swagger"] = []
+    return config, c
+
+
+def _load_path_scope(explicit_path=None):
+    """The endpoints this project declares it consumes.
+
+    Read from the same config the DTO codegen already filters on
+    (`api.schemas.include_paths` / `exclude_paths`), so a shared swagger's
+    other realms stop being counted as mocks this project owes.
+    """
+    from .mock.scope import PathScope
+
+    data, _ = _read_config_doc(explicit_path)
+    return PathScope.from_config(data)
 
 
 def _resolve_swaggers(swaggers, root, config_path):
@@ -475,7 +497,8 @@ def cmd_mock_generate(args):
 
     if getattr(args, "update_default", False):
         dry_run = getattr(args, "dry_run", False)
-        upd = update_default(swaggers, mock_dir, dry_run=dry_run)
+        upd = update_default(swaggers, mock_dir, dry_run=dry_run,
+                             scope=_load_path_scope(getattr(args, "config", None)))
         for rel in upd.updated:
             paths = upd.added.get(rel)
             detail = f" (+{', '.join(paths)})" if paths else " (source route)"
@@ -496,13 +519,17 @@ def cmd_mock_generate(args):
         return 0
 
     report = generate(swaggers, mock_dir, check=args.check,
-                      strict=getattr(args, "strict", False))
+                      strict=getattr(args, "strict", False),
+                      scope=_load_path_scope(getattr(args, "config", None)))
 
     if isinstance(report, CheckReport):
         for rel in report.missing:
             print(f"  [MISSING] {rel} (in swagger, no mock file)")
         for rel in report.orphaned:
             print(f"  [ORPHAN]  {rel} (mock file, not in swagger)")
+        for rel in report.out_of_scope:
+            print(f"  [SCOPE]   {rel} — outside this project's API paths, "
+                  "safe to delete")
         for msg in report.drifted:
             print(f"  [DRIFT]   {msg}")
         for drift in report.errors:
@@ -517,6 +544,9 @@ def cmd_mock_generate(args):
             print(f"  [NOTE]    {note} — not compared")
         for warning in report.warnings:
             print(f"  [WARN]    {warning}")
+        if report.scope_note:
+            print(f"\nAPI path scope: {report.scope_note} "
+                  f"({report.scope_excluded} endpoint(s) outside it, not checked)")
         if report.has_drift:
             print(f"\nDrift detected: {len(report.missing)} missing, "
                   f"{len(report.orphaned)} orphaned, {len(report.drifted)} drifted, "
@@ -534,6 +564,9 @@ def cmd_mock_generate(args):
     print(f"\nGenerated {len(report.created)} mock file(s) into "
           f"{mock_dir}/generated/ (rewritten each run — safe to gitignore); "
           f"{len(report.skipped)} route(s) already served by a hand-written mock.")
+    if report.out_of_scope:
+        print(f"{len(report.out_of_scope)} endpoint(s) outside this project's "
+              "API paths were not scaffolded.")
     return 0
 
 
