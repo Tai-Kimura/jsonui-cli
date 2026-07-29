@@ -15,7 +15,7 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
-        # Blur radius in dp. Android only: Compose has no material-blur equivalent of UIVisualEffectView, so effectStyle resolves to a radius there and this overrides it.
+        # Blur radius in px/dp. Android and Web only: both blur by radius, while UIKit/SwiftUI express the appearance as effectStyle (UIVisualEffectView has styles, not radii). Overrides the radius effectStyle resolves to.
         { name: 'blurRadius', kind: :number }.freeze,
         # Blur effect style
         { name: 'effectStyle', kind: :enum, values: ['Light', 'Dark', 'ExtraLight'].freeze }.freeze,

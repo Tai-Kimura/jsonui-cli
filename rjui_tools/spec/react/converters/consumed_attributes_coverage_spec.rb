@@ -53,7 +53,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
 
   UNDECLARED = {
     'base_converter.rb' => %w[accessibilityLabel alt direction font fontColor fontFamily fontSize fontWeight insetHorizontal insets key offsetX offsetY orientation textAlign zIndex],
-    'blur_converter.rb' => %w[backgroundColor blurRadius intensity],
+    'blur_converter.rb' => %w[backgroundColor intensity],
     'button_converter.rb' => %w[href partialAttributes],
     'circle_view_converter.rb' => %w[backgroundColor fillColor strokeColor strokeWidth],
     'collection_converter.rb' => %w[contentInset scrollDirection spacing],

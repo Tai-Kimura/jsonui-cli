@@ -8,7 +8,7 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "a6525b8c901d8f2a748ed9f64b6ca9924c99fd73722fb2259658f1a7408766ca",
+  "generatedFrom": "f2c580102f63ec2faeeaabf394017aab399287ef76d8332495e98b5cea41f2a3",
   "counts": {
     "fixtures": 709,
     "assertable": 36,
@@ -14668,7 +14668,8 @@
       "aliasOf": null,
       "value": 8,
       "platforms": [
-        "android"
+        "android",
+        "web"
       ],
       "mode": null,
       "deprecated": null,
