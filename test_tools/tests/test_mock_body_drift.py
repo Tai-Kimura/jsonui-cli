@@ -16,9 +16,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from jsonui_test_cli.mock.generate import (
     GENERATED_DIR,
-    empty_array_prefixes,
+    compare_to_schema,
     generate,
-    key_paths,
     update_default,
 )
 
@@ -94,16 +93,6 @@ def _write(path, scenarios, source=None):
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
-class TestKeyPaths:
-    def test_descends_objects_and_arrays(self):
-        assert key_paths({"a": {"b": 1}}) == {".a", ".a.b"}
-        assert key_paths({"items": [{"id": 1}]}) == {".items", ".items[].id"}
-
-    def test_empty_array_prefixes_finds_the_emptied_field(self):
-        assert empty_array_prefixes({"items": []}) == {".items[]"}
-        assert empty_array_prefixes({"items": [{"id": 1}]}) == set()
-
-
 class TestBodyDrift:
     def test_a_freshly_generated_tree_has_no_drift(self, tmp_path):
         spec, out = _setup(tmp_path)
@@ -157,8 +146,9 @@ class TestBodyDrift:
         report = generate([spec], out, check=True)
         drift = report.bodies[0]
         # `series` is optional; the undeclared `brand` is the real problem.
-        assert drift.optional == [".items[].series"]
-        assert drift.extra == [".items[].brand"]
+        # Paths are indexed, so a bad element is identified, not just its array.
+        assert drift.optional == [".items[0].series"]
+        assert drift.extra == [".items[0].brand"]
 
     def test_an_empty_array_is_a_valid_instance_not_drift(self, tmp_path):
         # The generator emits exactly this for its own `empty` scenario.
@@ -270,8 +260,7 @@ class TestSchemaConformance:
         _write(mock, {"default": {"status": 200, "body": {
             "status": "followed", "bar_id": "x"}}})
         report = generate([spec], out, check=True)
-        assert any("new_arrival_notification: required by the contract, missing" in v
-                   for v in report.bodies[0].violations)
+        assert report.bodies[0].missing == [".new_arrival_notification"]
 
     def test_a_value_outside_an_enum_is_reported(self, tmp_path):
         spec, out = _setup(tmp_path)
@@ -520,8 +509,10 @@ class TestOptionalFields:
         _write(mock, {"default": {"status": 200, "body": {"id": "1"}}})
         report = generate([str(spec)], out, check=True)
         drift = report.bodies[0]
+        # The walk stops at the absent optional parent — reporting its
+        # required children would be reporting an omission that is not one.
         assert drift.missing == []
-        assert ".price_plan.plan_id" in drift.optional
+        assert drift.optional == [".price_plan"]
 
     def test_notes_and_violations_are_labelled_separately(self, tmp_path):
         spec, out = _setup(tmp_path)
@@ -541,3 +532,73 @@ class TestOptionalFields:
         # Still reported as optional — strict changes the weight, not the fact.
         assert report.bodies[0].optional == [".bar_id"]
         assert report.errors == report.bodies
+
+
+class TestArrayElementShape:
+    """Regression: mock-check-array-element-shape-false-positives.
+
+    The comparison flattened both sides into key sets, which forces one
+    representative shape per array. Two false positives fell out of that: a
+    `nullable` array holding `null` was asked for its element shape, and one
+    empty element made the OTHER elements' fields read as undeclared.
+    """
+
+    ARRAYS = {
+        "openapi": "3.0.0",
+        "paths": {"/api/plan": {"get": {
+            "tags": ["Plan"], "operationId": "getPlan",
+            "responses": {"200": {"content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/Plan"}}}}},
+        }}},
+        "components": {"schemas": {
+            "Plan": {"type": "object", "properties": {
+                "daily_rates": {"type": "array", "nullable": True,
+                                "items": {"$ref": "#/components/schemas/Rate"}},
+                "stalls": {"type": "array", "items": {"$ref": "#/components/schemas/Stall"}},
+            }},
+            "Rate": {"type": "object", "required": ["apply_on_fri", "unit_price"],
+                     "properties": {"apply_on_fri": {"type": "boolean"},
+                                    "unit_price": {"type": "integer"}}},
+            "Stall": {"type": "object", "required": ["name"], "properties": {
+                "name": {"type": "string"},
+                "assignments": {"type": "array",
+                                "items": {"$ref": "#/components/schemas/Assignment"}}}},
+            "Assignment": {"type": "object", "required": ["usage_mode_id"], "properties": {
+                "usage_mode_id": {"type": "string"},
+                "price_plan_name": {"type": "string", "nullable": True}}},
+        }},
+    }
+
+    def _project(self, tmp_path, body):
+        spec = tmp_path / "spec.json"
+        spec.write_text(json.dumps(self.ARRAYS), encoding="utf-8")
+        out = tmp_path / "mocks"
+        generate([str(spec)], out)
+        mock = out / GENERATED_DIR / "plan" / "getPlan.mock.json"
+        _write(mock, {"default": {"status": 200, "body": body}})
+        return generate([str(spec)], out, check=True)
+
+    def test_a_nullable_array_holding_null_is_not_asked_for_element_shape(self, tmp_path):
+        # null is a valid value and there are no elements — an absent array is
+        # not an array of absent elements.
+        report = self._project(tmp_path, {"daily_rates": None, "stalls": []})
+        assert report.bodies == [] or report.bodies[0].missing == []
+
+    def test_an_empty_element_does_not_invalidate_its_siblings(self, tmp_path):
+        report = self._project(tmp_path, {"daily_rates": None, "stalls": [
+            {"name": "A-01", "assignments": [
+                {"usage_mode_id": "u1", "price_plan_name": "通常料金A"}]},
+            {"name": "A-03", "assignments": []},
+        ]})
+        drift = report.bodies[0] if report.bodies else None
+        assert drift is None or drift.extra == []
+        assert drift is None or drift.missing == []
+
+    def test_a_bad_element_is_identified_by_its_index(self, tmp_path):
+        report = self._project(tmp_path, {"daily_rates": None, "stalls": [
+            {"name": "A-01"},
+            {"name": 42},
+        ]})
+        violations = report.bodies[0].violations
+        assert any(".stalls[1].name" in v for v in violations)
+        assert not any(".stalls[0].name" in v for v in violations)

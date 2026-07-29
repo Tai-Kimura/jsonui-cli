@@ -398,114 +398,102 @@ def update_default(
                         added=added, needs_review=needs_review)
 
 
-def key_paths(value, prefix: str = "") -> set:
-    """Every dotted key path in a JSON value, descending through arrays.
+@dataclass
+class BodyFindings:
+    """What one body is, measured against its schema."""
 
-    An array contributes its elements' paths under a `[]` segment, unioned:
-    the shape comes from one item schema, so a stale mock's elements all
-    carry the same stale shape. A key present in some elements but not others
-    is therefore reported as present — an inconsistency this check does not
-    try to find.
+    violations: list = field(default_factory=list)  # wrong type / enum / null
+    missing: list = field(default_factory=list)     # required, absent
+    optional: list = field(default_factory=list)    # optional, absent
+    extra: list = field(default_factory=list)       # not in the contract
+
+    def merge(self, other: "BodyFindings") -> "BodyFindings":
+        self.violations += other.violations
+        self.missing += other.missing
+        self.optional += other.optional
+        self.extra += other.extra
+        return self
+
+
+#: JSON types a schema `type` accepts.
+_TYPE_CHECKS = {
+    "string": lambda v: isinstance(v, str),
+    "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
+    "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
+    "boolean": lambda v: isinstance(v, bool),
+    "array": lambda v: isinstance(v, list),
+    "object": lambda v: isinstance(v, dict),
+}
+
+
+def compare_to_schema(doc: OpenApiDoc, schema, value, path: str = "",
+                      _depth: int = 0) -> BodyFindings:
+    """Walk a body and its schema together.
+
+    Together, not as two flattened key sets. A set difference has to pick one
+    representative shape for a whole array, which produced two false
+    positives: a `nullable` array holding `null` was asked for its element
+    shape, and one empty element made the OTHER elements' fields read as
+    undeclared. Descending per element with an indexed path removes the class
+    — and says which element is at fault.
     """
-    out: set = set()
-    if isinstance(value, dict):
-        for key, child in value.items():
-            path = f"{prefix}.{key}"
-            out.add(path)
-            out |= key_paths(child, path)
-    elif isinstance(value, list):
-        for item in value:
-            out |= key_paths(item, f"{prefix}[]")
-    return out
-
-
-def empty_array_prefixes(value, prefix: str = "") -> set:
-    """`[]`-terminated prefixes where *value* holds an empty array.
-
-    An empty array is a legitimate instance of an array schema — the
-    generator emits exactly that for its own `empty` scenario — so the
-    element shape underneath it cannot be, and must not be, required.
-    """
-    out: set = set()
-    if isinstance(value, dict):
-        for key, child in value.items():
-            out |= empty_array_prefixes(child, f"{prefix}.{key}")
-    elif isinstance(value, list):
-        if not value:
-            out.add(f"{prefix}[]")
-        else:
-            for item in value:
-                out |= empty_array_prefixes(item, f"{prefix}[]")
-    return out
-
-
-def _drop_under(paths: set, prefixes: set) -> set:
-    return {p for p in paths if not any(p.startswith(pref) for pref in prefixes)}
-
-
-def required_paths(doc: OpenApiDoc, schema, path: str = "", _depth: int = 0) -> set:
-    """Dotted paths a schema marks `required`, in `key_paths` notation."""
-    out: set = set()
+    out = BodyFindings()
     if _depth > 12:
         return out
     schema = doc.resolve_schema(schema, _depth)
     if not isinstance(schema, dict):
         return out
 
-    stype = schema.get("type")
+    types = schema.get("type")
+    type_list = types if isinstance(types, list) else [types]
+    if value is None:
+        # `nullable` is OpenAPI 3.0; 3.1 spells it as a `null` type member.
+        # Either way there is no substructure to compare — an absent array is
+        # not an array of absent elements.
+        if schema.get("nullable") or "null" in type_list or types is None:
+            return out
+        out.violations.append(f"{path or '.'}: null, contract says {types}")
+        return out
+
+    stype = types
     if stype is None and "properties" in schema:
         stype = "object"
     if isinstance(stype, list):
         stype = next((t for t in stype if t != "null"), None)
 
+    check = _TYPE_CHECKS.get(stype)
+    if check is not None and not check(value):
+        out.violations.append(
+            f"{path or '.'}: {type(value).__name__}, contract says {stype}")
+        return out  # a wrong container makes everything under it noise
+
+    enum = schema.get("enum")
+    if isinstance(enum, list) and enum and value not in enum:
+        out.violations.append(f"{path or '.'}: {value!r} is not one of {enum}")
+
     if stype == "object":
+        properties = schema.get("properties") or {}
         required = set(schema.get("required") or [])
-        for name, child in (schema.get("properties") or {}).items():
+        additional = schema.get("additionalProperties")
+        for name, child in properties.items():
             child_path = f"{path}.{name}"
-            if name in required:
-                out.add(child_path)
-            out |= required_paths(doc, child, child_path, _depth + 1)
+            if name in value:
+                out.merge(compare_to_schema(doc, child, value[name], child_path, _depth + 1))
+            elif name in required:
+                out.missing.append(child_path)
+            else:
+                out.optional.append(child_path)
+        if properties and additional is not True and not isinstance(additional, dict):
+            for name in value:
+                if name not in properties:
+                    out.extra.append(f"{path}.{name}")
     elif stype == "array":
         items = schema.get("items")
         if items is not None:
-            out |= required_paths(doc, items, f"{path}[]", _depth + 1)
+            for index, element in enumerate(value):
+                out.merge(compare_to_schema(
+                    doc, items, element, f"{path}[{index}]", _depth + 1))
     return out
-
-
-def _ancestors(path: str) -> list:
-    """Ancestor paths of *path*, shallowest first, in both `.a` and `.a[]` form."""
-    out = []
-    cur = path
-    while True:
-        index = cur.rfind(".")
-        if index <= 0:
-            break
-        cur = cur[:index]
-        out.append(cur)
-        if cur.endswith("[]"):
-            out.append(cur[:-2])
-    return list(reversed(out))
-
-
-def split_missing(missing: set, required: set) -> tuple:
-    """`(required_missing, optional_missing)`.
-
-    A path under an omitted OPTIONAL parent is optional too, however the
-    schema marks it: leaving out `price_plan` legitimately leaves out
-    `price_plan.id`, and reporting the child as a contract violation would be
-    wrong. Classification therefore follows the shallowest omitted ancestor.
-    """
-    missing_set = set(missing)
-    req: list = []
-    opt: list = []
-    for path in missing:
-        anchor = path
-        for ancestor in _ancestors(path):
-            if ancestor in missing_set:
-                anchor = ancestor
-                break
-        (req if anchor in required else opt).append(path)
-    return sorted(req), sorted(opt)
 
 
 @dataclass
@@ -701,103 +689,31 @@ def _check_bodies(
         if schema is None:
             continue  # no declared body (204 and friends)
 
-        expected_body = doc.sample_for_schema(schema)
         actual_body = scenario.get("body")
         if actual_body is None:
             bodies.append(BodyDrift(rel, name, ["<body>"], [], generated=generated))
             continue
 
-        want = key_paths(expected_body)
-        got = key_paths(actual_body)
-        # Neither side can describe the element shape of an array it holds
-        # none of, so an empty array on either side excuses the other.
-        want = _drop_under(want, empty_array_prefixes(actual_body))
-        got = _drop_under(got, empty_array_prefixes(expected_body))
-        violations = validate_against_schema(doc, schema, actual_body)
-        missing_required, missing_optional = split_missing(
-            want - got, required_paths(doc, schema)
-        )
-        if missing_required or missing_optional or want != got or violations:
+        found = compare_to_schema(doc, schema, actual_body)
+        if found.missing or found.optional or found.extra or found.violations:
             bodies.append(
                 BodyDrift(
-                    rel, name, sorted(missing_required), sorted(got - want),
-                    violations=violations, generated=generated,
-                    optional=sorted(missing_optional),
+                    rel, name, sorted(found.missing), sorted(found.extra),
+                    violations=found.violations, generated=generated,
+                    optional=sorted(found.optional),
                 )
             )
 
 
-#: JSON types a schema `type` accepts, for the shape check below.
-_TYPE_CHECKS = {
-    "string": lambda v: isinstance(v, str),
-    "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
-    "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
-    "boolean": lambda v: isinstance(v, bool),
-    "array": lambda v: isinstance(v, list),
-    "object": lambda v: isinstance(v, dict),
-}
+def validate_against_schema(doc: OpenApiDoc, schema, value, path: str = "") -> list:
+    """Violations only — wrong types, absent `required`, bad enum members.
 
-
-def validate_against_schema(doc: OpenApiDoc, schema, value, path: str = "", _depth: int = 0) -> list:
-    """Schema violations in *value*: wrong types, missing `required`, bad enums.
-
-    The key-set comparison above answers "does this mock still have the same
-    shape". This answers "is it a valid instance" — a mock with `name: 42`
-    where the contract says `string` has the right keys and is still a lie the
-    tests will happily believe.
-
-    Deliberately partial: `oneOf`/`anyOf` resolve to their first branch (the
-    same simplification `sample_for_schema` makes), and unconstrained schemas
-    pass. Reporting a real violation matters more than proving full
-    conformance.
+    The repair path uses this to report what it could not merge; the check
+    path wants the notes too and calls `compare_to_schema` directly.
     """
-    out: list = []
-    if _depth > 12:
-        return out
-    schema = doc.resolve_schema(schema, _depth)
-    if not isinstance(schema, dict):
-        return out
+    found = compare_to_schema(doc, schema, value, path)
+    return found.violations + [
+        f"{p}: required by the contract, missing" for p in sorted(found.missing)
+    ]
 
-    if value is None:
-        # `nullable` is OpenAPI 3.0; 3.1 spells it as a `null` type member.
-        types = schema.get("type")
-        types = types if isinstance(types, list) else [types]
-        if schema.get("nullable") or "null" in types:
-            return out
-        if schema.get("type") is not None:
-            out.append(f"{path or '.'}: null, contract says {schema['type']}")
-        return out
 
-    stype = schema.get("type")
-    if stype is None and "properties" in schema:
-        stype = "object"
-    if isinstance(stype, list):
-        stype = next((t for t in stype if t != "null"), None)
-
-    check = _TYPE_CHECKS.get(stype)
-    if check is not None and not check(value):
-        out.append(f"{path or '.'}: {type(value).__name__}, contract says {stype}")
-        return out  # a wrong container makes everything under it noise
-
-    enum = schema.get("enum")
-    if isinstance(enum, list) and enum and value not in enum:
-        out.append(f"{path or '.'}: {value!r} is not one of {enum}")
-
-    if stype == "object":
-        properties = schema.get("properties") or {}
-        for name in schema.get("required") or []:
-            if name not in value:
-                out.append(f"{path}.{name}: required by the contract, missing")
-        for name, child in value.items():
-            if name in properties:
-                out += validate_against_schema(
-                    doc, properties[name], child, f"{path}.{name}", _depth + 1
-                )
-    elif stype == "array":
-        items = schema.get("items")
-        if items is not None:
-            for index, item in enumerate(value):
-                out += validate_against_schema(
-                    doc, items, item, f"{path}[{index}]", _depth + 1
-                )
-    return out

@@ -19,6 +19,13 @@ authors = [
     {name = "Tai Kimura"}
 ]
 keywords = ["jsonui", "documentation", "html", "markdown", "mermaid"]
+# jsonui_doc_cli.validator re-exports the one in-repo test validator, which
+# lives in the sibling `test_tools` package. Undeclared, `jsonui-doc --help`
+# died on a plain install — every developer machine has both editable, so it
+# only surfaced the first time a CI job installed this package alone.
+dependencies = [
+    "jsonui-test-cli @ git+https://github.com/Tai-Kimura/jsonui-cli.git#subdirectory=test_tools",
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
