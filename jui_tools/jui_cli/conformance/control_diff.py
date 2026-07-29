@@ -88,7 +88,8 @@ class DiffResult:
     inert: list = field(default_factory=list)
     #: inert AND listed as expected-to-differ — these fail
     regressions: list = field(default_factory=list)
-    #: expected-to-differ entries whose fixture produced no screenshot
+    #: expected-to-differ entries that could not be compared at all — no
+    #: fixture screenshot, or no control to compare against. Not a pass.
     unmeasured: list = field(default_factory=list)
     #: fixtures whose control produced no screenshot (cannot be compared)
     no_control: list = field(default_factory=list)
@@ -99,29 +100,62 @@ class DiffResult:
         return not self.regressions and self.error is None
 
 
-def load_ledger(path) -> set:
-    """`{fixture_id}` asserted to differ from its control."""
+def load_ledger(path, platform: str | None = None) -> set:
+    """Fixtures asserted to differ from their control.
+
+    Per platform, because that is what the fact is: `Label.textAlign` moving
+    pixels on web says nothing about iOS, where the attribute may not be
+    implemented at all. A shared list would either fail every platform for one
+    platform's gap or record nothing.
+    """
     path = Path(path)
     if not path.is_file():
         return set()
     raw = json.loads(path.read_text(encoding="utf-8"))
-    return {e["fixture"] for e in raw.get("entries", []) if "fixture" in e}
+    out = set()
+    for entry in raw.get("entries", []):
+        fixture = entry.get("fixture")
+        if not fixture:
+            continue
+        if platform is None or platform in (entry.get("platforms") or []):
+            out.add(fixture)
+    return out
 
 
-def render_ledger(fixture_ids) -> str:
-    """Deterministic ledger JSON for *fixture_ids*."""
+def load_ledger_all(path) -> dict:
+    """`{fixture_id: {platform}}` for the whole ledger."""
+    path = Path(path)
+    if not path.is_file():
+        return {}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    out: dict = {}
+    for entry in raw.get("entries", []):
+        fixture = entry.get("fixture")
+        if fixture:
+            out.setdefault(fixture, set()).update(entry.get("platforms") or [])
+    return out
+
+
+def render_ledger(by_fixture: dict) -> str:
+    """Deterministic ledger JSON for `{fixture_id: {platform, ...}}`."""
     doc = {
         "schemaVersion": SCHEMA_VERSION,
         "_comment": (
             "Visual fixtures asserted to render DIFFERENTLY from their control "
-            "(the same layout without the attribute under test). A fixture "
-            "listed here that renders identically fails the build: the "
-            "attribute stopped having an effect. Add an entry when you "
-            "implement an attribute; remove it only when the attribute is "
-            "removed. Fixtures not listed are reported as inert without "
-            "failing — a value that equals the platform default cannot differ."
+            "(the same layout without the attribute under test), per platform. "
+            "A fixture listed for a platform that renders identically there "
+            "fails the build: the attribute stopped having an effect. Record an "
+            "entry when you implement an attribute; remove it only when the "
+            "attribute is removed. Fixtures not listed are reported as inert "
+            "without failing — a value equal to the platform default, or a "
+            "fixture whose shape leaves the attribute nothing to do, cannot "
+            "differ."
         ),
-        "entries": [{"fixture": f} for f in sorted(fixture_ids)],
+        "entries": [
+            {"fixture": f, "platforms": sorted(by_fixture[f])}
+            for f in sorted(by_fixture)
+            if by_fixture[f]
+        ],
     }
     return json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
 
@@ -184,7 +218,7 @@ def compare(
     artifacts_dir = Path(artifacts_dir)
 
     result = DiffResult(platform=platform)
-    expected = load_ledger(ledger_path(conformance_dir))
+    expected = load_ledger(ledger_path(conformance_dir), platform)
     shots = _screenshot_names(results)
 
     for entry in manifest.get("fixtures", []):
@@ -202,12 +236,16 @@ def compare(
                 result.unmeasured.append(fid)
             continue
         if control_shot is None:
-            result.no_control.append(fid)
+            # A recorded fixture we cannot compare is an unverified assertion,
+            # not a pass. Letting it sit in `no_control` would make a run where
+            # the controls failed to render report "no regressions" for a
+            # comparison that never happened.
+            (result.unmeasured if fid in expected else result.no_control).append(fid)
             continue
 
         png_a, png_b = artifacts_dir / shot, artifacts_dir / control_shot
         if not (png_a.is_file() and png_b.is_file()):
-            result.no_control.append(fid)
+            (result.unmeasured if fid in expected else result.no_control).append(fid)
             continue
 
         try:

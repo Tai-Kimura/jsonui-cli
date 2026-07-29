@@ -321,12 +321,20 @@ def _cmd_effect(args: argparse.Namespace) -> int:
 
     path = cd.ledger_path(conformance_dir)
     if args.update:
-        # Union, not replace: a run on a device where one fixture failed to
-        # screenshot would otherwise quietly drop that attribute's guarantee.
-        kept = cd.load_ledger(path)
-        merged = kept | set(result.active)
-        path.write_text(cd.render_ledger(merged), encoding="utf-8")
-        print(f"  ledger written to {path} ({len(merged)} fixture(s), +{len(merged - kept)} new)")
+        # Union within this platform, and other platforms are left alone: a run
+        # on a device where one fixture failed to screenshot would otherwise
+        # quietly drop that attribute's guarantee, and recording web's results
+        # against iOS would fail iOS for a gap it has not been measured for.
+        ledger = cd.load_ledger_all(path)
+        before = sum(1 for f, ps in ledger.items() if args.platform in ps)
+        for fid in result.active:
+            ledger.setdefault(fid, set()).add(args.platform)
+        path.write_text(cd.render_ledger(ledger), encoding="utf-8")
+        after = sum(1 for f, ps in ledger.items() if args.platform in ps)
+        print(
+            f"  ledger written to {path} "
+            f"({after} fixture(s) for {args.platform}, +{after - before} new)"
+        )
         return 0
 
     if result.regressions:

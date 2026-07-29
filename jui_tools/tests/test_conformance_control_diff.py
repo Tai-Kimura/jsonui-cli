@@ -140,7 +140,7 @@ class ControlDiffTest(unittest.TestCase):
         self.assertTrue(unrecorded.ok)
 
         cd.ledger_path(self.root).write_text(
-            cd.render_ledger({"Label/fontColor__static"}), encoding="utf-8"
+            cd.render_ledger({"Label/fontColor__static": {"ios"}}), encoding="utf-8"
         )
         recorded = cd.compare(
             self.root, "ios", MANIFEST, results, artifacts_dir=self.artifacts
@@ -163,7 +163,7 @@ class ControlDiffTest(unittest.TestCase):
 
     def test_recorded_fixture_without_a_screenshot_is_unmeasured(self):
         cd.ledger_path(self.root).write_text(
-            cd.render_ledger({"Label/fontColor__static"}), encoding="utf-8"
+            cd.render_ledger({"Label/fontColor__static": {"ios"}}), encoding="utf-8"
         )
         _png(self._shot("__control/Label"), (10, 20, 30))
         r = cd.compare(
@@ -173,6 +173,21 @@ class ControlDiffTest(unittest.TestCase):
         )
         self.assertEqual(r.unmeasured, ["Label/fontColor__static"])
         self.assertEqual(r.inert, [])
+
+    def test_a_recorded_fixture_with_no_control_is_unmeasured_not_ignored(self):
+        """Otherwise a run whose controls failed to render reports
+        "no regressions" for a comparison that never happened."""
+        cd.ledger_path(self.root).write_text(
+            cd.render_ledger({"Label/fontColor__static": {"ios"}}), encoding="utf-8"
+        )
+        _png(self._shot("Label/fontColor__static"), (10, 20, 30))
+        r = cd.compare(
+            self.root, "ios", MANIFEST,
+            self._results("Label/fontColor__static"),
+            artifacts_dir=self.artifacts,
+        )
+        self.assertEqual(r.unmeasured, ["Label/fontColor__static"])
+        self.assertEqual(r.no_control, [])
 
     def test_platform_scoped_fixture_is_skipped_elsewhere(self):
         _png(self._shot("__control/Button"), (1, 2, 3))
@@ -199,16 +214,26 @@ class ControlDiffTest(unittest.TestCase):
     # -- ledger ---------------------------------------------------------- #
 
     def test_ledger_roundtrips_and_is_deterministic(self):
-        ids = {"b/x__static", "a/y__static"}
-        first = cd.render_ledger(ids)
-        self.assertEqual(first, cd.render_ledger(ids))
+        by_fixture = {"b/x__static": {"ios", "web"}, "a/y__static": {"web"}}
+        first = cd.render_ledger(by_fixture)
+        self.assertEqual(first, cd.render_ledger(by_fixture))
         path = cd.ledger_path(self.root)
         path.write_text(first, encoding="utf-8")
-        self.assertEqual(cd.load_ledger(path), ids)
+        self.assertEqual(cd.load_ledger_all(path), by_fixture)
         doc = json.loads(first)
         self.assertEqual(
             [e["fixture"] for e in doc["entries"]], ["a/y__static", "b/x__static"]
         )
+
+    def test_a_ledger_entry_binds_only_the_platform_it_names(self):
+        """web proving textAlign moves pixels says nothing about iOS, where the
+        attribute may not be implemented at all."""
+        path = cd.ledger_path(self.root)
+        path.write_text(
+            cd.render_ledger({"Label/fontColor__static": {"web"}}), encoding="utf-8"
+        )
+        self.assertEqual(cd.load_ledger(path, "web"), {"Label/fontColor__static"})
+        self.assertEqual(cd.load_ledger(path, "ios"), set())
 
     def test_missing_ledger_reads_as_empty(self):
         self.assertEqual(cd.load_ledger(cd.ledger_path(self.root)), set())

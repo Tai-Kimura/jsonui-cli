@@ -1,0 +1,1122 @@
+{
+  "schemaVersion": 1,
+  "_comment": "Visual fixtures asserted to render DIFFERENTLY from their control (the same layout without the attribute under test), per platform. A fixture listed for a platform that renders identically there fails the build: the attribute stopped having an effect. Record an entry when you implement an attribute; remove it only when the attribute is removed. Fixtures not listed are reported as inert without failing — a value equal to the platform default, or a fixture whose shape leaves the attribute nothing to do, cannot differ.",
+  "entries": [
+    {
+      "fixture": "Blur/effectStyle__dark",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Button/buttonType__button",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Button/fontColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Button/fontSize__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Button/fontWeight__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Button/font__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Button/highlightBackground__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Button/highlightColor__alias_hilightColor",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Button/hilightColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Button/image__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Button/tapBackground__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Button/textAlign__center",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Button/textAlign__left",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Button/textAlign__right",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Check/checked__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Check/fontColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Check/fontSize__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Check/font__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Check/isOn__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Check/spacing__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "CheckBox/checked__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "CheckBox/fontColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "CheckBox/fontSize__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "CheckBox/font__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "CheckBox/isOn__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "CheckBox/onSrc__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "CheckBox/spacing__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "CheckBox/src__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "EditText/hintColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "EditText/hint__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "GradientView/gradientDirection__horizontal",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "GradientView/gradientDirection__oblique",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "IconLabel/fontColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "IconLabel/fontSize__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "IconLabel/font__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "IconLabel/iconMargin__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "IconLabel/iconPosition__bottom",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "IconLabel/iconPosition__right",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "IconLabel/iconPosition__top",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "IconLabel/icon_off__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "IconLabel/icon_on__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Image/contentMode__aspectfit",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Image/contentMode__bottom",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Image/contentMode__bottom_2",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Image/contentMode__center",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Image/contentMode__center_2",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Image/contentMode__fit",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Image/contentMode__left",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Image/contentMode__left_2",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Image/contentMode__right",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Image/contentMode__right_2",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Image/contentMode__scaletofill",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Image/contentMode__top",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Image/contentMode__top_2",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Image/srcName__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Input/hintColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Input/hint__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/autoShrink__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/edgeInset__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/fontColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/fontFamily__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/fontSize__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/fontWeight__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/font__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/lineBreakMode__head",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/strikethrough__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/textAlign__center",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/textAlign__center_2",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/textAlign__right",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/textAlign__right_2",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/underline__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "NetworkImage/contentMode__aspectfit",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "NetworkImage/contentMode__bottom",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "NetworkImage/contentMode__center",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "NetworkImage/contentMode__center_2",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "NetworkImage/contentMode__fit",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "NetworkImage/contentMode__left",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "NetworkImage/contentMode__right",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "NetworkImage/contentMode__top",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "NetworkImage/placeholder__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Radio/checked__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Radio/fontColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Radio/fontSize__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Radio/font__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Radio/selected_icon__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Radio/spacing__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Radio/value__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "ScrollView/scrollMode__window",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Segment/selectedIndex__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "SelectBox/fontColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "SelectBox/fontSize__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "SelectBox/font__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "SelectBox/hint__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "SelectBox/placeholder__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "SelectBox/prompt__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "SelectBox/selectItemType__date",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "SelectBox/selectedValue__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Slider/maximum__alias_maxValue",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Slider/maximum__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Slider/minValue__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Slider/minimum__alias_minValue",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Slider/minimum__alias_minimumValue",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Slider/minimum__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Slider/progressTintColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Slider/step__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Slider/tintColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Slider/value__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Switch/checked__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Switch/isOn__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Switch/thumbTintColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TabView/tabBarBackground__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TabView/unselectedColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextField/borderStyle__line",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextField/borderStyle__line_2",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextField/fontColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextField/fontFamily__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextField/fontSize__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextField/font__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextField/hintColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextField/hint__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextField/textAlign__center",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextField/textAlign__center_2",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextField/textAlign__right",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextField/textAlign__right_2",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextField/textPaddingLeft__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/containerInset__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/flexible__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/fontColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/fontFamily__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/fontSize__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/font__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/hintColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/hint__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/resize__both",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/resize__horizontal",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/resize__none",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/resize__vertical",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/textAlign__center",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/textAlign__center_2",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/textAlign__right",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/textAlign__right_2",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Toggle/checked__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Toggle/isOn__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "View/direction__bottomtotop",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "View/flexWrap__wrap",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "View/flexWrap__wrap-reverse",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "View/orientation__horizontal",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "View/orientation__vertical",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "View/spacing__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Web/html__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/alpha__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/background__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/borderWidth__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/centerHorizontal__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/centerInParent__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/centerVertical__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/cornerRadius__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/disabledBackground__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/gravity__bottom",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/gravity__center",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/gravity__centerhorizontal",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/gravity__centervertical",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/gravity__right",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/height__matchparent",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/height__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/height__wrapcontent",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/highlightBackground__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/leftMargin__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/margins__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/maxHeight__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/maxWidth__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/opacity__alias_alpha",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/opacity__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/paddingLeft__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/paddingStart__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/paddingTop__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/padding__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/paddings__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/shadow__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/startMargin__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/tapBackground__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/topMargin__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/weight__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/width__matchparent",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/width__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/width__wrapcontent",
+      "platforms": [
+        "web"
+      ]
+    }
+  ]
+}
