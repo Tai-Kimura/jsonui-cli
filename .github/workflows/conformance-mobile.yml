@@ -139,8 +139,8 @@ jobs:
     # iOS lanes in parallel; comparable to the 365s@664 loaded reading
     # above), waitFor+text asserts only ≈ +5-10s clean local ≈ ≪1 min at
     # the 5-7x CI multiplier;
-    # attempt (20) < step (70) < job (150) budgets below unchanged, margin
-    # still dominated by the bad-runner 3-attempt case, not fixture count)
+    # margin is dominated by the bad-runner multi-attempt case, not by
+    # fixture count — see the budget arithmetic below)
     # varies WILDLY with the hosted runner drawn: ~7 min on a good runner
     # (401s, one attempt, run 28683440355) vs 6x slower on a bad one
     # (progress.jsonl: 330 outcomes after a full 20-min attempt, run
@@ -148,12 +148,23 @@ jobs:
     # runner: run_conformance's attempt loop RESUMES via on-device
     # progress.jsonl (chop-safe: a fixture chopped by the per-attempt
     # timeout re-runs once before counting as an error), so a slow runner
-    # needs boot ~2 + gradle ~5 + up to ~3x 20-min attempts → 70-min step.
+    # needs boot ~2 + gradle ~5 + several 20-min attempts.
     # The liveness probe (adb + screencap) fast-fails a truly wedged
-    # emulator and the step is retried once FRESH. Job budget:
-    # setup ~5 + 70 + 70 + upload ≈ 147 → 150. Nightly on a public repo —
-    # runner minutes are free; wall-clock only gates the nightly report.
-    timeout-minutes: 150
+    # emulator and the step is retried once FRESH.
+    #
+    # Budget sized from measurement, not from the healthy case. Emulator
+    # throughput on hosted runners varies ~10x run to run: 1207 outcomes in
+    # one 7-minute instrumentation attempt (2026-07-26, job green in 13 min)
+    # versus ~325 per 20-minute attempt on a degraded runner — the same suite
+    # needs ~85-95 min there, which the old 70-minute steps could not hold.
+    # Two of three runs on 2026-07-29 died on that ceiling.
+    #
+    # attempt < step < job:
+    #   per-attempt cap 20 min (run_conformance.sh), resumed on timeout
+    #   step 75 + retry 100 + setup ~15 + upload ≈ 190 → job 210
+    # Nightly on a public repo — runner minutes are free; wall-clock only
+    # gates the nightly report.
+    timeout-minutes: 210
     env:
       CONFORMANCE_DIR: ${{ github.workspace }}/conformance
     steps:
@@ -179,7 +190,7 @@ jobs:
       - name: Run Android conformance suite (emulator)
         id: android_emu
         continue-on-error: true
-        timeout-minutes: 70
+        timeout-minutes: 75
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -200,7 +211,9 @@ jobs:
       # NOT continue-on-error, so a second failure correctly fails the job.
       - name: Retry Android conformance suite (fresh emulator)
         if: steps.android_emu.outcome == 'failure'
-        timeout-minutes: 70
+        # Wider than attempt 1: this is the one that has to absorb a degraded
+        # runner, where the suite needs ~85-95 min rather than ~10.
+        timeout-minutes: 100
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
