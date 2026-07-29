@@ -29,7 +29,7 @@ module RjuiTools
 
           classes << 'inline-flex items-center justify-center'
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
 
         def build_spinner_class

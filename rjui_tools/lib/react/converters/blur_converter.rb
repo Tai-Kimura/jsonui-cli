@@ -43,7 +43,7 @@ module RjuiTools
           # Cursor pointer for clickable items
           classes << 'cursor-pointer' if attributes['onClick'] || attributes['onclick']
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
 
         def build_blur_style

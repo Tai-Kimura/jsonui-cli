@@ -64,7 +64,7 @@ module RjuiTools
             classes << '[&::-moz-progress-bar]:bg-blue-500'
           end
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
 
         def build_value_attr

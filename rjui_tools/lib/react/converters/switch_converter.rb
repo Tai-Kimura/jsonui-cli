@@ -63,7 +63,7 @@ module RjuiTools
             classes << "${!#{binding_expr} ? 'opacity-50 cursor-not-allowed' : ''}"
           end
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
 
         def build_switch_element(checked_attr, on_change, disabled_attr, tint_color, thumb_color, off_tint_color)

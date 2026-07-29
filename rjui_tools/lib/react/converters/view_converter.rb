@@ -106,7 +106,7 @@ module RjuiTools
           # Transition for smooth effects
           classes << 'transition-colors' if attributes['tapBackground'] || attributes['highlightBackground']
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
 
         def child_array

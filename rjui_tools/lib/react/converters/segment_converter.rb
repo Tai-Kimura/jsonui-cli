@@ -78,7 +78,7 @@ module RjuiTools
             classes << "${!#{binding_expr} ? 'opacity-50' : ''}"
           end
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
 
         def build_button_class(index)

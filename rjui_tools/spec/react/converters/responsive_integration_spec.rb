@@ -52,7 +52,7 @@ RSpec.describe 'Responsive integration with converters' do
     end
 
     context 'with responsive visibility (hidden to visible)' do
-      it 'generates hidden lg:block pattern' do
+      it 'restores the natural display at the breakpoint, not block' do
         converter = create_converter({
           'type' => 'View',
           'visibility' => 'gone',
@@ -64,7 +64,15 @@ RSpec.describe 'Responsive integration with converters' do
         output = converter.convert(2)
 
         expect(output).to include('hidden')
-        expect(output).to include('lg:block')
+        # View's natural display is flex, so the breakpoint override has to be
+        # `lg:flex`. `lg:block` would drop the flex context the children's
+        # alignment classes depend on.
+        expect(output).to include('lg:flex')
+        expect(output).not_to include('lg:block')
+        # And the unprefixed `flex` is gone: Tailwind emits `.flex` after
+        # `.hidden`, so leaving it in made `visibility: "gone"` a no-op.
+        tokens = output[/className="([^"]*)"/, 1].to_s.split(' ')
+        expect(tokens).not_to include('flex')
       end
     end
 
@@ -180,6 +188,70 @@ RSpec.describe 'Responsive integration with converters' do
         expect(output).to include('md:flex-row')
         expect(output).to include('lg:flex-row')
       end
+    end
+  end
+
+  # The reported case: a header hamburger that is hidden by default and shown
+  # only in `compact`. Both halves of it were broken — PC showed the button
+  # because `.inline-flex` outranks `.hidden` in Tailwind's output, and phone
+  # lost the icon because the breakpoint override emitted `block`, which
+  # un-flexed the button and left the mask span at 0x0.
+  describe RjuiTools::React::Converters::ButtonConverter do
+    def create_converter(json_data, config = nil)
+      described_class.new(json_data, config || default_config)
+    end
+
+    def tokens(json)
+      out = create_converter(json).convert(2)
+      out[/className="([^"]*)"/, 1].to_s.split(' ')
+    end
+
+    context 'gone by default, visible in compact' do
+      let(:cls) do
+        tokens({
+          'type' => 'Button', 'id' => 'menuButton', 'image' => 'menu',
+          'width' => 40, 'height' => 40,
+          'visibility' => 'gone',
+          'responsive' => { 'compact' => { 'visibility' => 'visible' } },
+          'onClick' => '@{onMenuTap}'
+        })
+      end
+
+      it 'lets hidden win outside the breakpoint' do
+        expect(cls).to include('hidden')
+        expect(cls).not_to include('inline-flex')
+      end
+
+      it 'restores inline-flex at the breakpoint, not block' do
+        expect(cls).to include('max-md:inline-flex')
+        expect(cls).not_to include('max-md:block')
+      end
+
+      it 'keeps the flex alignment the icon span depends on' do
+        expect(cls).to include('items-center')
+        expect(cls).to include('justify-center')
+      end
+    end
+
+    it 'actually hides a gone Button with no responsive override' do
+      cls = tokens({ 'type' => 'Button', 'image' => 'menu', 'visibility' => 'gone' })
+      expect(cls).to include('hidden')
+      expect(cls).not_to include('inline-flex')
+    end
+
+    it 'leaves the working direction (visible base, gone at a breakpoint) alone' do
+      cls = tokens({
+        'type' => 'Button', 'image' => 'menu',
+        'responsive' => { 'medium' => { 'visibility' => 'gone' } }
+      })
+      expect(cls).to include('md:hidden')
+      expect(cls).to include('inline-flex')
+    end
+
+    it 'keeps display for invisible, which only gives up paint, not space' do
+      cls = tokens({ 'type' => 'Button', 'image' => 'menu', 'visibility' => 'invisible' })
+      expect(cls).to include('invisible')
+      expect(cls).to include('inline-flex')
     end
   end
 

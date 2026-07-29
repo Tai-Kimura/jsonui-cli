@@ -54,7 +54,7 @@ module RjuiTools
           # Cursor pointer for clickable items
           classes << 'cursor-pointer' if attributes['onClick'] || attributes['onclick']
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
 
         def build_text_class_name
@@ -75,7 +75,7 @@ module RjuiTools
           classes << 'underline' if attributes['underline']
           classes << 'line-through' if attributes['strikethrough']
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
 
         def build_text_style
@@ -134,7 +134,7 @@ module RjuiTools
           tint_color = attributes['iconTintColor'] || attributes['tintColor']
           # Note: CSS filter or mix-blend-mode would be needed for actual color tinting
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
       end
     end

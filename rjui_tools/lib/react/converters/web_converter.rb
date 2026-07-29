@@ -37,7 +37,7 @@ module RjuiTools
           scrolling = attributes['scrollEnabled']
           classes << 'overflow-hidden' if scrolling == false
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
 
         def build_src_attr

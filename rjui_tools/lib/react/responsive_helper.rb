@@ -30,6 +30,19 @@ module RjuiTools
         'regular' => 'lg:'
       }.freeze
 
+      # "Whatever display this component naturally has."
+      #
+      # Emitted for a responsive `visibility: "visible"`, then UPGRADED to the
+      # converter's own display utility (`flex`, `inline-flex`, …) by
+      # BaseConverter#finalize_classes, which is the first place that knows it.
+      #
+      # It is a real Tailwind arbitrary property rather than a placeholder on
+      # purpose: `display: revert` is already the correct answer for a
+      # component with no display utility of its own (`<img>`, `<input>`,
+      # `<select>` are not blocks), so surviving unupgraded is a valid outcome
+      # instead of a dead class.
+      NATURAL_DISPLAY = '[display:revert]'
+
       # Attributes that map to specific Tailwind utilities
       # Each entry: attribute_name => lambda(value, prefix) -> class string
       ATTRIBUTE_MAPPERS = {
@@ -69,12 +82,24 @@ module RjuiTools
           # ("flex-[1.5] min-w-0 min-h-0") — each needs its own prefix.
           raw.empty? ? nil : raw.split(' ').map { |c| "#{prefix}#{c}" }.join(' ')
         },
+        # `visible` means "back to this component's natural display", which
+        # the mapper cannot know: the converter appends its display utility
+        # (Button `inline-flex`, View `flex`, …) after the responsive classes
+        # are built. So emit NATURAL_DISPLAY and let finalize_classes upgrade.
+        #
+        # It used to emit a hard-coded `block`. On a Button that replaced
+        # `inline-flex`, and the icon span inside it — sized with `w-[1.25em]`
+        # — went back to `inline`, where width/height do not apply: the icon
+        # collapsed to 0x0 at exactly the breakpoint that was supposed to
+        # reveal it.
         'visibility' => ->(v, prefix) {
           case v
           when 'visible'
-            "#{prefix}block"
+            "#{prefix}#{NATURAL_DISPLAY}"
           when 'gone'
             "#{prefix}hidden"
+          when 'invisible'
+            "#{prefix}invisible"
           end
         },
         'background' => ->(v, prefix) {

@@ -108,7 +108,7 @@ module RjuiTools
           # Linkable text
           classes << 'cursor-pointer' if attributes['linkable']
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
 
         def build_style_attr

@@ -77,7 +77,12 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
 
         # Base `hidden` comes from build_class_name's normal visibility
         # handling; the helper contributes only the scoped override.
-        expect(result[:classes]).to include('lg:block')
+        #
+        # `visible` restores the component's NATURAL display, which the helper
+        # cannot know at this point, so it emits a sentinel that
+        # BaseConverter#finalize_classes substitutes. It used to hard-code
+        # `block`, which blockified flex components.
+        expect(result[:classes]).to include("lg:#{described_class::NATURAL_DISPLAY}")
         expect(result[:classes]).not_to include('hidden')
       end
 

@@ -61,7 +61,7 @@ module RjuiTools
             end
           end
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
 
         def build_nav_class
@@ -79,7 +79,7 @@ module RjuiTools
             classes << 'bg-white'
           end
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
 
         def build_tab_item(tab, index, selected_binding)

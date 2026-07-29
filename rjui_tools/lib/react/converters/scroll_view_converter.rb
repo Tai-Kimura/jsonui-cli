@@ -91,7 +91,7 @@ module RjuiTools
             classes << 'scroll-p-0'
           end
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
 
         def build_style_attr

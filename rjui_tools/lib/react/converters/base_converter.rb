@@ -382,7 +382,66 @@ module RjuiTools
             classes.concat(@responsive_result[:classes])
           end
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
+        end
+
+        # Tailwind utilities that set `display`. Only these participate in the
+        # reconciliation below.
+        DISPLAY_UTILITIES = %w[
+          block inline-block inline flex inline-flex grid inline-grid
+          table inline-table table-cell table-row flow-root contents
+          list-item hidden
+        ].freeze
+
+        # Join the class list, reconciling `display` against `visibility`.
+        #
+        # Two things have to happen here rather than at the point each class is
+        # added, because the pieces arrive from different places: the base
+        # converter emits `hidden` and the responsive overrides, and the
+        # subclass appends the component's own display utility AFTERWARDS.
+        #
+        # 1. `visibility: "gone"` outranks the component's default display.
+        #    Both are single-class selectors, so the browser picks whichever
+        #    Tailwind emitted later in the stylesheet — and `.inline-flex`
+        #    comes after `.hidden`. A Button with `visibility: "gone"` was
+        #    therefore fully visible. Dropping the unprefixed display utility
+        #    is what makes `hidden` mean what it says; using `!important`
+        #    instead would also beat the breakpoint override in (2).
+        #
+        # 2. A responsive `visibility: "visible"` restores the component's
+        #    NATURAL display, not `block`. ResponsiveHelper emits
+        #    `<bp>:[display:revert]`, upgraded here to the display utility this
+        #    converter actually emitted, so `max-md:inline-flex` — inside a
+        #    media query, hence later in the stylesheet than `.hidden` — wins
+        #    at the breakpoint while keeping the flex context the component's
+        #    internals rely on.
+        #
+        # Runs twice on the same list (a subclass calls `super`, which
+        # finalizes, then finalizes the combined list). That is why the upgrade
+        # only ever replaces the marker with something MORE specific and never
+        # the other way: the base pass sees no display utility yet, so it
+        # leaves `[display:revert]` — itself the right answer for a component
+        # that has none — and the subclass pass upgrades it.
+        def finalize_classes(classes)
+          tokens = classes.compact.flat_map { |c| c.to_s.split(/\s+/) }.reject(&:empty?)
+
+          natural = tokens.reverse.find do |t|
+                      !t.include?(':') && t != 'hidden' && DISPLAY_UTILITIES.include?(t)
+                    end
+          marker = ResponsiveHelper::NATURAL_DISPLAY
+          hidden = tokens.include?('hidden')
+
+          out = []
+          tokens.each do |t|
+            if natural && t.end_with?(marker)
+              out << t.sub(marker, natural)
+            elsif hidden && t != 'hidden' && !t.include?(':') && DISPLAY_UTILITIES.include?(t)
+              next
+            else
+              out << t
+            end
+          end
+          out.join(' ')
         end
 
         def has_binding?(value)

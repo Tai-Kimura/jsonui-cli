@@ -72,7 +72,7 @@ module RjuiTools
             classes << 'disabled:cursor-not-allowed'
           end
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
 
         def build_style_attr

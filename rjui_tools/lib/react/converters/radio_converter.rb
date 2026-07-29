@@ -41,7 +41,7 @@ module RjuiTools
             classes << "${!#{binding_expr} ? 'opacity-50 cursor-not-allowed' : ''}"
           end
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
 
         private

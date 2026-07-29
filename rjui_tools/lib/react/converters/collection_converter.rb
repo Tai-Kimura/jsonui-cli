@@ -98,7 +98,7 @@ module RjuiTools
             classes << "pr-[#{right}px]" if right&.positive?
           end
 
-          classes.compact.reject(&:empty?).join(' ')
+          finalize_classes(classes)
         end
 
         private
