@@ -8,7 +8,7 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "00c825852795660c3f8c4da9b30e7e5d408305a2920cc28d230e73f2db4a4921",
+  "generatedFrom": "592a3acaaad376f42e9ed2c76cf51af9c4a3366021d7f3a2fe44e3ad174b4e0c",
   "counts": {
     "fixtures": 711,
     "assertable": 36,
@@ -14710,9 +14710,11 @@
       "aliasOf": null,
       "value": true,
       "platforms": [
-        "ios"
+        "ios",
+        "android",
+        "web"
       ],
-      "mode": "uikit",
+      "mode": null,
       "deprecated": null,
       "layout": "fixtures/IconLabel/selected__true.layout.json",
       "test": "fixtures/IconLabel/selected__true.test.json",

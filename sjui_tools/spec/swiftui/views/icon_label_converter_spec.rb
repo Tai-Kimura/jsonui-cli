@@ -188,5 +188,46 @@ RSpec.describe SjuiTools::SwiftUI::Views::IconLabelConverter do
         expect(code).not_to include('fontName:')
       end
     end
+
+    # `selected` decides icon_on over icon_off and selectedFontColor over
+    # fontColor. Nothing read it here, so both were inert: IconLabelView
+    # defaults isSelected to false and the converter passed nothing.
+    describe 'selected' do
+      def field(extra)
+        described_class.new({ 'type' => 'IconLabel', 'text' => 'Test' }.merge(extra)).convert
+      end
+
+      it 'passes a binding through to isSelected' do
+        expect(field('selected' => '@{isHome}')).to include('isSelected: data.isHome')
+      end
+
+      it 'passes a literal through' do
+        expect(field('selected' => true)).to include('isSelected: true')
+        expect(field('selected' => false)).to include('isSelected: false')
+      end
+
+      it 'omits the argument when absent, leaving the library default' do
+        expect(field({})).not_to include('isSelected:')
+      end
+
+      # Swift resolves argument labels positionally: isSelected is declared
+      # after fontName and before the button's action.
+      it 'emits isSelected after fontName' do
+        code = field('selected' => true, 'font' => 'Helvetica')
+        expect(code.index('fontName:')).to be < code.index('isSelected:')
+      end
+
+      it 'emits isSelected before the button action' do
+        code = field('selected' => '@{isHome}', 'onClick' => '@{tapped}')
+        expect(code).to include('IconLabelButton(')
+        expect(code.index('isSelected:')).to be < code.index('action:')
+      end
+
+      it 'keeps the trailing comma off the last argument' do
+        code = field('selected' => true)
+        args = code.lines.map(&:strip).reject { |l| l.empty? }
+        expect(args[-2]).to eq('isSelected: true')
+      end
+    end
   end
 end

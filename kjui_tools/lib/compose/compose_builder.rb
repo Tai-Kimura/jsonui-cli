@@ -22,6 +22,7 @@ require_relative 'helpers/visibility_helper'
 require_relative 'helpers/responsive_helper'
 require_relative 'helpers/section_extractor'
 require_relative 'components/text_component'
+require_relative 'components/iconlabel_component'
 require_relative 'components/button_component'
 require_relative 'components/textfield_component'
 require_relative 'components/container_component'
@@ -348,6 +349,8 @@ module KjuiTools
           Components::IndicatorComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'TextView'
           Components::TextViewComponent.generate(json_data, depth, @required_imports, parent_type)
+        when 'IconLabel'
+          Components::IconLabelComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'Collection'
           Components::CollectionComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'Table'

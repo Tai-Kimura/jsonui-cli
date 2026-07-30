@@ -91,47 +91,6 @@
     },
     {
       "component": "IconLabel",
-      "attribute": "iconMargin",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "IconLabel",
-      "attribute": "iconPosition",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "codegen 未対応。ランタイム側に実装あり (android: Kotlin Dynamic) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "IconLabel",
-      "attribute": "icon_off",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "IconLabel",
-      "attribute": "icon_on",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "IconLabel",
-      "attribute": "selectedFontColor",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "IconLabel",
       "attribute": "textShadow",
       "platforms": [
         "web"

@@ -76,7 +76,15 @@ module SjuiTools
             if @component['font'] && @component['font'] != 'bold'
               add_line "fontName: \"#{@component['font']}\","
             end
-            
+
+            # selected — the state that chooses icon_on over icon_off and
+            # selectedFontColor over fontColor. Nothing read it here, so both
+            # attributes were inert on the SwiftUI path: IconLabelView defaults
+            # isSelected to false and the converter never passed anything.
+            if (selected = selected_expression)
+              add_line "isSelected: #{selected},"
+            end
+
             # action for button (最後のパラメータなのでカンマなし)
             if onClick
               method_name = extract_binding_property(onClick)
@@ -103,6 +111,19 @@ module SjuiTools
         end
 
         private
+
+        # `selected` is a boolean|binding. A binding resolves against the data
+        # object; a literal passes straight through. Returns nil when absent so
+        # the argument is omitted and the library default (false) stands.
+        def selected_expression
+          value = @component['selected']
+          return nil if value.nil?
+          return 'true' if value == true || value == 'true'
+          return 'false' if value == false || value == 'false'
+          return "data.#{extract_binding_property(value)}" if is_binding?(value)
+
+          nil
+        end
 
         # textShadow — declared as a plain string here (a colour) rather than the
         # object form Label takes, and UIKit passes it straight through to

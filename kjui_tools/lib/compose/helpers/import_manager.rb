@@ -122,6 +122,7 @@ module KjuiTools
             test_tag: "import androidx.compose.ui.platform.testTag",
             test_tags_as_resource_id: "import androidx.compose.ui.semantics.testTagsAsResourceId",
             image: "import androidx.compose.foundation.Image",
+            color_filter: "import androidx.compose.ui.graphics.ColorFilter",
             painter_class: ["import androidx.compose.ui.graphics.painter.Painter",
                             "import androidx.compose.ui.geometry.Size",
                             "import androidx.compose.ui.graphics.drawscope.DrawScope"],

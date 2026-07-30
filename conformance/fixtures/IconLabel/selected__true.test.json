@@ -12,9 +12,7 @@
       "IconLabel"
     ]
   },
-  "platform": [
-    "ios"
-  ],
+  "platform": "all",
   "cases": [
     {
       "name": "selected__true",

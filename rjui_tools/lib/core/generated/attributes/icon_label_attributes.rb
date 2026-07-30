@@ -28,7 +28,7 @@ module JsonUI
         { name: 'icon_off', kind: :string }.freeze,
         # Selected icon
         { name: 'icon_on', kind: :string }.freeze,
-        # Selected state (binding supported)
+        # Selected state (binding supported). Chooses icon_on over icon_off and selectedFontColor over fontColor, so every platform declaring those needs this too.
         { name: 'selected', kind: :boolean, bindable: true }.freeze,
         # Selected text color - hex string or color name from colors.json
         { name: 'selectedFontColor', kind: :string }.freeze,

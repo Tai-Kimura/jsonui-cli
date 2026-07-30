@@ -4243,9 +4243,7 @@
         "boolean",
         "binding"
       ],
-      "description": "Selected state (binding supported)",
-      "platform": "swift",
-      "mode": "uikit"
+      "description": "Selected state (binding supported). Chooses icon_on over icon_off and selectedFontColor over fontColor, so every platform declaring those needs this too."
     },
     "font": {
       "type": "string",
