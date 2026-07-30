@@ -130,15 +130,6 @@
       "note": "Same as ScrollView: no Compose scrollbar primitive for Lazy lists. Needs a drawn scrollbar composable in KotlinJsonUI."
     },
     {
-      "component": "EditText",
-      "attribute": "inputType",
-      "platforms": [
-        "ios",
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
       "component": "GradientView",
       "attribute": "locations",
       "platforms": [
@@ -451,14 +442,6 @@
     },
     {
       "component": "TextField",
-      "attribute": "clearButtonMode",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextField",
       "attribute": "doneText",
       "platforms": [
         "ios"
@@ -682,38 +665,6 @@
       "platforms": [
         "android",
         "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "common",
-      "attribute": "maxEndMargin",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "common",
-      "attribute": "maxStartMargin",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "common",
-      "attribute": "minEndMargin",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "common",
-      "attribute": "minStartMargin",
-      "platforms": [
-        "ios"
       ],
       "reason": "unimplemented"
     },

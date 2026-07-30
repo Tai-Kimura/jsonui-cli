@@ -18,7 +18,7 @@ module JsonUI
         { name: 'hint', kind: :string }.freeze,
         # Placeholder color - hex string or color name from colors.json (binding supported)
         { name: 'hintColor', kind: :string, bindable: true }.freeze,
-        # Input type for Android
+        # Input type for Android (Android-only; `input` is the cross-platform attribute)
         { name: 'inputType', kind: :string }.freeze,
         # Placeholder text (alias for hint)
         { name: 'placeholder', kind: :string }.freeze,

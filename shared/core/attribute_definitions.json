@@ -2113,7 +2113,8 @@
     },
     "inputType": {
       "type": "string",
-      "description": "Input type for Android"
+      "description": "Input type for Android (Android-only; `input` is the cross-platform attribute)",
+      "platform": "kotlin"
     }
   },
   "Input": {

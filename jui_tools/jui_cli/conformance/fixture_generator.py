@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -369,11 +370,17 @@ def control_id(host: str, needs_anchor: bool, shape: str = "") -> str:
     return f"__control/{host}{'__anchored' if needs_anchor else ''}{suffix}"
 
 
+#: Anything outside this set is folded to `-` so a base-attribute value never
+#: decides whether the control fixture's filename is shell- or path-safe.
+_SHAPE_UNSAFE = re.compile(r"[^A-Za-z0-9.-]+")
+
+
 def shape_name(extra: dict | None) -> str:
     """Stable name for a set of extra base attributes."""
     if not extra:
         return ""
-    return "_".join(f"{k}-{v}" for k, v in sorted(extra.items()))
+    parts = (f"{k}-{v}" for k, v in sorted(extra.items()))
+    return "_".join(_SHAPE_UNSAFE.sub("-", part).strip("-") for part in parts)
 
 
 def control_shape(host: str, attribute: str) -> str:

@@ -114,9 +114,51 @@ module SjuiTools
               @modifier_bag.append(:margin, ".padding(.trailing, #{margin_value(right_margin)})")
             end
           end
+
+          apply_flexible_margins
         end
 
         private
+
+        # min/max{Start,End}Margin — a margin declared as a range instead of a
+        # fixed inset. SwiftUI has no flexible padding, so the library turns the
+        # bounds into a capped Spacer (see FlexibleMargin.swift); this only has
+        # to decide whether the bounds apply at all.
+        #
+        # A fixed margin on the same side wins, matching UIKit: leftMargin takes
+        # the `equal` constraint and the min/max pair is never consulted
+        # (UIViewDisposure.applyLeftPaddingConstraint). `margins` sets every
+        # side, so it suppresses both.
+        def apply_flexible_margins
+          return if @component['margins']
+
+          leading_fixed = @component['startMargin'] || @component['leftMargin']
+          trailing_fixed = @component['endMargin'] || @component['rightMargin']
+
+          args = []
+          unless leading_fixed
+            args << "minStart: #{flexible_margin_value(@component['minStartMargin'])}" if flexible_margin?(@component['minStartMargin'])
+            args << "maxStart: #{flexible_margin_value(@component['maxStartMargin'])}" if flexible_margin?(@component['maxStartMargin'])
+          end
+          unless trailing_fixed
+            args << "minEnd: #{flexible_margin_value(@component['minEndMargin'])}" if flexible_margin?(@component['minEndMargin'])
+            args << "maxEnd: #{flexible_margin_value(@component['maxEndMargin'])}" if flexible_margin?(@component['maxEndMargin'])
+          end
+          return if args.empty?
+
+          @modifier_bag.append(:margin, ".flexibleHorizontalMargin(#{args.join(', ')})")
+        end
+
+        # Declared `type: number`, so a non-numeric value is an authoring error
+        # rather than something to coerce — emitting `nil` for it would silently
+        # drop the bound.
+        def flexible_margin?(value)
+          value.is_a?(Numeric) || (value.is_a?(String) && value.match?(/\A-?\d+(\.\d+)?\z/))
+        end
+
+        def flexible_margin_value(value)
+          value.to_s
+        end
 
         # マージン値を取得（バインディング対応）
         def margin_value(value)

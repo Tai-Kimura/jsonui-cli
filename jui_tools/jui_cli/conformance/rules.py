@@ -404,6 +404,11 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
         "lineHeightMultiple": 1.5,
         "textAlign": "Center",
     },
+    # `sample` is not a mode, and the converter refuses to guess one from an
+    # unrecognised value, so the default string would render nothing. `always`
+    # is the one mode a static screenshot can show — the editing-sensitive modes
+    # need focus.
+    ("TextField", "clearButtonMode"): "always",
 }
 
 #: Text-ish string attributes that read better with a hint payload.
@@ -498,6 +503,9 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # screenshot cannot show anyway.
     "Label.highlightAttributes": {"selected": True},
     "Label.highlightColor": {"selected": True},
+    # UIKit hides the clear button while the field is empty — there is nothing
+    # to clear — so an empty fixture field renders no button at all.
+    "TextField.clearButtonMode": {"text": "Clear me"},
 }
 
 

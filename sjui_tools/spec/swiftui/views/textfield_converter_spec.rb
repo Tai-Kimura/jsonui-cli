@@ -667,5 +667,70 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextFieldConverter do
         expect(code).not_to include('prefix(10)')
       end
     end
+
+    # clearButtonMode — SwiftUI has no clear button, so the library supplies the
+    # overlay and the converter decides whether and how it applies.
+    describe 'clearButtonMode' do
+      def field(extra)
+        described_class.new({ 'type' => 'TextField', 'id' => 'email', 'text' => '@{email}' }.merge(extra)).convert
+      end
+
+      it 'passes the mode and the text binding to clear' do
+        expect(field('clearButtonMode' => 'always'))
+          .to include('.textFieldClearButton(mode: .always, text: $data.email)')
+      end
+
+      it 'feeds the focus state to the editing-sensitive modes' do
+        expect(field('clearButtonMode' => 'whileEditing'))
+          .to include('.textFieldClearButton(mode: .whileEditing, text: $data.email, isEditing: emailIsFocused)')
+        expect(field('clearButtonMode' => 'unlessEditing'))
+          .to include('isEditing: emailIsFocused')
+      end
+
+      it 'omits the editing flag where it cannot change the outcome' do
+        expect(field('clearButtonMode' => 'always')).not_to include('isEditing:')
+      end
+
+      it 'accepts the snake_case spelling' do
+        expect(field('clearButtonMode' => 'while_editing')).to include('mode: .whileEditing')
+      end
+
+      it 'emits nothing for never' do
+        expect(field('clearButtonMode' => 'never')).not_to include('textFieldClearButton')
+      end
+
+      it 'emits nothing for an unrecognised mode rather than guessing one' do
+        expect(field('clearButtonMode' => 'sometimes')).not_to include('textFieldClearButton')
+      end
+
+      it 'emits nothing when absent' do
+        expect(field({})).not_to include('textFieldClearButton')
+      end
+
+      # whileEditing needs a focus state even on a field that has no id and no
+      # focus handlers — but nothing to sync, so no onChange closure.
+      it 'creates the focus state a bare field would not otherwise have' do
+        converter = described_class.new({
+          'type' => 'TextField', 'text' => '@{email}', 'clearButtonMode' => 'whileEditing'
+        })
+        code = converter.convert
+
+        expect(converter.state_variables).to include('@FocusState private var fieldIsFocused: Bool')
+        expect(code).to include('.focused($fieldIsFocused)')
+        expect(code).to include('isEditing: fieldIsFocused')
+        # Nothing to sync, so the closure would have had an empty body.
+        expect(code).not_to include('.onChange(of: fieldIsFocused)')
+      end
+
+      it 'leaves a bare field alone for modes that do not read focus' do
+        converter = described_class.new({
+          'type' => 'TextField', 'text' => '@{email}', 'clearButtonMode' => 'always'
+        })
+        code = converter.convert
+
+        expect(converter.state_variables).to be_empty
+        expect(code).not_to include('.focused(')
+      end
+    end
   end
 end

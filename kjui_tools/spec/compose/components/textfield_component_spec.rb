@@ -191,6 +191,51 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       expect(result).to include('KeyboardType.Text')
     end
 
+    # inputType is the Android-XML spelling, read only by the frozen XML mode
+    # until now — a layout migrated to Compose lost its keyboard silently.
+    context 'inputType (XML-mode migration fallback)' do
+      it 'maps the XML mapper vocabulary' do
+        result = described_class.generate(
+          { 'type' => 'TextField', 'inputType' => 'email' }, 0, required_imports
+        )
+        expect(result).to include('KeyboardType.Email')
+        expect(required_imports).to include(:keyboard_type)
+      end
+
+      it 'maps the raw android:inputType names the mapper passes through' do
+        expect(described_class.generate(
+          { 'type' => 'TextField', 'inputType' => 'textPassword' }, 0, required_imports
+        )).to include('KeyboardType.Password')
+        expect(described_class.generate(
+          { 'type' => 'TextField', 'inputType' => 'numberDecimal' }, 0, required_imports
+        )).to include('KeyboardType.Decimal')
+      end
+
+      it 'falls back to a text keyboard for anything else' do
+        expect(described_class.generate(
+          { 'type' => 'TextField', 'inputType' => 'textMultiLine' }, 0, required_imports
+        )).to include('KeyboardType.Text')
+      end
+
+      # `input` is the canonical cross-platform attribute and must win.
+      it 'yields to input' do
+        result = described_class.generate(
+          { 'type' => 'TextField', 'input' => 'phone', 'inputType' => 'email' }, 0, required_imports
+        )
+        expect(result).to include('KeyboardType.Phone')
+        expect(result).not_to include('KeyboardType.Email')
+      end
+
+      it 'yields to contentType' do
+        result = described_class.generate(
+          { 'type' => 'TextField', 'contentType' => 'emailAddress', 'inputType' => 'phone' },
+          0, required_imports
+        )
+        expect(result).to include('KeyboardType.Email')
+        expect(result).not_to include('KeyboardType.Phone')
+      end
+    end
+
     it 'generates TextField with Done return key' do
       json_data = { 'type' => 'TextField', 'returnKeyType' => 'Done' }
       result = described_class.generate(json_data, 0, required_imports)

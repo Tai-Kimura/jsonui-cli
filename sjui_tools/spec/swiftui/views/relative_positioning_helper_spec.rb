@@ -380,5 +380,29 @@ RSpec.describe SjuiTools::SwiftUI::Views::RelativePositioningHelper do
       expect(positions['view'][:margins][:left]).to eq(12)
       expect(positions['view'][:margins][:right]).to eq(18)
     end
+
+    # A relative position is a fixed inset, so a bounded margin has no slack to
+    # flex into and collapses to its lower bound.
+    it 'collapses bounded margins to their lower bound' do
+      children = [{
+        'id' => 'view',
+        'minStartMargin' => 8,
+        'maxStartMargin' => 40,
+        'minEndMargin' => 6
+      }]
+
+      positions = helper.calculate_relative_positions(children)
+
+      expect(positions['view'][:margins][:left]).to eq(8)
+      expect(positions['view'][:margins][:right]).to eq(6)
+    end
+
+    it 'still prefers a fixed margin over a bounded one' do
+      children = [{ 'id' => 'view', 'startMargin' => 4, 'minStartMargin' => 8 }]
+
+      positions = helper.calculate_relative_positions(children)
+
+      expect(positions['view'][:margins][:left]).to eq(4)
+    end
   end
 end

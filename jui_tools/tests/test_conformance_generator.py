@@ -23,11 +23,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from jui_cli.conformance import interactive_rules, rules
+from jui_cli.conformance import fixture_generator, interactive_rules, rules
 from jui_cli.conformance.fixture_generator import generate_conformance
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REAL_DEFINITIONS = REPO_ROOT / "shared" / "core" / "attribute_definitions.json"
+REAL_CONFORMANCE_DIR = REPO_ROOT / "conformance"
 
 #: Small synthetic definitions exercising every classification branch.
 SYNTHETIC_DEFS = {
@@ -463,6 +464,21 @@ class ConformanceInteractiveTest(unittest.TestCase):
             for fixture in manifest["fixtures"]:
                 self.assertTrue((out_dir / fixture["layout"]).is_file(), fixture["id"])
                 self.assertTrue((out_dir / fixture["test"]).is_file(), fixture["id"])
+
+    def test_control_shape_names_stay_path_safe(self):
+        """A base-attribute value must not decide whether the control fixture's
+        filename is safe to glob, quote or check out on another filesystem."""
+        name = fixture_generator.shape_name({"text": "Clear me", "hint": 'a/b:"c"'})
+        self.assertNotRegex(name, r"[^A-Za-z0-9._-]")
+        # Distinct values still produce distinct names.
+        self.assertNotEqual(
+            fixture_generator.shape_name({"text": "a b"}),
+            fixture_generator.shape_name({"text": "a c"}),
+        )
+
+    def test_every_control_fixture_on_disk_has_a_path_safe_name(self):
+        for path in (REAL_CONFORMANCE_DIR / "fixtures" / "__control").glob("*.json"):
+            self.assertRegex(path.name, r"^[A-Za-z0-9._-]+$", path.name)
 
     # ---------------- rule table hygiene ---------------- #
 

@@ -324,6 +324,92 @@ RSpec.describe SjuiTools::SwiftUI::Views::SpacingHelper do
         expect(helper.generated_code).to be_empty
       end
     end
+
+    # min/max{Start,End}Margin — a margin declared as a range. The library turns
+    # the bounds into a capped Spacer; the converter only decides whether they
+    # apply.
+    context 'with bounded margins' do
+      it 'emits both bounds for one side' do
+        helper.component = { 'minStartMargin' => 8, 'maxStartMargin' => 40 }
+        helper.apply_margins
+
+        expect(helper.generated_code).to include('.flexibleHorizontalMargin(minStart: 8, maxStart: 40)')
+      end
+
+      it 'emits a lone lower bound' do
+        helper.component = { 'minEndMargin' => 12 }
+        helper.apply_margins
+
+        expect(helper.generated_code).to include('.flexibleHorizontalMargin(minEnd: 12)')
+      end
+
+      it 'emits a lone upper bound' do
+        helper.component = { 'maxStartMargin' => 24 }
+        helper.apply_margins
+
+        expect(helper.generated_code).to include('.flexibleHorizontalMargin(maxStart: 24)')
+      end
+
+      # Argument order has to match the library signature's declaration order.
+      it 'emits all four bounds in signature order' do
+        helper.component = {
+          'minStartMargin' => 8, 'maxStartMargin' => 40,
+          'minEndMargin' => 2, 'maxEndMargin' => 9
+        }
+        helper.apply_margins
+
+        expect(helper.generated_code)
+          .to include('.flexibleHorizontalMargin(minStart: 8, maxStart: 40, minEnd: 2, maxEnd: 9)')
+      end
+
+      it 'keeps a fractional bound intact' do
+        helper.component = { 'minStartMargin' => 8.5, 'maxStartMargin' => 40 }
+        helper.apply_margins
+
+        expect(helper.generated_code).to include('.flexibleHorizontalMargin(minStart: 8.5, maxStart: 40)')
+      end
+
+      # UIKit gives the `equal` constraint to the fixed margin and never
+      # consults the pair (UIViewDisposure.applyLeftPaddingConstraint).
+      it 'yields the leading side to startMargin' do
+        helper.component = { 'startMargin' => 4, 'minStartMargin' => 8, 'maxStartMargin' => 40 }
+        helper.apply_margins
+
+        expect(helper.generated_code).to include('.padding(.leading, 4)')
+        expect(helper.generated_code.join).not_to include('flexibleHorizontalMargin')
+      end
+
+      it 'yields the leading side to leftMargin' do
+        helper.component = { 'leftMargin' => 4, 'maxStartMargin' => 40 }
+        helper.apply_margins
+
+        expect(helper.generated_code.join).not_to include('flexibleHorizontalMargin')
+      end
+
+      it 'yields the trailing side to endMargin while keeping the leading pair' do
+        helper.component = { 'endMargin' => 4, 'maxEndMargin' => 40, 'maxStartMargin' => 30 }
+        helper.apply_margins
+
+        expect(helper.generated_code).to include('.flexibleHorizontalMargin(maxStart: 30)')
+      end
+
+      # `margins` sets every side, so there is no side left to bound.
+      it 'yields to the margins array' do
+        helper.component = { 'margins' => [1, 2, 3, 4], 'minStartMargin' => 8, 'maxStartMargin' => 40 }
+        helper.apply_margins
+
+        expect(helper.generated_code.join).not_to include('flexibleHorizontalMargin')
+      end
+
+      # Declared `type: number`: a binding would be dropped by the library's
+      # CGFloat signature, so it must not be emitted as a bare identifier.
+      it 'ignores a non-numeric bound' do
+        helper.component = { 'minStartMargin' => '@{someMargin}' }
+        helper.apply_margins
+
+        expect(helper.generated_code).to be_empty
+      end
+    end
   end
 
   describe '#apply_insets (private)' do

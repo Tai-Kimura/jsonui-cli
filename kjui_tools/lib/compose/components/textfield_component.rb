@@ -488,6 +488,29 @@ module KjuiTools
               'KeyboardType.Text'
             end
             keyboard_options << "keyboardType = #{keyboard_type}"
+          elsif json_data['inputType']
+            # inputType is the Android-XML spelling, and XML mode is the only
+            # place it was ever read (xml/helpers/mappers/input_mapper.rb) — so a
+            # layout migrated to Compose lost its keyboard silently. `input` is
+            # the canonical attribute and wins; this is the migration fallback,
+            # covering the XML mapper's own vocabulary plus the raw
+            # `android:inputType` names it passes through untouched.
+            required_imports&.add(:keyboard_type)
+            keyboard_type = case json_data['inputType'].to_s.downcase
+            when 'email', 'textemailaddress'
+              'KeyboardType.Email'
+            when 'password', 'textpassword'
+              'KeyboardType.Password'
+            when 'number'
+              'KeyboardType.Number'
+            when 'numberdecimal'
+              'KeyboardType.Decimal'
+            when 'phone'
+              'KeyboardType.Phone'
+            else
+              'KeyboardType.Text'
+            end
+            keyboard_options << "keyboardType = #{keyboard_type}"
           end
 
           if json_data['returnKeyType']

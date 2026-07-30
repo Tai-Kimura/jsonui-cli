@@ -115,8 +115,10 @@ module SjuiTools
               margins: {
                 top: child['topMargin'] || child['marginTop'] || 0,
                 bottom: child['bottomMargin'] || child['marginBottom'] || 0,
-                left: child['leftMargin'] || child['marginLeft'] || child['startMargin'] || child['marginStart'] || 0,
-                right: child['rightMargin'] || child['marginRight'] || child['endMargin'] || child['marginEnd'] || 0
+                # Bounded margins collapse to their lower bound: a relative
+                # position is a fixed inset, with no slack to flex into.
+                left: child['leftMargin'] || child['marginLeft'] || child['startMargin'] || child['marginStart'] || child['minStartMargin'] || 0,
+                right: child['rightMargin'] || child['marginRight'] || child['endMargin'] || child['marginEnd'] || child['minEndMargin'] || 0
               }
             }
           end
@@ -217,6 +219,12 @@ module SjuiTools
                         child_without_padding.delete('endMargin')
                         child_without_padding.delete('marginStart')
                         child_without_padding.delete('marginEnd')
+                        # Bounded margins collapse to their floor here — see the
+                        # margins: EdgeInsets(...) fallback chain below.
+                        child_without_padding.delete('minStartMargin')
+                        child_without_padding.delete('maxStartMargin')
+                        child_without_padding.delete('minEndMargin')
+                        child_without_padding.delete('maxEndMargin')
                         
                         # Generate the view without padding and background
                         # Use current indent_level + 1 for proper nesting inside view: AnyView(...)
@@ -268,6 +276,10 @@ module SjuiTools
                         child_without_margins.delete('endMargin')
                         child_without_margins.delete('marginStart')
                         child_without_margins.delete('marginEnd')
+                        child_without_margins.delete('minStartMargin')
+                        child_without_margins.delete('maxStartMargin')
+                        child_without_margins.delete('minEndMargin')
+                        child_without_margins.delete('maxEndMargin')
 
                         # Use current indent_level + 1 for proper nesting inside view: AnyView(...)
                         child_converter = @converter_factory.create_converter(child_without_margins, @indent_level + 1, @action_manager, @converter_factory, @view_registry)
@@ -435,9 +447,13 @@ module SjuiTools
                     else
                       # Individual margin properties
                       top_val = convert_margin_binding(child['topMargin'] || child['marginTop'] || 0)
-                      leading_val = convert_margin_binding(child['leftMargin'] || child['marginLeft'] || child['startMargin'] || child['marginStart'] || 0)
+                      # RelativePositionContainer places children at a fixed inset,
+                      # so a bounded margin has no slack to flex into: it
+                      # collapses to its lower bound, which is what the library's
+                      # min-only case resolves to as well.
+                      leading_val = convert_margin_binding(child['leftMargin'] || child['marginLeft'] || child['startMargin'] || child['marginStart'] || child['minStartMargin'] || 0)
                       bottom_val = convert_margin_binding(child['bottomMargin'] || child['marginBottom'] || 0)
-                      trailing_val = convert_margin_binding(child['rightMargin'] || child['marginRight'] || child['endMargin'] || child['marginEnd'] || 0)
+                      trailing_val = convert_margin_binding(child['rightMargin'] || child['marginRight'] || child['endMargin'] || child['marginEnd'] || child['minEndMargin'] || 0)
 
                       margins = []
                       margins << "top: #{top_val}"

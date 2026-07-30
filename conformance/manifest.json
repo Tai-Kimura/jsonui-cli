@@ -8,13 +8,13 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "fa209c4b2666cd79ccc6fe253e436804b5f9046c7864e55f584b407e8583aeaf",
+  "generatedFrom": "00c825852795660c3f8c4da9b30e7e5d408305a2920cc28d230e73f2db4a4921",
   "counts": {
-    "fixtures": 710,
+    "fixtures": 711,
     "assertable": 36,
     "visual": 603,
     "interactive": 36,
-    "control": 35,
+    "control": 36,
     "skipped": 167,
     "promoted": {
       "callback": 12
@@ -5925,7 +5925,7 @@
       "host": "TextField",
       "writtenKey": "clearButtonMode",
       "aliasOf": null,
-      "value": "sample",
+      "value": "always",
       "platforms": [
         "ios"
       ],
@@ -5935,7 +5935,7 @@
       "test": "fixtures/TextField/clearButtonMode__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": "__control/TextField__text-Clear-me"
     },
     {
       "id": "TextField/leftViewMode__static",
@@ -7509,9 +7509,7 @@
       "aliasOf": null,
       "value": "sample",
       "platforms": [
-        "ios",
-        "android",
-        "web"
+        "android"
       ],
       "mode": null,
       "deprecated": null,
@@ -15944,6 +15942,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/TextField.layout.json",
       "test": "fixtures/__control/TextField.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/TextField__text-Clear-me",
+      "component": "__control",
+      "attribute": null,
+      "case": "TextField",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/TextField__text-Clear-me.layout.json",
+      "test": "fixtures/__control/TextField__text-Clear-me.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

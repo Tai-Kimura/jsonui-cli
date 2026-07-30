@@ -12,7 +12,9 @@
       "EditText"
     ]
   },
-  "platform": "all",
+  "platform": [
+    "android"
+  ],
   "cases": [
     {
       "name": "inputType__static",

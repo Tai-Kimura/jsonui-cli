@@ -160,7 +160,10 @@ module SjuiTools
           focus_handlers = [@component['onFocus'], @component['onBeginEditing']].compact
           blur_handlers = [@component['onBlur'], @component['onEndEditing']].compact
 
-          if @component['id'] || focus_handlers.any? || blur_handlers.any?
+          focus_var = nil
+          needs_focus_state = @component['id'] || focus_handlers.any? || blur_handlers.any? ||
+                              clear_button_needs_focus?
+          if needs_focus_state
             field_id = to_camel_case(@component['id'] || 'field')
             focus_var = "#{field_id}IsFocused"
 
@@ -176,20 +179,26 @@ module SjuiTools
               end
               add_line "}"
             end
-            # Sync: FocusState -> Data, plus the focus/blur handlers
-            add_modifier_line ".onChange(of: #{focus_var}) { _, newValue in"
-            indent do
-              add_line "data.#{focus_var} = newValue" if @component['id']
-              if focus_handlers.any? || blur_handlers.any?
-                add_line "if newValue {"
-                indent { focus_handlers.each { |h| add_line "data.#{to_camel_case(h.to_s)}?()" } }
-                add_line "} else {"
-                indent { blur_handlers.each { |h| add_line "data.#{to_camel_case(h.to_s)}?()" } }
-                add_line "}"
+            # Sync: FocusState -> Data, plus the focus/blur handlers. Skipped when
+            # the FocusState only exists to feed clearButtonMode — the closure
+            # would have no body.
+            if @component['id'] || focus_handlers.any? || blur_handlers.any?
+              add_modifier_line ".onChange(of: #{focus_var}) { _, newValue in"
+              indent do
+                add_line "data.#{focus_var} = newValue" if @component['id']
+                if focus_handlers.any? || blur_handlers.any?
+                  add_line "if newValue {"
+                  indent { focus_handlers.each { |h| add_line "data.#{to_camel_case(h.to_s)}?()" } }
+                  add_line "} else {"
+                  indent { blur_handlers.each { |h| add_line "data.#{to_camel_case(h.to_s)}?()" } }
+                  add_line "}"
+                end
               end
+              add_line "}"
             end
-            add_line "}"
           end
+
+          apply_clear_button_mode(text_binding, focus_var)
 
           apply_text_input_traits
 
@@ -410,6 +419,39 @@ module SjuiTools
           @state_variables << "@State private var #{name}: #{type} = #{default_value}"
         end
         private
+
+        # clearButtonMode — UIKit's `UITextField.ViewMode`. SwiftUI has no clear
+        # button, so the library supplies the overlay
+        # (TextFieldClearButton.swift); this decides whether it applies and
+        # where the editing flag comes from.
+        CLEAR_BUTTON_MODES = {
+          'never' => '.never',
+          'whileediting' => '.whileEditing',
+          'unlessediting' => '.unlessEditing',
+          'always' => '.always'
+        }.freeze
+
+        def clear_button_mode
+          raw = @component['clearButtonMode']
+          return nil unless raw.is_a?(String)
+
+          CLEAR_BUTTON_MODES[raw.gsub('_', '').downcase]
+        end
+
+        # `whileEditing` / `unlessEditing` need the field's focus state, so they
+        # force a @FocusState even on a field that would not otherwise have one.
+        def clear_button_needs_focus?
+          %w[.whileEditing .unlessEditing].include?(clear_button_mode)
+        end
+
+        def apply_clear_button_mode(text_binding, focus_var)
+          mode = clear_button_mode
+          return if mode.nil? || mode == '.never'
+
+          args = ["mode: #{mode}", "text: #{text_binding}"]
+          args << "isEditing: #{focus_var}" if focus_var && clear_button_needs_focus?
+          @modifier_bag.append(:component_specific, ".textFieldClearButton(#{args.join(', ')})")
+        end
 
         # autocapitalizationType / autocorrectionType / maxLength / fieldPadding.
         #
