@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'swiftui/views/base_view_converter'
+require 'swiftui/view_registry'
+require 'swiftui/views/view_converter'
 
 RSpec.describe SjuiTools::SwiftUI::Views::BaseViewConverter do
   describe '.validation_enabled' do
@@ -849,5 +851,37 @@ RSpec.describe SjuiTools::SwiftUI::Views::BaseViewConverter do
       # The bag should emit the last registered value
       expect(code).to include('.background(Color.blue)')
     end
+  end
+end
+
+# `enabled` is declared boolean|binding on `common`, and the codegen only ever
+# matched the literal `false` — a layout that wrote `enabled: "@{isEnabled}"`
+# got nothing at all, on a declared attribute that raises no build warning.
+RSpec.describe SjuiTools::SwiftUI::Views::ViewConverter, 'enabled' do
+  before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+  after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+
+  def view(value)
+    json = { 'type' => 'View', 'onClick' => '@{tap}' }
+    json['enabled'] = value unless value == :absent
+    described_class.new(json, 0, nil).convert
+  end
+
+  it 'disables on a binding' do
+    expect(view('@{isEnabled}')).to include('.disabled(!((data.isEnabled')
+  end
+
+  it 'honours the negation and default forms' do
+    expect(view('@{!isLoading}')).to include('.disabled(!(!(data.isLoading')
+    expect(view('@{ready ?? true}')).to include('?? true')
+  end
+
+  it 'still disables on the literal false' do
+    expect(view(false)).to include('.disabled(true)')
+  end
+
+  it 'emits nothing for true or absent' do
+    expect(view(true)).not_to include('.disabled(')
+    expect(view(:absent)).not_to include('.disabled(')
   end
 end

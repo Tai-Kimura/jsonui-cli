@@ -610,17 +610,38 @@ module RjuiTools
         # Build className attribute, handling landscape responsive with template literal.
         # Returns the full className="..." or className={`...`} string.
         def build_responsive_class_attr(static_classes)
+          expressions = []
+
           if @responsive_result && @responsive_result[:needs_landscape_hook] &&
              !@responsive_result[:landscape_styles].empty?
             landscape_expr = ResponsiveHelper.build_landscape_class_expression(
               @responsive_result[:landscape_styles]
             )
-            unless landscape_expr.empty?
-              return " className={`#{static_classes} #{landscape_expr}`}"
-            end
+            expressions << landscape_expr unless landscape_expr.empty?
           end
 
+          expressions << enabled_class_expression
+
+          expressions.compact!
+          return " className={`#{static_classes} #{expressions.join(' ')}`}" if expressions.any?
+
           " className=\"#{static_classes}\""
+        end
+
+        # `enabled` as a binding cannot become a static class: the value is only
+        # known at runtime. It becomes a template-literal fragment, and it must
+        # stay OUT of the class list — finalize_classes splits on whitespace and
+        # would tear the expression into pieces. (That is the shape a `${...}`
+        # took when it was pushed into `classes` and landed inside a plain
+        # className="…": React renders it as literal text, so it did nothing.)
+        #
+        # Only the binding form needs this; a literal `enabled: false` is known
+        # at build time and is already a plain class.
+        def enabled_class_expression
+          enabled = attributes['enabled']
+          return nil unless enabled.is_a?(String) && has_binding?(enabled)
+
+          "${!#{extract_binding_property(enabled)} ? 'opacity-50 pointer-events-none' : ''}"
         end
 
         # Check if this component needs the useMediaQuery hook for landscape

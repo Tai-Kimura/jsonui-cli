@@ -232,6 +232,12 @@ TEXT_ASSERTABLE_COMPONENTS = {
 
 #: Components on which the enabled/disabled assertion is meaningful.
 ENABLED_ASSERTABLE_COMPONENTS = {
+    # A container's disabled state is observable through the a11y tree —
+    # `aria-disabled` on web, the `Disabled` semantics on Compose, SwiftUI's
+    # `.disabled` on iOS. It was left out while the three codegens ignored
+    # `enabled` on a View, which is the same reason the fixture was hosted on a
+    # Button and the gap stayed invisible.
+    "View",
     "Button",
     "TextField",
     "TextView",
@@ -582,8 +588,16 @@ BASE_CHILDREN: dict[str, list[dict[str, Any]]] = {
 
 #: Hosts for ``common`` attributes that only make sense on an interactive
 #: component. Default host for common attributes is ``View``.
+#:
+#: `enabled` is deliberately NOT here. It used to be hosted on Button, on the
+#: assumption that only an interactive component can be disabled — but a View
+#: with an onClick is interactive, and hosting the fixture on a Button is what
+#: hid the fact that `enabled` did nothing on a View: the Button emits a real
+#: `disabled` attribute, so the fixture passed while three codegens ignored the
+#: attribute on every container. The View host asserts through the a11y tree
+#: (`aria-disabled` on web, the `Disabled` semantics on Compose), which is the
+#: only thing a UI test can observe on a non-input element.
 COMMON_HOST_OVERRIDES: dict[str, str] = {
-    "enabled": "Button",
     "tapBackground": "Button",
     "highlightBackground": "Button",
     "disabledBackground": "Button",

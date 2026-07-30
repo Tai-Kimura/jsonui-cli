@@ -504,8 +504,20 @@ module SjuiTools
           apply_safe_area_insets_to_bag
 
           # disabled状態の処理
+          #
+          # The binding form used to fall through: `enabled` is declared
+          # boolean|binding, and `== false` only matches the literal. A layout
+          # that wrote `enabled: "@{isEnabled}"` got nothing at all, on a
+          # declared attribute that raises no build warning — which is worse than
+          # an unknown one. SwiftUI's `.disabled` also covers interactive
+          # descendants, so it is the right modifier for a container.
           if @component['enabled'] == false
             @modifier_bag.register(:disabled, ".disabled(true)")
+          elsif is_binding?(@component['enabled'])
+            expr = SwiftUI::Binding::BindingExpression.swift_bool_expr(
+              @component['enabled'][2..-2]
+            )
+            @modifier_bag.register(:disabled, ".disabled(!(#{expr}))")
           end
 
           # tagプロパティの適用（TabViewなどで使用）

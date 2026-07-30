@@ -119,6 +119,8 @@ module KjuiTools
             circle_shape: "import androidx.compose.foundation.shape.CircleShape",
             alpha: "import androidx.compose.ui.draw.alpha",
             semantics: "import androidx.compose.ui.semantics.semantics",
+            semantics_disabled: ["import androidx.compose.ui.semantics.semantics",
+                                 "import androidx.compose.ui.semantics.disabled"],
             test_tag: "import androidx.compose.ui.platform.testTag",
             test_tags_as_resource_id: "import androidx.compose.ui.semantics.testTagsAsResourceId",
             image: "import androidx.compose.foundation.Image",

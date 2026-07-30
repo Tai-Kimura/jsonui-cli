@@ -566,6 +566,7 @@ module KjuiTools
           modifiers = []
           modifiers.concat(build_long_pressable(json_data, required_imports))
           handler = json_data['onclick'] || json_data['onClick']
+          enabled = enabled_expression(json_data)
           if handler
             required_imports&.add(:clickable)
             view_id = json_data['id']
@@ -576,9 +577,38 @@ module KjuiTools
             else
               handler_call = get_event_handler_call(json_data['onclick'], is_camel_case: false)
             end
-            modifiers << ".clickable { #{handler_call} }"
+            gate = enabled ? "(enabled = #{enabled})" : ''
+            modifiers << ".clickable#{gate} { #{handler_call} }"
           end
+          modifiers.concat(build_disabled_semantics(json_data, enabled, required_imports))
           modifiers
+        end
+
+        # `enabled` — declared boolean|binding on `common`, so it may appear on
+        # any node, and the Compose codegen read it on none of them: a View with
+        # `enabled: "@{x}"` stayed clickable. Returns the Kotlin boolean
+        # expression, or nil when the attribute is absent or literally true
+        # (which is the default and needs no gate).
+        def self.enabled_expression(json_data)
+          value = json_data['enabled']
+          return nil if value.nil? || value == true || value == 'true'
+          return 'false' if value == false || value == 'false'
+          return nil unless is_binding?(value)
+
+          "data.#{extract_binding_property(value)}"
+        end
+
+        # A click-gated node is still `enabled` in the a11y tree, and the a11y
+        # tree is the only thing a UI test can observe (`assert: "disabled"`
+        # reads it). The check lives inside the semantics lambda so a binding
+        # needs no conditional Modifier.
+        def self.build_disabled_semantics(json_data, enabled, required_imports)
+          return [] if enabled.nil?
+
+          required_imports&.add(:semantics_disabled)
+          return [".semantics { disabled() }"] if enabled == 'false'
+
+          [".semantics { if (!#{enabled}) disabled() }"]
         end
 
         # onLongPress (common attribute, platform swift/kotlin) → long-press

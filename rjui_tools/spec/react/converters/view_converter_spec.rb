@@ -340,3 +340,79 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
     end
   end
 end
+
+# `enabled` is declared boolean|binding on `common`. The literal false was a
+# plain class; the binding form was read nowhere, so a layout that wrote
+# `enabled: "@{x}"` rendered a fully interactive node.
+RSpec.describe RjuiTools::React::Converters::ViewConverter, 'enabled' do
+  let(:config) { { 'use_tailwind' => true } }
+
+  def view(value)
+    json = { 'type' => 'View', 'width' => 10, 'height' => 10, 'onClick' => '@{tap}' }
+    json['enabled'] = value unless value == :absent
+    described_class.new(json, config).convert(2)
+  end
+
+  # The expression must stay out of the class list: finalize_classes splits on
+  # whitespace and would tear it apart, and a plain className="…" renders a
+  # `${...}` as literal text.
+  it 'dims and blocks pointer events through the class template literal' do
+    result = view('@{isEnabled}')
+    expect(result).to include("className={`")
+    expect(result).to include("${!data.isEnabled ? 'opacity-50 pointer-events-none' : ''}")
+  end
+
+  # A dimmed, click-through node is still `enabled` in the a11y tree, and the
+  # a11y tree is the only thing a UI test can observe.
+  it 'reports the state to the a11y tree' do
+    expect(view('@{isEnabled}')).to include('aria-disabled={!data.isEnabled}')
+    expect(view(false)).to include('aria-disabled="true"')
+  end
+
+  it 'keeps the static classes for the literal false' do
+    result = view(false)
+    expect(result).to include('opacity-50')
+    expect(result).to include('pointer-events-none')
+    expect(result).to include('className="')
+  end
+
+  it 'emits nothing for true or absent' do
+    expect(view(true)).not_to include('aria-disabled')
+    expect(view(:absent)).not_to include('aria-disabled')
+    expect(view(:absent)).not_to include('opacity-50')
+  end
+end
+
+# The SelectBox binding form pushed a `${...}` into the class list, which
+# finalize_classes split on whitespace; with no value binding to make the
+# className a template literal, React rendered the expression as literal text.
+RSpec.describe RjuiTools::React::Converters::SelectBoxConverter, 'enabled binding' do
+  let(:config) { { 'use_tailwind' => true } }
+
+  def select(extra)
+    RjuiTools::React::Converters::SelectBoxConverter.new(
+      { 'class' => 'SelectBox', 'items' => %w[a] }.merge(extra), config
+    ).convert(2)
+  end
+
+  it 'puts the expression in a template literal even with no value binding' do
+    result = select('enabled' => '@{isEnabled}')
+    expect(result).to include('className={`')
+    expect(result).to include("${!data.isEnabled ? 'opacity-50 cursor-not-allowed' : ''}")
+  end
+
+  it 'keeps both expressions when a value binding is also present' do
+    result = select('enabled' => '@{isEnabled}', 'selectedValue' => '@{v}')
+    expect(result).to include('className={`')
+    expect(result.scan('${').length).to eq(2)
+  end
+
+  # The functional half was never affected.
+  it 'still emits the real disabled attribute' do
+    expect(select('enabled' => '@{isEnabled}')).to include('disabled={!data.isEnabled}')
+  end
+
+  it 'leaves a plain select with a quoted className' do
+    expect(select({})).to include('className="')
+  end
+end

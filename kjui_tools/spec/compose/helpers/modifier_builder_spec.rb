@@ -907,3 +907,57 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
     end
   end
 end
+
+# `enabled` is declared boolean|binding on `common`, so it may appear on any
+# node — and the Compose codegen read it on none of them: a View with
+# `enabled: "@{x}"` stayed clickable.
+RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder, 'enabled' do
+  let(:required_imports) { Set.new }
+
+  def clickable(extra)
+    described_class.build_clickable(
+      { 'type' => 'View', 'id' => 'w', 'onClick' => '@{tap}' }.merge(extra), required_imports
+    ).join("\n")
+  end
+
+  it 'gates the click on a binding' do
+    expect(clickable('enabled' => '@{isEnabled}'))
+      .to include('.clickable(enabled = data.isEnabled) {')
+  end
+
+  it 'gates it on the literal false' do
+    expect(clickable('enabled' => false)).to include('.clickable(enabled = false) {')
+  end
+
+  # true is the default and needs no gate.
+  it 'leaves the click ungated for true or absent' do
+    expect(clickable('enabled' => true)).to include('.clickable {')
+    expect(clickable({})).to include('.clickable {')
+  end
+
+  # A click-gated node is still `enabled` in the a11y tree, and the a11y tree is
+  # the only thing a UI test can observe (`assert: "disabled"` reads it).
+  describe 'a11y' do
+    it 'marks the node disabled, checking inside the semantics lambda' do
+      expect(clickable('enabled' => '@{isEnabled}'))
+        .to include('.semantics { if (!data.isEnabled) disabled() }')
+      expect(required_imports).to include(:semantics_disabled)
+    end
+
+    it 'marks it unconditionally for the literal false' do
+      expect(clickable('enabled' => false)).to include('.semantics { disabled() }')
+    end
+
+    it 'marks a node with no click handler too' do
+      result = described_class.build_clickable(
+        { 'type' => 'View', 'id' => 'w', 'enabled' => '@{isEnabled}' }, required_imports
+      ).join("\n")
+      expect(result).to include('disabled()')
+      expect(result).not_to include('.clickable')
+    end
+
+    it 'adds nothing when enabled is absent' do
+      expect(clickable({})).not_to include('disabled()')
+    end
+  end
+end

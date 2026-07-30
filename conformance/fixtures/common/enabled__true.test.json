@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance common.enabled (true)",
-    "description": "Conformance fixture for 'enabled' on Button (section: common, class: assertable). Value under test: true.",
+    "description": "Conformance fixture for 'enabled' on View (section: common, class: assertable). Value under test: true.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "enabled__true",
-      "description": "Conformance fixture for 'enabled' on Button (section: common, class: assertable). Value under test: true.",
+      "description": "Conformance fixture for 'enabled' on View (section: common, class: assertable). Value under test: true.",
       "steps": [
         {
           "action": "waitFor",

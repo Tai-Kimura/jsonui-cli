@@ -79,12 +79,14 @@ module RjuiTools
           hint_color = attributes['hintColor'] || attributes['placeholderColor']
           @select_hint_color = hint_color || 'gray-400'
 
-          # Disabled state
+          # Disabled state. The binding form used to push a `${...}` into the
+          # class list, which finalize_classes split on whitespace and, when no
+          # value binding made the className a template literal, left inside a
+          # plain className="…" — React rendered the expression as literal text.
+          # It is a runtime expression now (build_select_class_attr). The
+          # functional half, the real `disabled` attribute, was never affected.
           if attributes['enabled'] == false
-            classes << 'opacity-50 cursor-not-allowed'
-          elsif has_binding?(attributes['enabled'])
-            binding_expr = extract_binding_property(attributes['enabled'])
-            classes << "${!#{binding_expr} ? 'opacity-50 cursor-not-allowed' : ''}"
+            classes << 'cursor-not-allowed'
           end
 
           finalize_classes(classes)
@@ -168,15 +170,21 @@ module RjuiTools
           hint_color = @select_hint_color
           value_binding = with_bind_fallback(attributes['selectedValue'] || attributes['value'])
 
+          expressions = []
           if value_binding && has_binding?(value_binding)
             prop = extract_binding_property(value_binding)
             hint_class = "text-#{hint_color}"
             font_color = attributes['fontColor']
             normal_class = font_color ? "text-#{font_color}" : ''
-            "className={`#{class_name} ${#{prop} ? '#{normal_class}' : '#{hint_class}'}`}"
-          else
-            "className=\"#{class_name}\""
+            expressions << "${#{prop} ? '#{normal_class}' : '#{hint_class}'}"
           end
+          if has_binding?(attributes['enabled'])
+            expressions << "${!#{extract_binding_property(attributes['enabled'])} ? 'opacity-50 cursor-not-allowed' : ''}"
+          end
+
+          return "className=\"#{class_name}\"" if expressions.empty?
+
+          "className={`#{class_name} #{expressions.join(' ')}`}"
         end
 
         def resolve_hint_text(hint)

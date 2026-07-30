@@ -15,12 +15,16 @@ module RjuiTools
           id_attr = build_id_attr
           event_attrs = build_event_attrs
           rel_ref_attr = build_relative_position_ref_attr
+          # A dimmed, click-through node is still `enabled` in the a11y tree, and
+          # the a11y tree is the only thing a UI test can observe — `assert:
+          # "disabled"` reads it. Without this the disable is invisible to tests.
+          aria_disabled_attr = build_aria_disabled_attr
 
           jsx = if children.empty?
-            "#{indent_str(indent)}<div#{id_attr}#{rel_ref_attr}#{class_attr}#{style_attr}#{event_attrs} />"
+            "#{indent_str(indent)}<div#{id_attr}#{rel_ref_attr}#{class_attr}#{style_attr}#{aria_disabled_attr}#{event_attrs} />"
           else
             <<~JSX.chomp
-              #{indent_str(indent)}<div#{id_attr}#{rel_ref_attr}#{class_attr}#{style_attr}#{event_attrs}>
+              #{indent_str(indent)}<div#{id_attr}#{rel_ref_attr}#{class_attr}#{style_attr}#{aria_disabled_attr}#{event_attrs}>
               #{children}
               #{indent_str(indent)}</div>
             JSX
