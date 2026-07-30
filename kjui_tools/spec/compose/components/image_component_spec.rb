@@ -67,3 +67,40 @@ RSpec.describe KjuiTools::Compose::Components::ImageComponent do
     end
   end
 end
+
+# renderingMode: `template` means "take the tint, ignore the asset's own
+# colours" — a ColorFilter here, `.renderingMode(.template)` on iOS.
+RSpec.describe KjuiTools::Compose::Components::ImageComponent, 'renderingMode' do
+  let(:required_imports) { Set.new }
+
+  def image(extra)
+    described_class.generate({ 'type' => 'Image', 'src' => 'logo' }.merge(extra), 0, required_imports)
+  end
+
+  # Compose's stand-in for "the current foreground colour", which is what a
+  # template image takes on iOS.
+  it 'tints with the content colour when no tint is given' do
+    expect(image('renderingMode' => 'template'))
+      .to include('colorFilter = ColorFilter.tint(LocalContentColor.current)')
+    expect(required_imports).to include(:color_filter, :local_content_color)
+  end
+
+  it 'tints with the given colour' do
+    expect(image('renderingMode' => 'template', 'tintColor' => '#FF0000'))
+      .to match(/colorFilter = ColorFilter\.tint\(Color\(.*FF0000/)
+  end
+
+  # `original` says the opposite, so it suppresses a tint that would otherwise
+  # apply.
+  it 'suppresses a tint for original' do
+    expect(image('renderingMode' => 'original', 'tintColor' => '#FF0000')).not_to include('colorFilter')
+  end
+
+  it 'still tints without a renderingMode' do
+    expect(image('tintColor' => '#FF0000')).to include('ColorFilter.tint(')
+  end
+
+  it 'emits nothing when neither is set' do
+    expect(image({})).not_to include('colorFilter')
+  end
+end

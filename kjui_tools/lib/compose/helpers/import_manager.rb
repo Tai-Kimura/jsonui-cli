@@ -90,6 +90,11 @@ module KjuiTools
                                  "import androidx.compose.ui.input.pointer.pointerInput"],
             radio_colors: "import androidx.compose.material3.RadioButtonDefaults",
             async_image: "import coil3.compose.AsyncImage",
+            image_request: "import coil3.request.ImageRequest",
+            # Coil 3: headers live on NetworkHeaders, applied through the
+            # `httpHeaders` extension on the request builder.
+            network_headers: ["import coil3.network.NetworkHeaders",
+                              "import coil3.network.httpHeaders"],
             content_scale: "import androidx.compose.ui.layout.ContentScale",
             lazy_grid: ["import androidx.compose.foundation.lazy.grid.LazyVerticalGrid",
                         "import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid",
@@ -128,6 +133,7 @@ module KjuiTools
             test_tags_as_resource_id: "import androidx.compose.ui.semantics.testTagsAsResourceId",
             image: "import androidx.compose.foundation.Image",
             color_filter: "import androidx.compose.ui.graphics.ColorFilter",
+            local_content_color: "import androidx.compose.material3.LocalContentColor",
             painter_class: ["import androidx.compose.ui.graphics.painter.Painter",
                             "import androidx.compose.ui.geometry.Size",
                             "import androidx.compose.ui.graphics.drawscope.DrawScope"],

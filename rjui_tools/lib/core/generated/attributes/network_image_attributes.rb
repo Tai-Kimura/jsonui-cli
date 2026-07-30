@@ -24,7 +24,7 @@ module JsonUI
         { name: 'defaultImage', kind: :string }.freeze,
         # Error image name
         { name: 'errorImage', kind: :string }.freeze,
-        # HTTP headers for the image request (Coil ImageRequest.Builder.addHeader).
+        # HTTP headers for the image request (Coil 3: httpHeaders(NetworkHeaders) on ImageRequest.Builder).
         { name: 'headers', kind: :object }.freeze,
         # Placeholder image name (primary)
         { name: 'hint', kind: :string }.freeze,

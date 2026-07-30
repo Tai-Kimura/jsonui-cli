@@ -7,6 +7,24 @@ module KjuiTools
   module Compose
     module Components
       class NetworkImageComponent
+        # `headers` — HTTP headers for the image request. A plain String model has
+        # nowhere to put them, so the URL becomes a built ImageRequest instead.
+        #
+        # Coil 3 moved these off the request builder: `addHeader` was Coil 2, and
+        # the current API is `httpHeaders(NetworkHeaders)` from coil3.network.
+        # (The attribute's own description still named the old one; corrected.)
+        def self.image_model(json_data, url, required_imports)
+          headers = json_data['headers']
+          return url unless headers.is_a?(Hash) && headers.any?
+
+          required_imports&.add(:image_request)
+          required_imports&.add(:network_headers)
+          required_imports&.add(:local_context)
+          pairs = headers.map { |key, value| ".add(#{quote(key.to_s)}, #{quote(value.to_s)})" }
+          "ImageRequest.Builder(LocalContext.current).data(#{url})" \
+            ".httpHeaders(NetworkHeaders.Builder()#{pairs.join}.build()).build()"
+        end
+
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           required_imports&.add(:async_image)
 
@@ -17,7 +35,7 @@ module KjuiTools
           content_description = json_data['contentDescription'] || 'Image'
 
           code = indent("AsyncImage(", depth)
-          code += "\n" + indent("model = #{url},", depth + 1)
+          code += "\n" + indent("model = #{image_model(json_data, url, required_imports)},", depth + 1)
           code += "\n" + indent("contentDescription = \"#{content_description}\",", depth + 1)
 
           # Content scale (case-insensitive check)
@@ -109,8 +127,13 @@ module KjuiTools
           end
         end
 
+        # A Kotlin string literal: a backslash, a quote and a `$` all need
+        # escaping — an unescaped `$` opens a string template. Block form on
+        # purpose: gsub's replacement string treats backslashes specially, which
+        # is how the first cut of this silently dropped the `$` case.
         def self.quote(text)
-          "\"#{text.gsub('"', '\\"')}\""
+          escaped = text.to_s.gsub(/[\\"$]/) { |char| "\\#{char}" }
+          "\"#{escaped}\""
         end
 
         def self.indent(text, level)

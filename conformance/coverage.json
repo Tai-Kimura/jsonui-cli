@@ -93,14 +93,6 @@
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
-      "component": "Image",
-      "attribute": "renderingMode",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
       "component": "Label",
       "attribute": "textShadow",
       "platforms": [
@@ -108,14 +100,6 @@
       ],
       "reason": "unimplemented",
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "NetworkImage",
-      "attribute": "headers",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
     },
     {
       "component": "NetworkImage",
@@ -152,7 +136,8 @@
       "platforms": [
         "android"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "Pinch-zoom on a SCROLLING container. Compose has no zoom primitive for one: detectTransformGestures / transformable consume the drag, so a naive emit would take the scroll away — correct arbitration is a real gesture design, not a modifier. Its twin ScrollView.minZoom is recorded for the same reason on all three platforms, and implementing a maximum without a minimum would be half a feature. Web maps it to touch-action pan-x pan-y pinch-zoom, which the browser arbitrates for us; iOS gets it from UIScrollView."
     },
     {
       "component": "ScrollView",

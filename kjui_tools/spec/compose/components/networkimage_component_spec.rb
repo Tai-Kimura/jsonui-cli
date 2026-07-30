@@ -32,3 +32,44 @@ RSpec.describe KjuiTools::Compose::Components::NetworkImageComponent do
     end
   end
 end
+
+# `headers` is declared `platform: kotlin, mode: compose` — a plain String model
+# has nowhere to put them, so the URL becomes a built ImageRequest.
+RSpec.describe KjuiTools::Compose::Components::NetworkImageComponent, 'headers' do
+  let(:required_imports) { Set.new }
+
+  before { KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {} }
+
+  def image(extra)
+    described_class.generate(
+      { 'type' => 'NetworkImage', 'url' => '@{imageUrl}' }.merge(extra), 0, required_imports
+    )
+  end
+
+  # Coil 3 moved these off the request builder: `addHeader` was Coil 2, and the
+  # current API is `httpHeaders(NetworkHeaders)`.
+  it 'builds an ImageRequest with the headers' do
+    result = image('headers' => { 'Authorization' => 'Bearer x', 'X-Env' => 'prod' })
+    expect(result).to include('ImageRequest.Builder(LocalContext.current)')
+    expect(result).to include('.httpHeaders(NetworkHeaders.Builder()')
+    expect(result).to include('.add("Authorization", "Bearer x")')
+    expect(result).to include('.add("X-Env", "prod")')
+    expect(required_imports).to include(:image_request, :network_headers, :local_context)
+  end
+
+  it 'leaves the model a plain URL without headers' do
+    result = image({})
+    expect(result).to include('model = data.imageUrl,')
+    expect(result).not_to include('ImageRequest')
+  end
+
+  it 'ignores an empty header map' do
+    expect(image('headers' => {})).not_to include('ImageRequest')
+  end
+
+  # A header value with a $ would otherwise open a Kotlin string template.
+  it 'escapes the header values' do
+    expect(image('headers' => { 'X-Token' => 'a$b"c' }))
+      .to include(%q{.add("X-Token", "a\$b\"c")})
+  end
+end

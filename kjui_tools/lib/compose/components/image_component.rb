@@ -97,8 +97,44 @@ module KjuiTools
             end
           end
           
+          # renderingMode — `template` means "take the tint, ignore the asset's own
+          # colours", which is a ColorFilter here and `.renderingMode(.template)`
+          # on iOS. `original` says the opposite, so it suppresses a tint that
+          # would otherwise apply. Emitted after contentScale, which is where the
+          # Image( ... ) argument list ends.
+          if (filter = rendering_color_filter(json_data, required_imports))
+            code += ",\n" + indent("colorFilter = #{filter}", depth + 1)
+          end
+
           code += "\n" + indent(")", depth)
           code
+        end
+
+        def self.rendering_color_filter(json_data, required_imports)
+          mode = json_data['renderingMode'].to_s.downcase
+          tint = json_data['tintColor'] || json_data['iconColor']
+
+          case mode
+          when 'template'
+            required_imports&.add(:color_filter)
+            color = if tint
+                      Helpers::ResourceResolver.process_color(tint, required_imports)
+                    else
+                      # Compose's stand-in for "the current foreground colour",
+                      # which is what a template image takes on iOS.
+                      required_imports&.add(:local_content_color)
+                      'LocalContentColor.current'
+                    end
+            "ColorFilter.tint(#{color})"
+          when 'original'
+            nil
+          else
+            # No renderingMode: a tint still applies if one was asked for.
+            return nil unless tint
+
+            required_imports&.add(:color_filter)
+            "ColorFilter.tint(#{Helpers::ResourceResolver.process_color(tint, required_imports)})"
+          end
         end
         
         private
