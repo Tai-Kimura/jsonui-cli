@@ -17,6 +17,7 @@
       "id": "target",
       "width": "wrapContent",
       "height": "wrapContent",
+      "isOn": true,
       "tint": "#FF0000"
     }
   ]

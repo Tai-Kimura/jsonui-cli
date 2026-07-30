@@ -261,14 +261,6 @@
       "note": "alias — normalized to its canonical spelling before conversion"
     },
     {
-      "component": "Switch",
-      "attribute": "tint",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
       "component": "TextField",
       "attribute": "accessoryBackground",
       "platforms": [
@@ -322,23 +314,6 @@
       "note": "alias — normalized to its canonical spelling before conversion"
     },
     {
-      "component": "Toggle",
-      "attribute": "tint",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "View",
-      "attribute": "alignment",
-      "platforms": [
-        "android",
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
       "component": "View",
       "attribute": "direction",
       "platforms": [
@@ -361,14 +336,6 @@
       "attribute": "safeAreaInsetPositions",
       "platforms": [
         "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "common",
-      "attribute": "alignment",
-      "platforms": [
-        "android"
       ],
       "reason": "unimplemented"
     },
@@ -404,10 +371,10 @@
       "component": "common",
       "attribute": "indexBelow",
       "platforms": [
-        "android",
-        "web"
+        "android"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "Compose z-order is `Modifier.zIndex`, which belongs to each component's own modifier chain — the codegen has no shared chain (28 components build their own, and only 15 even share build_alignment), so wiring it partially would make the attribute work on some components and silently not on others. z-order also only means anything inside a Box: Column/Row children do not overlap. The iOS implementation degrades to zIndex(-1) for the view-ID form, so there is no richer behaviour to port."
     },
     {
       "component": "common",

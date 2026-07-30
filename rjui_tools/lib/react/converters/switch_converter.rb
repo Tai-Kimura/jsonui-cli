@@ -19,7 +19,10 @@ module RjuiTools
           checked_attr = build_checked_attr
           on_change = build_on_change
           disabled_attr = build_disabled_attr
-          tint_color = attributes['tintColor'] || attributes['onTintColor'] || '#34C759'
+          # `onTintColor` is the track colour when on, `tint` and `tintColor` are the
+          # generic spellings (kjui: onTintColor || tint || tintColor).
+          tint_color = attributes['onTintColor'] || attributes['tint'] ||
+                       attributes['tintColor'] || '#34C759'
           thumb_color = attributes['thumbTintColor'] || '#FFFFFF'
           off_tint_color = attributes['offTintColor'] || '#E5E7EB'
 

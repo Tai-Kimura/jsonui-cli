@@ -11,6 +11,7 @@ require 'react/converters/select_box_converter'
 require 'react/converters/text_field_converter'
 require 'react/converters/collection_converter'
 require 'react/data_model_generator'
+require 'react/converters/view_converter'
 
 # `bind` is the alternative spelling for a component's primary value binding.
 # It is honoured by eight Compose components and by the iOS checkbox/text-field
@@ -95,6 +96,68 @@ RSpec.describe 'bind as the primary value binding' do
       field = generator.send(:extract_value_bindings, { 'type' => 'TextField', 'bind' => '@{name}' })
       expect(slider['vol'][:type]).to eq('number')
       expect(field['name'][:type]).to eq('string')
+    end
+  end
+end
+
+# indexBelow / tint — two more spellings web read nowhere.
+RSpec.describe 'z-order and tint spellings on web' do
+  let(:config) { { 'use_tailwind' => true } }
+
+  def view(extra)
+    RjuiTools::React::Converters::ViewConverter.new(
+      { 'class' => 'View', 'width' => 10, 'height' => 10 }.merge(extra), config
+    ).convert(2)
+  end
+
+  # CSS has no relative z-order, so this lands on the same answer the iOS
+  # codegen gives for the view-ID form: behind, at z -1.
+  it 'places a view behind for indexBelow' do
+    expect(view('indexBelow' => 'header')).to include('z-[-1]')
+  end
+
+  # An explicit zIndex is the author being specific.
+  it 'yields to an explicit zIndex' do
+    result = view('indexBelow' => 'header', 'zIndex' => 50)
+    expect(result).to include('z-50')
+    expect(result).not_to include('z-[-1]')
+  end
+
+  it 'emits no z class without indexBelow' do
+    expect(view({})).not_to include('z-')
+  end
+
+  describe 'tint' do
+    def control(klass, extra)
+      klass.new({ 'class' => 'Switch' }.merge(extra), config).convert(2)
+    end
+
+    it 'colours the Switch track' do
+      expect(control(RjuiTools::React::Converters::SwitchConverter, 'tint' => '#FF0000'))
+        .to include('#FF0000')
+    end
+
+    it 'colours the Toggle' do
+      expect(control(RjuiTools::React::Converters::ToggleConverter, 'tint' => '#FF0000'))
+        .to include('#FF0000')
+    end
+
+    # Same precedence as kjui's switch_component: onTintColor || tint || tintColor.
+    it 'yields to onTintColor' do
+      result = control(RjuiTools::React::Converters::SwitchConverter,
+                       'tint' => '#FF0000', 'onTintColor' => '#00FF00')
+      expect(result).to include('#00FF00')
+      expect(result).not_to include('#FF0000')
+    end
+
+    # The track colour is the `peer-checked:bg-[...]` class. `tintColor` also
+    # feeds `accentColor` from base_converter, which is a different CSS property
+    # and stays where it is.
+    it 'wins over the tintColor alias for the track' do
+      result = control(RjuiTools::React::Converters::SwitchConverter,
+                       'tint' => '#FF0000', 'tintColor' => '#0000FF')
+      expect(result).to include('peer-checked:bg-[#FF0000]')
+      expect(result).not_to include('peer-checked:bg-[#0000FF]')
     end
   end
 end

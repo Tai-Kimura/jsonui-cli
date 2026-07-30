@@ -3251,10 +3251,6 @@
       "type": "array",
       "description": "Child components (alias for child)"
     },
-    "alignment": {
-      "type": "string",
-      "description": "Child alignment"
-    },
     "distribution": {
       "type": "string",
       "enum": [

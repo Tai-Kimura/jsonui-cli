@@ -13,12 +13,11 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "Switch",
+      "type": "Toggle",
       "id": "target",
       "width": "wrapContent",
       "height": "wrapContent",
-      "isOn": true,
-      "tint": "#FF0000"
+      "isOn": true
     }
   ]
 }

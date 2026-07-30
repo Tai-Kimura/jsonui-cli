@@ -522,6 +522,14 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     "SelectBox.dateStringFormat": {"selectItemType": "Date"},
     # minuteInterval is a step through minutes, so it needs a time-bearing mode.
     "SelectBox.minuteInterval": {"selectItemType": "Date", "datePickerMode": "time"},
+    # The ON-state colours are invisible on an off switch, so the fixture
+    # rendered pixel-identical to its control and read as inert.
+    "Switch.tint": {"isOn": True},
+    "Switch.tintColor": {"isOn": True},
+    "Switch.onTintColor": {"isOn": True},
+    "Toggle.tint": {"isOn": True},
+    "Toggle.tintColor": {"isOn": True},
+    "Toggle.onTintColor": {"isOn": True},
 }
 
 

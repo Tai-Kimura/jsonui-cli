@@ -79,9 +79,19 @@ module KjuiTools
             code += Helpers::ModifierBuilder.format(modifiers, depth, is_root: is_root)
           end
           
-          # Add gravity settings
-          if json_data['gravity']
-            code += add_gravity_settings(layout, json_data['gravity'], depth)
+          # Add gravity settings. `alignment` is the string alternative to
+          # gravity (SwiftUI Alignment spelling), so it normalises into the same
+          # parts and travels the same path — gravity wins when both are set,
+          # since it is the primary spelling.
+          gravity = json_data['gravity'] || alignment_as_gravity(json_data['alignment'])
+          if gravity
+            gravity_code = add_gravity_settings(layout, gravity, depth)
+            # Each clause is emitted with a leading comma, which is only correct
+            # when an argument precedes it. A container with gravity but no
+            # modifiers has none — that emitted `Column(,`, which does not
+            # compile. The condition mirrors the modifier emission above exactly.
+            gravity_code = gravity_code.sub(/\A,/, '') unless modifiers.any? || is_root
+            code += gravity_code
           end
           
           # Add direction settings
@@ -178,6 +188,28 @@ module KjuiTools
           end
         end
         
+        #: `alignment` -> the gravity parts that mean the same thing. The
+        #: SwiftUI reading is authoritative: `top` is top-and-horizontally-
+        #: centred, `leading` is leading-and-vertically-centred, and so on
+        #: (StackAlignmentHelper#get_zstack_alignment maps the same nine values).
+        ALIGNMENT_GRAVITY = {
+          'topleading' => %w[top left],
+          'top' => %w[top centerHorizontal],
+          'toptrailing' => %w[top right],
+          'leading' => %w[centerVertical left],
+          'center' => %w[center],
+          'trailing' => %w[centerVertical right],
+          'bottomleading' => %w[bottom left],
+          'bottom' => %w[bottom centerHorizontal],
+          'bottomtrailing' => %w[bottom right]
+        }.freeze
+
+        def self.alignment_as_gravity(alignment)
+          return nil unless alignment.is_a?(String)
+
+          ALIGNMENT_GRAVITY[alignment.downcase]
+        end
+
         def self.add_gravity_settings(layout, gravity, depth)
           code = ""
 

@@ -343,6 +343,20 @@ module RjuiTools
           # Z-index
           classes << TailwindMapper.map_z_index(attributes['zIndex']) if attributes['zIndex']
 
+          # indexBelow — "place below the named view". CSS has no relative
+          # z-order, so this lands on the same answer the iOS codegen gives for
+          # the view-ID form: behind, at z -1 (base_view_converter). A true
+          # relative order would need the other element's resolved z, which is
+          # not knowable at codegen time. An explicit `zIndex` is the author
+          # being specific, so it wins.
+          #
+          # No numeric branch: the attribute is declared `type: string`, so a
+          # number never reaches here (TypedAttributes drops it). iOS honours one
+          # only because that converter reads raw JSON.
+          if attributes['indexBelow'] && !attributes['zIndex']
+            classes << TailwindMapper.map_z_index(-1)
+          end
+
           # Flex grow (weight)
           classes << TailwindMapper.map_flex_grow(attributes['weight']) if attributes['weight']
 

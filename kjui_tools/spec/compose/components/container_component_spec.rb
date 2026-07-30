@@ -447,4 +447,65 @@ RSpec.describe KjuiTools::Compose::Components::ContainerComponent do
       expect(result).to eq('Box')
     end
   end
+
+  # `alignment` is the string alternative to gravity, so it normalises into the
+  # same parts and travels the same path. The SwiftUI reading is authoritative:
+  # `top` is top-and-horizontally-centred, `leading` is
+  # leading-and-vertically-centred.
+  describe 'alignment' do
+    def container(extra)
+      code = described_class.generate(
+        { 'type' => 'View', 'child' => [{ 'type' => 'Label', 'text' => 'x' }] }.merge(extra),
+        0, required_imports
+      )
+      code.is_a?(Hash) ? code[:code] : code
+    end
+
+    it 'splits a compound alignment across both axes of a Column' do
+      result = container('orientation' => 'vertical', 'alignment' => 'bottomTrailing')
+      expect(result).to include('verticalArrangement = Arrangement.Bottom')
+      expect(result).to include('horizontalAlignment = Alignment.End')
+    end
+
+    it 'splits it across both axes of a Row' do
+      result = container('orientation' => 'horizontal', 'alignment' => 'top')
+      expect(result).to include('verticalAlignment = Alignment.Top')
+      expect(result).to include('horizontalArrangement = Arrangement.Center')
+    end
+
+    it 'resolves to a single contentAlignment on a Box' do
+      expect(container('alignment' => 'leading')).to include('contentAlignment = Alignment.CenterStart')
+    end
+
+    it 'centres both axes for center' do
+      result = container('orientation' => 'vertical', 'alignment' => 'center')
+      expect(result).to include('verticalArrangement = Arrangement.Center')
+      expect(result).to include('horizontalAlignment = Alignment.CenterHorizontally')
+    end
+
+    # gravity is the primary spelling.
+    it 'yields to gravity when both are set' do
+      result = container('orientation' => 'vertical', 'gravity' => 'top', 'alignment' => 'bottom')
+      expect(result).to include('verticalArrangement = Arrangement.Top')
+      expect(result).not_to include('Arrangement.Bottom')
+    end
+
+    it 'ignores a value that is not one of the nine' do
+      result = container('orientation' => 'vertical', 'alignment' => 'sideways')
+      expect(result).not_to include('verticalArrangement')
+    end
+
+    # Each clause is emitted with a leading comma, which is only correct when an
+    # argument precedes it — a container with no modifiers has none, and that
+    # emitted `Column(,`.
+    it 'emits compilable Kotlin with no modifiers of its own' do
+      expect(container('orientation' => 'vertical', 'alignment' => 'center')).not_to include('Column(,')
+      expect(container('orientation' => 'vertical', 'gravity' => 'center')).not_to include('Column(,')
+    end
+
+    it 'keeps the comma when a modifier precedes the clause' do
+      result = container('id' => 'wrap', 'orientation' => 'vertical', 'alignment' => 'center')
+      expect(result).to include("},\n    verticalArrangement")
+    end
+  end
 end

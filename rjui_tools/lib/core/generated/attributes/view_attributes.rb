@@ -9,14 +9,12 @@ require_relative 'common_attributes'
 module JsonUI
   module Generated
     # Typed attribute extraction for the `View` component.
-    # Overrides the common definition of: `alignment`, `distribution`.
+    # Overrides the common definition of: `distribution`.
     module ViewAttributes
       # Declared-attribute rows — part of the public metadata
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
-        # Child alignment
-        { name: 'alignment', kind: :string }.freeze,
         # Child component(s)
         { name: 'child', kind: :array }.freeze,
         # Child components (alias for child)

@@ -115,7 +115,8 @@ module RjuiTools
         end
 
         def build_checkbox_style
-          tint_color = attributes['tintColor'] || attributes['onTintColor']
+          # Same precedence as kjui's switch_component: onTintColor || tint || tintColor.
+          tint_color = attributes['onTintColor'] || attributes['tint'] || attributes['tintColor']
           return '' unless tint_color
 
           " style={{ accentColor: '#{tint_color}' }}"

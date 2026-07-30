@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/__control/Switch__isOn-True.layout.json"
+  },
+  "metadata": {
+    "name": "conformance control Switch",
+    "description": "Control for Switch: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "control"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "Switch__isOn-True",
+      "description": "Control for Switch: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "control_Switch__isOn-True"
+        }
+      ]
+    }
+  ]
+}

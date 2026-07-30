@@ -17,6 +17,7 @@
       "id": "target",
       "width": "wrapContent",
       "height": "wrapContent",
+      "isOn": true,
       "onTintColor": "#FF0000"
     }
   ]
