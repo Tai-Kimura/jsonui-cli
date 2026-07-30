@@ -40,6 +40,7 @@ module SjuiTools
           add_line "}"
           add_modifier_line ".pickerStyle(.segmented)"
           apply_segment_appearance
+          apply_value_change
 
           # (appearance emitted above; see apply_segment_appearance)
 
@@ -67,6 +68,33 @@ module SjuiTools
           generated_code
         end
         private
+
+        # valueChange — the selector-based handler, string only.
+        #
+        # UIKit wires it with `addTarget(_:action:for:.valueChanged)`
+        # (SJUISegmentedControl:62). It is the lowercase sibling of
+        # `onValueChange`, which takes a binding; this one names a method
+        # directly, so it emits an `.onChange` that calls that method on the data
+        # object. Nothing read it on the SwiftUI path.
+        def apply_value_change
+          handler = @component['valueChange']
+          return if handler.nil? || handler.to_s.empty?
+          # A binding here is `onValueChange`'s job, not this attribute's.
+          return if is_binding?(handler)
+
+          binding_prop = if @component['selectedIndex'] && is_binding?(@component['selectedIndex'])
+                           extract_binding_property(@component['selectedIndex'])
+                         elsif @component['selectedTabIndex'] && is_binding?(@component['selectedTabIndex'])
+                           extract_binding_property(@component['selectedTabIndex'])
+                         end
+          return if binding_prop.nil?
+
+          add_modifier_line ".onChange(of: data.#{binding_prop}) { _, newValue in"
+          indent do
+            add_line "data.#{to_camel_case(handler.to_s)}(newValue)"
+          end
+          add_line "}"
+        end
 
         # normalColor / selectedColor — unselected and selected title colours.
         #

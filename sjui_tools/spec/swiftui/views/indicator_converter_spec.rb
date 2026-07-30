@@ -146,5 +146,32 @@ RSpec.describe SjuiTools::SwiftUI::Views::IndicatorConverter do
         expect(code).to include('.cornerRadius(8)')
       end
     end
+
+    # hidesWhenStopped is UIActivityIndicatorView's own property, which
+    # SJUIViewCreator sets. The codegen read it nowhere, so `false` — keep the
+    # stopped indicator's space — behaved like the default.
+    describe 'hidesWhenStopped' do
+      it 'collapses a stopped indicator by default' do
+        code = described_class.new({ 'type' => 'Indicator', 'animating' => false }).convert
+        expect(code).to include('EmptyView()')
+      end
+
+      it 'keeps the space when false' do
+        code = described_class.new(
+          { 'type' => 'Indicator', 'animating' => false, 'hidesWhenStopped' => false }
+        ).convert
+        expect(code).to include('ProgressView()')
+        expect(code).to include('.opacity(0)')
+        expect(code).not_to include('EmptyView()')
+      end
+
+      it 'drives opacity from the binding when false' do
+        code = described_class.new({
+          'type' => 'Indicator', 'animating' => '@{isLoading}', 'hidesWhenStopped' => false
+        }).convert
+        expect(code).to include('.opacity(data.isLoading ? 1 : 0)')
+        expect(code).not_to include('if data.isLoading {')
+      end
+    end
   end
 end

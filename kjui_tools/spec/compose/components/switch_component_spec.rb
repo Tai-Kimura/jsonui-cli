@@ -136,5 +136,32 @@ RSpec.describe KjuiTools::Compose::Components::SwitchComponent do
       # Should use default 'switch' as viewId
       expect(result).to include('data.onToggle?.invoke("switch", newValue)')
     end
+
+  # labelPosition was read by nobody in the Compose codegen while the Dynamic
+  # runtime honoured it, so the label was always leading.
+  describe 'labelPosition' do
+    def emit(extra)
+      described_class.generate(
+        { 'type' => 'Switch', 'labelAttributes' => { 'text' => 'Wifi' }, 'isOn' => true }.merge(extra),
+        0, nil, nil
+      )
+    end
+
+    it 'puts the label before the Switch by default' do
+      code = emit({})
+      expect(code.index('Text(')).to be < code.index('Switch(')
+    end
+
+    it 'puts the label after the Switch for trailing' do
+      code = emit('labelPosition' => 'trailing')
+      expect(code.index('Switch(')).to be < code.index('Text(')
+    end
+
+    it 'treats an unknown value as leading rather than dropping the label' do
+      code = emit('labelPosition' => 'sideways')
+      expect(code).to include('Text(')
+      expect(code.index('Text(')).to be < code.index('Switch(')
+    end
+  end
   end
 end

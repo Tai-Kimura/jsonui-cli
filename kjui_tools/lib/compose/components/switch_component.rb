@@ -149,28 +149,15 @@ module KjuiTools
           code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
           code += "\n" + indent(") {", depth)
 
-          # Label Text
-          label_text = label_attrs['text'] || ''
-          code += "\n" + indent("Text(", depth + 1)
-          code += "\n" + indent("text = \"#{label_text}\",", depth + 2)
-
-          # Font attributes
-          if label_attrs['fontSize']
-            code += "\n" + indent("fontSize = #{label_attrs['fontSize']}.sp,", depth + 2)
-          end
-
-          if label_attrs['fontColor']
-            font_color = Helpers::ResourceResolver.process_color(label_attrs['fontColor'], required_imports)
-            code += "\n" + indent("color = #{font_color},", depth + 2)
-          end
-
-          if label_attrs['font']
-            font_weight = label_attrs['font'].downcase == 'bold' ? 'FontWeight.Bold' : 'FontWeight.Normal'
-            code += "\n" + indent("fontWeight = #{font_weight},", depth + 2)
-          end
-
-          code += "\n" + indent("modifier = Modifier.weight(1f)", depth + 2)
-          code += "\n" + indent(")", depth + 1)
+          # labelPosition — which side of the Switch the label sits on.
+          #
+          # The label was always emitted first, i.e. always leading, and the
+          # attribute was read by nobody: the Compose codegen ignored it while
+          # the Dynamic runtime honoured it (DynamicToggleComponent). Built as a
+          # separate string so it can be placed either side.
+          label_code = build_label_code(label_attrs, depth, required_imports)
+          label_position = (json_data['labelPosition'] || 'leading').to_s.downcase
+          code += label_code unless label_position == 'trailing'
 
           # Switch
           code += "\n" + indent("Switch(", depth + 1)
@@ -241,8 +228,35 @@ module KjuiTools
           end
 
           code += "\n" + indent(")", depth + 1)
+          code += label_code if label_position == 'trailing'
           code += "\n" + indent("}", depth)
           code
+        end
+
+        # The label Text block, as a string, so generate_with_label can put it
+        # before or after the Switch depending on labelPosition.
+        def self.build_label_code(label_attrs, depth, required_imports)
+          out = "\n" + indent("Text(", depth + 1)
+          out += "\n" + indent("text = \"#{label_attrs['text'] || ''}\",", depth + 2)
+
+          if label_attrs['fontSize']
+            out += "\n" + indent("fontSize = #{label_attrs['fontSize']}.sp,", depth + 2)
+          end
+
+          if label_attrs['fontColor']
+            font_color = Helpers::ResourceResolver.process_color(label_attrs['fontColor'], required_imports)
+            out += "\n" + indent("color = #{font_color},", depth + 2)
+          end
+
+          if label_attrs['font']
+            font_weight = label_attrs['font'].downcase == 'bold' ? 'FontWeight.Bold' : 'FontWeight.Normal'
+            out += "\n" + indent("fontWeight = #{font_weight},", depth + 2)
+          end
+
+          # weight(1f) on the label pushes the Switch to the far edge, which is
+          # what you want on either side.
+          out += "\n" + indent("modifier = Modifier.weight(1f)", depth + 2)
+          out + "\n" + indent(")", depth + 1)
         end
 
         private

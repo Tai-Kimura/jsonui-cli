@@ -10,18 +10,42 @@ module SjuiTools
           # Check for animating property binding
           animating = @component['animating']
 
+          # hidesWhenStopped — UIActivityIndicatorView's own property, which
+          # SJUIViewCreator sets. Default TRUE, matching UIKit: a stopped
+          # indicator disappears. `false` keeps the (stopped) indicator in the
+          # layout, so it has to render rather than collapse to EmptyView — the
+          # difference is whether the surrounding layout reflows, which is the
+          # whole reason the attribute exists.
+          hides_when_stopped = @component['hidesWhenStopped']
+          hides_when_stopped = true if hides_when_stopped.nil?
+
           if animating == false
-            # Static false - don't show indicator
-            add_line "EmptyView()"
+            if hides_when_stopped
+              # Static false - don't show indicator
+              add_line "EmptyView()"
+            else
+              # Keeps its space: a stopped indicator that still occupies layout.
+              generate_progress_view
+              @modifier_bag.append(:component_specific, ".opacity(0)")
+            end
           elsif animating.is_a?(String) && animating.match(/@\{([^}]+)\}/)
             # Animating is a binding
             variable = $1
-            # Wrap in if condition based on binding
-            add_line "if data.#{to_camel_case(variable)} {"
-            indent do
+            if hides_when_stopped
+              # Wrap in if condition based on binding
+              add_line "if data.#{to_camel_case(variable)} {"
+              indent do
+                generate_progress_view
+              end
+              add_line "}"
+            else
+              prop = to_camel_case(variable)
               generate_progress_view
+              @modifier_bag.append(
+                :component_specific,
+                ".opacity(data.#{prop} ? 1 : 0)"
+              )
             end
-            add_line "}"
           else
             # Static true, any truthy value, or no animating property - always show
             generate_progress_view

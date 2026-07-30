@@ -133,6 +133,8 @@ module SjuiTools
               add_line "// highlightColor: #{@component['highlightColor']} - Note: Text highlighting handled via selection in SwiftUI"
             end
 
+
+
             # Add underline
             if @component['underline']
               add_line "underline: true,"
@@ -178,6 +180,9 @@ module SjuiTools
             @generated_code[-1] = @generated_code[-1].chomp(',')
           end
           add_line ")"
+
+          apply_text_shadow
+          apply_highlight_attributes
 
           # lineBreakMode (SwiftJsonUI uses short forms: Char, Clip, Word, Head, Middle, Tail)
           if @component['lineBreakMode']
@@ -394,6 +399,66 @@ module SjuiTools
             # Direct color value
             get_swiftui_color(font_color)
           end
+        end
+        # textShadow — `{ color:, blur:, offset: [x, y] }`, the same shape UIKit
+        # turns into an NSShadow (SJUILabel: `attributes[.shadow] = s`).
+        #
+        # SwiftUI's `.shadow(color:radius:x:y:)` is the direct equivalent. The
+        # attribute was read by nobody on the SwiftUI path, so a label with a
+        # shadow rendered flat. A bare string form is accepted as a colour with
+        # UIKit's default 1pt blur, since the attribute is declared
+        # `["string", "object"]`.
+        def apply_text_shadow
+          shadow = @component['textShadow']
+          return if shadow.nil?
+
+          if shadow.is_a?(String)
+            @modifier_bag.append(
+              :component_specific,
+              ".shadow(color: #{get_swiftui_color(shadow)}, radius: 1, x: 0, y: 1)"
+            )
+            return
+          end
+          return unless shadow.is_a?(Hash)
+
+          color = shadow['color'] ? get_swiftui_color(shadow['color']) : 'Color.black.opacity(0.3)'
+          blur = shadow['blur'] || 1
+          offset = shadow['offset']
+          x, y = offset.is_a?(Array) && offset.length >= 2 ? [offset[0], offset[1]] : [0, 1]
+          @modifier_bag.append(
+            :component_specific,
+            ".shadow(color: #{color}, radius: #{blur}, x: #{x}, y: #{y})"
+          )
+        end
+        # highlightAttributes — the styling used while the label is highlighted.
+        #
+        # UIKit builds a second attribute dictionary and swaps to it when
+        # `isHighlighted` flips (SJUILabel: `l.highlightAttributes = ...`).
+        # SwiftUI has no highlighted state on a Text, so — as with
+        # Image.highlightSrc — the swap is driven by a zero-duration press.
+        # Only `fontColor` is expressible as a modifier; font and size would
+        # need a second PartialAttributedText, which is a bigger change than
+        # this attribute has ever justified, and are left unhandled rather than
+        # emitted wrongly.
+        def apply_highlight_attributes
+          attrs = @component['highlightAttributes']
+          return unless attrs.is_a?(Hash)
+
+          color = attrs['fontColor']
+          return if color.nil?
+
+          state_var = "#{(@component['id'] || 'label').gsub(/[^A-Za-z0-9]/, '_')}IsHighlighted"
+          @state_variables ||= []
+          @state_variables << "@State private var #{state_var} = false"
+
+          @modifier_bag.append(
+            :component_specific,
+            ".foregroundColor(#{state_var} ? #{get_swiftui_color(color)} : nil)"
+          )
+          @modifier_bag.append(
+            :component_specific,
+            ".onLongPressGesture(minimumDuration: 0, pressing: { #{state_var} = $0 }, perform: {})"
+          )
         end
       end
     end

@@ -28,6 +28,7 @@ module SjuiTools
           :allows_hit_testing,  # allowsHitTesting
           :tint_color,          # tint
           :on_click,            # contentShape + onTapGesture
+          :on_long_press,       # onLongPressGesture
           :on_value_change,     # onChange handlers
           :on_text_change,      # text change handlers
           :on_appear,           # onAppear
@@ -47,6 +48,7 @@ module SjuiTools
           :frame_constraints,
           :frame_size,
           :on_click,
+          :on_long_press,
           :on_value_change,
           :on_text_change,
           :on_appear,

@@ -438,5 +438,51 @@ RSpec.describe SjuiTools::SwiftUI::Views::LabelConverter do
 
       expect(full_code).to compile_as_swift
     end
+
+    # Both were read by nobody on the SwiftUI path: a label with a shadow
+    # rendered flat, and highlightAttributes was dropped entirely.
+    describe 'textShadow' do
+      it 'maps the object form onto .shadow' do
+        code = described_class.new({
+          'type' => 'Label', 'text' => 'Hi',
+          'textShadow' => { 'color' => '#333333', 'blur' => 3, 'offset' => [1, 2] }
+        }).convert
+        expect(code).to include('radius: 3, x: 1, y: 2')
+      end
+
+      it 'accepts the bare colour form the attribute also declares' do
+        code = described_class.new(
+          { 'type' => 'Label', 'text' => 'Hi', 'textShadow' => '#333333' }
+        ).convert
+        expect(code).to include('.shadow(color:')
+      end
+
+      it 'emits nothing when absent' do
+        code = described_class.new({ 'type' => 'Label', 'text' => 'Hi' }).convert
+        expect(code).not_to include('.shadow(')
+      end
+    end
+
+    describe 'highlightAttributes' do
+      it 'swaps the colour on press, since SwiftUI Text has no highlight state' do
+        converter = described_class.new({
+          'type' => 'Label', 'id' => 'title', 'text' => 'Hi',
+          'highlightAttributes' => { 'fontColor' => '#FF0000' }
+        })
+        code = converter.convert
+
+        expect(code).to include('titleIsHighlighted ?')
+        expect(code).to include('.onLongPressGesture(minimumDuration: 0')
+        expect(converter.state_variables)
+          .to include('@State private var titleIsHighlighted = false')
+      end
+
+      it 'ignores a highlightAttributes with nothing expressible in it' do
+        code = described_class.new({
+          'type' => 'Label', 'text' => 'Hi', 'highlightAttributes' => { 'fontSize' => 20 }
+        }).convert
+        expect(code).not_to include('IsHighlighted')
+      end
+    end
   end
 end

@@ -35,6 +35,14 @@ module SjuiTools
             color = get_swiftui_color(@component['trackTintColor'])
             add_modifier_line ".background(#{color})"
           end
+
+          # hidesWhenStopped — the UIActivityIndicatorView property SJUIViewCreator
+          # sets. On a determinate ProgressView "stopped" is progress == 0, so
+          # this hides the bar until there is progress to show. Read by nobody
+          # before, which meant a Progress declared with it stayed visible at 0.
+          if @component['hidesWhenStopped'] == true
+            add_modifier_line ".opacity(#{progress_value} > 0 ? 1 : 0)"
+          end
           
           # 共通のモディファイアを適用
           apply_modifiers

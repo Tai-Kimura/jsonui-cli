@@ -90,15 +90,6 @@
     },
     {
       "component": "Collection",
-      "attribute": "contentInsets",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "Collection",
       "attribute": "currentPage",
       "platforms": [
         "web"
@@ -118,17 +109,7 @@
       "component": "Collection",
       "attribute": "insetVertical",
       "platforms": [
-        "ios",
         "web"
-      ],
-      "reason": "unimplemented",
-      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "Collection",
-      "attribute": "itemWeight",
-      "platforms": [
-        "ios"
       ],
       "reason": "unimplemented",
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
@@ -261,7 +242,6 @@
       "component": "IconLabel",
       "attribute": "textShadow",
       "platforms": [
-        "ios",
         "web"
       ],
       "reason": "unimplemented",
@@ -302,19 +282,9 @@
       "reason": "unimplemented"
     },
     {
-      "component": "Indicator",
-      "attribute": "hidesWhenStopped",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
       "component": "Label",
       "attribute": "highlightAttributes",
       "platforms": [
-        "ios",
         "android",
         "web"
       ],
@@ -341,7 +311,6 @@
       "component": "Label",
       "attribute": "textShadow",
       "platforms": [
-        "ios",
         "web"
       ],
       "reason": "unimplemented",
@@ -368,15 +337,6 @@
       "attribute": "loadingImage",
       "platforms": [
         "android"
-      ],
-      "reason": "unimplemented",
-      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "Progress",
-      "attribute": "hidesWhenStopped",
-      "platforms": [
-        "ios"
       ],
       "reason": "unimplemented",
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
@@ -490,7 +450,6 @@
       "component": "Segment",
       "attribute": "valueChange",
       "platforms": [
-        "ios",
         "android",
         "web"
       ],
@@ -562,15 +521,6 @@
         "web"
       ],
       "reason": "unimplemented"
-    },
-    {
-      "component": "Switch",
-      "attribute": "labelPosition",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "codegen 未対応。ランタイム側に実装あり (android: Kotlin Dynamic) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "Switch",
@@ -851,15 +801,6 @@
     },
     {
       "component": "Toggle",
-      "attribute": "labelPosition",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "codegen 未対応。ランタイム側に実装あり (android: Kotlin Dynamic) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "Toggle",
       "attribute": "onToggle",
       "platforms": [
         "web"
@@ -905,7 +846,6 @@
       "component": "View",
       "attribute": "highlighted",
       "platforms": [
-        "ios",
         "android"
       ],
       "reason": "unimplemented",
@@ -1128,14 +1068,6 @@
     },
     {
       "component": "common",
-      "attribute": "onLongPress",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "common",
       "attribute": "onPan",
       "platforms": [
         "ios",
@@ -1151,15 +1083,6 @@
         "android"
       ],
       "reason": "unimplemented"
-    },
-    {
-      "component": "common",
-      "attribute": "onclick",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
       "component": "common",

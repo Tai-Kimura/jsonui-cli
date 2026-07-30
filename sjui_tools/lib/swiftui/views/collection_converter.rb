@@ -1562,13 +1562,16 @@ module SjuiTools
         # Used for LazyVGrid paths that previously had .padding(.horizontal)
         # insets format: [top, left, bottom, right]
         def apply_grid_padding
-          insets = @component['insets']
-          if insets.is_a?(Array) && insets.length == 4
-            top, left, bottom, right = insets.map(&:to_i)
+          insets = collection_insets_array(@component['insets']) ||
+                   collection_insets_array(@component['contentInsets'])
+          if insets
+            top, left, bottom, right = insets
             add_modifier_line ".padding(EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right}))"
           else
             add_modifier_line ".padding(.horizontal)"
           end
+          apply_inset_vertical
+          apply_item_weight
         end
 
         # Resolve the `lazy` attribute into one of three symbols matching
@@ -1602,11 +1605,67 @@ module SjuiTools
         # Convert array-form insets to a Swift EdgeInsets literal. Returns nil
         # when no insets attribute is present so the generator can omit the
         # parameter (uses CollectionStackView's default `nil`).
+        #
+        # Reads `contentInsets` as well as `insets`. Both are declared and the
+        # UIKit runtime honours both — SJUICollectionView parses `contentInsets`
+        # (string "t|l|b|r" or array) into the section inset — while this only
+        # looked at `insets`, so the SwiftUI path dropped it. `insets` wins when
+        # both are present, matching UIKit's order.
         def collection_content_insets_swift_expr
-          insets = @component['insets']
-          return nil unless insets.is_a?(Array) && insets.length == 4
-          top, left, bottom, right = insets.map(&:to_i)
+          insets = collection_insets_array(@component['insets']) ||
+                   collection_insets_array(@component['contentInsets'])
+          return nil unless insets
+          top, left, bottom, right = insets
           "EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right})"
+        end
+
+        # `[t, l, b, r]` from either the array form or UIKit's pipe-separated
+        # string form, or nil when the value is not usable. A short array is
+        # padded the way SJUICollectionView pads it (1 value = all sides,
+        # 2 = vertical/horizontal) rather than being dropped.
+        def collection_insets_array(value)
+          parts = case value
+                  when Array then value
+                  when String then value.split('|')
+                  else return nil
+                  end
+          nums = parts.map { |v| v.to_s.strip }.reject(&:empty?).map(&:to_i)
+          case nums.length
+          when 4 then nums
+          when 2 then [nums[0], nums[1], nums[0], nums[1]]
+          when 1 then [nums[0]] * 4
+          else nil
+          end
+        end
+
+        # itemWeight — the fraction of the container width one item takes.
+        #
+        # UIKit computes `itemSize.width = screenWidth * weight`
+        # (SJUICollectionView.getCollectionViewLayout). The SwiftUI equivalent is
+        # a containerRelativeFrame fraction, which is relative to the collection
+        # rather than the screen — the same intent, and correct inside a split
+        # view or a sheet where the screen is not the container.
+        def apply_item_weight
+          weight = @component['itemWeight']
+          return if weight.nil?
+
+          value = weight.to_f
+          return unless value > 0 && value <= 1.0
+
+          count = (1.0 / value).round
+          add_modifier_line ".containerRelativeFrame(.horizontal, count: #{count}, span: 1, spacing: 0)"
+        end
+
+        # insetVertical — vertical-only content inset.
+        #
+        # UIKit folds it into the section inset; here it is vertical padding on
+        # the scroll content, which is what the attribute says and what the
+        # Dynamic runtime does.
+        def apply_inset_vertical
+          value = @component['insetVertical']
+          return if value.nil?
+
+          add_modifier_line ".padding(.vertical, #{value})"
         end
 
         # Open a CollectionStackView(...) call. The caller is responsible for
@@ -1699,12 +1758,18 @@ module SjuiTools
 
         # Apply insets only when explicitly specified (no default padding)
         # Used for LazyVStack paths that originally had no padding
+        # Every collection path funnels through here for its content padding,
+        # so `contentInsets` / `itemWeight` / `insetVertical` are applied here
+        # too rather than at each of the eight call sites.
         def apply_insets_only
-          insets = @component['insets']
-          if insets.is_a?(Array) && insets.length == 4
-            top, left, bottom, right = insets.map(&:to_i)
+          insets = collection_insets_array(@component['insets']) ||
+                   collection_insets_array(@component['contentInsets'])
+          if insets
+            top, left, bottom, right = insets
             add_modifier_line ".padding(EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right}))"
           end
+          apply_inset_vertical
+          apply_item_weight
         end
 
         def to_camel_case(str)

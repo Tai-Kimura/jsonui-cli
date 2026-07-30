@@ -93,11 +93,41 @@ module SjuiTools
             end
           end
           add_line ")"
-          
+
+          apply_text_shadow
+
           # Apply common modifiers
           apply_modifiers
           
           generated_code
+        end
+
+        private
+
+        # textShadow — declared as a plain string here (a colour) rather than the
+        # object form Label takes, and UIKit passes it straight through to
+        # SJUILabelWithIcon as `shadow:`. Nothing read it on the SwiftUI path.
+        # The object form is accepted too, so a layout that shares a style block
+        # with a Label behaves the same.
+        def apply_text_shadow
+          shadow = @component['textShadow']
+          return if shadow.nil?
+
+          if shadow.is_a?(Hash)
+            color = shadow['color'] ? get_swiftui_color(shadow['color']) : 'Color.black.opacity(0.3)'
+            blur = shadow['blur'] || 1
+            offset = shadow['offset']
+            x, y = offset.is_a?(Array) && offset.length >= 2 ? [offset[0], offset[1]] : [0, 1]
+          else
+            color = get_swiftui_color(shadow)
+            blur = 1
+            x = 0
+            y = 1
+          end
+          @modifier_bag.append(
+            :component_specific,
+            ".shadow(color: #{color}, radius: #{blur}, x: #{x}, y: #{y})"
+          )
         end
       end
     end

@@ -569,8 +569,13 @@ module SjuiTools
           end
 
           # クリックイベント
-          # SwiftUI uses onClick only (onclick is UIKit only)
           # onClick (camelCase) -> binding format only (@{functionName})
+          # `onclick` (lowercase) names a method directly — no binding — and is
+          # what UIKit wires to a UITapGestureRecognizer selector
+          # (SJUIView: `Selector(onclick)`). It was declared, used in real
+          # layouts, and read by nobody on the SwiftUI path, so every screen
+          # migrating from UIKit lost its taps silently. camelCase wins when
+          # both are present.
           # ただし、Buttonの場合は既にactionで処理しているのでスキップ
           unless @component['type'] == 'Button'
             # enabled=falseの場合はクリックイベントを追加しない
@@ -578,15 +583,69 @@ module SjuiTools
               if @component['onClick']
                 on_click_lines = build_on_click_lines(@component['onClick'])
                 @modifier_bag.register(:on_click, on_click_lines)
+              elsif @component['onclick']
+                @modifier_bag.register(:on_click, build_selector_click_lines(@component['onclick']))
               end
             end
           end
+
+          apply_long_press_to_bag
+          apply_highlighted_to_bag
 
           # Lifecycle events (SwiftUI only)
           apply_lifecycle_events_to_bag
 
           # confirmationDialog (iOS 15+)
           apply_confirmation_dialog_to_bag
+        end
+
+        # `onclick` values are method names, not bindings: a bare string, or an
+        # array of them to call in order.
+        def build_selector_click_lines(value)
+          names = value.is_a?(Array) ? value : [value]
+          calls = names.map { |n| "    data.#{to_camel_case(n.to_s)}?()" }
+          [".onTapGesture {"] + calls + ["}"]
+        end
+
+        # onLongPress — binding-only (`@{handler}`), applied by the SwiftUI
+        # Dynamic runtime (DynamicEventHelper) and by nothing in the codegen.
+        def apply_long_press_to_bag
+          handler = @component['onLongPress']
+          return if handler.nil?
+          return unless is_binding?(handler)
+
+          prop = extract_binding_property(handler)
+          @modifier_bag.register(:on_long_press, [
+            ".onLongPressGesture {",
+            "    data.#{prop}?()",
+            "}"
+          ])
+        end
+
+        # highlighted — the pressed/selected appearance.
+        #
+        # UIKit swaps to `highlightBackgroundColor` when the flag is set
+        # (SJUIView:187). SwiftUI has no such state, so this emits the same
+        # swap against `highlightBackground`, driven by the flag. A binding lets
+        # the screen control it; a literal `true` pins it on, which is what
+        # UIKit's `attr["highlighted"].boolValue` does.
+        def apply_highlighted_to_bag
+          value = @component['highlighted']
+          return if value.nil?
+          highlight_bg = @component['highlightBackground']
+          return if highlight_bg.nil?
+
+          condition = if is_binding?(value)
+                        "data.#{extract_binding_property(value)}"
+                      elsif value == true || value == 'true'
+                        'true'
+                      else
+                        return
+                      end
+          @modifier_bag.append(
+            :component_specific,
+            ".background(#{condition} ? #{get_swiftui_color(highlight_bg)} : Color.clear)"
+          )
         end
 
         # Apply confirmationDialog modifier (iOS 15+) into the bag
