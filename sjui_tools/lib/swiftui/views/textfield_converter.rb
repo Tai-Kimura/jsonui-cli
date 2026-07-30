@@ -145,28 +145,53 @@ module SjuiTools
             end
           end
 
-          # FocusState support - sync with Data property for ViewModel control
-          if @component['id']
-            field_id = to_camel_case(@component['id'])
+          # FocusState support - sync with Data property for ViewModel control.
+          #
+          # Also where the focus handlers live. onFocus / onBeginEditing and
+          # onBlur / onEndEditing are the web and UIKit names for the same two
+          # moments; Compose wires all four (textfield_component: `onFocus = {
+          # ... }`) and the SwiftUI codegen wired none, so a field declared with
+          # them silently did nothing. Both names fire, in declaration order, so
+          # a layout that sets one or the other or both behaves the same.
+          # Written out rather than looped over a name list: the
+          # attribute-coverage scan matches a literal `@component['name']`, so a
+          # loop reads as "nobody consumes this" and the ledger keeps counting
+          # the attribute as unimplemented after it is implemented.
+          focus_handlers = [@component['onFocus'], @component['onBeginEditing']].compact
+          blur_handlers = [@component['onBlur'], @component['onEndEditing']].compact
+
+          if @component['id'] || focus_handlers.any? || blur_handlers.any?
+            field_id = to_camel_case(@component['id'] || 'field')
             focus_var = "#{field_id}IsFocused"
 
             @state_variables ||= []
             @state_variables << "@FocusState private var #{focus_var}: Bool"
 
             add_modifier_line ".focused($#{focus_var})"
-            # Sync: Data -> FocusState
-            add_modifier_line ".onChange(of: data.#{focus_var}) { _, newValue in"
-            indent do
-              add_line "#{focus_var} = newValue"
+            if @component['id']
+              # Sync: Data -> FocusState
+              add_modifier_line ".onChange(of: data.#{focus_var}) { _, newValue in"
+              indent do
+                add_line "#{focus_var} = newValue"
+              end
+              add_line "}"
             end
-            add_line "}"
-            # Sync: FocusState -> Data
+            # Sync: FocusState -> Data, plus the focus/blur handlers
             add_modifier_line ".onChange(of: #{focus_var}) { _, newValue in"
             indent do
-              add_line "data.#{focus_var} = newValue"
+              add_line "data.#{focus_var} = newValue" if @component['id']
+              if focus_handlers.any? || blur_handlers.any?
+                add_line "if newValue {"
+                indent { focus_handlers.each { |h| add_line "data.#{to_camel_case(h.to_s)}?()" } }
+                add_line "} else {"
+                indent { blur_handlers.each { |h| add_line "data.#{to_camel_case(h.to_s)}?()" } }
+                add_line "}"
+              end
             end
             add_line "}"
           end
+
+          apply_text_input_traits
 
           # Combined .onSubmit { } block — handles `nextFocus` (focus chain)
           # and/or `onSubmit` (user-defined handler). When both are set, focus
@@ -383,6 +408,63 @@ module SjuiTools
         def add_state_variable(name, type, default_value)
           @state_variables ||= []
           @state_variables << "@State private var #{name}: #{type} = #{default_value}"
+        end
+        private
+
+        # autocapitalizationType / autocorrectionType / maxLength / fieldPadding.
+        #
+        # All four are declared, all four are honoured by Compose or UIKit, and
+        # none were read here. The naming is UIKit's, but the concepts exist on
+        # every platform — `.textInputAutocapitalization` and
+        # `.autocorrectionDisabled` are the SwiftUI spellings.
+        def apply_text_input_traits
+          if (cap = @component['autocapitalizationType'])
+            resolved = case cap.to_s.downcase
+                       when 'none' then '.never'
+                       when 'words' then '.words'
+                       when 'sentences' then '.sentences'
+                       when 'allcharacters', 'characters' then '.characters'
+                       end
+            @modifier_bag.append(
+              :component_specific, ".textInputAutocapitalization(#{resolved})"
+            ) if resolved
+          end
+
+          if (corr = @component['autocorrectionType'])
+            disabled = %w[no none false off].include?(corr.to_s.downcase)
+            @modifier_bag.append(
+              :component_specific, ".autocorrectionDisabled(#{disabled})"
+            )
+          end
+
+          if (padding = @component['fieldPadding'])
+            @modifier_bag.append(:padding, ".padding(#{padding})")
+          end
+
+          apply_max_length
+        end
+
+        # maxLength — SwiftUI's TextField has no length limit, so it is enforced
+        # by truncating on change. Compose passes it to the value filter and web
+        # sets the `maxLength` attribute; here it needs a binding to write back
+        # to, and without one there is nothing to truncate.
+        def apply_max_length
+          max_length = @component['maxLength']
+          return if max_length.nil?
+
+          raw = @component['text'] || @component['value'] || @component['bind']
+          return unless raw.is_a?(String) && is_binding?(raw)
+
+          prop = extract_binding_property(raw)
+          indent_str = "    " * (@indent_level + 1)
+          @modifier_bag.append(
+            :on_text_change,
+            ".onChange(of: data.#{prop}) { _, newValue in\n" \
+            "#{indent_str}if newValue.count > #{max_length} {\n" \
+            "#{indent_str}    data.#{prop} = String(newValue.prefix(#{max_length}))\n" \
+            "#{indent_str}}\n" \
+            "#{indent_str[0...-4]}}"
+          )
         end
       end
     end

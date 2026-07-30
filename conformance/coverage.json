@@ -585,7 +585,6 @@
       "component": "TextField",
       "attribute": "autocapitalizationType",
       "platforms": [
-        "ios",
         "web"
       ],
       "reason": "unimplemented"
@@ -594,7 +593,6 @@
       "component": "TextField",
       "attribute": "autocorrectionType",
       "platforms": [
-        "ios",
         "web"
       ],
       "reason": "unimplemented"
@@ -618,23 +616,6 @@
     },
     {
       "component": "TextField",
-      "attribute": "fieldPadding",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "TextField",
-      "attribute": "maxLength",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextField",
       "attribute": "nextFocus",
       "platforms": [
         "android",
@@ -646,7 +627,6 @@
       "component": "TextField",
       "attribute": "onBeginEditing",
       "platforms": [
-        "ios",
         "web"
       ],
       "reason": "unimplemented"
@@ -655,7 +635,6 @@
       "component": "TextField",
       "attribute": "onBlur",
       "platforms": [
-        "ios",
         "web"
       ],
       "reason": "unimplemented"
@@ -664,7 +643,6 @@
       "component": "TextField",
       "attribute": "onEndEditing",
       "platforms": [
-        "ios",
         "web"
       ],
       "reason": "unimplemented"
@@ -673,7 +651,6 @@
       "component": "TextField",
       "attribute": "onFocus",
       "platforms": [
-        "ios",
         "web"
       ],
       "reason": "unimplemented"
@@ -707,14 +684,6 @@
       "attribute": "cols",
       "platforms": [
         "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextView",
-      "attribute": "editable",
-      "platforms": [
-        "ios"
       ],
       "reason": "unimplemented"
     },
@@ -762,7 +731,6 @@
       "component": "TextView",
       "attribute": "keyboardType",
       "platforms": [
-        "ios",
         "web"
       ],
       "reason": "unimplemented"

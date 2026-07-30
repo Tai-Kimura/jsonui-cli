@@ -249,10 +249,53 @@ module SjuiTools
             @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
           end
 
+          apply_editable_and_keyboard
+
           generated_code
         end
 
         private
+
+        # editable / keyboardType.
+        #
+        # Both are declared, both are honoured by Compose and by web
+        # (`editable` -> readOnly, `keyboardType` -> the input type), and neither
+        # was read here — so a read-only TextView was fully editable on iOS.
+        # `.disabled` rather than a readOnly flag because SwiftUI's TextEditor has
+        # no read-only mode; that also removes it from the focus chain, which is
+        # what "not editable" means for a keyboard user.
+        def apply_editable_and_keyboard
+          editable = @component['editable']
+          unless editable.nil?
+            if is_binding?(editable.to_s)
+              expr = SwiftUI::Binding::BindingExpression.swift_bool_expr(editable.to_s[2..-2])
+              @modifier_bag.register(:disabled, ".disabled(!(#{expr}))")
+            elsif editable == false || editable == 'false'
+              @modifier_bag.register(:disabled, ".disabled(true)")
+            end
+          end
+
+          if (kb = @component['keyboardType'])
+            resolved = keyboard_type_to_swiftui(kb)
+            @modifier_bag.append(:component_specific, ".keyboardType(#{resolved})") if resolved
+          end
+        end
+
+        # Shared spellings with TextField's `input` mapping; UIKit's
+        # UIKeyboardType names on the left, SwiftUI's on the right.
+        def keyboard_type_to_swiftui(value)
+          case value.to_s.downcase.gsub(/[^a-z]/, '')
+          when 'default' then '.default'
+          when 'number', 'numberpad', 'decimal', 'decimalpad' then '.decimalPad'
+          when 'numeric', 'phone', 'phonepad' then '.phonePad'
+          when 'email', 'emailaddress' then '.emailAddress'
+          when 'url', 'weburl' then '.URL'
+          when 'alphabet', 'asciicapable' then '.asciiCapable'
+          when 'namephonepad' then '.namePhonePad'
+          when 'twitter' then '.twitter'
+          when 'websearch' then '.webSearch'
+          end
+        end
 
         def add_state_variable(name, type, default_value)
           @state_variables ||= []

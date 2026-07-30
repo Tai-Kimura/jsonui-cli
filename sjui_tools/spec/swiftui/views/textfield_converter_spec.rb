@@ -594,5 +594,78 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextFieldConverter do
         expect(code).not_to include('.onSubmit {')
       end
     end
+
+    # All of these are declared, honoured by Compose and/or web, and were read
+    # by nobody here — a field declared with them silently did nothing on iOS.
+    describe 'focus handlers' do
+      it 'fires onFocus and onBlur from the FocusState change' do
+        code = described_class.new({
+          'type' => 'TextField', 'id' => 'email', 'text' => '@{email}',
+          'onFocus' => 'handleFocus', 'onBlur' => 'handleBlur'
+        }).convert
+
+        expect(code).to include('if newValue {')
+        expect(code).to include('data.handleFocus?()')
+        expect(code).to include('data.handleBlur?()')
+      end
+
+      it 'treats the UIKit names as the same two moments' do
+        code = described_class.new({
+          'type' => 'TextField', 'id' => 'email', 'text' => '@{email}',
+          'onBeginEditing' => 'began', 'onEndEditing' => 'ended'
+        }).convert
+
+        expect(code).to include('data.began?()')
+        expect(code).to include('data.ended?()')
+      end
+
+      it 'still declares the FocusState when there is no id' do
+        code = described_class.new({
+          'type' => 'TextField', 'text' => '@{email}', 'onFocus' => 'handleFocus'
+        }).convert
+
+        expect(code).to include('.focused($fieldIsFocused)')
+      end
+    end
+
+    describe 'input traits' do
+      it 'maps autocapitalizationType onto textInputAutocapitalization' do
+        code = described_class.new({
+          'type' => 'TextField', 'autocapitalizationType' => 'words'
+        }).convert
+        expect(code).to include('.textInputAutocapitalization(.words)')
+      end
+
+      it 'maps autocorrectionType no onto autocorrectionDisabled(true)' do
+        code = described_class.new({
+          'type' => 'TextField', 'autocorrectionType' => 'no'
+        }).convert
+        expect(code).to include('.autocorrectionDisabled(true)')
+      end
+
+      it 'applies fieldPadding' do
+        code = described_class.new({ 'type' => 'TextField', 'fieldPadding' => 12 }).convert
+        expect(code).to include('.padding(12)')
+      end
+    end
+
+    describe 'maxLength' do
+      it 'truncates on change, since SwiftUI TextField has no length limit' do
+        code = described_class.new({
+          'type' => 'TextField', 'text' => '@{email}', 'maxLength' => 10
+        }).convert
+
+        expect(code).to include('newValue.count > 10')
+        expect(code).to include('String(newValue.prefix(10))')
+      end
+
+      it 'emits nothing without a binding to write back to' do
+        code = described_class.new({
+          'type' => 'TextField', 'text' => 'static', 'maxLength' => 10
+        }).convert
+
+        expect(code).not_to include('prefix(10)')
+      end
+    end
   end
 end

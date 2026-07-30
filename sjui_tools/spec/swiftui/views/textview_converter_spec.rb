@@ -379,6 +379,35 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextViewConverter do
       expect(code.index('maxHeight: 100,')).to be < code.index('isFocused:')
       expect(code).to match(/isFocused: \$data\.noteInputIsFocused\s*\)/)
     end
+
+    # A read-only TextView was fully editable on iOS: both attributes are
+    # declared and honoured elsewhere, and neither was read here.
+    describe 'editable / keyboardType' do
+      it 'disables the editor when editable is false' do
+        code = described_class.new({ 'type' => 'TextView', 'editable' => false }).convert
+        expect(code).to include('.disabled(true)')
+      end
+
+      it 'inverts a bound editable' do
+        code = described_class.new({ 'type' => 'TextView', 'editable' => '@{canEdit}' }).convert
+        expect(code).to include('.disabled(!(')
+      end
+
+      it 'leaves an editable TextView alone' do
+        code = described_class.new({ 'type' => 'TextView', 'editable' => true }).convert
+        expect(code).not_to include('.disabled(')
+      end
+
+      it 'maps keyboardType onto the SwiftUI spelling' do
+        code = described_class.new({ 'type' => 'TextView', 'keyboardType' => 'email' }).convert
+        expect(code).to include('.keyboardType(.emailAddress)')
+      end
+
+      it 'ignores an unknown keyboardType rather than emitting bad Swift' do
+        code = described_class.new({ 'type' => 'TextView', 'keyboardType' => 'nonsense' }).convert
+        expect(code).not_to include('.keyboardType(')
+      end
+    end
   end
 end
 
