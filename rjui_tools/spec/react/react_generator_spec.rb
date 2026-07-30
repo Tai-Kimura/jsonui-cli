@@ -287,7 +287,8 @@ RSpec.describe RjuiTools::React::ReactGenerator do
 end
 RSpec.describe RjuiTools::React::ReactGenerator, 'focus-state declarations' do
   let(:generator) do
-    described_class.new({ 'use_tailwind' => true, 'layouts_directory' => '/tmp/x', 'generated_directory' => '/tmp/x/out' })
+    described_class.new({ 'use_tailwind' => true, 'typescript' => true,
+                          'layouts_directory' => '/tmp/x', 'generated_directory' => '/tmp/x/out' })
   end
 
   it 'hoists a ref + effect per id-bearing editable field and imports the hooks' do
@@ -308,5 +309,113 @@ RSpec.describe RjuiTools::React::ReactGenerator, 'focus-state declarations' do
     out = generator.generate('PlainScreen', json)
     expect(out).not_to include('useRef')
     expect(out).not_to include('IsFocused')
+  end
+
+  # A JS project emits .jsx, where `useRef<HTMLInputElement | null>(null)` is a
+  # syntax error rather than a harmless annotation.
+  it 'leaves the ref untyped in a JavaScript project' do
+    js = described_class.new({ 'use_tailwind' => true, 'layouts_directory' => '/tmp/x',
+                               'generated_directory' => '/tmp/x/out' })
+    out = js.generate('FocusScreenJs', { 'type' => 'View', 'child' => [
+      { 'type' => 'TextField', 'id' => 'email_field' }
+    ] })
+    expect(out).to include('const emailFieldRef = useRef(null);')
+    expect(out).not_to include('useRef<')
+  end
+end
+
+RSpec.describe RjuiTools::React::ReactGenerator, 'collection scroll declarations' do
+  let(:generator) do
+    described_class.new({ 'use_tailwind' => true, 'typescript' => true,
+                          'layouts_directory' => '/tmp/x', 'generated_directory' => '/tmp/x/out' })
+  end
+
+  def screen(collection, name: 'ScrollScreen')
+    generator.generate(name, { 'type' => 'View', 'child' => [collection] })
+  end
+
+  let(:base) do
+    { 'type' => 'Collection', 'id' => 'item_list', 'items' => '@{listData}',
+      'sections' => [{ 'cell' => 'ItemCell' }] }
+  end
+
+  it 'hoists a ref and imports only the helpers it uses' do
+    out = screen(base.merge('scrollTo' => '@{scrollIndex}'))
+    expect(out).to include("import { scrollCollectionToItem } from '@/generated/collectionScroll';")
+    expect(out).to include('const itemListRef = useRef<HTMLDivElement | null>(null);')
+    expect(out).to include("import React, { useRef, useEffect } from 'react';")
+    expect(out).to include('"use client"')
+  end
+
+  it 'passes the anchor and animation through to the scroll helper' do
+    out = screen(base.merge('scrollTo' => '@{scrollIndex}', 'scrollAnchor' => 'top',
+                            'scrollAnimated' => false))
+    expect(out).to include(
+      'useEffect(() => { scrollCollectionToItem(itemListRef.current, data.scrollIndex, ' \
+      "'top', false, false); }, [data.scrollIndex]);"
+    )
+  end
+
+  # The SSoT states bottom as the default anchor, and animation defaults on.
+  it 'defaults to a bottom anchor with animation' do
+    out = screen(base.merge('scrollTo' => '@{scrollIndex}'))
+    expect(out).to include("data.scrollIndex, 'bottom', true, false)")
+  end
+
+  it 'measures the horizontal axis for a horizontal collection' do
+    out = screen(base.merge('scrollTo' => '@{scrollIndex}', 'orientation' => 'horizontal'))
+    expect(out).to include("data.scrollIndex, 'bottom', true, true)")
+  end
+
+  # Mount-only: a later re-run would yank the user back to the anchor.
+  it 'applies the default anchor once, on mount' do
+    out = screen(base.merge('defaultScrollAnchor' => 'bottom'))
+    expect(out).to include(
+      "useEffect(() => { applyCollectionDefaultAnchor(itemListRef.current, 'bottom', false); }, []);"
+    )
+  end
+
+  it 'falls back to a bottom anchor for an unrecognised value' do
+    out = screen(base.merge('defaultScrollAnchor' => 'sideways'))
+    expect(out).to include("applyCollectionDefaultAnchor(itemListRef.current, 'bottom', false)")
+  end
+
+  # The observer can only watch the cells that existed when it was created, so
+  # it is rebuilt when the item list changes.
+  it 're-observes when the items change' do
+    out = screen(base.merge('onItemAppear' => '@{onItemAppear}'))
+    expect(out).to include(
+      'useEffect(() => observeCollectionItems(itemListRef.current, ' \
+      '(index) => data.onItemAppear?.(index)), [data.listData]);'
+    )
+    expect(out).to include("import { observeCollectionItems } from '@/generated/collectionScroll';")
+  end
+
+  it 'drives the scroll position from currentPage' do
+    out = screen(base.merge('currentPage' => '@{page}'))
+    expect(out).to include("scrollCollectionToItem(itemListRef.current, data.page, 'top', true, false); }, [data.page]);")
+    expect(out).to include('currentCollectionPage')
+  end
+
+  it 'emits nothing for a collection without scroll control' do
+    out = screen(base)
+    expect(out).not_to include('collectionScroll')
+    expect(out).not_to include('itemListRef')
+  end
+
+  # A literal id is what ties the element to the hoisted ref.
+  it 'skips a collection whose id is a binding' do
+    out = screen(base.merge('id' => '@{listId}', 'scrollTo' => '@{scrollIndex}'))
+    expect(out).not_to include('collectionScroll')
+  end
+
+  it 'leaves the ref untyped in a JavaScript project' do
+    js = described_class.new({ 'use_tailwind' => true, 'layouts_directory' => '/tmp/x',
+                               'generated_directory' => '/tmp/x/out' })
+    out = js.generate('ScrollScreenJs', { 'type' => 'View', 'child' => [
+      base.merge('scrollTo' => '@{scrollIndex}')
+    ] })
+    expect(out).to include('const itemListRef = useRef(null);')
+    expect(out).not_to include('useRef<')
   end
 end

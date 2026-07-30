@@ -245,5 +245,72 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
         expect(result).not_to include('flex flex-col')
       end
     end
+
+    # Scroll control. The element side lives here; the effects that drive it
+    # are hoisted by ReactGenerator (react_generator_spec).
+    context 'scroll control' do
+      def scrolling(extra)
+        create_converter(
+          { 'class' => 'Collection', 'id' => 'item_list', 'items' => '@{listData}',
+            'cellClasses' => ['ItemCell'] }.merge(extra)
+        ).convert
+      end
+
+      it 'attaches the ref the hoisted effects target' do
+        expect(scrolling('scrollTo' => '@{scrollIndex}')).to include('ref={itemListRef}')
+      end
+
+      %w[defaultScrollAnchor currentPage onItemAppear].each do |attr|
+        it "attaches the ref for #{attr}" do
+          value = attr == 'defaultScrollAnchor' ? 'bottom' : '@{x}'
+          expect(scrolling(attr => value)).to include('ref={itemListRef}')
+        end
+      end
+
+      it 'attaches no ref when no scroll control is declared' do
+        expect(scrolling({})).not_to include('ref=')
+      end
+
+      # Without a literal id there is no stable variable name for the
+      # converter and the generator to agree on, so the attributes would
+      # silently do nothing.
+      it 'warns instead of silently dropping the attributes when the id is missing' do
+        converter = create_converter(
+          { 'class' => 'Collection', 'scrollTo' => '@{scrollIndex}', 'cellClasses' => ['ItemCell'] }
+        )
+        expect { converter.convert }.to output(/literal `id`/).to_stderr
+      end
+
+      # currentPage read-back: `data.on<Prop>Change` is the same write-back
+      # convention the inputs use, and comparing against the bound value keeps
+      # a scroll from firing the handler on every frame.
+      it 'reports the page back through the derived change handler' do
+        result = scrolling('currentPage' => '@{page}')
+        expect(result).to include('onScroll={')
+        expect(result).to include('currentCollectionPage(itemListRef.current, false)')
+        expect(result).to include('if (page !== data.page) data.onPageChange?.(page)')
+      end
+
+      it 'measures the horizontal axis for a horizontal collection' do
+        result = scrolling('currentPage' => '@{page}', 'orientation' => 'horizontal')
+        expect(result).to include('currentCollectionPage(itemListRef.current, true)')
+      end
+
+      it 'adds no scroll handler without currentPage' do
+        expect(scrolling('scrollTo' => '@{scrollIndex}')).not_to include('onScroll=')
+      end
+
+      # The snap points have to be on the children, and the children are user
+      # cell components — hence the arbitrary-variant class.
+      it 'snaps children for paging' do
+        expect(scrolling('paging' => true)).to include('snap-y snap-mandatory [&>*]:snap-start')
+        expect(scrolling('paging' => true, 'orientation' => 'horizontal'))
+          .to include('snap-x snap-mandatory [&>*]:snap-start')
+      end
+
+      it 'does not snap without paging' do
+        expect(scrolling({})).not_to include('snap-')
+      end
+    end
   end
 end

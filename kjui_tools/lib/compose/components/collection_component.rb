@@ -7,6 +7,45 @@ module KjuiTools
   module Compose
     module Components
       class CollectionComponent
+
+        # defaultScrollAnchor — "Initial scroll position anchor. Sets where the
+        # scroll view starts." Compose has no equivalent of SwiftUI's
+        # `.defaultScrollAnchor`, and `reverseLayout` is not one: it flips the
+        # item order as well. So it is a one-shot scroll instead.
+        #
+        # Keyed on the item count rather than Unit because the list is usually
+        # empty on first composition (the data arrives async) and an anchor
+        # applied to an empty list does nothing. The remembered flag is what
+        # stops a later append from yanking the user back.
+        def self.default_scroll_anchor_code(json_data, state_var, depth, required_imports)
+          anchor = json_data['defaultScrollAnchor']
+          return '' unless %w[center bottom].include?(anchor.to_s)
+
+          items_property = json_data['items']
+          match = items_property.is_a?(String) ? items_property.match(/@\{([^}]+)\}/) : nil
+          return '' unless match
+
+          required_imports&.add(:remember_state)
+          required_imports&.add(:launched_effect)
+
+          target = anchor.to_s == 'center' ? 'defaultAnchorCount / 2' : 'defaultAnchorCount - 1'
+          code = indent("val defaultAnchorCount = data.#{match[1]}?.sections?.firstOrNull()?.cells?.data?.size ?: 0", depth) + "\n"
+          code += indent("val defaultAnchorApplied = remember { mutableStateOf(false) }", depth) + "\n"
+          code += indent("LaunchedEffect(defaultAnchorCount) {", depth) + "\n"
+          code += indent("if (!defaultAnchorApplied.value && defaultAnchorCount > 0) {", depth + 1) + "\n"
+          code += indent("#{state_var}.scrollToItem(#{target})", depth + 2) + "\n"
+          code += indent("defaultAnchorApplied.value = true", depth + 2) + "\n"
+          code += indent("}", depth + 1) + "\n"
+          code += indent("}", depth) + "\n"
+          code
+        end
+
+        def self.default_scroll_anchor?(json_data)
+          return false unless %w[center bottom].include?(json_data['defaultScrollAnchor'].to_s)
+
+          json_data['items'].is_a?(String) && json_data['items'].match?(/@\{[^}]+\}/)
+        end
+
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           # Check if sections are defined
           sections = json_data['sections'] || []
@@ -241,6 +280,9 @@ module KjuiTools
           cell_id_property = json_data['cellIdProperty']
           has_scroll_to = scroll_to && scroll_to.match(/@\{([^}]+)\}/)
 
+          has_default_anchor = default_scroll_anchor?(json_data)
+          needs_grid_state = has_scroll_to || has_default_anchor
+
           if has_scroll_to
             required_imports&.add(:lazy_grid_state)
             required_imports&.add(:launched_effect)
@@ -271,7 +313,13 @@ module KjuiTools
             end
 
             scroll_code += indent("}", depth) + "\n"
+            scroll_code += default_scroll_anchor_code(json_data, 'gridState', depth, required_imports)
             code = scroll_code + code
+          elsif has_default_anchor
+            required_imports&.add(:lazy_grid_state)
+            code = indent("val gridState = rememberLazyGridState()", depth) + "\n" +
+                   default_scroll_anchor_code(json_data, 'gridState', depth, required_imports) +
+                   code
           end
 
           # Hoist remember() for autoChangeTrackingId OUT of the LazyXxx body,
@@ -299,8 +347,8 @@ module KjuiTools
 
           code += Helpers::ModifierBuilder.format(modifiers, depth)
 
-          # Add state parameter if scrollTo is used
-          if has_scroll_to
+          # Add state parameter if scrollTo or defaultScrollAnchor needs one
+          if needs_grid_state
             code += ",\n" + indent("state = gridState", depth + 1)
           end
 
@@ -1162,6 +1210,7 @@ module KjuiTools
           scroll_to_raw = json_data['scrollTo']
           has_scroll_to = scroll_to_raw && scroll_to_raw.match(/@\{([^}]+)\}/)
           scroll_prop = has_scroll_to ? $1 : nil
+          stack_default_anchor = default_scroll_anchor?(json_data)
 
           code = ""
 
@@ -1184,6 +1233,11 @@ module KjuiTools
               code += indent("if (index >= 0) collectionStackState.animateScrollToItem(index)", depth + 1) + "\n"
             end
             code += indent("}", depth) + "\n"
+            code += default_scroll_anchor_code(json_data, 'collectionStackState', depth, required_imports)
+          elsif stack_default_anchor
+            required_imports&.add(:lazy_grid_state)
+            code += indent("val collectionStackState = androidx.compose.foundation.lazy.rememberLazyListState()", depth) + "\n"
+            code += default_scroll_anchor_code(json_data, 'collectionStackState', depth, required_imports)
           end
 
           # Hoist section / cellData / enrichedData out of the CollectionStack
@@ -1228,7 +1282,7 @@ module KjuiTools
           if reverse_layout
             code += "\n" + indent("reverseLayout = true,", depth + 1)
           end
-          if has_scroll_to
+          if has_scroll_to || stack_default_anchor
             code += "\n" + indent("lazyState = collectionStackState,", depth + 1)
           end
 

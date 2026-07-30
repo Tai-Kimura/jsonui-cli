@@ -63,6 +63,10 @@ module RjuiTools
           emit_screen_marker_helper
           emit_partial_text_helper
 
+          # Emit the Collection scroll-control helper (scrollTo /
+          # defaultScrollAnchor / currentPage / onItemAppear)
+          emit_collection_scroll_helper
+
           all_json_files = Dir.glob(File.join(layouts_dir, '**', '*.json')).reject do |file|
             # Skip Resources folder (colors.json, strings.json, etc.)
             # Skip Styles folder (reusable style definitions, not components)
@@ -1237,6 +1241,154 @@ module RjuiTools
 
           File.write(path, content)
           Core::Logger.info("Generated: #{path}")
+        end
+
+        # Collection scroll control — scrollTo / scrollAnchor / scrollAnimated /
+        # defaultScrollAnchor / currentPage / onItemAppear.
+        #
+        # These live in a helper rather than inline in every generated component
+        # because each one is a measurement, and measurement blobs repeated per
+        # collection are where drift starts. `scrollIntoView` is deliberately
+        # not used: it scrolls every scrollable ancestor, so scrolling a list to
+        # its last row would also scroll the page.
+        def emit_collection_scroll_helper
+          generated_dir = @config['generated_directory'] || 'src/generated'
+          FileUtils.mkdir_p(generated_dir)
+          is_ts = @config['typescript']
+          extension = is_ts ? 'ts' : 'js'
+          path = File.join(generated_dir, "collectionScroll.#{extension}")
+
+          anchor_type = is_ts ? "\n\nexport type CollectionScrollAnchor = 'top' | 'center' | 'bottom';" : ''
+          el_param = is_ts ? ': HTMLElement | null | undefined' : ''
+          index_param = is_ts ? ': number | undefined | null' : ''
+          anchor_param = is_ts ? ': CollectionScrollAnchor | undefined' : ''
+          horizontal_param = is_ts ? ': boolean' : ''
+          animated_param = is_ts ? ': boolean' : ''
+          page_ret = is_ts ? ': number' : ''
+          # `behavior` must be ScrollBehavior, not string, or ScrollToOptions
+          # rejects it under TS.
+          behavior_type = is_ts ? ': ScrollBehavior' : ''
+          appear_param = is_ts ? ': (index: number) => void' : ''
+          cleanup_ret = is_ts ? ': () => void' : ''
+
+          marker_header = Core::GeneratedMarker.comment_header(
+            source: "collectionScroll (Collection scroll-control helper)",
+            generator: "rjui build"
+          )
+          marker_footer = Core::GeneratedMarker.comment_footer
+
+          content = <<~JS
+            #{marker_header}
+            // Scroll control for Collection components. Every function is a
+            // no-op on a missing element so a generated effect never has to
+            // guard the ref itself.#{anchor_type}
+
+            function leadingEdge(box#{is_ts ? ': DOMRect' : ''}, horizontal#{horizontal_param}) {
+              return horizontal ? box.left : box.top;
+            }
+
+            // scrollTo: bring the cell at `index` to `anchor` within the
+            // collection's own scroll box — NOT the page's.
+            export function scrollCollectionToItem(
+              container#{el_param},
+              index#{index_param},
+              anchor#{anchor_param},
+              animated#{animated_param},
+              horizontal#{horizontal_param}
+            ) {
+              if (!container || index === undefined || index === null) return;
+              const child = container.children[Number(index)];
+              if (!child) return;
+              const containerBox = container.getBoundingClientRect();
+              const childBox = child.getBoundingClientRect();
+              const scrolled = horizontal ? container.scrollLeft : container.scrollTop;
+              const start =
+                leadingEdge(childBox, horizontal) - leadingEdge(containerBox, horizontal) + scrolled;
+              const childSize = horizontal ? childBox.width : childBox.height;
+              const viewport = horizontal ? container.clientWidth : container.clientHeight;
+              let offset = start;
+              if (anchor === 'center') offset = start - (viewport - childSize) / 2;
+              else if (anchor !== 'top') offset = start - (viewport - childSize);
+              offset = Math.max(0, offset);
+              const behavior#{behavior_type} = animated === false ? 'auto' : 'smooth';
+              container.scrollTo(
+                horizontal ? { left: offset, behavior } : { top: offset, behavior }
+              );
+            }
+
+            // defaultScrollAnchor: where the collection starts. Runs once, so it
+            // sets the scroll offset directly rather than animating to it.
+            export function applyCollectionDefaultAnchor(
+              container#{el_param},
+              anchor#{anchor_param},
+              horizontal#{horizontal_param}
+            ) {
+              if (!container) return;
+              const max = horizontal
+                ? container.scrollWidth - container.clientWidth
+                : container.scrollHeight - container.clientHeight;
+              if (max <= 0) return;
+              const offset = anchor === 'bottom' ? max : anchor === 'center' ? max / 2 : 0;
+              if (horizontal) container.scrollLeft = offset;
+              else container.scrollTop = offset;
+            }
+
+            // currentPage read-back: the cell nearest the collection's leading
+            // edge. Measured rather than divided by a page width, because cells
+            // are not required to be uniformly sized.
+            export function currentCollectionPage(
+              container#{el_param},
+              horizontal#{horizontal_param}
+            )#{page_ret} {
+              if (!container) return 0;
+              const origin = leadingEdge(container.getBoundingClientRect(), horizontal);
+              let nearest = 0;
+              let best = Infinity;
+              for (let i = 0; i < container.children.length; i++) {
+                const box = container.children[i].getBoundingClientRect();
+                const distance = Math.abs(leadingEdge(box, horizontal) - origin);
+                if (distance < best) {
+                  best = distance;
+                  nearest = i;
+                }
+              }
+              return nearest;
+            }
+
+            // onItemAppear: fires with the cell index each time a cell enters the
+            // collection's viewport, matching SwiftUI's .onAppear and Compose's
+            // LaunchedEffect per cell. Returns the observer teardown.
+            export function observeCollectionItems(
+              container#{el_param},
+              onAppear#{appear_param}
+            )#{cleanup_ret} {
+              if (!container || typeof IntersectionObserver === 'undefined') {
+                return () => {};
+              }
+              const observer = new IntersectionObserver(
+                (entries) => {
+                  for (const entry of entries) {
+                    if (!entry.isIntersecting) continue;
+                    const index = Array.prototype.indexOf.call(
+                      container.children,
+                      entry.target
+                    );
+                    if (index >= 0) onAppear(index);
+                  }
+                },
+                { root: container }
+              );
+              for (let i = 0; i < container.children.length; i++) {
+                observer.observe(container.children[i]);
+              }
+              return () => observer.disconnect();
+            }
+
+            #{marker_footer}
+          JS
+
+          File.write(path, content)
+          Core::Logger.success("Updated: #{path}")
         end
 
         def emit_cell_id_generator

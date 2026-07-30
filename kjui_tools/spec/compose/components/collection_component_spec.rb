@@ -636,6 +636,64 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
           expect(result).to include('// Section 1: ProductGridCell (data.gridColumnCount columns)')
         end
       end
+
+      # defaultScrollAnchor — Compose has no `.defaultScrollAnchor`, and
+      # reverseLayout is not one (it flips the item order too), so it is a
+      # one-shot scroll once the data has arrived.
+      describe 'defaultScrollAnchor' do
+        def grid(anchor, extra = {})
+          described_class.generate(
+            { 'type' => 'Collection', 'id' => 'list', 'columns' => 2,
+              'items' => '@{listData}', 'defaultScrollAnchor' => anchor,
+              'sections' => [{ 'cell' => 'ItemCell' }] }.merge(extra),
+            0, required_imports
+          )
+        end
+
+        it 'scrolls to the last item for bottom' do
+          result = grid('bottom')
+          expect(result).to include('gridState.scrollToItem(defaultAnchorCount - 1)')
+          expect(result).to include('state = gridState')
+        end
+
+        it 'scrolls to the middle item for center' do
+          expect(grid('center')).to include('gridState.scrollToItem(defaultAnchorCount / 2)')
+        end
+
+        # Keyed on the count, not Unit: the list is usually empty on the first
+        # composition, and an anchor applied to an empty list does nothing.
+        it 'waits for the data and then applies exactly once' do
+          result = grid('bottom')
+          expect(result).to include('LaunchedEffect(defaultAnchorCount)')
+          expect(result).to include('val defaultAnchorApplied = remember { mutableStateOf(false) }')
+          expect(result).to include('if (!defaultAnchorApplied.value && defaultAnchorCount > 0)')
+          expect(required_imports).to include(:remember_state, :launched_effect)
+        end
+
+        it 'emits nothing for top — that is where the list already starts' do
+          expect(grid('top')).not_to include('defaultAnchorApplied')
+        end
+
+        it 'emits nothing without an items binding to count' do
+          expect(grid('bottom', 'items' => nil)).not_to include('defaultAnchorApplied')
+        end
+
+        it 'reuses the state scrollTo already created' do
+          result = grid('bottom', 'scrollTo' => '@{scrollIndex}')
+          expect(result.scan('val gridState = rememberLazyGridState()').length).to eq(1)
+          expect(result).to include('gridState.scrollToItem(defaultAnchorCount - 1)')
+        end
+
+        it 'applies on the CollectionStack path too' do
+          result = described_class.generate(
+            { 'type' => 'Collection', 'id' => 'list', 'items' => '@{listData}',
+              'defaultScrollAnchor' => 'bottom', 'sections' => [{ 'cell' => 'ItemCell' }] },
+            0, required_imports
+          )
+          expect(result).to include('collectionStackState.scrollToItem(defaultAnchorCount - 1)')
+          expect(result).to include('lazyState = collectionStackState,')
+        end
+      end
     end
   end
 end

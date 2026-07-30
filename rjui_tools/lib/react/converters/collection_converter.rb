@@ -12,16 +12,96 @@ module RjuiTools
           id_attr = build_id_attr
           testid_attr = build_testid_attr
           tag_attr = build_tag_attr
+          ref_attr = build_collection_ref_attr
+          scroll_attr = build_current_page_scroll_attr
 
           content = generate_collection_content(indent + 2)
 
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<div#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}>
+            #{indent_str(indent)}<div#{id_attr}#{ref_attr} className="#{class_name}"#{style_attr}#{scroll_attr}#{testid_attr}#{tag_attr}>
             #{content}
             #{indent_str(indent)}</div>
           JSX
 
           wrap_with_visibility(jsx, indent)
+        end
+
+        # The collection is horizontal when its layout says so — the same
+        # decision `build_class_name` makes, hoisted so the scroll helpers can
+        # be told which axis to measure.
+        def horizontal_collection?
+          layout = attributes['orientation'] || attributes['layout'] ||
+                   attributes['scrollDirection'] || 'vertical'
+          layout.to_s.downcase == 'horizontal'
+        end
+
+        # A literal id is what ties the element to the hoisted ref, exactly as
+        # it does for the focus bindings and for `{id}_item_{index}`. Without
+        # one there is no stable variable name to agree on, so the attributes
+        # would silently do nothing — say so instead.
+        def scroll_control_id
+          id = attributes['id']
+          return nil unless id.is_a?(String) && !id.empty? && !has_binding?(id)
+
+          id
+        end
+
+        # Scroll control that needs a ref on the collection element.
+        # ReactGenerator hoists the matching declarations from its own walk
+        # (`extract_collection_scrolls`); the two must agree on which
+        # collections participate.
+        #
+        # Written out rather than looped over a name list: the consumed-
+        # attribute scan (and the conformance coverage ratchet) match literal
+        # single-quoted attribute reads, so a loop reads as "nobody consumes
+        # these" and the ledger keeps counting them as unimplemented.
+        def scroll_control_attrs
+          {
+            'scrollTo' => attributes['scrollTo'],
+            'defaultScrollAnchor' => attributes['defaultScrollAnchor'],
+            'currentPage' => attributes['currentPage'],
+            'onItemAppear' => attributes['onItemAppear']
+          }.compact.keys
+        end
+
+        def build_collection_ref_attr
+          declared = scroll_control_attrs
+          return '' if declared.empty?
+
+          id = scroll_control_id
+          unless id
+            warn "[rjui] Collection: #{declared.join(', ')} #{declared.one? ? 'needs' : 'need'} " \
+                 'a literal `id` on the collection to bind to; ignoring.'
+            return ''
+          end
+
+          " ref={#{snake_to_camel_id(id)}Ref}"
+        end
+
+        # currentPage read-back. `data.on<Prop>Change` is the same write-back
+        # convention the inputs use (TextField text, Switch isOn), and comparing
+        # against the bound value is what keeps a scroll event from firing the
+        # handler on every frame.
+        def build_current_page_scroll_attr
+          current_page = attributes['currentPage']
+          return '' unless current_page.is_a?(String) && has_binding?(current_page)
+          return '' unless scroll_control_id
+
+          prop = extract_binding_property(current_page)
+          handler = "data.on#{capitalize_first(extract_raw_binding_property(current_page))}Change"
+          " onScroll={() => { const page = currentCollectionPage(#{ref_var}, #{horizontal_collection?}); " \
+            "if (page !== #{prop}) #{handler}?.(page); }}"
+        end
+
+        def ref_var
+          id = scroll_control_id
+          id ? "#{snake_to_camel_id(id)}Ref.current" : 'null'
+        end
+
+        def capitalize_first(str)
+          return str if str.nil? || str.empty?
+
+          str[0].upcase + str[1..]
         end
 
         protected
@@ -86,6 +166,17 @@ module RjuiTools
             elsif col_gap
               classes << "gap-[#{col_gap}px]"
             end
+          end
+
+          # paging: CSS scroll snapping is the web's page model, and it is what
+          # gives `currentPage` a page to be the index of. iOS uses a TabView
+          # and Compose a HorizontalPager for the same attribute.
+          # The snap points have to be on the children, and the children are
+          # user cell components — hence the arbitrary-variant class rather than
+          # a class on each cell.
+          if attributes['paging']
+            classes << (is_horizontal ? 'snap-x snap-mandatory' : 'snap-y snap-mandatory')
+            classes << '[&>*]:snap-start'
           end
 
           # Content insets as padding

@@ -351,6 +351,17 @@ module RjuiTools
             end
           end
 
+          # Collection - currentPage binding (number). The paired
+          # on<Prop>Change report-back handler is derived from this binding by
+          # the value-binding handler loop in update_data_file — it is what the
+          # collection's onScroll calls when the user scrolls to another page.
+          if component_type == 'Collection'
+            page = json_data['currentPage']
+            if page.is_a?(String) && page.start_with?('@{') && page.end_with?('}')
+              bindings[page[2...-1]] = { type: 'number', defaultValue: 0 }
+            end
+          end
+
           # Focus-state binding (cross-platform parity with sjui/kjui
           # data.<id>IsFocused): every editable field with a literal id gets a
           # boolean prop the ViewModel can set to drive focus (the generated

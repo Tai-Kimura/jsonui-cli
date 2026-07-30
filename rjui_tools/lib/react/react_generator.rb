@@ -218,6 +218,7 @@ module RjuiTools
         data_name = data_type || name
         state_vars = extract_state_variables(json)
         focus_fields = extract_focus_fields(json)
+        collection_scrolls = extract_collection_scrolls(json)
         included_component_map = extract_included_components(json)  # { CompName => subdir_or_nil }
         included_components = included_component_map.keys
         extension_components = extract_extension_components(json)
@@ -250,13 +251,15 @@ module RjuiTools
         needs_state = !state_vars.empty?
         uses_extensions = !extension_components.empty?
         needs_focus = !focus_fields.empty?
-        needs_client = needs_state || uses_string_manager || uses_extensions || needs_landscape || needs_focus || variants.any?
+        needs_collection_scroll = !collection_scrolls.empty?
+        needs_client = needs_state || uses_string_manager || uses_extensions || needs_landscape || needs_focus ||
+                       needs_collection_scroll || variants.any?
         use_client = needs_client ? "\"use client\";\n\n" : ''
 
         # Build React import
         react_hooks = []
         react_hooks << 'useState' if needs_state
-        if needs_focus
+        if needs_focus || needs_collection_scroll
           react_hooks << 'useRef'
           react_hooks << 'useEffect'
         end
@@ -277,6 +280,11 @@ module RjuiTools
         # Generate cellIdGenerator import if needed
         uses_auto_cell_id = uses_auto_cell_id?(json)
         cell_id_import = uses_auto_cell_id ? "\nimport { enrichCellIds } from '@/generated/cellIdGenerator';" : ''
+
+        # Collection scroll control. Only the helpers actually used are
+        # imported, so a list with just `scrollTo` does not pull in the
+        # IntersectionObserver path.
+        collection_scroll_import = collection_scroll_import_line(collection_scrolls)
         screen_marker_import = screen_id ? "\nimport { screenMarker } from '@/generated/screenMarker';" : ''
 
         # partialAttributes are applied at runtime against the resolved
@@ -310,7 +318,7 @@ module RjuiTools
         # Determined early because the Data import shape depends on it:
         # data-consuming components also import the createXxxData factory
         # for the Partial-merge call convention (see props emission below).
-        uses_data = jsx_content.match?(/\bdata\./) || !focus_fields.empty?
+        uses_data = jsx_content.match?(/\bdata\./) || !focus_fields.empty? || !collection_scrolls.empty?
 
         # Generate Data type import (for TypeScript)
         data_import = ''
@@ -394,11 +402,28 @@ module RjuiTools
         # drives DOM focus from the data prop. The converters attach the ref
         # and report focus changes back via on<Camel>IsFocusedChange.
         focus_declarations = focus_fields.map do |field|
-          ref_type = field[:element] == 'textarea' ? 'HTMLTextAreaElement' : 'HTMLInputElement'
-          "  const #{field[:camel]}Ref = useRef<#{ref_type} | null>(null);\n" \
+          # The type parameter is TypeScript-only: a JS project emits .jsx, and
+          # `useRef<HTMLInputElement | null>(null)` there is a syntax error, not
+          # a harmless annotation.
+          ref_type =
+            if @config['typescript']
+              field[:element] == 'textarea' ? '<HTMLTextAreaElement | null>' : '<HTMLInputElement | null>'
+            else
+              ''
+            end
+          "  const #{field[:camel]}Ref = useRef#{ref_type}(null);\n" \
             "  useEffect(() => { if (data.#{field[:camel]}IsFocused) { #{field[:camel]}Ref.current?.focus(); } }, [data.#{field[:camel]}IsFocused]);"
         end.join("\n")
         focus_declarations = "\n#{focus_declarations}\n" unless focus_declarations.empty?
+
+        # Collection scroll control: a ref per collection plus one effect per
+        # declared attribute. The converter attaches the ref (and the onScroll
+        # read-back for currentPage); everything that has to live in the
+        # component body is hoisted here.
+        collection_scroll_declarations = collection_scrolls.map { |c| collection_scroll_effects(c) }.join("\n")
+        unless collection_scroll_declarations.empty?
+          collection_scroll_declarations = "\n#{collection_scroll_declarations}\n"
+        end
 
         # Generate landscape hook declaration
         landscape_declaration = needs_landscape ? "\n  #{ResponsiveHelper.landscape_hook_declaration}\n" : ''
@@ -472,10 +497,10 @@ module RjuiTools
 
         <<~JSX
           #{use_client}#{marker_header}
-          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{screen_marker_import}#{partial_text_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
+          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{collection_scroll_import}#{screen_marker_import}#{partial_text_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
 
           #{props_interface if @config['typescript']}
-          export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}
+          export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{collection_scroll_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}
             return (
           #{jsx_content}
             );
@@ -546,6 +571,121 @@ module RjuiTools
 
       def capitalize_first(str)
         str[0].upcase + str[1..]
+      end
+
+      # Collections declaring scroll control (scrollTo / defaultScrollAnchor /
+      # currentPage / onItemAppear). Each one gets a hoisted ref plus the
+      # effects below, matching the ref CollectionConverter attaches. MUST stay
+      # in sync with CollectionConverter::SCROLL_CONTROL_ATTRS and
+      # #build_collection_ref_attr — a literal id is what ties the two together.
+      def extract_collection_scrolls(json, found = [])
+        return found unless json.is_a?(Hash) || json.is_a?(Array)
+
+        if json.is_a?(Hash)
+          id = json['id']
+          if json['type'] == 'Collection' && id.is_a?(String) && !id.empty? && !id.include?('@{')
+            scroll_to = json['scrollTo']
+            default_anchor = json['defaultScrollAnchor']
+            current_page = json['currentPage']
+            on_item_appear = json['onItemAppear']
+            if scroll_to || default_anchor || current_page || on_item_appear
+              layout = json['orientation'] || json['layout'] || json['scrollDirection'] || 'vertical'
+              found << {
+                camel: snake_to_camel_id(id),
+                horizontal: layout.to_s.downcase == 'horizontal',
+                items: json['items'],
+                scroll_to: scroll_to,
+                scroll_anchor: json['scrollAnchor'],
+                scroll_animated: json['scrollAnimated'],
+                default_anchor: default_anchor,
+                current_page: current_page,
+                on_item_appear: on_item_appear
+              }
+            end
+          end
+
+          child = json['child'] || json['children']
+          if child.is_a?(Array)
+            child.each { |c| extract_collection_scrolls(c, found) }
+          elsif child
+            extract_collection_scrolls(child, found)
+          end
+        else
+          json.each { |item| extract_collection_scrolls(item, found) }
+        end
+
+        found.uniq { |c| c[:camel] }
+      end
+
+      # Only the helpers a screen actually uses get imported.
+      def collection_scroll_import_line(collections)
+        return '' if collections.empty?
+
+        names = []
+        names << 'scrollCollectionToItem' if collections.any? { |c| c[:scroll_to] || c[:current_page] }
+        names << 'applyCollectionDefaultAnchor' if collections.any? { |c| c[:default_anchor] }
+        names << 'currentCollectionPage' if collections.any? { |c| c[:current_page] }
+        names << 'observeCollectionItems' if collections.any? { |c| c[:on_item_appear] }
+        return '' if names.empty?
+
+        "\nimport { #{names.sort.join(', ')} } from '@/generated/collectionScroll';"
+      end
+
+      def collection_scroll_effects(collection)
+        camel = collection[:camel]
+        ref = "#{camel}Ref"
+        horizontal = collection[:horizontal]
+        element_type = @config['typescript'] ? '<HTMLDivElement | null>' : ''
+        lines = ["  const #{ref} = useRef#{element_type}(null);"]
+
+        # defaultScrollAnchor: where the collection starts, so it runs on mount
+        # only. A later re-run would yank the user back to the anchor.
+        if (anchor = collection[:default_anchor])
+          lines << "  useEffect(() => { applyCollectionDefaultAnchor(#{ref}.current, " \
+                   "#{scroll_anchor_expr(anchor)}, #{horizontal}); }, []);"
+        end
+
+        # scrollTo: iOS receives a PassthroughSubject, so a repeat send
+        # re-scrolls; a React effect keys on a value, so re-scrolling to the
+        # same index needs the bound value to change.
+        if (target = collection[:scroll_to]) && binding_expression?(target)
+          prop = binding_data_path(target)
+          anchor_expr = scroll_anchor_expr(collection[:scroll_anchor] || 'bottom')
+          animated = collection[:scroll_animated] == false ? 'false' : 'true'
+          lines << "  useEffect(() => { scrollCollectionToItem(#{ref}.current, #{prop}, " \
+                   "#{anchor_expr}, #{animated}, #{horizontal}); }, [#{prop}]);"
+        end
+
+        # currentPage: data -> DOM. The DOM -> data direction is the onScroll
+        # handler CollectionConverter puts on the element.
+        if (page = collection[:current_page]) && binding_expression?(page)
+          prop = binding_data_path(page)
+          lines << "  useEffect(() => { scrollCollectionToItem(#{ref}.current, #{prop}, " \
+                   "'top', true, #{horizontal}); }, [#{prop}]);"
+        end
+
+        # onItemAppear: re-observes when the item list changes, because the
+        # observer can only watch the cells that existed when it was created.
+        if (appear = collection[:on_item_appear]) && binding_expression?(appear)
+          prop = binding_data_path(appear)
+          dep = binding_expression?(collection[:items]) ? binding_data_path(collection[:items]) : ''
+          lines << "  useEffect(() => observeCollectionItems(#{ref}.current, " \
+                   "(index) => #{prop}?.(index)), [#{dep}]);"
+        end
+
+        lines.join("\n")
+      end
+
+      def scroll_anchor_expr(anchor)
+        %w[top center bottom].include?(anchor.to_s) ? "'#{anchor}'" : "'bottom'"
+      end
+
+      def binding_expression?(value)
+        value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
+      end
+
+      def binding_data_path(value)
+        "data.#{value[2..-2].strip}"
       end
 
       # Editable fields (TextField / TextView + aliases) with a literal id —

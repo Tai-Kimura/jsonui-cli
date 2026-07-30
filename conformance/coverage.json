@@ -37,23 +37,6 @@
     },
     {
       "component": "Collection",
-      "attribute": "currentPage",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Collection",
-      "attribute": "defaultScrollAnchor",
-      "platforms": [
-        "android",
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Collection",
       "attribute": "insetVertical",
       "platforms": [
         "web"
@@ -63,44 +46,12 @@
     },
     {
       "component": "Collection",
-      "attribute": "onItemAppear",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Collection",
       "attribute": "onPageChanged",
       "platforms": [
         "web"
       ],
       "reason": "legacy",
       "note": "alias — normalized to its canonical spelling before conversion"
-    },
-    {
-      "component": "Collection",
-      "attribute": "scrollAnchor",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Collection",
-      "attribute": "scrollAnimated",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Collection",
-      "attribute": "scrollTo",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
     },
     {
       "component": "Collection",
