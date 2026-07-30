@@ -56,7 +56,7 @@ module JsonUI
         { name: 'partialAttributes', kind: :array }.freeze,
         # Placeholder text when empty (alias for hint)
         { name: 'placeholder', kind: :string }.freeze,
-        # Selected state (binding supported)
+        # Selected state (binding supported). Decides which attribute set is in force: while true the label renders with 'highlightAttributes' (or 'highlightColor'), otherwise with its base font and colour.
         { name: 'selected', kind: :boolean, bindable: true }.freeze,
         # Strikethrough styling (boolean for simple, object for styled) [accepts: boolean | object]
         { name: 'strikethrough', kind: :raw }.freeze,

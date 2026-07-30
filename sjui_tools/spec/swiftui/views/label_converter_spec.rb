@@ -463,25 +463,140 @@ RSpec.describe SjuiTools::SwiftUI::Views::LabelConverter do
       end
     end
 
-    describe 'highlightAttributes' do
-      it 'swaps the colour on press, since SwiftUI Text has no highlight state' do
-        converter = described_class.new({
-          'type' => 'Label', 'id' => 'title', 'text' => 'Hi',
-          'highlightAttributes' => { 'fontColor' => '#FF0000' }
-        })
-        code = converter.convert
+    describe 'highlightAttributes / highlightColor' do
+      it 'carries every declared key into TextHighlightAttributes' do
+        code = described_class.new({
+          'type' => 'Label', 'text' => 'Hi', 'fontSize' => 14, 'selected' => '@{isChosen}',
+          'highlightAttributes' => {
+            'font' => 'Helvetica', 'fontSize' => 20, 'fontColor' => '#FF0000',
+            'lineHeightMultiple' => 1.5, 'textAlign' => 'Center'
+          }
+        }).convert
 
-        expect(code).to include('titleIsHighlighted ?')
-        expect(code).to include('.onLongPressGesture(minimumDuration: 0')
-        expect(converter.state_variables)
-          .to include('@State private var titleIsHighlighted = false')
+        expect(code).to include('fontFamily: "Helvetica"')
+        expect(code).to include('fontSize: 20.0')
+        expect(code).to include('lineHeightMultiple: 1.5')
+        expect(code).to include('textAlignment: .center')
+        expect(code).to include('isHighlighted: data.isChosen')
       end
 
-      it 'ignores a highlightAttributes with nothing expressible in it' do
+      # UIKit: `UIFont(name:size:) ?? (name == "bold" ? boldSystemFont : ...)`
+      it 'maps the literal font name "bold" to a weight, not a family' do
         code = described_class.new({
-          'type' => 'Label', 'text' => 'Hi', 'highlightAttributes' => { 'fontSize' => 20 }
+          'type' => 'Label', 'text' => 'Hi', 'selected' => true,
+          'highlightAttributes' => { 'font' => 'bold' }
         }).convert
-        expect(code).not_to include('IsHighlighted')
+
+        expect(code).to include('fontWeight: .bold')
+        expect(code).not_to include('fontFamily: "bold"')
+      end
+
+      # Argument labels must appear in the struct's declaration order or the
+      # generated Swift will not compile.
+      it 'emits the fields in TextHighlightAttributes declaration order' do
+        code = described_class.new({
+          'type' => 'Label', 'text' => 'Hi', 'selected' => true,
+          'highlightAttributes' => {
+            'font' => 'Helvetica', 'fontSize' => 20, 'fontColor' => '#FF0000',
+            'lineHeightMultiple' => 1.5, 'textAlign' => 'Right'
+          }
+        }).convert
+        call = code[/TextHighlightAttributes\((.*)\)/, 1]
+
+        # Argument boundaries only — nested calls carry labels of their own
+        # (`getColor(for:)`), which are not arguments of this initializer.
+        expect(call.scan(/(?:\A|, )(\w+):/).flatten)
+          .to eq(%w[fontFamily fontSize fontColor lineHeightMultiple textAlignment])
+      end
+
+      it 'drives the swap from selected rather than from a press' do
+        code = described_class.new({
+          'type' => 'Label', 'text' => 'Hi', 'selected' => true,
+          'highlightAttributes' => { 'fontColor' => '#FF0000' }
+        }).convert
+
+        expect(code).to include('isHighlighted: true')
+        expect(code).not_to include('.onLongPressGesture')
+      end
+
+      it 'treats an unselected label as showing its base styling' do
+        code = described_class.new({
+          'type' => 'Label', 'text' => 'Hi',
+          'highlightAttributes' => { 'fontColor' => '#FF0000' }
+        }).convert
+        expect(code).to include('isHighlighted: false')
+      end
+
+      it 'falls back to highlightColor, which used to emit only a comment' do
+        code = described_class.new({
+          'type' => 'Label', 'text' => 'Hi', 'selected' => true, 'highlightColor' => '#00FF00'
+        }).convert
+
+        expect(code).to include('highlightAttributes: TextHighlightAttributes(fontColor:')
+        expect(code).not_to include('// highlightColor')
+      end
+
+      # SJUILabel: `if !attr["highlightAttributes"].isEmpty ... else if highlightColor`
+      it 'prefers highlightAttributes and falls through when it has no usable key' do
+        both = described_class.new({
+          'type' => 'Label', 'text' => 'Hi', 'selected' => true,
+          'highlightAttributes' => { 'fontColor' => '#FF0000' }, 'highlightColor' => '#00FF00'
+        }).convert
+        expect(both).to include('"#FF0000"')
+        expect(both).not_to include('"#00FF00"')
+
+        empty = described_class.new({
+          'type' => 'Label', 'text' => 'Hi', 'selected' => true,
+          'highlightAttributes' => {}, 'highlightColor' => '#00FF00'
+        }).convert
+        expect(empty).to include('"#00FF00"')
+      end
+
+      it 'emits nothing when neither is present' do
+        code = described_class.new({ 'type' => 'Label', 'text' => 'Hi' }).convert
+        expect(code).not_to include('TextHighlightAttributes')
+        expect(code).not_to include('isHighlighted:')
+      end
+    end
+
+    # A String weight is only accepted by the convenience initializer, which
+    # does not take partialAttributes; the combination used to generate
+    # "cannot convert value of type 'String' to expected argument type
+    # 'Font.Weight'".
+    describe 'fontWeight alongside partialAttributes' do
+      let(:partials) { [{ 'range' => [0, 1], 'fontColor' => '#FF0000' }] }
+
+      it 'emits a Font.Weight when partialAttributes are present' do
+        code = described_class.new({
+          'type' => 'Label', 'text' => 'Hi', 'fontWeight' => 'semibold',
+          'partialAttributes' => partials
+        }).convert
+
+        expect(code).to include('fontWeight: .semibold')
+        expect(code).not_to include('fontWeight: "semibold"')
+      end
+
+      it 'also converts the font:"bold" spelling' do
+        code = described_class.new({
+          'type' => 'Label', 'text' => 'Hi', 'font' => 'bold', 'partialAttributes' => partials
+        }).convert
+
+        expect(code).to include('fontWeight: .bold')
+        expect(code).not_to include('fontWeight: "bold"')
+      end
+
+      it 'keeps the string form when there are no partialAttributes' do
+        code = described_class.new({
+          'type' => 'Label', 'text' => 'Hi', 'fontWeight' => 'bold'
+        }).convert
+        expect(code).to include('fontWeight: "bold"')
+      end
+
+      it 'keeps the string form when partialAttributes is present but empty' do
+        code = described_class.new({
+          'type' => 'Label', 'text' => 'Hi', 'fontWeight' => 'bold', 'partialAttributes' => []
+        }).convert
+        expect(code).to include('fontWeight: "bold"')
       end
     end
   end

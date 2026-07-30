@@ -122,7 +122,7 @@ def plan_definitions(
 def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> dict:
     """One minimal layout: root View + (anchor?) + target component."""
     base = dict(rules.BASE_ATTRS.get(plan.host, {}))
-    base.update(rules.BASE_ATTRS_BY_ATTRIBUTE.get(plan.attribute, {}))
+    base.update(rules.base_attrs_for(plan.host, plan.attribute))
 
     target: dict[str, Any] = {"type": plan.host, "id": rules.TARGET_ID}
     target["width"] = base.get("width", "wrapContent")
@@ -326,7 +326,9 @@ def build_manifest_entry(
         # an assertable fixture already states its expectation, and an
         # off-screen effect (soft-keyboard configuration) cannot be compared.
         "control": (
-            control_id(plan.host, plan.needs_anchor, control_shape(plan.attribute))
+            control_id(
+                plan.host, plan.needs_anchor, control_shape(plan.host, plan.attribute)
+            )
             if plan.cls == rules.CLASS_VISUAL
             and plan.attribute not in rules.NON_OBSERVABLE_ATTRS
             else None
@@ -367,12 +369,16 @@ def control_id(host: str, needs_anchor: bool, shape: str = "") -> str:
     return f"__control/{host}{'__anchored' if needs_anchor else ''}{suffix}"
 
 
-def control_shape(attribute: str) -> str:
-    """Stable name for the extra-base variant an attribute's fixture uses."""
-    extra = rules.BASE_ATTRS_BY_ATTRIBUTE.get(attribute)
+def shape_name(extra: dict | None) -> str:
+    """Stable name for a set of extra base attributes."""
     if not extra:
         return ""
     return "_".join(f"{k}-{v}" for k, v in sorted(extra.items()))
+
+
+def control_shape(host: str, attribute: str) -> str:
+    """Stable name for the extra-base variant an attribute's fixture uses."""
+    return shape_name(rules.base_attrs_for(host, attribute))
 
 
 def build_control_layout(
@@ -597,14 +603,16 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
                 summary.visual_count += 1
                 if plan.attribute not in rules.NON_OBSERVABLE_ATTRS:
                     needed_controls.add(
-                        (plan.host, plan.needs_anchor, control_shape(plan.attribute))
+                        (plan.host, plan.needs_anchor, control_shape(plan.host, plan.attribute))
                     )
 
     # One control per shape the visual fixtures actually used. Generated after
     # the sweep so an unused host does not get a control nobody compares to.
     control_dir = fixtures_dir / "__control"
+    # Keyed by shape, not by attribute: a shape is defined by its extras, and
+    # the same extras may be reached from a scoped or an unscoped key.
     shape_extras = {
-        control_shape(a): e for a, e in rules.BASE_ATTRS_BY_ATTRIBUTE.items()
+        shape_name(e): e for e in rules.BASE_ATTRS_BY_ATTRIBUTE.values()
     }
     for host, needs_anchor, shape in sorted(needed_controls):
         control_dir.mkdir(exist_ok=True)

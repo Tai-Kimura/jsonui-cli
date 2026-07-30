@@ -63,7 +63,10 @@ SYNTHETIC_DEFS = {
             "description": "Alignment with duplicate spellings",
         },
         "onTextChange": {"type": "callback", "description": "Change callback"},
-        "highlightAttributes": {
+        # Deliberately not a real attribute name: this case is about the
+        # composite -> skip MECHANISM, and naming a real attribute made the
+        # test fail the moment that attribute gained a representative value.
+        "compositeAttrs": {
             "type": "object",
             "description": "Composite object without representative value",
         },
@@ -153,7 +156,7 @@ class ConformanceGeneratorTest(unittest.TestCase):
         self.assertEqual(self.skips[("common", "someBinding")], rules.REASON_BINDING_ONLY)
         self.assertEqual(self.skips[("common", "type")], rules.REASON_METADATA)
         self.assertEqual(
-            self.skips[("Label", "highlightAttributes")], rules.REASON_COMPOSITE
+            self.skips[("Label", "compositeAttrs")], rules.REASON_COMPOSITE
         )
         self.assertIn(("Embed", "screen"), self.skips)
         # $-prefixed harness/normalizer markers (e.g. $jui) are metadata.

@@ -1151,9 +1151,8 @@
         "boolean",
         "binding"
       ],
-      "description": "Selected state (binding supported)",
-      "platform": "swift",
-      "mode": "uikit"
+      "description": "Selected state (binding supported). Decides which attribute set is in force: while true the label renders with 'highlightAttributes' (or 'highlightColor'), otherwise with its base font and colour.",
+      "platform": "swift"
     },
     "textAlign": {
       "type": [

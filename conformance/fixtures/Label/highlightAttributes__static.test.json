@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/highlightAttributes__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.highlightAttributes (static)",
+    "description": "Conformance fixture for 'highlightAttributes' on Label (section: Label, class: visual). Value under test: {\"font\": \"bold\", \"fontSize\": 24, \"fontColor\": \"#FF0000\"}.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "highlightAttributes__static",
+      "description": "Conformance fixture for 'highlightAttributes' on Label (section: Label, class: visual). Value under test: {\"font\": \"bold\", \"fontSize\": 24, \"fontColor\": \"#FF0000\"}.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_highlightAttributes__static"
+        }
+      ]
+    }
+  ]
+}

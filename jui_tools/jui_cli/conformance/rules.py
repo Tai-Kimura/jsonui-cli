@@ -392,6 +392,16 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     ("common", "padding"): 8,
     ("common", "paddings"): [8, 8, 8, 8],
     ("common", "margins"): [8, 8, 8, 8],
+    # Only the three keys UIKit actually applies. The declaration also lists
+    # `lineHeightMultiple` and `textAlign`, and the SwiftUI implementation
+    # honours them, but SJUILabel's creator reuses the BASE paragraph style for
+    # the highlight dictionary and so ignores both — fixturing them would fail
+    # UIKit mode for a divergence the fixture is not about.
+    ("Label", "highlightAttributes"): {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000",
+    },
 }
 
 #: Text-ish string attributes that read better with a hint payload.
@@ -476,7 +486,32 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # orientation the canonical answer is "no effect", so the fixture has to
     # supply one or it can never show anything.
     "direction": {"orientation": "vertical"},
+    # The highlight attribute sets only take effect while the label is
+    # selected — that is the whole contract (UIKit: `selected ?
+    # highlightAttributes : attributes`). Without this the fixture renders its
+    # base styling, matches the control exactly, and reads as inert.
+    #
+    # Scoped to Label on purpose: Button declares `highlightColor` too but has
+    # no `selected`, and its highlight is a press state that a static
+    # screenshot cannot show anyway.
+    "Label.highlightAttributes": {"selected": True},
+    "Label.highlightColor": {"selected": True},
 }
+
+
+def base_attrs_for(host: str, attribute: str) -> dict[str, Any]:
+    """Extra base attributes that make `attribute` observable on `host`.
+
+    Keys are either scoped to a component (`Label.highlightColor`) or apply to
+    the attribute wherever it appears (`flexWrap`); scoped wins. The scoping
+    matters when two components share an attribute name and only one has the
+    driver — injecting `selected` into a Button fixture would put an attribute
+    Button does not declare into the layout.
+    """
+    scoped = BASE_ATTRS_BY_ATTRIBUTE.get(f"{host}.{attribute}")
+    if scoped is not None:
+        return scoped
+    return BASE_ATTRS_BY_ATTRIBUTE.get(attribute, {})
 
 
 #: Children injected into container hosts so layout attributes are observable.

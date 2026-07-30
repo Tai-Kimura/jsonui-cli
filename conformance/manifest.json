@@ -8,14 +8,14 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "f2c580102f63ec2faeeaabf394017aab399287ef76d8332495e98b5cea41f2a3",
+  "generatedFrom": "1a117207e274271638b07b85cf84d9e5ad214b35c03a7504e5ca3ebf6d597d33",
   "counts": {
-    "fixtures": 709,
+    "fixtures": 711,
     "assertable": 36,
-    "visual": 603,
+    "visual": 604,
     "interactive": 36,
-    "control": 34,
-    "skipped": 168,
+    "control": 35,
+    "skipped": 167,
     "promoted": {
       "callback": 12
     }
@@ -3873,7 +3873,7 @@
       "platforms": [
         "ios"
       ],
-      "mode": "uikit",
+      "mode": null,
       "deprecated": null,
       "layout": "fixtures/Label/selected__true.layout.json",
       "test": "fixtures/Label/selected__true.test.json",
@@ -4416,6 +4416,33 @@
       "control": "__control/Label"
     },
     {
+      "id": "Label/highlightAttributes__static",
+      "component": "Label",
+      "attribute": "highlightAttributes",
+      "case": "static",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "highlightAttributes",
+      "aliasOf": null,
+      "value": {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000"
+      },
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/highlightAttributes__static.layout.json",
+      "test": "fixtures/Label/highlightAttributes__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Label__selected-True"
+    },
+    {
       "id": "Label/highlightColor__static",
       "component": "Label",
       "attribute": "highlightColor",
@@ -4436,7 +4463,7 @@
       "test": "fixtures/Label/highlightColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__selected-True"
     },
     {
       "id": "Label/fontWeight__static",
@@ -15615,6 +15642,30 @@
       "isControl": true
     },
     {
+      "id": "__control/Label__selected-True",
+      "component": "__control",
+      "attribute": null,
+      "case": "Label",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Label__selected-True.layout.json",
+      "test": "fixtures/__control/Label__selected-True.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/NetworkImage",
       "component": "__control",
       "attribute": null,
@@ -16701,11 +16752,6 @@
       "component": "common",
       "attribute": "heightRaw",
       "reason": "metadata (not rendered)"
-    },
-    {
-      "component": "Label",
-      "attribute": "highlightAttributes",
-      "reason": "composite value (no representative static value in v1)"
     },
     {
       "component": "Label",

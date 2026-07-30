@@ -23,13 +23,16 @@ module SjuiTools
           # Get text content with binding support
           text_content = get_text_with_string_manager(label_handler.get_text_content(@component))
 
+          has_partials = @component['partialAttributes'].is_a?(Array) &&
+                         !@component['partialAttributes'].empty?
+
           # Use PartialAttributedText for all text rendering
           add_line "PartialAttributedText("
           indent do
             add_line "#{text_content},"
 
             # Add partialAttributes if present
-            if @component['partialAttributes'] && @component['partialAttributes'].is_a?(Array) && !@component['partialAttributes'].empty?
+            if has_partials
               add_line "partialAttributes: ["
               indent do
                 @component['partialAttributes'].each_with_index do |partial, index|
@@ -103,10 +106,26 @@ module SjuiTools
             end
 
             # Add fontWeight (handle both fontWeight and font:"bold")
-            if @component['fontWeight']
-              add_line "fontWeight: \"#{@component['fontWeight']}\","
-            elsif @component['font'] == 'bold'
-              add_line "fontWeight: \"bold\","
+            #
+            # The type depends on which initializer the call resolves to. With
+            # partialAttributes present that is the PartialAttribute-taking one,
+            # whose fontWeight is a Font.Weight; the String convenience
+            # initializer does not accept partialAttributes, so emitting the
+            # string form alongside them yields Swift that does not compile
+            # ("cannot convert value of type 'String' to expected argument type
+            # 'Font.Weight'"). StateAwareButtonView has a combined overload,
+            # which is why Button never hit this.
+            weight_name = if @component['fontWeight']
+                            @component['fontWeight']
+                          elsif @component['font'] == 'bold'
+                            'bold'
+                          end
+            if weight_name
+              if has_partials
+                add_line "fontWeight: #{font_weight_to_swiftui(weight_name)},"
+              else
+                add_line "fontWeight: \"#{weight_name}\","
+              end
             end
 
             # Add fontFamily (with binding support)
@@ -127,12 +146,6 @@ module SjuiTools
               color = get_font_color_with_binding(@component['fontColor'])
               add_line "fontColor: #{color},"
             end
-
-            # Add highlightColor
-            if @component['highlightColor']
-              add_line "// highlightColor: #{@component['highlightColor']} - Note: Text highlighting handled via selection in SwiftUI"
-            end
-
 
 
             # Add underline
@@ -176,13 +189,17 @@ module SjuiTools
               add_line "linkable: true,"
             end
 
+            # highlightAttributes / highlightColor / selected. Emitted last
+            # because Swift requires argument labels in declaration order and
+            # these are the trailing parameters of PartialAttributedText.
+            emit_highlight_attributes
+
             # Remove trailing comma from last parameter
             @generated_code[-1] = @generated_code[-1].chomp(',')
           end
           add_line ")"
 
           apply_text_shadow
-          apply_highlight_attributes
 
           # lineBreakMode (SwiftJsonUI uses short forms: Char, Clip, Word, Head, Middle, Tail)
           if @component['lineBreakMode']
@@ -430,35 +447,70 @@ module SjuiTools
             ".shadow(color: #{color}, radius: #{blur}, x: #{x}, y: #{y})"
           )
         end
-        # highlightAttributes — the styling used while the label is highlighted.
+        # highlightAttributes / highlightColor — the styling a label switches to
+        # while it is selected.
         #
-        # UIKit builds a second attribute dictionary and swaps to it when
-        # `isHighlighted` flips (SJUILabel: `l.highlightAttributes = ...`).
-        # SwiftUI has no highlighted state on a Text, so — as with
-        # Image.highlightSrc — the swap is driven by a zero-duration press.
-        # Only `fontColor` is expressible as a modifier; font and size would
-        # need a second PartialAttributedText, which is a bigger change than
-        # this attribute has ever justified, and are left unhandled rather than
-        # emitted wrongly.
-        def apply_highlight_attributes
+        # UIKit keeps two attribute dictionaries and swaps between them when
+        # `selected` flips (SJUILabel#applyAttributedText:
+        # `let attr = selected ? highlightAttributes : attributes`), so the
+        # driver here is `selected` as well. A press gesture would be the wrong
+        # trigger: selection is state the screen owns, and it outlives the touch.
+        #
+        # `highlightAttributes` wins over `highlightColor` when both are given,
+        # and an empty attribute object falls through to `highlightColor` —
+        # both matching the precedence in SJUILabel's creator
+        # (`if !attr["highlightAttributes"].isEmpty ... else if highlightColor`).
+        def emit_highlight_attributes
           attrs = @component['highlightAttributes']
-          return unless attrs.is_a?(Hash)
+          highlight_color = @component['highlightColor']
 
-          color = attrs['fontColor']
-          return if color.nil?
+          fields = attrs.is_a?(Hash) ? highlight_attribute_fields(attrs) : []
+          if fields.empty? && highlight_color
+            fields = ["fontColor: #{get_font_color_with_binding(highlight_color)}"]
+          end
+          return if fields.empty?
 
-          state_var = "#{(@component['id'] || 'label').gsub(/[^A-Za-z0-9]/, '_')}IsHighlighted"
-          @state_variables ||= []
-          @state_variables << "@State private var #{state_var} = false"
+          add_line "highlightAttributes: TextHighlightAttributes(#{fields.join(', ')}),"
+          add_line "isHighlighted: #{highlight_condition},"
+        end
 
-          @modifier_bag.append(
-            :component_specific,
-            ".foregroundColor(#{state_var} ? #{get_swiftui_color(color)} : nil)"
-          )
-          @modifier_bag.append(
-            :component_specific,
-            ".onLongPressGesture(minimumDuration: 0, pressing: { #{state_var} = $0 }, perform: {})"
-          )
+        # Fields for the TextHighlightAttributes initializer.
+        #
+        # Emitted in the struct's declaration order (fontFamily, fontSize,
+        # fontWeight, fontColor, lineHeightMultiple, textAlignment) because
+        # Swift requires argument labels in that order.
+        def highlight_attribute_fields(attrs)
+          fields = []
+          font = attrs['font']
+
+          # UIKit resolves the literal name "bold" to the bold system font
+          # rather than to a family, so it maps to a weight and not a family:
+          # `UIFont(name: highlightName, size:) ?? (highlightName == "bold" ? ...)`
+          fields << "fontFamily: \"#{font}\"" if font && font != 'bold'
+          fields << "fontSize: #{attrs['fontSize'].to_f}" if attrs['fontSize']
+          fields << 'fontWeight: .bold' if font == 'bold'
+          if attrs['fontColor']
+            fields << "fontColor: #{get_font_color_with_binding(attrs['fontColor'])}"
+          end
+          if attrs['lineHeightMultiple']
+            fields << "lineHeightMultiple: #{attrs['lineHeightMultiple'].to_f}"
+          end
+          if attrs['textAlign']
+            alignment = text_alignment_to_swiftui(attrs['textAlign'])
+            fields << "textAlignment: #{alignment}" if alignment
+          end
+          fields
+        end
+
+        # The `selected` state that decides which attribute set is in force.
+        # Absent means never highlighted, which is what UIKit does with a label
+        # whose `selected` is never set.
+        def highlight_condition
+          value = @component['selected']
+          return 'true' if value == true || value == 'true'
+          return "data.#{extract_binding_property(value)}" if value.is_a?(String) && is_binding?(value)
+
+          'false'
         end
       end
     end
