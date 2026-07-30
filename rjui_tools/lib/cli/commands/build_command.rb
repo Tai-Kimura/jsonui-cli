@@ -67,6 +67,9 @@ module RjuiTools
           # defaultScrollAnchor / currentPage / onItemAppear)
           emit_collection_scroll_helper
 
+          # Emit the relative-positioning helper (align*View / align*OfView)
+          emit_relative_position_helper
+
           all_json_files = Dir.glob(File.join(layouts_dir, '**', '*.json')).reject do |file|
             # Skip Resources folder (colors.json, strings.json, etc.)
             # Skip Styles folder (reusable style definitions, not components)
@@ -1241,6 +1244,193 @@ module RjuiTools
 
           File.write(path, content)
           Core::Logger.info("Generated: #{path}")
+        end
+
+        # align*OfView / align*View / alignCenter*View — positioning a child
+        # against a SIBLING's box.
+        #
+        # CSS has no way to express this statically: `position: absolute` offsets
+        # resolve against the containing block, never against another element.
+        # (Anchor positioning would, but it is Chromium-only.) So the boxes are
+        # measured and the offsets written, which is what AutoLayout does on iOS
+        # and what RelativePositionContainer does in SwiftUI.
+        #
+        # Which edge is set matters: an absolutely positioned box applies its
+        # margin OUTWARD from whichever offset is set, so anchoring the child's
+        # bottom uses `bottom` and lets margin-bottom push it up — the same sign
+        # UIKit gives it. Setting `top` and subtracting a margin would fight the
+        # class-driven margin already on the element.
+        def emit_relative_position_helper
+          generated_dir = @config['generated_directory'] || 'src/generated'
+          FileUtils.mkdir_p(generated_dir)
+          is_ts = @config['typescript']
+          extension = is_ts ? 'ts' : 'js'
+          path = File.join(generated_dir, "relativePosition.#{extension}")
+
+          spec_type = is_ts ? <<~TS : ''
+
+            /** One child's constraints. Every value is the id of a sibling. */
+            export interface RelativeConstraint {
+              /** id of the element being positioned */
+              id: string;
+              /** alignTopOfView — this element's bottom sits at the anchor's top */
+              above?: string;
+              /** alignBottomOfView — this element's top sits at the anchor's bottom */
+              below?: string;
+              /** alignLeftOfView — this element's right sits at the anchor's left */
+              leftOf?: string;
+              /** alignRightOfView — this element's left sits at the anchor's right */
+              rightOf?: string;
+              /** alignTopView / alignBottomView / alignLeftView / alignRightView */
+              alignTop?: string;
+              alignBottom?: string;
+              alignLeft?: string;
+              alignRight?: string;
+              /** alignCenterVerticalView / alignCenterHorizontalView */
+              centerVertical?: string;
+              centerHorizontal?: string;
+            }
+          TS
+          container_param = is_ts ? ': HTMLElement | null | undefined' : ''
+          spec_param = is_ts ? ': RelativeConstraint[]' : ''
+          cleanup_ret = is_ts ? ': () => void' : ''
+          el_type = is_ts ? ' as HTMLElement | null' : ''
+
+          marker_header = Core::GeneratedMarker.comment_header(
+            source: "relativePosition (align*View / align*OfView helper)",
+            generator: "rjui build"
+          )
+          marker_footer = Core::GeneratedMarker.comment_footer
+
+          content = <<~JS
+            #{marker_header}
+            // Positions children against sibling boxes. See RelativeConstraint
+            // for which JsonUI attribute each field comes from.
+            #{spec_type}
+            function findChild(container#{container_param}, id#{is_ts ? ': string' : ''}) {
+              if (!container) return null;
+              return container.querySelector('[id="' + id + '"]')#{el_type};
+            }
+
+            // Writes one child's offsets. Returns true when anything moved, so the
+            // caller can settle chains (A below B below C) without needing the
+            // constraints in dependency order.
+            function place(
+              container#{container_param},
+              spec#{is_ts ? ': RelativeConstraint' : ''}
+            ) {
+              const child = findChild(container, spec.id);
+              if (!container || !child) return false;
+
+              const box = container.getBoundingClientRect();
+              const self = child.getBoundingClientRect();
+              const anchorOf = (id#{is_ts ? ': string | undefined' : ''}) => {
+                if (!id) return null;
+                const el = findChild(container, id);
+                return el ? el.getBoundingClientRect() : null;
+              };
+
+              let top#{is_ts ? ': number | null' : ''} = null;
+              let bottom#{is_ts ? ': number | null' : ''} = null;
+              let left#{is_ts ? ': number | null' : ''} = null;
+              let right#{is_ts ? ': number | null' : ''} = null;
+
+              const above = anchorOf(spec.above);
+              if (above) bottom = box.bottom - above.top;
+              const below = anchorOf(spec.below);
+              if (below) top = below.bottom - box.top;
+              const alignTop = anchorOf(spec.alignTop);
+              if (alignTop) top = alignTop.top - box.top;
+              const alignBottom = anchorOf(spec.alignBottom);
+              if (alignBottom) bottom = box.bottom - alignBottom.bottom;
+              const centerVertical = anchorOf(spec.centerVertical);
+              if (centerVertical) {
+                top = centerVertical.top + centerVertical.height / 2 - box.top - self.height / 2;
+              }
+
+              const leftOf = anchorOf(spec.leftOf);
+              if (leftOf) right = box.right - leftOf.left;
+              const rightOf = anchorOf(spec.rightOf);
+              if (rightOf) left = rightOf.right - box.left;
+              const alignLeft = anchorOf(spec.alignLeft);
+              if (alignLeft) left = alignLeft.left - box.left;
+              const alignRight = anchorOf(spec.alignRight);
+              if (alignRight) right = box.right - alignRight.right;
+              const centerHorizontal = anchorOf(spec.centerHorizontal);
+              if (centerHorizontal) {
+                left = centerHorizontal.left + centerHorizontal.width / 2 - box.left - self.width / 2;
+              }
+
+              let moved = false;
+              const write = (
+                prop#{is_ts ? ": 'top' | 'bottom' | 'left' | 'right'" : ''},
+                value#{is_ts ? ': number | null' : ''}
+              ) => {
+                const next = value === null ? '' : Math.round(value) + 'px';
+                if (child.style[prop] === next) return;
+                child.style[prop] = next;
+                moved = true;
+              };
+              // A vertical constraint clears the opposite edge, so re-running
+              // after a layout change cannot leave both edges pinned and stretch
+              // the element. An axis with no constraint is left alone.
+              if (top !== null || bottom !== null) {
+                write('top', top);
+                write('bottom', bottom);
+              }
+              if (left !== null || right !== null) {
+                write('left', left);
+                write('right', right);
+              }
+              return moved;
+            }
+
+            export function applyRelativePositions(
+              container#{container_param},
+              spec#{spec_param}
+            )#{cleanup_ret} {
+              if (!container || spec.length === 0) return () => {};
+
+              const settle = () => {
+                // One pass per constraint is enough to settle any acyclic chain;
+                // the loop exits as soon as nothing moves, so the common case is
+                // two passes.
+                for (let pass = 0; pass < spec.length + 1; pass++) {
+                  let moved = false;
+                  for (const one of spec) {
+                    if (place(container, one)) moved = true;
+                  }
+                  if (!moved) return;
+                }
+              };
+
+              settle();
+
+              if (typeof ResizeObserver === 'undefined') return () => {};
+              // Anchors move when their own content reflows, so the container
+              // alone is not enough to observe.
+              const observer = new ResizeObserver(() => settle());
+              observer.observe(container);
+              for (const one of spec) {
+                const child = findChild(container, one.id);
+                if (child) observer.observe(child);
+                for (const anchorId of [
+                  one.above, one.below, one.leftOf, one.rightOf,
+                  one.alignTop, one.alignBottom, one.alignLeft, one.alignRight,
+                  one.centerVertical, one.centerHorizontal
+                ]) {
+                  const anchor = anchorId ? findChild(container, anchorId) : null;
+                  if (anchor) observer.observe(anchor);
+                }
+              }
+              return () => observer.disconnect();
+            }
+
+            #{marker_footer}
+          JS
+
+          File.write(path, content)
+          Core::Logger.success("Updated: #{path}")
         end
 
         # Collection scroll control — scrollTo / scrollAnchor / scrollAnimated /

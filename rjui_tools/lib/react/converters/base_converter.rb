@@ -1145,39 +1145,59 @@ module RjuiTools
         end
 
         # Determine absolute position classes based on align attributes for overlay children
+        # Sibling-relative positioning (align*OfView / align*View /
+        # alignCenter*View). Written out rather than looped over a name list so
+        # the consumed-attribute scan and the coverage ratchet see the reads.
+        def sibling_vertical_constraint?
+          !!(attributes['alignTopOfView'] || attributes['alignBottomOfView'] ||
+             attributes['alignTopView'] || attributes['alignBottomView'] ||
+             attributes['alignCenterVerticalView'])
+        end
+
+        def sibling_horizontal_constraint?
+          !!(attributes['alignLeftOfView'] || attributes['alignRightOfView'] ||
+             attributes['alignLeftView'] || attributes['alignRightView'] ||
+             attributes['alignCenterHorizontalView'])
+        end
+
+        def sibling_constraint?
+          sibling_vertical_constraint? || sibling_horizontal_constraint?
+        end
+
         def overlay_position_classes
-          has_align = attributes['centerInParent'] || attributes['centerVertical'] || attributes['centerHorizontal'] ||
-                      attributes['alignTop'] || attributes['alignBottom'] || attributes['alignLeft'] || attributes['alignRight']
+          center_all = attributes['centerInParent']
 
-          unless has_align
-            return 'inset-0'
-          end
-
-          classes = []
-
-          if attributes['centerInParent']
-            classes << 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2'
-          else
-            # Vertical
-            if attributes['centerVertical']
-              classes << 'top-1/2 -translate-y-1/2'
+          # An axis constrained against a SIBLING is owned by the inline style
+          # that @/generated/relativePosition writes, so no class may touch it.
+          # `inset-0` is the dangerous one: it pins all four edges and would
+          # stretch the element across the container.
+          vertical =
+            if sibling_vertical_constraint?
+              nil
+            elsif center_all || attributes['centerVertical']
+              'top-1/2 -translate-y-1/2'
             elsif attributes['alignBottom']
-              classes << 'bottom-0'
+              'bottom-0'
             elsif attributes['alignTop']
-              classes << 'top-0'
+              'top-0'
             end
 
-            # Horizontal
-            if attributes['centerHorizontal']
-              classes << 'left-1/2 -translate-x-1/2'
+          horizontal =
+            if sibling_horizontal_constraint?
+              nil
+            elsif center_all || attributes['centerHorizontal']
+              'left-1/2 -translate-x-1/2'
             elsif attributes['alignRight']
-              classes << 'right-0'
+              'right-0'
             elsif attributes['alignLeft']
-              classes << 'left-0'
+              'left-0'
             end
-          end
 
-          classes.join(' ')
+          # No instruction on either axis: fill the container, as an overlay
+          # child with no alignment always has.
+          return 'inset-0' if vertical.nil? && horizontal.nil? && !sibling_constraint?
+
+          [vertical, horizontal].compact.join(' ')
         end
 
         # Canonical binding grammar (shared/core/binding_semantics.json):

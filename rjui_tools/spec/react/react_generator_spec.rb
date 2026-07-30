@@ -419,3 +419,85 @@ RSpec.describe RjuiTools::React::ReactGenerator, 'collection scroll declarations
     expect(out).not_to include('useRef<')
   end
 end
+
+RSpec.describe RjuiTools::React::ReactGenerator, 'relative positioning' do
+  let(:generator) do
+    described_class.new({ 'use_tailwind' => true, 'typescript' => true,
+                          'layouts_directory' => '/tmp/x', 'generated_directory' => '/tmp/x/out' })
+  end
+
+  let(:header) { { 'type' => 'Label', 'id' => 'header', 'text' => 'Header', 'height' => 40 } }
+
+  def screen(children, name: 'RelScreen')
+    generator.generate(name, { 'type' => 'View', 'child' => children })
+  end
+
+  it 'hoists one ref and one effect per container' do
+    out = screen([header, { 'type' => 'Label', 'id' => 'body', 'text' => 'Body',
+                            'alignBottomOfView' => 'header' }])
+    expect(out).to include("import { applyRelativePositions } from '@/generated/relativePosition';")
+    expect(out).to include('const bodyRelRef = useRef<HTMLDivElement | null>(null);')
+    expect(out).to include(
+      "useEffect(() => applyRelativePositions(bodyRelRef.current, [{ id: 'body', below: 'header' }]), []);"
+    )
+    expect(out).to include('ref={bodyRelRef}')
+    expect(out).to include('"use client"')
+  end
+
+  # The OfView family positions the element BESIDE the anchor — UIKit
+  # constrains alignTopOfView's subject bottom to the anchor's top, i.e. the
+  # subject goes above it.
+  it 'maps every constraint to its helper field' do
+    out = screen([header, {
+      'type' => 'Label', 'id' => 'body', 'text' => 'Body',
+      'alignTopOfView' => 'a', 'alignBottomOfView' => 'b',
+      'alignLeftOfView' => 'c', 'alignRightOfView' => 'd',
+      'alignTopView' => 'e', 'alignBottomView' => 'f',
+      'alignLeftView' => 'g', 'alignRightView' => 'h',
+      'alignCenterVerticalView' => 'i', 'alignCenterHorizontalView' => 'j'
+    }])
+    expect(out).to include(
+      "{ id: 'body', above: 'a', below: 'b', leftOf: 'c', rightOf: 'd', " \
+      "alignTop: 'e', alignBottom: 'f', alignLeft: 'g', alignRight: 'h', " \
+      "centerVertical: 'i', centerHorizontal: 'j' }"
+    )
+  end
+
+  it 'collects every constrained child of the same container into one spec' do
+    out = screen([header,
+                  { 'type' => 'Label', 'id' => 'body', 'text' => 'B', 'alignBottomOfView' => 'header' },
+                  { 'type' => 'Label', 'id' => 'footer', 'text' => 'F', 'alignBottomOfView' => 'body' }])
+    expect(out).to include("[{ id: 'body', below: 'header' }, { id: 'footer', below: 'body' }]")
+    expect(out.scan('applyRelativePositions').length).to eq(2) # import + one call
+  end
+
+  # The helper finds anchors and subjects by DOM id, so a binding-form id has
+  # nothing to look up.
+  it 'skips a child whose id is a binding' do
+    out = screen([header, { 'type' => 'Label', 'id' => '@{rowId}', 'text' => 'B',
+                            'alignBottomOfView' => 'header' }])
+    expect(out).not_to include('relativePosition')
+  end
+
+  it 'skips a constraint whose target is a binding' do
+    out = screen([header, { 'type' => 'Label', 'id' => 'body', 'text' => 'B',
+                            'alignBottomOfView' => '@{anchorId}' }])
+    expect(out).not_to include('relativePosition')
+  end
+
+  it 'emits nothing without sibling constraints' do
+    out = screen([header, { 'type' => 'Label', 'id' => 'body', 'text' => 'B' }])
+    expect(out).not_to include('relativePosition')
+    expect(out).not_to include('RelRef')
+  end
+
+  it 'leaves the ref untyped in a JavaScript project' do
+    js = described_class.new({ 'use_tailwind' => true, 'layouts_directory' => '/tmp/x',
+                               'generated_directory' => '/tmp/x/out' })
+    out = js.generate('RelScreenJs', { 'type' => 'View', 'child' => [
+      header, { 'type' => 'Label', 'id' => 'body', 'text' => 'B', 'alignBottomOfView' => 'header' }
+    ] })
+    expect(out).to include('const bodyRelRef = useRef(null);')
+    expect(out).not_to include('useRef<')
+  end
+end

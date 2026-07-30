@@ -230,4 +230,66 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
       expect(attrs).not_to match(/[^.]\bpanHandler\?\./)
     end
   end
+
+  # align*OfView / align*View: CSS cannot express a sibling-relative offset
+  # statically, so the element side is `position: absolute` plus a ref, and the
+  # hoisted effect writes the measured offsets.
+  describe 'sibling-relative positioning' do
+    let(:header) { { 'type' => 'Label', 'id' => 'header', 'text' => 'Header' } }
+
+    def container(children)
+      create_converter({ 'type' => 'View', 'child' => children }).convert
+    end
+
+    it 'becomes the containing block and takes the ref' do
+      result = container([header, { 'type' => 'Label', 'id' => 'body', 'text' => 'B',
+                                    'alignBottomOfView' => 'header' }])
+      expect(result).to include('ref={bodyRelRef}')
+      expect(result).to include('relative')
+    end
+
+    it 'is the containing block even when an orientation already made it flex' do
+      result = create_converter({
+        'type' => 'View', 'orientation' => 'vertical',
+        'child' => [header, { 'type' => 'Label', 'id' => 'body', 'text' => 'B',
+                              'alignLeftView' => 'header' }]
+      }).convert
+      expect(result).to include('relative')
+      expect(result).to include('ref={bodyRelRef}')
+    end
+
+    it 'absolutely positions the constrained child only' do
+      result = container([header, { 'type' => 'Label', 'id' => 'body', 'text' => 'B',
+                                    'alignBottomOfView' => 'header' }])
+      body = result.lines.find { |l| l.include?('id="body"') }
+      anchor = result.lines.find { |l| l.include?('id="header"') }
+      expect(body).to include('absolute')
+      # The anchor stays in the flow: `inset-0` would stretch it across the
+      # container and make every constraint pointing at it meaningless.
+      expect(anchor).not_to include('absolute')
+      expect(anchor).not_to include('inset-0')
+    end
+
+    # The inline style owns a constrained axis; a class must not fight it.
+    it 'emits no offset class for a sibling-constrained axis' do
+      result = container([header, { 'type' => 'Label', 'id' => 'body', 'text' => 'B',
+                                    'alignBottomOfView' => 'header', 'alignTop' => true }])
+      body = result.lines.find { |l| l.include?('id="body"') }
+      expect(body).not_to include('inset-0')
+      expect(body).not_to include('top-0')
+    end
+
+    it 'still honours parent alignment on the unconstrained axis' do
+      result = container([header, { 'type' => 'Label', 'id' => 'body', 'text' => 'B',
+                                    'alignBottomOfView' => 'header', 'alignRight' => true }])
+      body = result.lines.find { |l| l.include?('id="body"') }
+      expect(body).to include('right-0')
+    end
+
+    it 'leaves a plain overlay untouched' do
+      result = container([header, { 'type' => 'Label', 'id' => 'body', 'text' => 'B' }])
+      expect(result).not_to include('ref=')
+      expect(result.lines.find { |l| l.include?('id="header"') }).to include('absolute inset-0')
+    end
+  end
 end

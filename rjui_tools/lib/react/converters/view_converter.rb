@@ -14,12 +14,13 @@ module RjuiTools
           children = convert_children(indent)
           id_attr = build_id_attr
           event_attrs = build_event_attrs
+          rel_ref_attr = build_relative_position_ref_attr
 
           jsx = if children.empty?
-            "#{indent_str(indent)}<div#{id_attr}#{class_attr}#{style_attr}#{event_attrs} />"
+            "#{indent_str(indent)}<div#{id_attr}#{rel_ref_attr}#{class_attr}#{style_attr}#{event_attrs} />"
           else
             <<~JSX.chomp
-              #{indent_str(indent)}<div#{id_attr}#{class_attr}#{style_attr}#{event_attrs}>
+              #{indent_str(indent)}<div#{id_attr}#{rel_ref_attr}#{class_attr}#{style_attr}#{event_attrs}>
               #{children}
               #{indent_str(indent)}</div>
             JSX
@@ -48,12 +49,26 @@ module RjuiTools
             if attributes['orientation']
               # orientation specified - handled by base_converter's map_orientation
             elsif ui_children_count > 1
-              # No orientation + multiple UI children = overlay (FrameLayout)
-              classes << 'relative'
+              # No orientation + multiple UI children = overlay (FrameLayout).
+              # An element that is itself absolutely positioned is already a
+              # containing block for its absolute descendants, and `absolute`
+              # + `relative` on one element is a cascade coin-toss — both set
+              # `position`, so the winner is decided by stylesheet order, not
+              # class order (Tailwind emits `relative` last, which would undo
+              # the absolute placement).
+              classes << 'relative' unless json['_overlay']
             else
               # No orientation + single child = simple wrapper
               classes.unshift('flex flex-col')
             end
+          end
+
+          # A child positioned against a sibling needs this element to be the
+          # containing block its inline offsets resolve against — including when
+          # an orientation already made it a flex container, where the sibling
+          # constraint is the reason the child leaves the flow at all.
+          if relative_positioned_children? && !json['_overlay'] && !classes.include?('relative')
+            classes << 'relative'
           end
 
           # Wrapping. Only meaningful on a flex container, which every View
@@ -126,15 +141,58 @@ module RjuiTools
           child_array.is_a?(Array) && ui_children_count > 1 && !attributes['orientation']
         end
 
+        #: align*OfView / align*View / alignCenter*View on a child. MUST stay in
+        #: sync with ReactGenerator#relative_constraint_for, which builds the
+        #: spec the hoisted effect applies.
+        RELATIVE_POSITION_ATTRS = %w[
+          alignTopOfView alignBottomOfView alignLeftOfView alignRightOfView
+          alignTopView alignBottomView alignLeftView alignRightView
+          alignCenterVerticalView alignCenterHorizontalView
+        ].freeze
+
+        def relative_positioned?(child)
+          return false unless child.is_a?(Hash)
+
+          id = child['id']
+          return false unless id.is_a?(String) && !id.empty? && !id.include?('@{')
+
+          RELATIVE_POSITION_ATTRS.any? { |attr| child[attr] }
+        end
+
+        def relative_positioned_children?
+          items = child_array.is_a?(Array) ? child_array : [child_array]
+          items.any? { |child| relative_positioned?(child) }
+        end
+
+        # The ref the hoisted `applyRelativePositions` effect measures against.
+        # Named after the first constrained child rather than the container: the
+        # child is required to have a literal id (it is the anchor lookup key),
+        # the container is not, and both sides derive the name the same way.
+        # MUST stay in sync with ReactGenerator#relative_position_ref_name.
+        def build_relative_position_ref_attr
+          items = child_array.is_a?(Array) ? child_array : [child_array]
+          first = items.find { |child| relative_positioned?(child) }
+          return '' unless first
+
+          " ref={#{snake_to_camel_id(first['id'])}RelRef}"
+        end
+
         def convert_children(indent)
-          if overlay_layout?
+          if overlay_layout? || relative_positioned_children?
             items = child_array.is_a?(Array) ? child_array : [child_array]
             items.filter_map do |child|
               next nil if data_only_element?(child)
 
-              # Inject absolute positioning for overlay children
-              overlay_child = child.merge('_overlay' => true)
-              converter = create_converter_for_child(overlay_child)
+              # Absolute positioning. In a plain overlay every child is
+              # absolute, as before. Once a sibling constraint is in play only
+              # the constrained children leave the flow: an unconstrained child
+              # is there to be measured against, and the overlay default
+              # (`inset-0`) would stretch it across the container and make every
+              # constraint pointing at it meaningless.
+              absolute = relative_positioned?(child) ||
+                         (overlay_layout? && !relative_positioned_children?)
+              child = child.merge('_overlay' => true) if absolute
+              converter = create_converter_for_child(child)
               converter.convert_node(indent + 2)
             end.join("\n")
           else

@@ -219,6 +219,7 @@ module RjuiTools
         state_vars = extract_state_variables(json)
         focus_fields = extract_focus_fields(json)
         collection_scrolls = extract_collection_scrolls(json)
+        relative_containers = extract_relative_containers(json)
         included_component_map = extract_included_components(json)  # { CompName => subdir_or_nil }
         included_components = included_component_map.keys
         extension_components = extract_extension_components(json)
@@ -252,14 +253,15 @@ module RjuiTools
         uses_extensions = !extension_components.empty?
         needs_focus = !focus_fields.empty?
         needs_collection_scroll = !collection_scrolls.empty?
+        needs_relative_position = !relative_containers.empty?
         needs_client = needs_state || uses_string_manager || uses_extensions || needs_landscape || needs_focus ||
-                       needs_collection_scroll || variants.any?
+                       needs_collection_scroll || needs_relative_position || variants.any?
         use_client = needs_client ? "\"use client\";\n\n" : ''
 
         # Build React import
         react_hooks = []
         react_hooks << 'useState' if needs_state
-        if needs_focus || needs_collection_scroll
+        if needs_focus || needs_collection_scroll || needs_relative_position
           react_hooks << 'useRef'
           react_hooks << 'useEffect'
         end
@@ -285,6 +287,10 @@ module RjuiTools
         # imported, so a list with just `scrollTo` does not pull in the
         # IntersectionObserver path.
         collection_scroll_import = collection_scroll_import_line(collection_scrolls)
+
+        # Sibling-relative positioning (align*View / align*OfView).
+        relative_position_import = needs_relative_position ?
+          "\nimport { applyRelativePositions } from '@/generated/relativePosition';" : ''
         screen_marker_import = screen_id ? "\nimport { screenMarker } from '@/generated/screenMarker';" : ''
 
         # partialAttributes are applied at runtime against the resolved
@@ -425,6 +431,16 @@ module RjuiTools
           collection_scroll_declarations = "\n#{collection_scroll_declarations}\n"
         end
 
+        # Sibling-relative positioning: a ref per container plus one effect that
+        # measures and writes the offsets. The helper installs its own
+        # ResizeObserver, so the effect has no dependencies — the constraints
+        # are static.
+        relative_position_declarations =
+          relative_containers.map { |c| relative_position_effect(c) }.join("\n")
+        unless relative_position_declarations.empty?
+          relative_position_declarations = "\n#{relative_position_declarations}\n"
+        end
+
         # Generate landscape hook declaration
         landscape_declaration = needs_landscape ? "\n  #{ResponsiveHelper.landscape_hook_declaration}\n" : ''
 
@@ -497,10 +513,10 @@ module RjuiTools
 
         <<~JSX
           #{use_client}#{marker_header}
-          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{collection_scroll_import}#{screen_marker_import}#{partial_text_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
+          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{collection_scroll_import}#{relative_position_import}#{screen_marker_import}#{partial_text_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
 
           #{props_interface if @config['typescript']}
-          export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{collection_scroll_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}
+          export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{collection_scroll_declarations}#{relative_position_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}
             return (
           #{jsx_content}
             );
@@ -571,6 +587,76 @@ module RjuiTools
 
       def capitalize_first(str)
         str[0].upcase + str[1..]
+      end
+
+      #: JsonUI attribute -> the field the relativePosition helper expects. The
+      #: `OfView` family positions the element BESIDE the anchor (UIKit:
+      #: `alignTopOfView` constrains self.bottom to the anchor's top, i.e. self
+      #: goes above it); the plain `View` family aligns the same edges.
+      RELATIVE_CONSTRAINT_FIELDS = {
+        'alignTopOfView' => 'above',
+        'alignBottomOfView' => 'below',
+        'alignLeftOfView' => 'leftOf',
+        'alignRightOfView' => 'rightOf',
+        'alignTopView' => 'alignTop',
+        'alignBottomView' => 'alignBottom',
+        'alignLeftView' => 'alignLeft',
+        'alignRightView' => 'alignRight',
+        'alignCenterVerticalView' => 'centerVertical',
+        'alignCenterHorizontalView' => 'centerHorizontal'
+      }.freeze
+
+      # Containers holding at least one sibling-constrained child. MUST stay in
+      # sync with ViewConverter#relative_positioned? and
+      # #build_relative_position_ref_attr, which attach the ref this targets.
+      def extract_relative_containers(json, found = [])
+        return found unless json.is_a?(Hash) || json.is_a?(Array)
+
+        if json.is_a?(Hash)
+          child = json['child'] || json['children']
+          children = child.is_a?(Array) ? child : [child].compact
+          if %w[View SafeAreaView].include?(json['type'].to_s) || json['type'].nil?
+            specs = children.filter_map { |c| relative_constraint_for(c) }
+            found << { ref: relative_position_ref_name(specs.first['id']), specs: specs } if specs.any?
+          end
+          children.each { |c| extract_relative_containers(c, found) }
+        else
+          json.each { |item| extract_relative_containers(item, found) }
+        end
+
+        found.uniq { |c| c[:ref] }
+      end
+
+      # One child's constraint spec, or nil when it has none. A literal id is
+      # required: it is how the helper finds the element in the DOM.
+      def relative_constraint_for(child)
+        return nil unless child.is_a?(Hash)
+
+        id = child['id']
+        return nil unless id.is_a?(String) && !id.empty? && !id.include?('@{')
+
+        spec = { 'id' => id }
+        RELATIVE_CONSTRAINT_FIELDS.each do |attr, field|
+          target = child[attr]
+          spec[field] = target if target.is_a?(String) && !target.empty? && !target.include?('@{')
+        end
+        spec.length > 1 ? spec : nil
+      end
+
+      def relative_position_ref_name(child_id)
+        "#{snake_to_camel_id(child_id)}RelRef"
+      end
+
+      def relative_position_effect(container)
+        element_type = @config['typescript'] ? '<HTMLDivElement | null>' : ''
+        spec_literal = container[:specs].map do |spec|
+          pairs = spec.map { |k, v| "#{k}: '#{v}'" }
+          "{ #{pairs.join(', ')} }"
+        end.join(', ')
+
+        "  const #{container[:ref]} = useRef#{element_type}(null);\n" \
+          "  useEffect(() => applyRelativePositions(#{container[:ref]}.current, " \
+          "[#{spec_literal}]), []);"
       end
 
       # Collections declaring scroll control (scrollTo / defaultScrollAnchor /
