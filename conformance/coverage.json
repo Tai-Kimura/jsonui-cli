@@ -4,14 +4,6 @@
   "entries": [
     {
       "component": "Button",
-      "attribute": "buttonType",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Button",
       "attribute": "hilightColor",
       "platforms": [
         "web"
@@ -118,28 +110,12 @@
     },
     {
       "component": "Label",
-      "attribute": "lineHeight",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Label",
       "attribute": "textShadow",
       "platforms": [
         "web"
       ],
       "reason": "unimplemented",
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "Label",
-      "attribute": "textTransform",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
     },
     {
       "component": "NetworkImage",
@@ -168,14 +144,6 @@
       ],
       "reason": "legacy",
       "note": "alias — normalized to its canonical spelling before conversion"
-    },
-    {
-      "component": "SafeAreaView",
-      "attribute": "safeAreaInsetPositions",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
     },
     {
       "component": "ScrollView",
@@ -288,15 +256,6 @@
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
-      "component": "TextField",
-      "attribute": "nextFocus",
-      "platforms": [
-        "android",
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
       "component": "TextView",
       "attribute": "hintAttributes",
       "platforms": [
@@ -330,14 +289,6 @@
       ],
       "reason": "unimplemented",
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "View",
-      "attribute": "safeAreaInsetPositions",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
     },
     {
       "component": "common",

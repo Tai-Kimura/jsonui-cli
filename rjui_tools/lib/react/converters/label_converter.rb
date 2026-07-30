@@ -230,6 +230,16 @@ module RjuiTools
           # Strikethrough
           classes << 'line-through' if attributes['strikethrough']
 
+          # textTransform — declared `platform: react`; CSS text-transform is the
+          # web's own capability, and `none` is the initial value, so it is
+          # spelled out rather than omitted (a style block may have set another).
+          case attributes['textTransform'].to_s
+          when 'uppercase' then classes << 'uppercase'
+          when 'lowercase' then classes << 'lowercase'
+          when 'capitalize' then classes << 'capitalize'
+          when 'none' then classes << 'normal-case'
+          end
+
           # Cursor pointer for clickable items
           classes << 'cursor-pointer' if attributes['onClick'] || attributes['onclick']
 
@@ -243,7 +253,10 @@ module RjuiTools
           # Call parent to initialize @dynamic_styles
           super
 
-          # Line spacing / line height
+          # Line spacing / line height. `lineHeight` is declared
+          # `platform: react` and is the CSS property directly, in px — the
+          # cross-platform spellings are the multiplier and the extra spacing, so
+          # they take precedence over the web-only literal.
           if attributes['lineHeightMultiple']
             @dynamic_styles['lineHeight'] = attributes['lineHeightMultiple'].to_s
           elsif attributes['lineSpacing']
@@ -251,6 +264,9 @@ module RjuiTools
             font_size = attributes['fontSize'] || 16
             line_height = ((font_size + attributes['lineSpacing'].to_f) / font_size).round(2)
             @dynamic_styles['lineHeight'] = line_height.to_s
+
+          elsif attributes['lineHeight']
+            @dynamic_styles['lineHeight'] = "'#{attributes['lineHeight']}px'"
           end
 
           # A highlight lineHeightMultiple. Line height is a unitless multiplier

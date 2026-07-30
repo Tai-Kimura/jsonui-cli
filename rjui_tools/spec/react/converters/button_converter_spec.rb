@@ -341,3 +341,31 @@ RSpec.describe RjuiTools::React::Converters::ButtonConverter do
     end
   end
 end
+
+RSpec.describe RjuiTools::React::Converters::ButtonConverter, 'buttonType' do
+  let(:config) { { 'use_tailwind' => true } }
+
+  def button(extra)
+    described_class.new({ 'class' => 'Button', 'text' => 'Send' }.merge(extra), config).convert(2)
+  end
+
+  # It matters more than it looks: a <button> inside a <form> defaults to
+  # `submit`, so a plain action button submits the form unless it says `button`.
+  it 'emits the HTML type' do
+    expect(button('buttonType' => 'submit')).to include('type="submit"')
+    expect(button('buttonType' => 'reset')).to include('type="reset"')
+    expect(button('buttonType' => 'button')).to include('type="button"')
+  end
+
+  it 'reaches the href-wrapped and partialAttributes shapes too' do
+    expect(button('buttonType' => 'submit', 'href' => '/x')).to include('type="submit"')
+    expect(button('buttonType' => 'submit',
+                  'partialAttributes' => [{ 'range' => [0, 2], 'fontColor' => '#FF0000' }]))
+      .to include('type="submit"')
+  end
+
+  it 'emits nothing for an unknown value or when absent' do
+    expect(button('buttonType' => 'bogus')).not_to include('type=')
+    expect(button({})).not_to include('type=')
+  end
+end

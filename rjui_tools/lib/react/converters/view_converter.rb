@@ -33,7 +33,82 @@ module RjuiTools
         protected
 
         def build_style_attr_with_visibility
+          apply_safe_area_insets
           build_style_attr
+        end
+
+        #: JsonUI edge -> the physical CSS side. `leading`/`trailing` are logical
+        #: names, but `env()` only exposes physical insets and this codebase is
+        #: LTR throughout (startMargin already becomes a left padding), so they
+        #: map straight to left/right.
+        SAFE_AREA_SIDES = {
+          'top' => 'Top', 'bottom' => 'Bottom',
+          'leading' => 'Left', 'trailing' => 'Right'
+        }.freeze
+
+        # safeAreaInsetPositions — which edges reserve the safe area. On iOS the
+        # SafeAreaView holds the inset; on Compose it is a windowInsetsPadding;
+        # on web the equivalent is `env(safe-area-inset-*)` padding on the named
+        # edges (the notch, the home indicator, a rounded display's corners).
+        #
+        # The author's own padding on that edge is folded into a calc() rather
+        # than replaced: an inline style beats the Tailwind class outright, so
+        # emitting the inset alone would silently delete the padding the layout
+        # asked for.
+        def apply_safe_area_insets
+          edges = safe_area_edges
+          return if edges.empty?
+
+          @dynamic_styles ||= {}
+          edges.each do |edge|
+            side = SAFE_AREA_SIDES[edge]
+            inset = "env(safe-area-inset-#{side.downcase})"
+            own = own_padding_px(edge)
+            @dynamic_styles["padding#{side}"] =
+              own.positive? ? "'calc(#{format_px(own)}px + #{inset})'" : "'#{inset}'"
+          end
+        end
+
+        # 8.0px reads as a mistake; 8px does not.
+        def format_px(value)
+          value == value.to_i ? value.to_i.to_s : value.to_s
+        end
+
+        def safe_area_edges
+          raw = attributes['safeAreaInsetPositions']
+          return [] if raw.nil?
+
+          named = (raw.is_a?(Array) ? raw : [raw]).map { |e| e.to_s }
+          return SAFE_AREA_SIDES.keys if named.include?('all')
+
+          expanded = named.flat_map { |e| e == 'vertical' ? %w[top bottom] : [e] }
+          expanded.uniq.select { |e| SAFE_AREA_SIDES.key?(e) }
+        end
+
+        # The padding this element already has on one edge, in px. Mirrors the
+        # attributes base_converter turns into padding classes.
+        def own_padding_px(edge)
+          index = { 'top' => 0, 'trailing' => 1, 'bottom' => 2, 'leading' => 3 }[edge]
+          per_edge = case edge
+                     when 'top' then attributes['topPadding'] || attributes['paddingTop']
+                     when 'bottom' then attributes['bottomPadding'] || attributes['paddingBottom']
+                     when 'leading' then attributes['paddingStart'] || attributes['leftPadding'] || attributes['paddingLeft']
+                     else attributes['paddingEnd'] || attributes['rightPadding'] || attributes['paddingRight']
+                     end
+          return per_edge.to_f if per_edge.is_a?(Numeric)
+
+          all = attributes['padding'] || attributes['paddings']
+          case all
+          when Numeric then all.to_f
+          when Array
+            case all.length
+            when 1 then all[0].to_f
+            when 2 then (%w[top bottom].include?(edge) ? all[0] : all[1]).to_f
+            when 4 then all[index].to_f
+            else 0.0
+            end
+          else 0.0
+          end
         end
 
         def build_class_name

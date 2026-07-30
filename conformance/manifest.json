@@ -10,12 +10,12 @@
   "schemaVersion": 2,
   "generatedFrom": "3b2de2d5baf639678f13edc2b3ef2ca4dc73321b4996bb9797ef49e98098af82",
   "counts": {
-    "fixtures": 715,
+    "fixtures": 717,
     "assertable": 36,
-    "visual": 603,
+    "visual": 605,
     "interactive": 36,
     "control": 40,
-    "skipped": 162,
+    "skipped": 160,
     "promoted": {
       "callback": 12
     }
@@ -11955,6 +11955,32 @@
       "control": "__control/View"
     },
     {
+      "id": "View/safeAreaInsetPositions__static",
+      "component": "View",
+      "attribute": "safeAreaInsetPositions",
+      "case": "static",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "safeAreaInsetPositions",
+      "aliasOf": null,
+      "value": [
+        "top",
+        "bottom"
+      ],
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/View/safeAreaInsetPositions__static.layout.json",
+      "test": "fixtures/View/safeAreaInsetPositions__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
       "id": "View/highlighted__true",
       "component": "View",
       "attribute": "highlighted",
@@ -15115,6 +15141,32 @@
       "control": "__control/SafeAreaView"
     },
     {
+      "id": "SafeAreaView/safeAreaInsetPositions__static",
+      "component": "SafeAreaView",
+      "attribute": "safeAreaInsetPositions",
+      "case": "static",
+      "class": "visual",
+      "host": "SafeAreaView",
+      "writtenKey": "safeAreaInsetPositions",
+      "aliasOf": null,
+      "value": [
+        "top",
+        "bottom"
+      ],
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SafeAreaView/safeAreaInsetPositions__static.layout.json",
+      "test": "fixtures/SafeAreaView/safeAreaInsetPositions__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/SafeAreaView"
+    },
+    {
       "id": "TabView/selectedIndex__static",
       "component": "TabView",
       "attribute": "selectedIndex",
@@ -17172,11 +17224,6 @@
     },
     {
       "component": "View",
-      "attribute": "safeAreaInsetPositions",
-      "reason": "composite value (no representative static value in v1)"
-    },
-    {
-      "component": "View",
       "attribute": "onDragStart",
       "reason": "callback"
     },
@@ -17404,11 +17451,6 @@
       "component": "Web",
       "attribute": "allowsLinkPreview",
       "reason": "behavioral (no visual or assertable effect in v1)"
-    },
-    {
-      "component": "SafeAreaView",
-      "attribute": "safeAreaInsetPositions",
-      "reason": "composite value (no representative static value in v1)"
     },
     {
       "component": "SafeAreaView",

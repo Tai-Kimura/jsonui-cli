@@ -547,3 +547,37 @@ RSpec.describe RjuiTools::React::Converters::TextFieldConverter do
     end
   end
 end
+
+RSpec.describe RjuiTools::React::Converters::TextFieldConverter, 'nextFocus' do
+  let(:config) { { 'use_tailwind' => true } }
+
+  def field(extra)
+    described_class.new({ 'class' => 'TextField', 'id' => 'email' }.merge(extra), config).convert(2)
+  end
+
+  # The target's ref is the one ReactGenerator already hoists for every editable
+  # field with a literal id.
+  it 'focuses the named field on Enter' do
+    expect(field('nextFocus' => 'password_field'))
+      .to include("onKeyDown={(e) => { if (e.key === 'Enter') { passwordFieldRef.current?.focus(); } }}")
+  end
+
+  # These are React props: a second onKeyDown replaces the first rather than
+  # adding a listener, so both have to live in one handler.
+  it 'runs the chain before the author handler, in one handler' do
+    result = field('nextFocus' => 'password_field', 'onSubmit' => '@{submit}')
+    expect(result.scan('onKeyDown=').length).to eq(1)
+    expect(result).to include("{ passwordFieldRef.current?.focus(); data.submit?.(); }")
+  end
+
+  it 'still emits the author handler alone' do
+    expect(field('onSubmit' => '@{submit}'))
+      .to include("onKeyDown={(e) => { if (e.key === 'Enter') { data.submit?.(); } }}")
+  end
+
+  # A binding-form id has no ref to reach for.
+  it 'skips a binding target and emits nothing when absent' do
+    expect(field('nextFocus' => '@{nextId}')).not_to include('onKeyDown')
+    expect(field({})).not_to include('onKeyDown')
+  end
+end

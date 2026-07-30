@@ -292,4 +292,51 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
       expect(result.lines.find { |l| l.include?('id="header"') }).to include('absolute inset-0')
     end
   end
+
+  # safeAreaInsetPositions — which edges reserve the safe area. On web that is
+  # `env(safe-area-inset-*)` padding: the notch, the home indicator, a rounded
+  # display's corners.
+  describe 'safeAreaInsetPositions' do
+    def styled(extra)
+      create_converter({ 'type' => 'SafeAreaView', 'width' => 10, 'height' => 10 }.merge(extra)).convert
+    end
+
+    it 'pads the named edges' do
+      result = styled('safeAreaInsetPositions' => %w[top bottom])
+      expect(result).to include("paddingTop: 'env(safe-area-inset-top)'")
+      expect(result).to include("paddingBottom: 'env(safe-area-inset-bottom)'")
+      expect(result).not_to include('paddingLeft')
+    end
+
+    it 'expands all and vertical' do
+      all = styled('safeAreaInsetPositions' => ['all'])
+      expect(all).to include('paddingTop').and include('paddingBottom')
+      expect(all).to include('paddingLeft').and include('paddingRight')
+      expect(styled('safeAreaInsetPositions' => ['vertical'])).to include('paddingBottom')
+    end
+
+    # leading/trailing are logical names, but env() only exposes physical
+    # insets and this codebase is LTR throughout.
+    it 'maps leading and trailing to the physical sides' do
+      result = styled('safeAreaInsetPositions' => %w[leading trailing])
+      expect(result).to include("paddingLeft: 'env(safe-area-inset-left)'")
+      expect(result).to include("paddingRight: 'env(safe-area-inset-right)'")
+    end
+
+    # An inline style beats the Tailwind class outright, so emitting the inset
+    # alone would silently delete the padding the layout asked for.
+    it "folds the element's own padding into a calc" do
+      expect(styled('safeAreaInsetPositions' => ['top'], 'paddings' => [8, 4, 8, 4]))
+        .to include("paddingTop: 'calc(8px + env(safe-area-inset-top))'")
+      expect(styled('safeAreaInsetPositions' => ['leading'], 'paddingStart' => 12))
+        .to include("paddingLeft: 'calc(12px + env(safe-area-inset-left))'")
+      expect(styled('safeAreaInsetPositions' => ['top'], 'padding' => 6))
+        .to include("paddingTop: 'calc(6px + env(safe-area-inset-top))'")
+    end
+
+    it 'ignores an unknown edge and emits nothing when absent' do
+      expect(styled('safeAreaInsetPositions' => ['sideways'])).not_to include('safe-area-inset')
+      expect(styled({})).not_to include('safe-area-inset')
+    end
+  end
 end

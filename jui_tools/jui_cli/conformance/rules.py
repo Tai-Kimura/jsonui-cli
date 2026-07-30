@@ -409,6 +409,13 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     # is the one mode a static screenshot can show — the editing-sensitive modes
     # need focus.
     ("TextField", "clearButtonMode"): "always",
+    # Skipped as "no representative static value" until web implemented it.
+    # NOTE the fixture cannot show a visual difference on web: `env(safe-area-
+    # inset-*)` resolves to 0 in a headless desktop browser, so the padding is
+    # zero and the screenshot matches its control. It still proves the emit, and
+    # on iOS/Android the inset is real.
+    ("SafeAreaView", "safeAreaInsetPositions"): ["top", "bottom"],
+    ("View", "safeAreaInsetPositions"): ["top", "bottom"],
     # Skipped as "no representative static value" until web implemented it. The
     # four keys here are the ones that move pixels on a closed select, which is
     # what the label is.

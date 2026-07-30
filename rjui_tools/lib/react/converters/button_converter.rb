@@ -25,9 +25,9 @@ module RjuiTools
             # If href is specified, wrap with Next.js Link
             if attributes['href']
               href = attributes['href']
-              "#{indent_str(indent)}<Link href=\"#{href}\"><button#{id_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>#{body}</button></Link>"
+              "#{indent_str(indent)}<Link href=\"#{href}\"><button#{id_attr}#{build_button_type_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>#{body}</button></Link>"
             else
-              "#{indent_str(indent)}<button#{id_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>#{body}</button>"
+              "#{indent_str(indent)}<button#{id_attr}#{build_button_type_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>#{body}</button>"
             end
           end
 
@@ -202,6 +202,17 @@ module RjuiTools
         # Render button with partial attributes.
         #
         # Same runtime path as Label: the partials go to the generated
+        # buttonType — declared `platform: react`, because it is the HTML
+        # `type` attribute and nothing else. It matters more than it looks: a
+        # <button> inside a <form> defaults to `submit`, so a plain action button
+        # submits the form unless it says `button`.
+        def build_button_type_attr
+          type = attributes['buttonType'].to_s
+          return '' unless %w[button submit reset].include?(type)
+
+          " type=\"#{type}\""
+        end
+
         # `partialText` helper so a pattern range and a localized text work,
         # matching iOS and Android.
         def render_partial_attributes_button(indent, id_attr, class_name, style_attr, on_click, disabled_attr, testid_attr, tag_attr)
@@ -209,7 +220,7 @@ module RjuiTools
           specs = build_partial_specs(attributes['partialAttributes'])
 
           lines = []
-          lines << "#{indent_str(indent)}<button#{id_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>"
+          lines << "#{indent_str(indent)}<button#{id_attr}#{build_button_type_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>"
           lines << "#{indent_str(indent + 2)}{partialText(#{text_expr}, #{specs})}"
           lines << "#{indent_str(indent)}</button>"
           lines.join("\n")

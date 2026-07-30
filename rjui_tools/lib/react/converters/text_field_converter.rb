@@ -351,11 +351,28 @@ module RjuiTools
 
         # onSubmit fires on the return/done key. HTML `onSubmit` is a form event,
         # not an input one, so the key press is what has to be listened for.
+        # Enter closes the field: it runs the focus chain first, then the
+        # author's own handler — the same order sjui's combined .onSubmit block
+        # uses. Merged into ONE onKeyDown because these are React props: a second
+        # onKeyDown replaces the first rather than adding a listener, so emitting
+        # them separately would silently drop whichever came first.
         def build_on_submit_attr
-          call = handler_call(attributes['onSubmit'])
-          return '' if call.nil?
+          calls = [next_focus_call, handler_call(attributes['onSubmit'])].compact
+          return '' if calls.empty?
 
-          " onKeyDown={(e) => { if (e.key === 'Enter') { #{call}; } }}"
+          body = calls.map { |c| "#{c};" }.join(' ')
+          " onKeyDown={(e) => { if (e.key === 'Enter') { #{body} } }}"
+        end
+
+        # nextFocus — the id of the field to focus on submit. The target's ref is
+        # the one ReactGenerator already hoists for every editable field with a
+        # literal id (extract_focus_fields), so the chain needs nothing new; a
+        # binding-form or missing id has no ref to reach for.
+        def next_focus_call
+          target = attributes['nextFocus']
+          return nil unless target.is_a?(String) && !target.empty? && !has_binding?(target)
+
+          "#{snake_to_camel_id(target)}Ref.current?.focus()"
         end
 
         def build_on_change

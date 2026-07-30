@@ -757,3 +757,42 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
     end
   end
 end
+
+RSpec.describe RjuiTools::React::Converters::LabelConverter, 'web-only text attributes' do
+  let(:config) { { 'use_tailwind' => true } }
+
+  def label(extra)
+    described_class.new({ 'class' => 'Label', 'text' => 'hi' }.merge(extra), config).convert(2)
+  end
+
+  # Declared `platform: react`: CSS text-transform is the web's own capability.
+  it 'maps every textTransform value' do
+    expect(label('textTransform' => 'uppercase')).to include('uppercase')
+    expect(label('textTransform' => 'lowercase')).to include('lowercase')
+    expect(label('textTransform' => 'capitalize')).to include('capitalize')
+  end
+
+  # `none` is the CSS initial value, but a style block may have set another, so
+  # it is spelled out rather than omitted.
+  it 'spells out none' do
+    expect(label('textTransform' => 'none')).to include('normal-case')
+  end
+
+  it 'ignores an unknown value' do
+    result = label('textTransform' => 'smallcaps')
+    %w[uppercase lowercase capitalize normal-case].each { |c| expect(result).not_to include(c) }
+  end
+
+  # lineHeight is the CSS property directly, in px.
+  it 'emits lineHeight in px' do
+    expect(label('lineHeight' => 28)).to include("lineHeight: '28px'")
+  end
+
+  # The cross-platform spellings are the multiplier and the extra spacing, so
+  # they win over the web-only literal.
+  it 'yields to lineHeightMultiple and lineSpacing' do
+    expect(label('lineHeight' => 28, 'lineHeightMultiple' => 1.5)).to include('lineHeight: 1.5')
+    expect(label('lineHeight' => 28, 'lineHeightMultiple' => 1.5)).not_to include('28px')
+    expect(label('lineHeight' => 28, 'lineSpacing' => 4, 'fontSize' => 16)).not_to include('28px')
+  end
+end

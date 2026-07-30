@@ -721,3 +721,34 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
   end
 end
 
+RSpec.describe KjuiTools::Compose::Components::TextFieldComponent, 'nextFocus' do
+  let(:required_imports) { Set.new }
+
+  def field(extra)
+    described_class.generate(
+      { 'type' => 'TextField', 'id' => 'email', 'text' => '@{email}' }.merge(extra),
+      0, required_imports
+    )
+  end
+
+  # `nextFocus` is the declared attribute (and what the iOS converter reads);
+  # `nextFocusId` is the undeclared legacy spelling this file was written
+  # against, so a layout using the declared name got no focus chain at all.
+  it 'wires the chain from the declared nextFocus' do
+    expect(field('nextFocus' => 'password')).to include('focusRequester_password')
+  end
+
+  it 'still accepts the legacy nextFocusId' do
+    expect(field('nextFocusId' => 'password')).to include('focusRequester_password')
+  end
+
+  it 'prefers the declared name when both are set' do
+    result = field('nextFocus' => 'declared', 'nextFocusId' => 'legacy')
+    expect(result).to include('focusRequester_declared')
+    expect(result).not_to include('focusRequester_legacy')
+  end
+
+  it 'emits no chain when neither is set' do
+    expect(field({})).not_to include('KeyboardActions')
+  end
+end

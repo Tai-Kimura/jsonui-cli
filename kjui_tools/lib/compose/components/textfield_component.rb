@@ -127,6 +127,9 @@ module KjuiTools
           # Regression: kjui-keyboardactions-import-missing — the original
           # emit referenced a non-existent `FocusManager.requestFocus(...)`
           # helper. Refactored to use Compose stdlib `FocusRequester` only.
+          # `fieldId` is an undeclared legacy override for the requester name;
+          # `id` is the declared attribute and is what a nextFocus target is
+          # named by, so it is the fallback right below.
           focus_field_id = json_data['fieldId']
 
           # ViewModel-driven focus binding — sjui parity
@@ -413,7 +416,11 @@ module KjuiTools
           # declaration + `.focusRequester(...)` modifier). Here we
           # only need to wire KeyboardActions for `nextFocusId` lookup
           # and `onSubmit`.
-          next_focus_id = json_data['nextFocusId']
+          # `nextFocus` is the declared attribute (and what the iOS converter
+          # reads); `nextFocusId` is the undeclared legacy spelling this file was
+          # written against, so a layout that used the declared name got no focus
+          # chain at all. Both work, declared name first.
+          next_focus_id = json_data['nextFocus'] || json_data['nextFocusId']
           on_submit = json_data['onSubmit']
 
           # KeyboardActions for focus chain / submit
