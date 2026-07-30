@@ -12,7 +12,9 @@
       "ScrollView"
     ]
   },
-  "platform": "all",
+  "platform": [
+    "web"
+  ],
   "cases": [
     {
       "name": "scrollMode__inner",

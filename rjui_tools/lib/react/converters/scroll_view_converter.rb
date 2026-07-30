@@ -125,6 +125,14 @@ module RjuiTools
             @dynamic_styles['touchAction'] = "'pan-x pan-y pinch-zoom'"
           end
 
+          # scrollBehavior — declared `platform: react`, i.e. it exists for the
+          # web, and maps straight onto the CSS property of the same name. It
+          # governs programmatic scrolling (scrollIntoView, anchor jumps), not
+          # the user's own dragging.
+          if %w[auto smooth].include?(attributes['scrollBehavior'])
+            @dynamic_styles['scrollBehavior'] = "'#{attributes['scrollBehavior']}'"
+          end
+
           return '' if @dynamic_styles.nil? || @dynamic_styles.empty?
 
           # Delegate per-entry rendering to BaseConverter so the SPREAD

@@ -38,7 +38,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'network_image_converter.rb' => %w[canTap circle circleImage contentMode cornerRadius defaultImage errorImage imageUrl onClick onclick placeholder scaleType src url],
     'progress_converter.rb' => %w[barHeight maximumValue progress progressHeight progressTintColor tintColor trackColor trackTintColor value],
     'radio_converter.rb' => %w[enabled group items onValueChange selectedValue text tintColor],
-    'scroll_view_converter.rb' => %w[bounces contentInset contentInsetAdjustmentBehavior horizontalScroll maxZoom orientation paging scrollEnabled scrollMode showsHorizontalScrollIndicator showsVerticalScrollIndicator],
+    'scroll_view_converter.rb' => %w[bounces contentInset contentInsetAdjustmentBehavior horizontalScroll maxZoom orientation paging scrollBehavior scrollEnabled scrollMode showsHorizontalScrollIndicator showsVerticalScrollIndicator],
     'segment_converter.rb' => %w[backgroundColor enabled fontColor fontSize height items onValueChange selectedBackground selectedFontColor selectedIndex selectedTabIndex],
     'select_box_converter.rb' => %w[background borderColor colorScheme datePickerMode enabled fontColor fontSize hint hintColor items maximumDate minimumDate onChange onValueChange onValueChanged placeholder placeholderColor prompt selectItemType selectedDate selectedIndex selectedValue value],
     'slider_converter.rb' => %w[enabled maximum maximumTrackTintColor minimum minimumTrackTintColor onValueChange range step tintColor value],

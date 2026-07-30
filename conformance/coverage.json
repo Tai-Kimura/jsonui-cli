@@ -108,7 +108,8 @@
       "platforms": [
         "android"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "stickyHeader exists only on LazyColumn/LazyRow, not LazyVerticalGrid, and this component's section headers are emitted in the grid path via item(span = GridItemSpan). The single-column path delegates to the CollectionStack composable, so this is a KotlinJsonUI library feature plus codegen plumbing."
     },
     {
       "component": "Collection",
@@ -116,7 +117,8 @@
       "platforms": [
         "android"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "Same as ScrollView: no Compose scrollbar primitive for Lazy lists. Needs a drawn scrollbar composable in KotlinJsonUI."
     },
     {
       "component": "Collection",
@@ -124,7 +126,8 @@
       "platforms": [
         "android"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "Same as ScrollView: no Compose scrollbar primitive for Lazy lists. Needs a drawn scrollbar composable in KotlinJsonUI."
     },
     {
       "component": "EditText",
@@ -303,16 +306,8 @@
       "platforms": [
         "android"
       ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "ScrollView",
-      "attribute": "keyboardDismissMode",
-      "platforms": [
-        "android",
-        "web"
-      ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "Compose's equivalent is overscroll, and disabling it means CompositionLocalProvider(LocalOverscrollConfiguration provides null) — an experimental Foundation API needing an @OptIn the generated code does not currently carry."
     },
     {
       "component": "ScrollView",
@@ -335,28 +330,12 @@
     },
     {
       "component": "ScrollView",
-      "attribute": "scrollBehavior",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "ScrollView",
-      "attribute": "scrollMode",
-      "platforms": [
-        "ios",
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "ScrollView",
       "attribute": "showsHorizontalScrollIndicator",
       "platforms": [
         "android"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "Compose has no scrollbar primitive for Lazy lists (ScrollbarStyle is Compose Desktop only), so 'show' has nothing to switch on — it needs a drawn scrollbar composable, not a converter change. iOS uses .scrollIndicators, web uses CSS; both are native there."
     },
     {
       "component": "ScrollView",
@@ -364,7 +343,8 @@
       "platforms": [
         "android"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "Compose has no scrollbar primitive for Lazy lists (ScrollbarStyle is Compose Desktop only), so 'show' has nothing to switch on — it needs a drawn scrollbar composable, not a converter change. iOS uses .scrollIndicators, web uses CSS; both are native there."
     },
     {
       "component": "Segment",

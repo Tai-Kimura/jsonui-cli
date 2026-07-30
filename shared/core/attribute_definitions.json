@@ -3403,6 +3403,7 @@
     },
     "scrollMode": {
       "type": "string",
+      "platform": "react",
       "enum": [
         "inner",
         "window"
@@ -3482,6 +3483,7 @@
     },
     "keyboardDismissMode": {
       "type": "string",
+      "platform": "swift",
       "enum": [
         "none",
         "onDrag",

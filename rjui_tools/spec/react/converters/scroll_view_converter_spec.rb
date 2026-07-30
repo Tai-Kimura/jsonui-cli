@@ -298,4 +298,24 @@ RSpec.describe RjuiTools::React::Converters::ScrollViewConverter do
       expect(result).to include('data-tag="content-area"')
     end
   end
+  # Declared `platform: react` — it exists for the web, and maps onto the CSS
+  # property of the same name.
+  describe 'scrollBehavior' do
+    it 'emits the CSS property for each declared value' do
+      %w[auto smooth].each do |value|
+        result = create_converter({ 'type' => 'ScrollView', 'scrollBehavior' => value }).convert
+        expect(result).to include("scrollBehavior: '#{value}'")
+      end
+    end
+
+    it 'ignores a value outside the declared enum' do
+      result = create_converter({ 'type' => 'ScrollView', 'scrollBehavior' => 'instant' }).convert
+      expect(result).not_to include('scrollBehavior')
+    end
+
+    it 'emits nothing when absent' do
+      result = create_converter({ 'type' => 'ScrollView' }).convert
+      expect(result).not_to include('scrollBehavior')
+    end
+  end
 end
