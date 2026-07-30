@@ -20,22 +20,6 @@
       "note": "alias — normalized to its canonical spelling before conversion"
     },
     {
-      "component": "Check",
-      "attribute": "bind",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "CheckBox",
-      "attribute": "bind",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
       "component": "Collection",
       "attribute": "insetVertical",
       "platforms": [
@@ -269,14 +253,6 @@
     },
     {
       "component": "Switch",
-      "attribute": "bind",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Switch",
       "attribute": "onToggle",
       "platforms": [
         "web"
@@ -333,14 +309,6 @@
       "attribute": "hintAttributes",
       "platforms": [
         "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Toggle",
-      "attribute": "bind",
-      "platforms": [
-        "web"
       ],
       "reason": "unimplemented"
     },
@@ -412,23 +380,6 @@
       ],
       "reason": "legacy",
       "note": "alias — normalized to its canonical spelling before conversion"
-    },
-    {
-      "component": "common",
-      "attribute": "bind",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "common",
-      "attribute": "binding",
-      "platforms": [
-        "android",
-        "web"
-      ],
-      "reason": "unimplemented"
     },
     {
       "component": "common",

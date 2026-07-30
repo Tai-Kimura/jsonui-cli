@@ -149,15 +149,18 @@ module RjuiTools
             end
           end
 
-          # Value handling depends on binding presence
-          if attributes['text']
-            if has_binding?(attributes['text'])
+          # Value handling depends on binding presence. `bind` is the
+          # alternative spelling iOS already accepts here
+          # (textfield_converter.rb: text || value || bind).
+          text_value = with_bind_fallback(attributes['text'])
+          if text_value
+            if has_binding?(text_value)
               # Binding present: use controlled component (value + onChange)
-              value = convert_binding(attributes['text'])
+              value = convert_binding(text_value)
               attrs << " value={#{value.gsub(/[{}]/, '')}}"
             else
               # No binding: use uncontrolled component (defaultValue only)
-              attrs << " defaultValue=\"#{attributes['text']}\""
+              attrs << " defaultValue=\"#{text_value}\""
             end
           end
 

@@ -982,6 +982,20 @@ module RjuiTools
           attrs
         end
 
+        # `bind` — the alternative spelling for a component's primary value
+        # binding. Declared on `common`, honoured by eight Compose components and
+        # by the iOS checkbox/text-field paths, and read nowhere on web until
+        # now. The component's own value attribute wins; this is the last
+        # fallback, so an explicit `isOn` / `value` / `items` still decides.
+        #
+        # Kept as one helper rather than added to each chain so the fallback
+        # cannot drift between components — and so the truthiness of the
+        # existing chains is preserved exactly (a literal `isOn: false` still
+        # falls through, as it always did).
+        def with_bind_fallback(value)
+          value || attributes['bind']
+        end
+
         # A single call stays an expression body so the common case emits exactly
         # what it always did; several calls need a block.
         def arrow_body(calls)

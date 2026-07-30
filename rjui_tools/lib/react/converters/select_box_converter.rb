@@ -166,7 +166,7 @@ module RjuiTools
         # Build className attribute for select, with dynamic hint color when no value is selected
         def build_select_class_attr(class_name)
           hint_color = @select_hint_color
-          value_binding = attributes['selectedValue'] || attributes['value']
+          value_binding = with_bind_fallback(attributes['selectedValue'] || attributes['value'])
 
           if value_binding && has_binding?(value_binding)
             prop = extract_binding_property(value_binding)
@@ -257,7 +257,7 @@ module RjuiTools
         end
 
         def build_value_attr
-          value = attributes['selectedValue'] || attributes['value']
+          value = with_bind_fallback(attributes['selectedValue'] || attributes['value'])
 
           if value && has_binding?(value)
             prop = extract_binding_property(value)

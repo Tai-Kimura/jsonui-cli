@@ -82,7 +82,7 @@ module RjuiTools
         end
 
         def build_button_class(index)
-          selected_index = attributes['selectedIndex'] || attributes['selectedTabIndex'] || 0
+          selected_index = with_bind_fallback(attributes['selectedIndex'] || attributes['selectedTabIndex']) || 0
 
           # Build font size class
           font_size_class = if attributes['fontSize']
@@ -128,7 +128,7 @@ module RjuiTools
         end
 
         def build_selected_binding
-          selected = attributes['selectedIndex'] || attributes['selectedTabIndex']
+          selected = with_bind_fallback(attributes['selectedIndex'] || attributes['selectedTabIndex'])
 
           if selected && has_binding?(selected)
             extract_binding_property(selected)
@@ -146,7 +146,7 @@ module RjuiTools
             extract_binding_property(handler)
           else
             # Generate setter from the raw binding name (without viewModel.data. prefix)
-            selected = attributes['selectedIndex'] || attributes['selectedTabIndex']
+            selected = with_bind_fallback(attributes['selectedIndex'] || attributes['selectedTabIndex'])
             return nil unless selected && has_binding?(selected)
 
             raw_binding = extract_raw_binding_property(selected)

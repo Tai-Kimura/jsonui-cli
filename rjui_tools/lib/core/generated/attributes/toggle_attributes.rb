@@ -9,14 +9,12 @@ require_relative 'common_attributes'
 module JsonUI
   module Generated
     # Typed attribute extraction for the `Toggle` component.
-    # Overrides the common definition of: `bind`, `enabled`, `tintColor`.
+    # Overrides the common definition of: `enabled`, `tintColor`.
     module ToggleAttributes
       # Declared-attribute rows — part of the public metadata
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
-        # Two-way binding @{variable} [binding: two-way]
-        { name: 'bind', kind: :binding }.freeze,
         # Toggle state alias (binding for two-way) [binding: two-way]
         { name: 'checked', kind: :boolean, bindable: true }.freeze,
         # Whether enabled (can be data binding)

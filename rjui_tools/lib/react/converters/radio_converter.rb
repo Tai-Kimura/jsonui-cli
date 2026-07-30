@@ -102,7 +102,7 @@ module RjuiTools
         #   emitted a bare `selectedValue` identifier which is undefined at
         #   runtime and crashed the component on render)
         def build_selected_binding
-          selected = attributes['selectedValue']
+          selected = with_bind_fallback(attributes['selectedValue'])
           return nil unless selected
 
           if has_binding?(selected)
@@ -121,7 +121,7 @@ module RjuiTools
             extract_binding_property(handler)
           else
             # Generate setter from the raw binding name (without viewModel.data. prefix)
-            selected = attributes['selectedValue']
+            selected = with_bind_fallback(attributes['selectedValue'])
             return nil unless selected && has_binding?(selected)
 
             raw_binding = extract_raw_binding_property(selected)

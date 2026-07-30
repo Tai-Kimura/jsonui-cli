@@ -196,7 +196,7 @@ module RjuiTools
 
         def generate_collection_content(indent)
           sections = attributes['sections'] || []
-          items_binding = extract_collection_binding(attributes['items'])
+          items_binding = extract_collection_binding(with_bind_fallback(attributes['items']))
 
           content_lines = []
 
@@ -296,7 +296,7 @@ module RjuiTools
           header_view = extract_view_name(header_classes.first) if header_classes.any?
           footer_view = extract_view_name(footer_classes.first) if footer_classes.any?
 
-          items_binding = extract_collection_binding(attributes['items'])
+          items_binding = extract_collection_binding(with_bind_fallback(attributes['items']))
 
           # Header
           if header_view

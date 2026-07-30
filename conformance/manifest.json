@@ -8,14 +8,14 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "592a3acaaad376f42e9ed2c76cf51af9c4a3366021d7f3a2fe44e3ad174b4e0c",
+  "generatedFrom": "86ea9a2458bcfcd373a8f980b58150e3e991c137f35155be5c696630e8a90c5c",
   "counts": {
     "fixtures": 714,
     "assertable": 36,
     "visual": 604,
     "interactive": 36,
     "control": 38,
-    "skipped": 166,
+    "skipped": 162,
     "promoted": {
       "callback": 12
     }
@@ -17082,11 +17082,6 @@
     },
     {
       "component": "Switch",
-      "attribute": "bind",
-      "reason": "binding-only"
-    },
-    {
-      "component": "Switch",
       "attribute": "onToggle",
       "reason": "callback"
     },
@@ -17104,11 +17099,6 @@
       "component": "Toggle",
       "attribute": "_comment",
       "reason": "definition metadata, not an attribute"
-    },
-    {
-      "component": "Toggle",
-      "attribute": "bind",
-      "reason": "binding-only"
     },
     {
       "component": "Toggle",
@@ -17366,11 +17356,6 @@
       "reason": "definition metadata, not an attribute"
     },
     {
-      "component": "CheckBox",
-      "attribute": "bind",
-      "reason": "binding-only"
-    },
-    {
       "component": "Check",
       "attribute": "_alias_of",
       "reason": "definition metadata, not an attribute"
@@ -17379,11 +17364,6 @@
       "component": "Check",
       "attribute": "_comment",
       "reason": "definition metadata, not an attribute"
-    },
-    {
-      "component": "Check",
-      "attribute": "bind",
-      "reason": "binding-only"
     },
     {
       "component": "Web",

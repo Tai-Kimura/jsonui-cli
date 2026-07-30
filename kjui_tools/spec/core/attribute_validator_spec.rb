@@ -1001,9 +1001,13 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       expect(validator.definitions['Switch']['onTintColor']['type']).to eq('string')
     end
 
-    it 'has bind defined in Switch attributes' do
-      expect(validator.definitions['Switch']).to have_key('bind')
-      expect(validator.definitions['Switch']['bind']['type']).to eq('binding')
+    # `bind` is declared once, on `common`: it applies to every component and
+    # means "the component's primary value", so four per-component copies of the
+    # same row were redundant. The validator resolves it through common.
+    it 'resolves bind for Switch through the common declaration' do
+      expect(validator.definitions['Switch']).not_to have_key('bind')
+      expect(validator.definitions['common']['bind']['type']).to eq('binding')
+      expect(validator.definitions['common']['bind']['binding_direction']).to eq('two-way')
     end
 
     it 'has enabled defined in Switch attributes' do
@@ -1114,9 +1118,9 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       end
     end
 
-    it 'has bind defined in CheckBox attributes' do
-      expect(validator.definitions['CheckBox']).to have_key('bind')
-      expect(validator.definitions['CheckBox']['bind']['type']).to eq('binding')
+    it 'resolves bind for CheckBox through the common declaration' do
+      expect(validator.definitions['CheckBox']).not_to have_key('bind')
+      expect(validator.definitions['common']['bind']['type']).to eq('binding')
     end
 
     it 'has enabled defined in CheckBox attributes' do
@@ -1129,9 +1133,9 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       expect(validator.definitions['CheckBox']['onValueChange']['type']).to eq('binding')
     end
 
-    it 'has bind defined in Check attributes' do
-      expect(validator.definitions['Check']).to have_key('bind')
-      expect(validator.definitions['Check']['bind']['type']).to eq('binding')
+    it 'resolves bind for Check through the common declaration' do
+      expect(validator.definitions['Check']).not_to have_key('bind')
+      expect(validator.definitions['common']['bind']['type']).to eq('binding')
     end
 
     it 'has selectedIcon defined in Check attributes' do

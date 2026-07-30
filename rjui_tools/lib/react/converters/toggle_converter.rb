@@ -63,7 +63,7 @@ module RjuiTools
         end
 
         def build_checked_attr
-          is_on = attributes['isOn'] || attributes['checked']
+          is_on = with_bind_fallback(attributes['isOn'] || attributes['checked'])
 
           if is_on && has_binding?(is_on)
             prop = extract_binding_property(is_on)
@@ -85,7 +85,7 @@ module RjuiTools
 
           # Auto-generate onChange from isOn/checked binding property
           # e.g., isOn: "@{isEnabled}" -> onChange={(e) => data.onIsEnabledChange?.(e.target.checked)}
-          is_on = attributes['isOn'] || attributes['checked']
+          is_on = with_bind_fallback(attributes['isOn'] || attributes['checked'])
           if is_on && has_binding?(is_on)
             property_name = extract_raw_binding_property(is_on)
             handler_name = "on#{capitalize_first(property_name)}Change"

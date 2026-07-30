@@ -9,14 +9,12 @@ require_relative 'common_attributes'
 module JsonUI
   module Generated
     # Typed attribute extraction for the `Check` component.
-    # Overrides the common definition of: `bind`, `enabled`.
+    # Overrides the common definition of: `enabled`.
     module CheckAttributes
       # Declared-attribute rows — part of the public metadata
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
-        # Two-way binding @{variable} [binding: two-way]
-        { name: 'bind', kind: :binding }.freeze,
         # Check state (binding for two-way) [binding: two-way]
         { name: 'checked', kind: :boolean, bindable: true }.freeze,
         # Color when checked.
