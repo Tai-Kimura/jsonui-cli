@@ -155,7 +155,34 @@ module KjuiTools
             style_parts << "shadow = Shadow(color = Color.Black, offset = Offset(2f, 2f), blurRadius = 4f)"
           end
 
-          if json_data['lineHeightMultiple']
+          # A highlight lineHeightMultiple resolves against the highlight's own
+          # font size, the same way the base one resolves against the base size.
+          highlight_line_height = if highlight && highlight_condition && highlight[:line_height_multiple]
+                                    hl_size = (highlight.dig(:font_attrs, 'fontSize') || json_data['fontSize'] || 14).to_f
+                                    (hl_size * highlight[:line_height_multiple].to_f)
+                                  end
+
+          if highlight_line_height && always_highlighted
+            required_imports&.add(:text_style)
+            style_parts << "lineHeight = #{highlight_line_height}.sp"
+          elsif highlight_line_height
+            required_imports&.add(:text_style)
+            base_line_height = if json_data['lineHeightMultiple']
+                                 (json_data['fontSize'] || 14).to_f * json_data['lineHeightMultiple'].to_f
+                               elsif json_data['lineSpacing']
+                                 (json_data['fontSize'] || 14).to_f + json_data['lineSpacing'].to_f
+                               elsif json_data['fontSize']
+                                 (json_data['fontSize'].to_f * 1.3).round(1)
+                               end
+            style_parts << if base_line_height
+                             "lineHeight = (if (#{highlight_condition}) #{highlight_line_height} else #{base_line_height}).sp"
+                           else
+                             # TextUnit.Unspecified is how Compose says "use the
+                             # font's own line height".
+                             required_imports&.add(:text_unit)
+                             "lineHeight = if (#{highlight_condition}) #{highlight_line_height}.sp else TextUnit.Unspecified"
+                           end
+          elsif json_data['lineHeightMultiple']
             required_imports&.add(:text_style)
             # Line height multiplier - apply to font size
             line_height = json_data['fontSize'] ? json_data['fontSize'].to_f * json_data['lineHeightMultiple'].to_f : 14.0 * json_data['lineHeightMultiple'].to_f
@@ -230,7 +257,23 @@ module KjuiTools
           end
 
           # Text alignment
-          if json_data['textAlign']
+          highlight_align = if highlight && highlight_condition
+                              compose_text_align(highlight[:text_align])
+                            end
+          base_align = compose_text_align(json_data['textAlign'])
+
+          if highlight_align && always_highlighted
+            required_imports&.add(:text_align)
+            component_code += ",\n" + indent("textAlign = #{highlight_align}", depth + 1)
+          elsif highlight_align
+            required_imports&.add(:text_align)
+            # TextAlign.Unspecified is Compose's "inherit"; the unselected branch
+            # needs a concrete value because this is one expression.
+            component_code += ",\n" + indent(
+              "textAlign = if (#{highlight_condition}) #{highlight_align} else #{base_align || 'TextAlign.Unspecified'}",
+              depth + 1
+            )
+          elsif json_data['textAlign']
             required_imports&.add(:text_align)
             case json_data['textAlign'].downcase
             when 'center'
@@ -339,12 +382,25 @@ module KjuiTools
             font_attrs['fontSize'] = attrs['fontSize'] if attrs['fontSize']
             result[:font_attrs] = font_attrs if font_attrs.any?
             result[:font_color] = attrs['fontColor'] if attrs['fontColor']
+            result[:line_height_multiple] = attrs['lineHeightMultiple'] if attrs['lineHeightMultiple']
+            result[:text_align] = attrs['textAlign'] if attrs['textAlign']
           end
 
           if result.empty? && json_data['highlightColor']
             result[:font_color] = json_data['highlightColor']
           end
           result.empty? ? nil : result
+        end
+
+        # The declared textAlign spellings (Left/Right/Center) as Compose values.
+        def self.compose_text_align(value)
+          return nil unless value.is_a?(String)
+
+          case value.downcase
+          when 'center' then 'TextAlign.Center'
+          when 'right' then 'TextAlign.End'
+          when 'left' then 'TextAlign.Start'
+          end
         end
 
         # The `selected` state that decides which set is in force. Absent means

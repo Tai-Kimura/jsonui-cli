@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance Label.highlightAttributes (static)",
-    "description": "Conformance fixture for 'highlightAttributes' on Label (section: Label, class: visual). Value under test: {\"font\": \"bold\", \"fontSize\": 24, \"fontColor\": \"#FF0000\"}.",
+    "description": "Conformance fixture for 'highlightAttributes' on Label (section: Label, class: visual). Value under test: {\"font\": \"bold\", \"fontSize\": 24, \"fontColor\": \"#FF0000\", \"lineHeightMultiple\": 1.5, \"textAlign\": \"Center\"}.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "highlightAttributes__static",
-      "description": "Conformance fixture for 'highlightAttributes' on Label (section: Label, class: visual). Value under test: {\"font\": \"bold\", \"fontSize\": 24, \"fontColor\": \"#FF0000\"}.",
+      "description": "Conformance fixture for 'highlightAttributes' on Label (section: Label, class: visual). Value under test: {\"font\": \"bold\", \"fontSize\": 24, \"fontColor\": \"#FF0000\", \"lineHeightMultiple\": 1.5, \"textAlign\": \"Center\"}.",
       "steps": [
         {
           "action": "waitFor",

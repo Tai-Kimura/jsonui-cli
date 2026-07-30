@@ -815,6 +815,45 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
         expect(empty).to include('#00FF00')
       end
 
+      it 'swaps lineHeight, resolved against the highlight font size' do
+        json_data = {
+          'type' => 'Text', 'text' => 'Hi', 'fontSize' => 14, 'lineHeightMultiple' => 1.2,
+          'selected' => '@{sel}',
+          'highlightAttributes' => { 'fontSize' => 24, 'lineHeightMultiple' => 1.5 }
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+
+        # 24 * 1.5 highlighted, 14 * 1.2 not.
+        expect(result).to include('lineHeight = (if (data.sel) 36.0 else 16.8).sp')
+      end
+
+      it 'falls back to the font line height when the base sets none' do
+        json_data = {
+          'type' => 'Text', 'text' => 'Hi', 'selected' => '@{sel}',
+          'highlightAttributes' => { 'lineHeightMultiple' => 1.5 }
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('else TextUnit.Unspecified')
+      end
+
+      it 'swaps textAlign' do
+        json_data = {
+          'type' => 'Text', 'text' => 'Hi', 'textAlign' => 'Left', 'selected' => '@{sel}',
+          'highlightAttributes' => { 'textAlign' => 'Center' }
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('textAlign = if (data.sel) TextAlign.Center else TextAlign.Start')
+      end
+
+      it 'uses TextAlign.Unspecified when the base sets no alignment' do
+        json_data = {
+          'type' => 'Text', 'text' => 'Hi', 'selected' => '@{sel}',
+          'highlightAttributes' => { 'textAlign' => 'Center' }
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('else TextAlign.Unspecified')
+      end
+
       it 'emits nothing conditional without a driver, and no stale comment' do
         json_data = { 'type' => 'Text', 'text' => 'Hi', 'highlightColor' => '#00FF00' }
         result = described_class.generate(json_data, 0, required_imports)

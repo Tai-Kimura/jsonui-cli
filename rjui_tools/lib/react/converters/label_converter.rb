@@ -89,6 +89,7 @@ module RjuiTools
               classes << font_class if font_class && !font_class.empty?
             end
             classes << TailwindMapper.map_color(attrs['fontColor'], 'text') if attrs['fontColor']
+            classes.concat(align_classes(attrs['textAlign']))
           end
 
           classes = classes.reject { |c| c.nil? || c.empty? }
@@ -119,7 +120,48 @@ module RjuiTools
               overridden << TailwindMapper.map_font_weight(attributes['fontWeight'])
             end
           end
+          overridden.concat(align_classes(attributes['textAlign'])) if attrs['textAlign']
           overridden.reject { |c| c.nil? || c.empty? }
+        end
+
+        # textAlign costs two classes, not one: the base converter maps it to
+        # `text-*`, and a single-run label is a flex container so this converter
+        # also maps it to `justify-*`. A highlight that changes the alignment has
+        # to replace both, or the flex justification keeps the old value and wins.
+        def align_classes(value)
+          return [] unless value.is_a?(String)
+
+          classes = [TailwindMapper.map_text_align(value)]
+          unless multi_run_text?
+            case value.downcase
+            when 'center' then classes << 'justify-center'
+            when 'right' then classes << 'justify-end'
+            when 'left' then classes << 'justify-start'
+            end
+          end
+          classes.reject { |c| c.nil? || c.empty? }
+        end
+
+        # The lineHeight swap. Kept out of the class list because line height is
+        # a unitless multiplier in the style object, where React reads a bare
+        # number as a multiplier rather than pixels.
+        def apply_highlight_line_height
+          attrs = attributes['highlightAttributes']
+          return unless attrs.is_a?(Hash)
+
+          multiple = attrs['lineHeightMultiple']
+          return if multiple.nil?
+
+          condition = selected_condition
+          return if condition.nil?
+
+          if condition == 'true'
+            @dynamic_styles['lineHeight'] = multiple.to_s
+            return
+          end
+
+          base = @dynamic_styles['lineHeight'] || "'normal'"
+          @dynamic_styles['lineHeight'] = "(#{condition} ? #{multiple} : #{base})"
         end
 
         # The `selected` state that decides which set is in force. Absent means
@@ -210,6 +252,11 @@ module RjuiTools
             line_height = ((font_size + attributes['lineSpacing'].to_f) / font_size).round(2)
             @dynamic_styles['lineHeight'] = line_height.to_s
           end
+
+          # A highlight lineHeightMultiple. Line height is a unitless multiplier
+          # here, not a class, so unlike the font attributes it swaps through the
+          # style object; `normal` is the CSS initial value, i.e. "the font's own".
+          apply_highlight_line_height
 
           # edgeInset (Label internal padding)
           if attributes['edgeInset']

@@ -711,6 +711,40 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       expect(empty).to include('text-[#00FF00]')
     end
 
+    # textAlign is two classes on web: text-* from the base converter and
+    # justify-* because a single-run label is a flex container.
+    it 'swaps both the text-* and justify-* classes for textAlign' do
+      result = create_converter({
+        'type' => 'Label', 'text' => 'Hi', 'textAlign' => 'Left', 'selected' => '@{sel}',
+        'highlightAttributes' => { 'textAlign' => 'Center' }
+      }).convert
+      highlighted = result[/className=\{data\.sel \? "([^"]*)"/, 1]
+
+      expect(highlighted).to include('text-center')
+      expect(highlighted).to include('justify-center')
+      expect(highlighted).not_to include('text-left')
+      expect(highlighted).not_to include('justify-start')
+    end
+
+    # Line height is a unitless multiplier in the style object, not a class.
+    it 'swaps lineHeight through the style object' do
+      result = create_converter({
+        'type' => 'Label', 'text' => 'Hi', 'lineHeightMultiple' => 1.2,
+        'selected' => '@{sel}', 'highlightAttributes' => { 'lineHeightMultiple' => 1.5 }
+      }).convert
+
+      expect(result).to include('lineHeight: (data.sel ? 1.5 : 1.2)')
+    end
+
+    it 'falls back to CSS normal when the base sets no line height' do
+      result = create_converter({
+        'type' => 'Label', 'text' => 'Hi', 'selected' => '@{sel}',
+        'highlightAttributes' => { 'lineHeightMultiple' => 1.5 }
+      }).convert
+
+      expect(result).to include("lineHeight: (data.sel ? 1.5 : 'normal')")
+    end
+
     it 'leaves the class list untouched when there is no driver' do
       with_driver = create_converter({
         'type' => 'Label', 'text' => 'Hi', 'fontColor' => '#000000', 'highlightColor' => '#00FF00'

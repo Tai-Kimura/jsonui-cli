@@ -22,7 +22,9 @@
       "highlightAttributes": {
         "font": "bold",
         "fontSize": 24,
-        "fontColor": "#FF0000"
+        "fontColor": "#FF0000",
+        "lineHeightMultiple": 1.5,
+        "textAlign": "Center"
       }
     }
   ]

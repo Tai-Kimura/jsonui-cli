@@ -392,15 +392,17 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     ("common", "padding"): 8,
     ("common", "paddings"): [8, 8, 8, 8],
     ("common", "margins"): [8, 8, 8, 8],
-    # Only the three keys UIKit actually applies. The declaration also lists
-    # `lineHeightMultiple` and `textAlign`, and the SwiftUI implementation
-    # honours them, but SJUILabel's creator reuses the BASE paragraph style for
-    # the highlight dictionary and so ignores both — fixturing them would fail
-    # UIKit mode for a divergence the fixture is not about.
+    # Every declared key. `lineHeightMultiple` and `textAlign` were left out
+    # while SJUILabel's creator still shared the BASE paragraph style with the
+    # highlight dictionary and so ignored both; it builds its own copy now, and
+    # Compose and web implement the swap too, so all four surfaces agree and the
+    # fixture can assert the whole set.
     ("Label", "highlightAttributes"): {
         "font": "bold",
         "fontSize": 24,
         "fontColor": "#FF0000",
+        "lineHeightMultiple": 1.5,
+        "textAlign": "Center",
     },
 }
 
