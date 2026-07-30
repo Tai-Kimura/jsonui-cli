@@ -573,22 +573,6 @@
     },
     {
       "component": "TextField",
-      "attribute": "autocapitalizationType",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextField",
-      "attribute": "autocorrectionType",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextField",
       "attribute": "clearButtonMode",
       "platforms": [
         "ios"
@@ -614,138 +598,10 @@
       "reason": "unimplemented"
     },
     {
-      "component": "TextField",
-      "attribute": "onBeginEditing",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextField",
-      "attribute": "onBlur",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextField",
-      "attribute": "onEndEditing",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextField",
-      "attribute": "onFocus",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextField",
-      "attribute": "onSubmit",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextField",
-      "attribute": "pattern",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextField",
-      "attribute": "required",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextView",
-      "attribute": "cols",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextView",
-      "attribute": "hideOnFocused",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
       "component": "TextView",
       "attribute": "hintAttributes",
       "platforms": [
         "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextView",
-      "attribute": "hintFont",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextView",
-      "attribute": "hintFontSize",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextView",
-      "attribute": "hintLineHeightMultiple",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextView",
-      "attribute": "keyboardType",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextView",
-      "attribute": "pattern",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextView",
-      "attribute": "required",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextView",
-      "attribute": "selectable",
-      "platforms": [
-        "web"
       ],
       "reason": "unimplemented"
     },

@@ -467,5 +467,83 @@ RSpec.describe RjuiTools::React::Converters::TextFieldConverter do
       expect(result).not_to include('IsFocusedChange')
     end
   end
-end
+  describe 'validation and keyboard traits' do
+    # Both are declared `platform: react`, i.e. they exist FOR the web.
+    it 'emits native pattern and required' do
+      result = create_converter({
+        'type' => 'TextField', 'pattern' => '[0-9]{3}', 'required' => true
+      }).convert
 
+      expect(result).to include('pattern="[0-9]{3}"')
+      expect(result).to include(' required')
+    end
+
+    it 'escapes a quote in the pattern so the attribute cannot be broken out of' do
+      result = create_converter({ 'type' => 'TextField', 'pattern' => 'a"b' }).convert
+      expect(result).to include('pattern="a&quot;b"')
+    end
+
+    it 'maps the UIKit autocapitalization spellings to HTML values' do
+      {
+        'None' => 'off', 'Words' => 'words', 'Sentences' => 'sentences',
+        'AllCharacters' => 'characters'
+      }.each do |declared, expected|
+        result = create_converter({
+          'type' => 'TextField', 'autocapitalizationType' => declared
+        }).convert
+        expect(result).to include("autoCapitalize=\"#{expected}\"")
+      end
+    end
+
+    it 'turns autocorrect and spellcheck off together' do
+      result = create_converter({ 'type' => 'TextField', 'autocorrectionType' => 'No' }).convert
+      expect(result).to include('autoCorrect="off"')
+      expect(result).to include('spellCheck={false}')
+    end
+
+    it 'leaves the browser default alone for an unmapped value' do
+      result = create_converter({ 'type' => 'TextField', 'autocorrectionType' => 'Default' }).convert
+      expect(result).not_to include('autoCorrect')
+    end
+  end
+
+  describe 'focus and submit handlers' do
+    # React props replace rather than accumulate, so a second onFocus would
+    # silently drop the id-derived focus-state binding.
+    it 'merges a declared handler with the focus-state binding' do
+      result = create_converter({
+        'type' => 'TextField', 'id' => 'email_field', 'onFocus' => '@{didFocus}'
+      }).convert
+
+      expect(result.scan('onFocus=').length).to eq(1)
+      expect(result).to include('data.onEmailFieldIsFocusedChange?.(true); data.didFocus?.();')
+    end
+
+    it 'fires both the web and the UIKit spelling, in declaration order' do
+      result = create_converter({
+        'type' => 'TextField', 'onFocus' => 'a', 'onBeginEditing' => 'b',
+        'onBlur' => 'c', 'onEndEditing' => 'd'
+      }).convert
+
+      expect(result).to include('onFocus={() => { data.a?.(); data.b?.(); }}')
+      expect(result).to include('onBlur={() => { data.c?.(); data.d?.(); }}')
+    end
+
+    it 'leaves the single-handler form as a bare expression' do
+      result = create_converter({ 'type' => 'TextField', 'id' => 'email_field' }).convert
+      expect(result).to include('onFocus={() => data.onEmailFieldIsFocusedChange?.(true)}')
+    end
+
+    # HTML onSubmit is a form event, not an input one.
+    it 'binds onSubmit to the Enter key' do
+      result = create_converter({ 'type' => 'TextField', 'onSubmit' => '@{submitForm}' }).convert
+      expect(result).to include("onKeyDown={(e) => { if (e.key === 'Enter') { data.submitForm?.(); } }}")
+    end
+
+    it 'emits no handler when none is declared' do
+      result = create_converter({ 'type' => 'TextField' }).convert
+      expect(result).not_to include('onKeyDown')
+      expect(result).not_to include('onFocus')
+    end
+  end
+end

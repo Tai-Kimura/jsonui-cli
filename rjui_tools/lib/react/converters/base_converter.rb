@@ -951,15 +951,69 @@ module RjuiTools
         # ref and reports focus changes back through the optional
         # `on<Camel>IsFocusedChange` handler. Only fields with a literal id
         # participate (the ref/effect are derived from the same walk).
+        # ref + onFocus/onBlur for the `<id>IsFocused` binding, MERGED with any
+        # focus handlers the component itself declares.
+        #
+        # Merged rather than appended because these are React props: a second
+        # `onFocus` on the same element does not add a listener, it replaces the
+        # first one, so emitting both would silently drop either the focus-state
+        # binding or the layout's own handler.
         def build_focus_binding_attrs
-          id_value = attributes['id']
-          return '' unless id_value.is_a?(String) && !id_value.empty? && !has_binding?(id_value)
+          focus_calls = []
+          blur_calls = []
+          ref_attr = ''
 
-          camel = snake_to_camel_id(id_value)
-          handler = "on#{camel[0].upcase}#{camel[1..]}IsFocusedChange"
-          " ref={#{camel}Ref}" \
-            " onFocus={() => data.#{handler}?.(true)}" \
-            " onBlur={() => data.#{handler}?.(false)}"
+          id_value = attributes['id']
+          if id_value.is_a?(String) && !id_value.empty? && !has_binding?(id_value)
+            camel = snake_to_camel_id(id_value)
+            handler = "on#{camel[0].upcase}#{camel[1..]}IsFocusedChange"
+            ref_attr = " ref={#{camel}Ref}"
+            focus_calls << "data.#{handler}?.(true)"
+            blur_calls << "data.#{handler}?.(false)"
+          end
+
+          focus_calls.concat(declared_focus_calls)
+          blur_calls.concat(declared_blur_calls)
+          return '' if focus_calls.empty? && blur_calls.empty?
+
+          attrs = ref_attr.dup
+          attrs << " onFocus={() => #{arrow_body(focus_calls)}}" if focus_calls.any?
+          attrs << " onBlur={() => #{arrow_body(blur_calls)}}" if blur_calls.any?
+          attrs
+        end
+
+        # A single call stays an expression body so the common case emits exactly
+        # what it always did; several calls need a block.
+        def arrow_body(calls)
+          return calls.first if calls.length == 1
+
+          "{ #{calls.map { |c| "#{c};" }.join(' ')} }"
+        end
+
+        # Focus/blur handlers the component declares. Overridden by the text
+        # inputs, which are the only components that declare any.
+        def declared_focus_calls
+          []
+        end
+
+        def declared_blur_calls
+          []
+        end
+
+        # A declared handler as a callable expression. The attributes take
+        # "binding or raw method name", and both spellings resolve to the same
+        # `data.` receiver.
+        def handler_call(value)
+          return nil unless value.is_a?(String) && !value.empty?
+
+          if is_binding_format?(value)
+            prop = extract_binding_value(value)
+            return nil if prop.nil? || prop.empty?
+
+            "#{add_viewmodel_data_prefix(prop)}?.()"
+          else
+            "data.#{value}?.()"
+          end
         end
 
         # snake_case id -> lowerCamel stem. MUST stay in sync with

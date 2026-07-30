@@ -373,5 +373,64 @@ RSpec.describe RjuiTools::React::Converters::TextViewConverter do
       expect(result).to include('onBlur={() => data.onNoteInputIsFocusedChange?.(false)}')
     end
   end
-end
+  describe 'web-only TextView attributes' do
+    it 'emits cols and required natively' do
+      result = create_converter({ 'type' => 'TextView', 'cols' => 40, 'required' => true }).convert
+      expect(result).to include('cols={40}')
+      expect(result).to include(' required')
+    end
 
+    # HTML defines `pattern` for <input> only, so a textarea has to reach the
+    # same contract through the constraint-validation API.
+    it 'validates pattern through setCustomValidity' do
+      result = create_converter({ 'type' => 'TextView', 'pattern' => '[a-z]+' }).convert
+
+      expect(result).not_to include('pattern="')
+      expect(result).to include("new RegExp('^(?:[a-z]+)$').test(e.target.value)")
+      expect(result).to include('setCustomValidity(')
+    end
+
+    it 'escapes backslashes and quotes so the emitted JS literal stays valid' do
+      result = create_converter({ 'type' => 'TextView', 'pattern' => "\\d+'x" }).convert
+      expect(result).to include("new RegExp('^(?:\\\\d+\\'x)$')")
+    end
+
+    it 'maps keyboardType to inputMode' do
+      { 'EmailAddress' => 'email', 'NumberPad' => 'numeric', 'PhonePad' => 'tel',
+        'DecimalPad' => 'decimal', 'URL' => 'url' }.each do |declared, expected|
+        result = create_converter({ 'type' => 'TextView', 'keyboardType' => declared }).convert
+        expect(result).to include("inputMode=\"#{expected}\"")
+      end
+    end
+
+    it 'styles the placeholder through the placeholder variant, not the field' do
+      result = create_converter({
+        'type' => 'TextView', 'hintFontSize' => 14, 'hintFont' => 'bold',
+        'hintLineHeightMultiple' => 1.5
+      }).convert
+
+      expect(result).to include('placeholder:text-[14px]')
+      expect(result).to include('placeholder:font-bold')
+      expect(result).to include('placeholder:leading-[1.5]')
+      # The textarea's own text must not pick these up.
+      expect(result).not_to match(/className="[^"]*[^:]text-\[14px\]/)
+    end
+
+    # Declared default is true, and both mobile runtimes behave that way; a
+    # browser keeps the placeholder until there is text.
+    it 'hides the placeholder on focus by default and honours an opt-out' do
+      default_on = create_converter({ 'type' => 'TextView' }).convert
+      expect(default_on).to include('focus:placeholder-transparent')
+
+      opted_out = create_converter({ 'type' => 'TextView', 'hideOnFocused' => false }).convert
+      expect(opted_out).not_to include('focus:placeholder-transparent')
+    end
+
+    it 'blocks selection only when selectable is explicitly false' do
+      expect(create_converter({ 'type' => 'TextView', 'selectable' => false }).convert)
+        .to include('select-none')
+      expect(create_converter({ 'type' => 'TextView', 'selectable' => true }).convert)
+        .not_to include('select-none')
+    end
+  end
+end

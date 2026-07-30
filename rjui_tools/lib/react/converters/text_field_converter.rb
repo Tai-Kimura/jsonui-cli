@@ -19,8 +19,9 @@ module RjuiTools
           disabled_attr = build_disabled_attr
 
           focus_attrs = build_focus_binding_attrs
+          submit_attr = build_on_submit_attr
 
-          jsx = "#{indent_str(indent)}<input#{id_attr} className=\"#{class_name}\"#{style_attr}#{attrs}#{on_change}#{focus_attrs}#{disabled_attr}#{testid_attr}#{tag_attr} />"
+          jsx = "#{indent_str(indent)}<input#{id_attr} className=\"#{class_name}\"#{style_attr}#{attrs}#{on_change}#{focus_attrs}#{submit_attr}#{disabled_attr}#{testid_attr}#{tag_attr} />"
 
           wrap_with_visibility(jsx, indent)
         end
@@ -187,7 +188,51 @@ module RjuiTools
           # Read only
           attrs << ' readOnly' if attributes['readOnly'] || attributes['editable'] == false
 
+          # Native browser validation. Both are declared `platform: react`, i.e.
+          # they exist FOR the web, so there is no other surface to defer to.
+          if attributes['pattern']
+            attrs << " pattern=\"#{escape_attribute(attributes['pattern'])}\""
+          end
+          attrs << ' required' if attributes['required'] == true || attributes['required'] == 'true'
+
+          # Soft-keyboard behaviour. The declared values are the UIKit spellings;
+          # HTML has its own vocabulary for the same two ideas.
+          if attributes['autocapitalizationType']
+            capitalize = map_autocapitalization(attributes['autocapitalizationType'])
+            attrs << " autoCapitalize=\"#{capitalize}\"" if capitalize
+          end
+          if attributes['autocorrectionType']
+            correct = map_autocorrection(attributes['autocorrectionType'])
+            # spellCheck rides along: `no` means "stop correcting me", and a
+            # browser that only honours one of the two should still obey.
+            attrs << " autoCorrect=\"#{correct}\" spellCheck={#{correct == 'on'}}" if correct
+          end
+
           attrs.join
+        end
+
+        # UITextAutocapitalizationType spellings -> the HTML autocapitalize values.
+        def map_autocapitalization(value)
+          case value.to_s.downcase.sub(/^uitextautocapitalizationtype/, '')
+          when 'none' then 'off'
+          when 'words' then 'words'
+          when 'sentences' then 'sentences'
+          when 'allcharacters', 'characters' then 'characters'
+          end
+        end
+
+        # UITextAutocorrectionType spellings -> the HTML autocorrect values.
+        # `default` is deliberately unmapped: it means "leave it to the platform",
+        # and emitting an explicit value would override the browser default.
+        def map_autocorrection(value)
+          case value.to_s.downcase.sub(/^uitextautocorrectiontype/, '')
+          when 'no', 'off', 'false' then 'off'
+          when 'yes', 'on', 'true' then 'on'
+          end
+        end
+
+        def escape_attribute(value)
+          value.to_s.gsub('"', '&quot;')
         end
 
         def determine_input_type
@@ -277,6 +322,37 @@ module RjuiTools
           else
             nil
           end
+        end
+
+        # Both spellings of each event fire, in declaration order — the web pair
+        # (onFocus/onBlur) and the UIKit pair (onBeginEditing/onEndEditing) name
+        # the same moment, and a layout may carry either.
+        #
+        # Written out per attribute rather than looped over a name list: the
+        # attribute-coverage scan matches a literal `attributes['name']`, so a
+        # loop reads as "nobody consumes this" and the attribute stays recorded
+        # as a gap after it has been implemented.
+        def declared_focus_calls
+          [
+            handler_call(attributes['onFocus']),
+            handler_call(attributes['onBeginEditing'])
+          ].compact
+        end
+
+        def declared_blur_calls
+          [
+            handler_call(attributes['onBlur']),
+            handler_call(attributes['onEndEditing'])
+          ].compact
+        end
+
+        # onSubmit fires on the return/done key. HTML `onSubmit` is a form event,
+        # not an input one, so the key press is what has to be listened for.
+        def build_on_submit_attr
+          call = handler_call(attributes['onSubmit'])
+          return '' if call.nil?
+
+          " onKeyDown={(e) => { if (e.key === 'Enter') { #{call}; } }}"
         end
 
         def build_on_change
