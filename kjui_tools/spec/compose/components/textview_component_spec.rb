@@ -510,3 +510,50 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent do
   end
 end
 
+# `hintAttributes` is the object form of the flat `hint*` keys, and the object
+# wins per key — the precedence the SwiftUI converter uses. Only lineHeight was
+# honoured here before, so a hint colour or size was silently dropped.
+RSpec.describe KjuiTools::Compose::Components::TextViewComponent, 'hintAttributes' do
+  let(:required_imports) { Set.new }
+
+  def field(extra)
+    described_class.generate(
+      { 'type' => 'TextView', 'id' => 'note', 'text' => '@{note}', 'hint' => 'Write here' }.merge(extra),
+      0, required_imports
+    )
+  end
+
+  it 'styles the placeholder from the object form' do
+    result = field('hintAttributes' => { 'fontColor' => '#999999', 'fontSize' => 14, 'font' => 'bold' })
+    expect(result).to match(/color = Color\(.*999999/)
+    expect(result).to include('fontSize = 14.sp')
+    expect(result).to include('fontWeight = FontWeight.Bold')
+  end
+
+  it 'still honours the flat keys' do
+    result = field('hintColor' => '#999999', 'hintFontSize' => 14)
+    expect(result).to match(/color = Color\(.*999999/)
+    expect(result).to include('fontSize = 14.sp')
+  end
+
+  it 'lets the object win per key' do
+    result = field('hintColor' => '#111111', 'hintAttributes' => { 'fontColor' => '#999999' })
+    expect(result).to match(/color = Color\(.*999999/)
+    expect(result).not_to include('111111')
+  end
+
+  # Compose has no multiplier, so it resolves against the hint's own size.
+  it 'resolves lineHeightMultiple against the hint size' do
+    expect(field('hintAttributes' => { 'fontSize' => 14, 'lineHeightMultiple' => 1.4 }))
+      .to include('lineHeight = 19.6.sp')
+  end
+
+  # 19.599999999999998.sp is float noise, not a measurement.
+  it 'rounds the resolved line height' do
+    expect(field('hintFontSize' => 14, 'hintLineHeightMultiple' => 1.4)).not_to include('19.5999')
+  end
+
+  it 'keeps the one-liner when nothing styles the hint' do
+    expect(field({})).to include('placeholder = { Text("Write here") },')
+  end
+end

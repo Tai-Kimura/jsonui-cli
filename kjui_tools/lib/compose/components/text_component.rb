@@ -68,6 +68,22 @@ module KjuiTools
             )
           end
 
+          # `hint` + `hintAttributes` — a Label's placeholder. UIKit's SJUILabel
+          # swaps in the hint, styled by hintAttributes, when the text is empty
+          # (`if let hint, let hintAttributes, string.isEmpty`), and it requires
+          # BOTH: a hint with no attributes shows nothing there, so the same is
+          # true here rather than inventing a divergence.
+          hint = hint_overrides(json_data)
+          hint_var = hint ? "labelText#{@counter}" : nil
+          hint_condition = hint_var ? "#{hint_var}.isEmpty()" : nil
+          hint_font_var = nil
+          if hint && hint[:font_attrs].any?
+            hint_font_var = next_resolved_var
+            hint_font_args = Helpers::FontSpecHelper.build_font_spec_args(
+              json_data.merge(hint[:font_attrs]), required_imports
+            )
+          end
+
           # Which resolved font is in force. Normally an expression, so the swap
           # happens at recomposition; a literal `selected: true` collapses to the
           # highlight font directly, since `if (true)` earns a Kotlin
@@ -80,6 +96,9 @@ module KjuiTools
                      else
                        "(if (#{highlight_condition}) #{highlight_var} else #{var_name})"
                      end
+          # The hint branch is outermost: an empty label is a hint first and a
+          # selected label second.
+          font_ref = "(if (#{hint_condition}) #{hint_font_var} else #{font_ref})" if hint_font_var
 
           # Resolved ahead of emission so only the blocks the Text(...) call
           # actually references are written: an unreferenced `val` is a Kotlin
@@ -93,9 +112,22 @@ module KjuiTools
             component_code += Helpers::FontSpecHelper.emit_resolve_block(highlight_var, highlight_args, depth, required_imports)
             component_code += "\n"
           end
+          if hint_font_var
+            component_code += Helpers::FontSpecHelper.emit_resolve_block(hint_font_var, hint_font_args, depth, required_imports)
+            component_code += "\n"
+          end
+
+          # The text is hoisted into a `val` so the emptiness test and the value
+          # itself do not evaluate the same string template twice.
+          component_code += indent("val #{hint_var} = #{text}", depth) + "\n" if hint_var
 
           component_code += indent("Text(", depth)
-          component_code += "\n" + indent("text = #{text},", depth + 1)
+          text_expr = if hint_condition
+                        "if (#{hint_condition}) #{Helpers::ResourceResolver.process_text(hint[:text], required_imports)} else #{hint_var}"
+                      else
+                        text
+                      end
+          component_code += "\n" + indent("text = #{text_expr},", depth + 1)
 
           # Font color (official attribute)
           base_color = if json_data['fontColor']
@@ -104,7 +136,24 @@ module KjuiTools
           highlight_color = if highlight && highlight_condition && highlight[:font_color]
                               Helpers::ResourceResolver.process_color(highlight[:font_color], required_imports)
                             end
-          if highlight_color && always_highlighted
+          hint_color = if hint && hint[:font_color]
+                         Helpers::ResourceResolver.process_color(hint[:font_color], required_imports)
+                       end
+          if hint_color
+            # The hint branch wraps whatever the text branch would have used.
+            required_imports&.add(:color)
+            inner = if highlight_color && always_highlighted
+                      highlight_color
+                    elsif highlight_color
+                      "if (#{highlight_condition}) #{highlight_color} else #{base_color || 'Color.Unspecified'}"
+                    else
+                      base_color || 'Color.Unspecified'
+                    end
+            component_code += "\n" + indent(
+              "color = if (#{hint_condition}) #{hint_color} else #{inner.start_with?('if (') ? "(#{inner})" : inner},",
+              depth + 1
+            )
+          elsif highlight_color && always_highlighted
             component_code += "\n" + indent("color = #{highlight_color},", depth + 1)
           elsif highlight_color
             # Compose has no "inherit" colour, so the unselected branch needs a
@@ -405,6 +454,21 @@ module KjuiTools
 
         # The `selected` state that decides which set is in force. Absent means
         # never highlighted, so there is nothing to emit.
+        # `hintAttributes` on a Label, with `hint` as the text it styles. Returns
+        # nil unless both are present — that is UIKit's own condition.
+        def self.hint_overrides(json_data)
+          attrs = json_data['hintAttributes']
+          hint = json_data['hint']
+          return nil unless attrs.is_a?(Hash) && hint.is_a?(String) && !hint.empty?
+
+          {
+            text: hint,
+            font_color: attrs['fontColor'] || json_data['hintColor'],
+            font_attrs: attrs.slice('font', 'fontSize'),
+            line_height_multiple: attrs['lineHeightMultiple']
+          }
+        end
+
         def self.selected_condition(json_data)
           value = json_data['selected']
           return 'true' if value == true || value == 'true'

@@ -864,3 +864,62 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
     end
   end
 end
+
+# `hint` + `hintAttributes` — a Label's placeholder. UIKit's SJUILabel swaps in
+# the hint, styled by hintAttributes, when the text is empty, and it requires
+# BOTH: a hint with no attributes shows nothing there.
+RSpec.describe KjuiTools::Compose::Components::TextComponent, 'hintAttributes' do
+  let(:required_imports) { Set.new }
+
+  def label(extra)
+    described_class.reset_counter!
+    described_class.generate(
+      { 'type' => 'Label', 'text' => '@{title}' }.merge(extra), 0, required_imports
+    )
+  end
+
+  it 'swaps in the hint when the text is empty' do
+    result = label('hint' => 'No title', 'hintAttributes' => { 'fontColor' => '#999999' })
+    expect(result).to include('val labelText1 = "${data.title ?: ""}"')
+    expect(result).to include('text = if (labelText1.isEmpty()) "No title" else labelText1,')
+  end
+
+  it 'styles it with the hint colour' do
+    result = label('hint' => 'No title', 'hintAttributes' => { 'fontColor' => '#999999' })
+    expect(result).to match(/color = if \(labelText1\.isEmpty\(\)\) Color\(.*999999/)
+  end
+
+  # The hint font goes through the same FontSpec resolver as the base one, so an
+  # app's fontProvider is honoured in both states.
+  it 'resolves a separate font for the hint' do
+    result = label('hint' => 'None', 'fontSize' => 16,
+                   'hintAttributes' => { 'fontSize' => 12, 'font' => 'bold' })
+    expect(result).to include('size = 12.sp')
+    expect(result).to include('size = 16.sp')
+    expect(result).to include('fontSize = (if (labelText1.isEmpty()) resolved_text2 else resolved_text1).size')
+  end
+
+  # UIKit's own condition — both keys or nothing.
+  it 'does nothing with a hint and no attributes' do
+    result = label('hint' => 'No title')
+    expect(result).not_to include('labelText')
+    expect(result).to include('text = "${data.title ?: ""}",')
+  end
+
+  it 'does nothing with attributes and no hint' do
+    expect(label('hintAttributes' => { 'fontColor' => '#999999' })).not_to include('labelText')
+  end
+
+  # An empty label is a hint first and a selected label second.
+  it 'nests outside the highlight state' do
+    result = label('hint' => 'None', 'hintAttributes' => { 'fontColor' => '#999999' },
+                   'selected' => '@{isSel}', 'highlightColor' => '#FF0000', 'fontColor' => '#111111')
+    expect(result).to match(
+      /color = if \(labelText\d\.isEmpty\(\)\).*else \(if \(data\.isSel\)/
+    )
+  end
+
+  it 'leaves a plain label untouched' do
+    expect(label({})).not_to include('labelText')
+  end
+end

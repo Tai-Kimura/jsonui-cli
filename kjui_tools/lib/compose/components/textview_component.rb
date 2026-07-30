@@ -17,6 +17,72 @@ module KjuiTools
           @counter = 0
         end
 
+        # One key of the `hintAttributes` object, if it is there.
+        def self.hint_attr(json_data, key)
+          attrs = json_data['hintAttributes']
+          attrs.is_a?(Hash) ? attrs[key] : nil
+        end
+
+        def self.build_placeholder(json_data, placeholder, depth, required_imports)
+          # The flat fallbacks are written out rather than looked up by a passed
+          # key name: the coverage scan matches literal single-quoted attribute
+          # reads, so an indirected one reads as "nobody consumes this" — which
+          # is exactly what happened to hintLineHeightMultiple when this method
+          # was first refactored.
+          color = hint_attr(json_data, 'fontColor') || json_data['hintColor']
+          size = hint_attr(json_data, 'fontSize') || json_data['hintFontSize']
+          font = hint_attr(json_data, 'font') || json_data['hintFont']
+          multiple = hint_attr(json_data, 'lineHeightMultiple') || json_data['hintLineHeightMultiple']
+
+          args = []
+          args << "text = #{placeholder}"
+          if color
+            args << "color = #{Helpers::ResourceResolver.process_color(color, required_imports)}"
+          end
+          args << "fontSize = #{size}.sp" if size
+          if (weight = font_weight_for(font))
+            required_imports&.add(:font_weight)
+            args << "fontWeight = #{weight}"
+          end
+          if multiple
+            # Compose has no multiplier, so it resolves against the hint's own
+            # size (falling back to the field's, then Material's default).
+            required_imports&.add(:text_style)
+            base_size = size || json_data['fontSize'] || 14
+            args << "style = TextStyle(lineHeight = #{format_sp(base_size.to_f * multiple.to_f)}.sp)"
+          end
+
+          return "\n" + indent("placeholder = { Text(#{placeholder}) },", depth + 1) if args.length == 1
+
+          code = "\n" + indent("placeholder = {", depth + 1)
+          code += "\n" + indent("Text(", depth + 2)
+          code += args.map { |a| "\n" + indent("#{a},", depth + 3) }.join
+          code = code.chomp(',')
+          code += "\n" + indent(")", depth + 2)
+          code += "\n" + indent("},", depth + 1)
+          code
+        end
+
+        # 19.599999999999998.sp is float noise, not a measurement.
+        def self.format_sp(value)
+          rounded = value.round(2)
+          rounded == rounded.to_i ? rounded.to_i.to_s : rounded.to_s
+        end
+
+        # `font` on a hint carries a weight name, the same way IconLabel's does.
+        WEIGHT_NAMES = {
+          'thin' => 'FontWeight.Thin', 'extralight' => 'FontWeight.ExtraLight',
+          'light' => 'FontWeight.Light', 'normal' => 'FontWeight.Normal',
+          'regular' => 'FontWeight.Normal', 'medium' => 'FontWeight.Medium',
+          'semibold' => 'FontWeight.SemiBold', 'bold' => 'FontWeight.Bold',
+          'extrabold' => 'FontWeight.ExtraBold', 'heavy' => 'FontWeight.ExtraBold',
+          'black' => 'FontWeight.Black'
+        }.freeze
+
+        def self.font_weight_for(font)
+          font.is_a?(String) ? WEIGHT_NAMES[font.downcase] : nil
+        end
+
         def self.next_resolved_var
           @counter += 1
           "resolved_textview#{@counter}"
@@ -225,22 +291,12 @@ module KjuiTools
             end
           end
 
-          # Placeholder with optional line height styling
+          # Placeholder, styled from `hintAttributes` (the object form) or the
+          # flat `hint*` keys. The object wins per key, which is the precedence
+          # the SwiftUI converter uses; only lineHeight was honoured here before,
+          # so a hint colour or size was silently dropped.
           if placeholder
-            if json_data['hintLineHeightMultiple']
-              # Complex placeholder with line height
-              required_imports&.add(:text_style)
-              base_size = json_data['hintFontSize'] || json_data['fontSize'] || 14
-              line_height = base_size.to_f * json_data['hintLineHeightMultiple'].to_f
-              code += "\n" + indent("placeholder = {", depth + 1)
-              code += "\n" + indent("Text(", depth + 2)
-              code += "\n" + indent("text = #{placeholder},", depth + 3)
-              code += "\n" + indent("style = TextStyle(lineHeight = #{line_height}.sp)", depth + 3)
-              code += "\n" + indent(")", depth + 2)
-              code += "\n" + indent("},", depth + 1)
-            else
-              code += "\n" + indent("placeholder = { Text(#{placeholder}) },", depth + 1)
-            end
+            code += build_placeholder(json_data, placeholder, depth, required_imports)
           end
 
           # Container inset - internal padding
