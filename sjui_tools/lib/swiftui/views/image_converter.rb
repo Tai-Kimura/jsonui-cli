@@ -19,9 +19,16 @@ module SjuiTools
             end
           elsif @component['src']
             processed_src = process_template_value(@component['src'])
+            # systemIcon reinterprets `src` as an SF Symbol name rather than an
+            # asset name, which is a different Image initializer — not a
+            # modifier — so it has to be decided here.
+            system_icon = @component['systemIcon'] == true || @component['systemIcon'] == 'true'
             if processed_src.is_a?(Hash) && processed_src[:template_var]
               # テンプレート変数の場合
-              add_line "Image(data.#{to_camel_case(processed_src[:template_var])})"
+              var = "data.#{to_camel_case(processed_src[:template_var])}"
+              add_line(system_icon ? "Image(systemName: #{var})" : "Image(#{var})")
+            elsif system_icon
+              add_line "Image(systemName: \"#{@component['src']}\")"
             else
               # 通常の画像名
               add_line "Image(\"#{@component['src']}\")"

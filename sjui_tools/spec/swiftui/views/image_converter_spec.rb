@@ -273,4 +273,19 @@ RSpec.describe SjuiTools::SwiftUI::Views::ImageConverter do
       end
     end
   end
+  # systemIcon reinterprets `src` as an SF Symbol name, which is a different
+  # Image initializer rather than a modifier.
+  describe 'systemIcon' do
+    it 'switches src to the systemName initializer' do
+      code = described_class.new({ 'type' => 'Image', 'src' => 'star.fill', 'systemIcon' => true }, 0, nil).convert
+      expect(code).to include('Image(systemName: "star.fill")')
+      expect(code).not_to include('Image("star.fill")')
+    end
+
+    it 'treats src as an asset name without it' do
+      code = described_class.new({ 'type' => 'Image', 'src' => 'star.fill' }, 0, nil).convert
+      expect(code).to include('Image("star.fill")')
+      expect(code).not_to include('systemName')
+    end
+  end
 end

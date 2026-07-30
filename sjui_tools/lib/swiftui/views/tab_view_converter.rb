@@ -54,7 +54,23 @@ module SjuiTools
                                     "0" # fallback
                                   end
 
-                  if icon_type == 'resource'
+                  # showLabels: false -> icon only. A tabItem whose content is
+                  # just an image shows no title; an empty Text would still
+                  # reserve the space the label would have taken.
+                  if @component['showLabels'] == false
+                    if icon_type == 'resource'
+                      if icon != selected_icon
+                        add_line "Image(#{selection_var} == #{index} ? \"#{selected_icon}\" : \"#{icon}\")"
+                      else
+                        add_line "Image(\"#{icon}\")"
+                      end
+                      add_line "    .renderingMode(.template)"
+                    elsif icon != selected_icon
+                      add_line "Image(systemName: #{selection_var} == #{index} ? \"#{selected_icon}\" : \"#{icon}\")"
+                    else
+                      add_line "Image(systemName: \"#{icon}\")"
+                    end
+                  elsif icon_type == 'resource'
                     # Use Image from asset catalog
                     if icon != selected_icon
                       # Different icons for selected/unselected
@@ -134,6 +150,22 @@ module SjuiTools
               add_modifier_line ".toolbarBackground(#{color}, for: .tabBar)"
             end
             add_modifier_line ".toolbarBackground(.visible, for: .tabBar)"
+          end
+
+          # unselectedColor — SwiftUI exposes no modifier for the inactive tab
+          # tint (.tint only sets the active one), so it goes through the
+          # UITabBar appearance proxy, the same route Segment and Switch take
+          # for their UIKit-only appearance keys.
+          unselected = @component['unselectedColor']
+          if unselected
+            color = if is_binding?(unselected)
+                      "Color(data.#{extract_binding_property(unselected)})"
+                    else
+                      get_swiftui_color(unselected)
+                    end
+            add_modifier_line ".onAppear {"
+            add_modifier_line "    UITabBar.appearance().unselectedItemTintColor = UIColor(#{color})"
+            add_modifier_line "}"
           end
 
           # Apply tab-change handler. onValueChange is the canonical

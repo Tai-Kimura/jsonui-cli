@@ -90,6 +90,8 @@ module SjuiTools
             add_modifier_line ".tint(#{color})"
           end
 
+          apply_thumb_tint_color
+
           # onValueChange handler - called when toggle state changes
           # onValueChange (camelCase) -> binding format only (@{functionName})
           # onToggle is an alias of onValueChange (parity with kjui_tools).
@@ -117,6 +119,21 @@ module SjuiTools
         end
 
         private
+
+        # thumbTintColor — the knob, not the track.
+        #
+        # `.tint()` colours the track, and SwiftUI exposes nothing for the knob,
+        # so this goes through UISwitch.appearance() in .onAppear — the same
+        # route Segment takes for its own UIKit-only appearance keys. A binding
+        # is resolved at appear time, which is when the appearance proxy is read.
+        def apply_thumb_tint_color
+          thumb = @component['thumbTintColor']
+          return if thumb.nil?
+
+          add_modifier_line ".onAppear {"
+          add_modifier_line "    UISwitch.appearance().thumbTintColor = UIColor(#{get_swiftui_color(thumb)})"
+          add_modifier_line "}"
+        end
 
         def add_state_variable(name, type, default_value)
           @state_variables ||= []

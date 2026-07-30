@@ -224,14 +224,6 @@
       "reason": "unimplemented"
     },
     {
-      "component": "Image",
-      "attribute": "systemIcon",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented"
-    },
-    {
       "component": "Label",
       "attribute": "hintAttributes",
       "platforms": [
@@ -433,33 +425,9 @@
     },
     {
       "component": "Switch",
-      "attribute": "thumbTintColor",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Switch",
       "attribute": "tint",
       "platforms": [
         "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TabView",
-      "attribute": "showLabels",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TabView",
-      "attribute": "unselectedColor",
-      "platforms": [
-        "ios"
       ],
       "reason": "unimplemented"
     },
@@ -531,14 +499,6 @@
       ],
       "reason": "legacy",
       "note": "alias — normalized to its canonical spelling before conversion"
-    },
-    {
-      "component": "Toggle",
-      "attribute": "thumbTintColor",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented"
     },
     {
       "component": "Toggle",

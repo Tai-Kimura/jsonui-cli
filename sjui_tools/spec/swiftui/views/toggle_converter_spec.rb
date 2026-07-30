@@ -300,4 +300,29 @@ RSpec.describe SjuiTools::SwiftUI::Views::ToggleConverter do
       expect(code).not_to include('data.secondary?(')
     end
   end
+  # `.tint()` colours the track; SwiftUI exposes nothing for the knob, so this
+  # goes through the UISwitch appearance proxy.
+  describe 'thumbTintColor' do
+    it 'sets the knob colour through the appearance proxy on appear' do
+      code = described_class.new({ 'type' => 'Switch', 'thumbTintColor' => '#FF0000' }, 0, nil).convert
+
+      expect(code).to include('.onAppear {')
+      expect(code).to include('UISwitch.appearance().thumbTintColor = UIColor(')
+      expect(code).to include('#FF0000')
+    end
+
+    it 'is independent of the track tint' do
+      code = described_class.new({
+        'type' => 'Switch', 'tintColor' => '#0000FF', 'thumbTintColor' => '#FF0000'
+      }, 0, nil).convert
+
+      expect(code).to include('.tint(')
+      expect(code).to include('thumbTintColor')
+    end
+
+    it 'emits nothing when absent' do
+      code = described_class.new({ 'type' => 'Switch' }, 0, nil).convert
+      expect(code).not_to include('thumbTintColor')
+    end
+  end
 end

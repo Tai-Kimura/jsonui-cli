@@ -151,4 +151,52 @@ RSpec.describe SjuiTools::SwiftUI::Views::TabViewConverter do
       end
     end
   end
+  describe 'showLabels / unselectedColor' do
+    let(:tabs) { [{ 'title' => 'Home', 'icon' => 'house' }, { 'title' => 'Me', 'icon' => 'person' }] }
+
+    def generated(extra)
+      described_class.new({ 'type' => 'TabView', 'tabs' => tabs }.merge(extra), 0, nil).convert
+    end
+
+    # A tabItem whose content is just an image shows no title; an empty Text
+    # would still reserve the label's space.
+    it 'drops the Label wrapper entirely when showLabels is false' do
+      code = generated({ 'showLabels' => false })
+
+      # `Text("Home")` also appears as the tab's CONTENT (the page body), so the
+      # assertion has to look inside the .tabItem block, not at the whole view.
+      tab_item = code[/\.tabItem \{(.*?)\n\s*\}/m, 1]
+
+      expect(tab_item).to include('Image(systemName: "house")')
+      expect(tab_item).not_to include('Label')
+      expect(tab_item).not_to include('Text(')
+    end
+
+    it 'keeps the label by default' do
+      code = generated({})
+      expect(code).to include('Label')
+    end
+
+    it 'renders resource icons as templates in the icon-only form too' do
+      code = generated({
+        'showLabels' => false,
+        'tabs' => [{ 'title' => 'Home', 'icon' => 'home_img', 'iconType' => 'resource' }]
+      })
+
+      expect(code).to include('Image("home_img")')
+      expect(code).to include('.renderingMode(.template)')
+    end
+
+    # .tint only sets the ACTIVE tab; SwiftUI has no modifier for the inactive one.
+    it 'sets unselectedColor through the UITabBar appearance proxy' do
+      code = generated({ 'unselectedColor' => '#888888' })
+
+      expect(code).to include('UITabBar.appearance().unselectedItemTintColor = UIColor(')
+      expect(code).to include('#888888')
+    end
+
+    it 'emits no appearance block without unselectedColor' do
+      expect(generated({})).not_to include('unselectedItemTintColor')
+    end
+  end
 end
