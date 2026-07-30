@@ -301,14 +301,6 @@
     },
     {
       "component": "common",
-      "attribute": "canTap",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "common",
       "attribute": "indexAbove",
       "platforms": [
         "ios",
@@ -341,14 +333,6 @@
       "attribute": "onPinch",
       "platforms": [
         "ios",
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "common",
-      "attribute": "userInteractionEnabled",
-      "platforms": [
         "android"
       ],
       "reason": "unimplemented"

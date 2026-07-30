@@ -621,6 +621,7 @@ module RjuiTools
           end
 
           expressions << enabled_class_expression
+          expressions << interaction_class_expression
 
           expressions.compact!
           return " className={`#{static_classes} #{expressions.join(' ')}`}" if expressions.any?
@@ -637,11 +638,36 @@ module RjuiTools
         #
         # Only the binding form needs this; a literal `enabled: false` is known
         # at build time and is already a plain class.
+        # canTap — "whether component is tappable". It gates the TAP, not every
+        # pointer event: a child of a non-tappable view is still tappable, which
+        # is what UIKit's SJUIView.canTap does (the recogniser checks it) and
+        # what the Compose codegen does with `.clickable(enabled = …)`.
+        # `userInteractionEnabled` is the stronger one and blocks the subtree.
+        def can_tap_gated_click(handler_expr)
+          value = attributes['canTap']
+          return " onClick={#{handler_expr}}" if value.nil? || value == true || value == 'true'
+          return '' if value == false || value == 'false'
+          return " onClick={#{handler_expr}}" unless has_binding?(value)
+
+          gate = extract_binding_property(value)
+          " onClick={(e) => { if (#{gate}) #{handler_expr}?.(e); }}"
+        end
+
         def enabled_class_expression
           enabled = attributes['enabled']
           return nil unless enabled.is_a?(String) && has_binding?(enabled)
 
           "${!#{extract_binding_property(enabled)} ? 'opacity-50 pointer-events-none' : ''}"
+        end
+
+        # userInteractionEnabled blocks the whole subtree, which is what
+        # `pointer-events: none` does — and unlike `enabled` it is not a visual
+        # state, so it does not dim.
+        def interaction_class_expression
+          value = attributes['userInteractionEnabled']
+          return nil unless value.is_a?(String) && has_binding?(value)
+
+          "${!#{extract_binding_property(value)} ? 'pointer-events-none' : ''}"
         end
 
         # Check if this component needs the useMediaQuery hook for landscape
@@ -1138,7 +1164,7 @@ module RjuiTools
             elsif is_binding_format?(handler)
               # Valid binding: @{handleClick} -> viewModel.data.handleClick
               prop = handler.gsub(/@\{|\}/, '')
-              return " onClick={#{add_viewmodel_data_prefix(prop)}}"
+              return can_tap_gated_click(add_viewmodel_data_prefix(prop))
             else
               # ERROR: onClick (camelCase) must use binding format
               return " {/* ERROR: onClick requires binding format @{functionName} */}"

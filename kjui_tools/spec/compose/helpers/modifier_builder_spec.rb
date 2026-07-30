@@ -961,3 +961,68 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder, 'enabled' do
     end
   end
 end
+
+# canTap gates the TAP; userInteractionEnabled blocks the whole subtree. Both
+# are declared boolean|binding on `common`, and the Compose codegen read
+# neither.
+RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder, 'touch gating' do
+  let(:required_imports) { Set.new }
+
+  def clickable(extra)
+    described_class.build_clickable(
+      { 'type' => 'View', 'id' => 'w', 'onClick' => '@{tap}' }.merge(extra), required_imports
+    ).join("\n")
+  end
+
+  describe 'canTap' do
+    it 'gates the click on a binding' do
+      expect(clickable('canTap' => '@{isTappable}'))
+        .to include('.clickable(enabled = data.isTappable) {')
+    end
+
+    it 'gates it on the literal false' do
+      expect(clickable('canTap' => false)).to include('.clickable(enabled = false) {')
+    end
+
+    # Both gate the click, so both apply.
+    it 'ands with enabled' do
+      expect(clickable('enabled' => '@{isEnabled}', 'canTap' => '@{isTappable}'))
+        .to include('.clickable(enabled = data.isEnabled && data.isTappable) {')
+    end
+
+    # A view that is merely not tappable is not "disabled" to a screen reader.
+    it 'does not mark the a11y node disabled' do
+      expect(clickable('canTap' => false)).not_to include('disabled()')
+    end
+  end
+
+  describe 'userInteractionEnabled' do
+    # Compose has no allowsHitTesting, so the events are consumed in the Initial
+    # pass, before any child sees them.
+    it 'consumes pointer events in the Initial pass on a binding' do
+      result = clickable('userInteractionEnabled' => '@{isInteractive}')
+      expect(result).to include('.pointerInput(data.isInteractive) {')
+      expect(result).to include('if (!(data.isInteractive)) {')
+      expect(result).to include('awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }')
+      expect(required_imports).to include(:interaction_blocker)
+    end
+
+    # `if (!(false))` would trip the "condition is always true" warning, and the
+    # build gate tolerates zero warnings.
+    it 'emits an unconditional blocker for the literal false' do
+      result = clickable('userInteractionEnabled' => false)
+      expect(result).to include('.pointerInput(Unit) {')
+      expect(result).not_to include('if (!(false))')
+    end
+
+    it 'emits nothing for true or absent' do
+      expect(clickable('userInteractionEnabled' => true)).not_to include('pointerInput')
+      expect(clickable({})).not_to include('pointerInput')
+    end
+
+    # It blocks the subtree; it is not a click gate, so it leaves the click alone.
+    it 'leaves the clickable ungated' do
+      expect(clickable('userInteractionEnabled' => '@{isInteractive}')).to include('.clickable {')
+    end
+  end
+end

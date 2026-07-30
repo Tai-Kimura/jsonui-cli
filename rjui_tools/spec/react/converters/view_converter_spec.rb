@@ -2,6 +2,7 @@
 
 require_relative '../../spec_helper'
 require 'react/converters/view_converter'
+require 'react/converters/select_box_converter'
 
 RSpec.describe RjuiTools::React::Converters::ViewConverter do
   let(:default_config) { { 'use_tailwind' => true } }
@@ -414,5 +415,59 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter, 'enabled bindin
 
   it 'leaves a plain select with a quoted className' do
     expect(select({})).to include('className="')
+  end
+end
+
+# canTap gates the TAP; userInteractionEnabled blocks the whole subtree. Both
+# are declared boolean|binding on `common`, and web read only the literal
+# `userInteractionEnabled: false`.
+RSpec.describe RjuiTools::React::Converters::ViewConverter, 'touch gating' do
+  let(:config) { { 'use_tailwind' => true } }
+
+  def view(extra)
+    described_class.new(
+      { 'type' => 'View', 'width' => 10, 'height' => 10, 'onClick' => '@{tap}' }.merge(extra), config
+    ).convert(2)
+  end
+
+  describe 'canTap' do
+    # A child of a non-tappable view is still tappable — this is not
+    # pointer-events. UIKit's SJUIView.canTap gates the recogniser the same way.
+    it 'drops the handler for the literal false' do
+      result = view('canTap' => false)
+      expect(result).not_to include('onClick')
+      expect(result).not_to include('pointer-events-none')
+    end
+
+    it 'gates the handler on a binding' do
+      expect(view('canTap' => '@{isTappable}'))
+        .to include('onClick={(e) => { if (data.isTappable) data.tap?.(e); }}')
+    end
+
+    it 'leaves the handler alone for true or absent' do
+      expect(view('canTap' => true)).to include('onClick={data.tap}')
+      expect(view({})).to include('onClick={data.tap}')
+    end
+  end
+
+  describe 'userInteractionEnabled' do
+    it 'blocks pointer events on a binding' do
+      expect(view('userInteractionEnabled' => '@{isInteractive}'))
+        .to include("${!data.isInteractive ? 'pointer-events-none' : ''}")
+    end
+
+    # Unlike `enabled` this is not a visual state, so it does not dim.
+    it 'does not dim' do
+      expect(view('userInteractionEnabled' => '@{isInteractive}')).not_to include('opacity-50')
+    end
+
+    it 'keeps the static class for the literal false' do
+      expect(view('userInteractionEnabled' => false)).to include('pointer-events-none')
+    end
+
+    it 'emits nothing for true or absent' do
+      expect(view('userInteractionEnabled' => true)).not_to include('pointer-events-none')
+      expect(view({})).not_to include('pointer-events-none')
+    end
   end
 end

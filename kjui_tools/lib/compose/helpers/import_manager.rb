@@ -121,6 +121,9 @@ module KjuiTools
             semantics: "import androidx.compose.ui.semantics.semantics",
             semantics_disabled: ["import androidx.compose.ui.semantics.semantics",
                                  "import androidx.compose.ui.semantics.disabled"],
+            # userInteractionEnabled consumes events in the Initial pass.
+            interaction_blocker: ["import androidx.compose.ui.input.pointer.PointerEventPass",
+                                  "import androidx.compose.ui.input.pointer.pointerInput"],
             test_tag: "import androidx.compose.ui.platform.testTag",
             test_tags_as_resource_id: "import androidx.compose.ui.semantics.testTagsAsResourceId",
             image: "import androidx.compose.foundation.Image",

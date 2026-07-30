@@ -537,7 +537,12 @@ module SjuiTools
           end
 
           # userInteractionEnabled（タッチ有効/無効）
-          if @component['userInteractionEnabled'] == false
+          #
+          # `canTap` joins it here: the binding forms of both already resolve to
+          # `.allowsHitTesting(...)` through ViewBindingHandler, but the literal
+          # `canTap: false` matched nothing and did nothing. Same modifier, so
+          # the two forms of the same attribute agree.
+          if @component['userInteractionEnabled'] == false || @component['canTap'] == false
             @modifier_bag.register(:allows_hit_testing, ".allowsHitTesting(false)")
           end
 

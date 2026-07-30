@@ -567,6 +567,11 @@ module KjuiTools
           modifiers.concat(build_long_pressable(json_data, required_imports))
           handler = json_data['onclick'] || json_data['onClick']
           enabled = enabled_expression(json_data)
+          # `canTap` is the tap gate specifically — UIKit's SJUIView has the
+          # property and uses it to decide whether the tap recogniser fires. Both
+          # gate the click, so both apply.
+          can_tap = boolean_expression(json_data['canTap'])
+          tap_gate = [enabled, can_tap].compact
           if handler
             required_imports&.add(:clickable)
             view_id = json_data['id']
@@ -577,11 +582,47 @@ module KjuiTools
             else
               handler_call = get_event_handler_call(json_data['onclick'], is_camel_case: false)
             end
-            gate = enabled ? "(enabled = #{enabled})" : ''
+            gate = tap_gate.any? ? "(enabled = #{tap_gate.join(' && ')})" : ''
             modifiers << ".clickable#{gate} { #{handler_call} }"
           end
+          # `disabled()` follows `enabled` only: a view that is merely not
+          # tappable is not "disabled" to a screen reader.
           modifiers.concat(build_disabled_semantics(json_data, enabled, required_imports))
+          modifiers.concat(build_interaction_blocker(json_data, required_imports))
           modifiers
+        end
+
+        # userInteractionEnabled — blocks touches for this node AND its
+        # descendants, which is what UIKit's flag does and what
+        # `.allowsHitTesting(false)` does on iOS. Compose has no such modifier, so
+        # the events are consumed in the Initial pass, before any child sees
+        # them. The same pass build_long_pressable already uses.
+        def self.build_interaction_blocker(json_data, required_imports = nil)
+          expr = boolean_expression(json_data['userInteractionEnabled'])
+          return [] if expr.nil?
+
+          required_imports&.add(:interaction_blocker)
+          consume = <<~KOTLIN.rstrip
+            awaitPointerEventScope {
+                while (true) {
+                    awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                }
+            }
+          KOTLIN
+
+          # A literal `false` is decided here, not at runtime: emitting
+          # `if (!(false))` would trip the Kotlin "condition is always true"
+          # warning, and the kjui build gate tolerates zero warnings.
+          if expr == 'false'
+            return [".pointerInput(Unit) {\n#{indent_block(consume, 1)}\n}"]
+          end
+
+          [".pointerInput(#{expr}) {\n    if (!(#{expr})) {\n#{indent_block(consume, 2)}\n    }\n}"]
+        end
+
+        def self.indent_block(text, levels)
+          pad = '    ' * levels
+          text.split("\n").map { |line| line.empty? ? line : pad + line }.join("\n")
         end
 
         # `enabled` — declared boolean|binding on `common`, so it may appear on
@@ -590,7 +631,13 @@ module KjuiTools
         # expression, or nil when the attribute is absent or literally true
         # (which is the default and needs no gate).
         def self.enabled_expression(json_data)
-          value = json_data['enabled']
+          boolean_expression(json_data['enabled'])
+        end
+
+        # A boolean|binding attribute as a Kotlin expression. `true` yields nil:
+        # it is the default for every one of these gates, so emitting it would
+        # only add noise.
+        def self.boolean_expression(value)
           return nil if value.nil? || value == true || value == 'true'
           return 'false' if value == false || value == 'false'
           return nil unless is_binding?(value)
