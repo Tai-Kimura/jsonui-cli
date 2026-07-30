@@ -321,6 +321,15 @@ module RjuiTools
         color_manager_import = jsx_content.include?('ColorManager.') ?
                                "\nimport { ColorManager } from '@/generated/ColorManager';" : ''
 
+        # SelectBox dateStringFormat. Detected off the emitted JSX for the same
+        # reason as ColorManager: the emitter's own output cannot drift from
+        # itself, and only one of the two directions may be present.
+        date_format_names = []
+        date_format_names << 'formatDateValue' if jsx_content.include?('formatDateValue(')
+        date_format_names << 'toIsoDateValue' if jsx_content.include?('toIsoDateValue(')
+        date_format_import = date_format_names.empty? ? '' :
+          "\nimport { #{date_format_names.sort.join(', ')} } from '@/generated/dateFormat';"
+
         # Determined early because the Data import shape depends on it:
         # data-consuming components also import the createXxxData factory
         # for the Partial-merge call convention (see props emission below).
@@ -513,7 +522,7 @@ module RjuiTools
 
         <<~JSX
           #{use_client}#{marker_header}
-          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{collection_scroll_import}#{relative_position_import}#{screen_marker_import}#{partial_text_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
+          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{collection_scroll_import}#{relative_position_import}#{date_format_import}#{screen_marker_import}#{partial_text_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
 
           #{props_interface if @config['typescript']}
           export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{collection_scroll_declarations}#{relative_position_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}

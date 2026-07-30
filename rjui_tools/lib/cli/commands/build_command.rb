@@ -70,6 +70,9 @@ module RjuiTools
           # Emit the relative-positioning helper (align*View / align*OfView)
           emit_relative_position_helper
 
+          # Emit the date-format helper (SelectBox dateStringFormat)
+          emit_date_format_helper
+
           all_json_files = Dir.glob(File.join(layouts_dir, '**', '*.json')).reject do |file|
             # Skip Resources folder (colors.json, strings.json, etc.)
             # Skip Styles folder (reusable style definitions, not components)
@@ -1244,6 +1247,132 @@ module RjuiTools
 
           File.write(path, content)
           Core::Logger.info("Generated: #{path}")
+        end
+
+        # dateStringFormat — the shape the ViewModel holds its date string in.
+        #
+        # A native date/time input only ever speaks ISO: `yyyy-MM-dd`, `HH:mm`,
+        # or `yyyy-MM-ddTHH:mm`. iOS formats `selectedDate` with the declared
+        # pattern, so without a conversion the web would silently hand the
+        # ViewModel a string in a format it did not ask for — and reject the one
+        # it stored. Hence a round trip on both edges of the input.
+        def emit_date_format_helper
+          generated_dir = @config['generated_directory'] || 'src/generated'
+          FileUtils.mkdir_p(generated_dir)
+          is_ts = @config['typescript']
+          extension = is_ts ? 'ts' : 'js'
+          path = File.join(generated_dir, "dateFormat.#{extension}")
+
+          str = is_ts ? ': string' : ''
+          str_or_null = is_ts ? ': string | null | undefined' : ''
+          ret_str = is_ts ? ': string' : ''
+          parts_type = is_ts ? ': Record<string, string>' : ''
+          scan_ret = is_ts ? ': { order: string[]; regex: RegExp }' : ''
+
+          marker_header = Core::GeneratedMarker.comment_header(
+            source: "dateFormat (SelectBox dateStringFormat helper)",
+            generator: "rjui build"
+          )
+          marker_footer = Core::GeneratedMarker.comment_footer
+
+          content = <<~JS
+            #{marker_header}
+            // Converts between a declared `dateStringFormat` and the ISO value a
+            // native date/time input requires. Supported tokens: yyyy MM dd HH mm
+            // ss — the DateFormatter patterns JsonUI layouts actually use.
+
+            const TOKENS = ['yyyy', 'MM', 'dd', 'HH', 'mm', 'ss'];
+
+            function scanPattern(pattern#{str})#{scan_ret} {
+              const order#{is_ts ? ': string[]' : ''} = [];
+              let source = '';
+              let i = 0;
+              while (i < pattern.length) {
+                const token = TOKENS.find((t) => pattern.startsWith(t, i));
+                if (token) {
+                  order.push(token);
+                  source += token === 'yyyy' ? '(\\\\d{4})' : '(\\\\d{1,2})';
+                  i += token.length;
+                } else {
+                  source += pattern[i].replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+                  i += 1;
+                }
+              }
+              return { order, regex: new RegExp('^' + source + '$') };
+            }
+
+            function pad(value#{str}, width#{is_ts ? ': number' : ''}) {
+              return value.length >= width ? value : '0'.repeat(width - value.length) + value;
+            }
+
+            // The three ISO shapes an <input type="date|time|datetime-local">
+            // reports, in one pass.
+            function isoParts(iso#{str})#{is_ts ? ': Record<string, string> | null' : ''} {
+              const [datePart, timePart] = iso.split('T');
+              const parts#{parts_type} = {};
+              const date = (datePart ?? '').split('-');
+              const time = (timePart ?? (iso.includes(':') && !iso.includes('-') ? iso : '')).split(':');
+              if (date.length === 3) {
+                parts.yyyy = date[0];
+                parts.MM = date[1];
+                parts.dd = date[2];
+              }
+              if (time.length >= 2) {
+                parts.HH = time[0];
+                parts.mm = time[1];
+                parts.ss = time[2] ?? '00';
+              }
+              return Object.keys(parts).length > 0 ? parts : null;
+            }
+
+            /** ISO (what the input reports) -> the declared format. */
+            export function formatDateValue(
+              iso#{str_or_null},
+              pattern#{str},
+              _inputType#{str}
+            )#{ret_str} {
+              if (!iso) return '';
+              const parts = isoParts(iso);
+              if (!parts) return iso;
+              return pattern.replace(/yyyy|MM|dd|HH|mm|ss/g, (token) => parts[token] ?? '');
+            }
+
+            /** The declared format (what the ViewModel holds) -> ISO. */
+            export function toIsoDateValue(
+              value#{str_or_null},
+              pattern#{str},
+              inputType#{str}
+            )#{ret_str} {
+              if (!value) return '';
+              const { order, regex } = scanPattern(pattern);
+              const match = regex.exec(value);
+              if (!match) {
+                // A ViewModel still holding ISO keeps working; anything else is
+                // dropped rather than fed to the input as an invalid value,
+                // which React would warn about on every render.
+                return isoParts(value) ? value : '';
+              }
+              const parts#{parts_type} = {};
+              order.forEach((token, index) => {
+                parts[token] = match[index + 1];
+              });
+              const date = parts.yyyy && parts.MM && parts.dd
+                ? pad(parts.yyyy, 4) + '-' + pad(parts.MM, 2) + '-' + pad(parts.dd, 2)
+                : '';
+              const time = parts.HH && parts.mm
+                ? pad(parts.HH, 2) + ':' + pad(parts.mm, 2) +
+                  (order.includes('ss') && parts.ss ? ':' + pad(parts.ss, 2) : '')
+                : '';
+              if (inputType === 'time') return time;
+              if (inputType === 'datetime-local') return date && time ? date + 'T' + time : '';
+              return date;
+            }
+
+            #{marker_footer}
+          JS
+
+          File.write(path, content)
+          Core::Logger.success("Updated: #{path}")
         end
 
         # align*OfView / align*View / alignCenter*View — positioning a child

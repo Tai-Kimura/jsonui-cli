@@ -21,6 +21,7 @@
         "One",
         "Two"
       ],
+      "selectItemType": "Date",
       "dateStringFormat": "yyyy-MM-dd"
     }
   ]

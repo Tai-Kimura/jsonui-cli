@@ -21,6 +21,8 @@
         "One",
         "Two"
       ],
+      "selectItemType": "Date",
+      "datePickerMode": "time",
       "minuteInterval": 15
     }
   ]

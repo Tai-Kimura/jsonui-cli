@@ -250,46 +250,6 @@
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
-      "component": "SelectBox",
-      "attribute": "datePickerStyle",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "SelectBox",
-      "attribute": "dateStringFormat",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "SelectBox",
-      "attribute": "labelAttributes",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "SelectBox",
-      "attribute": "minuteInterval",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "SelectBox",
-      "attribute": "multiple",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
       "component": "Slider",
       "attribute": "maxValue",
       "platforms": [

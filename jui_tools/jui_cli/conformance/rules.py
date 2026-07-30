@@ -409,6 +409,15 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     # is the one mode a static screenshot can show — the editing-sensitive modes
     # need focus.
     ("TextField", "clearButtonMode"): "always",
+    # Skipped as "no representative static value" until web implemented it. The
+    # four keys here are the ones that move pixels on a closed select, which is
+    # what the label is.
+    ("SelectBox", "labelAttributes"): {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000",
+        "textAlign": "Center",
+    },
 }
 
 #: Text-ish string attributes that read better with a hint payload.
@@ -506,6 +515,13 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # UIKit hides the clear button while the field is empty — there is nothing
     # to clear — so an empty fixture field renders no button at all.
     "TextField.clearButtonMode": {"text": "Clear me"},
+    # The date-picker attributes only reach their code path when the SelectBox
+    # IS a date picker; without this the fixture renders the ordinary
+    # options list and the attribute is never consulted.
+    "SelectBox.datePickerStyle": {"selectItemType": "Date"},
+    "SelectBox.dateStringFormat": {"selectItemType": "Date"},
+    # minuteInterval is a step through minutes, so it needs a time-bearing mode.
+    "SelectBox.minuteInterval": {"selectItemType": "Date", "datePickerMode": "time"},
 }
 
 

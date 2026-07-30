@@ -215,5 +215,153 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         expect(result).to include('{data.showSelect !== "gone" &&')
       end
     end
+
+    # `multiple` is declared platform: react — a list box is a web-only control
+    # shape, and the value it reports is an array, not a string.
+    context 'multiple' do
+      def listbox(extra = {})
+        create_converter(
+          { 'class' => 'SelectBox', 'id' => 'tags', 'items' => %w[a b],
+            'multiple' => true }.merge(extra)
+        ).convert
+      end
+
+      it 'marks the select as a list box' do
+        expect(listbox).to include(' multiple')
+      end
+
+      it 'passes size through as the visible row count' do
+        expect(listbox('size' => 4)).to include(' size={4}')
+        expect(listbox).not_to include('size={')
+      end
+
+      # e.target.value on a multi-select is only the FIRST selected option,
+      # which silently loses every other selection.
+      it 'reports every selected option' do
+        expect(listbox('selectedValue' => '@{tags}'))
+          .to include('Array.from(e.target.selectedOptions).map((o) => o.value)')
+      end
+
+      # React warns at runtime when a multi-select is given a scalar value.
+      it 'normalises the bound value to an array' do
+        expect(listbox('selectedValue' => '@{tags}'))
+          .to include("value={Array.isArray(data.tags) ? data.tags : (data.tags == null || data.tags === '' ? [] : [data.tags])}")
+      end
+
+      it 'wraps a literal default value too' do
+        expect(listbox('selectedValue' => 'a')).to include('defaultValue={["a"]}')
+      end
+
+      # A list box has no closed state to label, so a blank row is just a
+      # selectable item meaning "nothing".
+      it 'drops the placeholder row' do
+        expect(listbox('prompt' => 'Pick')).not_to include('<option value="">')
+      end
+
+      it 'drops the arrow gutter and the pointer cursor' do
+        result = listbox
+        expect(result).not_to include('pr-8')
+        expect(result).not_to include('cursor-pointer')
+        expect(result).to include('px-3 py-2')
+      end
+
+      it 'leaves a single select alone' do
+        result = create_converter({ 'class' => 'SelectBox', 'items' => %w[a b],
+                                    'selectedValue' => '@{tag}', 'prompt' => 'Pick' }).convert
+        expect(result).not_to include(' multiple')
+        expect(result).to include('e.target.value')
+        expect(result).to include('<option value="">Pick</option>')
+      end
+    end
+
+    # labelAttributes is the same style object Label takes, and on a <select>
+    # the closed-state text IS the label.
+    context 'labelAttributes' do
+      def styled(label, extra = {})
+        create_converter(
+          { 'class' => 'SelectBox', 'items' => %w[a], 'labelAttributes' => label }.merge(extra)
+        ).convert
+      end
+
+      it 'styles the select text' do
+        result = styled('fontColor' => '#FF0000', 'fontSize' => 18,
+                        'textAlign' => 'Center', 'font' => 'bold')
+        expect(result).to include('text-[#FF0000]')
+        expect(result).to include('text-center')
+        expect(result).to include('font-bold')
+      end
+
+      # Tailwind spells colour and font size both with `text-`, so two of them
+      # have no defined winner — precedence is stylesheet order, not class
+      # order. The override has to replace.
+      it 'replaces the component-level colour rather than stacking on it' do
+        result = styled({ 'fontColor' => '#FF0000' }, 'fontColor' => '#111111')
+        expect(result).to include('text-[#FF0000]')
+        expect(result).not_to include('text-[#111111]')
+      end
+
+      it 'replaces the component-level font size' do
+        result = styled({ 'fontSize' => 18 }, 'fontSize' => 12)
+        expect(result.scan(/text-(?:xs|sm|base|lg|xl)/).uniq.length).to eq(1)
+      end
+
+      it 'leaves the component-level keys in place for the keys it omits' do
+        result = styled({ 'fontColor' => '#FF0000' }, 'fontSize' => 12)
+        expect(result).to include('text-[#FF0000]')
+        expect(result).to include('text-xs')
+      end
+    end
+
+    context 'date picker' do
+      def picker(extra)
+        create_converter(
+          { 'class' => 'SelectBox', 'id' => 'when', 'selectItemType' => 'Date' }.merge(extra)
+        ).convert
+      end
+
+      # `step` is in seconds, so the interval is minutes * 60.
+      it 'turns minuteInterval into a step on a time input' do
+        expect(picker('datePickerMode' => 'time', 'minuteInterval' => 15)).to include('step={900}')
+        expect(picker('datePickerMode' => 'datetime', 'minuteInterval' => 5)).to include('step={300}')
+      end
+
+      # A date input has no minutes to step through.
+      it 'ignores minuteInterval on a date-only input' do
+        expect(picker('minuteInterval' => 15)).not_to include('step=')
+      end
+
+      # The wheel/compact chrome is UIKit's; what the web can honour is whether
+      # the picker is presented or merely available.
+      it 'opens the picker on focus for graphical and inline' do
+        expect(picker('datePickerStyle' => 'graphical')).to include('showPicker?.()')
+        expect(picker('datePickerStyle' => 'inline')).to include('showPicker?.()')
+      end
+
+      it 'leaves the native control alone for the wheel styles' do
+        expect(picker('datePickerStyle' => 'wheel')).not_to include('showPicker')
+        expect(picker('datePickerStyle' => 'compact')).not_to include('showPicker')
+        expect(picker({})).not_to include('showPicker')
+      end
+
+      # The input only ever speaks ISO, so a declared format is converted on
+      # both edges rather than handing the ViewModel a shape it did not ask for.
+      it 'round-trips the value through dateStringFormat' do
+        result = picker('dateStringFormat' => 'yyyy/MM/dd', 'selectedDate' => '@{day}')
+        expect(result).to include("value={toIsoDateValue(data.day, 'yyyy/MM/dd', 'date')}")
+        expect(result).to include("data.onDayChange?.(formatDateValue(e.target.value, 'yyyy/MM/dd', 'date'))")
+      end
+
+      it 'passes the input type to the formatter' do
+        result = picker('datePickerMode' => 'time', 'dateStringFormat' => 'HH:mm',
+                        'selectedDate' => '@{at}')
+        expect(result).to include("'HH:mm', 'time')")
+      end
+
+      it 'uses the raw value without a declared format' do
+        result = picker('selectedDate' => '@{day}')
+        expect(result).to include("value={data.day || ''}")
+        expect(result).to include('data.onDayChange?.(e.target.value)')
+      end
+    end
   end
 end

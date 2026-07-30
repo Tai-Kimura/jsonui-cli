@@ -21,9 +21,12 @@
         "One",
         "Two"
       ],
-      "selectItemType": "Date",
-      "datePickerMode": "time",
-      "minuteInterval": 1
+      "labelAttributes": {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000",
+        "textAlign": "Center"
+      }
     }
   ]
 }

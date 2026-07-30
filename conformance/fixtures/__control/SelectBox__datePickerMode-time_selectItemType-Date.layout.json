@@ -22,8 +22,7 @@
         "Two"
       ],
       "selectItemType": "Date",
-      "datePickerMode": "time",
-      "minuteInterval": 1
+      "datePickerMode": "time"
     }
   ]
 }

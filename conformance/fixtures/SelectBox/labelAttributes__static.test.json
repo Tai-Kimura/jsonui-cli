@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/labelAttributes__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.labelAttributes (static)",
+    "description": "Conformance fixture for 'labelAttributes' on SelectBox (section: SelectBox, class: visual). Value under test: {\"font\": \"bold\", \"fontSize\": 24, \"fontColor\": \"#FF0000\", \"textAlign\": \"Center\"}.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "labelAttributes__static",
+      "description": "Conformance fixture for 'labelAttributes' on SelectBox (section: SelectBox, class: visual). Value under test: {\"font\": \"bold\", \"fontSize\": 24, \"fontColor\": \"#FF0000\", \"textAlign\": \"Center\"}.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_labelAttributes__static"
+        }
+      ]
+    }
+  ]
+}
