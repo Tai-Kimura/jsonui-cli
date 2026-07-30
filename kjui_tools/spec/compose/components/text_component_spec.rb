@@ -871,6 +871,12 @@ end
 RSpec.describe KjuiTools::Compose::Components::TextComponent, 'hintAttributes' do
   let(:required_imports) { Set.new }
 
+  # ResourceResolver.data_definitions is a Thread.current global that other
+  # specs set and do not always clear, and it decides whether a binding renders
+  # with its `?: ""` default. Cleared here so these expectations do not depend
+  # on the order rspec happens to run in (seed 37213 was the one that caught it).
+  before { KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {} }
+
   def label(extra)
     described_class.reset_counter!
     described_class.generate(

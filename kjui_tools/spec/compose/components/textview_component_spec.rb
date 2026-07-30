@@ -516,6 +516,9 @@ end
 RSpec.describe KjuiTools::Compose::Components::TextViewComponent, 'hintAttributes' do
   let(:required_imports) { Set.new }
 
+  # See the note in text_component_spec: data_definitions is a leaked global.
+  before { KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {} }
+
   def field(extra)
     described_class.generate(
       { 'type' => 'TextView', 'id' => 'note', 'text' => '@{note}', 'hint' => 'Write here' }.merge(extra),
