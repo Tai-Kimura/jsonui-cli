@@ -48,6 +48,13 @@ RSpec.configure do |config|
   # config.order = :random
   # Kernel.srand config.seed
 
+  # `Core::Logger.level` is a class-level global. logger_spec sets it to :debug
+  # and :warn and does not restore it, so every example that asserts on an
+  # info/warn message passed or failed depending on rspec's seed — six of them
+  # failed on seed 37213 while the suite was green on the next seed. Reset per
+  # example; a spec that sets the level inside an example still works.
+  config.before { SjuiTools::Core::Logger.level = :info if defined?(SjuiTools::Core::Logger) }
+
   # Filter configuration for slow tests
   config.filter_run_excluding slow: true unless ENV['RUN_SLOW_TESTS']
 

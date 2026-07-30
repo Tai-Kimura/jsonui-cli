@@ -55,8 +55,18 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
     end
 
     context 'with no processed files' do
-      it 'returns early without processing' do
-        expect { manager.process_colors([], 0, 0, config) }.not_to output.to_stdout
+      # This spec's config sets `resource_manager_directory`, so
+      # ColorManager.swift is still generated and still logs — "early" here means
+      # no extraction happens, not no output. Asserting on ALL of stdout made the
+      # example depend on `Core::Logger.level`, a class-level global that other
+      # specs lower and do not restore: it passed or failed on rspec's seed.
+      it 'does not extract colors' do
+        previous_level = SjuiTools::Core::Logger.level
+        SjuiTools::Core::Logger.level = :info
+        expect { manager.process_colors([], 0, 0, config) }
+          .not_to output(/Extracting colors/).to_stdout
+      ensure
+        SjuiTools::Core::Logger.level = previous_level
       end
     end
 
