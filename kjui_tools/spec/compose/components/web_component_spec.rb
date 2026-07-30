@@ -165,4 +165,28 @@ RSpec.describe KjuiTools::Compose::Components::WebComponent do
       expect(result).to eq("    line1\n\n    line2")
     end
   end
+  describe 'html' do
+    it 'loads raw html when there is no url' do
+      code = described_class.generate({ 'type' => 'Web', 'html' => '<b>hi</b>' }, 0, Set.new)
+      expect(code).to include('loadDataWithBaseURL(null, "<b>hi</b>", "text/html", "utf-8", null)')
+      expect(code).not_to include('loadUrl')
+    end
+
+    # `url` wins, matching the other platforms.
+    it 'prefers the url when both are given' do
+      code = described_class.generate(
+        { 'type' => 'Web', 'url' => 'https://a.test', 'html' => '<b>hi</b>' }, 0, Set.new
+      )
+      expect(code).to include('loadUrl("https://a.test")')
+      expect(code).not_to include('loadDataWithBaseURL')
+    end
+
+    # A Kotlin template would otherwise interpolate, and a bare quote would end
+    # the literal.
+    it 'escapes quotes and dollar signs in the html literal' do
+      code = described_class.generate({ 'type' => 'Web', 'html' => '<a t="x">$y' }, 0, Set.new)
+      expect(code).to include('\\"x\\"')
+      expect(code).to include('\\$y')
+    end
+  end
 end

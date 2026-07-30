@@ -118,4 +118,28 @@ RSpec.describe RjuiTools::React::Converters::WebConverter do
       end
     end
   end
+  describe 'allow' do
+    # The declared attribute is a raw feature-policy string; the convenience
+    # flags are undeclared conveniences that top it up rather than replace it.
+    it 'emits the declared policy tokens' do
+      result = create_converter({ 'type' => 'Web', 'allow' => 'clipboard-write; payment' }).convert
+      expect(result).to include('clipboard-write')
+      expect(result).to include('payment')
+    end
+
+    it 'unions with the derived tokens without duplicating them' do
+      result = create_converter({
+        'type' => 'Web', 'allow' => 'fullscreen; camera', 'allowCamera' => true
+      }).convert
+      allow_value = result[/allow="([^"]*)"/, 1]
+
+      expect(allow_value.scan('camera').length).to eq(1)
+      expect(allow_value.scan('fullscreen').length).to eq(1)
+    end
+
+    it 'still derives from the flags when allow is absent' do
+      result = create_converter({ 'type' => 'Web', 'allowGeolocation' => true }).convert
+      expect(result).to include('geolocation')
+    end
+  end
 end

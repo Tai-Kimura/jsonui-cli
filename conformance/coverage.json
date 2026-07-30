@@ -544,39 +544,6 @@
       "reason": "unimplemented"
     },
     {
-      "component": "Web",
-      "attribute": "allow",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Web",
-      "attribute": "allowsBackForwardNavigationGestures",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Web",
-      "attribute": "allowsLinkPreview",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Web",
-      "attribute": "html",
-      "platforms": [
-        "ios",
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
       "component": "common",
       "attribute": "alignBottomOfView",
       "platforms": [

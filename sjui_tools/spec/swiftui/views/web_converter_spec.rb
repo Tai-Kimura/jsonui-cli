@@ -82,4 +82,45 @@ RSpec.describe SjuiTools::SwiftUI::Views::WebConverter do
       end
     end
   end
+  describe 'html and the WKWebView flags' do
+    def generated(component)
+      described_class.new(component, 0, nil).convert
+    end
+
+    # `url` takes precedence in the component, so the placeholder default has to
+    # stand down when html is the only content — otherwise example.com wins and
+    # the HTML never renders.
+    it 'passes html and no url when only html is given' do
+      code = generated({ 'type' => 'Web', 'html' => '<b>hi</b>' })
+      expect(code).to include('url: nil')
+      expect(code).to include('html: "<b>hi</b>"')
+    end
+
+    it 'keeps the placeholder url only when there is nothing at all to show' do
+      expect(generated({ 'type' => 'Web' })).to include('https://example.com')
+    end
+
+    it 'escapes quotes in html so the Swift literal stays valid' do
+      code = generated({ 'type' => 'Web', 'html' => '<a title="x">' })
+      expect(code).to include('\\"x\\"')
+    end
+
+    it 'emits the flags only when declared, leaving WebKit defaults otherwise' do
+      with = generated({
+        'type' => 'Web', 'url' => 'https://a.test',
+        'allowsLinkPreview' => false, 'allowsBackForwardNavigationGestures' => false
+      })
+      expect(with).to include('allowsLinkPreview: false')
+      expect(with).to include('allowsBackForwardNavigationGestures: false')
+
+      without = generated({ 'type' => 'Web', 'url' => 'https://a.test' })
+      expect(without).not_to include('allowsLinkPreview')
+      expect(without).not_to include('allowsBackForwardNavigationGestures')
+    end
+
+    it 'leaves the url-only form unchanged' do
+      expect(generated({ 'type' => 'Web', 'url' => 'https://a.test' }))
+        .to eq('WebView(url: URL(string: "https://a.test"))')
+    end
+  end
 end

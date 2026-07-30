@@ -53,8 +53,15 @@ module KjuiTools
             code += "\n" + indent("setBackgroundColor(webViewBgColor)", depth + 3)
           end
 
-          # Load URL
-          code += "\n" + indent("loadUrl(#{url})", depth + 3)
+          # Load the URL, or the raw HTML when there is no URL. `url` wins, the
+          # same precedence the other platforms use (iframe src over srcdoc).
+          if json_data['url'].nil? && json_data['html']
+            # A base URL of null keeps the document in an opaque origin, which is
+            # what loading an author-supplied string should do.
+            code += "\n" + indent("loadDataWithBaseURL(null, #{kotlin_string(json_data['html'])}, \"text/html\", \"utf-8\", null)", depth + 3)
+          else
+            code += "\n" + indent("loadUrl(#{url})", depth + 3)
+          end
           
           # WebViewClient for handling navigation
           code += "\n" + indent("webViewClient = WebViewClient()", depth + 3)
@@ -107,6 +114,18 @@ module KjuiTools
         
         private
         
+        # A Kotlin string literal. HTML carries quotes, backslashes and newlines
+        # that would otherwise break the generated source.
+        def self.kotlin_string(value)
+          escaped = value.to_s
+                         .gsub('\\', '\\\\')
+                         .gsub('"', '\\"')
+                         .gsub('$', '\\$')
+                         .gsub("\n", '\\n')
+                         .gsub("\t", '\\t')
+          "\"#{escaped}\""
+        end
+
         def self.indent(text, level)
           return text if level == 0
           spaces = '    ' * level

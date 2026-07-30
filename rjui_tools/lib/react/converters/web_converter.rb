@@ -99,6 +99,15 @@ module RjuiTools
         def build_allow_attr
           allows = []
 
+          # The declared `allow` attribute: a raw feature-policy string, and the
+          # only one of these an author can find in the definitions. It goes
+          # first, then the convenience flags top it up — a policy is a token
+          # list, so the union is well-formed and nothing an author asked for
+          # gets dropped.
+          if attributes['allow'].is_a?(String) && !attributes['allow'].empty?
+            allows.concat(attributes['allow'].split(';').map(&:strip).reject(&:empty?))
+          end
+
           # Inline media playback
           allows << 'autoplay' if attributes['allowsInlineMediaPlayback']
 
@@ -112,6 +121,7 @@ module RjuiTools
           # Geolocation
           allows << 'geolocation' if attributes['allowGeolocation']
 
+          allows = allows.uniq
           return '' if allows.empty?
 
           " allow=\"#{allows.join('; ')}\""

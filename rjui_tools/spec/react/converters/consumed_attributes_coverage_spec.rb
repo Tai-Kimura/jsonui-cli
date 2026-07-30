@@ -48,7 +48,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'text_view_converter.rb' => %w[autoFocus background becomeFirstResponder borderColor borderWidth cols containerInset cornerRadius disabledBackground editable enabled flexible fontColor hideOnFocused hint hintAttributes hintColor hintFont hintFontSize hintLineHeightMultiple keyboardType lines maxHeight maxLength minHeight name onChange onTextChange padding pattern placeholder placeholderColor readOnly required resize rows scrollEnabled selectable text],
     'toggle_converter.rb' => %w[checked enabled isOn label onTintColor onValueChange text tintColor],
     'view_converter.rb' => %w[centerHorizontal centerInParent centerVertical distribution draggable flexWrap height highlightBackground highlighted onClick onDragEnter onDragLeave onDragOver onDragStart onDrop onLongPress onPan onPinch onclick orientation spacing tapBackground],
-    'web_converter.rb' => %w[accessibilityLabel allowCamera allowDownloads allowGeolocation allowMicrophone allowModals allowPopupsToEscapeSandbox allowsFullScreen allowsInlineMediaPlayback html htmlContent javaScriptCanOpenWindowsAutomatically javaScriptEnabled lazyLoad loading sandbox scrollEnabled src title url]
+    'web_converter.rb' => %w[accessibilityLabel allow allowCamera allowDownloads allowGeolocation allowMicrophone allowModals allowPopupsToEscapeSandbox allowsFullScreen allowsInlineMediaPlayback html htmlContent javaScriptCanOpenWindowsAutomatically javaScriptEnabled lazyLoad loading sandbox scrollEnabled src title url]
   }.freeze
 
   UNDECLARED = {
