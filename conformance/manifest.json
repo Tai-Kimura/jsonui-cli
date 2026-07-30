@@ -8,11 +8,11 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "df0c67c408c0e6dcc2c341132dab2607f39a6b2b041b67c8e09d81279c19d754",
+  "generatedFrom": "ef121d58e4ea3e2f9963961643fd1ddc065e87c3f01a0472d52132903c9da782",
   "counts": {
-    "fixtures": 711,
+    "fixtures": 710,
     "assertable": 36,
-    "visual": 604,
+    "visual": 603,
     "interactive": 36,
     "control": 35,
     "skipped": 167,
@@ -13653,29 +13653,6 @@
       "control": "__control/CheckBox"
     },
     {
-      "id": "CheckBox/onSrc__static",
-      "component": "CheckBox",
-      "attribute": "onSrc",
-      "case": "static",
-      "class": "visual",
-      "host": "CheckBox",
-      "writtenKey": "onSrc",
-      "aliasOf": null,
-      "value": "conformance_sample",
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/CheckBox/onSrc__static.layout.json",
-      "test": "fixtures/CheckBox/onSrc__static.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": "__control/CheckBox"
-    },
-    {
       "id": "CheckBox/value__static",
       "component": "CheckBox",
       "attribute": "value",
@@ -14123,24 +14100,23 @@
       "control": "__control/Check"
     },
     {
-      "id": "Check/onSrc__static",
+      "id": "Check/selectedIcon__alias_onSrc",
       "component": "Check",
-      "attribute": "onSrc",
-      "case": "static",
+      "attribute": "selectedIcon",
+      "case": "alias_onSrc",
       "class": "visual",
       "host": "Check",
       "writtenKey": "onSrc",
-      "aliasOf": null,
+      "aliasOf": "Check/selectedIcon__static",
       "value": "conformance_sample",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "mode": null,
       "deprecated": null,
-      "layout": "fixtures/Check/onSrc__static.layout.json",
-      "test": "fixtures/Check/onSrc__static.test.json",
+      "layout": "fixtures/Check/selectedIcon__alias_onSrc.layout.json",
+      "test": "fixtures/Check/selectedIcon__alias_onSrc.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Check"

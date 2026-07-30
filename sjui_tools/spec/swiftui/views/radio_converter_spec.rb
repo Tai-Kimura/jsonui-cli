@@ -218,5 +218,51 @@ RSpec.describe SjuiTools::SwiftUI::Views::RadioConverter do
         expect(code).to include('selectedDefaultgroup')
       end
     end
+    # icon / selectedIcon / iconSize / iconColor were all reported as
+    # implemented on iOS because the attribute-coverage scan matches attribute
+    # NAMES per platform and checkbox_converter.rb reads them — this converter
+    # read none of them and always emitted the SF Symbol pair tinted blue.
+    describe 'icon appearance' do
+      def glyph(extra)
+        described_class.new({ 'type' => 'Radio', 'id' => 'r1', 'group' => 'g' }.merge(extra), 0, nil).convert
+      end
+
+      it 'leaves the system symbol pair untouched when nothing is declared' do
+        code = glyph({})
+        expect(code).to include('Image(systemName: data.selectedG == "r1" ? "largecircle.fill.circle" : "circle")')
+        expect(code).to include('.foregroundColor(.blue)')
+        expect(code).not_to include('.frame(width:')
+      end
+
+      it 'uses named assets when icon / selectedIcon are given' do
+        code = glyph({ 'icon' => 'off_img', 'selectedIcon' => 'on_img' })
+        expect(code).to include('Image(data.selectedG == "r1" ? "on_img" : "off_img")')
+        expect(code).to include('.resizable()')
+      end
+
+      it 'falls back to the other asset when only one state is named' do
+        code = glyph({ 'selectedIcon' => 'on_img' })
+        expect(code).to include('? "on_img" : "on_img"')
+      end
+
+      it 'sizes the glyph, which needs resizable to take effect on a symbol' do
+        code = glyph({ 'iconSize' => 32 })
+        expect(code).to include('.resizable()')
+        expect(code).to include('.frame(width: 32, height: 32)')
+      end
+
+      it 'replaces the hard-coded blue with iconColor' do
+        code = glyph({ 'iconColor' => '#FF0000' })
+        expect(code).to include('#FF0000')
+        expect(code).not_to include('.foregroundColor(.blue)')
+      end
+
+      # A tint cannot reach an original-mode asset.
+      it 'renders a custom asset as a template when it is tinted' do
+        expect(glyph({ 'icon' => 'off_img', 'iconColor' => '#FF0000' }))
+          .to include('.renderingMode(.template)')
+        expect(glyph({ 'icon' => 'off_img' })).not_to include('.renderingMode(.template)')
+      end
+    end
   end
 end

@@ -39,8 +39,6 @@ module JsonUI
         { name: 'isOn', kind: :boolean, bindable: true }.freeze,
         # Checkbox label (can be data binding)
         { name: 'label', kind: :string, bindable: true }.freeze,
-        # Selected icon name (alias)
-        { name: 'onSrc', kind: :string }.freeze,
         # Value change handler - binding only (@{functionName})
         { name: 'onValueChange', kind: :binding }.freeze,
         # Selected icon name

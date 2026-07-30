@@ -3953,10 +3953,6 @@
         "onSrc"
       ]
     },
-    "onSrc": {
-      "type": "string",
-      "description": "Selected icon name (alias)"
-    },
     "value": {
       "type": "any",
       "description": "Associated value when checked"
@@ -4089,11 +4085,10 @@
       "platform": [
         "swift",
         "kotlin"
+      ],
+      "aliases": [
+        "onSrc"
       ]
-    },
-    "onSrc": {
-      "type": "string",
-      "description": "Image source for checked state"
     },
     "enabled": {
       "type": [

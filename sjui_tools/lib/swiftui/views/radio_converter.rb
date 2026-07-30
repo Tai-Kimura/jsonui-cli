@@ -38,8 +38,7 @@ module SjuiTools
               items.each_with_index do |item, index|
                 add_line "HStack {"
                 indent do
-                  add_line "Image(systemName: #{selection_binding} == \"#{item}\" ? \"largecircle.fill.circle\" : \"circle\")"
-                  add_modifier_line ".foregroundColor(.blue)"
+                  add_radio_icon_lines("#{selection_binding} == \"#{item}\"")
                   add_modifier_line ".onTapGesture {"
                   indent do
                     add_line "#{selection_binding} = \"#{item}\""
@@ -72,8 +71,7 @@ module SjuiTools
             # カスタムRadioButton実装
             add_line "HStack {"
             indent do
-              add_line "Image(systemName: data.#{state_var} == \"#{id}\" ? \"largecircle.fill.circle\" : \"circle\")"
-              add_modifier_line ".foregroundColor(.blue)"
+              add_radio_icon_lines("data.#{state_var} == \"#{id}\"")
               add_modifier_line ".onTapGesture {"
               indent do
                 add_line "data.#{state_var} = \"#{id}\""
@@ -116,6 +114,38 @@ module SjuiTools
         end
         
         private
+
+        # The radio glyph.
+        #
+        # `icon` / `selectedIcon` name asset images; without them the SF Symbol
+        # pair is used, as before. `iconColor` replaces the hard-coded blue, and
+        # reaches a custom asset only through template rendering — a tint applied
+        # to an original-mode asset does nothing. `iconSize` needs .resizable()
+        # to have any effect, because an SF Symbol otherwise scales with the
+        # font rather than the frame.
+        def add_radio_icon_lines(selected_expr)
+          icon = @component['icon']
+          selected_icon = @component['selectedIcon']
+          size = @component['iconSize']
+          icon_color = @component['iconColor'] ? get_swiftui_color(@component['iconColor']) : nil
+
+          if icon || selected_icon
+            on_name = selected_icon || icon
+            off_name = icon || selected_icon
+            add_line "Image(#{selected_expr} ? \"#{on_name}\" : \"#{off_name}\")"
+            add_modifier_line ".renderingMode(.template)" if icon_color
+            add_modifier_line ".resizable()"
+            add_modifier_line ".aspectRatio(contentMode: .fit)"
+          else
+            add_line "Image(systemName: #{selected_expr} ? \"largecircle.fill.circle\" : \"circle\")"
+            if size
+              add_modifier_line ".resizable()"
+              add_modifier_line ".aspectRatio(contentMode: .fit)"
+            end
+          end
+          add_modifier_line ".frame(width: #{size}, height: #{size})" if size
+          add_modifier_line ".foregroundColor(#{icon_color || '.blue'})"
+        end
         
         def add_state_variable(name, type, default_value)
           @state_variables ||= []

@@ -162,11 +162,15 @@ module KjuiTools
             modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
           end
 
+          # iconSize with no custom icon: there is no separate glyph to size, so
+          # it sizes the Checkbox itself.
+          modifiers << ".size(#{json_data['iconSize'].to_i}.dp)" if json_data['iconSize']
+
             code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
 
             # Checkbox colors
             checked_color_value = json_data['checkColor'] || json_data['checkedColor'] || json_data['tintColor'] || json_data['onTintColor']
-            if checked_color_value || json_data['uncheckedColor']
+            if checked_color_value || json_data['uncheckedColor'] || json_data['iconColor']
               required_imports&.add(:checkbox_colors)
               colors_params = []
 
@@ -178,6 +182,13 @@ module KjuiTools
               if json_data['uncheckedColor']
                 unchecked_color = Helpers::ResourceResolver.process_color(json_data['uncheckedColor'], required_imports)
                 colors_params << "uncheckedColor = #{unchecked_color}"
+              end
+
+              # For a Material Checkbox the "icon" is the tick, so iconColor maps
+              # to checkmarkColor rather than to the box.
+              if json_data['iconColor']
+                icon_color = Helpers::ResourceResolver.process_color(json_data['iconColor'], required_imports)
+                colors_params << "checkmarkColor = #{icon_color}"
               end
 
               if colors_params.any?
@@ -210,12 +221,17 @@ module KjuiTools
           required_imports&.add(:icon_toggle_button)
           required_imports&.add(:icon)
 
-          icon = json_data['icon'] || 'check_box_outline_blank'
-          selected_icon = json_data['selectedIcon'] || 'check_box'
+          # Each state falls back to the OTHER supplied asset, not to a Material
+          # icon name: this branch only runs when the layout named at least one
+          # drawable, and `R.drawable.check_box` does not exist in the app.
+          icon = json_data['icon'] || json_data['selectedIcon']
+          selected_icon = json_data['selectedIcon'] || json_data['icon']
 
           # Resolve icon names to drawable resources
-          icon_res = Helpers::ResourceResolver.process_drawable(icon, required_imports)
-          selected_icon_res = Helpers::ResourceResolver.process_drawable(selected_icon, required_imports)
+          required_imports&.add(:painter_resource)
+          required_imports&.add(:r_class)
+          icon_res = "R.drawable.#{Helpers::ResourceResolver.drawable_name(icon)}"
+          selected_icon_res = "R.drawable.#{Helpers::ResourceResolver.drawable_name(selected_icon)}"
 
           code = indent("IconToggleButton(", depth)
           code += "\n" + indent("checked = #{checked},", depth + 1)
@@ -262,12 +278,20 @@ module KjuiTools
 
           # Icon content - switch based on checked state
           code += "\n" + indent("Icon(", depth + 1)
-          code += "\n" + indent("painter = painterResource(if (#{checked}) #{selected_icon_res} else #{icon_res}),", depth + 2)
+          code += "\n" + indent("painter = painterResource(id = if (#{checked}) #{selected_icon_res} else #{icon_res}),", depth + 2)
           code += "\n" + indent("contentDescription = null", depth + 2)
 
-          # Icon tint color
-          if json_data['fontColor']
-            icon_color = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
+          # Icon size. IconToggleButton keeps its own 48dp touch target, so this
+          # sizes the glyph inside it rather than the control.
+          if json_data['iconSize']
+            code += ",\n" + indent("modifier = Modifier.size(#{json_data['iconSize'].to_i}.dp)", depth + 2)
+          end
+
+          # Icon tint. `iconColor` is the declared attribute for this; fontColor
+          # stays as the fallback it has always been.
+          tint_value = json_data['iconColor'] || json_data['fontColor']
+          if tint_value
+            icon_color = Helpers::ResourceResolver.process_color(tint_value, required_imports)
             code += ",\n" + indent("tint = #{icon_color}", depth + 2)
           end
 

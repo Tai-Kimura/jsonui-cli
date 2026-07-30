@@ -321,4 +321,43 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
       expect(result).to include('data.onRadioChange?.invoke("radio", "Yes")')
     end
   end
+  describe 'icon appearance' do
+    def glyph(extra)
+      described_class.generate(
+        { 'type' => 'Radio', 'id' => 'r1', 'group' => 'g', 'text' => 'A' }.merge(extra), 0, Set.new
+      )
+    end
+
+    it 'sizes and tints the default RadioButton' do
+      code = glyph({ 'iconSize' => 32, 'iconColor' => '#FF0000' })
+      expect(code).to include('modifier = Modifier.size(32.dp)')
+      expect(code).to include('RadioButtonDefaults.colors(')
+    end
+
+    # iconColor is one tint for the whole glyph, unlike selectedColor which sets
+    # only the selected state.
+    it 'applies iconColor to both radio states' do
+      code = glyph({ 'iconColor' => '#FF0000' })
+      expect(code).to include('selectedColor = ')
+      expect(code).to include('unselectedColor = ')
+    end
+
+    it 'tints the custom icon branch unconditionally rather than per state' do
+      code = glyph({ 'icon' => 'star', 'selectedIcon' => 'star.fill', 'iconColor' => '#00FF00' })
+      expect(code).to include('#00FF00')
+      expect(code).not_to include('else Color.Gray')
+    end
+
+    it 'keeps the per-state tint when only selectedColor is given' do
+      code = glyph({ 'icon' => 'star', 'selectedIcon' => 'star.fill', 'selectedColor' => '#00FF00' })
+      expect(code).to include('tint = if (isSelected)')
+      expect(code).to include('else Color.Gray')
+    end
+
+    it 'emits no appearance arguments when neither is declared' do
+      code = glyph({})
+      expect(code).not_to include('Modifier.size(')
+      expect(code).not_to include('RadioButtonDefaults.colors(')
+    end
+  end
 end

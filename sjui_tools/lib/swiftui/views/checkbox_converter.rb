@@ -50,6 +50,12 @@ module SjuiTools
               add_line "iconSize: #{@component['iconSize']},"
             end
 
+            # Icon tint. Emitted after iconSize because Swift requires argument
+            # labels in the initializer's declaration order.
+            if @component['iconColor']
+              add_line "iconColor: #{get_swiftui_color(@component['iconColor'])},"
+            end
+
             # Spacing
             if @component['spacing']
               add_line "spacing: #{@component['spacing']},"

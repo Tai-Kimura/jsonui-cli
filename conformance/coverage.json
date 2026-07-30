@@ -28,65 +28,12 @@
       "reason": "unimplemented"
     },
     {
-      "component": "Check",
-      "attribute": "iconColor",
-      "platforms": [
-        "ios",
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Check",
-      "attribute": "iconSize",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Check",
-      "attribute": "onSrc",
-      "platforms": [
-        "android",
-        "web"
-      ],
-      "reason": "unimplemented"
-    },
-    {
       "component": "CheckBox",
       "attribute": "bind",
       "platforms": [
         "web"
       ],
       "reason": "unimplemented"
-    },
-    {
-      "component": "CheckBox",
-      "attribute": "iconColor",
-      "platforms": [
-        "ios",
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "CheckBox",
-      "attribute": "iconSize",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "CheckBox",
-      "attribute": "onSrc",
-      "platforms": [
-        "android",
-        "web"
-      ],
-      "reason": "legacy",
-      "note": "alias — normalized to its canonical spelling before conversion"
     },
     {
       "component": "Collection",
@@ -330,23 +277,6 @@
       ],
       "reason": "unimplemented",
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "Radio",
-      "attribute": "iconColor",
-      "platforms": [
-        "ios",
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Radio",
-      "attribute": "iconSize",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
     },
     {
       "component": "Radio",

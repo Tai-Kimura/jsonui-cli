@@ -205,6 +205,9 @@ module KjuiTools
             code += "\n" + indent("    RadioButton(", depth)
             code += "\n" + indent("        selected = data.#{selected_var} == \"#{id}\",", depth)
             code += "\n" + indent("        onClick = { viewModel.updateData(mapOf(\"#{selected_var}\" to \"#{id}\")) }", depth)
+            icon_appearance_args(json_data, required_imports, :radio).each do |arg|
+              code += ",\n" + indent("        #{arg}", depth)
+            end
             code += "\n" + indent("    )", depth)
           elsif json_data['icon'] == 'square' && 
                 (json_data['selectedIcon'] == 'checkmark.square.fill' || !json_data['selectedIcon'])
@@ -213,6 +216,9 @@ module KjuiTools
             code += "\n" + indent("    Checkbox(", depth)
             code += "\n" + indent("        checked = data.#{selected_var} == \"#{id}\",", depth)
             code += "\n" + indent("        onCheckedChange = { viewModel.updateData(mapOf(\"#{selected_var}\" to \"#{id}\")) }", depth)
+            icon_appearance_args(json_data, required_imports, :checkbox).each do |arg|
+              code += ",\n" + indent("        #{arg}", depth)
+            end
             code += "\n" + indent("    )", depth)
           elsif json_data['icon'] || json_data['selectedIcon']
             # Use IconButton with custom icons only for non-standard icons
@@ -230,7 +236,15 @@ module KjuiTools
             code += "\n" + indent("            imageVector = if (isSelected) #{selected_icon} else #{icon},", depth)
             code += "\n" + indent("            contentDescription = \"#{text}\",", depth)
             
-            if json_data['selectedColor'] || json_data['tintColor']
+            if json_data['iconSize']
+              code += "\n" + indent("            modifier = Modifier.size(#{json_data['iconSize'].to_i}.dp),", depth)
+            end
+
+            if json_data['iconColor']
+              # One tint for the whole glyph, so both states share it.
+              icon_color = Helpers::ResourceResolver.process_color(json_data['iconColor'], required_imports)
+              code += "\n" + indent("            tint = #{icon_color}", depth)
+            elsif json_data['selectedColor'] || json_data['tintColor']
               color = json_data['selectedColor'] || json_data['tintColor']
               selected_color = Helpers::ResourceResolver.process_color(color, required_imports)
               code += "\n" + indent("            tint = if (isSelected) #{selected_color} else Color.Gray", depth)
@@ -245,6 +259,9 @@ module KjuiTools
             code += "\n" + indent("    RadioButton(", depth)
             code += "\n" + indent("        selected = data.#{selected_var} == \"#{id}\",", depth)
             code += "\n" + indent("        onClick = { viewModel.updateData(mapOf(\"#{selected_var}\" to \"#{id}\")) }", depth)
+            icon_appearance_args(json_data, required_imports, :radio).each do |arg|
+              code += ",\n" + indent("        #{arg}", depth)
+            end
             code += "\n" + indent("    )", depth)
           end
           
@@ -351,6 +368,29 @@ module KjuiTools
           code
         end
         
+        # `iconSize` / `iconColor` as extra arguments for the default Material
+        # controls.
+        #
+        # iconColor is a single tint for the whole glyph, so it applies to BOTH
+        # states — unlike selectedColor / tintColor, which only set the selected
+        # one. For a Checkbox the glyph is the tick, hence checkmarkColor.
+        def self.icon_appearance_args(json_data, required_imports, control)
+          args = []
+          args << "modifier = Modifier.size(#{json_data['iconSize'].to_i}.dp)" if json_data['iconSize']
+          if json_data['iconColor']
+            color = Helpers::ResourceResolver.process_color(json_data['iconColor'], required_imports)
+            case control
+            when :radio
+              required_imports&.add(:radio_colors)
+              args << "colors = RadioButtonDefaults.colors(selectedColor = #{color}, unselectedColor = #{color})"
+            when :checkbox
+              required_imports&.add(:checkbox_colors)
+              args << "colors = CheckboxDefaults.colors(checkmarkColor = #{color})"
+            end
+          end
+          args
+        end
+
         def self.map_icon_name(icon_name)
           # Map iOS SF Symbols to Material Icons
           icon_map = {
