@@ -746,5 +746,82 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
         expect(result).to include('fontStyle = resolved_text1.style ?: FontStyle.Normal,')
       end
     end
+
+    # highlightAttributes / highlightColor take over while `selected` is true.
+    # Canonical semantics come from the iOS UIKit runtime, which keeps two
+    # attribute dictionaries and swaps on `selected`.
+    describe 'highlight state' do
+      it 'resolves the highlight font through the same FontSpec provider' do
+        json_data = {
+          'type' => 'Text', 'text' => 'Hi', 'fontSize' => 14, 'selected' => '@{isChosen}',
+          'highlightAttributes' => { 'font' => 'bold', 'fontSize' => 24, 'fontColor' => '#FF0000' }
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+
+        # Two resolve blocks, so an app's fontProvider sees both states.
+        expect(result).to include('val resolved_text1 = Configuration.Font.resolve(')
+        expect(result).to include('val resolved_text2 = Configuration.Font.resolve(')
+        expect(result).to include('size = 24.sp')
+        expect(result).to include('weight = FontWeight.Bold')
+        expect(result).to include('fontSize = (if (data.isChosen) resolved_text2 else resolved_text1).size')
+      end
+
+      it 'swaps the colour on the same condition' do
+        json_data = {
+          'type' => 'Text', 'text' => 'Hi', 'fontColor' => '#000000',
+          'selected' => '@{isChosen}', 'highlightColor' => '#00FF00'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to match(/color = if \(data\.isChosen\) .*#00FF00.*else .*#000000/)
+      end
+
+      # Compose has no "inherit" colour for Text.
+      it 'falls back to Color.Unspecified when there is no base colour' do
+        json_data = {
+          'type' => 'Text', 'text' => 'Hi', 'selected' => '@{isChosen}',
+          'highlightColor' => '#00FF00'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('else Color.Unspecified')
+      end
+
+      # `if (true)` and an unreferenced `val` are both Kotlin warnings, and a
+      # zero-warning build is a hard invariant for the consuming project.
+      it 'emits no dead branch or unused val when selected is literally true' do
+        json_data = {
+          'type' => 'Text', 'text' => 'Hi', 'fontSize' => 14, 'selected' => true,
+          'highlightAttributes' => { 'fontSize' => 24, 'fontColor' => '#FF0000' }
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+
+        expect(result).not_to include('if (true)')
+        expect(result).not_to include('resolved_text1')
+        expect(result).to include('fontSize = resolved_text2.size ?: TextUnit.Unspecified,')
+      end
+
+      it 'prefers highlightAttributes and falls through when it has no usable key' do
+        both = described_class.generate({
+          'type' => 'Text', 'text' => 'Hi', 'selected' => true,
+          'highlightAttributes' => { 'fontColor' => '#FF0000' }, 'highlightColor' => '#00FF00'
+        }, 0, required_imports)
+        expect(both).to include('#FF0000')
+        expect(both).not_to include('#00FF00')
+
+        described_class.counter = 0
+        empty = described_class.generate({
+          'type' => 'Text', 'text' => 'Hi', 'selected' => true,
+          'highlightAttributes' => {}, 'highlightColor' => '#00FF00'
+        }, 0, required_imports)
+        expect(empty).to include('#00FF00')
+      end
+
+      it 'emits nothing conditional without a driver, and no stale comment' do
+        json_data = { 'type' => 'Text', 'text' => 'Hi', 'highlightColor' => '#00FF00' }
+        result = described_class.generate(json_data, 0, required_imports)
+
+        expect(result).not_to include('if (')
+        expect(result).not_to include('// highlightColor')
+      end
+    end
   end
 end

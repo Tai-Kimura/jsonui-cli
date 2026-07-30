@@ -34,7 +34,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'image_converter.rb' => %w[canTap contentMode cornerRadius defaultImage onClick onclick src srcName url],
     'include_converter.rb' => %w[shared_data],
     'indicator_converter.rb' => %w[borderWidth color halfSpinner height size strokeWidth tintColor width],
-    'label_converter.rb' => %w[autoShrink disabledFontColor edgeInset enabled fontSize gravity lineBreakMode lineHeightMultiple lineSpacing lines linkable minimumScaleFactor onClick onclick partialAttributes strikethrough text textAlign underline],
+    'label_converter.rb' => %w[autoShrink disabledFontColor edgeInset enabled font fontColor fontSize fontWeight gravity highlightAttributes highlightColor lineBreakMode lineHeightMultiple lineSpacing lines linkable minimumScaleFactor onClick onclick partialAttributes selected strikethrough text textAlign underline],
     'network_image_converter.rb' => %w[canTap circle circleImage contentMode cornerRadius defaultImage errorImage imageUrl onClick onclick placeholder scaleType src url],
     'progress_converter.rb' => %w[barHeight maximumValue progress progressHeight progressTintColor tintColor trackColor trackTintColor value],
     'radio_converter.rb' => %w[enabled group items onValueChange selectedValue text tintColor],

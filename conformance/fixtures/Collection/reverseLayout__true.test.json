@@ -12,7 +12,9 @@
       "Collection"
     ]
   },
-  "platform": "all",
+  "platform": [
+    "android"
+  ],
   "cases": [
     {
       "name": "reverseLayout__true",

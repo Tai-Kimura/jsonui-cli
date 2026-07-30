@@ -13,7 +13,9 @@
       "common"
     ]
   },
-  "platform": "all",
+  "platform": [
+    "android"
+  ],
   "cases": [
     {
       "name": "onAppear__callback_fire",

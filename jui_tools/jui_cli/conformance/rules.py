@@ -774,14 +774,52 @@ def _untestable_reason(section: str, attribute: str, defn: dict) -> str | None:
     return None
 
 
+#: `mode` tag -> the platforms an attribute is VALID on.
+#:
+#: Not the same mapping as `coverage.MODE_TAGS`, which answers "whose Ruby
+#: converter must read this" and maps `uikit` to nothing because UIKit applies
+#: attributes in the Swift runtime with no Ruby codegen involved. A UIKit
+#: attribute is still legal in an iOS layout, so a fixture for it belongs on
+#: iOS — and nowhere else.
+MODE_PLATFORM_MAP: dict[str, set[str]] = {
+    "uikit": {"ios"},
+    "swiftui": {"ios"},
+    "compose": {"android"},
+    "react": {"web"},
+}
+
+
 def _platforms(defn: dict) -> tuple[str, ...]:
+    """Platforms a fixture for this attribute should run on.
+
+    Honours `mode` as well as `platform`. Ignoring `mode` gave every
+    Compose-only attribute a three-platform fixture: `Collection.reverseLayout`
+    and `View.onAppear` were rendered on iOS and web, where the attribute is not
+    declared at all, so the layout was invalid there and the screenshot could
+    only ever match its control.
+    """
+    scope: set[str] | None = None
+
     raw = defn.get("platform")
-    if raw is None:
+    if raw is not None:
+        tags = raw if isinstance(raw, list) else [raw]
+        mapped = {PLATFORM_MAP[t] for t in tags if t in PLATFORM_MAP}
+        scope = mapped or None
+
+    raw_mode = defn.get("mode")
+    if raw_mode is not None:
+        tags = raw_mode if isinstance(raw_mode, list) else [raw_mode]
+        mode_scope: set[str] = set()
+        for tag in tags:
+            # An unknown or deliberately broad tag (`dynamic-only`) does not
+            # narrow: it says how the attribute is applied, not where.
+            mode_scope |= MODE_PLATFORM_MAP.get(tag, set(ALL_PLATFORMS))
+        scope = mode_scope if scope is None else (scope & mode_scope)
+
+    if scope is None:
         return ALL_PLATFORMS
-    tags = raw if isinstance(raw, list) else [raw]
-    mapped = [PLATFORM_MAP[t] for t in tags if t in PLATFORM_MAP]
     # Preserve the canonical ios/android/web order.
-    ordered = tuple(p for p in ALL_PLATFORMS if p in mapped)
+    ordered = tuple(p for p in ALL_PLATFORMS if p in scope)
     return ordered or ALL_PLATFORMS
 
 

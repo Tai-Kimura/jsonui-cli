@@ -1258,10 +1258,22 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       expect(common_attrs['maxWidthWeight']['mode']).to eq('uikit')
     end
 
-    it 'has selected defined in Label with swift platform marker' do
+    # Deliberately NOT swift-scoped, unlike its IconLabel namesake.
+    #
+    # `selected` decides which attribute set a Label renders with, and
+    # `highlightAttributes` / `highlightColor` carry no platform restriction —
+    # so scoping the driver to swift left the SSoT requiring every platform to
+    # support highlight styling while only iOS could turn it on. Compose and
+    # React both implement the swap now.
+    it 'has selected defined in Label with no platform restriction' do
       label_attrs = validator.definitions['Label']
       expect(label_attrs).to have_key('selected')
-      expect(label_attrs['selected']['platform']).to eq('swift')
+      expect(label_attrs['selected']).not_to have_key('platform')
+      expect(label_attrs['selected']).not_to have_key('mode')
+
+      %w[highlightAttributes highlightColor].each do |attr|
+        expect(label_attrs[attr]).not_to have_key('platform')
+      end
     end
 
     it 'has highlightSrcName defined in Image with swift platform marker' do

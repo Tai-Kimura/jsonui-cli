@@ -55,26 +55,77 @@ module KjuiTools
           font_args = Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports)
           var_name = next_resolved_var
 
+          # highlightAttributes / highlightColor take over while `selected` is
+          # true. The highlight font goes through the SAME FontSpec resolver as
+          # the base one so an app's fontProvider is honoured in both states.
+          highlight = highlight_overrides(json_data)
+          highlight_condition = selected_condition(json_data)
+          highlight_var = nil
+          if highlight && highlight_condition && highlight.key?(:font_attrs)
+            highlight_var = next_resolved_var
+            highlight_args = Helpers::FontSpecHelper.build_font_spec_args(
+              json_data.merge(highlight[:font_attrs]), required_imports
+            )
+          end
+
+          # Which resolved font is in force. Normally an expression, so the swap
+          # happens at recomposition; a literal `selected: true` collapses to the
+          # highlight font directly, since `if (true)` earns a Kotlin
+          # "condition is always true" warning in the consuming build.
+          always_highlighted = highlight_condition == 'true'
+          font_ref = if highlight_var.nil?
+                       var_name
+                     elsif always_highlighted
+                       highlight_var
+                     else
+                       "(if (#{highlight_condition}) #{highlight_var} else #{var_name})"
+                     end
+
+          # Resolved ahead of emission so only the blocks the Text(...) call
+          # actually references are written: an unreferenced `val` is a Kotlin
+          # "never used" warning in the consuming build.
           component_code = ""
-          component_code += Helpers::FontSpecHelper.emit_resolve_block(var_name, font_args, depth, required_imports)
-          component_code += "\n"
+          if font_ref.include?(var_name)
+            component_code += Helpers::FontSpecHelper.emit_resolve_block(var_name, font_args, depth, required_imports)
+            component_code += "\n"
+          end
+          if highlight_var
+            component_code += Helpers::FontSpecHelper.emit_resolve_block(highlight_var, highlight_args, depth, required_imports)
+            component_code += "\n"
+          end
 
           component_code += indent("Text(", depth)
           component_code += "\n" + indent("text = #{text},", depth + 1)
 
           # Font color (official attribute)
-          if json_data['fontColor']
-            color_value = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
-            component_code += "\n" + indent("color = #{color_value},", depth + 1) if color_value
+          base_color = if json_data['fontColor']
+                         Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
+                       end
+          highlight_color = if highlight && highlight_condition && highlight[:font_color]
+                              Helpers::ResourceResolver.process_color(highlight[:font_color], required_imports)
+                            end
+          if highlight_color && always_highlighted
+            component_code += "\n" + indent("color = #{highlight_color},", depth + 1)
+          elsif highlight_color
+            # Compose has no "inherit" colour, so the unselected branch needs a
+            # concrete value; Color.Unspecified is the documented way to say
+            # "whatever Text would have used".
+            required_imports&.add(:color)
+            component_code += "\n" + indent(
+              "color = if (#{highlight_condition}) #{highlight_color} else #{base_color || 'Color.Unspecified'},",
+              depth + 1
+            )
+          elsif base_color
+            component_code += "\n" + indent("color = #{base_color},", depth + 1)
           end
 
           # ResolvedFont fields routed to Text(...) parameters
           required_imports&.add(:font_style)
           required_imports&.add(:text_unit)
-          component_code += "\n" + indent("fontFamily = #{var_name}.family,", depth + 1)
-          component_code += "\n" + indent("fontWeight = #{var_name}.weight,", depth + 1)
-          component_code += "\n" + indent("fontSize = #{var_name}.size ?: TextUnit.Unspecified,", depth + 1)
-          component_code += "\n" + indent("fontStyle = #{var_name}.style ?: FontStyle.Normal,", depth + 1)
+          component_code += "\n" + indent("fontFamily = #{font_ref}.family,", depth + 1)
+          component_code += "\n" + indent("fontWeight = #{font_ref}.weight,", depth + 1)
+          component_code += "\n" + indent("fontSize = #{font_ref}.size ?: TextUnit.Unspecified,", depth + 1)
+          component_code += "\n" + indent("fontStyle = #{font_ref}.style ?: FontStyle.Normal,", depth + 1)
 
           # Text decoration (underline, strikethrough)
           text_decorations = []
@@ -258,12 +309,6 @@ module KjuiTools
             component_code += ",\n" + indent("overflow = #{overflow_value}", depth + 1)
           end
 
-          # highlightColor - color when pressed/selected
-          if json_data['highlightColor']
-            highlight_color = Helpers::ResourceResolver.process_color(json_data['highlightColor'], required_imports)
-            component_code += ",\n" + indent("// highlightColor: #{highlight_color} - Use InteractionSource for pressed state styling", depth + 1)
-          end
-
           component_code += "\n" + indent(")", depth)
 
           # Wrap with VisibilityWrapper if needed
@@ -271,6 +316,48 @@ module KjuiTools
         end
 
         private
+
+        # The styling that takes over while the label is selected.
+        #
+        # Canonical semantics come from the iOS UIKit runtime, which keeps two
+        # attribute dictionaries and swaps on `selected`
+        # (SJUILabel#applyAttributedText). `highlightAttributes` wins over
+        # `highlightColor`, and an object with no usable key falls through to
+        # `highlightColor` — matching SJUILabel's creator.
+        #
+        # Returns nil, or a hash with `:font_attrs` (base-shaped keys, so the
+        # existing FontSpec builder can consume them) and/or `:font_color`.
+        def self.highlight_overrides(json_data)
+          attrs = json_data['highlightAttributes']
+          result = {}
+
+          if attrs.is_a?(Hash)
+            font_attrs = {}
+            # `font` carries either a family or the literal weight name "bold",
+            # which is exactly what the base `font` key already accepts.
+            font_attrs['font'] = attrs['font'] if attrs['font']
+            font_attrs['fontSize'] = attrs['fontSize'] if attrs['fontSize']
+            result[:font_attrs] = font_attrs if font_attrs.any?
+            result[:font_color] = attrs['fontColor'] if attrs['fontColor']
+          end
+
+          if result.empty? && json_data['highlightColor']
+            result[:font_color] = json_data['highlightColor']
+          end
+          result.empty? ? nil : result
+        end
+
+        # The `selected` state that decides which set is in force. Absent means
+        # never highlighted, so there is nothing to emit.
+        def self.selected_condition(json_data)
+          value = json_data['selected']
+          return 'true' if value == true || value == 'true'
+          if Helpers::ModifierBuilder.is_binding?(value)
+            return "data.#{Helpers::ModifierBuilder.extract_binding_property(value)}"
+          end
+
+          nil
+        end
 
         def self.generate_with_partial_attributes_for_linkable(json_data, depth, required_imports, parent_type)
           required_imports&.add(:partial_attributes_text)

@@ -641,4 +641,85 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       expect(result).not_to include('onClick={@{handleTap}}')
     end
   end
+  # highlightAttributes / highlightColor take over while `selected` is true.
+  # Canonical semantics come from the iOS UIKit runtime, which keeps two
+  # attribute dictionaries and swaps on `selected`.
+  describe 'highlight state' do
+    it 'swaps at runtime when selected is a binding' do
+      result = create_converter({
+        'type' => 'Label', 'text' => 'Hi', 'fontSize' => 14, 'fontColor' => '#000000',
+        'selected' => '@{isChosen}',
+        'highlightAttributes' => { 'fontSize' => 24, 'fontColor' => '#FF0000' }
+      }).convert
+
+      expect(result).to include('className={data.isChosen ?')
+      expect(result).to include('text-[#FF0000]')
+    end
+
+    # Tailwind precedence comes from stylesheet order, not attribute order, so
+    # `text-black text-red-500` in one class list has no defined winner.
+    it 'replaces the base font classes rather than appending to them' do
+      result = create_converter({
+        'type' => 'Label', 'text' => 'Hi', 'fontSize' => 14, 'fontColor' => '#000000',
+        'selected' => '@{isChosen}',
+        'highlightAttributes' => { 'fontSize' => 24, 'fontColor' => '#FF0000' }
+      }).convert
+      highlighted = result[/className=\{data\.isChosen \? "([^"]*)"/, 1]
+
+      expect(highlighted).to include('text-[#FF0000]')
+      expect(highlighted).not_to include('text-[#000000]')
+      expect(highlighted).not_to include('text-sm')
+    end
+
+    it 'keeps the base branch intact for the unselected state' do
+      result = create_converter({
+        'type' => 'Label', 'text' => 'Hi', 'fontColor' => '#000000',
+        'selected' => '@{isChosen}', 'highlightColor' => '#00FF00'
+      }).convert
+      base = result[/: "([^"]*)"\}/, 1]
+
+      expect(base).to include('text-[#000000]')
+      expect(base).not_to include('text-[#00FF00]')
+    end
+
+    it 'needs no runtime branch when selected is literally true' do
+      result = create_converter({
+        'type' => 'Label', 'text' => 'Hi', 'fontColor' => '#000000', 'selected' => true,
+        'highlightAttributes' => { 'fontColor' => '#FF0000' }
+      }).convert
+
+      expect(result).to include('className="')
+      expect(result).not_to include('?')
+      expect(result).to include('text-[#FF0000]')
+      expect(result).not_to include('text-[#000000]')
+    end
+
+    # SJUILabel's creator: a non-empty highlightAttributes wins, otherwise
+    # highlightColor.
+    it 'prefers highlightAttributes and falls through when it has no usable key' do
+      both = create_converter({
+        'type' => 'Label', 'text' => 'Hi', 'selected' => true,
+        'highlightAttributes' => { 'fontColor' => '#FF0000' }, 'highlightColor' => '#00FF00'
+      }).convert
+      expect(both).to include('text-[#FF0000]')
+      expect(both).not_to include('text-[#00FF00]')
+
+      empty = create_converter({
+        'type' => 'Label', 'text' => 'Hi', 'selected' => true,
+        'highlightAttributes' => {}, 'highlightColor' => '#00FF00'
+      }).convert
+      expect(empty).to include('text-[#00FF00]')
+    end
+
+    it 'leaves the class list untouched when there is no driver' do
+      with_driver = create_converter({
+        'type' => 'Label', 'text' => 'Hi', 'fontColor' => '#000000', 'highlightColor' => '#00FF00'
+      }).convert
+      without = create_converter({
+        'type' => 'Label', 'text' => 'Hi', 'fontColor' => '#000000'
+      }).convert
+
+      expect(with_driver).to eq(without)
+    end
+  end
 end

@@ -8,7 +8,7 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "1a117207e274271638b07b85cf84d9e5ad214b35c03a7504e5ca3ebf6d597d33",
+  "generatedFrom": "df0c67c408c0e6dcc2c341132dab2607f39a6b2b041b67c8e09d81279c19d754",
   "counts": {
     "fixtures": 711,
     "assertable": 36,
@@ -2786,9 +2786,7 @@
       "aliasOf": null,
       "value": "conformanceFire",
       "platforms": [
-        "ios",
-        "android",
-        "web"
+        "android"
       ],
       "mode": "compose",
       "deprecated": null,
@@ -3871,7 +3869,9 @@
       "aliasOf": null,
       "value": true,
       "platforms": [
-        "ios"
+        "ios",
+        "android",
+        "web"
       ],
       "mode": null,
       "deprecated": null,
@@ -13010,9 +13010,7 @@
       "aliasOf": null,
       "value": true,
       "platforms": [
-        "ios",
-        "android",
-        "web"
+        "android"
       ],
       "mode": "compose",
       "deprecated": null,

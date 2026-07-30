@@ -7,7 +7,7 @@ module RjuiTools
     module Converters
       class LabelConverter < BaseConverter
         def convert(indent = 2)
-          class_name = build_class_name
+          class_attr = build_class_attr
           style_attr = build_style_attr
           id_attr = build_id_attr
           onclick_attr = build_onclick_attr
@@ -16,12 +16,12 @@ module RjuiTools
 
           # Check if we need partialAttributes rendering
           jsx = if partial_attributes_list
-            render_partial_attributes(indent, id_attr, class_name, style_attr, onclick_attr, testid_attr, tag_attr)
+            render_partial_attributes(indent, id_attr, class_attr, style_attr, onclick_attr, testid_attr, tag_attr)
           elsif attributes['linkable']
-            render_linkable_text(indent, id_attr, class_name, style_attr, onclick_attr, testid_attr, tag_attr)
+            render_linkable_text(indent, id_attr, class_attr, style_attr, onclick_attr, testid_attr, tag_attr)
           else
             text = convert_text_binding(attributes['text'] || '')
-            "#{indent_str(indent)}<span#{id_attr} className=\"#{class_name}\"#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>#{text}</span>"
+            "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>#{text}</span>"
           end
 
           wrap_with_visibility(jsx, indent)
@@ -44,6 +44,92 @@ module RjuiTools
         # the text around each detected URL.
         def multi_run_text?
           !partial_attributes_list.nil? || !!attributes['linkable']
+        end
+
+        # The className attribute, which is an EXPRESSION when the label has a
+        # highlight state driven by a binding.
+        #
+        # A second `text-*` class cannot simply be appended: Tailwind precedence
+        # comes from the order rules appear in the stylesheet, not from the order
+        # they appear in the attribute, so `text-black text-red-500` picks a
+        # winner arbitrarily. The highlight branch therefore REPLACES the base
+        # font classes rather than adding to them.
+        def build_class_attr
+          base = build_class_name
+          highlight = highlight_classes
+          return " className=\"#{base}\"" if highlight.empty?
+
+          condition = selected_condition
+          return " className=\"#{base}\"" if condition.nil?
+
+          swapped = (base.split(/\s+/) - overridden_font_classes + highlight).join(' ')
+          # A literal `selected: true` needs no runtime branch.
+          return " className=\"#{swapped}\"" if condition == 'true'
+
+          " className={#{condition} ? \"#{swapped}\" : \"#{base}\"}"
+        end
+
+        # Classes for the highlight state, from `highlightAttributes` or, when
+        # that yields nothing usable, from `highlightColor`.
+        #
+        # Canonical semantics come from the iOS UIKit runtime, which keeps two
+        # attribute dictionaries and swaps on `selected`
+        # (SJUILabel#applyAttributedText); its creator prefers a non-empty
+        # `highlightAttributes` and otherwise falls back to `highlightColor`.
+        def highlight_classes
+          attrs = attributes['highlightAttributes']
+          classes = []
+
+          if attrs.is_a?(Hash)
+            classes << TailwindMapper.map_font_size(attrs['fontSize']) if attrs['fontSize']
+            # `font` is polymorphic: a weight name or a family. map_font already
+            # discriminates, the same way the base path uses it.
+            if attrs['font']
+              font_class = TailwindMapper.map_font(attrs['font'])
+              classes << font_class if font_class && !font_class.empty?
+            end
+            classes << TailwindMapper.map_color(attrs['fontColor'], 'text') if attrs['fontColor']
+          end
+
+          classes = classes.reject { |c| c.nil? || c.empty? }
+          if classes.empty? && attributes['highlightColor']
+            classes = [TailwindMapper.map_color(attributes['highlightColor'], 'text')]
+          end
+          classes.reject { |c| c.nil? || c.empty? }
+        end
+
+        # The exact base classes the highlight set replaces. Recomputed rather
+        # than pattern-matched: Tailwind spells both colour and font size with a
+        # `text-` prefix (`text-[#FF0000]`, `text-[24px]`), so a prefix match
+        # cannot tell them apart, but the strings the base emitted are knowable.
+        def overridden_font_classes
+          attrs = attributes['highlightAttributes']
+          attrs = {} unless attrs.is_a?(Hash)
+          overridden = []
+
+          if attrs['fontColor'] || attributes['highlightColor']
+            overridden << TailwindMapper.map_color(attributes['fontColor'], 'text') if attributes['fontColor']
+          end
+          if attrs['fontSize'] && attributes['fontSize']
+            overridden << TailwindMapper.map_font_size(attributes['fontSize'])
+          end
+          if attrs['font']
+            overridden << TailwindMapper.map_font(attributes['font']) if attributes['font']
+            if attributes['fontWeight']
+              overridden << TailwindMapper.map_font_weight(attributes['fontWeight'])
+            end
+          end
+          overridden.reject { |c| c.nil? || c.empty? }
+        end
+
+        # The `selected` state that decides which set is in force. Absent means
+        # never highlighted, so no swap is emitted at all.
+        def selected_condition
+          value = attributes['selected']
+          return 'true' if value == true || value == 'true'
+          return extract_binding_property(value) if value.is_a?(String) && has_binding?(value)
+
+          nil
         end
 
         def build_class_name
@@ -200,12 +286,12 @@ module RjuiTools
         # applied at RUNTIME, against the resolved string. Slicing here at
         # build time could not support a pattern range or a localized text,
         # and iOS/Android have always done this at runtime.
-        def render_partial_attributes(indent, id_attr, class_name, style_attr, onclick_attr, testid_attr, tag_attr)
+        def render_partial_attributes(indent, id_attr, class_attr, style_attr, onclick_attr, testid_attr, tag_attr)
           text_expr = text_runtime_expression(attributes['text'] || '')
           specs = build_partial_specs(attributes['partialAttributes'])
 
           lines = []
-          lines << "#{indent_str(indent)}<span#{id_attr} className=\"#{class_name}\"#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>"
+          lines << "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>"
           lines << "#{indent_str(indent + 2)}{partialText(#{text_expr}, #{specs})}"
           lines << "#{indent_str(indent)}</span>"
           lines.join("\n")
@@ -239,13 +325,13 @@ module RjuiTools
         end
 
         # Render linkable text (auto-detect URLs and make them clickable)
-        def render_linkable_text(indent, id_attr, class_name, style_attr, onclick_attr, testid_attr, tag_attr)
+        def render_linkable_text(indent, id_attr, class_attr, style_attr, onclick_attr, testid_attr, tag_attr)
           text = attributes['text'] || ''
 
           # For React, we'll render with a data attribute and let the app handle link detection
           # Or use a simple regex-based approach
           lines = []
-          lines << "#{indent_str(indent)}<span#{id_attr} className=\"#{class_name}\"#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr} data-linkable=\"true\">"
+          lines << "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr} data-linkable=\"true\">"
 
           # Simple URL detection
           url_regex = /(https?:\/\/[^\s]+)/
