@@ -1211,6 +1211,48 @@ module RjuiTools
 
         # Resolve a handler attribute (binding `@{name}` or bare selector `name`)
         # to a `data.`-prefixed property reference
+        # Soft-keyboard vocabulary shared by TextField and TextView: the
+        # declared values are the UIKit spellings, HTML has its own words for
+        # the same ideas (inputMode / enterKeyHint). One copy so the two
+        # converters cannot drift.
+        def map_input_mode(input)
+          case input&.downcase
+          when 'number', 'numberpad'
+            'numeric'
+          when 'decimal', 'decimalpad'
+            'decimal'
+          when 'tel', 'phonenumber'
+            'tel'
+          when 'email'
+            'email'
+          when 'url'
+            'url'
+          when 'search', 'websearch'
+            'search'
+          else
+            nil
+          end
+        end
+
+        def map_return_key(return_key)
+          case return_key
+          when 'Done'
+            'done'
+          when 'Go'
+            'go'
+          when 'Next'
+            'next'
+          when 'Search'
+            'search'
+          when 'Send'
+            'send'
+          when 'Enter', 'Return'
+            'enter'
+          else
+            nil
+          end
+        end
+
         def resolve_handler_property(handler)
           if is_binding_format?(handler)
             extract_binding_property(handler)

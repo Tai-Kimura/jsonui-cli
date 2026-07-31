@@ -24,7 +24,7 @@ module RjuiTools
                        " src=\"#{src}\""
                      end
 
-          jsx = "#{indent_str(indent)}<img#{id_attr} className=\"#{class_name}\"#{style_attr}#{src_attr}#{build_alt_attr}#{onclick_attr}#{testid_attr}#{tag_attr} />"
+          jsx = "#{indent_str(indent)}<img#{id_attr} className=\"#{class_name}\"#{style_attr}#{src_attr}#{build_alt_attr}#{loading_attr}#{onclick_attr}#{testid_attr}#{tag_attr} />"
 
           wrap_with_visibility(jsx, indent)
         end
@@ -80,6 +80,15 @@ module RjuiTools
         end
 
         # A "bare name" carries no path, extension, or scheme — it cannot
+        # `loading` — the native lazy/eager fetch hint, passed through
+        # unchanged when it is one of the two values the browser knows.
+        def loading_attr
+          loading = attributes['loading'].to_s.downcase
+          return '' unless %w[lazy eager].include?(loading)
+
+          " loading=\"#{loading}\""
+        end
+
         # resolve as an <img> src and is almost certainly a srcName typo.
         def bare_image_name?(value)
           !value.empty? &&

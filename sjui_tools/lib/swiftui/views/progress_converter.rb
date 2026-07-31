@@ -23,10 +23,20 @@ module SjuiTools
           
           # ProgressView
           add_line "ProgressView(value: #{progress_value})"
-          
-          # progressTintColor
-          if @component['progressTintColor']
-            color = get_swiftui_color(@component['progressTintColor'])
+
+          # indicatorStyle — same vocabulary as Indicator (linear/circular);
+          # a determinate bar defaults to linear, so only emit when declared.
+          style = @component['indicatorStyle'] || @component['style']
+          if style
+            swift_style = style.to_s.downcase == 'linear' ? 'LinearProgressViewStyle()' : 'CircularProgressViewStyle()'
+            add_modifier_line ".progressViewStyle(#{swift_style})"
+          end
+
+          # progressTintColor — `color` and `tintColor` are the Indicator/UIKit
+          # spellings of the same accent; the specific name wins.
+          progress_tint = @component['progressTintColor'] || @component['color'] || @component['tintColor']
+          if progress_tint
+            color = get_swiftui_color(progress_tint)
             add_modifier_line ".tint(#{color})"
           end
           

@@ -20,14 +20,92 @@ module RjuiTools
           elsif attributes['linkable']
             render_linkable_text(indent, id_attr, class_attr, style_attr, onclick_attr, testid_attr, tag_attr)
           else
-            text = convert_text_binding(attributes['text'] || '')
-            "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>#{text}</span>"
+            render_plain_text(indent, id_attr, class_attr, style_attr, onclick_attr, testid_attr, tag_attr)
           end
 
           wrap_with_visibility(jsx, indent)
         end
 
         protected
+
+        # The plain single-span label, with the hint swap when configured.
+        #
+        # Canonical semantics (UIKit SJUILabel, mirrored by kjui): `hint` +
+        # `hintAttributes` are BOTH required, and the styled hint replaces the
+        # text when the text is empty. `placeholder` is the declared alias of
+        # `hint`; `hintAttributes.fontColor` wins over `hintColor`.
+        def render_plain_text(indent, id_attr, class_attr, style_attr, onclick_attr, testid_attr, tag_attr)
+          raw = attributes['text'] || ''
+          hint = hint_config
+          common = "#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}"
+          # The hint span merges the hint styling into the (possibly present)
+          # dynamic style attribute — two style props on one element is
+          # invalid JSX.
+          hint_common = hint ? "#{merged_hint_style(style_attr, hint)}#{onclick_attr}#{testid_attr}#{tag_attr}" : common
+
+          if hint && raw.strip.empty?
+            # Statically empty: the hint IS the content.
+            return "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{hint_common}>#{escape_jsx_text(hint[:text])}</span>"
+          end
+
+          if hint && pure_binding_text?(raw)
+            # Runtime emptiness: two spans, one rendered. An empty string is
+            # falsy in JS, which is exactly the SJUILabel `string.isEmpty`
+            # test.
+            expr = extract_binding_property(raw)
+            text_node = convert_text_binding(raw)
+            return <<~JSX.chomp
+              #{indent_str(indent)}{(#{expr}) ? (
+              #{indent_str(indent + 2)}<span#{id_attr}#{class_attr}#{common}>#{text_node}</span>
+              #{indent_str(indent)}) : (
+              #{indent_str(indent + 2)}<span#{id_attr}#{class_attr}#{hint_common}>#{escape_jsx_text(hint[:text])}</span>
+              #{indent_str(indent)})}
+            JSX
+          end
+
+          text = convert_text_binding(raw)
+          "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{common}>#{text}</span>"
+        end
+
+        def merged_hint_style(style_attr, hint)
+          return style_attr if hint[:parts].empty?
+
+          if style_attr.include?('style={{')
+            style_attr.sub(/ \}\}$/, ", #{hint[:parts].join(', ')} }}")
+          else
+            " style={{ #{hint[:parts].join(', ')} }}"
+          end
+        end
+
+        # {text:, style:} when the hint contract is satisfied. Styling is
+        # emitted as INLINE STYLE on purpose: appending a second `text-*`
+        # class would race the base font classes on stylesheet order (the
+        # known Tailwind trap), while an inline style always wins. Theme
+        # colour names resolve through the generated `--color-*` variables
+        # (theme.css); hex values pass through.
+        def hint_config
+          attrs = attributes['hintAttributes']
+          hint = attributes['hint'] || attributes['placeholder']
+          return nil unless attrs.is_a?(Hash) && hint.is_a?(String) && !hint.empty?
+
+          color = attrs['fontColor'] || attributes['hintColor']
+          parts = []
+          if color && !has_binding?(color)
+            css = color.to_s.start_with?('#') ? color : "var(--color-#{color})"
+            parts << "color: '#{css}'"
+          end
+          parts << "fontSize: '#{attrs['fontSize']}px'" if attrs['fontSize']
+          parts << "fontFamily: '#{attrs['font']}'" if attrs['font']
+          { text: hint, parts: parts }
+        end
+
+        def pure_binding_text?(raw)
+          raw.is_a?(String) && raw.strip.match?(/\A@\{[^}]+\}\z/)
+        end
+
+        def escape_jsx_text(text)
+          text.to_s.gsub('{', '&#123;').gsub('}', '&#125;').gsub('<', '&lt;')
+        end
 
         # The partialAttributes entries, or nil when the label has none. One
         # definition so the render branch and the class builder can't disagree

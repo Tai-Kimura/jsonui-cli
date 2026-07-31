@@ -45,6 +45,16 @@ module SjuiTools
           # Check if it should be a SecureField
           is_secure = textfield_handler.is_secure_field?(@component)
 
+          # hideOnFocused: EXPLICIT true hides the placeholder the moment the
+          # field focuses (UIKit SJUITextField semantics), driven by the
+          # auto-generated <id>IsFocused property. Absent keeps the historical
+          # SwiftUI behaviour (placeholder until text is typed) so existing
+          # screens do not change under them; explicit false is the same.
+          if @component['hideOnFocused'] == true && @component['id'] && hint != '""'
+            focus_prop = "#{to_camel_case(@component['id'])}IsFocused"
+            hint = "data.#{focus_prop} ? \"\" : #{hint}"
+          end
+
           # TextField or SecureField
           if is_secure
             add_line "SecureField(#{hint}, text: #{text_binding})"

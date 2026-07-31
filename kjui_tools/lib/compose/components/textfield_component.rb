@@ -317,6 +317,13 @@ module KjuiTools
             code += "\n" + indent("textPaddingStart = #{json_data['textPaddingLeft']}.dp,", depth + 1)
           end
           
+          # `tintColor` — the caret accent (UIKit vocabulary), forwarded to
+          # CustomTextField's cursorColor (KotlinJsonUI >= 2.17.1).
+          if json_data['tintColor']
+            cursor_color = Helpers::ResourceResolver.process_color(json_data['tintColor'], required_imports)
+            code += "\n" + indent("cursorColor = #{cursor_color},", depth + 1)
+          end
+
           # Background colors
           if json_data['background']
             bg_color = Helpers::ResourceResolver.process_color(json_data['background'], required_imports)

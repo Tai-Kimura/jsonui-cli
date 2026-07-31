@@ -49,8 +49,11 @@ module KjuiTools
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           # Check if sections are defined
           sections = json_data['sections'] || []
-          # Support both 'layout' and 'orientation' attributes for horizontal/vertical/flow
+          # Support both 'layout' and 'orientation' attributes for horizontal/vertical/flow.
+          # `horizontalScroll: true` is ScrollView's boolean spelling of the
+          # same direction fact — real carousels were measured using it here.
           layout = json_data['layout'] || json_data['orientation'] || 'vertical'
+          layout = 'horizontal' if json_data['horizontalScroll'] == true
           is_horizontal = layout == 'horizontal'
           is_flow = layout == 'flow'
 

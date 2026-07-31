@@ -21,6 +21,11 @@ module KjuiTools
           elsif json_data['selectedItem'] && json_data['selectedItem'].match(/@\{([^}]+)\}/)
             variable = $1
             "data.#{variable}"
+          elsif json_data['selectedValue'] && json_data['selectedValue'].match(/@\{([^}]+)\}/)
+            # `selectedValue` is the cross-platform spelling of the same
+            # two-way selection binding (web reads it; selectedItem wins).
+            variable = $1
+            "data.#{variable}"
           elsif json_data['selectedIndex'] && json_data['selectedIndex'].match(/@\{([^}]+)\}/)
             index_var = $1
             items = json_data['items']
@@ -56,6 +61,8 @@ module KjuiTools
           if is_date_picker && json_data['selectedDate'] && json_data['selectedDate'].match(/@\{([^}]+)\}/)
             binding_variable = $1
           elsif json_data['selectedItem'] && json_data['selectedItem'].match(/@\{([^}]+)\}/)
+            binding_variable = $1
+          elsif json_data['selectedValue'] && json_data['selectedValue'].match(/@\{([^}]+)\}/)
             binding_variable = $1
           elsif json_data['selectedIndex'] && json_data['selectedIndex'].match(/@\{([^}]+)\}/)
             binding_variable = $1
@@ -189,8 +196,15 @@ module KjuiTools
             code += "\n" + indent("borderColor = #{border_color},", depth + 1)
           end
           
-          if json_data['fontColor']
-            text_color = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
+          # `labelAttributes` styles the closed-state label; on this
+          # component the collapsed text IS the label, so its keys win over
+          # the component-level ones (same precedence the web converter uses).
+          # The library surface today carries colour and size; `font` /
+          # `textAlign` have no SelectBox parameter yet.
+          label_attrs = json_data['labelAttributes'].is_a?(Hash) ? json_data['labelAttributes'] : {}
+          label_font_color = label_attrs['fontColor'] || json_data['fontColor']
+          if label_font_color
+            text_color = Helpers::ResourceResolver.process_color(label_font_color, required_imports)
             code += "\n" + indent("textColor = #{text_color},", depth + 1)
           end
           
@@ -204,8 +218,9 @@ module KjuiTools
           end
 
           # Font styling
-          if json_data['fontSize']
-            code += "\n" + indent("fontSize = #{json_data['fontSize']},", depth + 1)
+          label_font_size = label_attrs['fontSize'] || json_data['fontSize']
+          if label_font_size
+            code += "\n" + indent("fontSize = #{label_font_size},", depth + 1)
           end
 
           if json_data['font']

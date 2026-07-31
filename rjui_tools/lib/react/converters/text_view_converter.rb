@@ -108,6 +108,22 @@ module RjuiTools
             @dynamic_styles['borderRadius'] = "'#{attributes['cornerRadius']}px'"
           end
 
+          # lineBreakMode — same truncation mapping as Label (a textarea shows
+          # its own scrollbar rather than truncating, so this only matters for
+          # the read-only/one-line styling cases, but the declared attribute
+          # must not be silently dropped).
+          if attributes['lineBreakMode']
+            case attributes['lineBreakMode']
+            when 'Head'
+              @dynamic_styles['textOverflow'] = "'ellipsis'"
+              @dynamic_styles['direction'] = "'rtl'"
+              @dynamic_styles['textAlign'] = "'left'"
+            when 'Middle', 'Tail', 'Clip'
+              @dynamic_styles['textOverflow'] = "'ellipsis'"
+            end
+            @dynamic_styles['overflow'] = "'hidden'"
+          end
+
           # Hint/placeholder color is now handled via Tailwind class in build_class_name
 
           # Container inset (internal padding)
@@ -203,6 +219,18 @@ module RjuiTools
 
           # Auto focus
           attrs << ' autoFocus' if attributes['autoFocus'] || attributes['becomeFirstResponder']
+
+          # Soft-keyboard hints — same UIKit-spelling vocabulary as TextField,
+          # mapped by the shared base helpers. A textarea has no `type`, so
+          # `input` only contributes the mobile keyboard mode here.
+          if attributes['input']
+            inputmode = map_input_mode(attributes['input'])
+            attrs << " inputMode=\"#{inputmode}\"" if inputmode
+          end
+          if attributes['returnKeyType']
+            enter_key_hint = map_return_key(attributes['returnKeyType'])
+            attrs << " enterKeyHint=\"#{enter_key_hint}\"" if enter_key_hint
+          end
 
           # Columns — the horizontal counterpart of `rows`.
           attrs << " cols={#{attributes['cols'].to_i}}" if attributes['cols']

@@ -186,6 +186,18 @@ SHARED = "__shared__"
 #: (helpers, base classes, builders) is SHARED.
 _COMPONENT_FILE = re.compile(r"^(?P<stem>.+?)_(?:converter|component)\.rb$")
 
+#: Per-platform converter files whose NAME lies about what they serve.
+#: rjui's historical naming: ToggleConverter renders CheckBox/Check
+#: (simple checkboxes) while SwitchConverter renders Switch/Toggle
+#: (iOS-style switches) — the filename-derived owner would credit the
+#: wrong components in both directions.
+PLATFORM_FILE_COMPONENTS = {
+    "web": {
+        "toggle_converter.rb": ("CheckBox", "Check"),
+        "switch_converter.rb": ("Switch", "Toggle"),
+    },
+}
+
 
 def _component_index(definitions: dict) -> dict:
     """`normalized-name -> component` for every declared component.
@@ -203,18 +215,23 @@ def _component_index(definitions: dict) -> dict:
     return index
 
 
-def component_for_file(path, component_index: dict) -> str:
-    """The component a converter file belongs to, or SHARED.
+def components_for_file(path, component_index: dict, platform: str | None = None) -> tuple:
+    """The component(s) a converter file belongs to, or (SHARED,).
 
     Unmatched files stay SHARED on purpose: SHARED satisfies every pair, so a
     mapping miss can only *hide* a gap (the pre-pair-scan behaviour for that
-    file), never invent a false one.
+    file), never invent a false one. Per-platform overrides win over the
+    filename for the files whose name lies (see PLATFORM_FILE_COMPONENTS).
     """
-    match = _COMPONENT_FILE.match(Path(path).name)
+    name = Path(path).name
+    override = PLATFORM_FILE_COMPONENTS.get(platform or "", {}).get(name)
+    if override:
+        return override
+    match = _COMPONENT_FILE.match(name)
     if not match:
-        return SHARED
+        return (SHARED,)
     stem = match.group("stem").replace("_", "").lower()
-    return component_index.get(stem, SHARED)
+    return (component_index.get(stem, SHARED),)
 
 
 def _reads_in_source(src: str) -> set:
@@ -232,7 +249,7 @@ def _reads_in_source(src: str) -> set:
     return keys
 
 
-def scan_reads(source_root, definitions: dict | None = None) -> dict:
+def scan_reads(source_root, definitions: dict | None = None, platform: str | None = None) -> dict:
     """Attribute reads under `source_root`, attributed per component.
 
     Returns `{component-or-SHARED: {attribute names}}`. A name read in
@@ -250,10 +267,10 @@ def scan_reads(source_root, definitions: dict | None = None) -> dict:
         return reads
     for path in sorted(root.rglob("*.rb")):
         src = path.read_text(encoding="utf-8", errors="replace")
-        owner = component_for_file(path, component_index)
         keys = _reads_in_source(src)
         if keys:
-            reads.setdefault(owner, set()).update(keys)
+            for owner in components_for_file(path, component_index, platform):
+                reads.setdefault(owner, set()).update(keys)
     return reads
 
 
@@ -493,7 +510,9 @@ def check(definitions: dict, repo_root, conformance_dir, platforms=None) -> Cove
     """Compare live gaps against the ledger."""
     platforms = tuple(platforms or PLATFORMS)
     reads = {
-        platform: scan_reads(Path(repo_root) / SOURCE_ROOTS[platform], definitions)
+        platform: scan_reads(
+            Path(repo_root) / SOURCE_ROOTS[platform], definitions, platform
+        )
         for platform in platforms
     }
     gaps = [g for g in find_gaps(definitions, reads) if g.platform in platforms]

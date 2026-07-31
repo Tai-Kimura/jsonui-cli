@@ -35,7 +35,26 @@ module KjuiTools
                    Helpers::ResourceResolver.process_text(json_data['text'] || 'Button', required_imports)
                  end
 
-          code = indent("Button(", depth)
+          # Pressed-state colours need an owned InteractionSource: Material3
+          # ButtonDefaults has no pressed slot, so the container/content
+          # colours become conditional on collectIsPressedAsState.
+          highlight_bg = json_data['highlightBackground']
+          highlight_font = Core::Normalization.attr_lookup(json_data, 'highlightColor', 'hilightColor')
+          pressed_var = nil
+          code = ''
+          if highlight_bg || highlight_font
+            required_imports&.add(:pressed_state)
+            suffix = json_data['id'].to_s.gsub(/[^A-Za-z0-9]/, '')
+            interaction_var = "buttonInteraction#{suffix}"
+            pressed_var = "buttonPressed#{suffix}"
+            code += indent("val #{interaction_var} = remember { MutableInteractionSource() }", depth) + "\n"
+            code += indent("val #{pressed_var} by #{interaction_var}.collectIsPressedAsState()", depth) + "\n"
+          end
+
+          code += indent("Button(", depth)
+          if highlight_bg || highlight_font
+            code += "\n" + indent("interactionSource = #{interaction_var},", depth + 1)
+          end
 
           # Handle click events
           # onclick (lowercase) -> selector format (string only)
@@ -158,11 +177,16 @@ module KjuiTools
           colors_code = "colors = ButtonDefaults.buttonColors("
           color_params = []
 
-          if json_data['background']
-            background_color = Helpers::ResourceResolver.process_color(json_data['background'], required_imports)
-            color_params << "containerColor = #{background_color}"
+          base_bg = if json_data['background']
+                      Helpers::ResourceResolver.process_color(json_data['background'], required_imports)
+                    else
+                      'Configuration.Button.defaultBackgroundColor'
+                    end
+          if highlight_bg
+            hl_bg = Helpers::ResourceResolver.process_color(highlight_bg, required_imports)
+            color_params << "containerColor = if (#{pressed_var}) #{hl_bg} else #{base_bg}"
           else
-            color_params << "containerColor = Configuration.Button.defaultBackgroundColor"
+            color_params << "containerColor = #{base_bg}"
           end
 
           if json_data['disabledBackground']
@@ -170,26 +194,21 @@ module KjuiTools
             color_params << "disabledContainerColor = #{disabled_bg_color}"
           end
 
-          if json_data['fontColor']
-            font_color = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
-            color_params << "contentColor = #{font_color}"
+          base_font = if json_data['fontColor']
+                        Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
+                      else
+                        'Configuration.Button.defaultTextColor'
+                      end
+          if highlight_font
+            hl_font = Helpers::ResourceResolver.process_color(highlight_font, required_imports)
+            color_params << "contentColor = if (#{pressed_var}) #{hl_font} else #{base_font}"
           else
-            color_params << "contentColor = Configuration.Button.defaultTextColor"
+            color_params << "contentColor = #{base_font}"
           end
 
           if json_data['disabledFontColor']
             disabled_font_color = Helpers::ResourceResolver.process_color(json_data['disabledFontColor'], required_imports)
             color_params << "disabledContentColor = #{disabled_font_color}"
-          end
-
-          # Note: highlightColor (pressed state) isn't directly supported in Material3 ButtonDefaults
-          # We'd need a custom button implementation or InteractionSource for true pressed state
-          # (canonical 'highlightColor'; 'hilightColor' is its typo alias,
-          # skipped on L1-normalized layouts). Comment text keeps the
-          # legacy spelling so L0/L1 output stays byte-identical.
-          highlight_color_value = Core::Normalization.attr_lookup(json_data, 'highlightColor', 'hilightColor')
-          if highlight_color_value
-            color_params << "// hilightColor: #{highlight_color_value} - Use InteractionSource for pressed state"
           end
 
           colors_code += "\n" + color_params.map { |param| indent(param, depth + 2) }.join(",\n")

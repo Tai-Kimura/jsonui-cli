@@ -48,7 +48,12 @@ module RjuiTools
         def build_class_name
           classes = [super]
 
-          classes << 'flex items-center gap-2' if attributes['text'] || attributes['label']
+          if attributes['text'] || attributes['label']
+            # `spacing` = control-to-label gap, same reading as kjui's checkbox.
+            spacing = attributes['spacing']
+            classes << 'flex items-center'
+            classes << (spacing ? "gap-[#{spacing}px]" : 'gap-2')
+          end
           classes << 'cursor-pointer'
 
           # Disabled state

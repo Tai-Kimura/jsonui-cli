@@ -482,3 +482,103 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter, 'touch gating' do
     end
   end
 end
+
+# 2026-07-31 pair-scan closure — web behaviours added when the component-
+# aware coverage scan exposed 21 silently-dropped attributes.
+require 'react/converters/radio_converter'
+require 'react/converters/toggle_converter'
+require 'react/converters/collection_converter'
+require 'react/converters/icon_label_converter'
+require 'react/converters/image_converter'
+require 'react/converters/network_image_converter'
+require 'react/converters/label_converter'
+require 'react/converters/text_view_converter'
+
+RSpec.describe 'pair-scan closure (web)' do
+  let(:config) { { 'use_tailwind' => true } }
+
+  def conv(klass, json)
+    klass.new(json, config)
+  end
+
+  it 'Radio: label alias, spacing gap, single-radio checked' do
+    r = conv(RjuiTools::React::Converters::RadioConverter,
+             'type' => 'Radio', 'label' => 'Opt', 'spacing' => 12, 'checked' => true).convert
+    expect(r).to include('Opt')
+    expect(r).to include('gap-[12px]')
+    expect(r).to include('defaultChecked')
+  end
+
+  it 'CheckBox (ToggleConverter): spacing replaces the fixed gap' do
+    r = conv(RjuiTools::React::Converters::ToggleConverter,
+             'type' => 'CheckBox', 'label' => 'A', 'spacing' => 10).convert
+    expect(r).to include('gap-[10px]')
+    expect(r).not_to include('gap-2')
+  end
+
+  it 'Collection: horizontalScroll flips direction; indicators and inset map like ScrollView' do
+    r = conv(RjuiTools::React::Converters::CollectionConverter,
+             'type' => 'Collection', 'horizontalScroll' => true,
+             'showsHorizontalScrollIndicator' => false,
+             'contentInsetAdjustmentBehavior' => 'never',
+             'items' => '@{rows}', 'child' => []).convert
+    expect(r).to include('flex-row')
+    expect(r).to include('scrollbar-hide')
+    expect(r).to include('scroll-p-0')
+  end
+
+  it 'IconLabel: selectedFontColor statically and via a bound selected' do
+    static = conv(RjuiTools::React::Converters::IconLabelConverter,
+                  'type' => 'IconLabel', 'text' => 'T', 'selected' => true,
+                  'selectedFontColor' => '#FF0000', 'icon' => 'star.png').convert
+    expect(static).to include('text-[#FF0000]')
+
+    bound = conv(RjuiTools::React::Converters::IconLabelConverter,
+                 'type' => 'IconLabel', 'text' => 'T', 'selected' => '@{isOn}',
+                 'selectedFontColor' => '#FF0000', 'icon_on' => 'a.png', 'icon_off' => 'b.png').convert
+    expect(bound).to include("data.isOn ? '#FF0000'")
+  end
+
+  it 'Image and NetworkImage: native loading passthrough, canonical hint' do
+    img = conv(RjuiTools::React::Converters::ImageConverter,
+               'type' => 'Image', 'src' => 'a.png', 'loading' => 'lazy').convert
+    expect(img).to include('loading="lazy"')
+
+    net = conv(RjuiTools::React::Converters::NetworkImageConverter,
+               'type' => 'NetworkImage', 'src' => 'https://x/y.png',
+               'hint' => 'ph.png', 'loading' => 'eager').convert
+    expect(net).to include('placeholder="ph.png"')
+    expect(net).to include('loading="eager"')
+  end
+
+  it 'Label: styled hint swaps in for an empty text (canonical: both keys required)' do
+    hinted = conv(RjuiTools::React::Converters::LabelConverter,
+                  'type' => 'Label', 'text' => '',
+                  'hint' => 'Nothing here', 'hintColor' => '#999999',
+                  'hintAttributes' => { 'fontSize' => 12 }).convert
+    expect(hinted).to include('Nothing here')
+    expect(hinted).to include("fontSize: '12px'")
+    expect(hinted).to include("color: '#999999'")
+
+    # binding text: runtime emptiness ternary, one span per state
+    bound = conv(RjuiTools::React::Converters::LabelConverter,
+                 'type' => 'Label', 'text' => '@{title}',
+                 'hint' => 'No title', 'hintAttributes' => { 'fontColor' => '#888888' }).convert
+    expect(bound).to include('data.title) ? (')
+    expect(bound).to include('No title')
+
+    # hint without hintAttributes shows nothing (UIKit SJUILabel contract)
+    bare = conv(RjuiTools::React::Converters::LabelConverter,
+                'type' => 'Label', 'text' => '', 'hint' => 'X').convert
+    expect(bare).not_to include('X</span>')
+  end
+
+  it 'TextView: input mode, enter key hint, truncation' do
+    r = conv(RjuiTools::React::Converters::TextViewConverter,
+             'type' => 'TextView', 'text' => '', 'input' => 'email',
+             'returnKeyType' => 'Done', 'lineBreakMode' => 'Tail').convert
+    expect(r).to include('inputMode="email"')
+    expect(r).to include('enterKeyHint="done"')
+    expect(r).to include("textOverflow: 'ellipsis'")
+  end
+end

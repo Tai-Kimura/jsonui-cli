@@ -50,12 +50,15 @@ module KjuiTools
 
           code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
           
-          # Progress colors
-          if json_data['progressTintColor'] || json_data['trackTintColor']
+          # Progress colors. `tintColor` is the cross-platform (UIKit)
+          # spelling of the indicator colour — progressTintColor wins when
+          # both are present.
+          progress_tint = json_data['progressTintColor'] || json_data['tintColor']
+          if progress_tint || json_data['trackTintColor']
             colors_params = []
             
-            if json_data['progressTintColor']
-              color_resolved = Helpers::ResourceResolver.process_color(json_data['progressTintColor'], required_imports)
+            if progress_tint
+              color_resolved = Helpers::ResourceResolver.process_color(progress_tint, required_imports)
               colors_params << "color = #{color_resolved}"
             end
             

@@ -289,43 +289,7 @@ module RjuiTools
           end
         end
 
-        def map_input_mode(input)
-          case input&.downcase
-          when 'number', 'numberpad'
-            'numeric'
-          when 'decimal', 'decimalpad'
-            'decimal'
-          when 'tel', 'phonenumber'
-            'tel'
-          when 'email'
-            'email'
-          when 'url'
-            'url'
-          when 'search', 'websearch'
-            'search'
-          else
-            nil
-          end
-        end
 
-        def map_return_key(return_key)
-          case return_key
-          when 'Done'
-            'done'
-          when 'Go'
-            'go'
-          when 'Next'
-            'next'
-          when 'Search'
-            'search'
-          when 'Send'
-            'send'
-          when 'Enter', 'Return'
-            'enter'
-          else
-            nil
-          end
-        end
 
         # Both spellings of each event fire, in declaration order — the web pair
         # (onFocus/onBlur) and the UIKit pair (onBeginEditing/onEndEditing) name

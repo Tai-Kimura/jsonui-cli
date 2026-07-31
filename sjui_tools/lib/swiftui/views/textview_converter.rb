@@ -112,6 +112,27 @@ module SjuiTools
               add_line "hideOnFocused: false,"
             end
 
+            # lineBreakMode — same truncation vocabulary as Label.
+            if @component['lineBreakMode']
+              truncation = case @component['lineBreakMode']
+                           when 'Head' then '.head'
+                           when 'Middle' then '.middle'
+                           when 'Tail', 'Clip' then '.tail'
+                           end
+              add_modifier_line ".truncationMode(#{truncation})" if truncation
+            end
+
+            # returnKeyType — the soft-keyboard submit label, as on TextField.
+            if @component['returnKeyType']
+              add_modifier_line ".submitLabel(#{return_key_to_submit_label(@component['returnKeyType'])})"
+            end
+
+            # scrollEnabled: false pins the editor (iOS 16+ scrollDisabled;
+            # the package floor is 17).
+            if @component['scrollEnabled'] == false
+              add_modifier_line ".scrollDisabled(true)"
+            end
+
             # fontSize
             if @component['fontSize']
               add_line "fontSize: #{@component['fontSize']},"
@@ -252,6 +273,21 @@ module SjuiTools
           apply_editable_and_keyboard
 
           generated_code
+        end
+
+        # Same mapping TextFieldConverter uses; duplicated spelling would
+        # drift, so keep the vocabulary identical to return_key_to_submit_label
+        # there.
+        def return_key_to_submit_label(return_key)
+          case return_key
+          when 'Done' then '.done'
+          when 'Go' then '.go'
+          when 'Next' then '.next'
+          when 'Search' then '.search'
+          when 'Send' then '.send'
+          when 'Enter', 'Return' then '.return'
+          else '.return'
+          end
         end
 
         private

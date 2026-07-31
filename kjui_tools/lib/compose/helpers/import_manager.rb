@@ -115,6 +115,14 @@ module KjuiTools
             horizontal_pager: ["import androidx.compose.foundation.pager.HorizontalPager",
                                "import androidx.compose.foundation.pager.rememberPagerState"],
             snapshot_flow: "import androidx.compose.runtime.snapshotFlow",
+            # Button pressed-state colours (highlightBackground/highlightColor).
+            pressed_state: ["import androidx.compose.foundation.interaction.MutableInteractionSource",
+                            "import androidx.compose.foundation.interaction.collectIsPressedAsState",
+                            "import androidx.compose.runtime.getValue",
+                            "import androidx.compose.runtime.remember"],
+            # ScrollView paging: per-item snap on the existing Lazy list.
+            snap_fling: ["import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior",
+                         "import androidx.compose.foundation.lazy.rememberLazyListState"],
             color_manager: "import com.kotlinjsonui.generated.ColorManager",
             grid_item_span: "import androidx.compose.foundation.lazy.grid.GridItemSpan",
             webview: ["import android.webkit.WebView",

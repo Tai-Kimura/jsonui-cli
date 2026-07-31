@@ -134,9 +134,14 @@ module SjuiTools
             return "$data.#{extract_binding_property(@component['bind'])}"
           end
 
+          # `value` is the cross-platform alias of the on/off state.
+          if @component['value'] && is_binding?(@component['value'])
+            return "$data.#{extract_binding_property(@component['value'])}"
+          end
+
           # Create local state variable
           state_var = "#{id}IsOn"
-          initial_value = @component['isOn'] || @component['checked'] || false
+          initial_value = @component['isOn'] || @component['checked'] || @component['value'] == true || false
           add_state_variable(state_var, "Bool", initial_value.to_s)
           "$#{state_var}"
         end

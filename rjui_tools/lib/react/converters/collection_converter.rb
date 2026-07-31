@@ -30,6 +30,11 @@ module RjuiTools
         # decision `build_class_name` makes, hoisted so the scroll helpers can
         # be told which axis to measure.
         def horizontal_collection?
+          # `horizontalScroll: true` is the boolean spelling of the same fact
+          # (ScrollView vocabulary; the ledger showed real layouts using it on
+          # Collection carousels).
+          return true if attributes['horizontalScroll'] == true
+
           layout = attributes['orientation'] || attributes['layout'] ||
                    attributes['scrollDirection'] || 'vertical'
           layout.to_s.downcase == 'horizontal'
@@ -119,8 +124,7 @@ module RjuiTools
           raw_columns = attributes['columnCount'] || attributes['columns']
           columns_binding = raw_columns.is_a?(String) && has_binding?(raw_columns)
           columns = columns_binding ? nil : (raw_columns || 1)
-          layout = attributes['orientation'] || attributes['layout'] || attributes['scrollDirection'] || 'vertical'
-          is_horizontal = layout.to_s.downcase == 'horizontal'
+          is_horizontal = horizontal_collection?
           # lazy: "none" → drop overflow scroll classes; Collection is expected to
           # render inside an already-scrollable parent.
           is_lazy = attributes['lazy'] != 'none'
@@ -188,6 +192,18 @@ module RjuiTools
             classes << "pb-[#{bottom}px]" if bottom&.positive?
             classes << "pr-[#{right}px]" if right&.positive?
           end
+
+          # Same web semantics as ScrollView for its shared vocabulary:
+          # indicator switches hide the scrollbar, and 'never' inset
+          # adjustment zeroes the scroll padding.
+          if attributes['showsHorizontalScrollIndicator'] == false ||
+             attributes['showsVerticalScrollIndicator'] == false
+            classes << 'scrollbar-hide'
+          end
+          if attributes['contentInsetAdjustmentBehavior'] == 'never'
+            classes << 'scroll-p-0'
+          end
+
 
           finalize_classes(classes)
         end

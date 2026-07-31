@@ -33,12 +33,29 @@ module KjuiTools
           # keyboardAvoidance属性の確認（デフォルトはtrue）
           keyboard_avoidance = json_data['keyboardAvoidance'] != false
 
+          # paging: every child becomes its own lazy item and the fling snaps
+          # to item bounds — the child IS the page, which is what UIKit's
+          # isPagingEnabled gives a full-size-children ScrollView. Without
+          # paging the children share one item (plain scroll).
+          paging = json_data['paging'] == true
+          state_var = nil
+          code = ''
+          if paging
+            required_imports&.add(:snap_fling)
+            state_var = "scrollPagingState#{json_data['id'].to_s.gsub(/[^A-Za-z0-9]/, '')}"
+            code += indent("val #{state_var} = rememberLazyListState()", depth) + "\n"
+          end
+
           if is_horizontal
             required_imports&.add(:lazy_row)
-            code = indent("LazyRow(", depth)
+            code += indent("LazyRow(", depth)
           else
             required_imports&.add(:lazy_column)
-            code = indent("LazyColumn(", depth)
+            code += indent("LazyColumn(", depth)
+          end
+          if paging
+            code += "\n" + indent("state = #{state_var},", depth + 1)
+            code += "\n" + indent("flingBehavior = rememberSnapFlingBehavior(lazyListState = #{state_var}),", depth + 1)
           end
 
           # Build modifiers
@@ -76,7 +93,7 @@ module KjuiTools
           end
 
           code += "\n" + indent(") {", depth)
-          code += "\n" + indent("item {", depth + 1)
+          code += "\n" + indent("item {", depth + 1) unless paging
           
           # Process children
           children = json_data['child'] || []
@@ -94,13 +111,15 @@ module KjuiTools
           # that isn't actually present. SwiftUI-free centering modifiers
           # (`wrapContentWidth/Height(Alignment.*)`) work in any scope, so the
           # ScopeFree branch of build_alignment routes through those instead.
-          {
+          result = {
             code: code,
             children: children,
-            closing: "\n" + indent("}", depth + 1) + "\n" + indent("}", depth),
+            closing: paging ? "\n" + indent("}", depth) : "\n" + indent("}", depth + 1) + "\n" + indent("}", depth),
             layout_type: 'ScopeFree',
             json_data: json_data
           }
+          result[:child_wrapper] = { open: 'item {', close: '}' } if paging
+          result
         end
         
         private

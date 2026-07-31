@@ -129,10 +129,24 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
       expect(result).to include('disabledContentColor')
     end
 
-    it 'generates Button with hilightColor comment' do
+    it 'generates a real pressed-state colour for hilightColor (no more comment)' do
       json_data = { 'type' => 'Button', 'text' => 'Test', 'hilightColor' => '#FF0000' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('// hilightColor')
+      # The pressed state is owned via an InteractionSource; the content
+      # colour follows collectIsPressedAsState instead of a TODO comment.
+      expect(result).to include('remember { MutableInteractionSource() }')
+      expect(result).to include('collectIsPressedAsState()')
+      expect(result).to include('interactionSource = buttonInteraction')
+      expect(result).to include('contentColor = if (buttonPressed)')
+      expect(result).not_to include('// hilightColor')
+      expect(required_imports).to include(:pressed_state)
+    end
+
+    it 'swaps the container colour when pressed for highlightBackground' do
+      json_data = { 'type' => 'Button', 'text' => 'Test',
+                    'background' => '#FFFFFF', 'highlightBackground' => '#DDDDDD' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('containerColor = if (buttonPressed)')
     end
 
     it 'generates Button with enabled false' do

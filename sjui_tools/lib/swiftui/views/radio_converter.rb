@@ -59,7 +59,10 @@ module SjuiTools
             end
             add_line "}"
           else
-            # Single radio button (old implementation)
+            # Single radio button (old implementation). `value` is the
+            # option's identity within the group (the web converter submits
+            # it); the node id is the fallback identity.
+            radio_value = @component['value'] || id
             group = @component['group'] || 'defaultGroup'
             
             # Create @State variable name for selection (グループごとに管理)
@@ -71,10 +74,10 @@ module SjuiTools
             # カスタムRadioButton実装
             add_line "HStack {"
             indent do
-              add_radio_icon_lines("data.#{state_var} == \"#{id}\"")
+              add_radio_icon_lines("data.#{state_var} == \"#{radio_value}\"")
               add_modifier_line ".onTapGesture {"
               indent do
-                add_line "data.#{state_var} = \"#{id}\""
+                add_line "data.#{state_var} = \"#{radio_value}\""
                 # onClick handler - called when radio is clicked
                 # onClick (camelCase) -> binding format only (@{functionName})
                 if @component['onClick'] && is_binding?(@component['onClick'])
@@ -144,7 +147,16 @@ module SjuiTools
             end
           end
           add_modifier_line ".frame(width: #{size}, height: #{size})" if size
-          add_modifier_line ".foregroundColor(#{icon_color || '.blue'})"
+          # checkedColor / uncheckedColor swap with the selection (the
+          # CheckBox converter has taken the same pair since it was written);
+          # iconColor stays the single-colour override, .blue the default.
+          checked = @component['checkedColor'] ? get_swiftui_color(@component['checkedColor']) : nil
+          unchecked = @component['uncheckedColor'] ? get_swiftui_color(@component['uncheckedColor']) : nil
+          if checked || unchecked
+            add_modifier_line ".foregroundColor(#{selected_expr} ? #{checked || icon_color || '.blue'} : #{unchecked || icon_color || '.gray'})"
+          else
+            add_modifier_line ".foregroundColor(#{icon_color || '.blue'})"
+          end
         end
         
         def add_state_variable(name, type, default_value)

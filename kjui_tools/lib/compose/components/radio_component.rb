@@ -13,8 +13,10 @@ module KjuiTools
             return generate_radio_group_with_items(json_data, depth, required_imports, parent_type)
           end
           
-          # Handle individual Radio item (not a group)
-          if json_data['group'] || json_data['text']
+          # Handle individual Radio item (not a group). `label` is the
+          # cross-platform spelling of the row text (web's ToggleConverter and
+          # sjui read it too).
+          if json_data['group'] || json_data['text'] || json_data['label']
             return generate_radio_item(json_data, depth, required_imports, parent_type)
           end
           # Radio uses 'bind' for selected value
@@ -101,7 +103,7 @@ module KjuiTools
                 code += "\n" + indent("}", depth + 3)
                 
                 # RadioButton colors
-                if json_data['selectedColor'] || json_data['unselectedColor']
+                if json_data['selectedColor'] || json_data['unselectedColor'] || json_data['uncheckedColor']
                   required_imports&.add(:radio_colors)
                   colors_params = []
                   
@@ -110,8 +112,11 @@ module KjuiTools
                     colors_params << "selectedColor = #{selectedcolor_resolved}"
                   end
                   
-                  if json_data['unselectedColor']
-                    unselectedcolor_resolved = Helpers::ResourceResolver.process_color(json_data['unselectedColor'], required_imports)
+                  # `uncheckedColor` is the cross-platform spelling of the
+                  # same colour; the Compose-native name wins when both exist.
+                  unselected = json_data['unselectedColor'] || json_data['uncheckedColor']
+                  if unselected
+                    unselectedcolor_resolved = Helpers::ResourceResolver.process_color(unselected, required_imports)
                     colors_params << "unselectedColor = #{unselectedcolor_resolved}"
                   end
                   
@@ -172,7 +177,7 @@ module KjuiTools
         def self.generate_radio_item(json_data, depth, required_imports, parent_type)
           group = json_data['group'] || 'default'
           id = json_data['id'] || "radio_#{rand(1000)}"
-          text = json_data['text'] || ''
+          text = json_data['text'] || json_data['label'] || ''
           
           # Get the selected state from binding
           selected_var = "selectedRadiogroup"  # Default variable name
@@ -377,15 +382,29 @@ module KjuiTools
         def self.icon_appearance_args(json_data, required_imports, control)
           args = []
           args << "modifier = Modifier.size(#{json_data['iconSize'].to_i}.dp)" if json_data['iconSize']
-          if json_data['iconColor']
-            color = Helpers::ResourceResolver.process_color(json_data['iconColor'], required_imports)
-            case control
-            when :radio
+          # Per-state colours: selectedColor/uncheckedColor (the
+          # cross-platform pair) win over the single iconColor override.
+          icon_color = json_data['iconColor'] &&
+                       Helpers::ResourceResolver.process_color(json_data['iconColor'], required_imports)
+          case control
+          when :radio
+            selected = json_data['selectedColor'] &&
+                       Helpers::ResourceResolver.process_color(json_data['selectedColor'], required_imports)
+            unselected = (json_data['unselectedColor'] || json_data['uncheckedColor']) &&
+                         Helpers::ResourceResolver.process_color(json_data['unselectedColor'] || json_data['uncheckedColor'], required_imports)
+            selected ||= icon_color
+            unselected ||= icon_color
+            if selected || unselected
               required_imports&.add(:radio_colors)
-              args << "colors = RadioButtonDefaults.colors(selectedColor = #{color}, unselectedColor = #{color})"
-            when :checkbox
+              parts = []
+              parts << "selectedColor = #{selected}" if selected
+              parts << "unselectedColor = #{unselected}" if unselected
+              args << "colors = RadioButtonDefaults.colors(#{parts.join(', ')})"
+            end
+          when :checkbox
+            if icon_color
               required_imports&.add(:checkbox_colors)
-              args << "colors = CheckboxDefaults.colors(checkmarkColor = #{color})"
+              args << "colors = CheckboxDefaults.colors(checkmarkColor = #{icon_color})"
             end
           end
           args

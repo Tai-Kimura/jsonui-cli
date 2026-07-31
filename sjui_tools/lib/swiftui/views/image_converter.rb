@@ -33,12 +33,24 @@ module SjuiTools
               # 通常の画像名
               add_line "Image(\"#{@component['src']}\")"
             end
-          elsif @component['defaultImage']
-            # defaultImageが指定されている場合はそれを使用
-            add_line "Image(\"#{@component['defaultImage']}\")"
+          elsif @component['defaultImage'] || @component['errorImage'] || @component['loadingImage']
+            # Fallback imagery when no src resolves. A STATIC Image never
+            # loads over the network, so `errorImage` / `loadingImage` cannot
+            # mean in-flight states here — they join the fallback chain
+            # (defaultImage first, the UIKit runtime honours the full
+            # semantics). Better an intended asset than the photo glyph.
+            fallback = @component['defaultImage'] || @component['errorImage'] || @component['loadingImage']
+            add_line "Image(\"#{fallback}\")"
           else
             # デフォルトのシステムイメージ
             add_line "Image(systemName: \"photo\")"
+          end
+
+          # renderingMode — template tints via .foregroundColor/tint,
+          # original suppresses tinting (same mapping the Compose side ships).
+          if @component['renderingMode']
+            mode = @component['renderingMode'].to_s.downcase == 'template' ? '.template' : '.original'
+            @modifier_bag.append(:component_specific, ".renderingMode(#{mode})")
           end
 
           @modifier_bag.append(:component_specific, ".resizable()")
@@ -57,6 +69,8 @@ module SjuiTools
           if @component['type'] == 'CircleImage'
             @modifier_bag.append(:component_specific, ".clipShape(Circle())")
           end
+
+          apply_pinch_zoom
 
           # onSrcプロパティ（画像読み込み完了時のコールバック）
           if @component['onSrc']
@@ -83,6 +97,31 @@ module SjuiTools
           apply_binding_modifiers
 
           generated_code
+        end
+
+        # minZoom/maxZoom — pinch zoom on a static image (mode: swiftui;
+        # the UIKit runtime has its own UIScrollView zoom). Cumulative
+        # MagnifyGesture scale, clamped to the declared bounds; state rides a
+        # per-view @State var. Either bound alone still works: the other side
+        # defaults to no-zoom-out (1.0) / the given ceiling.
+        def apply_pinch_zoom
+          min_zoom = @component['minZoom']
+          max_zoom = @component['maxZoom']
+          return unless min_zoom || max_zoom
+
+          id_part = to_camel_case(@component['id'] || 'image')
+          state_var = "#{id_part}ZoomScale"
+          @state_variables << "@State private var #{state_var}: CGFloat = 1.0"
+          lower = min_zoom || 1.0
+          upper = max_zoom || 'CGFloat.greatestFiniteMagnitude'
+          @modifier_bag.append(:component_specific, ".scaleEffect(#{state_var})")
+          @modifier_bag.register(:on_pinch, [
+            ".simultaneousGesture(",
+            "    MagnifyGesture().onChanged { value in",
+            "        #{state_var} = min(max(value.magnification, #{lower}), #{upper})",
+            "    }",
+            ")"
+          ])
         end
 
         private

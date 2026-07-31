@@ -29,13 +29,25 @@ module SjuiTools
               end
             end
 
-            if @component['fontSize']
-              add_line "fontSize: #{@component['fontSize']},"
+            # `labelAttributes` styles the closed-state label; its keys win
+            # over the component-level ones (the precedence the web and
+            # Compose converters use).
+            label_attrs = @component['labelAttributes'].is_a?(Hash) ? @component['labelAttributes'] : {}
+            label_size = label_attrs['fontSize'] || @component['fontSize']
+            if label_size
+              add_line "fontSize: #{label_size},"
             end
 
-            if @component['fontColor']
-              color = get_swiftui_color(@component['fontColor'])
+            label_color = label_attrs['fontColor'] || @component['fontColor']
+            if label_color
+              color = get_swiftui_color(label_color)
               add_line "fontColor: #{color},"
+            end
+
+            # hintColor — the placeholder colour (SelectBoxView >= 10.10.1;
+            # .gray remains the default when unset).
+            if @component['hintColor']
+              add_line "hintColor: #{get_swiftui_color(@component['hintColor'])},"
             end
 
             if @component['background']
@@ -207,6 +219,10 @@ module SjuiTools
                             extract_binding_property(@component['selectedIndex'])
                           elsif @component['selectedItem'] && is_binding?(@component['selectedItem'])
                             extract_binding_property(@component['selectedItem'])
+                          elsif @component['selectedValue'] && is_binding?(@component['selectedValue'])
+                            # cross-platform spelling of the same two-way
+                            # selection binding (selectedItem wins)
+                            extract_binding_property(@component['selectedValue'])
                           else
                             nil
                           end

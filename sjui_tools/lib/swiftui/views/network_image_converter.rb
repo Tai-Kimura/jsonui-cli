@@ -9,7 +9,9 @@ module SjuiTools
       # Dynamic mode equivalent: Sources/SwiftJsonUI/Classes/SwiftUI/Dynamic/Converters/NetworkImageConverter.swift
       class NetworkImageConverter < BaseViewConverter
         def convert
-          url = @component['src'] || ""
+          # `url` is the canonical spelling; `source`/`src` are aliases
+          # (kjui reads all three; the ios converter only read `src`).
+          url = @component['url'] || @component['source'] || @component['src'] || ""
 
           # NetworkImageを使用
           add_line "NetworkImage("
@@ -22,9 +24,11 @@ module SjuiTools
               add_line "url: \"#{url}\","
             end
 
-            # プレースホルダー
-            if @component['placeholder']
-              add_line "placeholder: \"#{@component['placeholder']}\","
+            # プレースホルダー — `hint` is the canonical spelling,
+            # `placeholder` the alias (kjui reads hint first; parity).
+            hint_value = @component['hint'] || @component['placeholder']
+            if hint_value
+              add_line "placeholder: \"#{hint_value}\","
             end
 
             # defaultImage / loadingImage / errorImage.

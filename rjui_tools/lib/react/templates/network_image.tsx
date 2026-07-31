@@ -24,6 +24,9 @@ interface NetworkImageProps {
   contentMode?: 'cover' | 'contain' | 'fill' | 'none' | 'scaleDown' | 'fit';
   placeholder?: string;
   errorImage?: string;
+  // Native browser fetch hint, forwarded to the rendered <img>. Renamed on
+  // destructure because `loading` is this component's own state name.
+  loading?: 'lazy' | 'eager';
   onLoad?: () => void;
   onError?: () => void;
 }
@@ -36,6 +39,7 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
   contentMode = 'cover',
   placeholder,
   errorImage,
+  loading: fetchHint,
   onLoad,
   onError,
 }) => {
@@ -130,6 +134,7 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
       id={id}
       src={imageUrl}
       alt={alt}
+      loading={fetchHint}
       className={`${className} ${objectFitClass}`}
     />
   );

@@ -27,7 +27,7 @@ module RjuiTools
           corner_radius_style = build_corner_radius_style
 
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<NetworkImage#{id_attr} className="#{class_name}"#{src}#{content_mode}#{placeholder_attr}#{error_image}#{build_alt_attr}#{on_load}#{on_error}#{onclick_attr}#{corner_radius_style}#{style_attr}#{testid_attr}#{tag_attr} />
+            #{indent_str(indent)}<NetworkImage#{id_attr} className="#{class_name}"#{src}#{content_mode}#{placeholder_attr}#{error_image}#{build_alt_attr}#{loading_attr}#{on_load}#{on_error}#{onclick_attr}#{corner_radius_style}#{style_attr}#{testid_attr}#{tag_attr} />
           JSX
 
           wrap_with_visibility(jsx, indent)
@@ -121,8 +121,19 @@ module RjuiTools
           " contentMode=\"#{mapped_mode}\""
         end
 
+        # Native lazy/eager fetch hint, forwarded to the underlying <img>.
+        def loading_attr
+          loading = attributes['loading'].to_s.downcase
+          return '' unless %w[lazy eager].include?(loading)
+
+          " loading=\"#{loading}\""
+        end
+
         def build_placeholder_attr
-          placeholder = attributes['placeholder'] || attributes['defaultImage']
+          # `hint` is the canonical spelling; `placeholder` and `defaultImage`
+          # are the aliases (kjui already read the canonical — ios/web only
+          # read the aliases, which the pair-scan flagged).
+          placeholder = attributes['hint'] || attributes['placeholder'] || attributes['defaultImage']
           return '' unless placeholder
 
           if has_binding?(placeholder)

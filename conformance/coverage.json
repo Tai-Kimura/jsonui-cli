@@ -4,96 +4,12 @@
   "entries": [
     {
       "component": "Button",
-      "attribute": "highlightBackground",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — android: read only by textfield_component.rb, textview_component.rb)"
-    },
-    {
-      "component": "Button",
       "attribute": "hilightColor",
       "platforms": [
         "web"
       ],
       "reason": "legacy",
       "note": "alias — normalized to its canonical spelling before conversion"
-    },
-    {
-      "component": "Check",
-      "attribute": "label",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — web: read only by switch_converter.rb, toggle_converter.rb)"
-    },
-    {
-      "component": "Check",
-      "attribute": "spacing",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — web: read only by collection_converter.rb, icon_label_converter.rb, view_converter.rb)"
-    },
-    {
-      "component": "CheckBox",
-      "attribute": "label",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — web: read only by switch_converter.rb, toggle_converter.rb)"
-    },
-    {
-      "component": "CheckBox",
-      "attribute": "spacing",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — web: read only by collection_converter.rb, icon_label_converter.rb, view_converter.rb)"
-    },
-    {
-      "component": "CheckBox",
-      "attribute": "value",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by slider_converter.rb, textfield_converter.rb)"
-    },
-    {
-      "component": "Collection",
-      "attribute": "containerInset",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "ScrollView vocabulary declared on Collection; only the ScrollView converters read it. Collection's own path drives direction/insets from its layout attrs — implement or narrow the declaration. (pair-scan 2026-07-31 — ios: read only by textview_converter.rb)"
-    },
-    {
-      "component": "Collection",
-      "attribute": "contentInsetAdjustmentBehavior",
-      "platforms": [
-        "ios",
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "ScrollView vocabulary declared on Collection; only the ScrollView converters read it. Collection's own path drives direction/insets from its layout attrs — implement or narrow the declaration. (pair-scan 2026-07-31 — ios: read only by scrollview_converter.rb; web: read only by scroll_view_converter.rb)"
-    },
-    {
-      "component": "Collection",
-      "attribute": "horizontalScroll",
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "ScrollView vocabulary declared on Collection; only the ScrollView converters read it. Collection's own path drives direction/insets from its layout attrs — implement or narrow the declaration. (pair-scan 2026-07-31 — ios: read only by scrollview_converter.rb; android: read only by scrollview_component.rb; web: read only by scroll_view_converter.rb)"
     },
     {
       "component": "Collection",
@@ -103,15 +19,6 @@
       ],
       "reason": "unimplemented",
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "Collection",
-      "attribute": "keyboardAvoidance",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "ScrollView vocabulary declared on Collection; only the ScrollView converters read it. Collection's own path drives direction/insets from its layout attrs — implement or narrow the declaration. (pair-scan 2026-07-31 — ios: read only by scrollview_converter.rb)"
     },
     {
       "component": "Collection",
@@ -132,24 +39,6 @@
       "note": "stickyHeader exists only on LazyColumn/LazyRow, not LazyVerticalGrid, and this component's section headers are emitted in the grid path via item(span = GridItemSpan). The single-column path delegates to the CollectionStack composable, so this is a KotlinJsonUI library feature plus codegen plumbing."
     },
     {
-      "component": "Collection",
-      "attribute": "showsHorizontalScrollIndicator",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "ScrollView vocabulary declared on Collection; only the ScrollView converters read it. Collection's own path drives direction/insets from its layout attrs — implement or narrow the declaration. (pair-scan 2026-07-31 — web: read only by scroll_view_converter.rb)"
-    },
-    {
-      "component": "Collection",
-      "attribute": "showsVerticalScrollIndicator",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "ScrollView vocabulary declared on Collection; only the ScrollView converters read it. Collection's own path drives direction/insets from its layout attrs — implement or narrow the declaration. (pair-scan 2026-07-31 — web: read only by scroll_view_converter.rb)"
-    },
-    {
       "component": "GradientView",
       "attribute": "locations",
       "platforms": [
@@ -160,15 +49,6 @@
     },
     {
       "component": "IconLabel",
-      "attribute": "selectedFontColor",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — web: read only by segment_converter.rb)"
-    },
-    {
-      "component": "IconLabel",
       "attribute": "textShadow",
       "platforms": [
         "web"
@@ -178,98 +58,12 @@
     },
     {
       "component": "Image",
-      "attribute": "errorImage",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "Network-loading vocabulary on Image; only NetworkImageConverter reads it. If static Image stays asset-only here, narrow the declaration instead. (pair-scan 2026-07-31 — ios: read only by network_image_converter.rb)"
-    },
-    {
-      "component": "Image",
-      "attribute": "loading",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "HTML img loading=lazy/eager; only the Web(iframe) converter reads 'loading'. Implementable as a passthrough attribute. (pair-scan 2026-07-31 — web: read only by web_converter.rb)"
-    },
-    {
-      "component": "Image",
       "attribute": "loadingImage",
       "platforms": [
-        "ios",
         "android"
       ],
       "reason": "unimplemented",
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "Image",
-      "attribute": "maxZoom",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "Same SwiftUI-codegen zoom gap as its twin minZoom (UIKit runtime has UIScrollView zoom). (pair-scan 2026-07-31 — ios: read only by scrollview_converter.rb)"
-    },
-    {
-      "component": "Image",
-      "attribute": "minZoom",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "Image",
-      "attribute": "renderingMode",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by network_image_converter.rb)"
-    },
-    {
-      "component": "Label",
-      "attribute": "hint",
-      "platforms": [
-        "ios",
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "Implemented on android (kjui text_component renders hint text/color/font when the label text is empty); the ios/web codegen never read it — real parity gap, not a wrong declaration. (pair-scan 2026-07-31 — ios: read only by selectbox_converter.rb, textfield_converter.rb, textview_converter.rb; web: read only by select_box_converter.rb, text_field_converter.rb, text_view_converter.rb)"
-    },
-    {
-      "component": "Label",
-      "attribute": "hintAttributes",
-      "platforms": [
-        "ios",
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "Implemented on android (kjui text_component renders hint text/color/font when the label text is empty); the ios/web codegen never read it — real parity gap, not a wrong declaration. (pair-scan 2026-07-31 — ios: read only by textfield_converter.rb, textview_converter.rb; web: read only by text_view_converter.rb)"
-    },
-    {
-      "component": "Label",
-      "attribute": "hintColor",
-      "platforms": [
-        "ios",
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "Implemented on android (kjui text_component renders hint text/color/font when the label text is empty); the ios/web codegen never read it — real parity gap, not a wrong declaration. (pair-scan 2026-07-31 — ios: read only by textfield_converter.rb, textview_converter.rb; web: read only by select_box_converter.rb, text_field_converter.rb, text_view_converter.rb)"
-    },
-    {
-      "component": "Label",
-      "attribute": "placeholder",
-      "platforms": [
-        "ios",
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "Implemented on android (kjui text_component renders hint text/color/font when the label text is empty); the ios/web codegen never read it — real parity gap, not a wrong declaration. (pair-scan 2026-07-31 — ios: read only by network_image_converter.rb, selectbox_converter.rb, textfield_converter.rb, textview_converter.rb; web: read only by network_image_converter.rb, select_box_converter.rb, text_field_converter.rb, text_view_converter.rb)"
     },
     {
       "component": "Label",
@@ -282,86 +76,12 @@
     },
     {
       "component": "NetworkImage",
-      "attribute": "hint",
-      "platforms": [
-        "ios",
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "kjui reads the canonical 'hint' as the loading placeholder; this platform reads only the 'placeholder' alias — the canonical spelling is dropped. Align the converter to canonical. (pair-scan 2026-07-31 — ios: read only by selectbox_converter.rb, textfield_converter.rb, textview_converter.rb; web: read only by select_box_converter.rb, text_field_converter.rb, text_view_converter.rb)"
-    },
-    {
-      "component": "NetworkImage",
-      "attribute": "loading",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "HTML img loading=lazy/eager; only the Web(iframe) converter reads 'loading'. Implementable as a passthrough attribute. (pair-scan 2026-07-31 — web: read only by web_converter.rb)"
-    },
-    {
-      "component": "NetworkImage",
       "attribute": "loadingImage",
       "platforms": [
         "android"
       ],
       "reason": "unimplemented",
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "NetworkImage",
-      "attribute": "url",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "The converter reads 'source' but not the declared 'url' spelling — canonical/alias drift. (pair-scan 2026-07-31 — ios: read only by web_converter.rb)"
-    },
-    {
-      "component": "Progress",
-      "attribute": "color",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by indicator_converter.rb, textview_converter.rb, toggle_converter.rb)"
-    },
-    {
-      "component": "Progress",
-      "attribute": "indicatorStyle",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by indicator_converter.rb)"
-    },
-    {
-      "component": "Progress",
-      "attribute": "tintColor",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — android: read only by button_component.rb, checkbox_component.rb, iconlabel_component.rb, image_component.rb, radio_component.rb, segment_component.rb, switch_component.rb, tabview_component.rb, toggle_component.rb)"
-    },
-    {
-      "component": "Radio",
-      "attribute": "checkedColor",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by checkbox_converter.rb)"
-    },
-    {
-      "component": "Radio",
-      "attribute": "label",
-      "platforms": [
-        "android",
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — android: read only by checkbox_component.rb; web: read only by switch_converter.rb, toggle_converter.rb)"
     },
     {
       "component": "Radio",
@@ -375,34 +95,6 @@
       "note": "alias — normalized to its canonical spelling before conversion"
     },
     {
-      "component": "Radio",
-      "attribute": "spacing",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — web: read only by collection_converter.rb, icon_label_converter.rb, view_converter.rb)"
-    },
-    {
-      "component": "Radio",
-      "attribute": "uncheckedColor",
-      "platforms": [
-        "ios",
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by checkbox_converter.rb; android: read only by checkbox_component.rb)"
-    },
-    {
-      "component": "Radio",
-      "attribute": "value",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by slider_converter.rb, textfield_converter.rb)"
-    },
-    {
       "component": "ScrollView",
       "attribute": "minZoom",
       "platforms": [
@@ -410,15 +102,6 @@
       ],
       "reason": "unimplemented",
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "ScrollView",
-      "attribute": "paging",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "Read only by Collection's converter on this platform; ScrollView's own path never reads it. (pair-scan 2026-07-31 — android: read only by collection_component.rb)"
     },
     {
       "component": "Segment",
@@ -429,35 +112,6 @@
       ],
       "reason": "unimplemented",
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "SelectBox",
-      "attribute": "hintColor",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by textfield_converter.rb, textview_converter.rb)"
-    },
-    {
-      "component": "SelectBox",
-      "attribute": "labelAttributes",
-      "platforms": [
-        "ios",
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by toggle_converter.rb; android: read only by switch_component.rb)"
-    },
-    {
-      "component": "SelectBox",
-      "attribute": "selectedValue",
-      "platforms": [
-        "ios",
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by radio_converter.rb; android: read only by radio_component.rb)"
     },
     {
       "component": "Slider",
@@ -478,15 +132,6 @@
       "note": "alias — normalized to its canonical spelling before conversion"
     },
     {
-      "component": "Slider",
-      "attribute": "tintColor",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — android: read only by button_component.rb, checkbox_component.rb, iconlabel_component.rb, image_component.rb, radio_component.rb, segment_component.rb, switch_component.rb, tabview_component.rb, toggle_component.rb)"
-    },
-    {
       "component": "Switch",
       "attribute": "onToggle",
       "platforms": [
@@ -494,24 +139,6 @@
       ],
       "reason": "legacy",
       "note": "alias — normalized to its canonical spelling before conversion"
-    },
-    {
-      "component": "Switch",
-      "attribute": "tint",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by indicator_converter.rb)"
-    },
-    {
-      "component": "Switch",
-      "attribute": "value",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by slider_converter.rb, textfield_converter.rb)"
     },
     {
       "component": "TextField",
@@ -541,62 +168,6 @@
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
-      "component": "TextField",
-      "attribute": "hideOnFocused",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by textview_converter.rb)"
-    },
-    {
-      "component": "TextField",
-      "attribute": "tintColor",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — android: read only by button_component.rb, checkbox_component.rb, iconlabel_component.rb, image_component.rb, radio_component.rb, segment_component.rb, switch_component.rb, tabview_component.rb, toggle_component.rb)"
-    },
-    {
-      "component": "TextView",
-      "attribute": "input",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — web: read only by text_field_converter.rb)"
-    },
-    {
-      "component": "TextView",
-      "attribute": "lineBreakMode",
-      "platforms": [
-        "ios",
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by label_converter.rb; web: read only by label_converter.rb)"
-    },
-    {
-      "component": "TextView",
-      "attribute": "returnKeyType",
-      "platforms": [
-        "ios",
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by textfield_converter.rb; web: read only by text_field_converter.rb)"
-    },
-    {
-      "component": "TextView",
-      "attribute": "scrollEnabled",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "Read only by ScrollView/Collection containers; TextView's converter never reads it. (pair-scan 2026-07-31 — ios: read only by collection_converter.rb, scrollview_converter.rb)"
-    },
-    {
       "component": "Toggle",
       "attribute": "onToggle",
       "platforms": [
@@ -604,24 +175,6 @@
       ],
       "reason": "legacy",
       "note": "alias — normalized to its canonical spelling before conversion"
-    },
-    {
-      "component": "Toggle",
-      "attribute": "tint",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by indicator_converter.rb)"
-    },
-    {
-      "component": "Toggle",
-      "attribute": "value",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "Read on the other declared platforms; this platform's converter never reads it — parity gap. (pair-scan 2026-07-31 — ios: read only by slider_converter.rb, textfield_converter.rb)"
     },
     {
       "component": "View",

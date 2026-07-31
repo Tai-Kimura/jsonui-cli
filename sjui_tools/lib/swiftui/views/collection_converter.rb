@@ -64,14 +64,18 @@ module SjuiTools
 
         def convert_non_responsive
           id = @component['id'] || 'collection'
+          apply_scroll_container_attrs
           info = columns_info
           # Sentinel for downstream control flow: any value > 1 routes
           # through the multi-column grid path. Compile-time LCM with
           # per-section overrides is forfeited for bindings because the
           # runtime column count is unknown.
           columns = info[:literal] || 2
-          # Support both 'layout' and 'orientation' attributes for horizontal/vertical
+          # Support both 'layout' and 'orientation' attributes for
+          # horizontal/vertical; `horizontalScroll: true` is ScrollView's
+          # boolean spelling of the same direction (used by real carousels).
           layout = @component['layout'] || @component['orientation'] || 'vertical'
+          layout = 'horizontal' if @component['horizontalScroll'] == true
           is_horizontal = layout == 'horizontal'
 
           # `lazy` accepts one of:
@@ -522,6 +526,36 @@ module SjuiTools
           # brace. Reset so the final generated_code call is a no-op.
           @modifier_bag = ModifierBag.new
           generated_code
+        end
+
+        # ScrollView vocabulary shared by Collection (measured in real
+        # layouts): content insets, safe-area adjustment, and the keyboard
+        # avoidance opt-out. Applied as modifiers on the whole emitted
+        # container, mirroring ScrollViewConverter's mappings.
+        def apply_scroll_container_attrs
+          inset = @component['containerInset']
+          if inset.is_a?(Numeric)
+            @modifier_bag.append(:component_specific, ".contentMargins(.all, #{inset}, for: .scrollContent)")
+          elsif inset.is_a?(Array)
+            edge = case inset.length
+                   when 1 then "EdgeInsets(top: #{inset[0]}, leading: #{inset[0]}, bottom: #{inset[0]}, trailing: #{inset[0]})"
+                   when 2 then "EdgeInsets(top: #{inset[0]}, leading: #{inset[1]}, bottom: #{inset[0]}, trailing: #{inset[1]})"
+                   when 4 then "EdgeInsets(top: #{inset[0]}, leading: #{inset[1]}, bottom: #{inset[2]}, trailing: #{inset[3]})"
+                   end
+            @modifier_bag.append(:component_specific, ".contentMargins(.all, #{edge}, for: .scrollContent)") if edge
+          end
+
+          case @component['contentInsetAdjustmentBehavior']
+          when 'never'
+            @modifier_bag.append(:component_specific, ".ignoresSafeArea()")
+          when 'scrollableAxes'
+            @modifier_bag.append(:component_specific, ".ignoresSafeArea(edges: .horizontal)")
+          end
+
+          # Default (true) is the system behaviour; only the opt-out emits.
+          if @component['keyboardAvoidance'] == false
+            @modifier_bag.append(:component_specific, ".ignoresSafeArea(.keyboard)")
+          end
         end
 
         private

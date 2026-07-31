@@ -25,11 +25,15 @@ module SjuiTools
                            "$data.#{extract_binding_property(@component['isOn'])}"
                          elsif @component['checked'] && is_binding?(@component['checked'])
                            toggle_handler.get_state_binding(@component)
+                         elsif @component['value'] && is_binding?(@component['value'])
+                           # `value` is the cross-platform alias of the on/off
+                           # state (kjui and web both accept it).
+                           "$data.#{extract_binding_property(@component['value'])}"
                          else
                            # Create @State variable name
                            state_var = "#{id}IsOn"
                            # Add state variable to requirements
-                           add_state_variable(state_var, "Bool", @component['isOn'] || @component['checked'] ? 'true' : 'false')
+                           add_state_variable(state_var, "Bool", @component['isOn'] || @component['checked'] || @component['value'] == true ? 'true' : 'false')
                            "$data.#{state_var}"
                          end
 
@@ -83,8 +87,9 @@ module SjuiTools
             end
           end
 
-          # onTintColor / tintColor -> .tint() modifier
-          tint = @component['onTintColor'] || @component['tintColor']
+          # onTintColor / tintColor / tint -> .tint() modifier (`tint` is the
+          # short spelling kjui's switch precedence also accepts)
+          tint = @component['onTintColor'] || @component['tintColor'] || @component['tint']
           if tint
             color = get_swiftui_color(tint)
             add_modifier_line ".tint(#{color})"

@@ -23,6 +23,27 @@ module SjuiTools
           # Get text content with binding support
           text_content = get_text_with_string_manager(label_handler.get_text_content(@component))
 
+          # hint / hintAttributes — the Label placeholder (canonical: UIKit
+          # SJUILabel swaps in the styled hint when the text is empty, and
+          # requires BOTH keys; `placeholder` is the declared alias of hint,
+          # hintAttributes.fontColor wins over hintColor). kjui has carried
+          # the same branch since 2026-07; this closes the ios side.
+          hint = label_hint_config
+          raw_text = @component['text'] || ''
+          hint_static = hint && raw_text.to_s.strip.empty?
+          hint_dynamic = hint && !hint_static &&
+                         raw_text.is_a?(String) && raw_text.strip.match?(/\A@\{[^}]+\}\z/)
+          hint_condition = nil
+          if hint_static
+            text_content = get_text_with_string_manager("\"#{hint[:text]}\"")
+          elsif hint_dynamic
+            hint_literal = get_text_with_string_manager("\"#{hint[:text]}\"")
+            # The emptiness test must run on the ORIGINAL expression — the
+            # wrapped ternary is never empty (its fallback is the hint).
+            hint_condition = "(#{text_content}).isEmpty"
+            text_content = "(#{hint_condition} ? #{hint_literal} : #{text_content})"
+          end
+
           has_partials = @component['partialAttributes'].is_a?(Array) &&
                          !@component['partialAttributes'].empty?
 
@@ -100,8 +121,11 @@ module SjuiTools
               add_line "],"
             end
 
-            # Add fontSize
-            if @component['fontSize']
+            # Add fontSize (the hint's size wins while the hint is showing;
+            # statically-empty text always shows it)
+            if hint_static && hint[:size]
+              add_line "fontSize: #{hint[:size]},"
+            elsif @component['fontSize']
               add_line "fontSize: #{@component['fontSize']},"
             end
 
@@ -138,13 +162,20 @@ module SjuiTools
               end
             end
 
-            # Add fontColor (with binding support)
-            if @component['enabled'] == false && @component['disabledFontColor']
-              color = get_font_color_with_binding(@component['disabledFontColor'])
-              add_line "fontColor: #{color},"
-            elsif @component['fontColor']
-              color = get_font_color_with_binding(@component['fontColor'])
-              add_line "fontColor: #{color},"
+            # Add fontColor (with binding support). When a hint is showing
+            # (statically empty text, or a bound text that is empty at
+            # runtime) the hint colour replaces the base one.
+            base_color = if @component['enabled'] == false && @component['disabledFontColor']
+                           get_font_color_with_binding(@component['disabledFontColor'])
+                         elsif @component['fontColor']
+                           get_font_color_with_binding(@component['fontColor'])
+                         end
+            if hint_static && hint[:color]
+              add_line "fontColor: #{hint[:color]},"
+            elsif hint_dynamic && hint[:color]
+              add_line "fontColor: (#{hint_condition} ? #{hint[:color]} : #{base_color || 'nil'}),"
+            elsif base_color
+              add_line "fontColor: #{base_color},"
             end
 
 
@@ -353,6 +384,21 @@ module SjuiTools
           end
 
           generated_code
+        end
+
+        # {text:, color:, size:} when the Label hint contract is satisfied
+        # (hint/placeholder + hintAttributes both present).
+        def label_hint_config
+          attrs = @component['hintAttributes']
+          hint = @component['hint'] || @component['placeholder']
+          return nil unless attrs.is_a?(Hash) && hint.is_a?(String) && !hint.empty?
+
+          color_value = attrs['fontColor'] || @component['hintColor']
+          {
+            text: hint,
+            color: color_value ? get_swiftui_color(color_value) : nil,
+            size: attrs['fontSize']
+          }
         end
 
         private

@@ -89,18 +89,21 @@ module KjuiTools
 
           code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
           
-          # Slider colors
-          if json_data['minimumTrackTintColor'] || json_data['maximumTrackTintColor'] || json_data['thumbTintColor']
+          # Slider colors. `tintColor` is the UIKit accent: it colours the
+          # thumb and the active track; the specific names win over it.
+          thumb_tint = json_data['thumbTintColor'] || json_data['tintColor']
+          active_tint = json_data['minimumTrackTintColor'] || json_data['tintColor']
+          if active_tint || json_data['maximumTrackTintColor'] || thumb_tint
             required_imports&.add(:slider_colors)
             colors_params = []
             
-            if json_data['thumbTintColor']
-              thumbcolor_resolved = Helpers::ResourceResolver.process_color(json_data['thumbTintColor'], required_imports)
+            if thumb_tint
+              thumbcolor_resolved = Helpers::ResourceResolver.process_color(thumb_tint, required_imports)
               colors_params << "thumbColor = #{thumbcolor_resolved}"
             end
             
-            if json_data['minimumTrackTintColor']
-              activetrackcolor_resolved = Helpers::ResourceResolver.process_color(json_data['minimumTrackTintColor'], required_imports)
+            if active_tint
+              activetrackcolor_resolved = Helpers::ResourceResolver.process_color(active_tint, required_imports)
               colors_params << "activeTrackColor = #{activetrackcolor_resolved}"
             end
             

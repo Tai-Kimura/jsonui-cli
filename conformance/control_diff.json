@@ -453,7 +453,19 @@
       ]
     },
     {
+      "fixture": "NetworkImage/hint__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
       "fixture": "NetworkImage/placeholder__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Radio/checked__true",
       "platforms": [
         "web"
       ]

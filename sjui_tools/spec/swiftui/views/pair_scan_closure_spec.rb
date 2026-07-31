@@ -1,0 +1,137 @@
+# frozen_string_literal: true
+
+# 2026-07-31 pair-scan closure — SwiftUI-codegen behaviours added when the
+# component-aware coverage scan exposed silently-dropped attributes.
+require_relative '../../spec_helper'
+require 'swiftui/view_registry'
+require 'swiftui/views/label_converter'
+require 'swiftui/views/textview_converter'
+require 'swiftui/views/textfield_converter'
+require 'swiftui/views/collection_converter'
+require 'swiftui/views/image_converter'
+require 'swiftui/views/network_image_converter'
+require 'swiftui/views/progress_converter'
+require 'swiftui/views/radio_converter'
+require 'swiftui/views/selectbox_converter'
+require 'swiftui/views/toggle_converter'
+require 'swiftui/views/checkbox_converter'
+require 'swiftui/views/color_helper'
+
+RSpec.describe 'pair-scan closure (swiftui)' do
+  before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+  after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+  before { SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {} }
+
+  def convert(klass, json)
+    SjuiTools::SwiftUI::Views.const_get(klass).new(json, 0, nil).convert
+  end
+
+  it 'Label: styled hint swaps in when the bound text is empty (both keys required)' do
+    code = convert(:LabelConverter,
+                   'type' => 'Label', 'text' => '@{title}',
+                   'hint' => 'No title', 'hintColor' => '#999999',
+                   'hintAttributes' => { 'fontSize' => 12 })
+    expect(code).to include('.isEmpty ?')
+    expect(code).to include('No title')
+    expect(code).to include('fontColor: (')
+
+    static_empty = convert(:LabelConverter,
+                           'type' => 'Label', 'text' => '',
+                           'hint' => 'Empty', 'hintAttributes' => { 'fontColor' => '#888888', 'fontSize' => 11 })
+    expect(static_empty).to include('Empty')
+    expect(static_empty).to include('fontSize: 11,')
+
+    bare = convert(:LabelConverter, 'type' => 'Label', 'text' => '', 'hint' => 'X')
+    expect(bare).not_to include('"X"')
+  end
+
+  it 'TextView: truncation, submit label, scroll opt-out' do
+    code = convert(:TextViewConverter,
+                   'type' => 'TextView', 'text' => '@{memo}', 'id' => 'memo_field',
+                   'lineBreakMode' => 'Tail', 'returnKeyType' => 'Done', 'scrollEnabled' => false)
+    expect(code).to include('.truncationMode(.tail)')
+    expect(code).to include('.submitLabel(.done)')
+    expect(code).to include('.scrollDisabled(true)')
+  end
+
+  it 'TextField: explicit hideOnFocused true empties the placeholder while focused' do
+    code = convert(:TextFieldConverter,
+                   'type' => 'TextField', 'id' => 'name_field', 'text' => '@{name}',
+                   'hint' => 'Your name', 'hideOnFocused' => true)
+    expect(code).to include('data.nameFieldIsFocused ? "" :')
+
+    default = convert(:TextFieldConverter,
+                      'type' => 'TextField', 'id' => 'name_field', 'text' => '@{name}',
+                      'hint' => 'Your name')
+    expect(default).not_to include('IsFocused ? ""')
+  end
+
+  it 'Collection: ScrollView vocabulary (insets, safe-area, keyboard opt-out, direction)' do
+    code = convert(:CollectionConverter,
+                   'type' => 'Collection', 'id' => 'cards', 'horizontalScroll' => true,
+                   'containerInset' => 8, 'contentInsetAdjustmentBehavior' => 'never',
+                   'keyboardAvoidance' => false, 'items' => '@{rows}')
+    expect(code).to include('.contentMargins(.all, 8, for: .scrollContent)')
+    expect(code).to include('.ignoresSafeArea()')
+    expect(code).to include('.ignoresSafeArea(.keyboard)')
+  end
+
+  it 'Image: renderingMode, fallback imagery, clamped pinch zoom' do
+    code = convert(:ImageConverter,
+                   'type' => 'Image', 'id' => 'photo', 'src' => 'pic',
+                   'renderingMode' => 'template', 'minZoom' => 1.0, 'maxZoom' => 3.0)
+    expect(code).to include('.renderingMode(.template)')
+    expect(code).to include('.scaleEffect(photoZoomScale)')
+    expect(code).to include('min(max(value.magnification, 1.0), 3.0)')
+
+    fallback = convert(:ImageConverter, 'type' => 'Image', 'errorImage' => 'broken')
+    expect(fallback).to include('Image("broken")')
+  end
+
+  it 'NetworkImage: canonical url and hint spellings' do
+    code = convert(:NetworkImageConverter,
+                   'type' => 'NetworkImage', 'url' => 'https://x/y.png', 'hint' => 'ph')
+    expect(code).to include('url: "https://x/y.png"')
+    expect(code).to include('placeholder: "ph"')
+  end
+
+  it 'Progress: indicatorStyle + the color/tintColor accent spellings' do
+    code = convert(:ProgressConverter,
+                   'type' => 'Progress', 'progress' => 0.4,
+                   'indicatorStyle' => 'linear', 'color' => '#FF0000')
+    expect(code).to include('.progressViewStyle(LinearProgressViewStyle())')
+    expect(code).to include('.tint(')
+  end
+
+  it 'Radio: per-state colours and the value identity' do
+    code = convert(:RadioConverter,
+                   'type' => 'Radio', 'id' => 'opt_a', 'text' => 'A', 'value' => 'A_VALUE',
+                   'checkedColor' => '#00FF00', 'uncheckedColor' => '#CCCCCC')
+    expect(code).to include('== "A_VALUE"')
+    expect(code).to match(/foregroundColor\(.*\?.*:.*\)/)
+  end
+
+  it 'SelectBox: selectedValue alias, labelAttributes precedence, hintColor' do
+    code = convert(:SelectBoxConverter,
+                   'type' => 'SelectBox', 'items' => %w[A B],
+                   'selectedValue' => '@{picked}', 'fontColor' => '#111111',
+                   'labelAttributes' => { 'fontColor' => '#222222', 'fontSize' => 18 },
+                   'hintColor' => '#999999', 'onValueChange' => '@{onPick}')
+    expect(code).to include('fontSize: 18,')
+    expect(code).to include('hintColor:')
+    expect(code).to include('data.picked')
+  end
+
+  it 'Switch/Toggle: tint spelling and the value state alias' do
+    code = convert(:ToggleConverter,
+                   'type' => 'Switch', 'id' => 'sw', 'value' => '@{isOn}', 'tint' => '#123456')
+    expect(code).to include('$data.isOn')
+    expect(code).to include('.tint(')
+  end
+
+  it 'CheckBox: value is the on/off state alias' do
+    code = convert(:CheckboxConverter,
+                   'type' => 'CheckBox', 'id' => 'cb', 'value' => '@{agreed}')
+    expect(code).to include('$data.agreed')
+  end
+end

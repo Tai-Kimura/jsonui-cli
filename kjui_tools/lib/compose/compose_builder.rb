@@ -669,9 +669,22 @@ module KjuiTools
             code += "\n" + lifecycle[:before] unless lifecycle[:before].empty?
           end
 
+          # Optional per-child wrapper: a container that must place EACH
+          # child in its own scope (ScrollView paging wraps every child in
+          # `item { }` so the snap fling has item bounds to snap to).
+          wrapper = result[:child_wrapper]
           children.each do |child|
-            child_code = generate_component(child, depth + 1, layout_type)
-            code += "\n" + child_code unless child_code.empty?
+            child_depth = wrapper ? depth + 2 : depth + 1
+            child_code = generate_component(child, child_depth, layout_type)
+            next if child_code.empty?
+
+            if wrapper
+              code += "\n" + ('    ' * (depth + 1)) + wrapper[:open]
+              code += "\n" + child_code
+              code += "\n" + ('    ' * (depth + 1)) + wrapper[:close]
+            else
+              code += "\n" + child_code
+            end
           end
 
           code += result[:closing] if result[:closing]

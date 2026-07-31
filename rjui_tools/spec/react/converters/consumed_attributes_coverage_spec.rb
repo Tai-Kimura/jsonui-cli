@@ -27,17 +27,140 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'blur_converter.rb' => %w[backgroundColor blurRadius cornerRadius effectStyle intensity onClick onclick],
     'button_converter.rb' => %w[buttonType cornerRadius disabledBackground disabledFontColor enabled fontColor highlightBackground highlightColor href image partialAttributes tapBackground text tintColor],
     'circle_view_converter.rb' => %w[background backgroundColor borderColor borderStyle borderWidth fillColor onClick onclick shadow strokeColor strokeWidth],
-    'collection_converter.rb' => %w[autoChangeTrackingId cellClasses cellIdProperty columnCount columnSpacing columns contentInset currentPage defaultScrollAnchor footerClasses headerClasses id itemSpacing items layout lazy lineSpacing onItemAppear orientation paging scrollDirection scrollEnabled scrollTo sections spacing],
+    'collection_converter.rb' => %w[
+      autoChangeTrackingId
+      cellClasses
+      cellIdProperty
+      columnCount
+      columnSpacing
+      columns
+      contentInset
+      contentInsetAdjustmentBehavior
+      currentPage
+      defaultScrollAnchor
+      footerClasses
+      headerClasses
+      horizontalScroll
+      id
+      itemSpacing
+      items
+      layout
+      lazy
+      lineSpacing
+      onItemAppear
+      orientation
+      paging
+      scrollDirection
+      scrollEnabled
+      scrollTo
+      sections
+      showsHorizontalScrollIndicator
+      showsVerticalScrollIndicator
+      spacing
+    ],
     'embed_converter.rb' => %w[events id navigationMode params screen],
     'gradient_view_converter.rb' => %w[angle colors cornerRadius direction endPoint gradient gradientDirection gradientType locations onClick onclick orientation startPoint],
-    'icon_label_converter.rb' => %w[fontColor fontSize fontWeight icon iconMargin iconOff iconOn iconPosition iconSize iconTintColor icon_off icon_on onClick onclick selected spacing strikethrough text tintColor underline],
-    'image_converter.rb' => %w[canTap contentMode cornerRadius defaultImage onClick onclick src srcName url],
+    'icon_label_converter.rb' => %w[
+      fontColor
+      fontSize
+      fontWeight
+      icon
+      iconMargin
+      iconOff
+      iconOn
+      iconPosition
+      iconSize
+      iconTintColor
+      icon_off
+      icon_on
+      onClick
+      onclick
+      selected
+      selectedFontColor
+      spacing
+      strikethrough
+      text
+      tintColor
+      underline
+    ],
+    'image_converter.rb' => %w[
+      canTap
+      contentMode
+      cornerRadius
+      defaultImage
+      loading
+      onClick
+      onclick
+      src
+      srcName
+      url
+    ],
     'include_converter.rb' => %w[shared_data],
     'indicator_converter.rb' => %w[borderWidth color halfSpinner height size strokeWidth tintColor width],
-    'label_converter.rb' => %w[autoShrink disabledFontColor edgeInset enabled font fontColor fontSize fontWeight gravity highlightAttributes highlightColor lineBreakMode lineHeight lineHeightMultiple lineSpacing lines linkable minimumScaleFactor onClick onclick partialAttributes selected strikethrough text textAlign textTransform underline],
-    'network_image_converter.rb' => %w[canTap circle circleImage contentMode cornerRadius defaultImage errorImage imageUrl onClick onclick placeholder scaleType src url],
+    'label_converter.rb' => %w[
+      autoShrink
+      disabledFontColor
+      edgeInset
+      enabled
+      font
+      fontColor
+      fontSize
+      fontWeight
+      gravity
+      highlightAttributes
+      highlightColor
+      hint
+      hintAttributes
+      hintColor
+      lineBreakMode
+      lineHeight
+      lineHeightMultiple
+      lineSpacing
+      lines
+      linkable
+      minimumScaleFactor
+      onClick
+      onclick
+      partialAttributes
+      placeholder
+      selected
+      strikethrough
+      text
+      textAlign
+      textTransform
+      underline
+    ],
+    'network_image_converter.rb' => %w[
+      canTap
+      circle
+      circleImage
+      contentMode
+      cornerRadius
+      defaultImage
+      errorImage
+      hint
+      imageUrl
+      loading
+      onClick
+      onclick
+      placeholder
+      scaleType
+      src
+      url
+    ],
     'progress_converter.rb' => %w[barHeight maximumValue progress progressHeight progressTintColor tintColor trackColor trackTintColor value],
-    'radio_converter.rb' => %w[enabled group items onValueChange selectedValue text tintColor],
+    'radio_converter.rb' => %w[
+      checked
+      enabled
+      group
+      items
+      label
+      onValueChange
+      selectedValue
+      spacing
+      text
+      tintColor
+    ],
     'scroll_view_converter.rb' => %w[bounces contentInset contentInsetAdjustmentBehavior horizontalScroll maxZoom orientation paging scrollBehavior scrollEnabled scrollMode showsHorizontalScrollIndicator showsVerticalScrollIndicator],
     'segment_converter.rb' => %w[backgroundColor enabled fontColor fontSize height items onValueChange selectedBackground selectedFontColor selectedIndex selectedTabIndex],
     'select_box_converter.rb' => %w[background borderColor colorScheme datePickerMode datePickerStyle dateStringFormat enabled font fontColor fontSize hint hintColor items labelAttributes maximumDate minimumDate minuteInterval multiple onChange onValueChange onValueChanged placeholder placeholderColor prompt selectItemType selectedDate selectedIndex selectedValue size textAlign value],
@@ -45,8 +168,62 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'switch_converter.rb' => %w[checked enabled isOn label offTintColor onTintColor onValueChange text thumbTintColor tint tintColor value],
     'tab_view_converter.rb' => %w[background height onValueChange selectedIndex showLabels tabBarBackground tabs tintColor unselectedColor width],
     'text_field_converter.rb' => %w[autoFocus autocapitalizationType autocorrectionType background becomeFirstResponder borderStyle borderWidth caretAttributes contentType cornerRadius disabledBackground editable enabled fontColor hint hintColor input maxLength name nextFocus onBeginEditing onBlur onChange onEndEditing onFocus onSubmit onTextChange padding pattern placeholder placeholderColor readOnly required returnKeyType secure shadow text textPaddingLeft],
-    'text_view_converter.rb' => %w[autoFocus background becomeFirstResponder borderColor borderWidth cols containerInset cornerRadius disabledBackground editable enabled flexible fontColor hideOnFocused hint hintAttributes hintColor hintFont hintFontSize hintLineHeightMultiple keyboardType lines maxHeight maxLength minHeight name onChange onTextChange padding pattern placeholder placeholderColor readOnly required resize rows scrollEnabled selectable text],
-    'toggle_converter.rb' => %w[checked enabled isOn label onTintColor onValueChange text tint tintColor],
+    'text_view_converter.rb' => %w[
+      autoFocus
+      background
+      becomeFirstResponder
+      borderColor
+      borderWidth
+      cols
+      containerInset
+      cornerRadius
+      disabledBackground
+      editable
+      enabled
+      flexible
+      fontColor
+      hideOnFocused
+      hint
+      hintAttributes
+      hintColor
+      hintFont
+      hintFontSize
+      hintLineHeightMultiple
+      input
+      keyboardType
+      lineBreakMode
+      lines
+      maxHeight
+      maxLength
+      minHeight
+      name
+      onChange
+      onTextChange
+      padding
+      pattern
+      placeholder
+      placeholderColor
+      readOnly
+      required
+      resize
+      returnKeyType
+      rows
+      scrollEnabled
+      selectable
+      text
+    ],
+    'toggle_converter.rb' => %w[
+      checked
+      enabled
+      isOn
+      label
+      onTintColor
+      onValueChange
+      spacing
+      text
+      tint
+      tintColor
+    ],
     'view_converter.rb' => %w[bottomPadding centerHorizontal centerInParent centerVertical distribution draggable flexWrap height highlightBackground highlighted leftPadding onClick onDragEnter onDragLeave onDragOver onDragStart onDrop onLongPress onPan onPinch onclick orientation padding paddingBottom paddingEnd paddingLeft paddingRight paddingStart paddingTop paddings rightPadding safeAreaInsetPositions spacing tapBackground topPadding],
     'web_converter.rb' => %w[accessibilityLabel allow allowCamera allowDownloads allowGeolocation allowMicrophone allowModals allowPopupsToEscapeSandbox allowsFullScreen allowsInlineMediaPlayback html htmlContent javaScriptCanOpenWindowsAutomatically javaScriptEnabled lazyLoad loading sandbox scrollEnabled src title url]
   }.freeze
@@ -75,7 +252,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'tab_view_converter.rb' => %w[],
     'text_field_converter.rb' => %w[autoFocus becomeFirstResponder editable name onChange readOnly],
     'text_view_converter.rb' => %w[autoFocus becomeFirstResponder lines name onChange placeholderColor readOnly],
-    'toggle_converter.rb' => %w[label text],
+    'toggle_converter.rb' => %w[label spacing text],
     'view_converter.rb' => %w[],
     'web_converter.rb' => %w[accessibilityLabel allowCamera allowDownloads allowGeolocation allowMicrophone allowModals allowPopupsToEscapeSandbox allowsFullScreen allowsInlineMediaPlayback htmlContent javaScriptCanOpenWindowsAutomatically javaScriptEnabled lazyLoad loading scrollEnabled src title]
   }.freeze
