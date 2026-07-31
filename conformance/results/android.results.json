@@ -1,6 +1,6 @@
 {
   "platform": "android",
-  "manifestHash": "2db1b434c5d2d3bd568f9d0a6e696e0c44e64387b5de8a66ffbcdcd142c2cb4d",
+  "manifestHash": "149715ab22aab62feebc4153bb91f4642bc9abb1f059666dac656750e40ff75a",
   "runner": {
     "name": "uiautomator",
     "version": "2.3.0"
@@ -626,15 +626,13 @@
     },
     {
       "id": "common/indexBelow__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/common_indexBelow__static.png"
+      "status": "skipped",
+      "detail": "not applicable to android"
     },
     {
       "id": "common/indexAbove__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/common_indexAbove__static.png"
+      "status": "skipped",
+      "detail": "not applicable to android"
     },
     {
       "id": "common/gravity__top",
@@ -3004,15 +3002,13 @@
     },
     {
       "id": "ScrollView/showsHorizontalScrollIndicator__true",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/ScrollView_showsHorizontalScrollIndicator__true.png"
+      "status": "skipped",
+      "detail": "not applicable to android"
     },
     {
       "id": "ScrollView/showsVerticalScrollIndicator__true",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/ScrollView_showsVerticalScrollIndicator__true.png"
+      "status": "skipped",
+      "detail": "not applicable to android"
     },
     {
       "id": "ScrollView/contentSize__static",
@@ -3165,15 +3161,13 @@
     },
     {
       "id": "Collection/showsHorizontalScrollIndicator__true",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Collection_showsHorizontalScrollIndicator__true.png"
+      "status": "skipped",
+      "detail": "not applicable to android"
     },
     {
       "id": "Collection/showsVerticalScrollIndicator__true",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Collection_showsVerticalScrollIndicator__true.png"
+      "status": "skipped",
+      "detail": "not applicable to android"
     },
     {
       "id": "Collection/columnCount__static",
@@ -3226,12 +3220,6 @@
       "id": "Collection/containerInset__static",
       "status": "skipped",
       "detail": "not applicable to android"
-    },
-    {
-      "id": "Collection/sectionSticky__true",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Collection_sectionSticky__true.png"
     },
     {
       "id": "Radio/label__static",
