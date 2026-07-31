@@ -858,7 +858,18 @@ def _platforms(defn: dict) -> tuple[str, ...]:
     raw = defn.get("platform")
     if raw is not None:
         tags = raw if isinstance(raw, list) else [raw]
-        mapped = {PLATFORM_MAP[t] for t in tags if t in PLATFORM_MAP}
+        unknown = [t for t in tags if t not in PLATFORM_MAP]
+        if unknown:
+            # A silently-dropped token either shrinks the declared surface
+            # (partial typo) or WIDENS it to all platforms (all tokens
+            # unknown -> scope None). Both corrupt the coverage universe
+            # without a trace — writing "web" instead of "react" did exactly
+            # that. Fail loudly instead.
+            raise ValueError(
+                f"unknown platform token(s) {unknown!r} in attribute "
+                f"definition (known: {sorted(PLATFORM_MAP)})"
+            )
+        mapped = {PLATFORM_MAP[t] for t in tags}
         scope = mapped or None
 
     raw_mode = defn.get("mode")

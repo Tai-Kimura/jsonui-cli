@@ -12,7 +12,10 @@
       "common"
     ]
   },
-  "platform": "all",
+  "platform": [
+    "ios",
+    "web"
+  ],
   "cases": [
     {
       "name": "indexBelow__static",

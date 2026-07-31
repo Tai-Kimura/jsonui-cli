@@ -12,7 +12,10 @@
       "Collection"
     ]
   },
-  "platform": "all",
+  "platform": [
+    "ios",
+    "web"
+  ],
   "cases": [
     {
       "name": "showsHorizontalScrollIndicator__true",

@@ -8,7 +8,7 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "deeb243e29ab179ab65bd9d11f1111ea50e82809e6d4615a55d213e0a9bae413",
+  "generatedFrom": "d2917fc05e6a16df13ba0be7ff32198232153a98d1f1354f4e07517b410542f1",
   "counts": {
     "fixtures": 718,
     "assertable": 36,
@@ -2619,7 +2619,6 @@
       "value": "anchor",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "mode": null,
@@ -2642,7 +2641,6 @@
       "value": "anchor",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "mode": null,
@@ -12226,7 +12224,6 @@
       "value": true,
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "mode": null,
@@ -12249,7 +12246,6 @@
       "value": true,
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "mode": null,
@@ -12872,7 +12868,6 @@
       "value": true,
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "mode": null,
@@ -12895,7 +12890,6 @@
       "value": true,
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "mode": null,

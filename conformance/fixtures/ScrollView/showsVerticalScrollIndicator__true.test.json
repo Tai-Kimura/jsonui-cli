@@ -12,7 +12,10 @@
       "ScrollView"
     ]
   },
-  "platform": "all",
+  "platform": [
+    "ios",
+    "web"
+  ],
   "cases": [
     {
       "name": "showsVerticalScrollIndicator__true",

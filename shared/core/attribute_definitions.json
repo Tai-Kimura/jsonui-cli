@@ -881,11 +881,25 @@
     },
     "indexBelow": {
       "type": "string",
-      "description": "Place below specified view ID"
+      "description": "Place below specified view ID",
+      "platform": [
+        "swift",
+        "react"
+      ],
+      "platform_reasons": {
+        "kotlin": "Compose z-order is Modifier.zIndex on each component's own modifier chain; the codegen has no shared chain, so wiring it partially would work on some components and silently not on others — and z-order only means anything inside a Box (Column/Row children do not overlap). iOS degrades to zIndex(-1); re-declare if the codegen grows a shared modifier chain."
+      }
     },
     "indexAbove": {
       "type": "string",
-      "description": "Place above specified view ID"
+      "description": "Place above specified view ID",
+      "platform": [
+        "swift",
+        "react"
+      ],
+      "platform_reasons": {
+        "kotlin": "Same as indexBelow: Compose z-order is Modifier.zIndex on each component's own modifier chain, and without a shared chain a partial wiring would be silently inconsistent across components. Re-declare if the codegen grows a shared modifier chain."
+      }
     },
     "touchDisabledState": {
       "type": "string",
@@ -3398,11 +3412,25 @@
     },
     "showsHorizontalScrollIndicator": {
       "type": "boolean",
-      "description": "Show horizontal indicator"
+      "description": "Show horizontal indicator",
+      "platform": [
+        "swift",
+        "react"
+      ],
+      "platform_reasons": {
+        "kotlin": "Compose has no scrollbar primitive for scrollable/Lazy content (ScrollbarStyle is Desktop-only), so there is nothing to switch on or off — needs a drawn scrollbar composable in KotlinJsonUI first. iOS uses .scrollIndicators and web uses CSS, both native. Re-declare when the composable exists."
+      }
     },
     "showsVerticalScrollIndicator": {
       "type": "boolean",
-      "description": "Show vertical indicator"
+      "description": "Show vertical indicator",
+      "platform": [
+        "swift",
+        "react"
+      ],
+      "platform_reasons": {
+        "kotlin": "Compose has no scrollbar primitive for scrollable/Lazy content (ScrollbarStyle is Desktop-only), so there is nothing to switch on or off — needs a drawn scrollbar composable in KotlinJsonUI first. iOS uses .scrollIndicators and web uses CSS, both native. Re-declare when the composable exists."
+      }
     },
     "paging": {
       "type": "boolean",
@@ -3410,7 +3438,14 @@
     },
     "bounces": {
       "type": "boolean",
-      "description": "Enable bounce effect"
+      "description": "Enable bounce effect",
+      "platform": [
+        "swift",
+        "react"
+      ],
+      "platform_reasons": {
+        "kotlin": "Compose's equivalent is overscroll, and disabling it means CompositionLocalProvider(LocalOverscrollConfiguration provides null) — an experimental Foundation API the generated code does not carry an @OptIn for. Re-declare when the API stabilizes."
+      }
     },
     "scrollEnabled": {
       "type": [
@@ -3434,14 +3469,28 @@
         "number",
         "binding"
       ],
-      "description": "Maximum zoom scale (binding supported)"
+      "description": "Maximum zoom scale (binding supported)",
+      "platform": [
+        "swift",
+        "react"
+      ],
+      "platform_reasons": {
+        "kotlin": "Pinch-zoom on a SCROLLING container needs real gesture arbitration in Compose — detectTransformGestures/transformable consume the drag and would take scrolling away — and a maximum without minZoom would be half a feature. iOS gets zoom from UIScrollView; web delegates to the browser via touch-action."
+      }
     },
     "minZoom": {
       "type": [
         "number",
         "binding"
       ],
-      "description": "Minimum zoom scale (binding supported)"
+      "description": "Minimum zoom scale (binding supported)",
+      "platform": [
+        "swift"
+      ],
+      "platform_reasons": {
+        "kotlin": "Same gesture-arbitration problem as maxZoom: Compose has no zoom primitive for a scrolling container.",
+        "react": "The browser arbitrates pinch zoom itself (touch-action); there is no control surface for a minimum scale."
+      }
     },
     "contentSize": {
       "type": "array",
@@ -3604,11 +3653,25 @@
     },
     "showsHorizontalScrollIndicator": {
       "type": "boolean",
-      "description": "Show horizontal indicator"
+      "description": "Show horizontal indicator",
+      "platform": [
+        "swift",
+        "react"
+      ],
+      "platform_reasons": {
+        "kotlin": "Compose has no scrollbar primitive for Lazy lists (ScrollbarStyle is Desktop-only), so there is nothing to switch on or off — needs a drawn scrollbar composable in KotlinJsonUI first. iOS uses .scrollIndicators and web uses CSS, both native. Re-declare when the composable exists."
+      }
     },
     "showsVerticalScrollIndicator": {
       "type": "boolean",
-      "description": "Show vertical indicator"
+      "description": "Show vertical indicator",
+      "platform": [
+        "swift",
+        "react"
+      ],
+      "platform_reasons": {
+        "kotlin": "Compose has no scrollbar primitive for Lazy lists (ScrollbarStyle is Desktop-only), so there is nothing to switch on or off — needs a drawn scrollbar composable in KotlinJsonUI first. iOS uses .scrollIndicators and web uses CSS, both native. Re-declare when the composable exists."
+      }
     },
     "paging": {
       "type": "boolean",
