@@ -387,7 +387,25 @@
       ]
     },
     {
+      "fixture": "Label/highlightAttributes__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/highlightColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
       "fixture": "Label/lineBreakMode__head",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/lineHeight__static",
       "platforms": [
         "web"
       ]
@@ -418,6 +436,18 @@
     },
     {
       "fixture": "Label/textAlign__right_2",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/textTransform__lowercase",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/textTransform__uppercase",
       "platforms": [
         "web"
       ]
@@ -561,6 +591,18 @@
       ]
     },
     {
+      "fixture": "SelectBox/labelAttributes__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "SelectBox/multiple__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
       "fixture": "SelectBox/placeholder__static",
       "platforms": [
         "web"
@@ -580,6 +622,12 @@
     },
     {
       "fixture": "SelectBox/selectedValue__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "SelectBox/size__static",
       "platforms": [
         "web"
       ]
@@ -657,7 +705,25 @@
       ]
     },
     {
+      "fixture": "Switch/onTintColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
       "fixture": "Switch/thumbTintColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Switch/tintColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Switch/tint__static",
       "platforms": [
         "web"
       ]
@@ -795,6 +861,18 @@
       ]
     },
     {
+      "fixture": "TextView/hintFontSize__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "TextView/hintLineHeightMultiple__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
       "fixture": "TextView/hint__static",
       "platforms": [
         "web"
@@ -861,6 +939,24 @@
       ]
     },
     {
+      "fixture": "Toggle/onTintColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Toggle/tintColor__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Toggle/tint__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
       "fixture": "View/direction__bottomtotop",
       "platforms": [
         "web"
@@ -898,6 +994,60 @@
     },
     {
       "fixture": "Web/html__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/alignBottomOfView__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/alignBottomView__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/alignCenterHorizontalView__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/alignCenterVerticalView__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/alignLeftOfView__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/alignLeftView__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/alignRightOfView__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/alignRightView__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/alignTopOfView__static",
       "platforms": [
         "web"
       ]
@@ -1000,6 +1150,12 @@
     },
     {
       "fixture": "common/highlightBackground__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "common/indexBelow__static",
       "platforms": [
         "web"
       ]

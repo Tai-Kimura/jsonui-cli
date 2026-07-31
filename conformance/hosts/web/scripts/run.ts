@@ -165,6 +165,15 @@ async function runFixture(page: Page, fixture: ManifestFixture): Promise<ResultE
   let screenshot: string | undefined;
   try {
     await page.goto(`${baseUrl}/fixture/${fixture.id}`, { waitUntil: 'load' });
+    // Pages are reused across fixtures per worker, and the mouse stays where
+    // the previous fixture's actions left it — a native control under that
+    // stale cursor renders :hover. Which fixture ran before on this page is
+    // scheduling-dependent, so Button/Check/Slider screenshots differed run
+    // to run while being perfectly stable within a run (measured: 5 controls
+    // + 27 fixtures flapping, all interactive hosts). Park the cursor in the
+    // root's empty bottom edge before anything is captured.
+    const viewport = page.viewportSize();
+    await page.mouse.move(0, (viewport?.height ?? 600) - 1);
 
     if (!platformIncludes(test.platform, 'web')) {
       return { id: fixture.id, status: 'skipped', detail: `test platform ${JSON.stringify(test.platform)} excludes web` };
@@ -177,7 +186,27 @@ async function runFixture(page: Page, fixture: ManifestFixture): Promise<ResultE
         if (step.action === 'screenshot') {
           const name = step.name ?? fixture.id.replace(/\//g, '_');
           const file = path.join(artifactsDir, `${name}.png`);
-          await page.screenshot({ path: file });
+          // waitFor proves the element is in the DOM, not that it has been
+          // painted or settled. Screenshots racing paint, font loading, CSS
+          // transitions or the text caret made the effect check's inert set
+          // flap run to run with no code change (docs/bugs:
+          // web-conformance-effect-check-is-nondeterministic; a plain
+          // double-rAF was measured insufficient). Settle, then capture
+          // until two consecutive frames are byte-identical.
+          await page.evaluate(() => (document as any).fonts?.ready);
+          const shotOpts = { animations: 'disabled', caret: 'hide' } as const;
+          let image = await page.screenshot(shotOpts);
+          for (let attempt = 0; attempt < 5; attempt++) {
+            await page.waitForTimeout(60);
+            const next = await page.screenshot(shotOpts);
+            const stable = next.equals(image);
+            image = next;
+            if (stable) break;
+            if (attempt === 4) {
+              console.warn(`[run] screenshot never stabilized: ${fixture.id}`);
+            }
+          }
+          fs.writeFileSync(file, image);
           screenshot = `artifacts/web/${name}.png`;
         } else if (step.action !== undefined) {
           await actions.execute(step);

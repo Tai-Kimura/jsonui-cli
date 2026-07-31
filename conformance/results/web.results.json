@@ -1,6 +1,6 @@
 {
   "platform": "web",
-  "manifestHash": "2db1b434c5d2d3bd568f9d0a6e696e0c44e64387b5de8a66ffbcdcd142c2cb4d",
+  "manifestHash": "46b7ebe6446eed25529a816199b874d37937fddc31e982f30756d114d2277970",
   "runner": {
     "name": "playwright",
     "version": "1.61.1"
