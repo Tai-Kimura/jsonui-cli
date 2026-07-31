@@ -24,7 +24,6 @@ module SjuiTools
           :hidden,              # hidden
           :offset,              # offset
           :margin,              # outer margin entries
-          :disabled,            # disabled
           :allows_hit_testing,  # allowsHitTesting
           :tint_color,          # tint
           :on_click,            # contentShape + onTapGesture
@@ -39,7 +38,13 @@ module SjuiTools
           :safe_area_insets,    # ignoresSafeArea
           :tag,                 # tag
           :z_index,             # zIndex
-          :accessibility_id,    # accessibilityIdentifier (always last)
+          :accessibility_id,    # accessibilityIdentifier
+          # .disabled is an ENVIRONMENT modifier and must wrap the
+          # accessibility element: applied before :accessibility_id, the
+          # container's a11y element sits outside the disabled environment
+          # and never carries the notEnabled trait — XCUITest then reads the
+          # node as enabled (measured on the dynamic runtime, same layering).
+          :disabled,            # disabled (outermost)
         ].freeze
 
         # Keys that store arrays of code strings (multi-value)
