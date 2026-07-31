@@ -207,6 +207,52 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         expect(code).to include('GridItem(.flexible(), spacing: 6)')
         expect(code).to include('alignment: .center, spacing: 6)')
       end
+    end
+
+    # Regression: sjui-flow-spacing-chain-asymmetric-with-kjui — the flow
+    # default 8 is symmetric with kjui and stays; the chain CONTENT differed:
+    # vertical never fell back to itemSpacing, and horizontal preferred
+    # itemSpacing over columnSpacing (kjui prefers columnSpacing).
+    describe 'flow spacing chains' do
+      let(:flow_component) do
+        {
+          'type' => 'Collection',
+          'layout' => 'flow',
+          'items' => '@{tags}',
+          'sections' => [{ 'cell' => 'tag_cell' }]
+        }
+      end
+
+      it 'falls back to itemSpacing on the vertical axis' do
+        code = described_class.new(flow_component.merge('itemSpacing' => 6)).convert
+        expect(code).to include('verticalSpacing: 6')
+        expect(code).to include('horizontalSpacing: 6')
+      end
+
+      it 'prefers columnSpacing horizontally and lineSpacing vertically' do
+        code = described_class.new(flow_component.merge(
+          'itemSpacing' => 6, 'columnSpacing' => 12, 'lineSpacing' => 14
+        )).convert
+        expect(code).to include('horizontalSpacing: 12')
+        expect(code).to include('verticalSpacing: 14')
+      end
+
+      it 'keeps the symmetric default 8 when nothing is declared' do
+        code = described_class.new(flow_component).convert
+        expect(code).to include('horizontalSpacing: 8')
+        expect(code).to include('verticalSpacing: 8')
+      end
+    end
+
+    describe 'section header/footer insets alignment' do
+      let(:grid_component) do
+        {
+          'type' => 'Collection',
+          'columns' => 2,
+          'items' => '@{listItems}',
+          'sections' => [{ 'cell' => 'item_cell' }]
+        }
+      end
 
       it 'aligns declared headers to the declared horizontal insets, not the system default' do
         with_header = grid_component.merge(

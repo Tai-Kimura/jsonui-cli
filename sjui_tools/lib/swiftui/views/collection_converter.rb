@@ -770,8 +770,12 @@ module SjuiTools
         end
 
         def generate_non_lazy_flow(has_sections)
-          h_spacing = @component['itemSpacing'] || @component['columnSpacing'] || 8
-          v_spacing = @component['lineSpacing'] || 8
+          # kjui's chain order on the declared attrs: inter-item prefers
+          # columnSpacing, inter-line prefers lineSpacing, itemSpacing is the
+          # uniform fallback for both axes. The flow default 8 is symmetric
+          # with kjui (unlike the grid paths' removed 10) and stays.
+          h_spacing = @component['columnSpacing'] || @component['itemSpacing'] || 8
+          v_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 8
           flow_alignment = get_flow_alignment
           section_spacing = @component['sectionSpacing'] || @component['lineSpacing'] || 8
 
@@ -925,8 +929,12 @@ module SjuiTools
 
         # Generate flow layout using FlowLayout (iOS 16+)
         def generate_flow_layout(has_sections)
-          h_spacing = @component['itemSpacing'] || @component['columnSpacing'] || 8
-          v_spacing = @component['lineSpacing'] || 8
+          # kjui's chain order on the declared attrs: inter-item prefers
+          # columnSpacing, inter-line prefers lineSpacing, itemSpacing is the
+          # uniform fallback for both axes. The flow default 8 is symmetric
+          # with kjui (unlike the grid paths' removed 10) and stays.
+          h_spacing = @component['columnSpacing'] || @component['itemSpacing'] || 8
+          v_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 8
           flow_alignment = get_flow_alignment
 
           shows_indicators = @component['showsVerticalScrollIndicator'] != false
