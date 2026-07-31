@@ -489,7 +489,7 @@ class ConformanceInteractiveTest(unittest.TestCase):
             self.assertIn(attribute, defs.get(section, {}), f"{section}.{attribute}")
 
     def test_interactive_steps_stay_inside_runner_vocabulary(self):
-        allowed_actions = {"waitFor", "tap", "input", "longPress", "selectOption"}
+        allowed_actions = {"waitFor", "tap", "input", "longPress", "selectOption", "swipe"}
         allowed_asserts = {"text", "visible", "notVisible"}
         for specs in interactive_rules.INTERACTIVE_SPECS.values():
             for spec in specs:
@@ -530,9 +530,10 @@ class ConformanceGeneratorRealDefinitionsTest(unittest.TestCase):
         self.assertGreater(self.summary.skipped_count, 100)
 
     def test_interactive_volume_and_promotions(self):
-        # 12 attributes promoted out of `callback` (v1 had 50); every
+        # 13 attributes promoted out of `callback` (v1 had 50; onPan joined
+        # 2026-07 when `swipe` was recognized as a pan trigger); every
         # interactive fixture carries a state contract.
-        self.assertEqual(self.summary.promoted, {"callback": 12})
+        self.assertEqual(self.summary.promoted, {"callback": 13})
         self.assertGreaterEqual(self.summary.interactive_count, 19)
         for fixture in self.manifest["fixtures"]:
             if fixture["class"] == "interactive":

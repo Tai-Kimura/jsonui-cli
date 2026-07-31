@@ -8,16 +8,16 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "0d397e7e4de335a89eccf6936836f924115c7ef43a4a332ab7a08dd142057c56",
+  "generatedFrom": "deeb243e29ab179ab65bd9d11f1111ea50e82809e6d4615a55d213e0a9bae413",
   "counts": {
-    "fixtures": 717,
+    "fixtures": 718,
     "assertable": 36,
     "visual": 605,
-    "interactive": 36,
+    "interactive": 37,
     "control": 40,
-    "skipped": 160,
+    "skipped": 159,
     "promoted": {
-      "callback": 12
+      "callback": 13
     }
   },
   "fixtures": [
@@ -2332,6 +2332,45 @@
       "deprecated": null,
       "layout": "fixtures/common/onLongPress__callback_fire.layout.json",
       "test": "fixtures/common/onLongPress__callback_fire.test.json",
+      "state": {
+        "vars": [
+          {
+            "name": "conformanceResult",
+            "class": "String",
+            "defaultValue": "ready"
+          }
+        ],
+        "handlers": [
+          {
+            "name": "conformanceFire",
+            "set": {
+              "var": "conformanceResult",
+              "value": "fired"
+            }
+          }
+        ]
+      },
+      "promotedFrom": "callback"
+    },
+    {
+      "id": "common/onPan__callback_fire",
+      "component": "common",
+      "attribute": "onPan",
+      "case": "callback_fire",
+      "class": "interactive",
+      "host": "View",
+      "writtenKey": "onPan",
+      "aliasOf": null,
+      "value": "@{conformanceFire}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/onPan__callback_fire.layout.json",
+      "test": "fixtures/common/onPan__callback_fire.test.json",
       "state": {
         "vars": [
           {
@@ -16741,11 +16780,6 @@
       "component": "common",
       "attribute": "responsive",
       "reason": "metadata (not rendered)"
-    },
-    {
-      "component": "common",
-      "attribute": "onPan",
-      "reason": "callback"
     },
     {
       "component": "common",

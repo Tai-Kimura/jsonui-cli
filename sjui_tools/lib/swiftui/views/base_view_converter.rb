@@ -607,6 +607,8 @@ module SjuiTools
           end
 
           apply_long_press_to_bag
+          apply_pan_to_bag
+          apply_pinch_to_bag
           apply_highlighted_to_bag
 
           # Lifecycle events (SwiftUI only)
@@ -636,6 +638,52 @@ module SjuiTools
             ".onLongPressGesture {",
             "    data.#{prop}?()",
             "}"
+          ])
+        end
+
+        # onPan — binding-only (`@{handler}`), fired repeatedly while the user
+        # drags. simultaneousGesture so it composes with onClick taps and
+        # Button actions; contentShape makes a background-less container
+        # hittable across its full bounds (a transparent SwiftUI view is not).
+        #
+        # Payload: `value.translation` — cumulative CGSize since the gesture
+        # began (the Compose emit accumulates deltas to match). The call shape
+        # follows the declared closure class: () -> Void stays bare, (CGSize)
+        # (optionally after a String id) receives the payload.
+        def apply_pan_to_bag
+          handler = @component['onPan']
+          return if handler.nil?
+          return unless is_binding?(handler)
+
+          invocation = get_event_handler_invocation(handler, @component['id'], 'value.translation')
+          @modifier_bag.register(:on_pan, [
+            ".contentShape(Rectangle())",
+            ".simultaneousGesture(",
+            "    DragGesture(minimumDistance: 10).onChanged { value in",
+            "        #{invocation}",
+            "    }",
+            ")"
+          ])
+        end
+
+        # onPinch — binding-only, fired repeatedly while the user pinches with
+        # `value.magnification` (cumulative CGFloat scale). MagnifyGesture is
+        # the iOS 17+ replacement for the deprecated MagnificationGesture;
+        # SwiftJsonUI's platform floor is iOS 17, so generated code can use it
+        # unconditionally without deprecation warnings.
+        def apply_pinch_to_bag
+          handler = @component['onPinch']
+          return if handler.nil?
+          return unless is_binding?(handler)
+
+          invocation = get_event_handler_invocation(handler, @component['id'], 'value.magnification')
+          @modifier_bag.register(:on_pinch, [
+            ".contentShape(Rectangle())",
+            ".simultaneousGesture(",
+            "    MagnifyGesture().onChanged { value in",
+            "        #{invocation}",
+            "    }",
+            ")"
           ])
         end
 
@@ -827,8 +875,9 @@ module SjuiTools
               else
                 "data.#{method_name}?(\"#{view_id}\", #{value_expr})"
               end
-            elsif value_expr && class_type.match?(/\(\s*\(?\s*(Int|Bool|Boolean|Float|Double|Number|String)\s*\)?\s*\)\s*->/)
-              # Handler takes a single typed argument (e.g., (Int) -> Void)
+            elsif value_expr && class_type.match?(/\(\s*\(?\s*(Int|Bool|Boolean|Float|Double|Number|String|CGSize|CGFloat)\s*\)?\s*\)\s*->/)
+              # Handler takes a single typed argument (e.g., (Int) -> Void).
+              # CGSize / CGFloat are the onPan / onPinch gesture payloads.
               "data.#{method_name}?(#{value_expr})"
             elsif class_type.match?(/\(\s*\)\s*->/)
               # () -> Void type - no arguments

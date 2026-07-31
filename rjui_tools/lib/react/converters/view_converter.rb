@@ -184,6 +184,9 @@ module RjuiTools
 
           # Cursor pointer for clickable items
           classes << 'cursor-pointer' if attributes['onClick'] || attributes['onclick']
+          # touch-action: none — without it the browser turns the touches into
+          # scrolling/pinch-zoom before the element's pan/pinch handlers see them.
+          classes << 'touch-none' if attributes['onPan'] || attributes['onPinch']
 
           # Highlight/Tap background effects (using hover/active states)
           if attributes['tapBackground'] || attributes['highlightBackground']
@@ -292,20 +295,24 @@ module RjuiTools
             attrs << " onContextMenu={(e) => { e.preventDefault(); #{prop}?.(e); }}"
           end
 
-          # onPan (using pointer events for drag)
+          # onPan — the bound value is a function (canonical contract shared
+          # with iOS/Android), invoked repeatedly while the user drags with the
+          # PointerEvent as payload. `e.buttons !== 0` keeps hover-only mouse
+          # moves out — a pan is a move with a button or touch held down.
+          # (An earlier emit expected an {onStart,onMove,onEnd} object; nothing
+          # declared or used that shape, and it contradicted the declaration.)
           if attributes['onPan']
             prop = resolve_handler_property(attributes['onPan'])
-            attrs << " onPointerDown={(e) => #{prop}?.onStart?.(e)}"
-            attrs << " onPointerMove={(e) => #{prop}?.onMove?.(e)}"
-            attrs << " onPointerUp={(e) => #{prop}?.onEnd?.(e)}"
+            attrs << " onPointerMove={(e) => { if (e.buttons !== 0) #{prop}?.(e); }}"
           end
 
-          # onPinch (using touch events)
+          # onPinch — fires while two or more touch points move, with the
+          # TouchEvent as payload. The touch-none class (build_class_name)
+          # keeps the browser's own pinch-zoom/scroll from consuming the
+          # gesture first.
           if attributes['onPinch']
             prop = resolve_handler_property(attributes['onPinch'])
-            attrs << " onTouchStart={(e) => #{prop}?.onStart?.(e)}"
-            attrs << " onTouchMove={(e) => #{prop}?.onMove?.(e)}"
-            attrs << " onTouchEnd={(e) => #{prop}?.onEnd?.(e)}"
+            attrs << " onTouchMove={(e) => { if (e.touches.length >= 2) #{prop}?.(e); }}"
           end
 
           # Drag and Drop

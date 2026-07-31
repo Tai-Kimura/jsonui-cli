@@ -895,6 +895,102 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
     end
   end
 
+  describe '.build_pannable' do
+    before do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+    end
+
+    it 'emits a drag detector accumulating cumulative translation per gesture' do
+      imports = Set.new
+      result = described_class.build_pannable({ 'onPan' => '@{onSurfacePan}' }, imports)
+
+      expect(result.length).to eq(1)
+      gesture = result.first
+      expect(gesture).to include('.pointerInput(data) {')
+      expect(gesture).to include('var total = Offset.Zero')
+      # Reset per gesture: the payload is translation since THIS gesture began
+      expect(gesture).to include('onDragStart = { total = Offset.Zero }')
+      expect(gesture).to include('change.consume()')
+      expect(gesture).to include('total += dragAmount')
+      expect(gesture).to include('data.onSurfacePan?.invoke()')
+      expect(imports).to include(:pan_gesture)
+    end
+
+    it 'passes the Offset payload when the handler declares it' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onSurfacePan' => { 'class' => '((Offset) -> Unit)?' }
+      }
+      result = described_class.build_pannable({ 'onPan' => '@{onSurfacePan}' }, Set.new)
+      expect(result.first).to include('data.onSurfacePan?.invoke(total)')
+    end
+
+    it 'returns no modifiers without onPan and ignores non-binding values' do
+      expect(described_class.build_pannable({}, Set.new)).to be_empty
+      expect(described_class.build_pannable({ 'onPan' => 'plainName' }, Set.new)).to be_empty
+    end
+  end
+
+  describe '.build_pinchable' do
+    before do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+    end
+
+    it 'emits a zoom loop with per-gesture cumulative scale' do
+      imports = Set.new
+      result = described_class.build_pinchable({ 'onPinch' => '@{onSurfacePinch}' }, imports)
+
+      expect(result.length).to eq(1)
+      gesture = result.first
+      expect(gesture).to include('.pointerInput(data) {')
+      expect(gesture).to include('awaitFirstDown(requireUnconsumed = false)')
+      # Scale resets per gesture — the reason this is a raw loop and not
+      # detectTransformGestures (which has no gesture-start hook)
+      expect(gesture).to include('var scale = 1f')
+      expect(gesture).to include('event.calculateZoom()')
+      expect(gesture).to include('scale *= zoom')
+      # zoom == 1f (single pointer) must not consume or fire
+      expect(gesture).to include('if (zoom != 1f)')
+      expect(gesture).to include('data.onSurfacePinch?.invoke()')
+      expect(imports).to include(:pinch_gesture)
+    end
+
+    it 'passes the Float scale payload when the handler declares it' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onSurfacePinch' => { 'class' => '((Float) -> Unit)?' }
+      }
+      result = described_class.build_pinchable({ 'onPinch' => '@{onSurfacePinch}' }, Set.new)
+      expect(result.first).to include('data.onSurfacePinch?.invoke(scale)')
+    end
+
+    it 'returns no modifiers without onPinch' do
+      expect(described_class.build_pinchable({ 'onClick' => '@{onTap}' }, Set.new)).to be_empty
+    end
+  end
+
+  describe '.build_clickable with onPan/onPinch' do
+    before do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+    end
+
+    it 'emits pan and pinch detectors alongside .clickable' do
+      imports = Set.new
+      json_data = { 'onClick' => '@{onTap}', 'onPan' => '@{onDrag}', 'onPinch' => '@{onZoom}' }
+      result = described_class.build_clickable(json_data, imports)
+
+      expect(result.length).to eq(3)
+      expect(result[0]).to include('detectDragGestures')
+      expect(result[1]).to include('calculateZoom')
+      expect(result[2]).to include('.clickable { data.onTap?.invoke() }')
+    end
+
+    it 'emits gesture detectors on a container with no onClick' do
+      result = described_class.build_clickable({ 'onPan' => '@{onDrag}' }, Set.new)
+      expect(result.length).to eq(1)
+      expect(result.first).to include('detectDragGestures')
+      expect(result.join).not_to include('.clickable')
+    end
+  end
+
   describe '.format with multi-line modifiers' do
     it 'indents every line of a single multi-line modifier' do
       gesture = ".pointerInput(data) {\n    awaitEachGesture {\n    }\n}"

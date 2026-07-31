@@ -287,24 +287,6 @@
       ],
       "reason": "unimplemented",
       "note": "Compose z-order is `Modifier.zIndex`, which belongs to each component's own modifier chain — the codegen has no shared chain (28 components build their own, and only 15 even share build_alignment), so wiring it partially would make the attribute work on some components and silently not on others. z-order also only means anything inside a Box: Column/Row children do not overlap. The iOS implementation degrades to zIndex(-1) for the view-ID form, so there is no richer behaviour to port."
-    },
-    {
-      "component": "common",
-      "attribute": "onPan",
-      "platforms": [
-        "ios",
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "common",
-      "attribute": "onPinch",
-      "platforms": [
-        "ios",
-        "android"
-      ],
-      "reason": "unimplemented"
     }
   ]
 }

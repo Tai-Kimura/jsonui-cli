@@ -1,6 +1,6 @@
 {
   "platform": "web",
-  "manifestHash": "7fb88dcba38f5cf656ce2bb5b6a3dc891deaaf43241a73850974b3137cff9b11",
+  "manifestHash": "2db1b434c5d2d3bd568f9d0a6e696e0c44e64387b5de8a66ffbcdcd142c2cb4d",
   "runner": {
     "name": "playwright",
     "version": "1.61.1"
@@ -569,6 +569,11 @@
       "detail": "not applicable to web"
     },
     {
+      "id": "common/onPan__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "common/tintColor__static",
       "status": "pass",
       "detail": "",
@@ -676,7 +681,7 @@
     {
       "id": "common/onAppear__callback_fire",
       "status": "skipped",
-      "detail": "mode: compose (host renders react mode)"
+      "detail": "not applicable to web"
     },
     {
       "id": "common/alignment__topleading",
@@ -916,8 +921,9 @@
     },
     {
       "id": "Label/selected__true",
-      "status": "skipped",
-      "detail": "not applicable to web"
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_selected__true.png"
     },
     {
       "id": "Label/textAlign__left",
@@ -1056,6 +1062,12 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Label_hintColor__static.png"
+    },
+    {
+      "id": "Label/highlightAttributes__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_highlightAttributes__static.png"
     },
     {
       "id": "Label/highlightColor__static",
@@ -1835,9 +1847,8 @@
     },
     {
       "id": "EditText/inputType__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/EditText_inputType__static.png"
+      "status": "skipped",
+      "detail": "not applicable to web"
     },
     {
       "id": "Input/text__static",
@@ -2468,6 +2479,12 @@
       "screenshot": "artifacts/web/SelectBox_fontColor__static.png"
     },
     {
+      "id": "SelectBox/labelAttributes__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SelectBox_labelAttributes__static.png"
+    },
+    {
       "id": "SelectBox/inView__static",
       "status": "skipped",
       "detail": "not applicable to web"
@@ -2896,12 +2913,6 @@
       "screenshot": "artifacts/web/View_direction__none.png"
     },
     {
-      "id": "View/alignment__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/View_alignment__static.png"
-    },
-    {
       "id": "View/distribution__fill",
       "status": "pass",
       "detail": "",
@@ -2945,6 +2956,12 @@
       "id": "View/locations__static",
       "status": "skipped",
       "detail": "not applicable to web"
+    },
+    {
+      "id": "View/safeAreaInsetPositions__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/View_safeAreaInsetPositions__static.png"
     },
     {
       "id": "View/highlighted__true",
@@ -3220,7 +3237,7 @@
     {
       "id": "Collection/reverseLayout__true",
       "status": "skipped",
-      "detail": "mode: compose (host renders react mode)"
+      "detail": "not applicable to web"
     },
     {
       "id": "Collection/containerInset__static",
@@ -3256,6 +3273,11 @@
     },
     {
       "id": "Radio/selectedIcon__static",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "Radio/selectedIcon__alias_selected_icon",
       "status": "skipped",
       "detail": "not applicable to web"
     },
@@ -3367,10 +3389,9 @@
       "detail": "not applicable to web"
     },
     {
-      "id": "CheckBox/onSrc__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/CheckBox_onSrc__static.png"
+      "id": "CheckBox/selectedIcon__alias_onSrc",
+      "status": "skipped",
+      "detail": "not applicable to web"
     },
     {
       "id": "CheckBox/value__static",
@@ -3477,10 +3498,9 @@
       "detail": "not applicable to web"
     },
     {
-      "id": "Check/onSrc__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Check_onSrc__static.png"
+      "id": "Check/selectedIcon__alias_onSrc",
+      "status": "skipped",
+      "detail": "not applicable to web"
     },
     {
       "id": "Check/enabled__true",
@@ -3610,14 +3630,21 @@
       "screenshot": "artifacts/web/Blur_effectStyle__extralight.png"
     },
     {
+      "id": "Blur/blurRadius__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Blur_blurRadius__static.png"
+    },
+    {
       "id": "IconLabel/text__static",
       "status": "pass",
       "detail": ""
     },
     {
       "id": "IconLabel/selected__true",
-      "status": "skipped",
-      "detail": "not applicable to web"
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/IconLabel_selected__true.png"
     },
     {
       "id": "IconLabel/font__static",
@@ -3722,6 +3749,12 @@
       "screenshot": "artifacts/web/SafeAreaView_orientation__vertical.png"
     },
     {
+      "id": "SafeAreaView/safeAreaInsetPositions__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SafeAreaView_safeAreaInsetPositions__static.png"
+    },
+    {
       "id": "TabView/selectedIndex__static",
       "status": "pass",
       "detail": "",
@@ -3762,6 +3795,246 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/TabView_showLabels__true.png"
+    },
+    {
+      "id": "__control/Blur",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Blur.png"
+    },
+    {
+      "id": "__control/Button",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Button.png"
+    },
+    {
+      "id": "__control/Check",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Check.png"
+    },
+    {
+      "id": "__control/Check__orientation-horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Check__orientation-horizontal.png"
+    },
+    {
+      "id": "__control/CheckBox",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_CheckBox.png"
+    },
+    {
+      "id": "__control/CheckBox__orientation-horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_CheckBox__orientation-horizontal.png"
+    },
+    {
+      "id": "__control/Collection",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Collection.png"
+    },
+    {
+      "id": "__control/EditText",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_EditText.png"
+    },
+    {
+      "id": "__control/GradientView",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_GradientView.png"
+    },
+    {
+      "id": "__control/IconLabel",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_IconLabel.png"
+    },
+    {
+      "id": "__control/Image",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Image.png"
+    },
+    {
+      "id": "__control/Indicator",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Indicator.png"
+    },
+    {
+      "id": "__control/Input",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Input.png"
+    },
+    {
+      "id": "__control/Label",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Label.png"
+    },
+    {
+      "id": "__control/Label__selected-True",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Label__selected-True.png"
+    },
+    {
+      "id": "__control/NetworkImage",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_NetworkImage.png"
+    },
+    {
+      "id": "__control/Progress",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Progress.png"
+    },
+    {
+      "id": "__control/Radio",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Radio.png"
+    },
+    {
+      "id": "__control/Radio__orientation-horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Radio__orientation-horizontal.png"
+    },
+    {
+      "id": "__control/SafeAreaView",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_SafeAreaView.png"
+    },
+    {
+      "id": "__control/ScrollView",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_ScrollView.png"
+    },
+    {
+      "id": "__control/Segment",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Segment.png"
+    },
+    {
+      "id": "__control/SelectBox",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_SelectBox.png"
+    },
+    {
+      "id": "__control/SelectBox__datePickerMode-time_selectItemType-Date",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_SelectBox__datePickerMode-time_selectItemType-Date.png"
+    },
+    {
+      "id": "__control/SelectBox__selectItemType-Date",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_SelectBox__selectItemType-Date.png"
+    },
+    {
+      "id": "__control/SelectBox__anchored",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_SelectBox__anchored.png"
+    },
+    {
+      "id": "__control/Slider",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Slider.png"
+    },
+    {
+      "id": "__control/Switch",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Switch.png"
+    },
+    {
+      "id": "__control/Switch__isOn-True",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Switch__isOn-True.png"
+    },
+    {
+      "id": "__control/TabView",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_TabView.png"
+    },
+    {
+      "id": "__control/TextField",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_TextField.png"
+    },
+    {
+      "id": "__control/TextField__text-Clear-me",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_TextField__text-Clear-me.png"
+    },
+    {
+      "id": "__control/TextView",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_TextView.png"
+    },
+    {
+      "id": "__control/Toggle",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Toggle.png"
+    },
+    {
+      "id": "__control/Toggle__isOn-True",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Toggle__isOn-True.png"
+    },
+    {
+      "id": "__control/View",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View.png"
+    },
+    {
+      "id": "__control/View__orientation-horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__orientation-horizontal.png"
+    },
+    {
+      "id": "__control/View__orientation-vertical",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__orientation-vertical.png"
+    },
+    {
+      "id": "__control/View__anchored",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__anchored.png"
+    },
+    {
+      "id": "__control/Web",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Web.png"
     },
     {
       "id": "Embed/navigationMode__delegate_baseline",

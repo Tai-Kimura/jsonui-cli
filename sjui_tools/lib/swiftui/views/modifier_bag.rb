@@ -29,6 +29,8 @@ module SjuiTools
           :tint_color,          # tint
           :on_click,            # contentShape + onTapGesture
           :on_long_press,       # onLongPressGesture
+          :on_pan,              # contentShape + simultaneousGesture(DragGesture)
+          :on_pinch,            # contentShape + simultaneousGesture(MagnifyGesture)
           :on_value_change,     # onChange handlers
           :on_text_change,      # text change handlers
           :on_appear,           # onAppear
@@ -49,6 +51,8 @@ module SjuiTools
           :frame_size,
           :on_click,
           :on_long_press,
+          :on_pan,
+          :on_pinch,
           :on_value_change,
           :on_text_change,
           :on_appear,

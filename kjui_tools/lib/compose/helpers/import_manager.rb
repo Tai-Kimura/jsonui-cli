@@ -88,6 +88,17 @@ module KjuiTools
                                  "import androidx.compose.ui.input.pointer.PointerEventPass",
                                  "import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException",
                                  "import androidx.compose.ui.input.pointer.pointerInput"],
+            # onPan drag detector (ModifierBuilder.build_pannable).
+            pan_gesture: ["import androidx.compose.foundation.gestures.detectDragGestures",
+                          "import androidx.compose.ui.geometry.Offset",
+                          "import androidx.compose.ui.input.pointer.pointerInput"],
+            # onPinch zoom loop (ModifierBuilder.build_pinchable).
+            # calculateZoom is a top-level function in foundation.gestures.
+            pinch_gesture: ["import androidx.compose.foundation.gestures.awaitEachGesture",
+                            "import androidx.compose.foundation.gestures.awaitFirstDown",
+                            "import androidx.compose.foundation.gestures.calculateZoom",
+                            "import androidx.compose.ui.input.pointer.PointerEvent",
+                            "import androidx.compose.ui.input.pointer.pointerInput"],
             radio_colors: "import androidx.compose.material3.RadioButtonDefaults",
             async_image: "import coil3.compose.AsyncImage",
             image_request: "import coil3.request.ImageRequest",

@@ -19,15 +19,16 @@ Fixture case types (plan 12 §2.1):
 
 - ``binding_initial``  — ``@{var}`` + ``data`` default -> initial value rendered
 - ``binding_twoway``   — runner ``input`` into a bound field -> mirror Label follows
-- ``callback_fire``    — runner ``tap``/``input``/``selectOption``/``longPress``
-  fires the handler -> mirror Label text changes
+- ``callback_fire``    — runner ``tap``/``input``/``selectOption``/``longPress``/
+  ``swipe`` fires the handler -> mirror Label text changes
 - ``binding_<enum>``   — enum value sweep through a binding, reusing the
   existing assertion mapping (``visibility`` -> visible / notVisible)
 
 All values are deterministic constants; there is no randomness or time.
 Every generated test stays inside the jsonui-test-runner schema (no schema
 extension was needed: ``tap``/``input``/``longPress``/``selectOption``/
-``waitFor`` + ``text``/``visible``/``notVisible`` assertions suffice).
+``swipe``/``waitFor`` + ``text``/``visible``/``notVisible`` assertions
+suffice).
 """
 from __future__ import annotations
 
@@ -157,6 +158,15 @@ def _tap_target() -> dict:
 
 def _long_press_target() -> dict:
     return {"action": "longPress", "id": rules.TARGET_ID}
+
+
+def _swipe_target(direction: str = "left") -> dict:
+    """A swipe IS a pan: press, move, release over the element. All three
+    drivers synthesize it (web: mouse drag → pointermove with buttons held;
+    ios: XCUIElement.swipe*; android: UiAutomator swipe), so it can fire an
+    onPan handler deterministically. Direction is irrelevant to the
+    assertion — any drag over the target fires the handler."""
+    return {"action": "swipe", "id": rules.TARGET_ID, "direction": direction}
 
 
 def _input_target(value: str) -> dict:
@@ -433,6 +443,13 @@ INTERACTIVE_SPECS: dict[tuple[str, str], tuple[InteractiveSpec, ...]] = {
     ("common", "onLongPress"): (
         _callback_fire("Button", "onLongPress", _FIRE_BINDING, _long_press_target()),
     ),
+    # View host on purpose: a pan surface is normally a container, and the
+    # 200x200 BASE_ATTRS View gives the swipe a real bounding box. Payload is
+    # ignored by the host contract, so the () -> Void conformanceFire closure
+    # is reached through each platform's call-ladder fallback.
+    ("common", "onPan"): (
+        _callback_fire("View", "onPan", _FIRE_BINDING, _swipe_target()),
+    ),
     ("common", "onAppear"): (_callback_fire("View", "onAppear", FIRE_HANDLER, None),),
     ("TextField", "onTextChange"): (
         _callback_fire("TextField", "onTextChange", _FIRE_BINDING, _input_target(TYPED_TEXT)),
@@ -464,8 +481,13 @@ INTERACTIVE_SPECS: dict[tuple[str, str], tuple[InteractiveSpec, ...]] = {
 #   currentPage): binding *wiring* without a runner-observable text surface —
 #   boolean/checked mirrors need a `checked` assertion the runner lacks.
 # - Slider/Segment/TabView/Collection value callbacks: no runner action can
-#   deterministically drive them (no drag/slide vocabulary; segment items and
-#   tab headers are not individually addressable by element id).
+#   deterministically drive them (`swipe` is direction-only — it cannot drag a
+#   thumb to a specific value; segment items and tab headers are not
+#   individually addressable by element id).
+# - common.onPinch: implemented on all three platforms, but no runner action
+#   synthesizes a two-pointer gesture (`swipe` is single-pointer), so the
+#   handler cannot be fired deterministically. Needs a `pinch` action in the
+#   runner vocabulary; onPan is promoted precisely because `swipe` IS a pan.
 # - TextField focus/editing callbacks (onFocus/onBlur/onBeginEditing/...):
 #   need a focus-shift vocabulary; revisit with the iOS/Android round.
 

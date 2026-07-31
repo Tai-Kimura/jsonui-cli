@@ -565,6 +565,8 @@ module KjuiTools
         def self.build_clickable(json_data, required_imports = nil)
           modifiers = []
           modifiers.concat(build_long_pressable(json_data, required_imports))
+          modifiers.concat(build_pannable(json_data, required_imports))
+          modifiers.concat(build_pinchable(json_data, required_imports))
           handler = json_data['onclick'] || json_data['onClick']
           enabled = enabled_expression(json_data)
           # `canTap` is the tap gate specifically — UIKit's SJUIView has the
@@ -714,6 +716,76 @@ module KjuiTools
                             event.changes.forEach { it.consume() }
                         } while (event.changes.any { it.pressed })
                     }
+                }
+            }
+          KOTLIN
+          [gesture]
+        end
+
+        # onPan (common attribute) → drag gesture. The handler fires on every
+        # drag event with the cumulative translation since the gesture began
+        # (an Offset — accumulated from per-event deltas so the payload matches
+        # SwiftUI's DragGesture.Value.translation). Declaring onPan means this
+        # node owns drags: detectDragGestures consumes them, so a surrounding
+        # scroll container will not also scroll from touches on this node —
+        # same trade a native drag handler makes.
+        #
+        # Handler resolution is data-definition aware (get_event_handler_invocation):
+        # () -> Unit stays bare, (Offset) — optionally after a String id —
+        # receives the payload.
+        def self.build_pannable(json_data, required_imports = nil)
+          handler = json_data['onPan']
+          return [] unless handler && is_binding?(handler)
+
+          required_imports&.add(:pan_gesture)
+          handler_call = get_event_handler_invocation(handler, json_data['id'], 'total')
+
+          gesture = <<~KOTLIN.rstrip
+            .pointerInput(data) {
+                var total = Offset.Zero
+                detectDragGestures(
+                    onDragStart = { total = Offset.Zero },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        total += dragAmount
+                        #{handler_call}
+                    }
+                )
+            }
+          KOTLIN
+          [gesture]
+        end
+
+        # onPinch (common attribute) → pinch/zoom gesture. The handler fires
+        # with the cumulative scale factor since the gesture began (Float,
+        # matching MagnifyGesture.Value.magnification on iOS). A raw
+        # awaitEachGesture loop rather than detectTransformGestures because the
+        # scale must reset per gesture and detectTransformGestures has no
+        # gesture-start hook. calculateZoom() is 1f for single-pointer events,
+        # so taps and one-finger drags pass through untouched (onPan and
+        # onClick on the same node keep working).
+        def self.build_pinchable(json_data, required_imports = nil)
+          handler = json_data['onPinch']
+          return [] unless handler && is_binding?(handler)
+
+          required_imports&.add(:pinch_gesture)
+          handler_call = get_event_handler_invocation(handler, json_data['id'], 'scale')
+
+          gesture = <<~KOTLIN.rstrip
+            .pointerInput(data) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    var scale = 1f
+                    var event: PointerEvent
+                    do {
+                        event = awaitPointerEvent()
+                        val zoom = event.calculateZoom()
+                        if (zoom != 1f) {
+                            scale *= zoom
+                            event.changes.forEach { it.consume() }
+                            #{handler_call}
+                        }
+                    } while (event.changes.any { it.pressed })
                 }
             }
           KOTLIN
@@ -1130,8 +1202,9 @@ module KjuiTools
             elsif class_type.match?(/\(\s*\)\s*->/)
               # Handler is () -> Unit (no arguments)
               "data.#{method_name}?.invoke()"
-            elsif value_expr && class_type.match?(/\(\s*\(?\s*(Bool|Boolean|Int|Float|Double|Number)\s*\)?\s*\)\s*->/)
-              # Handler takes a single typed argument (e.g., (Bool) -> Void)
+            elsif value_expr && class_type.match?(/\(\s*\(?\s*(Bool|Boolean|Int|Float|Double|Number|Offset)\s*\)?\s*\)\s*->/)
+              # Handler takes a single typed argument (e.g., (Bool) -> Void).
+              # Offset is the onPan gesture payload; Float covers onPinch.
               "data.#{method_name}?.invoke(#{value_expr})"
             else
               # Default: assume no arguments

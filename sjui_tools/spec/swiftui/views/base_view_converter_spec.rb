@@ -916,3 +916,53 @@ RSpec.describe SjuiTools::SwiftUI::Views::ViewConverter, 'touch gating' do
     expect(view({})).not_to include('.allowsHitTesting')
   end
 end
+
+# onPan / onPinch — declared `binding` on `common` for every platform, emitted
+# by no SwiftUI converter until 2026-07. The payload is cumulative per gesture
+# (DragGesture.Value.translation / MagnifyGesture.Value.magnification); the
+# call shape follows the declared closure class via
+# get_event_handler_invocation, so () -> Void handlers stay argument-free.
+RSpec.describe SjuiTools::SwiftUI::Views::ViewConverter, 'pan and pinch gestures' do
+  before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+  after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+
+  before { SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {} }
+
+  def view(extra)
+    described_class.new({ 'type' => 'View' }.merge(extra), 0, nil).convert
+  end
+
+  it 'emits a simultaneous drag gesture for an onPan binding' do
+    code = view('onPan' => '@{onSurfacePan}')
+    expect(code).to include('.simultaneousGesture(')
+    expect(code).to include('DragGesture(minimumDistance: 10).onChanged { value in')
+    expect(code).to include('data.onSurfacePan?()')
+    # A background-less container is not hittable without a content shape
+    expect(code).to include('.contentShape(Rectangle())')
+  end
+
+  it 'passes the translation payload when the handler declares CGSize' do
+    SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+      'onSurfacePan' => { 'class' => '((CGSize) -> Void)?' }
+    }
+    expect(view('onPan' => '@{onSurfacePan}')).to include('data.onSurfacePan?(value.translation)')
+  end
+
+  it 'emits a magnify gesture for an onPinch binding' do
+    code = view('onPinch' => '@{onSurfacePinch}')
+    expect(code).to include('MagnifyGesture().onChanged { value in')
+    expect(code).to include('data.onSurfacePinch?()')
+  end
+
+  it 'passes the scale payload when the handler declares CGFloat' do
+    SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+      'onSurfacePinch' => { 'class' => '((CGFloat) -> Void)?' }
+    }
+    expect(view('onPinch' => '@{onSurfacePinch}')).to include('data.onSurfacePinch?(value.magnification)')
+  end
+
+  it 'emits nothing without the attributes or for non-binding values' do
+    expect(view({})).not_to include('simultaneousGesture')
+    expect(view('onPan' => 'plainName')).not_to include('DragGesture')
+  end
+end

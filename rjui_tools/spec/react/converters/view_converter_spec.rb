@@ -196,27 +196,38 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
       expect(attrs).to include('data.handleLongPress?.(e)')
     end
 
-    it 'emits data-prefixed pointer handlers for onPan' do
+    # Canonical contract: the bound value is a FUNCTION, not an
+    # {onStart,onMove,onEnd} object (the pre-2026-07 emit expected one;
+    # nothing declared or used that shape and it contradicted the SSoT).
+    it 'calls the onPan handler on pressed pointer moves only' do
       converter = create_converter({
         'type' => 'View',
         'onPan' => '@{panHandler}',
         'child' => []
       })
       attrs = converter.send(:build_event_attrs)
-      expect(attrs).to include('onPointerDown={(e) => data.panHandler?.onStart?.(e)}')
-      expect(attrs).to include('onPointerMove={(e) => data.panHandler?.onMove?.(e)}')
-      expect(attrs).to include('onPointerUp={(e) => data.panHandler?.onEnd?.(e)}')
+      expect(attrs).to include('onPointerMove={(e) => { if (e.buttons !== 0) data.panHandler?.(e); }}')
+      expect(attrs).not_to include('onStart')
+      expect(attrs).not_to include('onPointerDown')
     end
 
-    it 'emits data-prefixed touch handlers for onPinch' do
+    it 'calls the onPinch handler on multi-touch moves only' do
       converter = create_converter({
         'type' => 'View',
         'onPinch' => '@{pinchHandler}',
         'child' => []
       })
       attrs = converter.send(:build_event_attrs)
-      expect(attrs).to include('onTouchStart={(e) => data.pinchHandler?.onStart?.(e)}')
-      expect(attrs).to include('onTouchEnd={(e) => data.pinchHandler?.onEnd?.(e)}')
+      expect(attrs).to include('onTouchMove={(e) => { if (e.touches.length >= 2) data.pinchHandler?.(e); }}')
+      expect(attrs).not_to include('onTouchStart')
+    end
+
+    it 'suppresses native touch handling with touch-none for pan/pinch nodes' do
+      with_pan = create_converter({ 'type' => 'View', 'onPan' => '@{panHandler}', 'child' => [] })
+      expect(with_pan.convert).to include('touch-none')
+
+      without = create_converter({ 'type' => 'View', 'child' => [] })
+      expect(without.convert).not_to include('touch-none')
     end
 
     it 'never emits a bare (un-prefixed) gesture handler identifier' do

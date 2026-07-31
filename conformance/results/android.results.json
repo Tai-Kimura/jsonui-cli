@@ -1,6 +1,6 @@
 {
   "platform": "android",
-  "manifestHash": "7fb88dcba38f5cf656ce2bb5b6a3dc891deaaf43241a73850974b3137cff9b11",
+  "manifestHash": "2db1b434c5d2d3bd568f9d0a6e696e0c44e64387b5de8a66ffbcdcd142c2cb4d",
   "runner": {
     "name": "uiautomator",
     "version": "2.3.0"
@@ -569,6 +569,11 @@
       "detail": ""
     },
     {
+      "id": "common/onPan__callback_fire",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "common/tintColor__static",
       "status": "pass",
       "detail": "",
@@ -924,8 +929,9 @@
     },
     {
       "id": "Label/selected__true",
-      "status": "skipped",
-      "detail": "not applicable to android"
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_selected__true.png"
     },
     {
       "id": "Label/textAlign__left",
@@ -1064,6 +1070,12 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/Label_hintColor__static.png"
+    },
+    {
+      "id": "Label/highlightAttributes__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_highlightAttributes__static.png"
     },
     {
       "id": "Label/highlightColor__static",
@@ -2459,6 +2471,12 @@
       "screenshot": "artifacts/android/SelectBox_fontColor__static.png"
     },
     {
+      "id": "SelectBox/labelAttributes__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SelectBox_labelAttributes__static.png"
+    },
+    {
       "id": "SelectBox/inView__static",
       "status": "skipped",
       "detail": "not applicable to android"
@@ -2886,12 +2904,6 @@
       "screenshot": "artifacts/android/View_direction__none.png"
     },
     {
-      "id": "View/alignment__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/View_alignment__static.png"
-    },
-    {
       "id": "View/distribution__fill",
       "status": "pass",
       "detail": "",
@@ -2937,6 +2949,12 @@
       "detail": "not applicable to android"
     },
     {
+      "id": "View/safeAreaInsetPositions__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/View_safeAreaInsetPositions__static.png"
+    },
+    {
       "id": "View/highlighted__true",
       "status": "pass",
       "detail": "",
@@ -2976,15 +2994,13 @@
     },
     {
       "id": "ScrollView/scrollMode__inner",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/ScrollView_scrollMode__inner.png"
+      "status": "skipped",
+      "detail": "not applicable to android"
     },
     {
       "id": "ScrollView/scrollMode__window",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/ScrollView_scrollMode__window.png"
+      "status": "skipped",
+      "detail": "not applicable to android"
     },
     {
       "id": "ScrollView/showsHorizontalScrollIndicator__true",
@@ -3247,6 +3263,12 @@
       "screenshot": "artifacts/android/Radio_selectedIcon__static.png"
     },
     {
+      "id": "Radio/selectedIcon__alias_selected_icon",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Radio_selectedIcon__alias_selected_icon.png"
+    },
+    {
       "id": "Radio/selected_icon__static",
       "status": "pass",
       "detail": "",
@@ -3360,10 +3382,10 @@
       "screenshot": "artifacts/android/CheckBox_selectedIcon__static.png"
     },
     {
-      "id": "CheckBox/onSrc__static",
+      "id": "CheckBox/selectedIcon__alias_onSrc",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/android/CheckBox_onSrc__static.png"
+      "screenshot": "artifacts/android/CheckBox_selectedIcon__alias_onSrc.png"
     },
     {
       "id": "CheckBox/value__static",
@@ -3476,10 +3498,10 @@
       "screenshot": "artifacts/android/Check_selectedIcon__static.png"
     },
     {
-      "id": "Check/onSrc__static",
+      "id": "Check/selectedIcon__alias_onSrc",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/android/Check_onSrc__static.png"
+      "screenshot": "artifacts/android/Check_selectedIcon__alias_onSrc.png"
     },
     {
       "id": "Check/enabled__true",
@@ -3613,14 +3635,21 @@
       "screenshot": "artifacts/android/Blur_effectStyle__extralight.png"
     },
     {
+      "id": "Blur/blurRadius__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Blur_blurRadius__static.png"
+    },
+    {
       "id": "IconLabel/text__static",
       "status": "pass",
       "detail": ""
     },
     {
       "id": "IconLabel/selected__true",
-      "status": "skipped",
-      "detail": "not applicable to android"
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/IconLabel_selected__true.png"
     },
     {
       "id": "IconLabel/font__static",
@@ -3723,6 +3752,12 @@
       "screenshot": "artifacts/android/SafeAreaView_orientation__vertical.png"
     },
     {
+      "id": "SafeAreaView/safeAreaInsetPositions__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/SafeAreaView_safeAreaInsetPositions__static.png"
+    },
+    {
       "id": "TabView/selectedIndex__static",
       "status": "pass",
       "detail": "",
@@ -3763,6 +3798,246 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/TabView_showLabels__true.png"
+    },
+    {
+      "id": "__control/Blur",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Blur.png"
+    },
+    {
+      "id": "__control/Button",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Button.png"
+    },
+    {
+      "id": "__control/Check",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Check.png"
+    },
+    {
+      "id": "__control/Check__orientation-horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Check__orientation-horizontal.png"
+    },
+    {
+      "id": "__control/CheckBox",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_CheckBox.png"
+    },
+    {
+      "id": "__control/CheckBox__orientation-horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_CheckBox__orientation-horizontal.png"
+    },
+    {
+      "id": "__control/Collection",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Collection.png"
+    },
+    {
+      "id": "__control/EditText",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_EditText.png"
+    },
+    {
+      "id": "__control/GradientView",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_GradientView.png"
+    },
+    {
+      "id": "__control/IconLabel",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_IconLabel.png"
+    },
+    {
+      "id": "__control/Image",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Image.png"
+    },
+    {
+      "id": "__control/Indicator",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Indicator.png"
+    },
+    {
+      "id": "__control/Input",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Input.png"
+    },
+    {
+      "id": "__control/Label",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Label.png"
+    },
+    {
+      "id": "__control/Label__selected-True",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Label__selected-True.png"
+    },
+    {
+      "id": "__control/NetworkImage",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_NetworkImage.png"
+    },
+    {
+      "id": "__control/Progress",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Progress.png"
+    },
+    {
+      "id": "__control/Radio",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Radio.png"
+    },
+    {
+      "id": "__control/Radio__orientation-horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Radio__orientation-horizontal.png"
+    },
+    {
+      "id": "__control/SafeAreaView",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_SafeAreaView.png"
+    },
+    {
+      "id": "__control/ScrollView",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_ScrollView.png"
+    },
+    {
+      "id": "__control/Segment",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Segment.png"
+    },
+    {
+      "id": "__control/SelectBox",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_SelectBox.png"
+    },
+    {
+      "id": "__control/SelectBox__datePickerMode-time_selectItemType-Date",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_SelectBox__datePickerMode-time_selectItemType-Date.png"
+    },
+    {
+      "id": "__control/SelectBox__selectItemType-Date",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_SelectBox__selectItemType-Date.png"
+    },
+    {
+      "id": "__control/SelectBox__anchored",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_SelectBox__anchored.png"
+    },
+    {
+      "id": "__control/Slider",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Slider.png"
+    },
+    {
+      "id": "__control/Switch",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Switch.png"
+    },
+    {
+      "id": "__control/Switch__isOn-True",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Switch__isOn-True.png"
+    },
+    {
+      "id": "__control/TabView",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_TabView.png"
+    },
+    {
+      "id": "__control/TextField",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_TextField.png"
+    },
+    {
+      "id": "__control/TextField__text-Clear-me",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_TextField__text-Clear-me.png"
+    },
+    {
+      "id": "__control/TextView",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_TextView.png"
+    },
+    {
+      "id": "__control/Toggle",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Toggle.png"
+    },
+    {
+      "id": "__control/Toggle__isOn-True",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Toggle__isOn-True.png"
+    },
+    {
+      "id": "__control/View",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_View.png"
+    },
+    {
+      "id": "__control/View__orientation-horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_View__orientation-horizontal.png"
+    },
+    {
+      "id": "__control/View__orientation-vertical",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_View__orientation-vertical.png"
+    },
+    {
+      "id": "__control/View__anchored",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_View__anchored.png"
+    },
+    {
+      "id": "__control/Web",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Web.png"
     },
     {
       "id": "Embed/navigationMode__delegate_baseline",
