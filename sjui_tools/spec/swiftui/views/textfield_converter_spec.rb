@@ -359,6 +359,17 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextFieldConverter do
 
         expect(code).to include('.disabled(true)')
       end
+
+      # The bound form is covered by TextFieldBindingHandler, not this
+      # converter — pinned here so the TextView gap
+      # (sjui-kjui-textview-enabled-binding-gaps-after-common-enabled-fix)
+      # can't silently reappear on TextField.
+      it 'inverts a bound enabled (via the binding handler)' do
+        code = described_class.new({
+          'type' => 'TextField', 'hint' => 'Test', 'enabled' => '@{isInputEnabled}'
+        }).convert
+        expect(code).to include('.disabled(!data.isInputEnabled)')
+      end
     end
 
     context 'with background and cornerRadius' do

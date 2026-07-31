@@ -123,7 +123,9 @@ module SjuiTools
             # SecureField should be handled above, not here
           end
 
-          # Disabled state
+          # Disabled state. Literal only by design: the bound form is
+          # TextFieldBindingHandler's job (it emits `.disabled(!<binding>)`),
+          # so adding it here would double the machinery.
           if @component['enabled'] == false
             @modifier_bag.register(:disabled, ".disabled(true)")
           end

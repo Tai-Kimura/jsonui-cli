@@ -15,3 +15,15 @@ body,
   height: 100%;
   margin: 0;
 }
+
+/* `showsHorizontalScrollIndicator:false` & friends emit `scrollbar-hide`,
+   which has no Tailwind-core backing (it is tailwind-scrollbar-hide plugin
+   vocabulary). Supply it here — the same contract rjui's generated theme.css
+   ships to consumers. */
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

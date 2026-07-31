@@ -559,4 +559,29 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent, 'hintAttribute
   it 'keeps the one-liner when nothing styles the hint' do
     expect(field({})).to include('placeholder = { Text("Write here") },')
   end
+
+  # Regression: sjui-kjui-textview-enabled-binding-gaps-after-common-enabled-fix
+  # (follow-through) — the tail chunks prefixed ",\n" while the args before
+  # them carried their own trailing comma, so any shape without fontColor
+  # (no textStyle to absorb the comma) plus enabled/keyboardType emitted
+  # `singleLine = false,,` — broken Kotlin.
+  describe 'argument separators' do
+    it 'emits the enabled param without doubling the comma when textStyle is absent' do
+      result = field('enabled' => '@{isInputEnabled}')
+      expect(result).to include('enabled = data.isInputEnabled')
+      expect(result).not_to include(',,')
+    end
+
+    it 'emits keyboardOptions without doubling the comma when textStyle is absent' do
+      result = field('keyboardType' => 'email')
+      expect(result).to include('keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)')
+      expect(result).not_to include(',,')
+    end
+
+    it 'keeps valid separators when fontColor routes through textStyle' do
+      result = field('fontColor' => '#FFFFFF', 'enabled' => '@{isInputEnabled}')
+      expect(result).to include('enabled = data.isInputEnabled')
+      expect(result).not_to include(',,')
+    end
+  end
 end

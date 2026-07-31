@@ -586,13 +586,27 @@ module KjuiTools
             code += ",\n" + indent("keyboardOptions = KeyboardOptions(#{keyboard_options.join(', ')})", depth + 1)
           end
 
+          # Enabled state (boolean value context: supports `??` default and
+          # `@{!flag}` negation via the canonical binding parser).
+          # CustomTextField forwards it to the inner TextField, so input is
+          # functionally gated — matching the a11y `disabled()` the common
+          # modifier path already emits. TextView had this; TextField didn't.
+          if json_data.key?('enabled')
+            if json_data['enabled'].is_a?(String) && json_data['enabled'].start_with?('@{')
+              inner_expr = json_data['enabled'][2..-2]
+              code += ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 1)
+            else
+              code += ",\n" + indent("enabled = #{json_data['enabled']}", depth + 1)
+            end
+          end
+
           # Remove trailing comma and close
           if code.end_with?(',')
             code = code[0..-2]
           end
-          
+
           code += "\n" + indent(")", depth)
-          
+
           code
         end
         

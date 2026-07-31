@@ -751,4 +751,22 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent, 'nextFocus' d
   it 'emits no chain when neither is set' do
     expect(field({})).not_to include('KeyboardActions')
   end
+
+  # Regression: sjui-kjui-textview-enabled-binding-gaps-after-common-enabled-fix
+  # — TextView passed `enabled` through to the composable; TextField never
+  # did, so the a11y `disabled()` from the common modifier path claimed a
+  # state the input didn't have (typing stayed possible).
+  describe 'enabled' do
+    it 'forwards a bound enabled to the composable' do
+      expect(field('enabled' => '@{isInputEnabled}')).to include('enabled = data.isInputEnabled')
+    end
+
+    it 'forwards a literal enabled' do
+      expect(field('enabled' => false)).to include('enabled = false')
+    end
+
+    it 'emits nothing when undeclared' do
+      expect(field({})).not_to include('enabled =')
+    end
+  end
 end

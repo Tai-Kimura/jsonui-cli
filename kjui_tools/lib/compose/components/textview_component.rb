@@ -381,7 +381,7 @@ module KjuiTools
               style_parts << "color = #{font_color}"
             end
             if style_parts.any?
-              code += "\n" + indent("textStyle = TextStyle(#{style_parts.join(', ')})", depth + 1)
+              code += "\n" + indent("textStyle = TextStyle(#{style_parts.join(', ')}),", depth + 1)
             end
           end
 
@@ -424,9 +424,15 @@ module KjuiTools
             keyboard_options << "imeAction = #{ime_action}"
           end
 
+          # From here down, argument chunks carry their own trailing comma and
+          # comment chunks carry none — the earlier args (isOutlined, maxLines,
+          # singleLine, textStyle) already end with "," so a leading ",\n" here
+          # doubled the comma (`singleLine = false,,`) whenever textStyle was
+          # absent: broken Kotlin. Comments are transparent between args as
+          # long as every arg line supplies its own separator.
           if keyboard_options.any?
             required_imports&.add(:keyboard_type)
-            code += ",\n" + indent("keyboardOptions = KeyboardOptions(#{keyboard_options.join(', ')})", depth + 1)
+            code += "\n" + indent("keyboardOptions = KeyboardOptions(#{keyboard_options.join(', ')}),", depth + 1)
           end
 
           # scrollEnabled - controls vertical scroll within TextView
@@ -434,7 +440,7 @@ module KjuiTools
             # In Compose, scrolling is controlled via verticalScroll modifier
             # For TextField, we just note it - actual implementation may need custom handling
             if json_data['scrollEnabled'] == false
-              code += ",\n" + indent("// scrollEnabled = false - scrolling disabled", depth + 1)
+              code += "\n" + indent("// scrollEnabled = false - scrolling disabled", depth + 1)
             end
           end
 
@@ -442,7 +448,7 @@ module KjuiTools
           # Note: Compose TextField hides placeholder by default when there's text
           # This is primarily for when you want different behavior
           if json_data.key?('hideOnFocused')
-            code += ",\n" + indent("// hideOnFocused = #{json_data['hideOnFocused']}", depth + 1)
+            code += "\n" + indent("// hideOnFocused = #{json_data['hideOnFocused']}", depth + 1)
           end
 
           # Enabled state (boolean value context: supports `??` default and
@@ -450,9 +456,9 @@ module KjuiTools
           if json_data.key?('enabled')
             if json_data['enabled'].is_a?(String) && json_data['enabled'].start_with?('@{')
               inner_expr = json_data['enabled'][2..-2]
-              code += ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 1)
+              code += "\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)},", depth + 1)
             else
-              code += ",\n" + indent("enabled = #{json_data['enabled']}", depth + 1)
+              code += "\n" + indent("enabled = #{json_data['enabled']},", depth + 1)
             end
           end
 

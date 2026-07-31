@@ -408,6 +408,34 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextViewConverter do
         expect(code).not_to include('.keyboardType(')
       end
     end
+
+    # Regression: sjui-kjui-textview-enabled-binding-gaps-after-common-enabled-fix
+    # — TextView assembles its own modifier set, so the base converter's
+    # `enabled` block never ran here and a declared `enabled` emitted nothing.
+    describe 'enabled' do
+      it 'maps a bound enabled to .disabled with the negated expression' do
+        code = described_class.new({ 'type' => 'TextView', 'text' => '@{t}', 'enabled' => '@{isInputEnabled}' }).convert
+        expect(code).to include('.disabled(!((data.isInputEnabled ?? false)))')
+      end
+
+      it 'maps a literal enabled: false to .disabled(true)' do
+        code = described_class.new({ 'type' => 'TextView', 'text' => '@{t}', 'enabled' => false }).convert
+        expect(code).to include('.disabled(true)')
+      end
+
+      it 'leaves an enabled TextView alone' do
+        code = described_class.new({ 'type' => 'TextView', 'text' => '@{t}', 'enabled' => true }).convert
+        expect(code).not_to include('.disabled(')
+      end
+
+      it 'OR-combines editable and enabled instead of clobbering (register is last-wins)' do
+        code = described_class.new({
+          'type' => 'TextView', 'text' => '@{t}',
+          'editable' => '@{canEdit}', 'enabled' => '@{isOn}'
+        }).convert
+        expect(code).to include('.disabled(!((data.canEdit ?? false)) || !((data.isOn ?? false)))')
+      end
+    end
   end
 end
 

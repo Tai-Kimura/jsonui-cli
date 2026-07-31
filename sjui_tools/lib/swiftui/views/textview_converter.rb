@@ -292,28 +292,46 @@ module SjuiTools
 
         private
 
-        # editable / keyboardType.
+        # editable / enabled / keyboardType.
         #
-        # Both are declared, both are honoured by Compose and by web
-        # (`editable` -> readOnly, `keyboardType` -> the input type), and neither
-        # was read here — so a read-only TextView was fully editable on iOS.
-        # `.disabled` rather than a readOnly flag because SwiftUI's TextEditor has
-        # no read-only mode; that also removes it from the focus chain, which is
-        # what "not editable" means for a keyboard user.
+        # `editable` and `keyboardType` are declared, honoured by Compose and by
+        # web (`editable` -> readOnly, `keyboardType` -> the input type), and
+        # neither was read here — so a read-only TextView was fully editable on
+        # iOS. `.disabled` rather than a readOnly flag because SwiftUI's
+        # TextEditor has no read-only mode; that also removes it from the focus
+        # chain, which is what "not editable" means for a keyboard user.
+        #
+        # `enabled` (common, boolean|binding) joins editable here: TextView
+        # assembles its own modifier set and never runs the base converter's
+        # enabled block, so the container fix did not reach it. Both map to
+        # `.disabled` and register() is last-wins by key, so the conditions are
+        # OR-combined into a single registration instead of clobbering.
         def apply_editable_and_keyboard
-          editable = @component['editable']
-          unless editable.nil?
-            if is_binding?(editable.to_s)
-              expr = SwiftUI::Binding::BindingExpression.swift_bool_expr(editable.to_s[2..-2])
-              @modifier_bag.register(:disabled, ".disabled(!(#{expr}))")
-            elsif editable == false || editable == 'false'
-              @modifier_bag.register(:disabled, ".disabled(true)")
-            end
+          conditions = []
+          conditions << disabled_condition(@component['editable'])
+          conditions << disabled_condition(@component['enabled'])
+          conditions.compact!
+          if conditions.include?('true')
+            @modifier_bag.register(:disabled, '.disabled(true)')
+          elsif conditions.any?
+            @modifier_bag.register(:disabled, ".disabled(#{conditions.join(' || ')})")
           end
 
           if (kb = @component['keyboardType'])
             resolved = keyboard_type_to_swiftui(kb)
             @modifier_bag.append(:component_specific, ".keyboardType(#{resolved})") if resolved
+          end
+        end
+
+        # The Swift condition under which this value disables the view, or nil.
+        def disabled_condition(value)
+          return nil if value.nil?
+
+          if is_binding?(value.to_s)
+            expr = SwiftUI::Binding::BindingExpression.swift_bool_expr(value.to_s[2..-2])
+            "!(#{expr})"
+          elsif value == false || value == 'false'
+            'true'
           end
         end
 

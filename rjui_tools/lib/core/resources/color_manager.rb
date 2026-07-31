@@ -835,7 +835,6 @@ module RjuiTools
         # some mode would emit a dead class anyway).
         def generate_theme_css
           keys = mode_complete_keys
-          return if keys.empty?
 
           generated_dir = File.join(@source_path, @config['generated_directory'])
           FileUtils.mkdir_p(generated_dir)
@@ -847,29 +846,34 @@ module RjuiTools
           lines = []
           lines << css_marker_header
           lines << ''
-          lines << '@theme {'
-          keys.sort.each do |key|
-            css = css_color_value(base_palette[key])
-            lines << "  --color-#{key}: #{css};" if css
-          end
-          lines << '}'
-
-          # Per-mode overrides for any non-base mode (future dark support).
-          # The @theme block above fixes the token→utility mapping; a mode
-          # switch only needs to rebind the CSS variable under a selector.
-          (@modes - [base_mode]).each do |mode|
-            palette = @palettes[mode] || {}
-            overrides = keys.sort.filter_map do |key|
-              css = css_color_value(palette[key])
-              "  --color-#{key}: #{css};" if css
+          if keys.any?
+            lines << '@theme {'
+            keys.sort.each do |key|
+              css = css_color_value(base_palette[key])
+              lines << "  --color-#{key}: #{css};" if css
             end
-            next if overrides.empty?
+            lines << '}'
+
+            # Per-mode overrides for any non-base mode (future dark support).
+            # The @theme block above fixes the token→utility mapping; a mode
+            # switch only needs to rebind the CSS variable under a selector.
+            (@modes - [base_mode]).each do |mode|
+              palette = @palettes[mode] || {}
+              overrides = keys.sort.filter_map do |key|
+                css = css_color_value(palette[key])
+                "  --color-#{key}: #{css};" if css
+              end
+              next if overrides.empty?
+
+              lines << ''
+              lines << ":root[data-theme=\"#{mode}\"] {"
+              lines.concat(overrides)
+              lines << '}'
+            end
 
             lines << ''
-            lines << ":root[data-theme=\"#{mode}\"] {"
-            lines.concat(overrides)
-            lines << '}'
           end
+          lines.concat(static_utility_lines)
 
           lines << ''
           lines << css_marker_footer
@@ -879,6 +883,25 @@ module RjuiTools
           Core::Logger.info "✓ Generated theme.css (#{keys.size} tokens)"
 
           announce_theme_import(output_file)
+        end
+
+        # Converter-emitted classes with no Tailwind-core backing — the
+        # generated theme.css is the one stylesheet consumers import, so it
+        # supplies them. Declared via `@utility` (Tailwind v4) rather than a
+        # plain rule so variant forms (`md:scrollbar-hide` from a responsive
+        # re-emit) resolve too. Emitted unconditionally: the converters emit
+        # these classes whether or not the project has any colors.
+        def static_utility_lines
+          [
+            '/* Converter-emitted utilities with no Tailwind-core backing. */',
+            '@utility scrollbar-hide {',
+            '  -ms-overflow-style: none;',
+            '  scrollbar-width: none;',
+            '  &::-webkit-scrollbar {',
+            '    display: none;',
+            '  }',
+            '}'
+          ]
         end
 
         # Convert a colors.json hex value to a CSS color. JsonUI hex is
@@ -919,13 +942,13 @@ module RjuiTools
 
             rel = relative_import_path(globals, theme_path)
             Core::Logger.info(
-              "To activate brand colors, add to #{globals} (once):\n" \
+              "To activate the generated theme (colors + utilities), add to #{globals} (once):\n" \
               "  @import \"#{rel}\";"
             )
           else
             Core::Logger.info(
-              'To activate brand colors, @import the generated theme.css from ' \
-              'your global stylesheet (after `@import "tailwindcss";`).'
+              'To activate the generated theme (colors + utilities), @import the generated ' \
+              'theme.css from your global stylesheet (after `@import "tailwindcss";`).'
             )
           end
         end

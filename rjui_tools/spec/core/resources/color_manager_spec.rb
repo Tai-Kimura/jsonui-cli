@@ -151,6 +151,21 @@ RSpec.describe RjuiTools::Core::Resources::ColorManager do
       expect(css).to include('@generated')
     end
 
+    # Regression: rjui-scrollbar-hide-class-has-no-css — converters emit
+    # `scrollbar-hide` (tailwind-scrollbar-hide plugin vocabulary, not
+    # Tailwind core), so a plugin-less consumer got an inert class. The one
+    # generated stylesheet consumers import now supplies it, as @utility so
+    # variant forms (`md:scrollbar-hide`) resolve too.
+    it 'supplies the scrollbar-hide utility the converters emit' do
+      write_colors('ink' => '#1C1C1A')
+      run_process
+
+      css = File.read(theme_file)
+      expect(css).to include('@utility scrollbar-hide {')
+      expect(css).to include('scrollbar-width: none;')
+      expect(css).to include('&::-webkit-scrollbar {')
+    end
+
     it 'converts JsonUI alpha-first 8-digit hex to rgba()' do
       write_colors('backdrop' => '#731C1C1A')
       run_process
@@ -196,10 +211,14 @@ RSpec.describe RjuiTools::Core::Resources::ColorManager do
       expect(css).not_to include('--color-lightOnly')
     end
 
-    it 'does not write theme.css when there are no colors' do
+    it 'still writes theme.css (utilities only, no @theme block) when there are no colors' do
       write_colors({})
       run_process
-      expect(File.exist?(theme_file)).to be false
+
+      expect(File.exist?(theme_file)).to be true
+      css = File.read(theme_file)
+      expect(css).not_to include('@theme {')
+      expect(css).to include('@utility scrollbar-hide {')
     end
   end
 
