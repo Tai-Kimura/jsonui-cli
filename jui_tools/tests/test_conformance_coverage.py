@@ -30,39 +30,59 @@ def _defs(**components) -> dict:
 
 
 class ScanReadsTests(unittest.TestCase):
-    def _scan(self, source: str) -> set:
+    def _scan(self, source: str, filename: str = "converter.rb", defs: dict | None = None) -> dict:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "lib"
             (root / "nested").mkdir(parents=True)
-            (root / "nested" / "converter.rb").write_text(source, encoding="utf-8")
-            return coverage.scan_reads(root)
+            (root / "nested" / filename).write_text(source, encoding="utf-8")
+            return coverage.scan_reads(root, defs)
 
     def test_finds_bracket_reads_for_every_receiver(self):
         keys = self._scan(
             "attributes['a']\n@component['b']\njson_data['c']\njson['d']\nattrs['e']\n"
         )
-        self.assertEqual({"a", "b", "c", "d", "e"}, keys)
+        self.assertEqual({coverage.SHARED: {"a", "b", "c", "d", "e"}}, keys)
 
     def test_finds_both_names_of_an_alias_helper(self):
         # highlightColor/hilightColor is read through one call, not two lookups.
         keys = self._scan("attr_with_alias('highlightColor', 'hilightColor')")
-        self.assertEqual({"highlightColor", "hilightColor"}, keys)
+        self.assertEqual({coverage.SHARED: {"highlightColor", "hilightColor"}}, keys)
         keys = self._scan("Core::Normalization.attr_lookup(json_data, 'a', 'b')")
-        self.assertEqual({"a", "b"}, keys)
+        self.assertEqual({coverage.SHARED: {"a", "b"}}, keys)
 
     def test_finds_dig_fetch_and_key_predicate(self):
         keys = self._scan(
             "json_data.dig('x')\nattributes.fetch('y')\n@component.key?('z')\n"
         )
-        self.assertEqual({"x", "y", "z"}, keys)
+        self.assertEqual({coverage.SHARED: {"x", "y", "z"}}, keys)
 
     def test_ignores_non_ruby_files_and_missing_roots(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "lib"
             root.mkdir()
             (root / "notes.md").write_text("attributes['ignored']", encoding="utf-8")
-            self.assertEqual(set(), coverage.scan_reads(root))
-        self.assertEqual(set(), coverage.scan_reads(Path(tmp) / "gone"))
+            self.assertEqual({}, coverage.scan_reads(root))
+        self.assertEqual({}, coverage.scan_reads(Path(tmp) / "gone"))
+
+    def test_component_files_own_their_reads(self):
+        # A read in button_converter.rb credits Button, and ONLY Button —
+        # the false-green this closes: Label.highlightColor reported
+        # implemented on web because button_converter.rb read the name.
+        defs = _defs(Button={"image": {"type": "string"}})
+        keys = self._scan("attributes['image']", filename="button_converter.rb", defs=defs)
+        self.assertEqual({"Button": {"image"}}, keys)
+
+    def test_file_naming_quirks_normalize_to_the_component(self):
+        defs = _defs(TextField={"text": {"type": "string"}})
+        for name in ("text_field_converter.rb", "textfield_converter.rb", "textfield_component.rb"):
+            keys = self._scan("attributes['text']", filename=name, defs=defs)
+            self.assertEqual({"TextField": {"text"}}, keys, name)
+
+    def test_unmapped_component_like_files_stay_shared(self):
+        # SHARED satisfies every pair, so a mapping miss can only hide a gap
+        # (the pre-pair-scan behaviour), never invent a false one.
+        keys = self._scan("attributes['x']", filename="collection_stack_component.rb", defs=_defs())
+        self.assertEqual({coverage.SHARED: {"x"}}, keys)
 
 
 class ScopingTests(unittest.TestCase):
@@ -83,6 +103,14 @@ class ScopingTests(unittest.TestCase):
         self.assertEqual(
             (), coverage.applicable_platforms({"platform": "swift", "mode": "uikit"})
         )
+
+    def test_unknown_platform_tokens_fail_loudly(self):
+        # Silently dropping a token either shrinks the declared surface or
+        # (all tokens unknown -> scope None) widens it to every platform.
+        with self.assertRaises(ValueError):
+            coverage.applicable_platforms({"platform": "web"})
+        with self.assertRaises(ValueError):
+            coverage.applicable_platforms({"platform": ["swift", "webb"]})
 
     def test_swiftui_and_compose_modes_narrow_to_their_platform(self):
         self.assertEqual(("ios",), coverage.applicable_platforms({"mode": "swiftui"}))
@@ -108,14 +136,55 @@ class FindGapsTests(unittest.TestCase):
     def test_reports_only_the_platforms_that_miss_the_attribute(self):
         defs = _defs(Button={"image": {"type": "string"}})
         gaps = coverage.find_gaps(
-            defs, {"ios": {"image"}, "android": set(), "web": {"image"}}
+            defs,
+            {
+                "ios": {"Button": {"image"}},
+                "android": {},
+                "web": {coverage.SHARED: {"image"}},
+            },
         )
         self.assertEqual(["Button.image [android]"], [str(g) for g in gaps])
 
     def test_platform_scoped_attribute_is_only_checked_there(self):
         defs = _defs(Button={"buttonType": {"type": "string", "platform": "react"}})
-        gaps = coverage.find_gaps(defs, {"ios": set(), "android": set(), "web": set()})
+        gaps = coverage.find_gaps(defs, {"ios": {}, "android": {}, "web": {}})
         self.assertEqual(["Button.buttonType [web]"], [str(g) for g in gaps])
+
+    def test_a_sibling_components_read_no_longer_satisfies_the_pair(self):
+        # The filed bug: Label.highlightColor [web] closed because
+        # button_converter.rb read the name.
+        defs = _defs(
+            Button={"highlightColor": {"type": "string"}},
+            Label={"highlightColor": {"type": "string"}},
+        )
+        reads = {"ios": {"Button": {"highlightColor"}},
+                 "android": {"Button": {"highlightColor"}},
+                 "web": {"Button": {"highlightColor"}}}
+        gaps = {str(g) for g in coverage.find_gaps(defs, reads)}
+        self.assertEqual(
+            {"Label.highlightColor [ios]", "Label.highlightColor [android]",
+             "Label.highlightColor [web]"},
+            gaps,
+        )
+
+    def test_alias_closure_lets_the_alias_named_file_serve_the_canonical(self):
+        # sjui routes `Switch, Toggle` to toggle_converter.rb: the CANONICAL
+        # component's reads live in the alias-named file.
+        defs = _defs(
+            Switch={"isOn": {"type": "boolean"}},
+            Toggle={"_alias_of": "Switch", "isOn": {"type": "boolean"}},
+        )
+        reads = {"ios": {"Toggle": {"isOn"}},
+                 "android": {"Toggle": {"isOn"}},
+                 "web": {"Toggle": {"isOn"}}}
+        self.assertEqual([], coverage.find_gaps(defs, reads))
+
+    def test_common_attributes_are_satisfied_tree_wide(self):
+        defs = _defs(common={"padding": {"type": "number"}})
+        reads = {"ios": {"Button": {"padding"}},
+                 "android": {coverage.SHARED: {"padding"}},
+                 "web": {"Label": {"padding"}}}
+        self.assertEqual([], coverage.find_gaps(defs, reads))
 
 
 class LedgerTests(unittest.TestCase):
@@ -127,7 +196,11 @@ class LedgerTests(unittest.TestCase):
                 "highlightColor": {"type": "string", "aliases": ["hilightColor"]},
             }
         )
-        self.reads = {"ios": {"highlightColor"}, "android": set(), "web": set()}
+        self.reads = {
+            "ios": {coverage.SHARED: {"highlightColor"}},
+            "android": {},
+            "web": {},
+        }
 
     def test_ledger_is_deterministic_and_sorted(self):
         gaps = coverage.find_gaps(self.defs, self.reads)
@@ -316,13 +389,25 @@ class RealRepositoryTests(unittest.TestCase):
     def test_button_image_is_no_longer_a_gap(self):
         # The regression that motivated this check.
         repo_root = Path(__file__).resolve().parents[2]
+        defs = json.loads(
+            (repo_root / "shared" / "core" / "attribute_definitions.json").read_text(
+                encoding="utf-8"
+            )
+        )
         reads = {
-            p: coverage.scan_reads(repo_root / coverage.SOURCE_ROOTS[p])
+            p: coverage.scan_reads(repo_root / coverage.SOURCE_ROOTS[p], defs)
             for p in coverage.PLATFORMS
         }
+        sources = coverage._readers_for("Button", defs)
         for platform in coverage.PLATFORMS:
-            self.assertIn("image", reads[platform], platform)
-            self.assertIn("flexWrap", reads["web"])
+            self.assertTrue(
+                coverage._is_read("image", sources, reads[platform]), platform
+            )
+        self.assertTrue(
+            coverage._is_read(
+                "flexWrap", coverage._readers_for("View", defs), reads["web"]
+            )
+        )
 
 
 if __name__ == "__main__":

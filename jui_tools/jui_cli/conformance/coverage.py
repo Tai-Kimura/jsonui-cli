@@ -176,24 +176,85 @@ def coverage_path(conformance_dir) -> Path:
 # --------------------------------------------------------------------------- #
 
 
-def scan_reads(source_root) -> set:
-    """Attribute names the Ruby converters under `source_root` read."""
+#: Key under which reads from non-component files (base converters, helpers,
+#: modifier builders) are collected. Those files legitimately serve every
+#: component, so their reads satisfy any (component, attribute) pair — the
+#: same latitude `common.*` attributes get.
+SHARED = "__shared__"
+
+#: Converter/component file suffixes that name a component. Anything else
+#: (helpers, base classes, builders) is SHARED.
+_COMPONENT_FILE = re.compile(r"^(?P<stem>.+?)_(?:converter|component)\.rb$")
+
+
+def _component_index(definitions: dict) -> dict:
+    """`normalized-name -> component` for every declared component.
+
+    File stems are normalized the same way (lowercase, underscores stripped),
+    which absorbs each tree's naming quirks: `text_field_converter.rb`,
+    `textfield_converter.rb` and `textfield_component.rb` all resolve to
+    `TextField`.
+    """
+    index = {}
+    for component in definitions:
+        if component.startswith("_") or component == "common":
+            continue
+        index[component.replace("_", "").lower()] = component
+    return index
+
+
+def component_for_file(path, component_index: dict) -> str:
+    """The component a converter file belongs to, or SHARED.
+
+    Unmatched files stay SHARED on purpose: SHARED satisfies every pair, so a
+    mapping miss can only *hide* a gap (the pre-pair-scan behaviour for that
+    file), never invent a false one.
+    """
+    match = _COMPONENT_FILE.match(Path(path).name)
+    if not match:
+        return SHARED
+    stem = match.group("stem").replace("_", "").lower()
+    return component_index.get(stem, SHARED)
+
+
+def _reads_in_source(src: str) -> set:
+    """Attribute names one Ruby source file reads."""
     keys: set = set()
+    for pattern in READ_PATTERNS:
+        for match in pattern.findall(src):
+            if isinstance(match, tuple):
+                keys.update(match)
+            else:
+                keys.add(match)
+    for args in ALIAS_HELPERS.findall(src):
+        keys.update(_QUOTED.findall(args))
+    keys |= _attribute_case_reads(src)
+    return keys
+
+
+def scan_reads(source_root, definitions: dict | None = None) -> dict:
+    """Attribute reads under `source_root`, attributed per component.
+
+    Returns `{component-or-SHARED: {attribute names}}`. A name read in
+    `button_converter.rb` lands under `Button` and satisfies only Button's
+    declarations; a name read in `base_view_converter.rb` (or any file that
+    does not map to a declared component) lands under SHARED and satisfies
+    every component. Without the attribution, a name read by ANY component's
+    converter satisfied every component that declares it — Label.highlightColor
+    reported implemented on web because button_converter.rb reads the name.
+    """
+    component_index = _component_index(definitions or {})
+    reads: dict = {}
     root = Path(source_root)
     if not root.is_dir():
-        return keys
+        return reads
     for path in sorted(root.rglob("*.rb")):
         src = path.read_text(encoding="utf-8", errors="replace")
-        for pattern in READ_PATTERNS:
-            for match in pattern.findall(src):
-                if isinstance(match, tuple):
-                    keys.update(match)
-                else:
-                    keys.add(match)
-        for args in ALIAS_HELPERS.findall(src):
-            keys.update(_QUOTED.findall(args))
-        keys |= _attribute_case_reads(src)
-    return keys
+        owner = component_for_file(path, component_index)
+        keys = _reads_in_source(src)
+        if keys:
+            reads.setdefault(owner, set()).update(keys)
+    return reads
 
 
 def _attribute_case_reads(src: str) -> set:
@@ -227,7 +288,16 @@ def applicable_platforms(defn: dict) -> tuple:
     raw = defn.get("platform")
     if raw is not None:
         tags = raw if isinstance(raw, list) else [raw]
-        scope = {PLATFORM_TAGS[t] for t in tags if t in PLATFORM_TAGS}
+        unknown = [t for t in tags if t not in PLATFORM_TAGS]
+        if unknown:
+            # Same guard as rules._platforms: a silently-dropped token shrinks
+            # or (all-unknown -> None -> ALL) widens the declared surface with
+            # no trace, corrupting this check's universe.
+            raise ValueError(
+                f"unknown platform token(s) {unknown!r} in attribute "
+                f"definition (known: {sorted(PLATFORM_TAGS)})"
+            )
+        scope = {PLATFORM_TAGS[t] for t in tags}
 
     raw_mode = defn.get("mode")
     if raw_mode is not None:
@@ -252,17 +322,75 @@ def in_scope(component: str, attribute: str, defn) -> bool:
     return reason not in NON_RENDERER_REASONS
 
 
+#: Components co-routed to another component's converter WITHOUT an
+#: `_alias_of` declaration — dispatch facts, verified against the three
+#: converter factories (sjui converter_factory.rb / kjui compose_builder.rb /
+#: rjui base_converter.get_converter_class). SafeAreaView is a View with safe
+#: area handling, rendered by the View converter on every platform.
+ROUTED_WITH = {
+    "SafeAreaView": "View",
+}
+
+
+def _routing_group(component: str, definitions: dict) -> set:
+    """Every component whose converter file may legitimately read
+    `component`'s attributes: the bidirectional closure of `_alias_of` plus
+    ROUTED_WITH.
+
+    `_alias_of` must close in BOTH directions because converter files are
+    sometimes named after the alias: sjui routes `Switch, Toggle` to
+    toggle_converter.rb, so the canonical Switch's reads live in the
+    alias-named file.
+    """
+    group = {component}
+    changed = True
+    while changed:
+        changed = False
+        for name, attrs in definitions.items():
+            if name.startswith("_") or not isinstance(attrs, dict):
+                continue
+            canonical = attrs.get("_alias_of")
+            link = ROUTED_WITH.get(name)
+            for a, b in ((name, canonical), (name, link)):
+                if not b:
+                    continue
+                if (a in group) != (b in group):
+                    group.update((a, b))
+                    changed = True
+    return group
+
+
+def _readers_for(component: str, definitions: dict) -> tuple:
+    """Read-sources allowed to satisfy `component`'s attributes.
+
+    The component's routing group (own converter + aliases/co-routed, in
+    either naming direction) plus SHARED. `common` is satisfied tree-wide:
+    base converters and helpers legitimately implement common attributes for
+    every component, and so, per the same logic, does any single converter.
+    """
+    if component == "common":
+        return ("*",)
+    return tuple(sorted(_routing_group(component, definitions))) + (SHARED,)
+
+
+def _is_read(attribute: str, sources: tuple, reads: dict) -> bool:
+    if sources == ("*",):
+        return any(attribute in names for names in reads.values())
+    return any(attribute in reads.get(source, ()) for source in sources)
+
+
 def find_gaps(definitions: dict, reads: dict) -> list:
-    """Every declared (component, attribute, platform) nobody reads."""
+    """Every declared (component, attribute, platform) its component never reads."""
     gaps = []
     for component, attrs in sorted(definitions.items()):
         if component.startswith("_") or not isinstance(attrs, dict):
             continue
+        sources = _readers_for(component, definitions)
         for attribute, defn in sorted(attrs.items()):
             if not in_scope(component, attribute, defn):
                 continue
             for platform in applicable_platforms(defn):
-                if attribute not in reads.get(platform, ()):
+                if not _is_read(attribute, sources, reads.get(platform, {})):
                     gaps.append(Gap(component, attribute, platform))
     return gaps
 
@@ -365,7 +493,7 @@ def check(definitions: dict, repo_root, conformance_dir, platforms=None) -> Cove
     """Compare live gaps against the ledger."""
     platforms = tuple(platforms or PLATFORMS)
     reads = {
-        platform: scan_reads(Path(repo_root) / SOURCE_ROOTS[platform])
+        platform: scan_reads(Path(repo_root) / SOURCE_ROOTS[platform], definitions)
         for platform in platforms
     }
     gaps = [g for g in find_gaps(definitions, reads) if g.platform in platforms]
