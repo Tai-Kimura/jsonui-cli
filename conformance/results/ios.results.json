@@ -1,5 +1,5 @@
 {
-  "manifestHash" : "7fb88dcba38f5cf656ce2bb5b6a3dc891deaaf43241a73850974b3137cff9b11",
+  "manifestHash" : "2db1b434c5d2d3bd568f9d0a6e696e0c44e64387b5de8a66ffbcdcd142c2cb4d",
   "platform" : "ios",
   "results" : [
     {
@@ -566,6 +566,11 @@
     },
     {
       "detail" : "",
+      "id" : "common/onPan__callback_fire",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/tintColor__static",
       "screenshot" : "artifacts/ios/common_tintColor__static.png",
       "status" : "pass"
@@ -670,7 +675,7 @@
       "status" : "pass"
     },
     {
-      "detail" : "mode compose not hosted (SwiftUI dynamic host)",
+      "detail" : "not applicable to ios",
       "id" : "common/onAppear__callback_fire",
       "status" : "skipped"
     },
@@ -925,9 +930,10 @@
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "",
       "id" : "Label/selected__true",
-      "status" : "skipped"
+      "screenshot" : "artifacts/ios/Label_selected__true.png",
+      "status" : "pass"
     },
     {
       "detail" : "",
@@ -1065,6 +1071,12 @@
       "detail" : "",
       "id" : "Label/hintColor__static",
       "screenshot" : "artifacts/ios/Label_hintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/highlightAttributes__static",
+      "screenshot" : "artifacts/ios/Label_highlightAttributes__static.png",
       "status" : "pass"
     },
     {
@@ -1837,10 +1849,9 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "not applicable to ios",
       "id" : "EditText/inputType__static",
-      "screenshot" : "artifacts/ios/EditText_inputType__static.png",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -2471,6 +2482,12 @@
       "status" : "pass"
     },
     {
+      "detail" : "",
+      "id" : "SelectBox/labelAttributes__static",
+      "screenshot" : "artifacts/ios/SelectBox_labelAttributes__static.png",
+      "status" : "pass"
+    },
+    {
       "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
       "id" : "SelectBox/inView__static",
       "status" : "skipped"
@@ -2901,12 +2918,6 @@
     },
     {
       "detail" : "",
-      "id" : "View/alignment__static",
-      "screenshot" : "artifacts/ios/View_alignment__static.png",
-      "status" : "pass"
-    },
-    {
-      "detail" : "",
       "id" : "View/distribution__fill",
       "screenshot" : "artifacts/ios/View_distribution__fill.png",
       "status" : "pass"
@@ -2952,6 +2963,12 @@
     },
     {
       "detail" : "",
+      "id" : "View/safeAreaInsetPositions__static",
+      "screenshot" : "artifacts/ios/View_safeAreaInsetPositions__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "View/highlighted__true",
       "screenshot" : "artifacts/ios/View_highlighted__true.png",
       "status" : "pass"
@@ -2989,16 +3006,14 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "not applicable to ios",
       "id" : "ScrollView/scrollMode__inner",
-      "screenshot" : "artifacts/ios/ScrollView_scrollMode__inner.png",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "not applicable to ios",
       "id" : "ScrollView/scrollMode__window",
-      "screenshot" : "artifacts/ios/ScrollView_scrollMode__window.png",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -3217,7 +3232,7 @@
       "status" : "pass"
     },
     {
-      "detail" : "mode compose not hosted (SwiftUI dynamic host)",
+      "detail" : "not applicable to ios",
       "id" : "Collection/reverseLayout__true",
       "status" : "skipped"
     },
@@ -3259,6 +3274,12 @@
       "detail" : "",
       "id" : "Radio/selectedIcon__static",
       "screenshot" : "artifacts/ios/Radio_selectedIcon__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/selectedIcon__alias_selected_icon",
+      "screenshot" : "artifacts/ios/Radio_selectedIcon__alias_selected_icon.png",
       "status" : "pass"
     },
     {
@@ -3376,8 +3397,8 @@
     },
     {
       "detail" : "",
-      "id" : "CheckBox/onSrc__static",
-      "screenshot" : "artifacts/ios/CheckBox_onSrc__static.png",
+      "id" : "CheckBox/selectedIcon__alias_onSrc",
+      "screenshot" : "artifacts/ios/CheckBox_selectedIcon__alias_onSrc.png",
       "status" : "pass"
     },
     {
@@ -3492,8 +3513,8 @@
     },
     {
       "detail" : "",
-      "id" : "Check/onSrc__static",
-      "screenshot" : "artifacts/ios/Check_onSrc__static.png",
+      "id" : "Check/selectedIcon__alias_onSrc",
+      "screenshot" : "artifacts/ios/Check_selectedIcon__alias_onSrc.png",
       "status" : "pass"
     },
     {
@@ -3531,9 +3552,9 @@
       "status" : "pass"
     },
     {
-      "detail" : "assert text(mirror): Assertion 'text' failed - Expected: equals 'fired', Actual: 'ready' for 'mirror'",
+      "detail" : "",
       "id" : "Check/onValueChange__callback_fire",
-      "status" : "error"
+      "status" : "pass"
     },
     {
       "detail" : "",
@@ -3632,14 +3653,20 @@
       "status" : "pass"
     },
     {
+      "detail" : "not applicable to ios",
+      "id" : "Blur/blurRadius__static",
+      "status" : "skipped"
+    },
+    {
       "detail" : "",
       "id" : "IconLabel/text__static",
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "",
       "id" : "IconLabel/selected__true",
-      "status" : "skipped"
+      "screenshot" : "artifacts/ios/IconLabel_selected__true.png",
+      "status" : "pass"
     },
     {
       "detail" : "",
@@ -3743,6 +3770,12 @@
     },
     {
       "detail" : "",
+      "id" : "SafeAreaView/safeAreaInsetPositions__static",
+      "screenshot" : "artifacts/ios/SafeAreaView_safeAreaInsetPositions__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "TabView/selectedIndex__static",
       "screenshot" : "artifacts/ios/TabView_selectedIndex__static.png",
       "status" : "pass"
@@ -3781,6 +3814,246 @@
       "detail" : "",
       "id" : "TabView/showLabels__true",
       "screenshot" : "artifacts/ios/TabView_showLabels__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Blur",
+      "screenshot" : "artifacts/ios/control_Blur.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Button",
+      "screenshot" : "artifacts/ios/control_Button.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Check",
+      "screenshot" : "artifacts/ios/control_Check.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Check__orientation-horizontal",
+      "screenshot" : "artifacts/ios/control_Check__orientation-horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/CheckBox",
+      "screenshot" : "artifacts/ios/control_CheckBox.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/CheckBox__orientation-horizontal",
+      "screenshot" : "artifacts/ios/control_CheckBox__orientation-horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Collection",
+      "screenshot" : "artifacts/ios/control_Collection.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/EditText",
+      "screenshot" : "artifacts/ios/control_EditText.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/GradientView",
+      "screenshot" : "artifacts/ios/control_GradientView.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/IconLabel",
+      "screenshot" : "artifacts/ios/control_IconLabel.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Image",
+      "screenshot" : "artifacts/ios/control_Image.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Indicator",
+      "screenshot" : "artifacts/ios/control_Indicator.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Input",
+      "screenshot" : "artifacts/ios/control_Input.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Label",
+      "screenshot" : "artifacts/ios/control_Label.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Label__selected-True",
+      "screenshot" : "artifacts/ios/control_Label__selected-True.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/NetworkImage",
+      "screenshot" : "artifacts/ios/control_NetworkImage.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Progress",
+      "screenshot" : "artifacts/ios/control_Progress.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Radio",
+      "screenshot" : "artifacts/ios/control_Radio.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Radio__orientation-horizontal",
+      "screenshot" : "artifacts/ios/control_Radio__orientation-horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/SafeAreaView",
+      "screenshot" : "artifacts/ios/control_SafeAreaView.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/ScrollView",
+      "screenshot" : "artifacts/ios/control_ScrollView.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Segment",
+      "screenshot" : "artifacts/ios/control_Segment.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/SelectBox",
+      "screenshot" : "artifacts/ios/control_SelectBox.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/SelectBox__datePickerMode-time_selectItemType-Date",
+      "screenshot" : "artifacts/ios/control_SelectBox__datePickerMode-time_selectItemType-Date.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/SelectBox__selectItemType-Date",
+      "screenshot" : "artifacts/ios/control_SelectBox__selectItemType-Date.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/SelectBox__anchored",
+      "screenshot" : "artifacts/ios/control_SelectBox__anchored.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Slider",
+      "screenshot" : "artifacts/ios/control_Slider.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Switch",
+      "screenshot" : "artifacts/ios/control_Switch.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Switch__isOn-True",
+      "screenshot" : "artifacts/ios/control_Switch__isOn-True.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/TabView",
+      "screenshot" : "artifacts/ios/control_TabView.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/TextField",
+      "screenshot" : "artifacts/ios/control_TextField.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/TextField__text-Clear-me",
+      "screenshot" : "artifacts/ios/control_TextField__text-Clear-me.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/TextView",
+      "screenshot" : "artifacts/ios/control_TextView.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Toggle",
+      "screenshot" : "artifacts/ios/control_Toggle.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Toggle__isOn-True",
+      "screenshot" : "artifacts/ios/control_Toggle__isOn-True.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View",
+      "screenshot" : "artifacts/ios/control_View.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__orientation-horizontal",
+      "screenshot" : "artifacts/ios/control_View__orientation-horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__orientation-vertical",
+      "screenshot" : "artifacts/ios/control_View__orientation-vertical.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__anchored",
+      "screenshot" : "artifacts/ios/control_View__anchored.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Web",
+      "screenshot" : "artifacts/ios/control_Web.png",
       "status" : "pass"
     },
     {
@@ -3856,6 +4129,6 @@
   ],
   "runner" : {
     "name" : "xcuitest",
-    "version" : "ios-26.2"
+    "version" : "ios-18.6"
   }
 }
