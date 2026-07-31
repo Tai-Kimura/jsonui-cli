@@ -364,13 +364,13 @@ module SjuiTools
                         add_line "if let headerData = section.header?.data {"
                         indent do
                           add_line "#{header_view_name}(data: headerData)"
-                          add_modifier_line ".padding(.horizontal)"
+                          apply_header_footer_padding
                         end
                         add_line "}"
                       end
 
                       # Grid for cells
-                      add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['itemSpacing'] || 10}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{@component['itemSpacing'] || 10}) {"
+                      add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['itemSpacing'] || 0}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{@component['itemSpacing'] || 0}) {"
                       indent do
                         if cell_view_name
                           add_line "if let cellsData = section.cells?.data {"
@@ -405,7 +405,7 @@ module SjuiTools
                         add_line "if let footerData = section.footer?.data {"
                         indent do
                           add_line "#{footer_view_name}(data: footerData)"
-                          add_modifier_line ".padding(.horizontal)"
+                          apply_header_footer_padding
                         end
                         add_line "}"
                       end
@@ -415,10 +415,10 @@ module SjuiTools
                     # No property binding - use static rendering
                     if header_view_name
                       add_line "#{header_view_name}()"
-                      add_modifier_line ".padding(.horizontal)"
+                      apply_header_footer_padding
                     end
 
-                    add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['itemSpacing'] || 10}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{@component['itemSpacing'] || 10}) {"
+                    add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['itemSpacing'] || 0}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{@component['itemSpacing'] || 0}) {"
                     indent do
                       add_line "// No items binding specified"
                     end
@@ -427,7 +427,7 @@ module SjuiTools
 
                     if footer_view_name
                       add_line "#{footer_view_name}()"
-                      add_modifier_line ".padding(.horizontal)"
+                      apply_header_footer_padding
                     end
                   end
                 end
@@ -435,10 +435,10 @@ module SjuiTools
                 # Legacy behavior - header/footer from cellClasses
                 if header_class_name
                   add_line "#{header_class_name}()"
-                  add_modifier_line ".padding(.horizontal)"
+                  apply_header_footer_padding
                 end
                 
-                add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['itemSpacing'] || 10}), count: #{columns_info[:expr]}), alignment: #{get_grid_alignment}, spacing: #{@component['itemSpacing'] || 10}) {"
+                add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['itemSpacing'] || 0}), count: #{columns_info[:expr]}), alignment: #{get_grid_alignment}, spacing: #{@component['itemSpacing'] || 0}) {"
                 indent do
                   generate_collection_content(cell_class_name, id)
                 end
@@ -448,7 +448,7 @@ module SjuiTools
                 if footer_class_name
                   add_line ""
                   add_line "#{footer_class_name}()"
-                  add_modifier_line ".padding(.horizontal)"
+                  apply_header_footer_padding
                 end
               end
             end
@@ -603,7 +603,7 @@ module SjuiTools
         end
 
         def generate_non_lazy_horizontal(has_sections, cell_class_name)
-          spacing = @component['itemSpacing'] || @component['columnSpacing'] || 10
+          spacing = @component['itemSpacing'] || @component['columnSpacing'] || 0
           hstack_alignment = get_hstack_alignment_from_gravity(@component['gravity'])
           add_line "HStack(alignment: #{hstack_alignment}, spacing: #{spacing}) {"
           indent do
@@ -679,7 +679,7 @@ module SjuiTools
         end
 
         def generate_non_lazy_grid(has_sections, cell_class_name, header_class_name, footer_class_name)
-          spacing = @component['itemSpacing'] || 10
+          spacing = @component['itemSpacing'] || 0
           grid_cols = "Array(repeating: GridItem(.flexible(), spacing: #{spacing}), count: #{columns_info[:expr]})"
 
           if has_sections
@@ -1592,8 +1592,11 @@ module SjuiTools
           end
         end
         
-        # Generate .padding() modifier from insets array or default .padding(.horizontal)
-        # Used for LazyVGrid paths that previously had .padding(.horizontal)
+        # Generate .padding() from declared insets — declaration-faithful:
+        # nothing declared, nothing emitted. The old else-branch injected the
+        # SwiftUI system default (.padding(.horizontal) ≈16pt) that Compose
+        # never had, so an insets-free Collection rendered 16pt wider gutters
+        # on iOS only.
         # insets format: [top, left, bottom, right]
         def apply_grid_padding
           insets = collection_insets_array(@component['insets']) ||
@@ -1601,11 +1604,23 @@ module SjuiTools
           if insets
             top, left, bottom, right = insets
             add_modifier_line ".padding(EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right}))"
-          else
-            add_modifier_line ".padding(.horizontal)"
           end
           apply_inset_vertical
           apply_item_weight
+        end
+
+        # Section headers/footers sit outside the LazyVGrid; follow the
+        # declared insets' horizontal edges so they line up with the grid
+        # body. Nothing declared → nothing emitted. They used to get an
+        # unconditional .padding(.horizontal) — even when insets WERE
+        # declared, which misaligned them from the grid.
+        def apply_header_footer_padding
+          insets = collection_insets_array(@component['insets']) ||
+                   collection_insets_array(@component['contentInsets'])
+          return unless insets
+
+          _top, left, _bottom, right = insets
+          add_modifier_line ".padding(EdgeInsets(top: 0, leading: #{left}, bottom: 0, trailing: #{right}))"
         end
 
         # Resolve the `lazy` attribute into one of three symbols matching
@@ -1728,8 +1743,9 @@ module SjuiTools
             # horizontal single-column CollectionStackView, the inter-cell gap
             # IS the inter-line gap (one cell per line), so authoring
             # `lineSpacing` for a horizontal Collection should still set the
-            # spacing. kjui's CollectionStack matches this fallback order.
-            line_spacing = @component['itemSpacing'] || @component['columnSpacing'] || @component['lineSpacing'] || 10
+            # spacing. kjui's CollectionStack matches this fallback order AND
+            # the all-absent default of 0 (the composable's `spacing: Dp = 0.dp`).
+            line_spacing = @component['itemSpacing'] || @component['columnSpacing'] || @component['lineSpacing'] || 0
             alignment_param = "verticalAlignment: #{get_hstack_alignment_from_gravity(@component['gravity'])}"
           end
 

@@ -147,11 +147,66 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
           expect(code).to include('spacing: 12')
         end
 
-        it 'falls back to default 10 when no spacing attr is set' do
+        # Regression: sjui-collection-undeclared-default-insets-and-spacing —
+        # the all-absent default used to be an iOS-only 10; kjui's
+        # CollectionStack composable defaults to 0.dp, so declaration-faithful
+        # means 0 here too.
+        it 'falls back to 0 when no spacing attr is set' do
           converter = described_class.new(component)
           code = converter.convert
-          expect(code).to include('spacing: 10')
+          expect(code).to include('spacing: 0')
+          expect(code).not_to include('spacing: 10')
         end
+      end
+    end
+
+    # Regression: sjui-collection-undeclared-default-insets-and-spacing —
+    # with insets/spacing undeclared, iOS injected `.padding(.horizontal)`
+    # (SwiftUI system ≈16pt) and `spacing: 10` into grid paths while Compose
+    # emitted nothing. Ruling: declaration-faithful (the Android behavior).
+    describe 'undeclared insets / spacing (declaration-faithful)' do
+      let(:grid_component) do
+        {
+          'type' => 'Collection',
+          'columns' => 2,
+          'items' => '@{listItems}',
+          'sections' => [{ 'cell' => 'item_cell' }]
+        }
+      end
+
+      it 'emits no horizontal padding when insets are undeclared' do
+        code = described_class.new(grid_component).convert
+        expect(code).not_to include('.padding(.horizontal)')
+      end
+
+      it 'emits spacing 0 when spacing attrs are undeclared' do
+        code = described_class.new(grid_component).convert
+        expect(code).to include('spacing: 0')
+        expect(code).not_to include('spacing: 10')
+      end
+
+      it 'still honours declared insets on the grid' do
+        code = described_class.new(grid_component.merge('insets' => [16, 16, 16, 16])).convert
+        expect(code).to include('.padding(EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))')
+      end
+
+      it 'aligns declared headers to the declared horizontal insets, not the system default' do
+        with_header = grid_component.merge(
+          'insets' => [4, 12, 4, 8],
+          'sections' => [{ 'cell' => 'item_cell', 'header' => 'header_view' }]
+        )
+        code = described_class.new(with_header).convert
+        expect(code).to include('.padding(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 8))')
+        expect(code).not_to include('.padding(.horizontal)')
+      end
+
+      it 'emits no header padding at all when insets are undeclared' do
+        with_header = grid_component.merge(
+          'sections' => [{ 'cell' => 'item_cell', 'header' => 'header_view' }]
+        )
+        code = described_class.new(with_header).convert
+        expect(code).not_to include('.padding(.horizontal)')
+        expect(code).not_to include('.padding(EdgeInsets(top: 0,')
       end
     end
 
