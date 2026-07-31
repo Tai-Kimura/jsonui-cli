@@ -370,7 +370,7 @@ module SjuiTools
                       end
 
                       # Grid for cells
-                      add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['itemSpacing'] || 0}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{@component['itemSpacing'] || 0}) {"
+                      add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{@component['lineSpacing'] || @component['itemSpacing'] || 0}) {"
                       indent do
                         if cell_view_name
                           add_line "if let cellsData = section.cells?.data {"
@@ -418,7 +418,7 @@ module SjuiTools
                       apply_header_footer_padding
                     end
 
-                    add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['itemSpacing'] || 0}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{@component['itemSpacing'] || 0}) {"
+                    add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{@component['lineSpacing'] || @component['itemSpacing'] || 0}) {"
                     indent do
                       add_line "// No items binding specified"
                     end
@@ -438,7 +438,7 @@ module SjuiTools
                   apply_header_footer_padding
                 end
                 
-                add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['itemSpacing'] || 0}), count: #{columns_info[:expr]}), alignment: #{get_grid_alignment}, spacing: #{@component['itemSpacing'] || 0}) {"
+                add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{columns_info[:expr]}), alignment: #{get_grid_alignment}, spacing: #{@component['lineSpacing'] || @component['itemSpacing'] || 0}) {"
                 indent do
                   generate_collection_content(cell_class_name, id)
                 end
@@ -679,7 +679,8 @@ module SjuiTools
         end
 
         def generate_non_lazy_grid(has_sections, cell_class_name, header_class_name, footer_class_name)
-          spacing = @component['itemSpacing'] || 0
+          # Inter-column gap: columnSpacing first, kjui's order.
+          spacing = @component['columnSpacing'] || @component['itemSpacing'] || 0
           grid_cols = "Array(repeating: GridItem(.flexible(), spacing: #{spacing}), count: #{columns_info[:expr]})"
 
           if has_sections

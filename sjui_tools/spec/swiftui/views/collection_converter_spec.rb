@@ -190,6 +190,24 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         expect(code).to include('.padding(EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))')
       end
 
+      # The `|| 10` default had been masking that this path never read
+      # columnSpacing/lineSpacing at all (declared 12/12 emitted 10/10 —
+      # close enough to hide). kjui's order: inter-column prefers
+      # columnSpacing, inter-row prefers lineSpacing.
+      it 'honours columnSpacing for the inter-column gap and lineSpacing for the inter-row gap' do
+        code = described_class.new(
+          grid_component.merge('columnSpacing' => 12, 'lineSpacing' => 14)
+        ).convert
+        expect(code).to include('GridItem(.flexible(), spacing: 12)')
+        expect(code).to include('alignment: .center, spacing: 14)')
+      end
+
+      it 'falls back to itemSpacing for both gaps' do
+        code = described_class.new(grid_component.merge('itemSpacing' => 6)).convert
+        expect(code).to include('GridItem(.flexible(), spacing: 6)')
+        expect(code).to include('alignment: .center, spacing: 6)')
+      end
+
       it 'aligns declared headers to the declared horizontal insets, not the system default' do
         with_header = grid_component.merge(
           'insets' => [4, 12, 4, 8],
