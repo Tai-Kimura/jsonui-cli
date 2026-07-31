@@ -61,12 +61,6 @@
       ]
     },
     {
-      "fixture": "Button/textAlign__center",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "Button/textAlign__left",
       "platforms": [
         "web"
@@ -76,14 +70,7 @@
       "fixture": "Button/textAlign__right",
       "platforms": [
         "android",
-        "ios",
         "web"
-      ]
-    },
-    {
-      "fixture": "Check/checkedColor__static",
-      "platforms": [
-        "ios"
       ]
     },
     {
@@ -114,14 +101,7 @@
       "fixture": "Check/font__static",
       "platforms": [
         "android",
-        "ios",
         "web"
-      ]
-    },
-    {
-      "fixture": "Check/iconColor__static",
-      "platforms": [
-        "ios"
       ]
     },
     {
@@ -148,28 +128,19 @@
     {
       "fixture": "Check/label__static",
       "platforms": [
-        "android",
-        "ios"
+        "android"
       ]
     },
     {
       "fixture": "Check/selectedIcon__alias_onSrc",
       "platforms": [
-        "android",
-        "ios"
+        "android"
       ]
     },
     {
       "fixture": "Check/selectedIcon__static",
       "platforms": [
-        "android",
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Check/spacing__static",
-      "platforms": [
-        "ios"
+        "android"
       ]
     },
     {
@@ -180,12 +151,6 @@
     },
     {
       "fixture": "Check/uncheckedColor__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "CheckBox/checkedColor__static",
       "platforms": [
         "ios"
       ]
@@ -218,14 +183,7 @@
       "fixture": "CheckBox/font__static",
       "platforms": [
         "android",
-        "ios",
         "web"
-      ]
-    },
-    {
-      "fixture": "CheckBox/iconColor__static",
-      "platforms": [
-        "ios"
       ]
     },
     {
@@ -258,21 +216,13 @@
     {
       "fixture": "CheckBox/selectedIcon__alias_onSrc",
       "platforms": [
-        "android",
-        "ios"
+        "android"
       ]
     },
     {
       "fixture": "CheckBox/selectedIcon__static",
       "platforms": [
-        "android",
-        "ios"
-      ]
-    },
-    {
-      "fixture": "CheckBox/spacing__static",
-      "platforms": [
-        "ios"
+        "android"
       ]
     },
     {
@@ -288,28 +238,9 @@
       ]
     },
     {
-      "fixture": "CheckBox/value__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Collection/columnSpacing__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "Collection/columns__static",
       "platforms": [
-        "android",
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Collection/horizontalScroll__true",
-      "platforms": [
-        "ios"
+        "android"
       ]
     },
     {
@@ -333,8 +264,7 @@
     {
       "fixture": "Collection/itemSpacing__static",
       "platforms": [
-        "android",
-        "ios"
+        "android"
       ]
     },
     {
@@ -352,54 +282,31 @@
     {
       "fixture": "Collection/layout__horizontal",
       "platforms": [
-        "android",
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Collection/layout__vertical",
-      "platforms": [
-        "ios"
+        "android"
       ]
     },
     {
       "fixture": "Collection/lazy__eager",
       "platforms": [
-        "android",
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Collection/lazy__lazy",
-      "platforms": [
-        "ios"
+        "android"
       ]
     },
     {
       "fixture": "Collection/lazy__none",
       "platforms": [
-        "android",
-        "ios"
+        "android"
       ]
     },
     {
       "fixture": "Collection/lineSpacing__static",
       "platforms": [
-        "android",
-        "ios"
+        "android"
       ]
     },
     {
       "fixture": "Collection/orientation__horizontal",
       "platforms": [
-        "android",
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Collection/orientation__vertical",
-      "platforms": [
-        "ios"
+        "android"
       ]
     },
     {
@@ -513,21 +420,18 @@
     {
       "fixture": "Image/contentMode__aspectfit",
       "platforms": [
-        "ios",
         "web"
       ]
     },
     {
       "fixture": "Image/contentMode__bottom",
       "platforms": [
-        "ios",
         "web"
       ]
     },
     {
       "fixture": "Image/contentMode__bottom_2",
       "platforms": [
-        "ios",
         "web"
       ]
     },
@@ -535,7 +439,6 @@
       "fixture": "Image/contentMode__center",
       "platforms": [
         "android",
-        "ios",
         "web"
       ]
     },
@@ -543,49 +446,42 @@
       "fixture": "Image/contentMode__center_2",
       "platforms": [
         "android",
-        "ios",
         "web"
       ]
     },
     {
       "fixture": "Image/contentMode__fill",
       "platforms": [
-        "android",
-        "ios"
+        "android"
       ]
     },
     {
       "fixture": "Image/contentMode__fit",
       "platforms": [
-        "ios",
         "web"
       ]
     },
     {
       "fixture": "Image/contentMode__left",
       "platforms": [
-        "ios",
         "web"
       ]
     },
     {
       "fixture": "Image/contentMode__left_2",
       "platforms": [
-        "ios",
         "web"
       ]
     },
     {
       "fixture": "Image/contentMode__right",
       "platforms": [
-        "ios",
         "web"
       ]
     },
     {
       "fixture": "Image/contentMode__right_2",
       "platforms": [
-        "ios",
         "web"
       ]
     },
@@ -593,65 +489,25 @@
       "fixture": "Image/contentMode__scaletofill",
       "platforms": [
         "android",
-        "ios",
         "web"
       ]
     },
     {
       "fixture": "Image/contentMode__top",
       "platforms": [
-        "ios",
         "web"
       ]
     },
     {
       "fixture": "Image/contentMode__top_2",
       "platforms": [
-        "ios",
         "web"
-      ]
-    },
-    {
-      "fixture": "Image/errorImage__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Image/highlightSrc__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Image/loadingImage__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Image/renderingMode__original",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Image/renderingMode__template",
-      "platforms": [
-        "ios"
       ]
     },
     {
       "fixture": "Image/srcName__static",
       "platforms": [
-        "ios",
         "web"
-      ]
-    },
-    {
-      "fixture": "Image/src__static",
-      "platforms": [
-        "ios"
       ]
     },
     {
@@ -667,13 +523,13 @@
       ]
     },
     {
-      "fixture": "Indicator/hidesWhenStopped__true",
+      "fixture": "Indicator/indicatorStyle__large",
       "platforms": [
         "ios"
       ]
     },
     {
-      "fixture": "Indicator/indicatorStyle__large",
+      "fixture": "Indicator/indicatorStyle__medium",
       "platforms": [
         "ios"
       ]
@@ -854,21 +710,18 @@
     {
       "fixture": "NetworkImage/contentMode__aspectfit",
       "platforms": [
-        "ios",
         "web"
       ]
     },
     {
       "fixture": "NetworkImage/contentMode__bottom",
       "platforms": [
-        "ios",
         "web"
       ]
     },
     {
       "fixture": "NetworkImage/contentMode__center",
       "platforms": [
-        "ios",
         "web"
       ]
     },
@@ -879,63 +732,39 @@
       ]
     },
     {
-      "fixture": "NetworkImage/contentMode__fill",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "NetworkImage/contentMode__fit",
       "platforms": [
-        "ios",
         "web"
       ]
     },
     {
       "fixture": "NetworkImage/contentMode__left",
       "platforms": [
-        "ios",
         "web"
       ]
     },
     {
       "fixture": "NetworkImage/contentMode__right",
       "platforms": [
-        "ios",
         "web"
       ]
     },
     {
       "fixture": "NetworkImage/contentMode__top",
       "platforms": [
-        "ios",
         "web"
-      ]
-    },
-    {
-      "fixture": "NetworkImage/defaultImage__static",
-      "platforms": [
-        "ios"
       ]
     },
     {
       "fixture": "NetworkImage/errorImage__static",
       "platforms": [
-        "android",
-        "ios"
+        "android"
       ]
     },
     {
       "fixture": "NetworkImage/hint__static",
       "platforms": [
-        "ios",
         "web"
-      ]
-    },
-    {
-      "fixture": "NetworkImage/loadingImage__static",
-      "platforms": [
-        "ios"
       ]
     },
     {
@@ -946,37 +775,7 @@
       ]
     },
     {
-      "fixture": "Progress/color__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Progress/hidesWhenStopped__true",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Progress/indicatorStyle__large",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Progress/indicatorStyle__medium",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "Progress/progressTintColor__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Progress/progress__static",
       "platforms": [
         "ios"
       ]
@@ -1059,27 +858,9 @@
       ]
     },
     {
-      "fixture": "ScrollView/orientation__vertical",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "ScrollView/scrollMode__window",
       "platforms": [
         "web"
-      ]
-    },
-    {
-      "fixture": "ScrollView/showsHorizontalScrollIndicator__true",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "ScrollView/showsVerticalScrollIndicator__true",
-      "platforms": [
-        "ios"
       ]
     },
     {
@@ -1191,21 +972,9 @@
       ]
     },
     {
-      "fixture": "Slider/progressTintColor__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "Slider/tintColor__static",
       "platforms": [
         "web"
-      ]
-    },
-    {
-      "fixture": "Slider/trackTintColor__static",
-      "platforms": [
-        "ios"
       ]
     },
     {
@@ -1603,49 +1372,7 @@
       ]
     },
     {
-      "fixture": "View/direction__lefttoright",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "View/direction__none",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "View/direction__righttoleft",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "View/direction__toptobottom",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "View/distribution__equalcentering",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "View/distribution__equalspacing",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "View/distribution__fill",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "View/distribution__fillequally",
       "platforms": [
         "ios"
       ]
@@ -1663,12 +1390,6 @@
       ]
     },
     {
-      "fixture": "View/highlighted__true",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "View/orientation__horizontal",
       "platforms": [
         "android",
@@ -1682,12 +1403,6 @@
         "android",
         "ios",
         "web"
-      ]
-    },
-    {
-      "fixture": "View/safeAreaInsetPositions__static",
-      "platforms": [
-        "ios"
       ]
     },
     {
@@ -1815,30 +1530,6 @@
       ]
     },
     {
-      "fixture": "common/borderColor__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "common/borderStyle__dashed",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "common/borderStyle__dotted",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "common/borderStyle__solid",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "common/borderWidth__static",
       "platforms": [
         "ios",
@@ -1884,12 +1575,6 @@
         "android",
         "ios",
         "web"
-      ]
-    },
-    {
-      "fixture": "common/disabledBackground__static",
-      "platforms": [
-        "ios"
       ]
     },
     {
@@ -1972,12 +1657,6 @@
       ]
     },
     {
-      "fixture": "common/highlightBackground__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "common/indexBelow__static",
       "platforms": [
         "web"
@@ -2014,7 +1693,6 @@
     {
       "fixture": "common/maxHeight__static",
       "platforms": [
-        "ios",
         "web"
       ]
     },
@@ -2027,7 +1705,6 @@
     {
       "fixture": "common/maxWidth__static",
       "platforms": [
-        "ios",
         "web"
       ]
     },
@@ -2038,19 +1715,7 @@
       ]
     },
     {
-      "fixture": "common/minHeight__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "common/minStartMargin__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "common/minWidth__static",
       "platforms": [
         "ios"
       ]
@@ -2157,12 +1822,6 @@
       ]
     },
     {
-      "fixture": "common/tapBackground__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "common/topMargin__static",
       "platforms": [
         "android",
@@ -2180,7 +1839,6 @@
     {
       "fixture": "common/weight__static",
       "platforms": [
-        "ios",
         "web"
       ]
     },
