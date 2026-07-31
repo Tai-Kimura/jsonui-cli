@@ -217,9 +217,9 @@ module JsonUI
         { name: 'onDisappear', kind: :string }.freeze,
         # Long press gesture handler (camelCase) - binding only (@{functionName}) [binding: one-way]
         { name: 'onLongPress', kind: :binding }.freeze,
-        # Pan gesture handler (camelCase) - binding only (@{functionName})
+        # Pan gesture handler (camelCase) - binding only (@{functionName}). Invoked repeatedly while the user drags. Payload: cumulative translation since the gesture began (iOS CGSize, Android Offset; web passes the PointerEvent). A handler declared () -> Void is called without the payload.
         { name: 'onPan', kind: :binding }.freeze,
-        # Pinch gesture handler (camelCase) - binding only (@{functionName})
+        # Pinch gesture handler (camelCase) - binding only (@{functionName}). Invoked repeatedly while the user pinches. Payload: cumulative scale factor since the gesture began (iOS CGFloat, Android Float; web passes the TouchEvent). A handler declared () -> Void is called without the payload.
         { name: 'onPinch', kind: :binding }.freeze,
         # Click handler function name (selector-based, lowercase) - string only, no binding [accepts: string | array]
         { name: 'onclick', kind: :raw }.freeze,
