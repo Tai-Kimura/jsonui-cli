@@ -9,12 +9,6 @@
       ]
     },
     {
-      "fixture": "Button/buttonType__button",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
       "fixture": "Button/fontColor__static",
       "platforms": [
         "web"
@@ -39,37 +33,7 @@
       ]
     },
     {
-      "fixture": "Button/highlightBackground__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Button/highlightColor__alias_hilightColor",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Button/hilightColor__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
       "fixture": "Button/image__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Button/tapBackground__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Button/textAlign__center",
       "platforms": [
         "web"
       ]
@@ -117,12 +81,6 @@
       ]
     },
     {
-      "fixture": "Check/spacing__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
       "fixture": "CheckBox/checked__true",
       "platforms": [
         "web"
@@ -154,18 +112,6 @@
     },
     {
       "fixture": "CheckBox/onSrc__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "CheckBox/spacing__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "CheckBox/src__static",
       "platforms": [
         "web"
       ]
@@ -513,12 +459,6 @@
       ]
     },
     {
-      "fixture": "Radio/checked__true",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
       "fixture": "Radio/fontColor__static",
       "platforms": [
         "web"
@@ -532,24 +472,6 @@
     },
     {
       "fixture": "Radio/font__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Radio/selected_icon__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Radio/spacing__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Radio/value__static",
       "platforms": [
         "web"
       ]
@@ -628,54 +550,6 @@
     },
     {
       "fixture": "SelectBox/size__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Slider/maximum__alias_maxValue",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Slider/maximum__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Slider/minValue__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Slider/minimum__alias_minValue",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Slider/minimum__alias_minimumValue",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Slider/minimum__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Slider/progressTintColor__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Slider/step__static",
       "platforms": [
         "web"
       ]
@@ -1095,12 +969,6 @@
       ]
     },
     {
-      "fixture": "common/disabledBackground__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
       "fixture": "common/gravity__bottom",
       "platforms": [
         "web"
@@ -1144,12 +1012,6 @@
     },
     {
       "fixture": "common/height__wrapcontent",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "common/highlightBackground__static",
       "platforms": [
         "web"
       ]
@@ -1234,12 +1096,6 @@
     },
     {
       "fixture": "common/startMargin__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "common/tapBackground__static",
       "platforms": [
         "web"
       ]
