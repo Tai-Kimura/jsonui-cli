@@ -8,8 +8,11 @@ module KjuiTools
     module Components
       class ImageComponent
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
-          # Image source priority: srcName > src > defaultImage > 'placeholder'
-          raw_src = json_data['srcName'] || json_data['src'] || json_data['defaultImage'] || 'placeholder'
+          # Image source priority: srcName > src > defaultImage >
+          # loadingImage > 'placeholder'. A STATIC Image has no in-flight
+          # state, so `loadingImage` can only mean fallback imagery here
+          # (the sjui converter makes the same call).
+          raw_src = json_data['srcName'] || json_data['src'] || json_data['defaultImage'] || json_data['loadingImage'] || 'placeholder'
 
           # Add required imports
           required_imports&.add(:image)
@@ -27,7 +30,7 @@ module KjuiTools
             required_imports&.add(:local_context)
             code += "\n" + indent("painter = LocalContext.current.let { ctx ->", depth + 1)
             code += "\n" + indent("val resId = ctx.resources.getIdentifier(data.#{camel_case_name}, \"drawable\", ctx.packageName)", depth + 2)
-            code += "\n" + indent("if (resId != 0) painterResource(id = resId) else painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(json_data['defaultImage'] || 'placeholder')})", depth + 2)
+            code += "\n" + indent("if (resId != 0) painterResource(id = resId) else painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(json_data['defaultImage'] || json_data['loadingImage'] || 'placeholder')})", depth + 2)
             code += "\n" + indent("},", depth + 1)
           else
             # Static resource name needs painterResource

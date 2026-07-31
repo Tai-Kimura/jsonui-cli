@@ -50,13 +50,21 @@ module KjuiTools
           end
           
           # Build color list - process colors at generation time, not runtime
-          color_list = colors.map { |color| 
+          resolved_colors = colors.map { |color|
             Helpers::ResourceResolver.process_color(color, required_imports)
-          }.join(", ")
-          
-          # Add gradient modifier
+          }
+
+          # Add gradient modifier. `locations` (0.0-1.0 stops, one per
+          # colour) selects the colorStops overload; without it the colours
+          # spread evenly, which is the listOf form.
           required_imports&.add(:gradient)
-          modifiers << ".background(Brush.#{gradient_type}(listOf(#{color_list})))"
+          locations = json_data['locations']
+          if locations.is_a?(Array) && locations.length == resolved_colors.length
+            stops = locations.zip(resolved_colors).map { |loc, color| "#{loc}f to #{color}" }.join(", ")
+            modifiers << ".background(Brush.#{gradient_type}(#{stops}))"
+          else
+            modifiers << ".background(Brush.#{gradient_type}(listOf(#{resolved_colors.join(', ')})))"
+          end
           
           # Add corner radius if specified
           if json_data['cornerRadius']

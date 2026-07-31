@@ -97,6 +97,15 @@ module RjuiTools
             style_parts << "color: #{binding_expr}"
           end
 
+          # textShadow — same canonical object contract as Label.
+          shadow = attributes['textShadow']
+          if shadow.is_a?(Hash) && shadow['color'] && shadow['blur'] && shadow['offset'].is_a?(Array)
+            css_color = shadow['color'].to_s.start_with?('#') ? shadow['color'] : "var(--color-#{shadow['color']})"
+            style_parts << "textShadow: '#{shadow['offset'][0]}px #{shadow['offset'][1]}px #{shadow['blur']}px #{css_color}'"
+          elsif shadow.is_a?(String) && !shadow.empty?
+            style_parts << "textShadow: '#{shadow}'"
+          end
+
           return '' if style_parts.empty?
 
           " style={{ #{style_parts.join(', ')} }}"

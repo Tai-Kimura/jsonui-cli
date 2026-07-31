@@ -195,6 +195,12 @@
       ]
     },
     {
+      "fixture": "IconLabel/textShadow__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
       "fixture": "Image/contentMode__aspectfit",
       "platforms": [
         "web"
@@ -382,6 +388,12 @@
     },
     {
       "fixture": "Label/textAlign__right_2",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Label/textShadow__static",
       "platforms": [
         "web"
       ]

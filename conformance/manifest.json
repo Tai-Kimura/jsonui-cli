@@ -8,11 +8,11 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "d2917fc05e6a16df13ba0be7ff32198232153a98d1f1354f4e07517b410542f1",
+  "generatedFrom": "2184c0f39907d3b874ee4c883b0cb641e29ad808bb361ff370e216224203043c",
   "counts": {
-    "fixtures": 718,
+    "fixtures": 717,
     "assertable": 36,
-    "visual": 605,
+    "visual": 604,
     "interactive": 37,
     "control": 40,
     "skipped": 159,
@@ -4415,7 +4415,14 @@
       "host": "Label",
       "writtenKey": "textShadow",
       "aliasOf": null,
-      "value": "sample",
+      "value": {
+        "color": "#000000",
+        "blur": 4,
+        "offset": [
+          2,
+          2
+        ]
+      },
       "platforms": [
         "ios",
         "android",
@@ -13102,27 +13109,6 @@
       "control": "__control/Collection"
     },
     {
-      "id": "Collection/sectionSticky__true",
-      "component": "Collection",
-      "attribute": "sectionSticky",
-      "case": "true",
-      "class": "visual",
-      "host": "Collection",
-      "writtenKey": "sectionSticky",
-      "aliasOf": null,
-      "value": true,
-      "platforms": [
-        "android"
-      ],
-      "mode": "compose",
-      "deprecated": null,
-      "layout": "fixtures/Collection/sectionSticky__true.layout.json",
-      "test": "fixtures/Collection/sectionSticky__true.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": "__control/Collection"
-    },
-    {
       "id": "Radio/label__static",
       "component": "Radio",
       "attribute": "label",
@@ -14864,7 +14850,14 @@
       "host": "IconLabel",
       "writtenKey": "textShadow",
       "aliasOf": null,
-      "value": "sample",
+      "value": {
+        "color": "#000000",
+        "blur": 4,
+        "offset": [
+          2,
+          2
+        ]
+      },
       "platforms": [
         "ios",
         "android",

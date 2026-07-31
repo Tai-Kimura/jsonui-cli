@@ -15,6 +15,7 @@ require 'swiftui/views/radio_converter'
 require 'swiftui/views/selectbox_converter'
 require 'swiftui/views/toggle_converter'
 require 'swiftui/views/checkbox_converter'
+require 'swiftui/views/view_converter'
 require 'swiftui/views/color_helper'
 
 RSpec.describe 'pair-scan closure (swiftui)' do
@@ -133,5 +134,23 @@ RSpec.describe 'pair-scan closure (swiftui)' do
     code = convert(:CheckboxConverter,
                    'type' => 'CheckBox', 'id' => 'cb', 'value' => '@{agreed}')
     expect(code).to include('$data.agreed')
+  end
+end
+
+# Group-2 backlog closure (2026-07-31).
+RSpec.describe 'backlog closure group 2 (swiftui)' do
+  before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+  after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+
+  it 'common.indexAbove degrades to zIndex, mirroring indexBelow' do
+    named = SjuiTools::SwiftUI::Views::ViewConverter.new(
+      { 'type' => 'View', 'indexAbove' => 'other' }, 0, nil
+    ).convert
+    expect(named).to include('.zIndex(1)')
+
+    numeric = SjuiTools::SwiftUI::Views::ViewConverter.new(
+      { 'type' => 'View', 'indexAbove' => '3' }, 0, nil
+    ).convert
+    expect(numeric).to include('.zIndex(3)')
   end
 end

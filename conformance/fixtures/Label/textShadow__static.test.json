@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance Label.textShadow (static)",
-    "description": "Conformance fixture for 'textShadow' on Label (section: Label, class: visual). Value under test: \"sample\".",
+    "description": "Conformance fixture for 'textShadow' on Label (section: Label, class: visual). Value under test: {\"color\": \"#000000\", \"blur\": 4, \"offset\": [2, 2]}.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "textShadow__static",
-      "description": "Conformance fixture for 'textShadow' on Label (section: Label, class: visual). Value under test: \"sample\".",
+      "description": "Conformance fixture for 'textShadow' on Label (section: Label, class: visual). Value under test: {\"color\": \"#000000\", \"blur\": 4, \"offset\": [2, 2]}.",
       "steps": [
         {
           "action": "waitFor",

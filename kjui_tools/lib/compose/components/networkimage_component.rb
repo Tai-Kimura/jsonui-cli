@@ -30,8 +30,9 @@ module KjuiTools
 
           # NetworkImage uses 'source' or 'url' for image URL
           url = process_data_binding(json_data['source'] || json_data['url'] || json_data['src'] || '')
-          # Support both 'hint' (primary) and 'placeholder' (alias)
-          placeholder = json_data['hint'] || json_data['placeholder']
+          # Support 'hint' (primary), 'placeholder' and the legacy
+          # 'loadingImage' spelling — all name the in-flight image.
+          placeholder = json_data['hint'] || json_data['placeholder'] || json_data['loadingImage']
           content_description = json_data['contentDescription'] || 'Image'
 
           code = indent("AsyncImage(", depth)

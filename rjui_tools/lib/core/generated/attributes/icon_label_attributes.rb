@@ -34,8 +34,8 @@ module JsonUI
         { name: 'selectedFontColor', kind: :string }.freeze,
         # Label text (can be data binding)
         { name: 'text', kind: :string, bindable: true }.freeze,
-        # Text shadow
-        { name: 'textShadow', kind: :string }.freeze,
+        # Text shadow — same object contract as Label ({color, blur, offset: [x, y]}; the UIKit runtime passes the identical JSON to both) [accepts: string | object]
+        { name: 'textShadow', kind: :raw }.freeze,
       ].freeze
 
       # Returns a Hash keyed by canonical attribute name.

@@ -357,6 +357,12 @@ module RjuiTools
             classes << TailwindMapper.map_z_index(-1)
           end
 
+          # indexAbove — the mirror: in front, at z 1 (same degradation the
+          # iOS codegen applies for the view-ID form; an explicit zIndex wins).
+          if attributes['indexAbove'] && !attributes['zIndex']
+            classes << TailwindMapper.map_z_index(1)
+          end
+
           # Flex grow (weight)
           classes << TailwindMapper.map_flex_grow(attributes['weight']) if attributes['weight']
 

@@ -78,8 +78,6 @@ module JsonUI
         { name: 'scrollEnabled', kind: :boolean, bindable: true }.freeze,
         # PassthroughSubject<Int, Never> for programmatic scrolling to cell index
         { name: 'scrollTo', kind: :binding }.freeze,
-        # When true, section headers stick using LazyColumn.stickyHeader (Compose).
-        { name: 'sectionSticky', kind: :boolean }.freeze,
         # Section-based configuration
         { name: 'sections', kind: :array }.freeze,
         # Set target as data source

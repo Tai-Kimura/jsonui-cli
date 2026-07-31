@@ -379,6 +379,18 @@ module RjuiTools
             @dynamic_styles['color'] = color_style_expr(attributes['disabledFontColor'])
           end
 
+          # textShadow — canonical object {color, blur, offset: [x, y]}
+          # (UIKit SJUILabel requires all three; same contract here). Theme
+          # colour names resolve through the generated --color-* variables.
+          shadow = attributes['textShadow']
+          if shadow.is_a?(Hash) && shadow['color'] && shadow['blur'] && shadow['offset'].is_a?(Array)
+            css_color = shadow['color'].to_s.start_with?('#') ? shadow['color'] : "var(--color-#{shadow['color']})"
+            @dynamic_styles['textShadow'] = "'#{shadow['offset'][0]}px #{shadow['offset'][1]}px #{shadow['blur']}px #{css_color}'"
+          elsif shadow.is_a?(String) && !shadow.empty?
+            # A raw CSS string passes through untouched.
+            @dynamic_styles['textShadow'] = "'#{shadow}'"
+          end
+
           # lineBreakMode (truncation)
           if attributes['lineBreakMode']
             case attributes['lineBreakMode']

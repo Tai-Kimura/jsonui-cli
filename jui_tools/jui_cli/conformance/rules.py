@@ -388,6 +388,11 @@ VALUE_OVERRIDES: dict[str, Any] = {
 
 #: (section, attribute) overrides — beat VALUE_OVERRIDES.
 VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
+    # The canonical shadow object (UIKit SJUILabel contract) — a generic
+    # string value renders as invalid CSS on web and nothing anywhere, so
+    # the fixture could never differ from its control.
+    ("Label", "textShadow"): {"color": "#000000", "blur": 4, "offset": [2, 2]},
+    ("IconLabel", "textShadow"): {"color": "#000000", "blur": 4, "offset": [2, 2]},
     ("Segment", "items"): ["One", "Two"],
     ("SelectBox", "items"): ["One", "Two"],
     ("SelectBox", "selectedItem"): "Two",

@@ -143,6 +143,14 @@ module KjuiTools
                 else
                   code += "\n" + indent("// ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName}", depth + 3)
                 end
+              elsif json_data['valueChange'].is_a?(String) && !json_data['valueChange'].empty?
+                # `valueChange` is the legacy SELECTOR spelling (a bare
+                # method name, like `onclick`) that only UIKit read. Selector
+                # names camelize, matching the rjui/sjui handling of the same
+                # attribute.
+                selector = camelize_selector(json_data['valueChange'])
+                code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to #{index}))", depth + 3) if has_binding
+                code += "\n" + indent("data.#{selector}?.invoke()", depth + 3)
               elsif has_binding
                 # Update the bound variable
                 code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to #{index}))", depth + 3)
@@ -247,6 +255,13 @@ module KjuiTools
               else
                 code += "\n" + indent("// ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName}", depth + 4)
               end
+            elsif json_data['valueChange'].is_a?(String) && !json_data['valueChange'].empty?
+              # `valueChange` is the legacy SELECTOR spelling (a bare method
+              # name, like `onclick`) that only UIKit read. Selector names
+              # camelize, matching the rjui/sjui handling of the same
+              # attribute.
+              code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to index))", depth + 4) if has_binding
+              code += "\n" + indent("data.#{camelize_selector(json_data['valueChange'])}?.invoke()", depth + 4)
             elsif has_binding
               # Update the bound variable
               code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to index))", depth + 4)
@@ -295,6 +310,11 @@ module KjuiTools
         
         private
         
+        # snake_case selector -> camelCase data-property name.
+        def self.camelize_selector(name)
+          name.split('_').each_with_index.map { |w, i| i.zero? ? w : w.capitalize }.join
+        end
+
         def self.indent(text, level)
           return text if level == 0
           spaces = '    ' * level

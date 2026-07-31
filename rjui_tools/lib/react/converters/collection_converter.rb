@@ -193,6 +193,12 @@ module RjuiTools
             classes << "pr-[#{right}px]" if right&.positive?
           end
 
+          # insetVertical — vertical content padding (the UIKit content
+          # inset's vertical half).
+          if attributes['insetVertical'].is_a?(Numeric)
+            classes << "py-[#{attributes['insetVertical']}px]"
+          end
+
           # Same web semantics as ScrollView for its shared vocabulary:
           # indicator switches hide the scrollbar, and 'never' inset
           # adjustment zeroes the scroll padding.

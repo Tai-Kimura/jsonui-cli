@@ -585,6 +585,18 @@ module SjuiTools
             end
           end
 
+          # indexAbove — the mirror of indexBelow: in front. The view-ID form
+          # degrades to zIndex(+1), a numeric to zIndex(+N) (same degradation
+          # indexBelow ships; a true relative order would need the other
+          # view's resolved z).
+          if @component['indexAbove']
+            if @component['indexAbove'].to_s =~ /^\d+$/
+              @modifier_bag.append(:z_index, ".zIndex(#{@component['indexAbove'].to_i})")
+            else
+              @modifier_bag.append(:z_index, ".zIndex(1)")
+            end
+          end
+
           # クリックイベント
           # onClick (camelCase) -> binding format only (@{functionName})
           # `onclick` (lowercase) names a method directly — no binding — and is

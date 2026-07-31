@@ -3793,12 +3793,6 @@
       "platform": "swift",
       "mode": "swiftui"
     },
-    "sectionSticky": {
-      "type": "boolean",
-      "description": "When true, section headers stick using LazyColumn.stickyHeader (Compose).",
-      "platform": "kotlin",
-      "mode": "compose"
-    },
     "onValueChange": {
       "type": [
         "string",
@@ -4296,8 +4290,11 @@
       "description": "Text color - hex string or color name from colors.json"
     },
     "textShadow": {
-      "type": "string",
-      "description": "Text shadow"
+      "type": [
+        "string",
+        "object"
+      ],
+      "description": "Text shadow — same object contract as Label ({color, blur, offset: [x, y]}; the UIKit runtime passes the identical JSON to both)"
     },
     "selectedFontColor": {
       "type": "string",

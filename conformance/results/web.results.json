@@ -1,6 +1,6 @@
 {
   "platform": "web",
-  "manifestHash": "46b7ebe6446eed25529a816199b874d37937fddc31e982f30756d114d2277970",
+  "manifestHash": "149715ab22aab62feebc4153bb91f4642bc9abb1f059666dac656750e40ff75a",
   "runner": {
     "name": "playwright",
     "version": "1.61.1"
@@ -3241,11 +3241,6 @@
     },
     {
       "id": "Collection/containerInset__static",
-      "status": "skipped",
-      "detail": "not applicable to web"
-    },
-    {
-      "id": "Collection/sectionSticky__true",
       "status": "skipped",
       "detail": "not applicable to web"
     },

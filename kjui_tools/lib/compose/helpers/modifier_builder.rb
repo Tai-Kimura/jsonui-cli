@@ -430,11 +430,27 @@ module KjuiTools
         def self.build_background(json_data, required_imports = nil)
           modifiers = []
           
+          # highlighted — UIKit's pressed/selected appearance flag: when set
+          # (literal true, or a bool binding) the background swaps to
+          # highlightBackground, matching sjui's apply_highlighted_to_bag.
+          highlight_bg = json_data['highlightBackground']
+          highlight_cond = case json_data['highlighted']
+                           when true, 'true' then 'true'
+                           when String
+                             if is_binding?(json_data['highlighted'])
+                               "data.#{extract_binding_property(json_data['highlighted'])}"
+                             end
+                           end
+
           if json_data['background']
             required_imports&.add(:background)
             
             # Use ResourceResolver to process background color
             background_color = ResourceResolver.process_color(json_data['background'], required_imports)
+            if highlight_cond && highlight_bg
+              hl = ResourceResolver.process_color(highlight_bg, required_imports)
+              background_color = highlight_cond == 'true' ? hl : "if (#{highlight_cond}) #{hl} else #{background_color}"
+            end
             
             if json_data['cornerRadius'] || json_data['borderColor'] || json_data['borderWidth']
               required_imports&.add(:border)
@@ -453,6 +469,14 @@ module KjuiTools
             else
               modifiers << ".background(#{background_color})"
             end
+          elsif highlight_cond && highlight_bg
+            # No base background: the highlight IS the background when the
+            # flag holds (transparent otherwise, which is what no-background
+            # renders anyway).
+            required_imports&.add(:background)
+            hl = ResourceResolver.process_color(highlight_bg, required_imports)
+            expr = highlight_cond == 'true' ? hl : "if (#{highlight_cond}) #{hl} else Color.Transparent"
+            modifiers << ".background(#{expr})"
           elsif json_data['cornerRadius'] || json_data['borderColor'] || json_data['borderWidth']
             required_imports&.add(:border)
             required_imports&.add(:shape)

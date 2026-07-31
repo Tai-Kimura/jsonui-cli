@@ -493,6 +493,7 @@ require 'react/converters/image_converter'
 require 'react/converters/network_image_converter'
 require 'react/converters/label_converter'
 require 'react/converters/text_view_converter'
+require 'react/converters/segment_converter'
 
 RSpec.describe 'pair-scan closure (web)' do
   let(:config) { { 'use_tailwind' => true } }
@@ -580,5 +581,50 @@ RSpec.describe 'pair-scan closure (web)' do
     expect(r).to include('inputMode="email"')
     expect(r).to include('enterKeyHint="done"')
     expect(r).to include("textOverflow: 'ellipsis'")
+  end
+end
+
+# Group-2 backlog closure (2026-07-31): the implementable leftovers.
+RSpec.describe 'backlog closure group 2 (web)' do
+  let(:config) { { 'use_tailwind' => true } }
+
+  it 'Label/IconLabel: canonical textShadow object maps to CSS text-shadow' do
+    label = RjuiTools::React::Converters::LabelConverter.new(
+      { 'type' => 'Label', 'text' => 'T',
+        'textShadow' => { 'color' => '#000000', 'blur' => 4, 'offset' => [1, 2] } }, config
+    ).convert
+    expect(label).to include("textShadow: '1px 2px 4px #000000'")
+
+    icon = RjuiTools::React::Converters::IconLabelConverter.new(
+      { 'type' => 'IconLabel', 'text' => 'T', 'icon' => 'i.png',
+        'textShadow' => { 'color' => 'dark_red', 'blur' => 2, 'offset' => [0, 1] } }, config
+    ).convert
+    expect(icon).to include("textShadow: '0px 1px 2px var(--color-dark_red)'")
+  end
+
+  it 'Collection: insetVertical becomes vertical content padding' do
+    r = RjuiTools::React::Converters::CollectionConverter.new(
+      { 'type' => 'Collection', 'insetVertical' => 16, 'items' => '@{rows}' }, config
+    ).convert
+    expect(r).to include('py-[16px]')
+  end
+
+  it 'common.indexAbove degrades to z 1, and an explicit zIndex wins' do
+    above = RjuiTools::React::Converters::ViewConverter.new(
+      { 'type' => 'View', 'indexAbove' => 'other', 'child' => [] }, config
+    ).convert
+    expect(above).to include('z-[1]')
+
+    explicit = RjuiTools::React::Converters::ViewConverter.new(
+      { 'type' => 'View', 'indexAbove' => 'other', 'zIndex' => 5, 'child' => [] }, config
+    ).convert
+    expect(explicit).not_to include('z-[1]')
+  end
+
+  it 'Segment: legacy valueChange selector calls the named method' do
+    r = RjuiTools::React::Converters::SegmentConverter.new(
+      { 'type' => 'Segment', 'items' => %w[A B], 'valueChange' => 'on_tab_change' }, config
+    ).convert
+    expect(r).to include('data.onTabChange')
   end
 end

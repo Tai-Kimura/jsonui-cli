@@ -23,7 +23,92 @@ RSpec.describe 'Converter consumed-attribute coverage' do
   CONVERTERS_DIR = File.expand_path('../../../lib/react/converters', __dir__)
 
   CONSUMED = {
-    'base_converter.rb' => %w[accessibilityLabel alignBottom alignBottomOfView alignBottomView alignCenterHorizontalView alignCenterVerticalView alignLeft alignLeftOfView alignLeftView alignRight alignRightOfView alignRightView alignTop alignTopOfView alignTopView alt background bind borderColor borderStyle borderWidth bottomMargin bottomPadding canTap centerHorizontal centerInParent centerVertical className clipToBounds cornerRadius direction enabled endMargin font fontColor fontFamily fontSize fontWeight gravity height hidden id indexBelow insetHorizontal insets key leftMargin leftPadding margins maxHeight maxWidth minHeight minWidth offsetX offsetY onClick onclick opacity orientation padding paddingBottom paddingEnd paddingLeft paddingRight paddingStart paddingTop paddings propertyName rightMargin rightPadding shadow startMargin tag testId textAlign tintColor topMargin topPadding userInteractionEnabled visibility weight width zIndex],
+    'base_converter.rb' => %w[
+      accessibilityLabel
+      alignBottom
+      alignBottomOfView
+      alignBottomView
+      alignCenterHorizontalView
+      alignCenterVerticalView
+      alignLeft
+      alignLeftOfView
+      alignLeftView
+      alignRight
+      alignRightOfView
+      alignRightView
+      alignTop
+      alignTopOfView
+      alignTopView
+      alt
+      background
+      bind
+      borderColor
+      borderStyle
+      borderWidth
+      bottomMargin
+      bottomPadding
+      canTap
+      centerHorizontal
+      centerInParent
+      centerVertical
+      className
+      clipToBounds
+      cornerRadius
+      direction
+      enabled
+      endMargin
+      font
+      fontColor
+      fontFamily
+      fontSize
+      fontWeight
+      gravity
+      height
+      hidden
+      id
+      indexAbove
+      indexBelow
+      insetHorizontal
+      insets
+      key
+      leftMargin
+      leftPadding
+      margins
+      maxHeight
+      maxWidth
+      minHeight
+      minWidth
+      offsetX
+      offsetY
+      onClick
+      onclick
+      opacity
+      orientation
+      padding
+      paddingBottom
+      paddingEnd
+      paddingLeft
+      paddingRight
+      paddingStart
+      paddingTop
+      paddings
+      propertyName
+      rightMargin
+      rightPadding
+      shadow
+      startMargin
+      tag
+      testId
+      textAlign
+      tintColor
+      topMargin
+      topPadding
+      userInteractionEnabled
+      visibility
+      weight
+      width
+      zIndex
+    ],
     'blur_converter.rb' => %w[backgroundColor blurRadius cornerRadius effectStyle intensity onClick onclick],
     'button_converter.rb' => %w[buttonType cornerRadius disabledBackground disabledFontColor enabled fontColor highlightBackground highlightColor href image partialAttributes tapBackground text tintColor],
     'circle_view_converter.rb' => %w[background backgroundColor borderColor borderStyle borderWidth fillColor onClick onclick shadow strokeColor strokeWidth],
@@ -42,6 +127,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       headerClasses
       horizontalScroll
       id
+      insetVertical
       itemSpacing
       items
       layout
@@ -80,6 +166,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       spacing
       strikethrough
       text
+      textShadow
       tintColor
       underline
     ],
@@ -127,6 +214,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       strikethrough
       text
       textAlign
+      textShadow
       textTransform
       underline
     ],
@@ -162,7 +250,20 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       tintColor
     ],
     'scroll_view_converter.rb' => %w[bounces contentInset contentInsetAdjustmentBehavior horizontalScroll maxZoom orientation paging scrollBehavior scrollEnabled scrollMode showsHorizontalScrollIndicator showsVerticalScrollIndicator],
-    'segment_converter.rb' => %w[backgroundColor enabled fontColor fontSize height items onValueChange selectedBackground selectedFontColor selectedIndex selectedTabIndex],
+    'segment_converter.rb' => %w[
+      backgroundColor
+      enabled
+      fontColor
+      fontSize
+      height
+      items
+      onValueChange
+      selectedBackground
+      selectedFontColor
+      selectedIndex
+      selectedTabIndex
+      valueChange
+    ],
     'select_box_converter.rb' => %w[background borderColor colorScheme datePickerMode datePickerStyle dateStringFormat enabled font fontColor fontSize hint hintColor items labelAttributes maximumDate minimumDate minuteInterval multiple onChange onValueChange onValueChanged placeholder placeholderColor prompt selectItemType selectedDate selectedIndex selectedValue size textAlign value],
     'slider_converter.rb' => %w[enabled maximum maximumTrackTintColor minimum minimumTrackTintColor onValueChange range step tintColor value],
     'switch_converter.rb' => %w[checked enabled isOn label offTintColor onTintColor onValueChange text thumbTintColor tint tintColor value],

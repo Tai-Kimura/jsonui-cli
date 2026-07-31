@@ -144,6 +144,10 @@ module RjuiTools
 
           if handler && has_binding?(handler)
             extract_binding_property(handler)
+          elsif attributes['valueChange'].is_a?(String) && !attributes['valueChange'].empty?
+            # `valueChange` is the legacy SELECTOR spelling (a bare method
+            # name, like `onclick`) that only the UIKit runtime read.
+            add_viewmodel_data_prefix(to_camel_case(attributes['valueChange']))
           else
             # Generate setter from the raw binding name (without viewModel.data. prefix)
             selected = with_bind_fallback(attributes['selectedIndex'] || attributes['selectedTabIndex'])

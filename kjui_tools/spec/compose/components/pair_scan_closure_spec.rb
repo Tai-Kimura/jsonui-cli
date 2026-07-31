@@ -94,3 +94,66 @@ RSpec.describe 'pair-scan closure (compose)' do
     expect(code).to match(/cursorColor = .*ABCDEF/)
   end
 end
+
+# Group-2 backlog closure (2026-07-31).
+RSpec.describe 'backlog closure group 2 (compose)' do
+  before { KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {} }
+
+  it 'GradientView: locations selects the colorStops overload' do
+    require 'compose/components/gradientview_component'
+    code = KjuiTools::Compose::Components::GradientviewComponent.generate(
+      { 'type' => 'GradientView', 'colors' => ['#000000', '#FFFFFF'],
+        'locations' => [0.0, 0.7] }, 0, Set.new
+    )
+    text = code.is_a?(Hash) ? code[:code] : code
+    expect(text).to include('0.0f to Color(')
+    expect(text).to include('0.7f to Color(')
+
+    plain = KjuiTools::Compose::Components::GradientviewComponent.generate(
+      { 'type' => 'GradientView', 'colors' => ['#000000', '#FFFFFF'] }, 0, Set.new
+    )
+    ptext = plain.is_a?(Hash) ? plain[:code] : plain
+    expect(ptext).to include('listOf(')
+  end
+
+  it 'Image/NetworkImage: loadingImage joins the fallback/placeholder chain' do
+    require 'compose/components/image_component'
+    require 'compose/components/networkimage_component'
+    img = KjuiTools::Compose::Components::ImageComponent.generate(
+      { 'type' => 'Image', 'loadingImage' => 'spinner_art' }, 0, Set.new
+    )
+    itext = img.is_a?(Hash) ? img[:code] : img
+    expect(itext).to include('spinner_art')
+
+    net = KjuiTools::Compose::Components::NetworkImageComponent.generate(
+      { 'type' => 'NetworkImage', 'src' => 'https://x/y.png', 'loadingImage' => 'loading_art' }, 0, Set.new
+    )
+    expect(net).to include('loading_art')
+  end
+
+  it 'View.highlighted swaps the background (literal pins, binding is conditional)' do
+    mods = KjuiTools::Compose::Helpers::ModifierBuilder.build_background(
+      { 'highlighted' => true, 'highlightBackground' => '#FFEEDD', 'background' => '#FFFFFF' }, Set.new
+    )
+    expect(mods.join).to match(/background\(Color\(.*FFEEDD.*\)\)/)
+
+    bound = KjuiTools::Compose::Helpers::ModifierBuilder.build_background(
+      { 'highlighted' => '@{isPressed}', 'highlightBackground' => '#FFEEDD', 'background' => '#FFFFFF' }, Set.new
+    )
+    expect(bound.join).to include('if (data.isPressed)')
+
+    no_base = KjuiTools::Compose::Helpers::ModifierBuilder.build_background(
+      { 'highlighted' => '@{isPressed}', 'highlightBackground' => '#FFEEDD' }, Set.new
+    )
+    expect(no_base.join).to include('else Color.Transparent')
+  end
+
+  it 'Segment: legacy valueChange selector calls the named method' do
+    require 'compose/components/segment_component'
+    code = KjuiTools::Compose::Components::SegmentComponent.generate(
+      { 'type' => 'Segment', 'items' => %w[A B], 'valueChange' => 'on_tab_change' }, 0, Set.new
+    )
+    text = code.is_a?(Hash) ? code[:code] : code
+    expect(text).to include('onTabChange')
+  end
+end
