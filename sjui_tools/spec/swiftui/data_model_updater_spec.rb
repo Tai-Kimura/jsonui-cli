@@ -306,22 +306,19 @@ RSpec.describe SjuiTools::SwiftUI::DataModelUpdater do
     end
   end
 
-  describe '#extract_struct_name' do
+  describe '#extract_type_name' do
     let(:updater) { described_class.new }
 
-    it 'extracts struct name from file' do
-      path = File.join(data_dir, 'Test.swift')
-      File.write(path, "struct MyCustomData {\n  // content\n}")
-
-      result = updater.send(:extract_struct_name, path)
+    # W3-2: extract_struct_name(path) became the shared core's
+    # extract_type_name(content) hook — same regex, content-in instead
+    # of path-in (the core reads the file once in update_data_file).
+    it 'extracts struct name from content' do
+      result = updater.send(:extract_type_name, "struct MyCustomData {\n  // content\n}")
       expect(result).to eq('MyCustomData')
     end
 
     it 'returns nil if no struct found' do
-      path = File.join(data_dir, 'Empty.swift')
-      File.write(path, '// empty file')
-
-      result = updater.send(:extract_struct_name, path)
+      result = updater.send(:extract_type_name, '// empty file')
       expect(result).to be_nil
     end
   end

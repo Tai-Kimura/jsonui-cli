@@ -353,15 +353,16 @@ RSpec.describe KjuiTools::Compose::DataModelUpdater do
       end
     end
 
-    describe '#extract_class_name' do
+    describe '#extract_type_name' do
+      # W3-2: extract_class_name(path) became the shared core's
+      # extract_type_name(content) hook — same regex, content-in instead
+      # of path-in (the core reads the file once in update_data_file).
       it 'extracts class name from data class' do
-        File.write(File.join(data_dir, 'TestData.kt'), 'data class TestData(val name: String)')
-        expect(updater.send(:extract_class_name, File.join(data_dir, 'TestData.kt'))).to eq('TestData')
+        expect(updater.send(:extract_type_name, 'data class TestData(val name: String)')).to eq('TestData')
       end
 
       it 'returns nil for non-matching content' do
-        File.write(File.join(data_dir, 'Other.kt'), 'class NotDataClass {}')
-        expect(updater.send(:extract_class_name, File.join(data_dir, 'Other.kt'))).to be_nil
+        expect(updater.send(:extract_type_name, 'class NotDataClass {}')).to be_nil
       end
     end
 
@@ -553,7 +554,7 @@ RSpec.describe KjuiTools::Compose::DataModelUpdater do
         }
 
         event_bindings = updater.send(:extract_event_bindings, json_data)
-        result = updater.send(:extract_data_properties, json_data, [], 0, event_bindings)
+        result = updater.send(:extract_data_properties, json_data, [], event_bindings)
 
         expect(result.length).to eq(1)
         # Event should be converted to (String, Boolean) for Switch.onValueChange in Compose
@@ -573,7 +574,7 @@ RSpec.describe KjuiTools::Compose::DataModelUpdater do
         }
 
         event_bindings = updater.send(:extract_event_bindings, json_data)
-        result = updater.send(:extract_data_properties, json_data, [], 0, event_bindings)
+        result = updater.send(:extract_data_properties, json_data, [], event_bindings)
 
         expect(result.length).to eq(1)
         # Event should be converted to (String, Unit) for Button.onClick in Compose
@@ -593,7 +594,7 @@ RSpec.describe KjuiTools::Compose::DataModelUpdater do
         }
 
         event_bindings = updater.send(:extract_event_bindings, json_data)
-        result = updater.send(:extract_data_properties, json_data, [], 0, event_bindings)
+        result = updater.send(:extract_data_properties, json_data, [], event_bindings)
 
         expect(result.length).to eq(1)
         # Event should be converted to (String, String) for TextField.onTextChange in Compose
@@ -613,7 +614,7 @@ RSpec.describe KjuiTools::Compose::DataModelUpdater do
         }
 
         event_bindings = updater.send(:extract_event_bindings, json_data)
-        result = updater.send(:extract_data_properties, json_data, [], 0, event_bindings)
+        result = updater.send(:extract_data_properties, json_data, [], event_bindings)
 
         expect(result.length).to eq(1)
         # Non-Event type should remain unchanged
@@ -629,7 +630,7 @@ RSpec.describe KjuiTools::Compose::DataModelUpdater do
         }
 
         event_bindings = updater.send(:extract_event_bindings, json_data)
-        result = updater.send(:extract_data_properties, json_data, [], 0, event_bindings)
+        result = updater.send(:extract_data_properties, json_data, [], event_bindings)
 
         expect(result.length).to eq(1)
         # Unbound Event type should remain unchanged
