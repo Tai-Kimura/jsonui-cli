@@ -8,14 +8,14 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "4c8bc6b85d9c81109565edceddd2e6edf6ea51f5b5651df8e1004a78d591a0dd",
+  "generatedFrom": "b01bc992ef4ce5e11c1d83de119398c84f027b8d1a6081b3910fcdcb3504feab",
   "counts": {
     "fixtures": 670,
     "assertable": 29,
     "visual": 572,
     "interactive": 35,
     "control": 34,
-    "skipped": 153,
+    "skipped": 154,
     "promoted": {
       "callback": 11
     }
@@ -16140,6 +16140,11 @@
       "component": "View",
       "attribute": "onDragLeave",
       "reason": "callback"
+    },
+    {
+      "component": "CircleView",
+      "attribute": "_comment",
+      "reason": "definition metadata, not an attribute"
     },
     {
       "component": "CircleView",
