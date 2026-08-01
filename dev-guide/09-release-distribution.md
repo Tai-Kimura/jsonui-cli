@@ -106,6 +106,30 @@ push せず、rsync/sync_tool による同期のみ。
 - **drift-check の運用**: 正準スキーマは `test_tools/tests/schema_fixtures/` に **test 専用 fixture として vendor**（パッケージ非同梱＝実行時無依存を維持）。
   test-runner 側でスキーマを変えたら `schema_fixtures/VENDOR.md` の手順で再 vendor し、`test_schema_drift.py` を通す（通らなければ実 drift）。
 
+### attr-codegen テーブルの再 vendor（SwiftJsonUI / KotlinJsonUI — B3 ガード付き）
+
+swift / kotlin テーブルは手動 rsync だが、規律ではなく**ゲート**で守られている:
+`jui generate attr-bindings --lang all` が `build/attr_codegen/manifest.json`
+（ファイル毎 sha256 + attribute_definitions.json の source sha256。build/ 配下で
+唯一のコミット対象）を発行し、ssot-guards が陳腐化で fail、両ライブラリ CI の
+`vendored-attr-guard` ジョブがピン参照(`JSONUI_CLI_MANIFEST_REF`)の manifest と
+vendored 実体を双方向照合する（hash 不一致・欠落・余剰いずれも fail。
+`skipped_attributes.json` は emit メタデータで vendor 対象外）。
+
+再 vendor の正式手順（順序厳守）:
+
+1. `jui generate attr-bindings --lang all` — テーブルと manifest を同時再生成
+2. jsonui-cli コミット: attr テーブル差分の原因(SSoT 変更等) + **manifest を同一コミット**に → push
+3. rsync: `build/attr_codegen/swift/*.swift` → SwiftJsonUI
+   `Sources/SwiftJsonUI/Classes/SwiftUI/Dynamic/Generated/Attributes/`、
+   `build/attr_codegen/kotlin/*.kt` → KotlinJsonUI
+   `library-dynamic/src/main/kotlin/com/kotlinjsonui/dynamic/generated/`
+4. **両ライブラリをビルド**（テーブルからフィールドが消える変更は本体コードの追随が要る —
+   sjui は xcodebuild + iOS Simulator、kjui は `:library-dynamic:compileReleaseKotlin`）
+5. 各ライブラリのコミットで **再 vendor と `JSONUI_CLI_MANIFEST_REF` バンプを同一コミット**に
+   （2. の push 済み SHA、次回リリース以降はタグを推奨 — manifest は `2299153` 以降にのみ存在）
+6. CI 3 本 green を確認（jsonui-cli ssot-guards / 両ライブラリ vendored-attr-guard）
+
 ### jsonui-helper
 - `npm run sync:specs` → vendor/VERSION（cli SHA）更新 → `vsce package`（.vsix）。
 
