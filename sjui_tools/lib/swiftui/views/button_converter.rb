@@ -166,24 +166,6 @@ module SjuiTools
               add_line "backgroundColor: #{get_swiftui_color(@component['background'])},"
             end
 
-            # Icon. `image` was declared for Button but no SwiftUI converter
-            # read it, so an icon-only button rendered as an empty button.
-            # Resolution follows Image#srcName: a bare name is an asset name,
-            # a binding resolves through data.
-            #
-            # The tint is only passed when the layout asked for one — a
-            # template rendering mode would flatten a multi-colour asset to a
-            # single colour. Same rule as the Compose and web converters.
-            if has_image
-              if is_binding?(image)
-                add_line "image: data.#{extract_binding_property(image)},"
-              else
-                add_line "image: \"#{image}\","
-              end
-              image_tint = @component['tintColor'] || @component['fontColor']
-              add_line "imageTint: #{get_swiftui_color(image_tint)}," if image_tint
-            end
-
             # State-dependent colors
             if @component['tapBackground']
               add_line "tapBackground: #{get_swiftui_color(@component['tapBackground'])},"
@@ -192,8 +174,13 @@ module SjuiTools
             if highlight_color
               add_line "highlightColor: #{get_swiftui_color(highlight_color)},"
             end
-            if @component['highlightBackground']
-              add_line "highlightBackground: #{get_swiftui_color(@component['highlightBackground'])},"
+            # highlightBackground is the UIKit-era spelling of the pressed-state
+            # background; the SwiftUI component's parameter is tapBackground.
+            # Emitting the attribute name verbatim produced an "extra argument"
+            # compile error (caught by the codegen parity host). Canonical
+            # tapBackground wins when both are present.
+            if @component['highlightBackground'] && !@component['tapBackground']
+              add_line "tapBackground: #{get_swiftui_color(@component['highlightBackground'])},"
             end
             if @component['disabledFontColor']
               add_line "disabledFontColor: #{get_swiftui_color(@component['disabledFontColor'])},"
@@ -272,6 +259,29 @@ module SjuiTools
               if parent_orientation == 'vertical'
                 add_line "height: -1,"
               end
+            end
+
+            # Icon. `image` was declared for Button but no SwiftUI converter
+            # read it, so an icon-only button rendered as an empty button.
+            # Resolution follows Image#srcName: a bare name is an asset name,
+            # a binding resolves through data.
+            #
+            # The tint is only passed when the layout asked for one — a
+            # template rendering mode would flatten a multi-colour asset to a
+            # single colour. Same rule as the Compose and web converters.
+            #
+            # Emitted LAST: Swift requires call-site argument order to match
+            # the declaration, and image/imageTint are the final parameters of
+            # StateAwareButtonView.init ("argument 'isEnabled' must precede
+            # argument 'image'" — caught by the codegen parity host).
+            if has_image
+              if is_binding?(image)
+                add_line "image: data.#{extract_binding_property(image)},"
+              else
+                add_line "image: \"#{image}\","
+              end
+              image_tint = @component['tintColor'] || @component['fontColor']
+              add_line "imageTint: #{get_swiftui_color(image_tint)}," if image_tint
             end
 
             # Remove trailing comma from last parameter

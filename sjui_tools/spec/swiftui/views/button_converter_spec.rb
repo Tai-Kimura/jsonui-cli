@@ -224,11 +224,33 @@ RSpec.describe SjuiTools::SwiftUI::Views::ButtonConverter do
         }
       end
 
-      it 'includes highlightBackground parameter' do
+      it 'maps highlightBackground to the tapBackground parameter' do
         converter = described_class.new(component)
         code = converter.convert
 
-        expect(code).to include('highlightBackground:')
+        # StateAwareButtonView's pressed-state background parameter is
+        # tapBackground; emitting the UIKit-era attribute name verbatim was
+        # an "extra argument" compile error (codegen parity host, 2026-08-02).
+        expect(code).to include('tapBackground:')
+        expect(code).not_to include('highlightBackground:')
+      end
+    end
+
+    context 'with both tapBackground and highlightBackground' do
+      let(:component) do
+        {
+          'type' => 'Button',
+          'text' => 'Both',
+          'tapBackground' => '#00FF00',
+          'highlightBackground' => '#FFFF00'
+        }
+      end
+
+      it 'emits tapBackground once — the canonical spelling wins' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code.scan('tapBackground:').length).to eq(1)
       end
     end
 

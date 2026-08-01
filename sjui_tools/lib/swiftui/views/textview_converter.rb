@@ -21,10 +21,16 @@ module SjuiTools
             property_name = SwiftUI::Binding::BindingExpression.parse(text_binding[2..-2]).path
             binding_path = "data.#{property_name}"
           else
-            # Fallback to ID-based naming if no binding
+            # Fallback to ID-based naming if no binding. The state variable is
+            # injected into the generated VIEW as `@State private var …` (see
+            # add_state_variable / update_generated_body), so the reference is
+            # the bare name — a `data.` prefix points at a property the Data
+            # model never grows (caught compiling the codegen parity host:
+            # every no-binding TextView fixture failed with "no dynamic
+            # member 'targetText'"). Radio's fallback is the precedent.
             state_var = "#{id}Text"
             add_state_variable(state_var, "String", '""')
-            binding_path = "data.#{state_var}"
+            binding_path = state_var
           end
 
           # TextViewWithPlaceholderを使用
@@ -112,27 +118,6 @@ module SjuiTools
               add_line "hideOnFocused: false,"
             end
 
-            # lineBreakMode — same truncation vocabulary as Label.
-            if @component['lineBreakMode']
-              truncation = case @component['lineBreakMode']
-                           when 'Head' then '.head'
-                           when 'Middle' then '.middle'
-                           when 'Tail', 'Clip' then '.tail'
-                           end
-              add_modifier_line ".truncationMode(#{truncation})" if truncation
-            end
-
-            # returnKeyType — the soft-keyboard submit label, as on TextField.
-            if @component['returnKeyType']
-              add_modifier_line ".submitLabel(#{return_key_to_submit_label(@component['returnKeyType'])})"
-            end
-
-            # scrollEnabled: false pins the editor (iOS 16+ scrollDisabled;
-            # the package floor is 17).
-            if @component['scrollEnabled'] == false
-              add_modifier_line ".scrollDisabled(true)"
-            end
-
             # fontSize
             if @component['fontSize']
               add_line "fontSize: #{@component['fontSize']},"
@@ -210,6 +195,34 @@ module SjuiTools
             end
           end
           add_line ")"
+
+          # Modifiers below attach to the CLOSED call — emitting them inside
+          # the argument block put raw `.modifier(...)` lines between
+          # labeled arguments and produced uncompilable Swift ("expected ','
+          # separator"), which is exactly how the codegen parity host caught
+          # TextView/returnKeyType__* failing to build while dynamic mode
+          # rendered them fine.
+
+          # lineBreakMode — same truncation vocabulary as Label.
+          if @component['lineBreakMode']
+            truncation = case @component['lineBreakMode']
+                         when 'Head' then '.head'
+                         when 'Middle' then '.middle'
+                         when 'Tail', 'Clip' then '.tail'
+                         end
+            add_modifier_line ".truncationMode(#{truncation})" if truncation
+          end
+
+          # returnKeyType — the soft-keyboard submit label, as on TextField.
+          if @component['returnKeyType']
+            add_modifier_line ".submitLabel(#{return_key_to_submit_label(@component['returnKeyType'])})"
+          end
+
+          # scrollEnabled: false pins the editor (iOS 16+ scrollDisabled;
+          # the package floor is 17).
+          if @component['scrollEnabled'] == false
+            add_modifier_line ".scrollDisabled(true)"
+          end
 
           # onTextChange handler - called when text changes
           # onTextChange (camelCase) -> binding format only (@{functionName})

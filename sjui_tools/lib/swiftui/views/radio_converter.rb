@@ -68,16 +68,21 @@ module SjuiTools
             # Create @State variable name for selection (グループごとに管理)
             state_var = "selected#{group.split('_').map(&:capitalize).join}"
             
-            # Add state variable to requirements
+            # Add state variable to requirements. The variable is injected
+            # into the generated VIEW as `@State private var …`, so references
+            # are the bare name — a `data.` prefix points at a property the
+            # Data model never grows (uncompilable; caught by the codegen
+            # parity host on __control/Radio, 2026-08-02). The items-based
+            # branch above already references it bare.
             add_state_variable(state_var, "String", '""')
             
             # カスタムRadioButton実装
             add_line "HStack {"
             indent do
-              add_radio_icon_lines("data.#{state_var} == \"#{radio_value}\"")
+              add_radio_icon_lines("#{state_var} == \"#{radio_value}\"")
               add_modifier_line ".onTapGesture {"
               indent do
-                add_line "data.#{state_var} = \"#{radio_value}\""
+                add_line "#{state_var} = \"#{radio_value}\""
                 # onClick handler - called when radio is clicked
                 # onClick (camelCase) -> binding format only (@{functionName})
                 if @component['onClick'] && is_binding?(@component['onClick'])

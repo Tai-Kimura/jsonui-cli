@@ -229,14 +229,14 @@ RSpec.describe SjuiTools::SwiftUI::Views::RadioConverter do
 
       it 'leaves the system symbol pair untouched when nothing is declared' do
         code = glyph({})
-        expect(code).to include('Image(systemName: data.selectedG == "r1" ? "largecircle.fill.circle" : "circle")')
+        expect(code).to include('Image(systemName: selectedG == "r1" ? "largecircle.fill.circle" : "circle")')
         expect(code).to include('.foregroundColor(.blue)')
         expect(code).not_to include('.frame(width:')
       end
 
       it 'uses named assets when icon / selectedIcon are given' do
         code = glyph({ 'icon' => 'off_img', 'selectedIcon' => 'on_img' })
-        expect(code).to include('Image(data.selectedG == "r1" ? "on_img" : "off_img")')
+        expect(code).to include('Image(selectedG == "r1" ? "on_img" : "off_img")')
         expect(code).to include('.resizable()')
       end
 

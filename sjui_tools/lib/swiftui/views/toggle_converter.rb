@@ -30,11 +30,14 @@ module SjuiTools
                            # state (kjui and web both accept it).
                            "$data.#{extract_binding_property(@component['value'])}"
                          else
-                           # Create @State variable name
+                           # View-local @State fallback (injected by
+                           # update_generated_body) — bare reference; `$data.`
+                           # pointed at a property the Data model never grows
+                           # and did not compile (codegen parity host,
+                           # __control/Switch, 2026-08-02).
                            state_var = "#{id}IsOn"
-                           # Add state variable to requirements
                            add_state_variable(state_var, "Bool", @component['isOn'] || @component['checked'] || @component['value'] == true ? 'true' : 'false')
-                           "$data.#{state_var}"
+                           "$#{state_var}"
                          end
 
           # Toggle

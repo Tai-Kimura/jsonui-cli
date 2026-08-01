@@ -32,7 +32,14 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextViewConverter do
         code = converter.convert
 
         expect(code).to include('TextViewWithPlaceholder(')
-        expect(code).to include('text: $data.editorText')
+        # The fallback is a view-local @State variable (injected by
+        # update_generated_body), so the reference is the bare name — a
+        # `data.` prefix points at a property the Data model never grows
+        # (uncompilable; caught by the codegen parity host, 2026-08-02).
+        expect(code).to include('text: $editorText')
+        expect(converter.state_variables).to include(
+          '@State private var editorText: String = ""'
+        )
       end
     end
 

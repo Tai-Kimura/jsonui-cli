@@ -21,10 +21,15 @@ module SjuiTools
                              elsif (@component['selectedTabIndex'] && is_binding?(@component['selectedTabIndex']))
                                "$data.#{extract_binding_property(@component['selectedTabIndex'])}"
                              else
-                               # Use state variable name on data object
+                               # View-local @State fallback (injected by
+                               # update_generated_body) — bare reference; the
+                               # old `$data.` spelling pointed at a property
+                               # the Data model never grows and did not
+                               # compile (codegen parity host, __control/
+                               # Segment, 2026-08-02). Picker tags are Int.
                                state_var = "selected#{id.split('_').map(&:capitalize).join}"
-                               # Note: This needs to be defined in JSON data section
-                               "$data.#{state_var}"
+                               add_state_variable(state_var, "Int", "0")
+                               "$#{state_var}"
                              end
           
           # Picker（SwiftUIのSegmented Control）
@@ -123,6 +128,12 @@ module SjuiTools
           end
           add_line "}"
         end
+
+        def add_state_variable(name, type, default_value)
+          @state_variables ||= []
+          @state_variables << "@State private var #{name}: #{type} = #{default_value}"
+        end
+
       end
     end
   end
