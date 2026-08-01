@@ -505,15 +505,18 @@
       "swift_dynamic": false,
       "kotlin_generated": false,
       "kotlin_dynamic": true,
-      "react": false
+      "react": true
     },
     "platformSpecific": {
       "kotlin": {
         "composable": "Box with CircleShape clip (dynamic runtime only)"
+      },
+      "react": {
+        "element": "div with rounded-full clip, centered content"
       }
     },
     "rules": [
-      "Only the Kotlin dynamic runtime dispatches CircleView — SwiftUI codegen/dynamic, Compose codegen and React render a fallback instead",
+      "Only the Kotlin dynamic runtime and React dispatch CircleView — SwiftUI codegen/dynamic and Compose codegen render a fallback instead",
       "For cross-platform layouts use View with cornerRadius"
     ]
   },
@@ -525,7 +528,7 @@
       "swift_dynamic": true,
       "kotlin_generated": true,
       "kotlin_dynamic": true,
-      "react": false
+      "react": true
     },
     "platformSpecific": {
       "swift": {
@@ -533,11 +536,13 @@
       },
       "kotlin": {
         "composable": "Brush.linearGradient / radialGradient"
+      },
+      "react": {
+        "element": "div with a CSS linear/radial-gradient background"
       }
     },
     "rules": [
-      "colors array defines gradient stops",
-      "Not implemented in ReactJsonUI — rjui renders unmapped types as a plain View"
+      "colors array defines gradient stops"
     ]
   },
   "Blur": {
@@ -548,7 +553,7 @@
       "swift_dynamic": true,
       "kotlin_generated": false,
       "kotlin_dynamic": true,
-      "react": false
+      "react": true
     },
     "platformSpecific": {
       "swift": {
@@ -556,11 +561,13 @@
       },
       "kotlin": {
         "composable": "Box with Modifier.blur() (dynamic runtime only)"
+      },
+      "react": {
+        "element": "div with backdrop-filter blur"
       }
     },
     "rules": [
-      "Kotlin Compose codegen dispatches only the legacy BlurView spelling; canonical Blur reaches the dynamic runtime only",
-      "Not implemented in ReactJsonUI — rjui renders unmapped types as a plain View"
+      "Kotlin Compose codegen dispatches only the legacy BlurView spelling; canonical Blur reaches the dynamic runtime only"
     ]
   },
   "IconLabel": {
@@ -571,7 +578,7 @@
       "swift_dynamic": true,
       "kotlin_generated": true,
       "kotlin_dynamic": true,
-      "react": false
+      "react": true
     },
     "platformSpecific": {
       "swift": {
@@ -579,11 +586,13 @@
       },
       "kotlin": {
         "composable": "Row with Icon + Text"
+      },
+      "react": {
+        "element": "flex div with img + span; iconPosition maps to the flex direction"
       }
     },
     "rules": [
-      "icon_on / icon_off / selected drive the two-state icon; iconPosition places the icon Left/Right/Top/Bottom",
-      "Not implemented in ReactJsonUI — rjui renders unmapped types as a plain View"
+      "icon_on / icon_off / selected drive the two-state icon; iconPosition places the icon Left/Right/Top/Bottom"
     ]
   },
   "Web": {
@@ -594,7 +603,7 @@
       "swift_dynamic": true,
       "kotlin_generated": true,
       "kotlin_dynamic": true,
-      "react": false
+      "react": true
     },
     "platformSpecific": {
       "swift": {
@@ -602,11 +611,13 @@
       },
       "kotlin": {
         "composable": "AndroidView with WebView"
+      },
+      "react": {
+        "element": "sandboxed iframe (allow-scripts allow-same-origin allow-forms)"
       }
     },
     "rules": [
-      "url attribute specifies the web page to load",
-      "Not implemented in ReactJsonUI — rjui renders unmapped types as a plain View"
+      "url attribute specifies the web page to load"
     ]
   },
   "SafeAreaView": {

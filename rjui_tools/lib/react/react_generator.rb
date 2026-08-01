@@ -24,6 +24,11 @@ require_relative 'converters/select_box_converter'
 require_relative 'converters/include_converter'
 require_relative 'converters/tab_view_converter'
 require_relative 'converters/embed_converter'
+require_relative 'converters/icon_label_converter'
+require_relative 'converters/circle_view_converter'
+require_relative 'converters/web_converter'
+require_relative 'converters/blur_converter'
+require_relative 'converters/gradient_view_converter'
 require_relative 'tailwind_mapper'
 require_relative 'responsive_helper'
 require_relative 'helpers/string_manager_helper'
@@ -71,7 +76,15 @@ module RjuiTools
         'SelectBox' => Converters::SelectBoxConverter,
         'Include' => Converters::IncludeConverter,
         'TabView' => Converters::TabViewConverter,
-        'Embed' => Converters::EmbedConverter
+        'Embed' => Converters::EmbedConverter,
+        # These five ship the same canonical names as BaseConverter's child
+        # dispatch map — the two tables must stay in step or a type renders
+        # differently at root vs nested position.
+        'IconLabel' => Converters::IconLabelConverter,
+        'CircleView' => Converters::CircleViewConverter,
+        'Web' => Converters::WebConverter,
+        'Blur' => Converters::BlurConverter,
+        'GradientView' => Converters::GradientViewConverter
       }.freeze
 
       def initialize(config)
@@ -206,7 +219,14 @@ module RjuiTools
         type = json['type'] || 'View'
 
         # First check extension converters, then built-in converters
-        converter_class = @extension_converters[type] || CONVERTERS[type] || Converters::ViewConverter
+        converter_class = @extension_converters[type] || CONVERTERS[type]
+        unless converter_class
+          # sjui renders unknown types as a red "Unsupported component" Text
+          # and swift dynamic as an error box; silently degrading to a plain
+          # View here left react the only face that hid the failure.
+          Core::Logger.warn("Unknown component type '#{type}' — rendering as a plain View (no converter registered)") if defined?(Core::Logger)
+          converter_class = Converters::ViewConverter
+        end
 
         converter = converter_class.new(json, @config)
         converter.convert_node(indent)

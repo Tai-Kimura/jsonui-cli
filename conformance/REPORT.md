@@ -2,8 +2,8 @@
 
 # JsonUI Conformance Report
 
-- Manifest: `149715ab22aab62feebc4153bb91f4642bc9abb1f059666dac656750e40ff75a` (sha256)
-- Definitions: `2184c0f39907d3b874ee4c883b0cb641e29ad808bb361ff370e216224203043c` (sha256)
+- Manifest: `a753ab98864aa33ca04b81a906d00377057c06a3ccbb5a3271074c37b86318ee` (sha256)
+- Definitions: `18c2a4b7cd008396f2e10246002a68122b4541dec339b0fc9c1d7ad510a62047` (sha256)
 - Fixtures: 717 (assertable: 36, visual: 604, interactive: 37) / skipped attributes: 159
 
 Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
@@ -58,12 +58,12 @@ _No cross-platform mismatches._
 
 ## Visual regression (same-platform baselines)
 
-Screenshots are compared against `baselines/<platform>.hashes.json` (algorithm `dhash-64`, Hamming distance > threshold ⇒ regression). Cross-platform pixel comparison is out of scope by design.
+Screenshots are compared against `baselines/local/<platform>.hashes.json` (render environment `local`; algorithm `dhash-64`, Hamming distance > threshold ⇒ regression). Baselines only ever compare within one render environment — cross-environment and cross-platform pixel comparison are out of scope by design.
 
 | Platform | Baseline | Compared | Regressions | No baseline | Missing artifact |
 |---|---|---|---|---|---|
 | android | threshold 8 | 506 | 0 | 0 | 12 |
-| ios | threshold 8 | 534 | 0 | 0 | 6 |
+| ios | threshold 8 | 0 | 0 | 0 | 540 |
 | web | threshold 8 | 510 | 0 | 0 | 4 |
 
 ## Attribute effect (fixture vs control)
@@ -73,16 +73,22 @@ Each visual fixture is compared against its **control** — the same layout with
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
 | android | 422 | 155 | 267 | 0 | 0 |
-| ios | 451 | 148 | 303 | 0 | 0 |
+| ios | 0 | 0 | 0 | 0 | 148 |
 | web | 427 | 191 | 236 | 0 | 0 |
+
+> ios: 303 fixture(s) had no usable control screenshot (not compared — NOT a pass)
 
 ## Platforms
 
 | Platform | Runner | Results | pass | fail | error | skipped | Manifest |
 |---|---|---|---|---|---|---|---|
-| android | uiautomator 2.3.0 | 717 | 574 | 0 | 0 | 143 | current |
-| ios | xcuitest ios-18.6 | 717 | 601 | 0 | 0 | 116 | current |
+| android | uiautomator 2.3.0 | 717 | 574 | 0 | 0 | 143 | ⚠️ STALE |
+| ios | xcuitest ios-18.6 | 717 | 601 | 0 | 0 | 116 | ⚠️ STALE |
 | web | playwright 1.61.1 | 717 | 578 | 0 | 0 | 139 | current |
+
+> ⚠️ `android.results.json` was produced against manifest `149715ab22aab62feebc4153bb91f4642bc9abb1f059666dac656750e40ff75a` but the current manifest is `a753ab98864aa33ca04b81a906d00377057c06a3ccbb5a3271074c37b86318ee` — results are stale; re-run the android suite.
+
+> ⚠️ `ios.results.json` was produced against manifest `149715ab22aab62feebc4153bb91f4642bc9abb1f059666dac656750e40ff75a` but the current manifest is `a753ab98864aa33ca04b81a906d00377057c06a3ccbb5a3271074c37b86318ee` — results are stale; re-run the ios suite.
 
 ## Matrix
 
