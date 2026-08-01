@@ -3,13 +3,23 @@
 require 'fileutils'
 require 'json'
 require_relative '../../core/logger'
+require_relative '../../core/generated_marker'
+require_relative '../../core/converter_generator_core'
 require_relative 'kotlin_component_generator'
 require_relative 'dynamic_component_generator'
 
 module KjuiTools
   module Compose
     module Generators
-      class ConverterGenerator
+      # Android profile over the shared converter-scaffolder body
+      # (lib/core/converter_generator_core.rb — byte-identical mirror of
+      # shared/core/converter_generator_core.rb, pinned by
+      # spec/core/shared_core_mirror_spec.rb). The overwrite flow, registry
+      # patching, attribute-definition JSON and type mapping live in the
+      # shared core; this class owns the Compose scaffold template, the
+      # Kotlin/Dynamic sub-generators and the DynamicComponentInitializer
+      # pair.
+      class ConverterGenerator < ::JsonUIShared::ConverterGeneratorCore
         def initialize(name, options = {})
           @name = name
           # Keep original PascalCase name for component
@@ -50,127 +60,57 @@ module KjuiTools
 
         private
 
-        def create_converter_file
-          # Get the path relative to this generator file
+        def extensions_dir
+          # Resolve relative to this generator file: the scaffold lands in
+          # the tool copy the project runs (lib/compose/components/extensions)
           generator_dir = File.dirname(__FILE__)
-          # Go up to lib/compose/components/extensions
-          extensions_dir = File.join(generator_dir, '..', 'components', 'extensions')
-          extensions_dir = File.expand_path(extensions_dir)
-          FileUtils.mkdir_p(extensions_dir)
-
-          file_path = File.join(extensions_dir, "#{@component_snake_case}_component.rb")
-
-          if File.exist?(file_path)
-            # `jui build` (and other non-interactive flows) set JUI_SKIP_EXISTING=1
-            # so the prompt is bypassed and existing converter files are left alone.
-            if ENV['JUI_SKIP_EXISTING'] == '1'
-              @logger.info "Skipped existing converter: #{file_path}"
-              return
-            end
-            @logger.warn "Converter file already exists: #{file_path}"
-            print "Overwrite? (y/n): "
-            response = gets.chomp.downcase
-            return unless response == 'y'
-          end
-
-          File.write(file_path, converter_template)
-          @logger.info "Created converter file: #{file_path}"
+          File.expand_path(File.join(generator_dir, '..', 'components', 'extensions'))
         end
 
-        def update_mappings_file
-          # Get the path relative to this generator file
-          generator_dir = File.dirname(__FILE__)
-          mappings_file = File.join(generator_dir, '..', 'components', 'extensions', 'component_mappings.rb')
-          mappings_file = File.expand_path(mappings_file)
-
-          # Create new mappings file if it doesn't exist
-          if !File.exist?(mappings_file)
-            create_initial_mappings_file
-            return
-          end
-
-          # Read existing mappings
-          content = File.read(mappings_file)
-
-          # Check if mapping already exists
-          if content.include?("'#{@component_pascal_case}' =>")
-            @logger.warn "Mapping for '#{@component_pascal_case}' already exists in component_mappings.rb"
-            return
-          end
-
-          # Add require statement if not present
-          require_line = "require_relative '#{@component_snake_case}_component'"
-          unless content.include?(require_line)
-            # Add require after other requires or at the beginning of the module
-            if content =~ /^require_relative/
-              # Add after the last require
-              content.sub!(/^((?:require_relative.*\n)+)/) do
-                "#{$1}#{require_line}\n"
-              end
-            else
-              # Add before the module declaration
-              content.sub!(/^(# Auto-generated.*\n)\n/) do
-                "#{$1}\n#{require_line}\n\n"
-              end
-            end
-          end
-
-          # Add new mapping
-          new_mapping = "        '#{@component_pascal_case}' => #{@class_name},"
-
-          # Insert the new mapping before the closing brace of COMPONENT_MAPPINGS
-          content.sub!(/(COMPONENT_MAPPINGS = \{.*?)(,?)(\s*)(      \}\.freeze)/m) do
-            existing_mappings = $1
-            last_comma = $2
-            whitespace = $3
-            closing = $4
-
-            # If there are existing mappings, add the new one with proper formatting
-            if existing_mappings =~ /=>/
-              # Ensure the last existing mapping has a comma, then add the new mapping
-              "#{existing_mappings},\n#{new_mapping}\n#{closing}"
-            else
-              # First mapping
-              "#{existing_mappings}\n#{new_mapping}\n#{closing}"
-            end
-          end
-
-          File.write(mappings_file, content)
-          @logger.info "Updated component_mappings.rb with new mapping"
+        def converter_file_name
+          "#{@component_snake_case}_component.rb"
         end
 
-        def create_initial_mappings_file
-          # Get the path relative to this generator file
-          generator_dir = File.dirname(__FILE__)
-          extensions_dir = File.join(generator_dir, '..', 'components', 'extensions')
-          extensions_dir = File.expand_path(extensions_dir)
-          FileUtils.mkdir_p(extensions_dir)
+        def registry_spec
+          {
+            file: File.join(extensions_dir, 'component_mappings.rb'),
+            const: 'COMPONENT_MAPPINGS',
+            # kjui maps to class constants, so the class must be required
+            mapping_line: "        '#{@component_pascal_case}' => #{@class_name},",
+            require_line: "require_relative '#{@component_snake_case}_component'",
+            initial_content: <<~RUBY
+              # frozen_string_literal: true
 
-          mappings_file = File.join(extensions_dir, 'component_mappings.rb')
+              # This file maps custom component types to their converter classes
+              # Auto-generated by kjui g converter command
 
-          content = <<~RUBY
-            # frozen_string_literal: true
+              require_relative '#{@component_snake_case}_component'
 
-            # This file maps custom component types to their converter classes
-            # Auto-generated by kjui g converter command
-
-            require_relative '#{@component_snake_case}_component'
-
-            module KjuiTools
-              module Compose
-                module Components
-                  module Extensions
-                    COMPONENT_MAPPINGS = {
-                      '#{@component_pascal_case}' => #{@class_name},
-                    }.freeze
+              module KjuiTools
+                module Compose
+                  module Components
+                    module Extensions
+                      COMPONENT_MAPPINGS = {
+                        '#{@component_pascal_case}' => #{@class_name},
+                      }.freeze
+                    end
                   end
                 end
               end
-            end
-          RUBY
+            RUBY
+          }
+        end
 
-          File.write(mappings_file, content)
-          @logger.info "Created component_mappings.rb with initial mapping"
+        def attr_defs_dir
+          File.join(extensions_dir, 'attribute_definitions')
+        end
+
+        def command_string
+          @command ||= build_command_string('kjui g converter')
+        end
+
+        def json_marker(source:, generator:)
+          Core::GeneratedMarker.json_marker(source: source, generator: generator)
         end
 
         def converter_template
@@ -310,12 +250,6 @@ module KjuiTools
           lines.join("\n")
         end
 
-        def to_snake_case(str)
-          str.gsub(/([A-Z]+)([A-Z][a-z])/,'\1_\2')
-             .gsub(/([a-z\d])([A-Z])/,'\1_\2')
-             .downcase
-        end
-
         def create_dynamic_initializers
           config = Core::ConfigManager.load_config
           base_path = config['_config_dir'] || Dir.pwd
@@ -403,78 +337,6 @@ module KjuiTools
               }
           }
           KOTLIN
-        end
-
-        # Generate attribute definition file for validation
-        def generate_attribute_definition_file
-          # Skip if no attributes defined and not a container
-          has_attributes = @options[:attributes] && !@options[:attributes].empty?
-          is_container = @options[:is_container] == true
-          return if !has_attributes && !is_container
-
-          # Get the path relative to this generator file
-          generator_dir = File.dirname(__FILE__)
-          definitions_dir = File.join(generator_dir, '..', 'components', 'extensions', 'attribute_definitions')
-          definitions_dir = File.expand_path(definitions_dir)
-          FileUtils.mkdir_p(definitions_dir)
-
-          file_path = File.join(definitions_dir, "#{@component_pascal_case}.json")
-
-          # Build attribute definitions
-          attribute_defs = {}
-          if has_attributes
-            @options[:attributes].each do |key, type|
-              # Remove @ prefix if present (for binding properties)
-              actual_key = key.start_with?('@') ? key[1..-1] : key
-
-              attribute_defs[actual_key] = build_attribute_definition(actual_key, type)
-            end
-          end
-
-          # Add child/children for container components
-          if is_container
-            attribute_defs["child"] = { "type" => "array", "description" => "Child component(s)" }
-            attribute_defs["children"] = { "type" => "array", "description" => "Child components (alias for child)" }
-          end
-
-          # Wrap in component name
-          definition = {
-            @component_pascal_case => attribute_defs
-          }
-
-          # Write JSON file
-          File.write(file_path, JSON.pretty_generate(definition))
-          @logger.info "Created attribute definition file: #{file_path}"
-        end
-
-        # Map type string to JSON schema type (supports binding for all types)
-        # @param type [String] The type string from options
-        # @return [Array, String] JSON schema type(s) - array for binding support
-        def map_type_to_json_type(type)
-          case type.downcase
-          when 'string'
-            ['string', 'binding']
-          when 'int', 'integer'
-            ['number', 'binding']
-          when 'double', 'float'
-            ['number', 'binding']
-          when 'bool', 'boolean'
-            ['boolean', 'binding']
-          when 'color'
-            # Color accepts either a semantic key ("dark_brown_text") or a
-            # binding; the runtime color converter handles both.
-            ['string', 'binding']
-          else
-            # Custom class types must use binding syntax (@{propertyName})
-            'binding'
-          end
-        end
-
-        def build_attribute_definition(actual_key, type)
-          {
-            "type" => map_type_to_json_type(type),
-            "description" => "#{actual_key} attribute"
-          }
         end
       end
     end

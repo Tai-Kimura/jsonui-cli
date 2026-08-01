@@ -30,30 +30,31 @@ RSpec.describe SjuiTools::SwiftUI::Generators::ConverterGenerator do
     end
   end
 
-  describe '#build_command_string' do
+  describe '#command_string' do
+    # W3-2: build_command_string(name, options) became the shared core's
+    # build_command_string(prefix) — the command is derived from the
+    # instance's own @name/@options in the constructor and exposed via the
+    # command_string hook (used for the _generated provenance markers).
     it 'builds basic command' do
       generator = described_class.new('MyComponent')
-      result = generator.build_command_string('MyComponent', {})
-      expect(result).to eq('sjui g converter MyComponent')
+      expect(generator.send(:command_string)).to eq('sjui g converter MyComponent')
     end
 
     it 'includes attributes' do
       generator = described_class.new('MyCard', attributes: { 'title' => 'String' })
-      result = generator.build_command_string('MyCard', { attributes: { 'title' => 'String' } })
+      result = generator.send(:command_string)
       expect(result).to include('--attributes=')
       expect(result).to include('title:String')
     end
 
     it 'includes container flag' do
       generator = described_class.new('MyContainer', is_container: true)
-      result = generator.build_command_string('MyContainer', { is_container: true })
-      expect(result).to include('--container')
+      expect(generator.send(:command_string)).to include('--container')
     end
 
     it 'includes no-container flag' do
       generator = described_class.new('MyView', is_container: false)
-      result = generator.build_command_string('MyView', { is_container: false })
-      expect(result).to include('--no-container')
+      expect(generator.send(:command_string)).to include('--no-container')
     end
   end
 

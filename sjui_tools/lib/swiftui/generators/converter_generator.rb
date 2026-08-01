@@ -4,13 +4,21 @@ require 'fileutils'
 require 'json'
 require_relative '../../core/logger'
 require_relative '../../core/generated_marker'
+require_relative '../../core/converter_generator_core'
 require_relative 'swift_component_generator'
 require_relative 'adapter_generator'
 
 module SjuiTools
   module SwiftUI
     module Generators
-      class ConverterGenerator
+      # iOS profile over the shared converter-scaffolder body
+      # (lib/core/converter_generator_core.rb — byte-identical mirror of
+      # shared/core/converter_generator_core.rb, pinned by
+      # spec/core/shared_core_mirror_spec.rb). The overwrite flow, registry
+      # patching, attribute-definition JSON and type mapping live in the
+      # shared core; this class owns the SwiftUI scaffold template, the
+      # Swift/adapter sub-generators and the Xcode membership exceptions.
+      class ConverterGenerator < ::JsonUIShared::ConverterGeneratorCore
         def initialize(name, options = {})
           @name = name
           # Keep original PascalCase name for component, add Converter suffix for class
@@ -18,18 +26,7 @@ module SjuiTools
           @class_name = name + "Converter"  # e.g., MyTestCardConverter
           @options = options
           @logger = Core::Logger
-          @command = build_command_string(name, options)
-        end
-
-        def build_command_string(name, options)
-          cmd = "sjui g converter #{name}"
-          if options[:attributes] && !options[:attributes].empty?
-            attrs = options[:attributes].map { |k, v| "#{k}:#{v}" }.join(",")
-            cmd += " --attributes=\"#{attrs}\""
-          end
-          cmd += " --container" if options[:is_container] == true
-          cmd += " --no-container" if options[:is_container] == false
-          cmd
+          @command = build_command_string('sjui g converter')
         end
 
         def generate
@@ -63,208 +60,57 @@ module SjuiTools
 
         private
 
-        def create_converter_file
-          # Ensure views/extensions directory exists
+        def extensions_dir
           # Check if we're in a test app or main SwiftJsonUI
           if File.exist?(File.join(Dir.pwd, 'sjui_tools'))
             # Test app structure
-            extensions_dir = File.join(Dir.pwd, 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions')
+            File.join(Dir.pwd, 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions')
           else
             # Main SwiftJsonUI structure
-            extensions_dir = File.join(Dir.pwd, 'tools', 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions')
+            File.join(Dir.pwd, 'tools', 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions')
           end
-          FileUtils.mkdir_p(extensions_dir)
-
-          # Convert name to snake_case for file name
-          snake_case_name = @name.gsub(/([A-Z]+)([A-Z][a-z])/,'\1_\2').
-                                  gsub(/([a-z\d])([A-Z])/,'\1_\2').
-                                  downcase
-          file_path = File.join(extensions_dir, "#{snake_case_name}_converter.rb")
-
-          if File.exist?(file_path)
-            # `jui build` (and other non-interactive flows) set JUI_SKIP_EXISTING=1
-            # so the prompt is bypassed and existing converter files are left alone.
-            if ENV['JUI_SKIP_EXISTING'] == '1'
-              @logger.info "Skipped existing converter: #{file_path}"
-              return
-            end
-            @logger.warn "Converter file already exists: #{file_path}"
-            print "Overwrite? (y/n): "
-            response = gets.chomp.downcase
-            return unless response == 'y'
-          end
-
-          File.write(file_path, converter_template)
-          @logger.info "Created converter file: #{file_path}"
         end
 
-        def update_mappings_file
-          # Check if we're in a test app or main SwiftJsonUI
-          if File.exist?(File.join(Dir.pwd, 'sjui_tools'))
-            # Test app structure
-            mappings_file = File.join(Dir.pwd, 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions', 'converter_mappings.rb')
-          else
-            # Main SwiftJsonUI structure
-            mappings_file = File.join(Dir.pwd, 'tools', 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions', 'converter_mappings.rb')
-          end
-
-          # Create new mappings file if it doesn't exist
-          if !File.exist?(mappings_file)
-            create_initial_mappings_file
-            return
-          end
-
-          # Read existing mappings
-          content = File.read(mappings_file)
-
-          # Check if mapping already exists
-          component_type = @component_pascal_case
-          if content.include?("'#{component_type}' =>")
-            @logger.warn "Mapping for '#{component_type}' already exists in converter_mappings.rb"
-            return
-          end
-
-          # Add new mapping
-          new_mapping = "          '#{component_type}' => '#{@class_name}',"
-
-          # Insert the new mapping before the closing brace of CONVERTER_MAPPINGS
-          content.sub!(/(CONVERTER_MAPPINGS = \{.*?)(,?)(\s*)(        \}\.freeze)/m) do
-            existing_mappings = $1
-            last_comma = $2
-            whitespace = $3
-            closing = $4
-
-            # If there are existing mappings, add the new one with proper formatting
-            if existing_mappings =~ /=>/
-              # Ensure the last existing mapping has a comma, then add the new mapping
-              "#{existing_mappings},\n#{new_mapping}\n#{closing}"
-            else
-              # First mapping
-              "#{existing_mappings}\n#{new_mapping}\n#{closing}"
-            end
-          end
-
-          File.write(mappings_file, content)
-          @logger.info "Updated converter_mappings.rb with new mapping"
+        def converter_file_name
+          "#{to_snake_case(@name)}_converter.rb"
         end
 
-        def create_initial_mappings_file
-          # Ensure views/extensions directory exists
-          # Check if we're in a test app or main SwiftJsonUI
-          if File.exist?(File.join(Dir.pwd, 'sjui_tools'))
-            # Test app structure
-            extensions_dir = File.join(Dir.pwd, 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions')
-          else
-            # Main SwiftJsonUI structure
-            extensions_dir = File.join(Dir.pwd, 'tools', 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions')
-          end
-          FileUtils.mkdir_p(extensions_dir)
+        def registry_spec
+          {
+            file: File.join(extensions_dir, 'converter_mappings.rb'),
+            const: 'CONVERTER_MAPPINGS',
+            mapping_line: "          '#{@component_pascal_case}' => '#{@class_name}',",
+            initial_content: <<~RUBY
+              # frozen_string_literal: true
 
-          mappings_file = File.join(extensions_dir, 'converter_mappings.rb')
+              # This file maps custom component types to their converter classes
+              # Auto-generated by sjui g converter command
 
-          content = <<~RUBY
-            # frozen_string_literal: true
-
-            # This file maps custom component types to their converter classes
-            # Auto-generated by sjui g converter command
-
-            module SjuiTools
-              module SwiftUI
-                module Views
-                  module Extensions
-                    CONVERTER_MAPPINGS = {
-                      '#{@component_pascal_case}' => '#{@class_name}',
-                    }.freeze
+              module SjuiTools
+                module SwiftUI
+                  module Views
+                    module Extensions
+                      CONVERTER_MAPPINGS = {
+                        '#{@component_pascal_case}' => '#{@class_name}',
+                      }.freeze
+                    end
                   end
                 end
               end
-            end
-          RUBY
-
-          File.write(mappings_file, content)
-          @logger.info "Created converter_mappings.rb with initial mapping"
-        end
-
-        def generate_attribute_definition_file
-          # Skip if no attributes and not a container
-          has_attributes = @options[:attributes] && !@options[:attributes].empty?
-          is_container = @options[:is_container] == true
-          return if !has_attributes && !is_container
-
-          # Determine directory path
-          if File.exist?(File.join(Dir.pwd, 'sjui_tools'))
-            # Test app structure
-            attr_defs_dir = File.join(Dir.pwd, 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions', 'attribute_definitions')
-          else
-            # Main SwiftJsonUI structure
-            attr_defs_dir = File.join(Dir.pwd, 'tools', 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions', 'attribute_definitions')
-          end
-
-          # Create directory if it doesn't exist
-          FileUtils.mkdir_p(attr_defs_dir)
-
-          # Build attribute definitions
-          attributes = {}
-          if has_attributes
-            @options[:attributes].each do |key, type|
-              # Remove @ prefix if this is a binding attribute
-              actual_key = key.start_with?('@') ? key[1..-1] : key
-
-              attributes[actual_key] = build_attribute_definition(actual_key, type)
-            end
-          end
-
-          # Add child/children for container components
-          if is_container
-            attributes["child"] = { "type" => "array", "description" => "Child component(s)" }
-            attributes["children"] = { "type" => "array", "description" => "Child components (alias for child)" }
-          end
-
-          # Build JSON structure (prefix with _generated marker so LLM/Agent tools
-          # know the file is regenerated on every `sjui g converter` run).
-          json_content = {
-            "_generated" => Core::GeneratedMarker.json_marker(
-              source: @component_pascal_case,
-              generator: @command
-            ),
-            @component_pascal_case => attributes
+            RUBY
           }
-
-          # Write to file
-          file_path = File.join(attr_defs_dir, "#{@component_pascal_case}.json")
-          File.write(file_path, JSON.pretty_generate(json_content))
-
-          @logger.info "Created attribute definition file: attribute_definitions/#{@component_pascal_case}.json"
         end
 
-        # Map type string to JSON schema type (supports binding for all types)
-        # @param type [String] The type string from options
-        # @return [Array, String] JSON schema type(s) - array for binding support
-        def map_type_to_json_type(type)
-          case type.downcase
-          when 'string'
-            ['string', 'binding']
-          when 'int', 'integer'
-            ['number', 'binding']
-          when 'double', 'float'
-            ['number', 'binding']
-          when 'bool', 'boolean'
-            ['boolean', 'binding']
-          when 'color'
-            # Color accepts either a semantic key ("dark_brown_text") or a
-            # binding. format_color_value handles both at runtime.
-            ['string', 'binding']
-          else
-            # Custom class types must use binding syntax (@{propertyName})
-            'binding'
-          end
+        def attr_defs_dir
+          File.join(extensions_dir, 'attribute_definitions')
         end
 
-        def build_attribute_definition(actual_key, type)
-          {
-            "type" => map_type_to_json_type(type),
-            "description" => "#{actual_key} attribute"
-          }
+        def command_string
+          @command
+        end
+
+        def json_marker(source:, generator:)
+          Core::GeneratedMarker.json_marker(source: source, generator: generator)
         end
 
         def converter_template
