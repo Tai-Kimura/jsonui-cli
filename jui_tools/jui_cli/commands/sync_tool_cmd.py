@@ -32,11 +32,13 @@ Notes:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 from pathlib import Path
 
 from ..core.config_manager import ConfigManager
+from ..version import source_sha, toolchain_version
 
 
 PLATFORM_TO_TOOL = {
@@ -44,6 +46,12 @@ PLATFORM_TO_TOOL = {
     "android": "kjui_tools",
     "web": "rjui_tools",
 }
+
+#: Consumer-side toolchain-coordinate stamp: <project>/.jsonui-cli/sync-meta.json.
+#: Written on every successful sync so a bug report can name the exact
+#: toolchain (version + source SHA) the project's tool copies came from.
+SYNC_META_DIRNAME = ".jsonui-cli"
+SYNC_META_FILENAME = "sync-meta.json"
 
 # Files that live at the CLI-root ``shared/core/`` (a SIBLING of each tool
 # dir) but are read at runtime by the tools via a ``<tool_dir>/shared/core/``
@@ -327,6 +335,72 @@ def _files_equal(a: Path, b: Path) -> bool:
         return False
 
 
+def _home_relative(path: Path) -> str:
+    """Render *path* with the home directory as ``~``.
+
+    The rendered string lands in a consumer project's sync-meta file; a raw
+    absolute path would embed a username + machine layout there.
+    """
+    try:
+        return "~/" + path.relative_to(Path.home()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _write_sync_meta(
+    project_root: Path,
+    source_root: Path,
+    synced: dict[str, str],
+    *,
+    dry_run: bool,
+) -> tuple[Path, bool]:
+    """Stamp toolchain coordinates for the platforms just synced.
+
+    Entries merge per platform: syncing only ``web`` must not erase the
+    coordinates ``ios`` was synced at earlier. Content is deterministic
+    (no timestamps) and the file is left untouched when nothing changed,
+    so repeated syncs don't churn the consumer's git status.
+
+    Returns ``(meta_path, changed)``.
+    """
+    meta_path = project_root / SYNC_META_DIRNAME / SYNC_META_FILENAME
+    platforms: dict = {}
+    if meta_path.exists():
+        try:
+            existing = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            existing = {}
+        if isinstance(existing.get("platforms"), dict):
+            platforms = existing["platforms"]
+
+    version = toolchain_version(source_root)
+    sha = source_sha(source_root)
+    for platform_name, tool_name in synced.items():
+        platforms[platform_name] = {
+            "tool": tool_name,
+            "version": version,
+            "sourceSha": sha,
+            "sourceRoot": _home_relative(source_root),
+        }
+
+    payload = {
+        "_generated_by": "jui sync_tool — toolchain coordinates of the last sync; quote these in bug reports",
+        "platforms": {name: platforms[name] for name in sorted(platforms)},
+    }
+    content = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+
+    if meta_path.exists():
+        try:
+            if meta_path.read_text(encoding="utf-8") == content:
+                return meta_path, False
+        except OSError:
+            pass
+    if not dry_run:
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        meta_path.write_text(content, encoding="utf-8")
+    return meta_path, True
+
+
 def cmd_sync_tool(args: argparse.Namespace) -> int:
     """Execute ``jui sync_tool``."""
     config_mgr = ConfigManager()
@@ -362,6 +436,7 @@ def cmd_sync_tool(args: argparse.Namespace) -> int:
 
     totals = {"copied": 0, "updated": 0, "preserved": 0, "pruned": 0, "ruby_pin": 0, "shared_core": 0}
     had_error = False
+    synced: dict[str, str] = {}  # platform -> tool actually mirrored
 
     for platform_name, pconfig in targets:
         tool_name = PLATFORM_TO_TOOL.get(platform_name)
@@ -404,6 +479,7 @@ def cmd_sync_tool(args: argparse.Namespace) -> int:
 
         for key, val in counters.items():
             totals[key] += val
+        synced[platform_name] = tool_name
         print(
             f"  copied: {counters['copied']}  updated: {counters['updated']}"
             f"  preserved-in-extensions: {counters['preserved']}"
@@ -411,6 +487,29 @@ def cmd_sync_tool(args: argparse.Namespace) -> int:
             f"  shared-core: {counters['shared_core']}"
             + (f"  pruned: {counters['pruned']}" if args.prune else "")
         )
+
+    # Toolchain-coordinate stamp — with it, a consumer bug report can say
+    # exactly which toolchain (version + source SHA) produced its generated
+    # code instead of "whatever HEAD was that day".
+    if synced:
+        meta_path, changed = _write_sync_meta(
+            project_root, source_root, synced, dry_run=args.dry_run
+        )
+        sha = source_sha(source_root)
+        label = (
+            f"toolchain {toolchain_version(source_root)}"
+            f" @ {sha[:12] if sha else 'unstamped source'}"
+        )
+        try:
+            display = meta_path.relative_to(project_root)
+        except ValueError:
+            display = meta_path
+        if not changed:
+            print(f"\n  meta: {display} ({label}) — unchanged")
+        elif args.dry_run:
+            print(f"\n  would write:  {display} ({label})")
+        else:
+            print(f"\n  meta: {display} ({label})")
 
     print("\n== total ==")
     print(
