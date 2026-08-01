@@ -231,7 +231,10 @@ jobs:
           python-version: "3.11"
       - name: Install jui_tools
         working-directory: jui_tools
-        run: python -m pip install --upgrade pip && python -m pip install -e .
+        # [conformance] pulls in Pillow — the per-push web lane compares
+        # screenshots against baselines/ci/web.hashes.json (see the gate
+        # step); without it the comparison silently never runs.
+        run: python -m pip install --upgrade pip && python -m pip install -e '.[conformance]'
       - name: npm ci
         working-directory: conformance/hosts/web
         run: npm ci
@@ -244,16 +247,21 @@ jobs:
       - name: Run web conformance suite
         working-directory: conformance/hosts/web
         run: npm run conformance
-      - name: Gate — zero fail / zero error (jui conformance gate)
+      - name: Gate — fail/error + visual vs baselines/ci/web (jui conformance gate)
         # Renders REPORT.md (fresh web results merged with the committed
-        # iOS/Android results) and fails on web fail/error results. Judgment
-        # is scoped to --platform web: the committed mobile screenshots are
-        # not on this runner. --no-visual because the committed baselines
-        # were rendered on macOS and this runner is not — the authoritative
-        # 3-platform gate (visual + ratchets) runs in conformance-mobile.yml.
+        # iOS/Android results) and judges --platform web only: the committed
+        # mobile screenshots are not on this runner. Visual checks are ON
+        # with --env ci (plan 25 Phase C): this runner and the mobile lane's
+        # web job are the same renderer class (ubuntu + pinned Chromium), so
+        # both compare against baselines/ci/web.hashes.json. When a push
+        # changes the fixture set, this lane goes red on no_baseline — bake
+        # from THIS lane's uploaded artifacts (never a local render):
+        #   jui conformance baseline update --platform web --env ci \
+        #     --artifacts <downloaded>/artifacts/web
+        # and commit baselines/ci/web.hashes.json with the change.
         # Same command runs locally; logic lives in
         # jui_tools/jui_cli/conformance/gate.py (tests: test_conformance_gate).
-        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','web','--no-visual']))"
+        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','web','--env','ci']))"
       - name: Upload results + report + screenshots
         if: always()
         uses: actions/upload-artifact@v4
