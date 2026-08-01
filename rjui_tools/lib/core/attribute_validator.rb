@@ -305,7 +305,7 @@ module RjuiTools
           'CheckBox'
         when 'Check'
           'Check'
-        when 'Indicator', 'Spinner', 'Loading'
+        when 'Indicator', 'Loading'
           'Indicator'
         when 'GradientView', 'Gradient'
           'GradientView'
