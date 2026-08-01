@@ -8528,7 +8528,7 @@
       "host": "NetworkImage",
       "writtenKey": "hint",
       "aliasOf": null,
-      "value": "Conformance Hint",
+      "value": "conformance_sample",
       "platforms": [
         "ios",
         "android",
@@ -8551,7 +8551,7 @@
       "host": "NetworkImage",
       "writtenKey": "placeholder",
       "aliasOf": null,
-      "value": "Conformance Hint",
+      "value": "conformance_sample",
       "platforms": [
         "ios",
         "android",
@@ -10100,15 +10100,15 @@
       "control": "__control/Switch"
     },
     {
-      "id": "Switch/value__static",
+      "id": "Switch/value__true",
       "component": "Switch",
       "attribute": "value",
-      "case": "static",
+      "case": "true",
       "class": "visual",
       "host": "Switch",
       "writtenKey": "value",
       "aliasOf": null,
-      "value": 0.5,
+      "value": true,
       "platforms": [
         "ios",
         "android",
@@ -10116,8 +10116,8 @@
       ],
       "mode": null,
       "deprecated": null,
-      "layout": "fixtures/Switch/value__static.layout.json",
-      "test": "fixtures/Switch/value__static.test.json",
+      "layout": "fixtures/Switch/value__true.layout.json",
+      "test": "fixtures/Switch/value__true.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Switch"

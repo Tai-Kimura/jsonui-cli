@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Switch/value__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Switch.value (true)",
+    "description": "Conformance fixture for 'value' on Switch (section: Switch, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Switch"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "value__true",
+      "description": "Conformance fixture for 'value' on Switch (section: Switch, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Switch_value__true"
+        }
+      ]
+    }
+  ]
+}

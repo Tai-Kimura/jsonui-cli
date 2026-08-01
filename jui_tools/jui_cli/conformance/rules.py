@@ -396,6 +396,18 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     ("IconLabel", "textShadow"): {"color": "#000000", "blur": 4, "offset": [2, 2]},
     ("Segment", "items"): ["One", "Two"],
     ("SelectBox", "items"): ["One", "Two"],
+    # NetworkImage's hint is its PLACEHOLDER IMAGE NAME (SSoT: "Placeholder
+    # image name (primary)"), not user-facing text — the generic hint text
+    # produced painterResource(R.drawable.conformance_hint) on Compose, a
+    # resource that cannot exist. Same bundled asset as every image attr.
+    ("NetworkImage", "hint"): IMAGE_ASSET_NAME,
+    ("NetworkImage", "placeholder"): IMAGE_ASSET_NAME,
+    # `value` is Slider/Progress vocabulary in the name-keyed fallback table
+    # (0.5), but Switch declares it as its boolean state alias — 0.5 is not a
+    # boolean, the Compose codegen host cannot even compile it
+    # (`checked = 0.5`), and a non-boolean state fixture can never assert the
+    # attribute it exists for.
+    ("Switch", "value"): True,
     ("SelectBox", "selectedItem"): "Two",
     ("SelectBox", "selectedValue"): "Two",
     ("TabView", "tabs"): [{"title": "One"}, {"title": "Two"}],

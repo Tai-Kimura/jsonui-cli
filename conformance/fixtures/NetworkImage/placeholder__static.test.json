@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance NetworkImage.placeholder (static)",
-    "description": "Conformance fixture for 'placeholder' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"Conformance Hint\".",
+    "description": "Conformance fixture for 'placeholder' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"conformance_sample\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "placeholder__static",
-      "description": "Conformance fixture for 'placeholder' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"Conformance Hint\".",
+      "description": "Conformance fixture for 'placeholder' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"conformance_sample\".",
       "steps": [
         {
           "action": "waitFor",
