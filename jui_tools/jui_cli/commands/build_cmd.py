@@ -51,6 +51,13 @@ def register_build_command(subparsers: argparse._SubParsersAction) -> None:
     build_parser.add_argument("--ios-only", action="store_true", help="Build iOS only")
     build_parser.add_argument("--android-only", action="store_true", help="Build Android only")
     build_parser.add_argument("--web-only", action="store_true", help="Build Web only")
+    build_parser.add_argument(
+        "--lint-strings",
+        action="store_true",
+        help="Run the localize gate (jui lint-strings) and report findings "
+             "as build warnings (also: \"lint\": {\"strings\": true} in "
+             "jui.config.json)",
+    )
 
 
 
@@ -71,6 +78,15 @@ def cmd_build(args: argparse.Namespace) -> int:
     # (docs/plans/2026-07-24-v1-unsupported/06a-design.md D3).
     if _check_variant_constraints(config_mgr) is False:
         return 1
+
+    # Localize gate (opt-in). Findings ride the warning stream, where the
+    # zero-warnings invariant makes them gate; the flag-off path never
+    # imports the linter.
+    if _lint_strings_enabled(config, args):
+        from .lint_strings_cmd import run_for_build
+
+        for line in run_for_build(config_mgr):
+            print(f"  WARNING [lint-strings]: {line}")
 
     # Distribute shared assets to each platform before build
     _distribute_layouts(config_mgr, platforms, args)
@@ -179,6 +195,18 @@ def _prune_orphans(
             except OSError:
                 pass
     return removed
+
+
+def _lint_strings_enabled(config: dict, args: argparse.Namespace) -> bool:
+    """``jui build --lint-strings`` or ``"lint": {"strings": true}``.
+
+    Kept inline (not imported from lint_strings_cmd) so the default build
+    path never loads the linter module at all.
+    """
+    if getattr(args, "lint_strings", False):
+        return True
+    lint_cfg = config.get("lint") or {}
+    return isinstance(lint_cfg, dict) and bool(lint_cfg.get("strings"))
 
 
 def _normalize_layouts_enabled(config_mgr: ConfigManager) -> bool:
