@@ -7,7 +7,7 @@ SimpleCov.start do
   coverage_dir File.expand_path('../coverage', __dir__)
 
   # Only track sjui_tools/lib source files
-  root File.expand_path('../sjui_tools', __dir__)
+  root File.expand_path('..', __dir__)
 
   add_filter '/spec/'
   add_filter '/vendor/'
@@ -28,7 +28,7 @@ require 'json'
 require 'tempfile'
 
 # Add lib to load path (sjui_tools/lib)
-$LOAD_PATH.unshift(File.expand_path('../sjui_tools/lib', __dir__))
+$LOAD_PATH.unshift(File.expand_path('../lib', __dir__))
 
 # Load support files
 Dir[File.join(__dir__, 'support', '**', '*.rb')].sort.each { |f| require f }
