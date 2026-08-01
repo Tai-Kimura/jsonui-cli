@@ -24,17 +24,6 @@ module RjuiTools
         'RJUI'
       end
 
-      # Transitional (see the shared core's class doc): the Embed params
-      # tree grammar canonically belongs to the binding validator — sjui
-      # and kjui check it there, and kjui explicitly deduplicates. rjui
-      # historically also reported camelCase/array violations from the
-      # attribute validator, so this stays on until the binding
-      # validators unify, then both the flag and the core's
-      # validate_embed_params die together.
-      def embed_params_in_attribute_validator?
-        true
-      end
-
       # Check for extension definitions in various locations
       def extension_definition_paths
         [

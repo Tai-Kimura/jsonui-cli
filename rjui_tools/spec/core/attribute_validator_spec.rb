@@ -984,18 +984,21 @@ RSpec.describe RjuiTools::Core::AttributeValidator do
       expect(warnings.select { |w| w.include?('Embed.params') }).to be_empty, warnings.inspect
     end
 
-    it 'warns on arrays anywhere in params' do
+    # W3-2 file 5: the params tree grammar (arrays, camelCase, defaults,
+    # negation) is the binding validator's job on every platform — the
+    # attribute validator no longer reports it.
+    it 'leaves array violations in params to the binding validator' do
       warnings = validator.validate(embed(
         'params' => { 'profile' => { 'tags' => %w[a b] } }
       ))
-      expect(warnings).to include(a_string_matching(/Embed\.params\.profile\.tags.*array/))
+      expect(warnings.none? { |w| w.match?(/params.*array/) }).to be true
     end
 
-    it 'warns on non-camelCase keys at any level' do
+    it 'leaves camelCase key violations to the binding validator' do
       warnings = validator.validate(embed(
         'params' => { 'profile' => { 'UserName' => 'x' } }
       ))
-      expect(warnings).to include(a_string_matching(/Embed\.params\.profile\.UserName.*camelCase/))
+      expect(warnings.none? { |w| w.include?('camelCase') }).to be true
     end
   end
 end

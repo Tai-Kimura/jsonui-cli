@@ -403,7 +403,9 @@ RSpec.describe RjuiTools::Core::BindingValidator do
         }
         warnings = validator.validate(component, 'test_component.json')
         expect(warnings).not_to be_empty
-        expect(warnings.first).to include('[test_component.json]')
+        # W3-2: the context prefix carries file name plus id/hierarchy/type
+        # (e.g. "[test_component.json child[1] Label] ").
+        expect(warnings.first).to include('test_component.json')
       end
     end
 

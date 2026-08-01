@@ -31,9 +31,10 @@ RSpec.describe KjuiTools::Core::BindingValidator do
       let(:json_data) do
         {
           'type' => 'Text',
+          # W3-2: a dotted path counts as its ROOT variable only — 'name'
+          # is a field of user, not a data property of its own.
           'data' => [
-            { 'name' => 'user', 'class' => 'User' },
-            { 'name' => 'name', 'class' => 'String' }
+            { 'name' => 'user', 'class' => 'User' }
           ],
           'text' => '@{user.name}'
         }
@@ -407,12 +408,14 @@ RSpec.describe KjuiTools::Core::BindingValidator do
 
     it 'includes file name in warning message' do
       warnings = validator.validate(json_data, 'MyScreen.json')
-      expect(warnings.first).to include('[MyScreen.json]')
+      # W3-2: the context prefix carries file name plus id/hierarchy/type
+      # (e.g. "[MyScreen.json Text] "), the sjui machinery adopted core-wide.
+      expect(warnings.first).to include('MyScreen.json')
     end
 
-    it 'works without file name' do
+    it 'works without file name (type context remains)' do
       warnings = validator.validate(json_data)
-      expect(warnings.first).not_to include('[')
+      expect(warnings.first).to include('[Text]')
     end
   end
 
@@ -616,7 +619,9 @@ RSpec.describe KjuiTools::Core::BindingValidator do
     end
 
     it 'returns true when has warnings' do
-      json_data = { 'type' => 'Text', 'text' => '@{undefined}' }
+      # 'undefined' joined the cross-language literal keywords in W3-2 —
+      # use a real property name to trigger the undefined-variable warning.
+      json_data = { 'type' => 'Text', 'text' => '@{missingProp}' }
       validator.validate(json_data)
       expect(validator.has_warnings?).to be true
     end

@@ -33,9 +33,10 @@ RSpec.describe SjuiTools::Core::BindingValidator do
         {
           'type' => 'Label',
           'id' => 'label',
+          # W3-2: a dotted path counts as its ROOT variable only — 'name'
+          # is a field of user, not a data property of its own.
           'data' => [
-            { 'name' => 'user', 'class' => 'User' },
-            { 'name' => 'name', 'class' => 'String' }
+            { 'name' => 'user', 'class' => 'User' }
           ],
           'text' => '@{user.name}'
         }
@@ -758,7 +759,9 @@ RSpec.describe SjuiTools::Core::BindingValidator do
     end
 
     it 'returns true when has warnings' do
-      json_data = { 'type' => 'Label', 'id' => 'label', 'text' => '@{undefined}' }
+      # 'undefined' joined the cross-language literal keywords in W3-2 —
+      # use a real property name to trigger the undefined-variable warning.
+      json_data = { 'type' => 'Label', 'id' => 'label', 'text' => '@{missingProp}' }
       validator.validate(json_data)
       expect(validator.has_warnings?).to be true
     end

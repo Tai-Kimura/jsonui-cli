@@ -6,7 +6,7 @@
 # byte-for-byte to the canon — the same guard plural_validator and
 # screen_index already carry.
 RSpec.describe 'shared/core mirrors' do
-  %w[responsive_resolver.rb layout_validator.rb attribute_validator_core.rb converter_generator_core.rb].each do |file|
+  %w[responsive_resolver.rb layout_validator.rb attribute_validator_core.rb converter_generator_core.rb binding_validator_core.rb].each do |file|
     it "keeps lib/core/#{file} byte-identical to the canonical shared/core copy" do
       tool_copy = File.expand_path("../../lib/core/#{file}", __dir__)
       shared_copy = File.expand_path("../../../shared/core/#{file}", __dir__)

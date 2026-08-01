@@ -22,14 +22,10 @@ module JsonUIShared
   #   styles_fallback_dirs          style-directory candidates when config
   #                                 does not resolve one
   #   config_file_name              '<tool>.config.json'
-  #   embed_params_in_attribute_validator?
-  #                                 transitional (react only): the Embed
-  #                                 params tree grammar is canonically the
-  #                                 binding validator's job (sjui/kjui check
-  #                                 it there, kjui explicitly deduplicates);
-  #                                 rjui historically also reported it here.
-  #                                 Kept behind this flag until the binding
-  #                                 validators unify, then it dies.
+  #
+  # The Embed params tree grammar is the binding validator's job on every
+  # platform (W3-2 file 5 retired the transitional react-only reporting
+  # that briefly lived here).
   #
   # Everything else is deliberately identical across toolchains. Unified
   # 2026-08-01 (W3-2); divergences resolved toward canonical semantics:
@@ -164,9 +160,6 @@ module JsonUIShared
         end
       end
 
-      # Embed params tree grammar (transitional, react only — see class doc)
-      validate_embed_params(merged_component) if type == 'Embed' && embed_params_in_attribute_validator?
-
       @warnings
     end
 
@@ -212,10 +205,6 @@ module JsonUIShared
 
     def config_file_name
       raise NotImplementedError, 'platform profile must define config_file_name'
-    end
-
-    def embed_params_in_attribute_validator?
-      false
     end
 
     # -----------------------------------------------------------------------
@@ -462,28 +451,6 @@ module JsonUIShared
       return false unless EDGE_INSET_ATTRIBUTES.include?(attr_name)
       return false unless [1, 2, 4].include?(value.length)
       value.all? { |v| v.is_a?(Numeric) }
-    end
-
-    # Embed params tree grammar: intermediate nodes are literal objects
-    # only, @{} bindings appear only at leaf scalar positions, arrays are
-    # unsupported, keys are camelCase at every level.
-    def validate_embed_params(component, node = nil, path = 'params')
-      node ||= component['params']
-      return unless node.is_a?(Hash)
-      node.each do |key, value|
-        key_path = "#{path}.#{key}"
-        unless key.to_s.match?(/\A[a-z][a-zA-Z0-9]*\z/)
-          add_warning("Embed.#{key_path} key must be camelCase (at every nesting level)")
-        end
-        if value.is_a?(Hash)
-          validate_embed_params(component, value, key_path)
-        elsif value.is_a?(Array)
-          # Canonical rule id: binding-params-array (shared/core/
-          # binding_semantics.json validatorRules; BindingValidator emits
-          # the same id as a hard error).
-          add_warning("[binding-params-array] Embed.#{key_path} is an array — arrays are not supported in Embed params (nest literal objects or bind a scalar leaf)")
-        end
-      end
     end
 
     # Validate enum value (supports both single values and arrays)

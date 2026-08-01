@@ -20,8 +20,10 @@ RSpec.describe SjuiTools::Core::BindingValidator do
         'data' => [{ 'name' => 'n', 'class' => 'String' }],
         'text' => '@{missing}'
       )
+      # W3-2: print_warnings prints advisory warnings and canonical errors
+      # as two streams with the unified Binding Warning/Error prefixes.
       expect { validator.print_warnings }
-        .to output(/\[SJUI Warning\].*'missing' in 'Label\.text' is not defined/).to_stdout
+        .to output(/\[SJUI Binding Warning\].*'missing' in 'Label\.text' is not defined/).to_stdout
     end
   end
 
@@ -36,7 +38,7 @@ RSpec.describe SjuiTools::Core::BindingValidator do
         ]
       )
       expect(warnings).to include(
-        a_string_matching(/\[binding-cell-parent-scope\] Cell binding '@\{parentProp\}' in 'Label\.text' refers to parent screen data property 'parentProp'/)
+        a_string_matching(/\[binding-cell-parent-scope\] Cell binding '@\{parentProp\}' in 'Label\.text' depends on parent-screen data key 'parentProp'/)
       )
     end
   end

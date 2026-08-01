@@ -51,11 +51,12 @@ RSpec.describe RjuiTools::Core::AttributeValidator do
     expect(w.none? { |m| m.include?("'width'") && m.include?('missing') }).to be true
   end
 
-  it 'reports the Embed params tree grammar here (transitional react-only flag)' do
+  it 'leaves the Embed params tree grammar to the binding validator (no report here)' do
+    # W3-2 file 5: the transitional react-only flag retired — the unified
+    # binding validator now reports camelCase/params-array on every platform.
     w = validator.validate({ 'type' => 'Embed', 'screen' => 'X',
                              'params' => { 'BadKey' => 1, 'arr' => [1] },
                              'width' => 10, 'height' => 10 }, nil, 'vertical')
-    expect(w.any? { |m| m.include?('camelCase') }).to be true
-    expect(w.any? { |m| m.include?('binding-params-array') }).to be true
+    expect(w.none? { |m| m.include?('camelCase') || m.include?('binding-params-array') }).to be true
   end
 end
