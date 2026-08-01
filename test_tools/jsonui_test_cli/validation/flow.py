@@ -9,6 +9,7 @@ from .step import StepValidator
 from .launch import validate_launch
 from .platform import validate_platform_field
 from .mock import find_mock_index, validate_mock_reference
+from ..schema import VALID_FLOW_TOP_LEVEL_KEYS, VALID_SCREEN_TOP_LEVEL_KEYS
 
 
 class FlowTestValidator:
@@ -25,6 +26,26 @@ class FlowTestValidator:
 
     def validate(self, data: dict, path: str, result: ValidationResult):
         """Validate flow test structure."""
+        # Unknown top-level keys are errors — the schema says
+        # additionalProperties: false. Flow tests previously had no top-level
+        # key check at all (screen.py's check used a shared screen∪flow set,
+        # this side had nothing). A key from the screen list gets a pointed
+        # message instead of "unknown".
+        for key in data.keys():
+            if key in VALID_FLOW_TOP_LEVEL_KEYS:
+                continue
+            if key in VALID_SCREEN_TOP_LEVEL_KEYS:
+                message = (
+                    f"'{key}' is a screen-test key, not valid in a flow test"
+                    " — should this file be type: screen?"
+                )
+            else:
+                message = f"Unknown top-level key: {key}"
+            result.errors.append(ValidationMessage(
+                path=path,
+                message=message
+            ))
+
         # Warn if file references use subdirectories
         self._check_subdirectory_references(data, path, result)
 

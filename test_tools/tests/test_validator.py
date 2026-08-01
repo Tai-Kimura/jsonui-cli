@@ -1545,6 +1545,101 @@ class TestSourceValidation:
         assert any("deprecated alias" in str(e) for e in result.errors)
 
 
+class TestTopLevelKeyValidation:
+    """Per-type top-level key sets, unknown keys as errors.
+
+    Same track as TestSourceValidation (the schemas say
+    additionalProperties: false): before this, screen tests warned against the
+    screen∪flow union — so flow-only keys passed silently — and flow tests had
+    no top-level check at all."""
+
+    def setup_method(self):
+        self.validator = TestValidator()
+
+    def _screen(self, **extra) -> dict:
+        data = {
+            "type": "screen",
+            "source": {"layout": "layouts/test.json"},
+            "metadata": {"name": "test", "description": "Test"},
+            "cases": [{"name": "case1", "description": "Test case", "steps": [{"action": "tap", "id": "btn"}]}],
+        }
+        data.update(extra)
+        return data
+
+    def _flow(self, **extra) -> dict:
+        data = {
+            "type": "flow",
+            "sources": [{"layout": "layouts/screen1.json", "alias": "screen1"}],
+            "metadata": {"name": "flow_test"},
+            "steps": [{"screen": "screen1", "action": "tap", "id": "button_id"}],
+        }
+        data.update(extra)
+        return data
+
+    def test_screen_unknown_top_level_key_fails(self):
+        result = self.validator.validate_data(self._screen(futureKey="x"))
+        assert not result.is_valid
+        assert any("Unknown top-level key: futureKey" in str(e) for e in result.errors)
+
+    def test_screen_with_flow_key_fails_with_type_hint(self):
+        """The wrong-type mistake: flow keys in a screen test used to pass
+        without even a warning (shared union set)."""
+        result = self.validator.validate_data(
+            self._screen(steps=[{"screen": "s", "action": "tap", "id": "b"}], checkpoints=[])
+        )
+        assert not result.is_valid
+        assert any("'steps' is a flow-test key" in str(e) for e in result.errors)
+        assert any("'checkpoints' is a flow-test key" in str(e) for e in result.errors)
+
+    def test_flow_unknown_top_level_key_fails(self):
+        """Flow tests previously had no top-level key check at all."""
+        result = self.validator.validate_data(self._flow(futureKey="x"))
+        assert not result.is_valid
+        assert any("Unknown top-level key: futureKey" in str(e) for e in result.errors)
+
+    def test_flow_with_screen_key_fails_with_type_hint(self):
+        result = self.validator.validate_data(
+            self._flow(cases=[], source={"layout": "layouts/test.json"})
+        )
+        assert not result.is_valid
+        assert any("'cases' is a screen-test key" in str(e) for e in result.errors)
+        assert any("'source' is a screen-test key" in str(e) for e in result.errors)
+
+    def test_screen_full_key_set_passes(self):
+        """Every schema-legal screen key at once — no top-level complaints."""
+        data = self._screen(**{
+            "$schema": "https://example.invalid/screen-test.schema.json",
+            "platform": "ios",
+            "embeddedIn": {"screen": "home"},
+            "initialState": {},
+            "launch": {"clearState": True},
+            "setup": [],
+            "teardown": [],
+        })
+        result = self.validator.validate_data(data)
+        top_level = [m for m in result.errors + result.warnings
+                     if "top-level" in str(m) or "not valid in" in str(m)]
+        assert top_level == []
+
+    def test_flow_full_key_set_passes(self):
+        """Every schema-legal flow key at once — no top-level complaints
+        (descriptionFile and checkpoints are flow-legal)."""
+        data = self._flow(**{
+            "$schema": "https://example.invalid/flow-test.schema.json",
+            "platform": "ios",
+            "initialState": {},
+            "launch": {"clearState": True},
+            "setup": [],
+            "teardown": [],
+            "checkpoints": [],
+            "descriptionFile": "descriptions/flow.md",
+        })
+        result = self.validator.validate_data(data)
+        top_level = [m for m in result.errors + result.warnings
+                     if "top-level" in str(m) or "not valid in" in str(m)]
+        assert top_level == []
+
+
 class TestPlatformFieldValidation:
     """Tests for test-level and case-level 'platform' enum validation.
 

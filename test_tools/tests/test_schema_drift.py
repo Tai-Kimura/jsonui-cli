@@ -136,14 +136,25 @@ def test_set_orientation_action_enum_matches():
     )
 
 
-# --- screen-test + flow-test top-level <-> VALID_TOP_LEVEL_KEYS -------------
+# --- screen-test / flow-test top-level <-> per-type key sets ----------------
+# One set per type (not the union): the union let flow-only keys pass silently
+# in screen tests, which is exactly the wrong-type mistake worth catching.
 
-def test_top_level_keys_match_union_of_screen_and_flow():
-    union = _top_props(_load("screen-test")) | _top_props(_load("flow-test"))
-    assert union == set(sc.VALID_TOP_LEVEL_KEYS), (
-        "screen-test + flow-test top-level props drifted from VALID_TOP_LEVEL_KEYS.\n"
-        f"  only in schemas: {sorted(union - set(sc.VALID_TOP_LEVEL_KEYS))}\n"
-        f"  only in const  : {sorted(set(sc.VALID_TOP_LEVEL_KEYS) - union)}"
+def test_screen_top_level_keys_match():
+    props = _top_props(_load("screen-test"))
+    assert props == set(sc.VALID_SCREEN_TOP_LEVEL_KEYS), (
+        "screen-test top-level props drifted from VALID_SCREEN_TOP_LEVEL_KEYS.\n"
+        f"  only in schema: {sorted(props - set(sc.VALID_SCREEN_TOP_LEVEL_KEYS))}\n"
+        f"  only in const : {sorted(set(sc.VALID_SCREEN_TOP_LEVEL_KEYS) - props)}"
+    )
+
+
+def test_flow_top_level_keys_match():
+    props = _top_props(_load("flow-test"))
+    assert props == set(sc.VALID_FLOW_TOP_LEVEL_KEYS), (
+        "flow-test top-level props drifted from VALID_FLOW_TOP_LEVEL_KEYS.\n"
+        f"  only in schema: {sorted(props - set(sc.VALID_FLOW_TOP_LEVEL_KEYS))}\n"
+        f"  only in const : {sorted(set(sc.VALID_FLOW_TOP_LEVEL_KEYS) - props)}"
     )
 
 

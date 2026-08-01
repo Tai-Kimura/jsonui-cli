@@ -11,7 +11,12 @@ from .launch import validate_launch
 from .mock import find_mock_index, validate_mock_reference
 from .platform import validate_platform_field
 from .responsive import validate_responsive_field
-from ..schema import VALID_TOP_LEVEL_KEYS, VALID_CASE_KEYS, VALID_SOURCE_KEYS
+from ..schema import (
+    VALID_SCREEN_TOP_LEVEL_KEYS,
+    VALID_FLOW_TOP_LEVEL_KEYS,
+    VALID_CASE_KEYS,
+    VALID_SOURCE_KEYS,
+)
 
 # Pattern to match @{varName} placeholders
 ARG_PLACEHOLDER_PATTERN = re.compile(r'@\{([^}]+)\}')
@@ -31,14 +36,25 @@ class ScreenTestValidator:
 
     def validate(self, data: dict, path: str, result: ValidationResult):
         """Validate screen test structure."""
-        # Check for unknown top-level keys
+        # Unknown top-level keys are errors — the schema says
+        # additionalProperties: false, and the old shared screen∪flow key set
+        # let the wrong-type mistake (flow keys in a screen test) through
+        # without even a warning. A key from the flow list gets a pointed
+        # message instead of "unknown".
         for key in data.keys():
-            if key not in VALID_TOP_LEVEL_KEYS:
-                result.warnings.append(ValidationMessage(
-                    path=path,
-                    message=f"Unknown top-level key: {key}",
-                    level="warning"
-                ))
+            if key in VALID_SCREEN_TOP_LEVEL_KEYS:
+                continue
+            if key in VALID_FLOW_TOP_LEVEL_KEYS:
+                message = (
+                    f"'{key}' is a flow-test key, not valid in a screen test"
+                    " — should this file be type: flow?"
+                )
+            else:
+                message = f"Unknown top-level key: {key}"
+            result.errors.append(ValidationMessage(
+                path=path,
+                message=message
+            ))
 
         # Validate source object keys. 'spec' is the pre-2026-08-01 spelling of
         # 'document' (flow-test used it as its canonical key until then):

@@ -282,11 +282,20 @@ VALID_PERMISSION_NAMES = [
 # Valid permission values
 VALID_PERMISSION_VALUES = ["allow", "deny", "unset"]
 
-# Valid top-level keys in test file
-VALID_TOP_LEVEL_KEYS = [
+# Valid top-level keys, per test type. Each list mirrors the corresponding
+# schema's top-level `properties` (additionalProperties: false there, so an
+# unknown key is an error). The lists are deliberately separate: a key from
+# the *other* type's list means the file is probably the wrong test type,
+# which the validators report with a pointed message. test_schema_drift.py
+# pins both lists to the vendored schemas.
+VALID_SCREEN_TOP_LEVEL_KEYS = [
     "$schema", "type", "source", "metadata", "platform", "embeddedIn",
-    "initialState", "launch", "mocks", "setup", "teardown", "cases",
-    "sources", "steps", "checkpoints", "descriptionFile"
+    "initialState", "launch", "mocks", "setup", "teardown", "cases"
+]
+VALID_FLOW_TOP_LEVEL_KEYS = [
+    "$schema", "type", "metadata", "platform", "initialState", "launch",
+    "mocks", "setup", "teardown", "sources", "steps", "checkpoints",
+    "descriptionFile"
 ]
 
 # Valid keys in source object
