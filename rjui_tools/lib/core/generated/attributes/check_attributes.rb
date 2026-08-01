@@ -9,13 +9,14 @@ require_relative 'common_attributes'
 module JsonUI
   module Generated
     # Typed attribute extraction for the `Check` component.
+    # Component alias of `CheckBox` — full clone of the canonical table (the runtime selects tables by raw spelling).
     # Overrides the common definition of: `enabled`.
     module CheckAttributes
       # Declared-attribute rows — part of the public metadata
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
-        # Check state (binding for two-way) [binding: two-way]
+        # Checked state alias (binding for two-way) [binding: two-way]
         { name: 'checked', kind: :boolean, bindable: true }.freeze,
         # Color when checked.
         { name: 'checkedColor', kind: :color }.freeze,
@@ -35,7 +36,7 @@ module JsonUI
         { name: 'iconSize', kind: :number }.freeze,
         # Checked state (binding for two-way) [binding: two-way]
         { name: 'isOn', kind: :boolean, bindable: true }.freeze,
-        # Check label text (can be data binding)
+        # Checkbox label (can be data binding)
         { name: 'label', kind: :string, bindable: true }.freeze,
         # Value change handler - binding only (@{functionName})
         { name: 'onValueChange', kind: :binding }.freeze,
@@ -43,12 +44,14 @@ module JsonUI
         { name: 'selectedIcon', kind: :string, aliases: ['onSrc'].freeze }.freeze,
         # Space between icon and text (binding supported)
         { name: 'spacing', kind: :number, bindable: true }.freeze,
-        # Image source for unchecked state
+        # Icon name for unchecked state (alias)
         { name: 'src', kind: :string }.freeze,
-        # Check label text alias (can be data binding)
+        # Checkbox label (alias, can be data binding)
         { name: 'text', kind: :string, bindable: true }.freeze,
         # Color when unchecked.
         { name: 'uncheckedColor', kind: :color }.freeze,
+        # Associated value when checked
+        { name: 'value', kind: :any }.freeze,
       ].freeze
 
       # Returns a Hash keyed by canonical attribute name.

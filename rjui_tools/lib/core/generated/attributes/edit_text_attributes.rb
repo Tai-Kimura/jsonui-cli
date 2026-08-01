@@ -9,21 +9,133 @@ require_relative 'common_attributes'
 module JsonUI
   module Generated
     # Typed attribute extraction for the `EditText` component.
+    # Component alias of `TextField` — full clone of the canonical table (the runtime selects tables by raw spelling).
+    # Overrides the common definition of: `borderStyle`, `disabledBackground`, `tintColor`.
     module EditTextAttributes
       # Declared-attribute rows — part of the public metadata
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
+        # Input accessory background - hex string or color name from colors.json
+        { name: 'accessoryBackground', kind: :string }.freeze,
+        # Accessory corner radius
+        { name: 'accessoryCornerRadius', kind: :number }.freeze,
+        # Input accessory text color - hex string or color name from colors.json
+        { name: 'accessoryTextColor', kind: :string }.freeze,
+        # Apply liquid glass effect
+        { name: 'applyLiquidGlass', kind: :boolean }.freeze,
+        # Auto-capitalization type
+        { name: 'autocapitalizationType', kind: :string }.freeze,
+        # Auto-correction type
+        { name: 'autocorrectionType', kind: :string }.freeze,
+        # Border style
+        { name: 'borderStyle', kind: :enum, values: ['none', 'line', 'bezel', 'roundedRect', 'RoundedRect', 'Line', 'Bezel'].freeze }.freeze,
+        # Caret styling attributes (fontColor for cursor color) [DEPRECATED: SwiftUI cannot style the caret (iOS 17 has partial .tint API).]
+        { name: 'caretAttributes', kind: :object }.freeze,
+        # Clear button mode
+        { name: 'clearButtonMode', kind: :string }.freeze,
+        # Content type for autofill (binding supported)
+        { name: 'contentType', kind: :string, bindable: true }.freeze,
+        # Background color when disabled - hex string or color name from colors.json
+        { name: 'disabledBackground', kind: :string }.freeze,
+        # Done button text
+        { name: 'doneText', kind: :string }.freeze,
+        # Field padding
+        { name: 'fieldPadding', kind: :number }.freeze,
+        # Font name or 'bold' (binding supported)
+        { name: 'font', kind: :string, bindable: true }.freeze,
+        # Font color - hex string or color name from colors.json (binding supported)
+        { name: 'fontColor', kind: :string, bindable: true }.freeze,
+        # Font family name (e.g., 'Noto Sans JP'). Passed as the `family` field of `FontSpec` to `Configuration.Font.fontProvider`. Coexists with `font` (weight) and `fontSize` which are passed in the same FontSpec.
+        { name: 'fontFamily', kind: :string, bindable: true }.freeze,
+        # Font size (binding supported)
+        { name: 'fontSize', kind: :number, bindable: true }.freeze,
+        # Glass effect style
+        { name: 'glassEffectStyle', kind: :string }.freeze,
+        # Has container view [DEPRECATED: hasContainer is a UIKit-only behavior.]
+        { name: 'hasContainer', kind: :boolean }.freeze,
+        # Hide other elements while the field is focused.
+        { name: 'hideOnFocused', kind: :boolean }.freeze,
         # Placeholder text (primary)
         { name: 'hint', kind: :string }.freeze,
-        # Placeholder color - hex string or color name from colors.json (binding supported)
+        # Hint text attributes (font, color, etc.)
+        { name: 'hintAttributes', kind: :object }.freeze,
+        # Placeholder color - hex string or color name from colors.json (binding supported) [DEPRECATED: SwiftUI TextField placeholder cannot be color-styled.]
         { name: 'hintColor', kind: :string, bindable: true }.freeze,
+        # Placeholder font [DEPRECATED: SwiftUI TextField placeholder cannot be custom-font-styled.]
+        { name: 'hintFont', kind: :string }.freeze,
+        # Placeholder font size [DEPRECATED: SwiftUI TextField placeholder cannot be custom-size-styled.]
+        { name: 'hintFontSize', kind: :number }.freeze,
+        # Input type (includes 'allphabet' typo for backward compatibility)
+        { name: 'input', kind: :enum, values: ['default', 'alphabet', 'allphabet', 'email', 'number', 'phone', 'url', 'password', 'decimal'].freeze }.freeze,
         # Input type for Android (Android-only; `input` is the cross-platform attribute)
         { name: 'inputType', kind: :string }.freeze,
+        # Keyboard appearance: dark, light [DEPRECATED: Compose keyboard appearance is system-controlled.]
+        { name: 'keyboardAppearance', kind: :string }.freeze,
+        # Left view configuration
+        { name: 'leftView', kind: :object }.freeze,
+        # Left view display mode
+        { name: 'leftViewMode', kind: :string }.freeze,
+        # Maximum input length
+        { name: 'maxLength', kind: :number }.freeze,
+        # ID of the next field to focus on submit (for focus chain)
+        { name: 'nextFocus', kind: :string }.freeze,
+        # Begin editing event handler
+        { name: 'onBeginEditing', kind: :string }.freeze,
+        # Blur event handler
+        { name: 'onBlur', kind: :string }.freeze,
+        # Selection change event handler
+        { name: 'onChangeSelection', kind: :string }.freeze,
+        # Delete backward (backspace) event handler
+        { name: 'onDeleteBackward', kind: :string }.freeze,
+        # End editing event handler
+        { name: 'onEndEditing', kind: :string }.freeze,
+        # Focus event handler
+        { name: 'onFocus', kind: :string }.freeze,
+        # Should begin editing event handler (return true to allow)
+        { name: 'onShouldBeginEditing', kind: :string }.freeze,
+        # Should change characters event handler (return true to allow)
+        { name: 'onShouldChangeCharacters', kind: :string }.freeze,
+        # Should clear event handler (return true to allow)
+        { name: 'onShouldClear', kind: :string }.freeze,
+        # Should end editing event handler (return true to allow)
+        { name: 'onShouldEndEditing', kind: :string }.freeze,
+        # Should return event handler (return true to allow)
+        { name: 'onShouldReturn', kind: :string }.freeze,
+        # Submit event handler — fires when the user taps the return/done key (binding or raw method name). On SwiftUI emitted as .onSubmit { ... }; on Compose emitted in KeyboardActions.onDone/onGo/onSearch/onSend
+        { name: 'onSubmit', kind: :string }.freeze,
+        # Text change event handler
+        { name: 'onTextChange', kind: :string }.freeze,
+        # Input validation pattern
+        { name: 'pattern', kind: :string }.freeze,
         # Placeholder text (alias for hint)
         { name: 'placeholder', kind: :string }.freeze,
+        # Deprecated on swift. [DEPRECATED: SwiftUI TextField placeholder cannot be color-styled.]
+        { name: 'placeholderColor', kind: :string }.freeze,
+        # Required field validation
+        { name: 'required', kind: :boolean }.freeze,
+        # Return key type
+        { name: 'returnKeyType', kind: :enum, values: ['Done', 'Go', 'Next', 'Return', 'Search', 'Send', 'Continue', 'Join', 'Route', 'Yahoo', 'Google'].freeze }.freeze,
+        # Right view configuration
+        { name: 'rightView', kind: :object }.freeze,
+        # Right view display mode
+        { name: 'rightViewMode', kind: :string }.freeze,
+        # Secure text entry for passwords (can be data binding)
+        { name: 'secure', kind: :boolean, bindable: true }.freeze,
+        # Spell checking type [DEPRECATED: Compose does not expose spell-checking control.]
+        { name: 'spellCheckingType', kind: :string }.freeze,
         # Text content (binding for two-way) [binding: two-way]
         { name: 'text', kind: :string, bindable: true }.freeze,
+        # Text alignment
+        { name: 'textAlign', kind: :enum, values: ['Left', 'Center', 'Right', 'left', 'center', 'right'].freeze }.freeze,
+        # Text padding left
+        { name: 'textPaddingLeft', kind: :number }.freeze,
+        # Text padding right
+        { name: 'textPaddingRight', kind: :number }.freeze,
+        # Text vertical alignment
+        { name: 'textVerticalAlign', kind: :string }.freeze,
+        # Cursor/caret color - hex string or color name from colors.json
+        { name: 'tintColor', kind: :string }.freeze,
       ].freeze
 
       # Returns a Hash keyed by canonical attribute name.

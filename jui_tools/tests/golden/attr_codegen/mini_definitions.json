@@ -7,18 +7,39 @@
       "description": "Unique identifier for the component"
     },
     "width": {
-      "type": ["number", {"enum": ["matchParent", "wrapContent"]}, "binding"],
+      "type": [
+        "number",
+        {
+          "enum": [
+            "matchParent",
+            "wrapContent"
+          ]
+        },
+        "binding"
+      ],
       "required": true,
       "description": "Width (number, 'matchParent', 'wrapContent') - binding supported"
     },
     "visibility": {
-      "type": ["string", "binding"],
-      "enum": ["visible", "invisible", "gone"],
+      "type": [
+        "string",
+        "binding"
+      ],
+      "enum": [
+        "visible",
+        "invisible",
+        "gone"
+      ],
       "description": "View visibility state (can be data binding)"
     },
     "opacity": {
-      "type": ["number", "binding"],
-      "aliases": ["alpha"],
+      "type": [
+        "number",
+        "binding"
+      ],
+      "aliases": [
+        "alpha"
+      ],
       "min": 0,
       "max": 1,
       "description": "Opacity/alpha value (0-1)"
@@ -32,22 +53,36 @@
       "description": "AI generation command that created this component (metadata only, not rendered)"
     },
     "shadow": {
-      "type": ["string", "object"],
+      "type": [
+        "string",
+        "object"
+      ],
       "description": "Shadow configuration (string or object)"
     },
     "hidden": {
-      "type": ["boolean", "binding"],
+      "type": [
+        "boolean",
+        "binding"
+      ],
       "description": "Hide view"
     }
   },
   "Label": {
     "text": {
-      "type": ["string", "binding"],
+      "type": [
+        "string",
+        "binding"
+      ],
       "description": "Text content (supports data binding)"
     },
     "textTransform": {
       "type": "string",
-      "enum": ["none", "wrap-reverse", "Flow", "flow"],
+      "enum": [
+        "none",
+        "wrap-reverse",
+        "Flow",
+        "flow"
+      ],
       "default": "none",
       "description": "Text transformation (legacy spellings kept for compat)"
     },
@@ -76,12 +111,18 @@
     },
     "highlightColor": {
       "type": "string",
-      "aliases": ["hilightColor"],
+      "aliases": [
+        "hilightColor"
+      ],
       "description": "Highlight color - hex string or color name from colors.json"
     },
     "shadow": {
       "type": "object",
       "description": "Label-specific shadow override (object only)"
     }
+  },
+  "Text": {
+    "_alias_of": "Label",
+    "_comment": "Component alias fixture: emitted as a full clone of Label."
   }
 }

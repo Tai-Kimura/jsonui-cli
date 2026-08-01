@@ -67,6 +67,8 @@ module JsonUI
         { name: 'hintFontSize', kind: :number }.freeze,
         # Input type (includes 'allphabet' typo for backward compatibility)
         { name: 'input', kind: :enum, values: ['default', 'alphabet', 'allphabet', 'email', 'number', 'phone', 'url', 'password', 'decimal'].freeze }.freeze,
+        # Input type for Android (Android-only; `input` is the cross-platform attribute)
+        { name: 'inputType', kind: :string }.freeze,
         # Keyboard appearance: dark, light [DEPRECATED: Compose keyboard appearance is system-controlled.]
         { name: 'keyboardAppearance', kind: :string }.freeze,
         # Left view configuration

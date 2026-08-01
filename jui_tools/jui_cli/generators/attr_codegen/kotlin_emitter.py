@@ -254,6 +254,11 @@ def _component_file(comp: Component, model: AttrModel, mapper: TypeMapper) -> st
         parts.append("/** Attributes shared across all components (emitted once). */")
     else:
         parts.append(f"/** Typed attribute extraction for the `{comp.name}` component.")
+        if comp.alias_of:
+            parts.append(
+                f" * Component alias of `{comp.alias_of}` — full clone of the "
+                "canonical table (the runtime selects tables by raw spelling)."
+            )
         parts.append(" * Shared attributes are available via [common].")
         if comp.common_overrides:
             names = ", ".join(f"`{n}`" for n in comp.common_overrides)

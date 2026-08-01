@@ -98,6 +98,12 @@ class Component:
     attrs: list[Attribute] = field(default_factory=list)
     #: attr names that shadow a same-named `common` attribute
     common_overrides: tuple[str, ...] = ()
+    #: canonical component when this section is an `_alias_of` pointer
+    #: (EditText -> TextField, ...). The emitted table is a full clone of
+    #: the canonical one: the dynamic runtimes select tables by the raw
+    #: spelling, so an alias table must parse the complete canonical
+    #: surface.
+    alias_of: str | None = None
 
 
 @dataclass
@@ -142,16 +148,29 @@ def build_model(data: dict[str, Any]) -> AttrModel:
     common_section = data.get("common") or {}
     common_names = {
         k for k, v in common_section.items()
-        if k != "_comment" and isinstance(v, dict)
+        if not k.startswith("_") and isinstance(v, dict)
     }
 
     for section_name in sorted(k for k in data if k != "_comment"):
         section = data[section_name]
         if not isinstance(section, dict):
             continue
+        # Component alias (`_alias_of` pointer section, B1 shape): emit a
+        # full clone of the canonical section under the alias name. One
+        # hop only; a pointer to a missing or alias-shaped target falls
+        # back to the section's own (empty) body.
+        alias_of: str | None = None
+        target_name = section.get("_alias_of")
+        if isinstance(target_name, str):
+            target = data.get(target_name)
+            if isinstance(target, dict) and not isinstance(
+                target.get("_alias_of"), str
+            ):
+                alias_of = target_name
+                section = target
         attrs: list[Attribute] = []
         overrides: list[str] = []
-        for attr_name in sorted(k for k in section if k != "_comment"):
+        for attr_name in sorted(k for k in section if not k.startswith("_")):
             entry = section[attr_name]
             if not isinstance(entry, dict):
                 continue
@@ -166,6 +185,7 @@ def build_model(data: dict[str, Any]) -> AttrModel:
             name=section_name,
             attrs=attrs,
             common_overrides=tuple(sorted(overrides)),
+            alias_of=alias_of,
         )
         if section_name == "common":
             common = component

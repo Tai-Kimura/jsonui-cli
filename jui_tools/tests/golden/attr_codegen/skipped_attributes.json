@@ -9,6 +9,12 @@
       "reason": "callback type — function-valued, not extractable from JSON"
     },
     {
+      "component": "Text",
+      "attribute": "onItemAppear",
+      "type": "\"callback\"",
+      "reason": "callback type — function-valued, not extractable from JSON"
+    },
+    {
       "component": "common",
       "attribute": "generatedBy",
       "type": "\"string\"",

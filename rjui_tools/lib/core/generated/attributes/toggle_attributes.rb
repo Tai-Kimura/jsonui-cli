@@ -9,17 +9,18 @@ require_relative 'common_attributes'
 module JsonUI
   module Generated
     # Typed attribute extraction for the `Toggle` component.
+    # Component alias of `Switch` — full clone of the canonical table (the runtime selects tables by raw spelling).
     # Overrides the common definition of: `enabled`, `tintColor`.
     module ToggleAttributes
       # Declared-attribute rows — part of the public metadata
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
-        # Toggle state alias (binding for two-way) [binding: two-way]
+        # Switch state alias (binding for two-way) [binding: two-way]
         { name: 'checked', kind: :boolean, bindable: true }.freeze,
         # Whether enabled (can be data binding)
         { name: 'enabled', kind: :boolean, bindable: true }.freeze,
-        # Toggle state (binding for two-way) [binding: two-way]
+        # Switch state (binding for two-way) [binding: two-way]
         { name: 'isOn', kind: :boolean, bindable: true }.freeze,
         # Label styling for Toggle
         { name: 'labelAttributes', kind: :object }.freeze,
@@ -41,7 +42,7 @@ module JsonUI
         { name: 'tintColor', kind: :string }.freeze,
         # Deprecated on swift. [DEPRECATED: SwiftUI Toggle uses unified tint only.]
         { name: 'trackTintColor', kind: :string }.freeze,
-        # Toggle state alias (binding for two-way) [binding: two-way]
+        # Switch state alias (binding for two-way) [binding: two-way]
         { name: 'value', kind: :boolean, bindable: true }.freeze,
       ].freeze
 

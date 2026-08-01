@@ -277,6 +277,11 @@ def _component_file(comp: Component) -> str:
         lines.append(
             f"    # Typed attribute extraction for the `{comp.name}` component."
         )
+        if comp.alias_of:
+            lines.append(
+                f"    # Component alias of `{comp.alias_of}` — full clone of the "
+                "canonical table (the runtime selects tables by raw spelling)."
+            )
         if comp.common_overrides:
             names = ", ".join(f"`{n}`" for n in comp.common_overrides)
             lines.append(
