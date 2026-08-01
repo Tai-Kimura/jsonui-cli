@@ -1015,9 +1015,11 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       expect(validator.definitions['Switch']['enabled']['type']).to eq(['boolean', 'binding'])
     end
 
-    it 'has onTintColor defined in Toggle attributes' do
-      expect(validator.definitions['Toggle']).to have_key('onTintColor')
-      expect(validator.definitions['Toggle']['onTintColor']['type']).to eq('string')
+    it 'has onTintColor on the canonical Switch section (Toggle is an alias)' do
+      expect(validator.definitions['Toggle']['_alias_of']).to eq('Switch')
+      expect(validator.send(:map_type_to_definition, 'Toggle')).to eq('Switch')
+      expect(validator.definitions['Switch']).to have_key('onTintColor')
+      expect(validator.definitions['Switch']['onTintColor']['type']).to eq('string')
     end
   end
 
@@ -1138,9 +1140,11 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       expect(validator.definitions['common']['bind']['type']).to eq('binding')
     end
 
-    it 'has selectedIcon defined in Check attributes' do
-      expect(validator.definitions['Check']).to have_key('selectedIcon')
-      expect(validator.definitions['Check']['selectedIcon']['type']).to eq('string')
+    it 'has selectedIcon on the canonical CheckBox section (Check is an alias)' do
+      expect(validator.definitions['Check']['_alias_of']).to eq('CheckBox')
+      expect(validator.send(:map_type_to_definition, 'Check')).to eq('CheckBox')
+      expect(validator.definitions['CheckBox']).to have_key('selectedIcon')
+      expect(validator.definitions['CheckBox']['selectedIcon']['type']).to eq('string')
     end
   end
 
@@ -1211,29 +1215,18 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       expect(validator.definitions['Input']['_alias_of']).to eq('TextField')
     end
 
-    it 'has text attribute in EditText' do
-      expect(validator.definitions['EditText']).to have_key('text')
-      expect(validator.definitions['EditText']['text']['type']).to eq(['string', 'binding'])
+    it 'resolves EditText to the TextField section (pure alias pointer)' do
+      expect(validator.definitions['EditText'].keys).to all(start_with('_'))
+      expect(validator.send(:map_type_to_definition, 'EditText')).to eq('TextField')
+      expect(validator.definitions['TextField']['text']['type']).to eq(['string', 'binding'])
+      expect(validator.definitions['TextField']).to have_key('hint')
+      expect(validator.definitions['TextField']).to have_key('placeholder')
     end
 
-    it 'has hint attribute in EditText' do
-      expect(validator.definitions['EditText']).to have_key('hint')
-      expect(validator.definitions['EditText']['hint']['type']).to eq('string')
-    end
-
-    it 'has placeholder attribute in EditText' do
-      expect(validator.definitions['EditText']).to have_key('placeholder')
-      expect(validator.definitions['EditText']['placeholder']['type']).to eq('string')
-    end
-
-    it 'has text attribute in Input' do
-      expect(validator.definitions['Input']).to have_key('text')
-      expect(validator.definitions['Input']['text']['type']).to eq(['string', 'binding'])
-    end
-
-    it 'has hint attribute in Input' do
-      expect(validator.definitions['Input']).to have_key('hint')
-      expect(validator.definitions['Input']['hint']['type']).to eq('string')
+    it 'resolves Input to the TextField section (pure alias pointer)' do
+      expect(validator.definitions['Input'].keys).to all(start_with('_'))
+      expect(validator.send(:map_type_to_definition, 'Input')).to eq('TextField')
+      expect(validator.definitions['TextField']).to have_key('hint')
     end
   end
 

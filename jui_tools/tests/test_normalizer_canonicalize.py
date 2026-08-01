@@ -34,6 +34,15 @@ SYNTH_DEFS = {
             "deprecation_note": "use hintAttributes instead.",
         },
     },
+    # Component alias (`_alias_of` pointer section, B1 shape): no attribute
+    # copies of its own — everything resolves through the canonical section.
+    "EditText": {
+        "_alias_of": "TextField",
+        "_comment": "component alias",
+    },
+    "BrokenAlias": {
+        "_alias_of": "NoSuchSection",
+    },
 }
 
 
@@ -63,6 +72,24 @@ class AliasTableTest(unittest.TestCase):
         self.assertIsNotNone(dep)
         self.assertEqual(dep.scope, "swiftui")
         self.assertIn("hintAttributes", dep.note)
+
+    def test_component_alias_resolves_to_canonical_section(self):
+        table = _table()
+        self.assertEqual(table.component_alias_target("EditText"), "TextField")
+        self.assertEqual(table.definition_key_for("EditText"), "TextField")
+        # deprecation metadata comes from the canonical section
+        self.assertIn("hintColor", table.deprecated_for("EditText"))
+
+    def test_component_alias_target_is_none_for_canonical_and_unknown(self):
+        table = _table()
+        self.assertIsNone(table.component_alias_target("TextField"))
+        self.assertIsNone(table.component_alias_target("SeekBar"))
+        self.assertIsNone(table.component_alias_target(None))
+
+    def test_broken_alias_pointer_degrades_to_own_section(self):
+        table = _table()
+        self.assertIsNone(table.component_alias_target("BrokenAlias"))
+        self.assertEqual(table.definition_key_for("BrokenAlias"), "BrokenAlias")
 
     def test_real_definitions_contain_known_aliases(self):
         path = default_definitions_path()
@@ -129,6 +156,19 @@ class CanonicalizerTest(unittest.TestCase):
         tree, warnings = self.canon.canonicalize({"type": "View", "alpha": 0.5})
         self.assertEqual(tree["opacity"], 0.5)
         self.assertNotIn("alpha", tree)
+        self.assertEqual(warnings, [])
+
+    def test_component_alias_type_rewritten_with_warning(self):
+        tree, warnings = self.canon.canonicalize(
+            {"type": "EditText", "hintColor": "#000"}
+        )
+        self.assertEqual(tree["type"], "TextField")
+        self.assertEqual(len(warnings), 2)  # rewrite note + hintColor deprecation
+        self.assertIn("component alias of 'TextField'", warnings[0])
+
+    def test_synonym_type_not_rewritten(self):
+        tree, warnings = self.canon.canonicalize({"type": "SeekBar", "alpha": 1})
+        self.assertEqual(tree["type"], "SeekBar")
         self.assertEqual(warnings, [])
 
     def test_key_order_preserved_on_rewrite(self):

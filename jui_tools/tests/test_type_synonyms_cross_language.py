@@ -59,9 +59,12 @@ UNIFIED_TABLE: dict[str, str] = {
     # selection / input controls
     "SelectBox": "SelectBox", "Spinner": "SelectBox", "DatePicker": "SelectBox",
     "Select": "SelectBox", "Picker": "SelectBox",
-    "Toggle": "Toggle",
+    # component aliases (`_alias_of` pointer sections): resolved to the
+    # canonical section by the alias hop in every implementation
+    "Switch": "Switch", "Toggle": "Switch",
     "CheckBox": "CheckBox", "Checkbox": "CheckBox",
-    "Check": "Check",
+    "Check": "CheckBox",
+    "EditText": "TextField", "Input": "TextField",
     "Radio": "Radio", "RadioButton": "Radio", "RadioGroup": "Radio",
     "Segment": "Segment", "SegmentedControl": "Segment",
     "TabLayout": "Segment", "TabGroup": "Segment",
@@ -87,18 +90,6 @@ UNIFIED_TABLE: dict[str, str] = {
     "Embed": "Embed",
 }
 
-#: Spellings the Ruby validators fold into a broader section even though the
-#: SSoT carries a standalone section of the same name. Python's exact-match
-#: precedence keeps them on their own (subset) sections, so Ruby and Python
-#: intentionally diverge here until B1 lands the component-level alias
-#: mechanism and collapses the copy-paste subsets. Ruby-side agreement is
-#: still enforced for these; only the Python comparison excludes them.
-B1_PENDING_RUBY_TABLE: dict[str, str] = {
-    "EditText": "TextField",
-    "Input": "TextField",
-    "Switch": "Toggle",
-}
-
 #: A spelling no implementation knows: both sides must degrade it to
 #: common-only validation (Ruby via identity + failed section lookup,
 #: Python via ``None``).
@@ -108,6 +99,9 @@ RUBY_DRIVER = r"""
 require 'json'
 require ARGV[0]
 validator = Object.const_get(ARGV[1]).allocate
+# map_type_to_definition's component-alias hop (`_alias_of`) reads
+# @definitions — allocate skips initialize, so inject the SSoT directly.
+validator.instance_variable_set(:@definitions, JSON.parse(File.read(ARGV[3])))
 types = JSON.parse(ARGV[2])
 puts JSON.generate(types.to_h { |t| [t, validator.send(:map_type_to_definition, t)] })
 """
@@ -123,7 +117,14 @@ def _ruby_mapping(tool_dir: str, const_name: str, types: list[str]) -> dict[str,
         driver = Path(tmp) / "driver.rb"
         driver.write_text(RUBY_DRIVER, encoding="utf-8")
         proc = subprocess.run(
-            ["ruby", str(driver), str(source), const_name, json.dumps(types)],
+            [
+                "ruby",
+                str(driver),
+                str(source),
+                const_name,
+                json.dumps(types),
+                str(DEFINITIONS),
+            ],
             capture_output=True,
             text=True,
         )
@@ -145,9 +146,36 @@ class TargetExistenceTests(unittest.TestCase):
         missing = sorted(set(UNIFIED_TABLE.values()) - _ssot_keys())
         self.assertEqual(missing, [], "UNIFIED_TABLE maps to nonexistent sections")
 
-    def test_b1_pending_targets_exist(self):
-        missing = sorted(set(B1_PENDING_RUBY_TABLE.values()) - _ssot_keys())
-        self.assertEqual(missing, [], "B1 pending table maps to nonexistent sections")
+    def test_component_alias_sections_are_pure_pointers(self):
+        """B1 invariant: an `_alias_of` section carries no attribute copies
+        (that is the copy-paste drift the collapse removed), points at a
+        real section, and the target is not itself an alias (one hop)."""
+        with open(DEFINITIONS, encoding="utf-8") as f:
+            definitions = json.load(f)
+        alias_sections = {
+            name: section
+            for name, section in definitions.items()
+            if isinstance(section, dict) and "_alias_of" in section
+        }
+        self.assertEqual(
+            sorted(alias_sections),
+            ["Check", "EditText", "Input", "Toggle"],
+            "unexpected set of component-alias sections",
+        )
+        for name, section in alias_sections.items():
+            with self.subTest(section=name):
+                stray = sorted(k for k in section if not k.startswith("_"))
+                self.assertEqual(
+                    stray, [], f"{name} is an alias yet carries attribute copies"
+                )
+                target = section["_alias_of"]
+                target_section = definitions.get(target)
+                self.assertIsInstance(
+                    target_section, dict, f"{name} points at missing '{target}'"
+                )
+                self.assertNotIn(
+                    "_alias_of", target_section, f"{name} -> {target} chains aliases"
+                )
 
     def test_python_synonym_targets_exist(self):
         missing = sorted(set(_TYPE_SYNONYMS.values()) - _ssot_keys())
@@ -172,7 +200,7 @@ class RubyAgreementTests(unittest.TestCase):
                     "ruby is required in CI to run the cross-language guard"
                 )
             raise unittest.SkipTest("ruby not installed")
-        cls.expected = {**UNIFIED_TABLE, **B1_PENDING_RUBY_TABLE}
+        cls.expected = dict(UNIFIED_TABLE)
         types = sorted(cls.expected) + [UNKNOWN_TYPE]
         cls.actual = {
             tool: _ruby_mapping(tool, const, types)
@@ -224,17 +252,6 @@ class PythonAgreementTests(unittest.TestCase):
 
     def test_unknown_type_degrades_to_common_only(self):
         self.assertIsNone(self.table.definition_key_for(UNKNOWN_TYPE))
-
-    def test_b1_pending_divergence_still_exists(self):
-        """Tripwire, not an endorsement: Python exact-matches these spellings
-        to their standalone (copy-paste subset) sections while Ruby folds
-        them into the broader ones. When B1 collapses the subsets this test
-        MUST fail — resolve it by moving the spellings into UNIFIED_TABLE
-        and deleting B1_PENDING_RUBY_TABLE."""
-        for spelling in B1_PENDING_RUBY_TABLE:
-            with self.subTest(spelling=spelling):
-                self.assertEqual(self.table.definition_key_for(spelling), spelling)
-
 
 if __name__ == "__main__":
     unittest.main()

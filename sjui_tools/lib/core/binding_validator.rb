@@ -752,15 +752,34 @@ module SjuiTools
         message
       end
 
-      # Look up an attribute definition for [component_type, 'common']
+      # Look up an attribute definition for [component_type, its component
+      # alias target, 'common'] — Toggle resolves through Switch, EditText
+      # through TextField, etc. (`_alias_of` pointer sections carry no
+      # attribute copies of their own).
       def attribute_definition(component_type, attr_name)
-        [component_type, 'common'].each do |type_key|
+        [component_type, resolve_component_alias(component_type), 'common'].uniq.each do |type_key|
           component_defs = @attribute_definitions[type_key]
           next unless component_defs.is_a?(Hash)
           attr_def = component_defs[attr_name]
           return attr_def if attr_def.is_a?(Hash)
         end
         nil
+      end
+
+      # Follow a component-alias section (an `_alias_of` pointer such as
+      # EditText -> TextField) to its canonical section. One hop only; a
+      # pointer to a missing or alias-shaped target is ignored.
+      def resolve_component_alias(key)
+        section = @attribute_definitions[key]
+        return key unless section.is_a?(Hash)
+
+        target = section['_alias_of']
+        return key unless target.is_a?(String)
+
+        target_section = @attribute_definitions[target]
+        return key unless target_section.is_a?(Hash)
+
+        target_section['_alias_of'].is_a?(String) ? key : target
       end
 
       # Two-way attributes (TextField text, Switch isOn, ...) carry
@@ -783,7 +802,7 @@ module SjuiTools
       # Check if an attribute is excluded for the current platform/mode
       # by looking up the component type's attribute definition
       def attribute_excluded_for_platform?(component_type, attr_name)
-        [component_type, 'common'].each do |type_key|
+        [component_type, resolve_component_alias(component_type), 'common'].uniq.each do |type_key|
           component_defs = @attribute_definitions[type_key]
           next unless component_defs.is_a?(Hash)
           attr_def = component_defs[attr_name]

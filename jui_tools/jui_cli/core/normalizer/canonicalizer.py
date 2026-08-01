@@ -73,6 +73,23 @@ class Canonicalizer:
             return node
 
         node_type = node.get("type") if isinstance(node.get("type"), str) else None
+        # Component alias (EditText/Input/Check/Toggle): rewrite the type to
+        # the canonical spelling. Cross-platform synonyms (Text, Scroll, …)
+        # are deliberately NOT rewritten — they are display spellings every
+        # platform dispatch accepts; only `_alias_of` sections are collapsed
+        # pointers whose spelling the Compose codegen does not dispatch.
+        canonical_type = self._table.component_alias_target(node_type)
+        if canonical_type is not None:
+            warnings.append(
+                self._fmt(
+                    source,
+                    self._node_label(node, node_type, path),
+                    f"type '{node_type}' is a component alias of "
+                    f"'{canonical_type}' — rewrote the type",
+                )
+            )
+            node["type"] = canonical_type
+            node_type = canonical_type
         alias_map = self._table.aliases_for(node_type)
         deprecated_map = self._table.deprecated_for(node_type)
         label = self._node_label(node, node_type, path)

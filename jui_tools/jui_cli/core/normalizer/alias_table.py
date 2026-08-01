@@ -30,12 +30,11 @@ from typing import Any
 # (map_type_to_definition) — and jui_tools/tests/
 # test_type_synonyms_cross_language.py holds the agreed canon and fails CI
 # on any divergence: change all four together, never one alone.
-# Deliberately absent: EditText / Input / Switch. Those spellings are real
-# sections in attribute_definitions.json, so the exact-match check resolves
-# them first and an entry here would be dead code. The Ruby validators fold
-# them into TextField / Toggle instead — a known divergence pending the B1
-# component-level alias mechanism (tracked by the cross-language test's
-# tripwire case).
+# Deliberately absent: EditText / Input / Check / Toggle. Those spellings
+# are real sections in attribute_definitions.json shaped as `_alias_of`
+# pointers (B1); the exact-match check resolves them first and the
+# component-alias hop in definition_key_for follows the pointer to the
+# canonical section, so an entry here would be dead code.
 _TYPE_SYNONYMS = {
     "Text": "Label",
     "MultiLineEditText": "TextView",
@@ -171,12 +170,42 @@ class AliasTable:
 
     def definition_key_for(self, component_type: str | None) -> str | None:
         """Map a node ``type`` value to its definition key (exact match
-        first, then cross-platform type synonyms)."""
+        first, then cross-platform type synonyms), following a component
+        alias (`_alias_of`) to the canonical section."""
         if not component_type:
             return None
         if component_type in self._definitions:
-            return component_type
-        return _TYPE_SYNONYMS.get(component_type)
+            key: str | None = component_type
+        else:
+            key = _TYPE_SYNONYMS.get(component_type)
+        target = self.component_alias_target(key)
+        return target if target is not None else key
+
+    def component_alias_target(self, component_type: str | None) -> str | None:
+        """Canonical section name when *component_type* is a component
+        alias — a real section whose body is an ``_alias_of`` pointer
+        (EditText/Input -> TextField, Check -> CheckBox, Toggle ->
+        Switch). None for canonical sections, synonyms and unknowns.
+
+        One hop only: a canonical section must not itself declare
+        ``_alias_of`` (the collapse that introduced this shape keeps
+        alias sections attribute-free, so a chain cannot mean anything).
+        A pointer to a nonexistent section is ignored rather than
+        followed — the alias then degrades to its own (empty) section,
+        which the schema guard suite reports loudly."""
+        if not component_type:
+            return None
+        section = self._definitions.get(component_type)
+        if not isinstance(section, dict):
+            return None
+        target = section.get("_alias_of")
+        if isinstance(target, str) and target in self._definitions:
+            target_section = self._definitions.get(target)
+            if isinstance(target_section, dict) and not isinstance(
+                target_section.get("_alias_of"), str
+            ):
+                return target
+        return None
 
     def aliases_for(self, component_type: str | None) -> dict[str, str]:
         """``{alias: canonical}`` effective for *component_type* —

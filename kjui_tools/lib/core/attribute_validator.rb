@@ -239,22 +239,27 @@ module KjuiTools
         expanded
       end
 
-      # Map JSON type to definition key.
+      # Map JSON type to definition key, in two layers:
       #
-      # This table is one of four implementations of the same mapping —
-      # {s,k,r}jui_tools attribute_validator.rb and the Python
+      # 1. the cross-platform synonym table below (display spellings that
+      #    are not sections themselves: Text, Scroll, Checkbox, ...),
+      # 2. a component-alias hop: sections that are `_alias_of` pointers
+      #    (EditText/Input -> TextField, Check -> CheckBox, Toggle ->
+      #    Switch) resolve to their canonical section, driven by the SSoT
+      #    rather than by arms of this case.
+      #
+      # The synonym table is one of four implementations of the same
+      # mapping — {s,k,r}jui_tools attribute_validator.rb and the Python
       # jui_cli/core/normalizer/alias_table.py _TYPE_SYNONYMS.
       # jui_tools/tests/test_type_synonyms_cross_language.py holds the
       # agreed canon and fails CI on any divergence: change all four
       # together with the canon table, never one alone. Types without a
-      # branch (Button, Check, IconLabel, TabView, Embed, ...) resolve by
-      # the identity fallback to their own definition section.
+      # branch (Button, IconLabel, TabView, Embed, ...) resolve by the
+      # identity fallback to their own definition section.
       def map_type_to_definition(type)
-        case type
+        mapped = case type
         when 'Label', 'Text'
           'Label'
-        when 'TextField', 'EditText', 'Input'
-          'TextField'
         when 'TextView', 'MultiLineEditText', 'Textarea'
           'TextView'
         when 'Image', 'ImageView', 'Img'
@@ -263,8 +268,6 @@ module KjuiTools
           'NetworkImage'
         when 'SelectBox', 'Spinner', 'DatePicker', 'Select', 'Picker'
           'SelectBox'
-        when 'Toggle', 'Switch'
-          'Toggle'
         when 'CheckBox', 'Checkbox'
           'CheckBox'
         when 'Radio', 'RadioButton', 'RadioGroup'
@@ -296,6 +299,24 @@ module KjuiTools
         else
           type
         end
+        resolve_component_alias(mapped)
+      end
+
+      # Follow a component-alias section (an `_alias_of` pointer such as
+      # EditText -> TextField) to its canonical section. One hop only; a
+      # pointer to a missing or alias-shaped target is ignored and the
+      # spelling resolves to its own (empty) section instead.
+      def resolve_component_alias(key)
+        section = @definitions[key]
+        return key unless section.is_a?(Hash)
+
+        target = section['_alias_of']
+        return key unless target.is_a?(String)
+
+        target_section = @definitions[target]
+        return key unless target_section.is_a?(Hash)
+
+        target_section['_alias_of'].is_a?(String) ? key : target
       end
 
       # Validate a single attribute value

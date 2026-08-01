@@ -420,13 +420,32 @@ module KjuiTools
       def find_attribute_definition(component_type, attr_name)
         # Nested attribute paths ("shadow.color") resolve on the base name
         base_attr = attr_name.to_s.split('.').first
-        [component_type, 'common'].each do |type_key|
+        # component alias hop: Toggle resolves through Switch, EditText
+        # through TextField, etc. (`_alias_of` pointer sections carry no
+        # attribute copies of their own)
+        [component_type, resolve_component_alias(component_type), 'common'].uniq.each do |type_key|
           defs = @attribute_definitions[type_key]
           next unless defs.is_a?(Hash)
           attr_def = defs[base_attr]
           return attr_def if attr_def.is_a?(Hash)
         end
         nil
+      end
+
+      # Follow a component-alias section (an `_alias_of` pointer such as
+      # EditText -> TextField) to its canonical section. One hop only; a
+      # pointer to a missing or alias-shaped target is ignored.
+      def resolve_component_alias(key)
+        section = @attribute_definitions[key]
+        return key unless section.is_a?(Hash)
+
+        target = section['_alias_of']
+        return key unless target.is_a?(String)
+
+        target_section = @attribute_definitions[target]
+        return key unless target_section.is_a?(Hash)
+
+        target_section['_alias_of'].is_a?(String) ? key : target
       end
 
       # Check if variables in binding expression are defined in data
@@ -715,8 +734,9 @@ module KjuiTools
       # Check if an attribute is excluded for the current platform/mode
       # by looking up the component type's attribute definition
       def attribute_excluded_for_platform?(component_type, attr_name)
-        # Check component-specific definition first, then common
-        [component_type, 'common'].each do |type_key|
+        # Check component-specific definition first (component aliases
+        # resolve through their canonical section), then common
+        [component_type, resolve_component_alias(component_type), 'common'].uniq.each do |type_key|
           component_defs = @attribute_definitions[type_key]
           next unless component_defs.is_a?(Hash)
           attr_def = component_defs[attr_name]

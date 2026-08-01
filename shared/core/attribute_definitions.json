@@ -1575,6 +1575,11 @@
       ],
       "description": "Input type (includes 'allphabet' typo for backward compatibility)"
     },
+    "inputType": {
+      "type": "string",
+      "description": "Input type for Android (Android-only; `input` is the cross-platform attribute)",
+      "platform": "kotlin"
+    },
     "returnKeyType": {
       "type": "string",
       "enum": [
@@ -2100,61 +2105,11 @@
   },
   "EditText": {
     "_alias_of": "TextField",
-    "_comment": "EditText is an alias for TextField. Maintained for Android compatibility.",
-    "text": {
-      "type": [
-        "string",
-        "binding"
-      ],
-      "description": "Text content (binding for two-way)",
-      "binding_direction": "two-way"
-    },
-    "hint": {
-      "type": "string",
-      "description": "Placeholder text (primary)"
-    },
-    "placeholder": {
-      "type": "string",
-      "description": "Placeholder text (alias for hint)"
-    },
-    "hintColor": {
-      "type": [
-        "string",
-        "binding"
-      ],
-      "description": "Placeholder color - hex string or color name from colors.json (binding supported)"
-    },
-    "inputType": {
-      "type": "string",
-      "description": "Input type for Android (Android-only; `input` is the cross-platform attribute)",
-      "platform": "kotlin"
-    }
+    "_comment": "Component alias of TextField (Android naming). Resolved by the L1 normalizer type rewrite and by every validator/codegen consumer - do not add attribute copies here. inputType lives on TextField (platform: kotlin)."
   },
   "Input": {
     "_alias_of": "TextField",
-    "_comment": "Input is an alias for TextField. Maintained for web compatibility.",
-    "text": {
-      "type": [
-        "string",
-        "binding"
-      ],
-      "description": "Text content (binding for two-way)"
-    },
-    "hint": {
-      "type": "string",
-      "description": "Placeholder text (primary)"
-    },
-    "placeholder": {
-      "type": "string",
-      "description": "Placeholder text (alias for hint)"
-    },
-    "hintColor": {
-      "type": [
-        "string",
-        "binding"
-      ],
-      "description": "Placeholder color - hex string or color name from colors.json (binding supported)"
-    }
+    "_comment": "Component alias of TextField (web naming). Resolved by the L1 normalizer type rewrite and by every validator/codegen consumer - do not add attribute copies here."
   },
   "Button": {
     "text": {
@@ -2906,120 +2861,7 @@
   },
   "Toggle": {
     "_alias_of": "Switch",
-    "_comment": "Toggle is an alias for Switch. Maintained for backward compatibility. New code should use Switch.",
-    "isOn": {
-      "type": [
-        "boolean",
-        "binding"
-      ],
-      "description": "Toggle state (binding for two-way)",
-      "binding_direction": "two-way"
-    },
-    "value": {
-      "type": [
-        "boolean",
-        "binding"
-      ],
-      "description": "Toggle state alias (binding for two-way)",
-      "binding_direction": "two-way"
-    },
-    "checked": {
-      "type": [
-        "boolean",
-        "binding"
-      ],
-      "description": "Toggle state alias (binding for two-way)",
-      "binding_direction": "two-way"
-    },
-    "enabled": {
-      "type": [
-        "boolean",
-        "binding"
-      ],
-      "description": "Whether enabled (can be data binding)"
-    },
-    "tint": {
-      "type": [
-        "string",
-        "binding"
-      ],
-      "description": "Tint color - hex string or color name from colors.json (binding supported)"
-    },
-    "tintColor": {
-      "type": "string",
-      "description": "Tint color - hex string or color name from colors.json (alias)"
-    },
-    "onTintColor": {
-      "type": "string",
-      "description": "Track color when on - hex string or color name from colors.json"
-    },
-    "thumbTintColor": {
-      "type": [
-        "string",
-        "binding"
-      ],
-      "description": "Thumb tint color - hex string or color name from colors.json (binding supported)"
-    },
-    "offTintColor": {
-      "type": [
-        "string",
-        "binding"
-      ],
-      "description": "Off tint color - hex string or color name from colors.json (binding supported)",
-      "platform": "swift",
-      "mode": "uikit"
-    },
-    "onToggle": {
-      "type": "binding",
-      "description": "Toggle handler function - binding only (@{functionName}). Alias of onValueChange."
-    },
-    "onValueChange": {
-      "type": "binding",
-      "description": "Value change handler - binding only (@{functionName})",
-      "aliases": [
-        "onToggle"
-      ]
-    },
-    "labelAttributes": {
-      "type": "object",
-      "description": "Label styling for Toggle",
-      "properties": {
-        "text": {
-          "type": "string",
-          "description": "Label text"
-        },
-        "font": {
-          "type": "string",
-          "description": "Font name"
-        },
-        "fontSize": {
-          "type": "number",
-          "description": "Font size"
-        },
-        "fontColor": {
-          "type": "string",
-          "description": "Font color - hex string or color name from colors.json"
-        }
-      },
-      "platform": "kotlin",
-      "mode": "compose"
-    },
-    "labelPosition": {
-      "type": "string",
-      "enum": [
-        "leading",
-        "trailing"
-      ],
-      "description": "Label position relative to the Switch.",
-      "platform": "kotlin",
-      "mode": "compose"
-    },
-    "trackTintColor": {
-      "type": "string",
-      "description": "Deprecated on swift.",
-      "deprecated": "swift",
-      "deprecation_note": "SwiftUI Toggle uses unified tint only."
-    }
+    "_comment": "Component alias of Switch. Resolved by the L1 normalizer type rewrite and by every validator/codegen consumer - do not add attribute copies here."
   },
   "Segment": {
     "items": {
@@ -3371,6 +3213,7 @@
     }
   },
   "CircleView": {
+    "_comment": "Sparse by design, not an alias: only the Kotlin dynamic runtime dispatches CircleView (DynamicCircleViewComponent, CircleShape clip) - P18 audit 2026-08-01. Everything it renders beyond child/children comes from common. component_metadata.json carries the per-platform truth.",
     "child": {
       "type": "array",
       "description": "Child component(s)",
@@ -4071,131 +3914,7 @@
   },
   "Check": {
     "_alias_of": "CheckBox",
-    "_comment": "Check is an alias for CheckBox. Maintained for backward compatibility. New code should use CheckBox.",
-    "checked": {
-      "type": [
-        "boolean",
-        "binding"
-      ],
-      "description": "Check state (binding for two-way)",
-      "binding_direction": "two-way"
-    },
-    "isOn": {
-      "type": [
-        "boolean",
-        "binding"
-      ],
-      "description": "Checked state (binding for two-way)",
-      "binding_direction": "two-way"
-    },
-    "label": {
-      "type": [
-        "string",
-        "binding"
-      ],
-      "description": "Check label text (can be data binding)"
-    },
-    "text": {
-      "type": [
-        "string",
-        "binding"
-      ],
-      "description": "Check label text alias (can be data binding)"
-    },
-    "icon": {
-      "type": "string",
-      "description": "Icon name for unchecked state",
-      "platform": [
-        "swift",
-        "kotlin"
-      ]
-    },
-    "src": {
-      "type": "string",
-      "description": "Image source for unchecked state"
-    },
-    "selectedIcon": {
-      "type": "string",
-      "description": "Selected icon name",
-      "platform": [
-        "swift",
-        "kotlin"
-      ],
-      "aliases": [
-        "onSrc"
-      ]
-    },
-    "enabled": {
-      "type": [
-        "boolean",
-        "binding"
-      ],
-      "description": "Whether enabled (can be data binding)"
-    },
-    "font": {
-      "type": [
-        "string",
-        "binding"
-      ],
-      "description": "Font name (binding supported)"
-    },
-    "fontSize": {
-      "type": [
-        "number",
-        "binding"
-      ],
-      "description": "Font size (binding supported)"
-    },
-    "fontColor": {
-      "type": [
-        "string",
-        "binding"
-      ],
-      "description": "Text color - hex string or color name from colors.json (binding supported)"
-    },
-    "spacing": {
-      "type": [
-        "number",
-        "binding"
-      ],
-      "description": "Space between icon and text (binding supported)"
-    },
-    "onValueChange": {
-      "type": "binding",
-      "description": "Value change handler - binding only (@{functionName})"
-    },
-    "checkedColor": {
-      "type": "color",
-      "description": "Color when checked.",
-      "platform": [
-        "swift",
-        "kotlin"
-      ]
-    },
-    "uncheckedColor": {
-      "type": "color",
-      "description": "Color when unchecked.",
-      "platform": [
-        "swift",
-        "kotlin"
-      ]
-    },
-    "iconSize": {
-      "type": "number",
-      "description": "Icon size (pt / dp).",
-      "platform": [
-        "swift",
-        "kotlin"
-      ]
-    },
-    "iconColor": {
-      "type": "color",
-      "description": "Icon tint color.",
-      "platform": [
-        "swift",
-        "kotlin"
-      ]
-    }
+    "_comment": "Component alias of CheckBox. Resolved by the L1 normalizer type rewrite and by every validator/codegen consumer - do not add attribute copies here."
   },
   "Indicator": {
     "indicatorStyle": {

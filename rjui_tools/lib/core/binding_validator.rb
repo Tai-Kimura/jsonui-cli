@@ -115,10 +115,33 @@ module RjuiTools
         @has_data_definitions = false
         @cell_depth = 0
         defs = load_attribute_definitions
+        @component_alias_by_type = build_component_aliases(defs)
         @incompatible_attrs_by_type = build_incompatible_attrs(defs)
         @two_way_attrs_by_type = build_two_way_attrs(defs)
         @boolean_attrs_by_type = build_boolean_attrs(defs)
         @known_attrs_by_type = build_known_attrs(defs)
+      end
+
+      # `_alias_of` pointer sections (EditText/Input -> TextField, Check ->
+      # CheckBox, Toggle -> Switch) carry no attribute copies of their own —
+      # every per-type table lookup resolves through this map first. One hop
+      # only; a pointer to a missing or alias-shaped target is ignored.
+      def build_component_aliases(defs)
+        out = {}
+        defs.each do |component_type, section|
+          next unless section.is_a?(Hash)
+          target = section['_alias_of']
+          next unless target.is_a?(String)
+          target_section = defs[target]
+          next unless target_section.is_a?(Hash)
+          next if target_section['_alias_of'].is_a?(String)
+          out[component_type] = target
+        end
+        out
+      end
+
+      def resolve_component_alias(component_type)
+        @component_alias_by_type[component_type] || component_type
       end
 
       # Load attribute_definitions.json (deployed copies mirror the file
@@ -214,14 +237,14 @@ module RjuiTools
       end
 
       def lookup_attr_set(table, component_type, attr_name)
-        (table[component_type]&.include?(attr_name)) ||
+        (table[resolve_component_alias(component_type)]&.include?(attr_name)) ||
           (table['common']&.include?(attr_name)) || false
       end
 
       def incompatible_attr?(component_type, attr_name)
         # Strip nested-path suffix: "confirmationDialog.isPresented" → "confirmationDialog"
         top_level = attr_name.to_s.split('.').first
-        type_attrs = @incompatible_attrs_by_type[component_type]
+        type_attrs = @incompatible_attrs_by_type[resolve_component_alias(component_type)]
         common_attrs = @incompatible_attrs_by_type['common']
         (type_attrs && type_attrs.include?(top_level)) ||
           (common_attrs && common_attrs.include?(top_level))
