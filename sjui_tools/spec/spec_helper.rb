@@ -20,8 +20,12 @@ SimpleCov.start do
   add_group 'UIKit', 'lib/uikit'
   add_group 'CLI', 'lib/cli'
 
-  # Note: Target is 80%, currently building up tests
-  minimum_coverage 50
+  # Coverage floor is a ratchet: raise it as measured coverage rises, never
+  # lower it without a justifying comment in the same commit (same
+  # tighten-only idea as conformance's gate_ratchet.json). 76 is the floor of
+  # the 2026-08-01 measurement (76.38% overall / 77.78% excluding lib/uikit);
+  # the working target is 80% excluding lib/uikit.
+  minimum_coverage 76
 end
 
 require 'json'
