@@ -328,8 +328,8 @@ RSpec.describe RjuiTools::Core::Resources::ColorManager do
         expect(manager.send(:parse_hex_to_rgb, '#F00')).to eq([255, 0, 0])
       end
 
-      it 'parses 8-digit hex (ignoring alpha)' do
-        expect(manager.send(:parse_hex_to_rgb, '#FF0000AA')).to eq([255, 0, 0])
+      it 'parses 8-digit hex (alpha-first: leading byte is stripped)' do
+        expect(manager.send(:parse_hex_to_rgb, '#AAFF0000')).to eq([255, 0, 0])
       end
 
       it 'returns nil for invalid length hex' do

@@ -5,18 +5,19 @@ require 'fileutils'
 require 'pathname'
 require_relative '../logger'
 require_relative '../generated_marker'
+require_relative '../color_manager_core'
 
 module RjuiTools
   module Core
     module Resources
-      class ColorManager
-        # Top-level keys in colors.json that are NOT color modes. Everything
-        # else at the top level is treated as a mode name whose value is a
-        # `{key => "#HEX"}` palette.
-        RESERVED_META_KEYS = %w[fallback_mode systemModeMapping modes].freeze
-        DEFAULT_MODE_NAME = 'light'
-        DEFAULT_DARK_MODE_NAME = 'dark'
-
+      # Web profile over the shared color-manager body
+      # (lib/core/color_manager_core.rb — byte-identical mirror of
+      # shared/core/color_manager_core.rb, pinned by
+      # spec/core/shared_core_mirror_spec.rb). The themed colors.json
+      # model, extraction/rewrite pipeline and key naming live in the
+      # shared core; this class owns the generated ColorManager.ts|js and
+      # the Tailwind @theme CSS suite.
+      class ColorManager < ::JsonUIShared::ColorManagerCore
         def initialize(config, source_path, resources_dir)
           @config = config
           @source_path = source_path
@@ -24,9 +25,6 @@ module RjuiTools
           @colors_file = File.join(@resources_dir, 'colors.json')
           @defined_colors_file = File.join(@resources_dir, 'defined_colors.json')
 
-          # Extracted colors during this build pass: { mode => { key => hex } }.
-          # They land in the same mode (@extract_into_mode) unless a caller
-          # routes per-color-value to a different mode.
           @extracted_colors = Hash.new { |h, k| h[k] = {} }
           @undefined_colors = {}
 
@@ -42,9 +40,6 @@ module RjuiTools
 
           extract_colors(processed_files)
 
-          # Always save if we migrated the schema (flat → themed) even when no
-          # new colors were extracted — the on-disk file still needs to be
-          # rewritten into the new shape so subsequent reads are consistent.
           save_colors_json if any_extracted? || @migrated
 
           save_defined_colors_json if @undefined_colors.any?
@@ -59,487 +54,10 @@ module RjuiTools
           save_defined_colors_json if @undefined_colors.any?
         end
 
-        # Public API for other components that need to know about themes.
-        attr_reader :modes, :palettes, :fallback_mode, :system_mode_mapping
-
-        # Names registered in EVERY mode — the curated vocabulary the web
-        # @theme mirrors. Machine-extracted colors land in one mode only, so
-        # they are never mode-complete until a human promotes them (adds the
-        # other modes' values), which is exactly when `bg-<name>` becomes safe.
-        def mode_complete_keys
-          return [] if @modes.empty?
-
-          @modes.map { |m| (@palettes[m] || {}).keys }.reduce(:&)
-        end
-
-        # name => hex in the fallback mode, for resolving a non-theme-safe
-        # name back to a displayable arbitrary value.
-        def fallback_hexes
-          mode = @fallback_mode || DEFAULT_MODE_NAME
-          (@palettes[mode] || @palettes.values.first || {}).dup
-        end
-
         private
 
-        def any_extracted?
-          @extracted_colors.any? { |_, palette| palette.any? }
-        end
-
-        # Load existing colors.json. Detects flat-legacy vs themed schema and
-        # populates @palettes / @modes / @fallback_mode / @system_mode_mapping.
-        # Sets @migrated = true if a flat-legacy file needs to be rewritten.
-        def load_colors_json
-          @migrated = false
-          @palettes = {}
-          @modes = []
-          @fallback_mode = nil
-          @system_mode_mapping = nil
-
-          if File.exist?(@colors_file)
-            raw = begin
-              JSON.parse(File.read(@colors_file))
-            rescue JSON::ParserError => e
-              Core::Logger.warn "Failed to parse colors.json: #{e.message}"
-              nil
-            end
-
-            case detect_schema(raw)
-            when :themed
-              ingest_themed(raw)
-            when :flat
-              ingest_flat(raw)
-            else
-              seed_default_empty
-            end
-          else
-            seed_default_empty
-          end
-
-          @system_mode_mapping ||= default_system_mode_mapping
-          @extract_into_mode = resolve_extract_into_mode
-        end
-
-        def seed_default_empty
-          @modes = [DEFAULT_MODE_NAME]
-          @palettes[DEFAULT_MODE_NAME] = {}
-          @fallback_mode = DEFAULT_MODE_NAME
-        end
-
-        # Schema classification.
-        def detect_schema(raw)
-          return :empty unless raw.is_a?(Hash)
-          return :empty if raw.empty?
-
-          content_keys = raw.keys - RESERVED_META_KEYS
-          return :empty if content_keys.empty?
-
-          sample_value = raw[content_keys.first]
-          case sample_value
-          when Hash then :themed
-          when String then :flat
-          else :empty
-          end
-        end
-
-        def ingest_themed(raw)
-          meta_modes_hint = raw['modes'].is_a?(Array) ? raw['modes'] : nil
-          @fallback_mode = raw['fallback_mode'] if raw['fallback_mode'].is_a?(String)
-          @system_mode_mapping = raw['systemModeMapping'] if raw['systemModeMapping'].is_a?(Hash)
-
-          palette_keys = raw.keys - RESERVED_META_KEYS
-          palette_keys.each do |mode_name|
-            value = raw[mode_name]
-            next unless value.is_a?(Hash)
-
-            @palettes[mode_name] = value.each_with_object({}) do |(k, v), acc|
-              acc[k] = v if v.is_a?(String) || v.nil?
-            end
-          end
-
-          @modes = if meta_modes_hint
-                     ordered = meta_modes_hint.select { |m| @palettes.key?(m) }
-                     extras = @palettes.keys - ordered
-                     ordered + extras
-                   else
-                     @palettes.keys
-                   end
-
-          @fallback_mode ||= @modes.include?(DEFAULT_MODE_NAME) ? DEFAULT_MODE_NAME : @modes.first
-          @system_mode_mapping ||= default_system_mode_mapping
-        end
-
-        def ingest_flat(raw)
-          Core::Logger.info "Migrating colors.json from flat schema to themed (default mode: '#{DEFAULT_MODE_NAME}')"
-          @migrated = true
-
-          flat_palette = raw.each_with_object({}) do |(k, v), acc|
-            next if RESERVED_META_KEYS.include?(k)
-            acc[k] = v if v.is_a?(String) || v.nil?
-          end
-
-          @modes = [DEFAULT_MODE_NAME]
-          @palettes[DEFAULT_MODE_NAME] = flat_palette
-          @fallback_mode = DEFAULT_MODE_NAME
-          @system_mode_mapping = default_system_mode_mapping
-        end
-
-        def default_system_mode_mapping
-          mapping = {}
-          mapping['light'] = DEFAULT_MODE_NAME if @palettes.key?(DEFAULT_MODE_NAME)
-          mapping['dark'] = DEFAULT_DARK_MODE_NAME if @palettes.key?(DEFAULT_DARK_MODE_NAME)
-          mapping
-        end
-
-        # Determine which mode extraction writes to. Precedence:
-        #   1. @config['extract_into_mode'] if present and mode exists (or create)
-        #   2. 'light' if present
-        #   3. First mode in @modes
-        #   4. Create 'light' from scratch
-        def resolve_extract_into_mode
-          requested = @config['extract_into_mode']
-          if requested.is_a?(String) && !requested.empty?
-            unless @palettes.key?(requested)
-              @palettes[requested] = {}
-              @modes << requested unless @modes.include?(requested)
-            end
-            return requested
-          end
-
-          return DEFAULT_MODE_NAME if @palettes.key?(DEFAULT_MODE_NAME)
-          return @modes.first unless @modes.empty?
-
-          @palettes[DEFAULT_MODE_NAME] = {}
-          @modes << DEFAULT_MODE_NAME
-          @fallback_mode ||= DEFAULT_MODE_NAME
-          @system_mode_mapping ||= default_system_mode_mapping
-          DEFAULT_MODE_NAME
-        end
-
-        # Load existing defined_colors.json file.
-        def load_defined_colors_json
-          return {} unless File.exist?(@defined_colors_file)
-
-          begin
-            JSON.parse(File.read(@defined_colors_file))
-          rescue JSON::ParserError => e
-            Core::Logger.warn "Failed to parse defined_colors.json: #{e.message}"
-            {}
-          end
-        end
-
-        # Write @palettes back out as themed schema, preserving meta keys.
-        def save_colors_json
-          # Merge extracted into palettes (per mode).
-          @extracted_colors.each do |mode, new_entries|
-            @palettes[mode] ||= {}
-            @palettes[mode].merge!(new_entries)
-            @modes << mode unless @modes.include?(mode)
-          end
-
-          FileUtils.mkdir_p(@resources_dir)
-
-          out = {}
-          out['modes'] = @modes if @modes.size > 1 || @migrated
-          out['fallback_mode'] = @fallback_mode if @fallback_mode
-          out['systemModeMapping'] = @system_mode_mapping if @system_mode_mapping && !@system_mode_mapping.empty?
-
-          @modes.each do |mode|
-            out[mode] = @palettes[mode] || {}
-          end
-
-          File.write(@colors_file, JSON.pretty_generate(out))
-
-          total_new = @extracted_colors.sum { |_, p| p.size }
-          if total_new.positive?
-            Core::Logger.info "Updated colors.json with #{total_new} new colors across #{@extracted_colors.size} mode(s)"
-          elsif @migrated
-            Core::Logger.info "Migrated colors.json to themed schema"
-          end
-
-          @extracted_colors.clear
-          @migrated = false
-        end
-
-        # Save undefined colors to defined_colors.json.
-        def save_defined_colors_json
-          @defined_colors_data.merge!(@undefined_colors)
-
-          FileUtils.mkdir_p(@resources_dir)
-
-          File.write(@defined_colors_file, JSON.pretty_generate(@defined_colors_data))
-          Core::Logger.info "Updated defined_colors.json with #{@undefined_colors.size} undefined color keys"
-
-          @undefined_colors.clear
-        end
-
-        # Extract color values from processed JSON files.
-        def extract_colors(processed_files)
-          @modified_files = []
-
-          Core::Logger.debug "Processing #{processed_files.size} files for colors"
-
-          processed_files.each do |json_file|
-            begin
-              Core::Logger.debug "Processing file: #{json_file}"
-              content = File.read(json_file)
-              data = JSON.parse(content)
-
-              modified = replace_colors_recursive(data)
-
-              Core::Logger.debug "File modified: #{modified}"
-
-              if modified
-                File.write(json_file, JSON.pretty_generate(data))
-                @modified_files << json_file
-                Core::Logger.debug "Updated colors in: #{json_file}"
-              end
-            rescue JSON::ParserError => e
-              Core::Logger.warn "Failed to parse #{json_file}: #{e.message}"
-            rescue => e
-              Core::Logger.error "Error processing #{json_file}: #{e.message}"
-            end
-          end
-
-          if @modified_files.any?
-            Core::Logger.info "Replaced colors in #{@modified_files.size} files"
-          end
-        end
-
-        # Replace colors recursively in JSON data.
-        def replace_colors_recursive(data, parent_key = nil)
-          modified = false
-
-          case data
-          when Hash
-            if data['class'] == 'Color' && data['defaultValue'].is_a?(String)
-              value = data['defaultValue']
-              unless value.start_with?('@{') && value.end_with?('}')
-                new_value = process_and_replace_color(value)
-                if new_value != value
-                  data['defaultValue'] = new_value
-                  modified = true
-                  Core::Logger.debug "Replaced data defaultValue #{value} with #{new_value}"
-                end
-              end
-            end
-
-            data.each do |key, value|
-              if is_color_property?(key) && value.is_a?(String)
-                if value.start_with?('@{') && value.end_with?('}')
-                  Core::Logger.debug "Skipping binding expression: #{value}"
-                  next
-                end
-
-                new_value = process_and_replace_color(value)
-                if new_value != value
-                  data[key] = new_value
-                  modified = true
-                  Core::Logger.debug "Replaced #{value} with #{new_value} in #{key}"
-                end
-              elsif value.is_a?(Hash) || value.is_a?(Array)
-                child_modified = replace_colors_recursive(value, key)
-                modified ||= child_modified
-              end
-            end
-          when Array
-            data.each do |item|
-              if item.is_a?(Hash) || item.is_a?(Array)
-                child_modified = replace_colors_recursive(item, parent_key)
-                modified ||= child_modified
-              end
-            end
-          end
-
-          modified
-        end
-
-        # Check if a property name is likely to contain a color.
-        def is_color_property?(key)
-          color_properties = %w[background tapBackground borderColor]
-
-          additional_color_properties = %w[
-            fontColor textColor hintColor shadowColor tintColor
-            selectedColor unselectedColor backgroundColor strokeColor
-            overlayColor caretColor disabledBackground
-          ]
-
-          (color_properties + additional_color_properties).include?(key.to_s)
-        end
-
-        # Process and replace a color value, returning the color key.
-        def process_and_replace_color(color_value)
-          if color_value.is_a?(String) && color_value.start_with?('@{') && color_value.end_with?('}')
-            return color_value
-          end
-
-          if is_hex_color?(color_value)
-            hex_color = normalize_hex_color(color_value)
-
-            existing_key = find_color_key(hex_color, @extract_into_mode)
-
-            if existing_key
-              Core::Logger.debug "Found existing color: #{existing_key} = #{hex_color}"
-              return existing_key
-            else
-              new_key = generate_color_key(hex_color, @extract_into_mode)
-              @extracted_colors[@extract_into_mode][new_key] = hex_color
-              Core::Logger.debug "New color found: #{new_key} = #{hex_color} (mode: #{@extract_into_mode})"
-              return new_key
-            end
-          elsif color_value.is_a?(String) && !color_value.empty?
-            if color_key_exists_anywhere?(color_value)
-              Core::Logger.debug "Color key exists: #{color_value}"
-              return color_value
-            elsif @defined_colors_data.key?(color_value)
-              Core::Logger.debug "Color key already in defined_colors: #{color_value}"
-              return color_value
-            else
-              @undefined_colors[color_value] = nil
-              Core::Logger.debug "Undefined color key found: #{color_value}"
-              return color_value
-            end
-          else
-            return color_value
-          end
-        end
-
-        # A color key is considered to exist if ANY mode's palette (committed
-        # or just-extracted) references it. Each key may be defined per-mode
-        # with different values, but from the layout side the key itself is
-        # mode-agnostic (resolution happens at runtime).
-        def color_key_exists_anywhere?(key)
-          @palettes.any? { |_, p| p.key?(key) } ||
-            @extracted_colors.any? { |_, p| p.key?(key) }
-        end
-
-        # Find existing key for a hex color WITHIN the given mode. A collision
-        # in another mode is fine — the same key name in different modes can
-        # point to different hex values (that's the whole point of theming).
-        # When called without a mode (spec helpers / callers outside the
-        # extraction loop), fall back to the extract-into mode.
-        def find_color_key(hex_color, mode = nil)
-          mode ||= @extract_into_mode || DEFAULT_MODE_NAME
-          palette = (@palettes[mode] || {}).merge(@extracted_colors[mode] || {})
-          palette.find { |_, value| value.is_a?(String) && value.upcase == hex_color.upcase }&.first
-        end
-
-        # Generate a descriptive key name based on RGB values. Uniqueness is
-        # scoped to the target mode — ColorManager.dark.red and
-        # ColorManager.light.red are two separate colors sharing one key.
-        def generate_color_key(hex_color, mode = nil)
-          mode ||= @extract_into_mode || DEFAULT_MODE_NAME
-          rgb = parse_hex_to_rgb(hex_color)
-          return 'unknown_color' unless rgb
-
-          r, g, b = rgb
-
-          brightness = (r + g + b) / 3.0
-
-          base_name = if brightness > 230
-                        'white'
-                      elsif brightness > 200
-                        'pale'
-                      elsif brightness > 150
-                        'light'
-                      elsif brightness > 100
-                        'medium'
-                      elsif brightness > 50
-                        'dark'
-                      elsif brightness > 20
-                        'deep'
-                      else
-                        'black'
-                      end
-
-          max_diff = [r, g, b].max - [r, g, b].min
-          if max_diff > 30
-            if r > g && r > b
-              if r - g > 50 && r - b > 50
-                color_suffix = '_red'
-              elsif r > b
-                color_suffix = '_orange' if g > b
-                color_suffix = '_pink' if b > g * 0.7
-              else
-                color_suffix = '_magenta'
-              end
-            elsif g > r && g > b
-              if g - r > 50 && g - b > 50
-                color_suffix = '_green'
-              elsif g > b && r > b * 0.7
-                color_suffix = '_yellow'
-              else
-                color_suffix = '_lime'
-              end
-            elsif b > r && b > g
-              if b - r > 50 && b - g > 50
-                color_suffix = '_blue'
-              elsif b > r && g > r * 0.7
-                color_suffix = '_cyan'
-              else
-                color_suffix = '_purple'
-              end
-            else
-              color_suffix = ''
-            end
-
-            # Hue-carrying colors must never collapse to bare `white`/`black`:
-            # those collide with Tailwind's fixed builtins (bg-white never
-            # follows dark mode) and discard the hue (#DBEAFE is a blue, not a
-            # white). Demote to pale/deep and keep the suffix; bare white/black
-            # remain reserved for true neutrals below.
-            base_name = 'pale' if base_name == 'white'
-            base_name = 'deep' if base_name == 'black'
-            base_name = base_name + color_suffix if color_suffix
-          elsif base_name != 'white' && base_name != 'black'
-            base_name = base_name + '_gray'
-          end
-
-          final_key = base_name
-          counter = 2
-          existing_keys = (@palettes[mode] || {}).merge(@extracted_colors[mode] || {})
-
-          while existing_keys.key?(final_key)
-            final_key = "#{base_name}_#{counter}"
-            counter += 1
-          end
-
-          final_key
-        end
-
-        # Parse hex color to RGB values.
-        def parse_hex_to_rgb(hex_color)
-          hex = hex_color.gsub('#', '')
-
-          case hex.length
-          when 3
-            hex = hex.chars.map { |c| c * 2 }.join
-            [hex[0..1].to_i(16), hex[2..3].to_i(16), hex[4..5].to_i(16)]
-          when 6
-            [hex[0..1].to_i(16), hex[2..3].to_i(16), hex[4..5].to_i(16)]
-          when 8
-            [hex[0..1].to_i(16), hex[2..3].to_i(16), hex[4..5].to_i(16)]
-          else
-            nil
-          end
-        rescue
-          nil
-        end
-
-        # Check if a value is a hex color.
-        def is_hex_color?(value)
-          return false unless value.is_a?(String)
-          value.match?(/^#?([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/)
-        end
-
-        # Normalize hex color format.
-        def normalize_hex_color(hex_color)
-          hex = hex_color.gsub('#', '').upcase
-
-          if hex.length == 3
-            hex = hex.chars.map { |c| c * 2 }.join
-          end
-
-          "##{hex}"
+        def logger
+          Core::Logger
         end
 
         # ==========================================================
@@ -573,19 +91,6 @@ module RjuiTools
         # Kept for backwards compat with existing specs.
         def generate_color_manager_js
           generate_color_manager
-        end
-
-        def deep_clone_palettes
-          @palettes.each_with_object({}) do |(mode, palette), acc|
-            acc[mode] = palette.dup
-          end
-        end
-
-        # The full set of color keys across every palette (union). Used for
-        # dynamic current-mode accessors — any key in ANY mode appears as a
-        # getter on the ColorManager instance that resolves via current mode.
-        def all_color_keys(merged_palettes)
-          merged_palettes.values.flat_map(&:keys).uniq.sort
         end
 
         def generate_ts_code(merged_palettes, typescript)
@@ -990,12 +495,6 @@ module RjuiTools
 
         def css_marker_footer
           "/* ══ #{Core::GeneratedMarker::END_LINE} ══ */"
-        end
-
-        def snake_to_camel(snake_case)
-          parts = snake_case.to_s.split('_')
-          first_part = parts.shift || ''
-          first_part + parts.map(&:capitalize).join
         end
 
         def mode_const(mode)

@@ -154,9 +154,11 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
 
     context 'with white transparent color' do
       before do
+        # W3-2: JsonUI 8-digit hex is alpha-FIRST (#AARRGGBB) — the
+        # convention kjui/rjui already used; sjui read the trailing byte.
         File.write(json_file, JSON.pretty_generate({
           'type' => 'View',
-          'background' => '#FFFFFF00'
+          'background' => '#00FFFFFF'
         }))
       end
 
@@ -243,16 +245,17 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
         expect(manager.send(:is_transparent_color?, '#00000000')).to be true
       end
 
+      # W3-2: alpha is the LEADING byte (#AARRGGBB).
       it 'returns true for any color with zero alpha' do
-        expect(manager.send(:is_transparent_color?, '#FF000000')).to be true
+        expect(manager.send(:is_transparent_color?, '#00000000')).to be true
       end
 
       it 'returns true for white with zero alpha' do
-        expect(manager.send(:is_transparent_color?, '#FFFFFF00')).to be true
+        expect(manager.send(:is_transparent_color?, '#00FFFFFF')).to be true
       end
 
       it 'returns false for fully opaque color' do
-        expect(manager.send(:is_transparent_color?, '#000000FF')).to be false
+        expect(manager.send(:is_transparent_color?, '#FF000000')).to be false
       end
 
       it 'returns false for 6-digit hex (no alpha)' do
@@ -268,7 +271,7 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
       end
 
       it 'handles lowercase hex' do
-        expect(manager.send(:is_transparent_color?, '#ff000000')).to be true
+        expect(manager.send(:is_transparent_color?, '#00ff0000')).to be true
       end
     end
 
@@ -299,8 +302,8 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
         expect(manager.send(:parse_hex_to_rgb, '#F00')).to eq([255, 0, 0])
       end
 
-      it 'parses 8-digit hex (ignoring alpha)' do
-        expect(manager.send(:parse_hex_to_rgb, '#FF0000AA')).to eq([255, 0, 0])
+      it 'parses 8-digit hex (alpha-first: leading byte is stripped)' do
+        expect(manager.send(:parse_hex_to_rgb, '#AAFF0000')).to eq([255, 0, 0])
       end
 
       it 'returns nil for invalid length hex' do
