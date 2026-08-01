@@ -363,11 +363,31 @@ class TestFlowSourcesAndInlineScreenValidation:
         result = self.validator.validate_data(data)
         assert not result.is_valid
 
-    def test_sources_unknown_key_warns(self):
+    def test_sources_unknown_key_fails(self):
+        """Schema says additionalProperties: false — unknown keys are errors, not warnings."""
         data = self._make_flow_test(sources=[{"layout": "layouts/login.json", "screen": "login"}])
         result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("Unknown key in source: screen" in str(e) for e in result.errors)
+
+    def test_sources_document_is_canonical(self):
+        data = self._make_flow_test(sources=[{"layout": "layouts/login.json", "document": "specs/Login.md", "alias": "login"}])
+        result = self.validator.validate_data(data)
         assert result.is_valid
-        assert any("Unknown key in source" in str(w) for w in result.warnings)
+        assert result.warning_count == 0
+
+    def test_sources_spec_is_deprecated_alias(self):
+        """'spec' (the pre-rename key) still validates, with a deprecation warning."""
+        data = self._make_flow_test(sources=[{"layout": "layouts/login.json", "spec": "specs/Login.md"}])
+        result = self.validator.validate_data(data)
+        assert result.is_valid
+        assert any("'spec' is deprecated" in str(w) for w in result.warnings)
+
+    def test_sources_spec_and_document_conflict_fails(self):
+        data = self._make_flow_test(sources=[{"layout": "layouts/login.json", "spec": "a.md", "document": "b.md"}])
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("deprecated alias" in str(e) for e in result.errors)
 
     def test_inline_step_without_screen_fails(self):
         data = self._make_flow_test(steps=[{"assert": "visible", "id": "app_title_label"}])
@@ -1476,8 +1496,8 @@ class TestSourceValidation:
         assert result.is_valid
         assert result.warning_count == 0
 
-    def test_source_unknown_key_warning(self):
-        """Test unknown key in source produces warning."""
+    def test_source_unknown_key_fails(self):
+        """Schema says additionalProperties: false — unknown keys are errors, not warnings."""
         data = {
             "type": "screen",
             "source": {"layout": "layouts/test.json", "unknownKey": "value"},
@@ -1485,12 +1505,10 @@ class TestSourceValidation:
             "cases": [{"name": "case1", "description": "Test case", "steps": [{"action": "tap", "id": "btn"}]}]
         }
         result = self.validator.validate_data(data)
-        assert result.is_valid  # Should pass with warning
-        assert result.warning_count > 0
-        assert any("Unknown source key: unknownKey" in str(w) for w in result.warnings)
+        assert not result.is_valid
+        assert any("Unknown source key: unknownKey" in str(e) for e in result.errors)
 
-    def test_source_multiple_unknown_keys_warning(self):
-        """Test multiple unknown keys in source produce warnings."""
+    def test_source_multiple_unknown_keys_fail(self):
         data = {
             "type": "screen",
             "source": {"layout": "layouts/test.json", "foo": "bar", "baz": "qux"},
@@ -1498,9 +1516,33 @@ class TestSourceValidation:
             "cases": [{"name": "case1", "description": "Test case", "steps": [{"action": "tap", "id": "btn"}]}]
         }
         result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("Unknown source key: foo" in str(e) for e in result.errors)
+        assert any("Unknown source key: baz" in str(e) for e in result.errors)
+
+    def test_source_spec_is_deprecated_alias(self):
+        """'spec' was flow-test's canonical key pre-2026-08-01 and leaked into
+        screen tests (3 of 4 shipped examples): warn, don't break."""
+        data = {
+            "type": "screen",
+            "source": {"layout": "layouts/test.json", "spec": "specs/Test.md"},
+            "metadata": {"name": "test", "description": "Test"},
+            "cases": [{"name": "case1", "description": "Test case", "steps": [{"action": "tap", "id": "btn"}]}]
+        }
+        result = self.validator.validate_data(data)
         assert result.is_valid
-        assert any("Unknown source key: foo" in str(w) for w in result.warnings)
-        assert any("Unknown source key: baz" in str(w) for w in result.warnings)
+        assert any("'spec' is deprecated" in str(w) for w in result.warnings)
+
+    def test_source_spec_and_document_conflict_fails(self):
+        data = {
+            "type": "screen",
+            "source": {"layout": "layouts/test.json", "spec": "a.md", "document": "b.md"},
+            "metadata": {"name": "test", "description": "Test"},
+            "cases": [{"name": "case1", "description": "Test case", "steps": [{"action": "tap", "id": "btn"}]}]
+        }
+        result = self.validator.validate_data(data)
+        assert not result.is_valid
+        assert any("deprecated alias" in str(e) for e in result.errors)
 
 
 class TestPlatformFieldValidation:

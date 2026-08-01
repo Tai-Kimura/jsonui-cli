@@ -28,7 +28,7 @@ class FlowTestValidator:
         # Warn if file references use subdirectories
         self._check_subdirectory_references(data, path, result)
 
-        # Validate sources if present (drivers require an array of {layout, alias?, spec?})
+        # Validate sources if present (drivers require an array of {layout, alias?, document?})
         if "sources" in data:
             self._validate_sources(data["sources"], f"{path}.sources", result)
 
@@ -72,14 +72,19 @@ class FlowTestValidator:
         """Validate the sources array.
 
         Mirrors the driver models (FlowTestSource): sources must be an array of
-        objects with a required 'layout' string and optional 'alias'/'spec'
+        objects with a required 'layout' string and optional 'alias'/'document'
         strings. An object map ({"alias": "path"}) passes JSON but crashes the
         iOS/Android drivers at deserialization.
+
+        'spec' is the pre-2026-08-01 spelling of 'document' (screen-test and
+        flow-test used different keys for the same concept): accepted as a
+        deprecated alias with a warning, error when both are present. Any
+        other key is an error — the schema says additionalProperties: false.
         """
         if not isinstance(sources, list):
             result.errors.append(ValidationMessage(
                 path=path,
-                message=f"'sources' must be an array of {{layout, alias?, spec?}} objects, got: {type(sources).__name__}. The drivers reject non-array sources at parse time."
+                message=f"'sources' must be an array of {{layout, alias?, document?}} objects, got: {type(sources).__name__}. The drivers reject non-array sources at parse time."
             ))
             return
 
@@ -90,7 +95,7 @@ class FlowTestValidator:
             ))
             return
 
-        valid_source_keys = {"layout", "alias", "spec"}
+        valid_source_keys = {"layout", "alias", "document", "spec"}
         for i, source in enumerate(sources):
             source_path = f"{path}[{i}]"
             if not isinstance(source, dict):
@@ -107,19 +112,31 @@ class FlowTestValidator:
                     message="Source must have a non-empty string 'layout'"
                 ))
 
-            for key in ("alias", "spec"):
+            for key in ("alias", "document", "spec"):
                 if key in source and (not isinstance(source[key], str) or not source[key].strip()):
                     result.errors.append(ValidationMessage(
                         path=source_path,
                         message=f"Source '{key}' must be a non-empty string"
                     ))
 
-            for key in source.keys():
-                if key not in valid_source_keys:
+            if "spec" in source:
+                if "document" in source:
+                    result.errors.append(ValidationMessage(
+                        path=source_path,
+                        message="'spec' and 'document' are both present — 'spec' is the deprecated alias of 'document', drop it"
+                    ))
+                else:
                     result.warnings.append(ValidationMessage(
                         path=source_path,
-                        message=f"Unknown key in source: {key}",
+                        message="'spec' is deprecated — rename to 'document' (canonical key, aligned with screen-test source.document)",
                         level="warning"
+                    ))
+
+            for key in source.keys():
+                if key not in valid_source_keys:
+                    result.errors.append(ValidationMessage(
+                        path=source_path,
+                        message=f"Unknown key in source: {key} (allowed: layout, alias, document)"
                     ))
 
     def _check_subdirectory_references(self, data: dict, path: str, result: ValidationResult):

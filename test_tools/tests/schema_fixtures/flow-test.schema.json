@@ -134,9 +134,13 @@
             "type": "string",
             "description": "Path to the JsonUI layout file"
           },
+          "document": {
+            "type": "string",
+            "description": "Path to the specification document file. Canonical key since 2026-08-01, aligned with screen-test source.document (the two schemas used different spellings for the same concept). Provenance metadata: drivers decode it but never open it, and the doc generator currently links only screen-test source.document."
+          },
           "spec": {
             "type": "string",
-            "description": "Path to the specification document"
+            "description": "DEPRECATED alias of 'document' (the pre-2026-08-01 spelling). Validators read it as 'document' and warn; providing both is an error. Removed in the next schema version."
           },
           "alias": {
             "type": "string",

@@ -40,15 +40,31 @@ class ScreenTestValidator:
                     level="warning"
                 ))
 
-        # Validate source object keys
+        # Validate source object keys. 'spec' is the pre-2026-08-01 spelling of
+        # 'document' (flow-test used it as its canonical key until then):
+        # deprecated alias with a warning, error when both are present. Any
+        # other unknown key is an error — the schema says
+        # additionalProperties: false, and the old warning-only handling let
+        # 3 of the 4 shipped examples violate the repo's own schema unnoticed.
         source = data.get("source")
         if source and isinstance(source, dict):
-            for key in source.keys():
-                if key not in VALID_SOURCE_KEYS:
+            if "spec" in source:
+                if "document" in source:
+                    result.errors.append(ValidationMessage(
+                        path=f"{path}.source",
+                        message="'spec' and 'document' are both present — 'spec' is the deprecated alias of 'document', drop it"
+                    ))
+                else:
                     result.warnings.append(ValidationMessage(
                         path=f"{path}.source",
-                        message=f"Unknown source key: {key}",
+                        message="'spec' is deprecated — rename to 'document' (canonical key)",
                         level="warning"
+                    ))
+            for key in source.keys():
+                if key not in VALID_SOURCE_KEYS and key != "spec":
+                    result.errors.append(ValidationMessage(
+                        path=f"{path}.source",
+                        message=f"Unknown source key: {key} (allowed: {', '.join(VALID_SOURCE_KEYS)})"
                     ))
 
         # Check required fields
