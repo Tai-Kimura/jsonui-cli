@@ -123,6 +123,7 @@ def _cmd_generate_attr_bindings(args: argparse.Namespace) -> int:
     into external library repos requires an explicit ``--out``
     (07/08/09 sync the build output instead of cross-repo writes).
     """
+    import hashlib
     import json
     import shutil
     from pathlib import Path
@@ -161,6 +162,9 @@ def _cmd_generate_attr_bindings(args: argparse.Namespace) -> int:
     component_count = len(model.components)
     component_attr_count = sum(len(c.attrs) for c in model.components)
 
+    # `<lang>/<rel_path>` -> sha256 of the emitted content, for the manifest.
+    manifest_files: dict[str, str] = {}
+
     for lang in langs:
         if args.out:
             out_dir = Path(args.out)
@@ -179,13 +183,55 @@ def _cmd_generate_attr_bindings(args: argparse.Namespace) -> int:
             target = out_dir / rel_path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content, encoding="utf-8")
+            manifest_files[f"{lang}/{rel_path}"] = hashlib.sha256(
+                content.encode("utf-8")
+            ).hexdigest()
 
         skip_path = out_dir / "skipped_attributes.json"
-        with open(skip_path, "w", encoding="utf-8") as f:
-            json.dump(skipped, f, indent=2, ensure_ascii=False, sort_keys=False)
-            f.write("\n")
+        skipped_text = (
+            json.dumps(skipped, indent=2, ensure_ascii=False, sort_keys=False) + "\n"
+        )
+        skip_path.write_text(skipped_text, encoding="utf-8")
+        manifest_files[f"{lang}/skipped_attributes.json"] = hashlib.sha256(
+            skipped_text.encode("utf-8")
+        ).hexdigest()
 
         print(f"[{lang}] wrote {len(files) + 1} file(s) → {out_dir}")
+
+    # Manifest: per-file sha256 + source provenance, so the library repos'
+    # CI can verify their vendored copies against a pinned jsonui-cli ref
+    # (swift/kotlin have no in-repo diff guard the way ruby does). Only a
+    # full default emit describes the complete set — partial --lang or
+    # --out runs don't touch it. Deterministic on purpose (sorted, no
+    # timestamps, no version string): it changes iff the emitted bytes or
+    # the SSoT source change, and CI fails when the committed copy goes
+    # stale, same as the fixture-freshness gate.
+    if args.lang == "all" and not args.out:
+        try:
+            source_label = str(definitions.relative_to(repo_root))
+        except ValueError:
+            source_label = definitions.name
+        manifest = {
+            "_comment": (
+                "sha256 manifest of the attr-codegen emit. Committed so "
+                "SwiftJsonUI / KotlinJsonUI CI can verify their vendored "
+                "attribute tables against a pinned jsonui-cli ref. "
+                "Regenerate: jui generate attr-bindings --lang all "
+                "(re-vendor and manifest belong in the same commit)."
+            ),
+            "generatedBy": "jui generate attr-bindings --lang all",
+            "source": {
+                "file": source_label,
+                "sha256": hashlib.sha256(definitions.read_bytes()).hexdigest(),
+            },
+            "files": {key: manifest_files[key] for key in sorted(manifest_files)},
+        }
+        manifest_path = repo_root / "build" / "attr_codegen" / "manifest.json"
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        print(f"[manifest] wrote {manifest_path} ({len(manifest_files)} file hashes)")
 
     print(
         f"\nComponents: {component_count} (+ common), attributes: "

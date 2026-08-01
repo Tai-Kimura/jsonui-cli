@@ -188,6 +188,17 @@ jobs:
         # rjui_tools vendors the generated ruby extraction tables; README.md
         # is the (hand-written) provenance note and is excluded.
         run: diff -r -x README.md build/attr_codegen/ruby rjui_tools/lib/core/generated/attributes
+      - name: attr-codegen manifest freshness (committed manifest matches fresh emit)
+        # The determinism step above just re-emitted build/attr_codegen,
+        # including manifest.json (the only committed file under build/).
+        # SwiftJsonUI / KotlinJsonUI CI verify their vendored swift/kotlin
+        # tables against this manifest at a pinned ref, so a stale or
+        # missing committed copy would silently disarm that cross-repo
+        # guard — fail here instead. Re-vendor and manifest belong in the
+        # same commit.
+        run: |
+          git ls-files --error-unmatch build/attr_codegen/manifest.json
+          git diff --exit-code -- build/attr_codegen/manifest.json
       - name: Attribute coverage ratchet (declared attributes each platform reads)
         # The conformance suite compares each platform against its own previous
         # screenshot, so an attribute no converter reads renders blank, matches

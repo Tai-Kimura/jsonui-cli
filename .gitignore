@@ -4,7 +4,13 @@ __pycache__/
 *.pyo
 *.pyd
 *.egg-info/
-build/
+# build/ output is generated — except the attr-codegen manifest, which is
+# committed so library repos can verify their vendored tables against it
+# (an ignored parent DIRECTORY would block the re-include, hence /build/*).
+/build/*
+!/build/attr_codegen
+/build/attr_codegen/*
+!/build/attr_codegen/manifest.json
 dist/
 .pytest_cache/
 
