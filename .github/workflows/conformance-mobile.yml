@@ -87,6 +87,9 @@ jobs:
         with:
           repository: Tai-Kimura/jsonui-test-runner
           path: jsonui-test-runner
+          # drivers/ios is a submodule since test-runner 61a860e — without this
+          # the vendor step finds an empty gitlink and fails
+          submodules: true
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: "16.4"
