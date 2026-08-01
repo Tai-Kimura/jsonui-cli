@@ -2,9 +2,9 @@
 
 # JsonUI Conformance Report
 
-- Manifest: `a753ab98864aa33ca04b81a906d00377057c06a3ccbb5a3271074c37b86318ee` (sha256)
-- Definitions: `18c2a4b7cd008396f2e10246002a68122b4541dec339b0fc9c1d7ad510a62047` (sha256)
-- Fixtures: 717 (assertable: 36, visual: 604, interactive: 37) / skipped attributes: 159
+- Manifest: `ecf24199bb4d0d06a2993ab89cbcd69cca23728cfb61b52c9f1f90db45ae525e` (sha256)
+- Definitions: `4c8bc6b85d9c81109565edceddd2e6edf6ea51f5b5651df8e1004a78d591a0dd` (sha256)
+- Fixtures: 670 (assertable: 29, visual: 572, interactive: 35) / skipped attributes: 153
 
 Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
 
@@ -14,7 +14,7 @@ _No cross-platform mismatches._
 
 ## Interactive fixtures
 
-- Interactive fixtures: 37 · attributes promoted out of skip reasons: callback: 13 · still skipped: binding-only: 5, callback: 38
+- Interactive fixtures: 35 · attributes promoted out of skip reasons: callback: 11 · still skipped: binding-only: 5, callback: 37
 
 | Fixture | Case | Promoted from | android | ios | web | Detail |
 |---|---|---|---|---|---|---|
@@ -49,9 +49,7 @@ _No cross-platform mismatches._
 | `SelectBox/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
 | `SelectBox/onValueChanged__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
 | `Switch/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
-| `Toggle/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
 | `CheckBox/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
-| `Check/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
 | `Embed/navigationMode__isolated_push` | `isolated_push` | — | ✅ | ✅ | ✅ |  |
 | `Embed/navigationMode__isolated_pop_boundary` | `isolated_pop_boundary` | — | ✅ | ✅ | ✅ |  |
 | `common/variantfile__state_vm_survives` | `state_vm_survives` | — | – | – | ✅ | android: not applicable to android<br>ios: not applicable to ios |
@@ -62,9 +60,15 @@ Screenshots are compared against `baselines/local/<platform>.hashes.json` (rende
 
 | Platform | Baseline | Compared | Regressions | No baseline | Missing artifact |
 |---|---|---|---|---|---|
-| android | threshold 8 | 506 | 0 | 0 | 12 |
-| ios | threshold 8 | 0 | 0 | 0 | 540 |
-| web | threshold 8 | 510 | 0 | 0 | 4 |
+| android | threshold 8 | 434 | 0 | 72 | 8 |
+| ios | threshold 8 | 0 | 0 | 69 | 467 |
+| web | threshold 8 | 448 | 0 | 34 | 0 |
+
+> android: 72 screenshot(s) without a baseline hash (not compared — NOT a pass): `EditText_hint__static.png`, `EditText_placeholder__static.png`, `EditText_hintColor__static.png`, `EditText_inputType__static.png`, `Input_hint__static.png`, `Input_placeholder__static.png`, `Input_hintColor__static.png`, `Toggle_isOn__true.png`, `Toggle_value__static.png`, `Toggle_checked__true.png` …
+
+> ios: 69 screenshot(s) without a baseline hash (not compared — NOT a pass): `EditText_hint__static.png`, `EditText_placeholder__static.png`, `EditText_hintColor__static.png`, `Input_hint__static.png`, `Input_placeholder__static.png`, `Input_hintColor__static.png`, `Toggle_isOn__true.png`, `Toggle_value__static.png`, `Toggle_checked__true.png`, `Toggle_tint__static.png` …
+
+> web: 34 screenshot(s) without a baseline hash (not compared — NOT a pass): `control_Blur.png`, `control_Button.png`, `control_CheckBox.png`, `control_CheckBox__orientation-horizontal.png`, `control_Collection.png`, `control_GradientView.png`, `control_IconLabel.png`, `control_Image.png`, `control_Indicator.png`, `control_Label.png` …
 
 ## Attribute effect (fixture vs control)
 
@@ -72,11 +76,11 @@ Each visual fixture is compared against its **control** — the same layout with
 
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
-| android | 422 | 155 | 267 | 0 | 0 |
-| ios | 0 | 0 | 0 | 0 | 148 |
-| web | 427 | 191 | 236 | 0 | 0 |
+| android | 391 | 140 | 251 | 0 | 0 |
+| ios | 0 | 0 | 0 | 0 | 134 |
+| web | 405 | 177 | 228 | 0 | 0 |
 
-> ios: 303 fixture(s) had no usable control screenshot (not compared — NOT a pass)
+> ios: 288 fixture(s) had no usable control screenshot (not compared — NOT a pass)
 
 ## Platforms
 
@@ -84,11 +88,15 @@ Each visual fixture is compared against its **control** — the same layout with
 |---|---|---|---|---|---|---|---|
 | android | uiautomator 2.3.0 | 717 | 574 | 0 | 0 | 143 | ⚠️ STALE |
 | ios | xcuitest ios-18.6 | 717 | 601 | 0 | 0 | 116 | ⚠️ STALE |
-| web | playwright 1.61.1 | 717 | 578 | 0 | 0 | 139 | current |
+| web | playwright 1.61.1 | 670 | 541 | 0 | 0 | 129 | current |
 
-> ⚠️ `android.results.json` was produced against manifest `149715ab22aab62feebc4153bb91f4642bc9abb1f059666dac656750e40ff75a` but the current manifest is `a753ab98864aa33ca04b81a906d00377057c06a3ccbb5a3271074c37b86318ee` — results are stale; re-run the android suite.
+> ⚠️ `android.results.json` was produced against manifest `149715ab22aab62feebc4153bb91f4642bc9abb1f059666dac656750e40ff75a` but the current manifest is `ecf24199bb4d0d06a2993ab89cbcd69cca23728cfb61b52c9f1f90db45ae525e` — results are stale; re-run the android suite.
 
-> ⚠️ `ios.results.json` was produced against manifest `149715ab22aab62feebc4153bb91f4642bc9abb1f059666dac656750e40ff75a` but the current manifest is `a753ab98864aa33ca04b81a906d00377057c06a3ccbb5a3271074c37b86318ee` — results are stale; re-run the ios suite.
+> ⚠️ `android.results.json` contains 48 fixture id(s) not present in the manifest: `Check/checkedColor__static`, `Check/checked__true`, `Check/enabled__false`, `Check/enabled__true`, `Check/fontColor__static`, `Check/fontSize__static`, `Check/font__static`, `Check/iconColor__static`, `Check/iconSize__static`, `Check/icon__static` …
+
+> ⚠️ `ios.results.json` was produced against manifest `149715ab22aab62feebc4153bb91f4642bc9abb1f059666dac656750e40ff75a` but the current manifest is `ecf24199bb4d0d06a2993ab89cbcd69cca23728cfb61b52c9f1f90db45ae525e` — results are stale; re-run the ios suite.
+
+> ⚠️ `ios.results.json` contains 48 fixture id(s) not present in the manifest: `Check/checkedColor__static`, `Check/checked__true`, `Check/enabled__false`, `Check/enabled__true`, `Check/fontColor__static`, `Check/fontSize__static`, `Check/font__static`, `Check/iconColor__static`, `Check/iconSize__static`, `Check/icon__static` …
 
 ## Matrix
 
@@ -331,6 +339,7 @@ Each visual fixture is compared against its **control** — the same layout with
 | `input` | `url` | visual | ✅ | ✅ | ✅ |
 | `input` | `password` | visual | ✅ | ✅ | ✅ |
 | `input` | `decimal` | visual | ✅ | ✅ | ✅ |
+| `inputType` | `static` | visual |  |  | – |
 | `returnKeyType` | `done` | visual | ✅ | ✅ | ✅ |
 | `returnKeyType` | `go` | visual | ✅ | ✅ | ✅ |
 | `returnKeyType` | `next` | visual | ✅ | ✅ | ✅ |
@@ -431,25 +440,6 @@ Each visual fixture is compared against its **control** — the same layout with
 | `fontFamily` | `static` | visual | ✅ | ✅ | ✅ |
 | `disabledBackground` | `static` | visual | – | – | ✅ |
 | `edgeInset` | `static` | visual | ✅ | ✅ | ✅ |
-
-### EditText
-
-| Fixture | Case | Class | android | ios | web |
-|---|---|---|---|---|---|
-| `text` | `static` | assertable | ✅ | ✅ | ✅ |
-| `hint` | `static` | visual | ✅ | ✅ | ✅ |
-| `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
-| `hintColor` | `static` | visual | ✅ | ✅ | ✅ |
-| `inputType` | `static` | visual | ✅ | – | – |
-
-### Input
-
-| Fixture | Case | Class | android | ios | web |
-|---|---|---|---|---|---|
-| `text` | `static` | assertable | ✅ | ✅ | ✅ |
-| `hint` | `static` | visual | ✅ | ✅ | ✅ |
-| `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
-| `hintColor` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### Button
 
@@ -585,25 +575,6 @@ Each visual fixture is compared against its **control** — the same layout with
 | `selectedValue` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### Switch
-
-| Fixture | Case | Class | android | ios | web |
-|---|---|---|---|---|---|
-| `isOn` | `true` | visual | ✅ | ✅ | ✅ |
-| `value` | `static` | visual | ✅ | ✅ | ✅ |
-| `checked` | `true` | visual | ✅ | ✅ | ✅ |
-| `enabled` | `true` | assertable | ✅ | ✅ | ✅ |
-| `enabled` | `false` | assertable | ✅ | ✅ | ✅ |
-| `tint` | `static` | visual | ✅ | ✅ | ✅ |
-| `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
-| `onTintColor` | `static` | visual | ✅ | ✅ | ✅ |
-| `thumbTintColor` | `static` | visual | ✅ | ✅ | ✅ |
-| `offTintColor` | `static` | visual | – | – | – |
-| `onValueChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
-| `labelPosition` | `leading` | visual | ✅ | – | – |
-| `labelPosition` | `trailing` | visual | ✅ | – | – |
-| `trackTintColor` | `static` | visual | ✅ | ✅ | ✅ |
-
-### Toggle
 
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
@@ -796,30 +767,6 @@ Each visual fixture is compared against its **control** — the same layout with
 | `iconSize` | `static` | visual | ✅ | ✅ | – |
 | `iconColor` | `static` | visual | ✅ | ✅ | – |
 
-### Check
-
-| Fixture | Case | Class | android | ios | web |
-|---|---|---|---|---|---|
-| `checked` | `true` | visual | ✅ | ✅ | ✅ |
-| `isOn` | `true` | visual | ✅ | ✅ | ✅ |
-| `label` | `static` | visual | ✅ | ✅ | ✅ |
-| `text` | `static` | assertable | ✅ | ✅ | ✅ |
-| `icon` | `static` | visual | ✅ | ✅ | – |
-| `src` | `static` | visual | ✅ | ✅ | ✅ |
-| `selectedIcon` | `static` | visual | ✅ | ✅ | – |
-| `selectedIcon` (alias) | `alias_onSrc` | visual | ✅ | ✅ | – |
-| `enabled` | `true` | assertable | ✅ | ✅ | ✅ |
-| `enabled` | `false` | assertable | ✅ | ✅ | ✅ |
-| `font` | `static` | visual | ✅ | ✅ | ✅ |
-| `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
-| `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
-| `spacing` | `static` | visual | ✅ | ✅ | ✅ |
-| `onValueChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
-| `checkedColor` | `static` | visual | ✅ | ✅ | – |
-| `uncheckedColor` | `static` | visual | ✅ | ✅ | – |
-| `iconSize` | `static` | visual | ✅ | ✅ | – |
-| `iconColor` | `static` | visual | ✅ | ✅ | – |
-
 ### Indicator
 
 | Fixture | Case | Class | android | ios | web |
@@ -901,17 +848,13 @@ Each visual fixture is compared against its **control** — the same layout with
 |---|---|---|---|---|---|
 | `None` | `Blur` | visual | ✅ | ✅ | ✅ |
 | `None` | `Button` | visual | ✅ | ✅ | ✅ |
-| `None` | `Check` | visual | ✅ | ✅ | ✅ |
-| `None` | `Check` | visual | ✅ | ✅ | ✅ |
 | `None` | `CheckBox` | visual | ✅ | ✅ | ✅ |
 | `None` | `CheckBox` | visual | ✅ | ✅ | ✅ |
 | `None` | `Collection` | visual | ✅ | ✅ | ✅ |
-| `None` | `EditText` | visual | ✅ | ✅ | ✅ |
 | `None` | `GradientView` | visual | ✅ | ✅ | ✅ |
 | `None` | `IconLabel` | visual | ✅ | ✅ | ✅ |
 | `None` | `Image` | visual | ✅ | ✅ | ✅ |
 | `None` | `Indicator` | visual | ✅ | ✅ | ✅ |
-| `None` | `Input` | visual | ✅ | ✅ | ✅ |
 | `None` | `Label` | visual | ✅ | ✅ | ✅ |
 | `None` | `Label` | visual | ✅ | ✅ | ✅ |
 | `None` | `NetworkImage` | visual | ✅ | ✅ | ✅ |
@@ -932,8 +875,6 @@ Each visual fixture is compared against its **control** — the same layout with
 | `None` | `TextField` | visual | ✅ | ✅ | ✅ |
 | `None` | `TextField` | visual | ✅ | ✅ | ✅ |
 | `None` | `TextView` | visual | ✅ | ✅ | ✅ |
-| `None` | `Toggle` | visual | ✅ | ✅ | ✅ |
-| `None` | `Toggle` | visual | ✅ | ✅ | ✅ |
 | `None` | `View` | visual | ✅ | ✅ | ✅ |
 | `None` | `View` | visual | ✅ | ✅ | ✅ |
 | `None` | `View` | visual | ✅ | ✅ | ✅ |
@@ -1039,10 +980,8 @@ Each visual fixture is compared against its **control** — the same layout with
 | TextView | `onShouldChangeText` | callback |
 | TextView | `onShouldBeginEditing` | callback |
 | TextView | `onShouldEndEditing` | callback |
-| EditText | `_alias_of` | definition metadata, not an attribute |
-| EditText | `_comment` | definition metadata, not an attribute |
-| Input | `_alias_of` | definition metadata, not an attribute |
-| Input | `_comment` | definition metadata, not an attribute |
+| EditText | `*` | component alias (fixtures live on the canonical section) |
+| Input | `*` | component alias (fixtures live on the canonical section) |
 | Button | `config` | metadata (not rendered) |
 | Image | `canTap` | behavioral (no visual or assertable effect in v1) |
 | Image | `maxZoom` | behavioral (no visual or assertable effect in v1) |
@@ -1061,10 +1000,7 @@ Each visual fixture is compared against its **control** — the same layout with
 | Switch | `_comment` | definition metadata, not an attribute |
 | Switch | `onToggle` | callback |
 | Switch | `labelAttributes` | composite value (no representative static value in v1) |
-| Toggle | `_alias_of` | definition metadata, not an attribute |
-| Toggle | `_comment` | definition metadata, not an attribute |
-| Toggle | `onToggle` | callback |
-| Toggle | `labelAttributes` | composite value (no representative static value in v1) |
+| Toggle | `*` | component alias (fixtures live on the canonical section) |
 | Segment | `valueChange` | callback |
 | Segment | `momentary` | behavioral (no visual or assertable effect in v1) |
 | Segment | `onValueChange` | callback |
@@ -1113,8 +1049,7 @@ Each visual fixture is compared against its **control** — the same layout with
 | Radio | `onValueChange` | callback |
 | CheckBox | `_alias` | definition metadata, not an attribute |
 | CheckBox | `_comment` | definition metadata, not an attribute |
-| Check | `_alias_of` | definition metadata, not an attribute |
-| Check | `_comment` | definition metadata, not an attribute |
+| Check | `*` | component alias (fixtures live on the canonical section) |
 | Web | `url` | network resource (v1 fixtures are offline) |
 | Web | `allowsBackForwardNavigationGestures` | behavioral (no visual or assertable effect in v1) |
 | Web | `allowsLinkPreview` | behavioral (no visual or assertable effect in v1) |

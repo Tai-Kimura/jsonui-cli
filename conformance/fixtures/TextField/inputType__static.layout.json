@@ -13,12 +13,12 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "Check",
+      "type": "TextField",
       "id": "target",
       "width": 200,
       "height": "wrapContent",
-      "text": "Sample",
-      "label": "sample"
+      "hint": "Sample",
+      "inputType": "sample"
     }
   ]
 }

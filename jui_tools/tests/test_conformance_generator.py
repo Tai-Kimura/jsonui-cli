@@ -521,6 +521,12 @@ class ConformanceGeneratorRealDefinitionsTest(unittest.TestCase):
         for section, attrs in defs.items():
             if section == "_comment" or not isinstance(attrs, dict):
                 continue
+            if isinstance(attrs.get("_alias_of"), str):
+                # Component alias sections (B1) are covered by a single
+                # section-level ledger entry — the canonical section owns
+                # the per-attribute coverage.
+                self.assertIn((section, "*"), covered)
+                continue
             for attribute in attrs:
                 self.assertIn((section, attribute), covered)
 
@@ -530,10 +536,12 @@ class ConformanceGeneratorRealDefinitionsTest(unittest.TestCase):
         self.assertGreater(self.summary.skipped_count, 100)
 
     def test_interactive_volume_and_promotions(self):
-        # 13 attributes promoted out of `callback` (v1 had 50; onPan joined
-        # 2026-07 when `swipe` was recognized as a pan trigger); every
-        # interactive fixture carries a state contract.
-        self.assertEqual(self.summary.promoted, {"callback": 13})
+        # 11 attributes promoted out of `callback` (v1 had 50; onPan joined
+        # 2026-07 when `swipe` was recognized as a pan trigger; Toggle/Check
+        # onValueChange left with the B1 alias collapse — the canonical
+        # Switch/CheckBox rules carry the coverage); every interactive
+        # fixture carries a state contract.
+        self.assertEqual(self.summary.promoted, {"callback": 11})
         self.assertGreaterEqual(self.summary.interactive_count, 19)
         for fixture in self.manifest["fixtures"]:
             if fixture["class"] == "interactive":

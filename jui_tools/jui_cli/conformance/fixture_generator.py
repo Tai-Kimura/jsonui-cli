@@ -90,6 +90,15 @@ def plan_definitions(
     for section, attrs in definitions.items():
         if section == "_comment" or not isinstance(attrs, dict):
             continue
+        if isinstance(attrs.get("_alias_of"), str):
+            # Component alias (`_alias_of` pointer section, B1): carries no
+            # attribute copies, so there is nothing to fixture — the
+            # canonical section owns the coverage. One ledger entry keeps
+            # the no-silent-drops contract.
+            skipped.append(
+                SkippedAttribute(section, "*", rules.REASON_COMPONENT_ALIAS)
+            )
+            continue
         for attribute, defn in attrs.items():
             result = rules.plan_attribute(section, attribute, defn)
             if isinstance(result, SkippedAttribute):

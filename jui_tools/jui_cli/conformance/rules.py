@@ -95,6 +95,7 @@ REASON_COMPOSITE = "composite value (no representative static value in v1)"
 REASON_NETWORK = "network resource (v1 fixtures are offline)"
 REASON_RUNTIME_DATA = "requires runtime data / cell template (v1 static fixtures only)"
 REASON_DEFINITION_META = "definition metadata, not an attribute"
+REASON_COMPONENT_ALIAS = "component alias (fixtures live on the canonical section)"
 
 #: Attribute names (any section) that are pure metadata for parsers / codegen.
 METADATA_ATTRS = {

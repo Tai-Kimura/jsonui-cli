@@ -1,6 +1,6 @@
 {
   "platform": "web",
-  "manifestHash": "a753ab98864aa33ca04b81a906d00377057c06a3ccbb5a3271074c37b86318ee",
+  "manifestHash": "ecf24199bb4d0d06a2993ab89cbcd69cca23728cfb61b52c9f1f90db45ae525e",
   "runner": {
     "name": "playwright",
     "version": "1.61.1"
@@ -1272,6 +1272,11 @@
       "screenshot": "artifacts/web/TextField_input__decimal.png"
     },
     {
+      "id": "TextField/inputType__static",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
       "id": "TextField/returnKeyType__done",
       "status": "pass",
       "detail": "",
@@ -1821,57 +1826,6 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/TextView_edgeInset__static.png"
-    },
-    {
-      "id": "EditText/text__static",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "EditText/hint__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/EditText_hint__static.png"
-    },
-    {
-      "id": "EditText/placeholder__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/EditText_placeholder__static.png"
-    },
-    {
-      "id": "EditText/hintColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/EditText_hintColor__static.png"
-    },
-    {
-      "id": "EditText/inputType__static",
-      "status": "skipped",
-      "detail": "not applicable to web"
-    },
-    {
-      "id": "Input/text__static",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "Input/hint__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Input_hint__static.png"
-    },
-    {
-      "id": "Input/placeholder__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Input_placeholder__static.png"
-    },
-    {
-      "id": "Input/hintColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Input_hintColor__static.png"
     },
     {
       "id": "Button/text__static",
@@ -2611,84 +2565,6 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Switch_trackTintColor__static.png"
-    },
-    {
-      "id": "Toggle/isOn__true",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Toggle_isOn__true.png"
-    },
-    {
-      "id": "Toggle/value__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Toggle_value__static.png"
-    },
-    {
-      "id": "Toggle/checked__true",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Toggle_checked__true.png"
-    },
-    {
-      "id": "Toggle/enabled__true",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "Toggle/enabled__false",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "Toggle/tint__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Toggle_tint__static.png"
-    },
-    {
-      "id": "Toggle/tintColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Toggle_tintColor__static.png"
-    },
-    {
-      "id": "Toggle/onTintColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Toggle_onTintColor__static.png"
-    },
-    {
-      "id": "Toggle/thumbTintColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Toggle_thumbTintColor__static.png"
-    },
-    {
-      "id": "Toggle/offTintColor__static",
-      "status": "skipped",
-      "detail": "not applicable to web"
-    },
-    {
-      "id": "Toggle/onValueChange__callback_fire",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "Toggle/labelPosition__leading",
-      "status": "skipped",
-      "detail": "not applicable to web"
-    },
-    {
-      "id": "Toggle/labelPosition__trailing",
-      "status": "skipped",
-      "detail": "not applicable to web"
-    },
-    {
-      "id": "Toggle/trackTintColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Toggle_trackTintColor__static.png"
     },
     {
       "id": "Segment/items__static",
@@ -3454,109 +3330,6 @@
       "detail": "not applicable to web"
     },
     {
-      "id": "Check/checked__true",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Check_checked__true.png"
-    },
-    {
-      "id": "Check/isOn__true",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Check_isOn__true.png"
-    },
-    {
-      "id": "Check/label__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Check_label__static.png"
-    },
-    {
-      "id": "Check/text__static",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "Check/icon__static",
-      "status": "skipped",
-      "detail": "not applicable to web"
-    },
-    {
-      "id": "Check/src__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Check_src__static.png"
-    },
-    {
-      "id": "Check/selectedIcon__static",
-      "status": "skipped",
-      "detail": "not applicable to web"
-    },
-    {
-      "id": "Check/selectedIcon__alias_onSrc",
-      "status": "skipped",
-      "detail": "not applicable to web"
-    },
-    {
-      "id": "Check/enabled__true",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "Check/enabled__false",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "Check/font__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Check_font__static.png"
-    },
-    {
-      "id": "Check/fontSize__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Check_fontSize__static.png"
-    },
-    {
-      "id": "Check/fontColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Check_fontColor__static.png"
-    },
-    {
-      "id": "Check/spacing__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Check_spacing__static.png"
-    },
-    {
-      "id": "Check/onValueChange__callback_fire",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "Check/checkedColor__static",
-      "status": "skipped",
-      "detail": "not applicable to web"
-    },
-    {
-      "id": "Check/uncheckedColor__static",
-      "status": "skipped",
-      "detail": "not applicable to web"
-    },
-    {
-      "id": "Check/iconSize__static",
-      "status": "skipped",
-      "detail": "not applicable to web"
-    },
-    {
-      "id": "Check/iconColor__static",
-      "status": "skipped",
-      "detail": "not applicable to web"
-    },
-    {
       "id": "Indicator/indicatorStyle__medium",
       "status": "skipped",
       "detail": "not applicable to web"
@@ -3804,18 +3577,6 @@
       "screenshot": "artifacts/web/control_Button.png"
     },
     {
-      "id": "__control/Check",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/control_Check.png"
-    },
-    {
-      "id": "__control/Check__orientation-horizontal",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/control_Check__orientation-horizontal.png"
-    },
-    {
       "id": "__control/CheckBox",
       "status": "pass",
       "detail": "",
@@ -3832,12 +3593,6 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/control_Collection.png"
-    },
-    {
-      "id": "__control/EditText",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/control_EditText.png"
     },
     {
       "id": "__control/GradientView",
@@ -3862,12 +3617,6 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/control_Indicator.png"
-    },
-    {
-      "id": "__control/Input",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/control_Input.png"
     },
     {
       "id": "__control/Label",
@@ -3988,18 +3737,6 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/control_TextView.png"
-    },
-    {
-      "id": "__control/Toggle",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/control_Toggle.png"
-    },
-    {
-      "id": "__control/Toggle__isOn-True",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/control_Toggle__isOn-True.png"
     },
     {
       "id": "__control/View",

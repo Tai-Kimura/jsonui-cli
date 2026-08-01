@@ -74,88 +74,6 @@
       ]
     },
     {
-      "fixture": "Check/checked__true",
-      "platforms": [
-        "android",
-        "ios",
-        "web"
-      ]
-    },
-    {
-      "fixture": "Check/fontColor__static",
-      "platforms": [
-        "android",
-        "ios",
-        "web"
-      ]
-    },
-    {
-      "fixture": "Check/fontSize__static",
-      "platforms": [
-        "android",
-        "ios",
-        "web"
-      ]
-    },
-    {
-      "fixture": "Check/font__static",
-      "platforms": [
-        "android",
-        "web"
-      ]
-    },
-    {
-      "fixture": "Check/iconSize__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Check/icon__static",
-      "platforms": [
-        "android",
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Check/isOn__true",
-      "platforms": [
-        "android",
-        "ios",
-        "web"
-      ]
-    },
-    {
-      "fixture": "Check/label__static",
-      "platforms": [
-        "android"
-      ]
-    },
-    {
-      "fixture": "Check/selectedIcon__alias_onSrc",
-      "platforms": [
-        "android"
-      ]
-    },
-    {
-      "fixture": "Check/selectedIcon__static",
-      "platforms": [
-        "android"
-      ]
-    },
-    {
-      "fixture": "Check/src__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Check/uncheckedColor__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "CheckBox/checked__true",
       "platforms": [
         "android",
@@ -313,21 +231,6 @@
       "fixture": "Collection/reverseLayout__true",
       "platforms": [
         "android"
-      ]
-    },
-    {
-      "fixture": "EditText/hintColor__static",
-      "platforms": [
-        "android",
-        "web"
-      ]
-    },
-    {
-      "fixture": "EditText/hint__static",
-      "platforms": [
-        "android",
-        "ios",
-        "web"
       ]
     },
     {
@@ -532,21 +435,6 @@
       "fixture": "Indicator/indicatorStyle__medium",
       "platforms": [
         "ios"
-      ]
-    },
-    {
-      "fixture": "Input/hintColor__static",
-      "platforms": [
-        "android",
-        "web"
-      ]
-    },
-    {
-      "fixture": "Input/hint__static",
-      "platforms": [
-        "android",
-        "ios",
-        "web"
       ]
     },
     {
@@ -1324,42 +1212,6 @@
     {
       "fixture": "TextView/textAlign__right_2",
       "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Toggle/checked__true",
-      "platforms": [
-        "ios",
-        "web"
-      ]
-    },
-    {
-      "fixture": "Toggle/isOn__true",
-      "platforms": [
-        "android",
-        "ios",
-        "web"
-      ]
-    },
-    {
-      "fixture": "Toggle/onTintColor__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "Toggle/tintColor__static",
-      "platforms": [
-        "android",
-        "ios",
-        "web"
-      ]
-    },
-    {
-      "fixture": "Toggle/tint__static",
-      "platforms": [
-        "ios",
         "web"
       ]
     },

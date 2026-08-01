@@ -457,17 +457,13 @@ INTERACTIVE_SPECS: dict[tuple[str, str], tuple[InteractiveSpec, ...]] = {
     ("TextView", "onTextChange"): (
         _callback_fire("TextView", "onTextChange", _FIRE_BINDING, _input_target(TYPED_TEXT)),
     ),
+    # Toggle / Check are `_alias_of` pointer sections (B1) — their plans
+    # never form, so only the canonical Switch / CheckBox rules exist.
     ("Switch", "onValueChange"): (
         _callback_fire("Switch", "onValueChange", _FIRE_BINDING, _tap_target()),
     ),
-    ("Toggle", "onValueChange"): (
-        _callback_fire("Toggle", "onValueChange", _FIRE_BINDING, _tap_target()),
-    ),
     ("CheckBox", "onValueChange"): (
         _callback_fire("CheckBox", "onValueChange", _FIRE_BINDING, _tap_target()),
-    ),
-    ("Check", "onValueChange"): (
-        _callback_fire("Check", "onValueChange", _FIRE_BINDING, _tap_target()),
     ),
     ("SelectBox", "onValueChange"): (
         _callback_fire("SelectBox", "onValueChange", _FIRE_BINDING, _select_target("Two")),
