@@ -61,6 +61,14 @@ class ReportSummary:
     unknown_ids: dict[str, list[str]] = field(default_factory=dict)
     visual_regressions: dict[str, int] = field(default_factory=dict)  # platform -> count
     no_baseline: dict[str, int] = field(default_factory=dict)  # platform -> count
+    #: platform -> count of baseline entries with no fresh screenshot (plus
+    #: result-referenced screenshots whose PNG is gone). A fixture that stops
+    #: producing a screenshot exits visual coverage without failing anything —
+    #: this is the number the gate ratchets so that exit is no longer silent.
+    missing_artifact: dict[str, int] = field(default_factory=dict)
+    #: platform -> {pass/fail/error/skipped: count} over that platform's
+    #: results (unknown statuses count as error, like the matrix rendering).
+    status_tallies: dict[str, dict[str, int]] = field(default_factory=dict)
     #: platform -> why its screenshots could not be compared at all. A gate
     #: that ignores this reports "0 regressions" for a comparison that never
     #: ran — which is how the whole visual check sat inert in CI (Pillow was
@@ -282,6 +290,7 @@ def render_report(
                 continue
             summary.visual_regressions[p.platform] = len(comparison.regressions)
             summary.no_baseline[p.platform] = len(comparison.no_baseline)
+            summary.missing_artifact[p.platform] = len(comparison.missing_artifact)
             if comparison.error:
                 summary.baseline_errors[p.platform] = comparison.error
                 lines.append(
@@ -405,6 +414,7 @@ def render_report(
                 status = _status_of(p, fixture_id)
                 if status in tally:
                     tally[status] += 1
+            summary.status_tallies[p.platform] = dict(tally)
             runner = p.runner or {}
             runner_label = str(runner.get("name", "?"))
             if runner.get("version"):

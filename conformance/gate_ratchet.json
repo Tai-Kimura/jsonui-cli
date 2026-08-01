@@ -1,0 +1,19 @@
+{
+  "_comment": [
+    "Ratchet ceilings for `jui conformance gate` (plan 06 §3).",
+    "missing_artifact: baseline entries whose fixture produced no screenshot this run — the way a fixture silently exits visual coverage.",
+    "no_baseline: screenshots that have no baseline hash (rendered but never compared).",
+    "A count above its ceiling fails the gate. LOWERING a ceiling to match improved reality is routine and encouraged (the gate prints a notice when there is slack); RAISING one is a coverage regression and needs a justification comment here.",
+    "Initial values are the measured reality at introduction (2026-08-01 committed results)."
+  ],
+  "missing_artifact": {
+    "android": 12,
+    "ios": 6,
+    "web": 4
+  },
+  "no_baseline": {
+    "android": 0,
+    "ios": 0,
+    "web": 0
+  }
+}

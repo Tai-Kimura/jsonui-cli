@@ -65,6 +65,48 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         help="Report output path (default: <dir>/REPORT.md)",
     )
 
+    gate = sub.add_parser(
+        "gate",
+        help="Render REPORT.md and fail on regressions — the CI gate, runnable locally",
+    )
+    gate.add_argument(
+        "--platform",
+        action="append",
+        required=True,
+        choices=list(_PLATFORMS),
+        help=(
+            "Platform whose results this gate judges (repeatable). Cross-platform "
+            "mismatches are judged only when all three platforms are selected — "
+            "with fewer, the unselected results are committed snapshots, not this run's."
+        ),
+    )
+    gate.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory containing manifest.json (default: {_DEFAULT_OUT})",
+    )
+    gate.add_argument(
+        "--results",
+        default=None,
+        help="Results directory (default: <dir>/results)",
+    )
+    gate.add_argument(
+        "--out",
+        default=None,
+        help="Report output path (default: <dir>/REPORT.md)",
+    )
+    gate.add_argument(
+        "--no-visual",
+        action="store_true",
+        help=(
+            "Skip the screenshot-dependent checks (baseline comparison, attribute "
+            "effect, artifact ratchets). For lanes that cannot compare renders — "
+            "the per-push web lane runs on a different OS than the committed "
+            "baselines were rendered on and does not install Pillow."
+        ),
+    )
+
     compat = sub.add_parser(
         "compat-doc",
         help="Generate the @generated attribute-compatibility markdown",
@@ -192,6 +234,8 @@ def cmd_conformance(args: argparse.Namespace) -> int:
         return _cmd_generate(args)
     if target == "report":
         return _cmd_report(args)
+    if target == "gate":
+        return _cmd_gate(args)
     if target == "compat-doc":
         return _cmd_compat_doc(args)
     if target == "baseline":
@@ -201,7 +245,7 @@ def cmd_conformance(args: argparse.Namespace) -> int:
     if target == "effect":
         return _cmd_effect(args)
     print(
-        "Usage: jui conformance <generate|report|baseline|coverage|effect> [options]"
+        "Usage: jui conformance <generate|report|gate|baseline|coverage|effect> [options]"
     )
     return 1
 
@@ -448,4 +492,81 @@ def _cmd_report(args: argparse.Namespace) -> int:
         print(f"  STALE results: {', '.join(summary.stale_platforms)}")
     for platform, ids in summary.unknown_ids.items():
         print(f"  WARNING: {platform} has {len(ids)} fixture id(s) not in manifest")
+    return 0
+
+
+def _cmd_gate(args: argparse.Namespace) -> int:
+    import hashlib
+    import os
+
+    from ..conformance.gate import evaluate
+    from ..conformance.report import ReportError, _status_of, load_platform_results
+
+    conformance_dir = (
+        Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    )
+    results_dir = Path(args.results) if args.results else conformance_dir / "results"
+    out_path = Path(args.out) if args.out else None
+    selected = list(dict.fromkeys(args.platform))
+
+    try:
+        outcome = evaluate(
+            conformance_dir,
+            selected,
+            results_dir=results_dir,
+            out_path=out_path,
+            visual=not args.no_visual,
+        )
+    except ReportError as e:
+        print(f"ERROR: {e}")
+        return 1
+
+    summary = outcome.summary
+    print(f"report written to {summary.out_path}")
+    for platform in selected:
+        tally = summary.status_tallies.get(platform)
+        if tally is not None:
+            print(f"{platform}: {tally}")
+
+    # List the failing fixtures so a red gate is diagnosable from the log
+    # alone (same 30-entry cap the workflow heredocs used).
+    has_bad_results = any(
+        tally.get("fail", 0) + tally.get("error", 0)
+        for platform in selected
+        if (tally := summary.status_tallies.get(platform)) is not None
+    )
+    if has_bad_results:
+        manifest_hash = hashlib.sha256(
+            (conformance_dir / "manifest.json").read_bytes()
+        ).hexdigest()
+        loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash)}
+        for platform in selected:
+            p = loaded.get(platform)
+            if p is None:
+                continue
+            bad = [
+                (fixture_id, entry)
+                for fixture_id, entry in p.results.items()
+                if _status_of(p, fixture_id) in ("fail", "error")
+            ]
+            for fixture_id, entry in bad[:30]:
+                status = _status_of(p, fixture_id)
+                print(f"  {status:5} {fixture_id} — {entry.get('detail', '')}")
+            if len(bad) > 30:
+                print(f"  … {len(bad) - 30} more")
+
+    on_actions = os.environ.get("GITHUB_ACTIONS") == "true"
+    for notice in outcome.notices:
+        print(f"::notice::{notice}" if on_actions else f"note: {notice}")
+    if outcome.problems:
+        for problem in outcome.problems:
+            print(f"::error::{problem}" if on_actions else f"GATE FAIL: {problem}")
+        return 1
+
+    checks = "0 fail / 0 error"
+    if set(_PLATFORMS) <= set(selected):
+        checks = "0 mismatch / " + checks
+    if not args.no_visual:
+        checks += " / visual + ratchets OK"
+    print(f"conformance gate: OK ({', '.join(selected)} — {checks})")
     return 0
