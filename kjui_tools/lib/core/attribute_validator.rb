@@ -239,60 +239,60 @@ module KjuiTools
         expanded
       end
 
-      # Map JSON type to definition key
+      # Map JSON type to definition key.
+      #
+      # This table is one of four implementations of the same mapping —
+      # {s,k,r}jui_tools attribute_validator.rb and the Python
+      # jui_cli/core/normalizer/alias_table.py _TYPE_SYNONYMS.
+      # jui_tools/tests/test_type_synonyms_cross_language.py holds the
+      # agreed canon and fails CI on any divergence: change all four
+      # together with the canon table, never one alone. Types without a
+      # branch (Button, Check, IconLabel, TabView, Embed, ...) resolve by
+      # the identity fallback to their own definition section.
       def map_type_to_definition(type)
         case type
         when 'Label', 'Text'
           'Label'
-        when 'TextField', 'EditText'
+        when 'TextField', 'EditText', 'Input'
           'TextField'
-        when 'TextView', 'MultiLineEditText'
+        when 'TextView', 'MultiLineEditText', 'Textarea'
           'TextView'
-        when 'Button'
-          'Button'
-        when 'Image', 'ImageView'
+        when 'Image', 'ImageView', 'Img'
           'Image'
-        when 'NetworkImage', 'NetworkImageView'
+        when 'NetworkImage', 'NetworkImageView', 'CircleImage', 'CircleImageView', 'AsyncImage'
           'NetworkImage'
-        when 'CircleImage', 'CircleImageView'
-          'CircleImage'
-        when 'SelectBox', 'Spinner', 'DatePicker'
+        when 'SelectBox', 'Spinner', 'DatePicker', 'Select', 'Picker'
           'SelectBox'
         when 'Toggle', 'Switch'
           'Toggle'
-        when 'CheckBox', 'Check'
-          type == 'CheckBox' ? 'CheckBox' : 'Check'
+        when 'CheckBox', 'Checkbox'
+          'CheckBox'
         when 'Radio', 'RadioButton', 'RadioGroup'
           'Radio'
-        when 'Segment', 'SegmentedControl', 'TabLayout'
+        when 'Segment', 'SegmentedControl', 'TabLayout', 'TabGroup'
           'Segment'
-        when 'Slider', 'SeekBar'
+        when 'Slider', 'SeekBar', 'Range'
           'Slider'
         when 'Progress', 'ProgressBar'
           'Progress'
-        when 'Indicator', 'ActivityIndicator'
+        when 'Indicator', 'ActivityIndicator', 'Loading'
           'Indicator'
-        when 'View', 'Container', 'SafeAreaView', 'LinearLayout', 'RelativeLayout', 'FrameLayout',
-             'VStack', 'HStack', 'ZStack', 'Column', 'Row', 'Box'
+        when 'View', 'LinearLayout', 'RelativeLayout', 'FrameLayout', 'HStack', 'VStack', 'ZStack',
+             'Div', 'Box', 'Container', 'Column', 'Row', 'ConstraintLayout'
           'View'
+        when 'SafeAreaView'
+          'SafeAreaView'
         when 'ScrollView', 'Scroll'
           'ScrollView'
-        when 'Collection', 'CollectionView', 'RecyclerView', 'LazyGrid', 'Grid'
+        when 'Collection', 'CollectionView', 'RecyclerView', 'Table', 'TableView', 'List', 'Grid',
+             'LazyGrid', 'ListView', 'LazyColumn'
           'Collection'
-        when 'Table', 'TableView', 'ListView', 'LazyColumn'
-          'Table'
-        when 'GradientView'
+        when 'GradientView', 'Gradient'
           'GradientView'
         when 'Blur', 'BlurView'
           'Blur'
-        when 'IconLabel'
-          'IconLabel'
-        when 'Web', 'WebView'
+        when 'Web', 'WebView', 'Iframe'
           'Web'
-        when 'TabView'
-          'TabView'
-        when 'ConstraintLayout'
-          'View'
         else
           type
         end

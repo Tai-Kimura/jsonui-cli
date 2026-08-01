@@ -24,38 +24,69 @@ from pathlib import Path
 from typing import Any
 
 
-# Node ``type`` spellings that map onto a different top-level definition
-# key. Mirrors the union of the ``map_type_to_definition`` tables in
-# {s,k,r}jui_tools/lib/core/attribute_validator.rb, minus spellings that
-# already exist as top-level keys in attribute_definitions.json (exact
-# key match always wins).
+# Cross-platform type-spelling synonyms, applied AFTER the exact-match
+# check in definition_key_for. This table is one of four implementations
+# of the same mapping — see {s,k,r}jui_tools/lib/core/attribute_validator.rb
+# (map_type_to_definition) — and jui_tools/tests/
+# test_type_synonyms_cross_language.py holds the agreed canon and fails CI
+# on any divergence: change all four together, never one alone.
+# Deliberately absent: EditText / Input / Switch. Those spellings are real
+# sections in attribute_definitions.json, so the exact-match check resolves
+# them first and an entry here would be dead code. The Ruby validators fold
+# them into TextField / Toggle instead — a known divergence pending the B1
+# component-level alias mechanism (tracked by the cross-language test's
+# tripwire case).
 _TYPE_SYNONYMS = {
     "Text": "Label",
     "MultiLineEditText": "TextView",
+    "Textarea": "TextView",
     "ImageView": "Image",
+    "Img": "Image",
     "NetworkImageView": "NetworkImage",
     "CircleImage": "NetworkImage",
     "CircleImageView": "NetworkImage",
+    "AsyncImage": "NetworkImage",
     "Spinner": "SelectBox",
     "DatePicker": "SelectBox",
+    "Select": "SelectBox",
+    "Picker": "SelectBox",
+    "Checkbox": "CheckBox",
+    "RadioButton": "Radio",
+    "RadioGroup": "Radio",
     "SegmentedControl": "Segment",
+    "TabLayout": "Segment",
+    "TabGroup": "Segment",
     "SeekBar": "Slider",
+    "Range": "Slider",
     "ProgressBar": "Progress",
+    "ActivityIndicator": "Indicator",
+    "Loading": "Indicator",
     "LinearLayout": "View",
     "RelativeLayout": "View",
     "FrameLayout": "View",
     "HStack": "View",
     "VStack": "View",
     "ZStack": "View",
+    "Div": "View",
+    "Box": "View",
+    "Container": "View",
+    "Column": "View",
+    "Row": "View",
+    "ConstraintLayout": "View",
     "Scroll": "ScrollView",
     "CollectionView": "Collection",
     "RecyclerView": "Collection",
     "Table": "Collection",
     "TableView": "Collection",
-    "RadioButton": "Radio",
-    "ActivityIndicator": "Indicator",
+    "List": "Collection",
+    "Grid": "Collection",
+    "LazyGrid": "Collection",
+    "ListView": "Collection",
+    "LazyColumn": "Collection",
+    "Gradient": "GradientView",
     "BlurView": "Blur",
     "WebView": "Web",
+    "Iframe": "Web",
 }
 
 # The SSoT definitions file, in preference order: the shared/ tree of a
