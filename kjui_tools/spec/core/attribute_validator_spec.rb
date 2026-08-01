@@ -1318,8 +1318,10 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
 
       it 'returns warning for invalid binding syntax' do
         warnings = validator.validate(component)
+        # Warnings carry a [file id=…]/[type] context prefix since the
+        # W3-2 unification (shared core adopted the sjui context machinery).
         expect(warnings).to include(
-          "Attribute 'text' in 'Text' has invalid binding syntax (starts with '@{' but doesn't end with '}')"
+          "[Text] Attribute 'text' in 'Text' has invalid binding syntax (starts with '@{' but doesn't end with '}')"
         )
       end
     end
@@ -1335,7 +1337,7 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       it 'returns warning for invalid binding syntax' do
         warnings = validator.validate(component)
         expect(warnings).to include(
-          "Attribute 'text' in 'Text' has invalid binding syntax (starts with '@{' but doesn't end with '}')"
+          "[Text] Attribute 'text' in 'Text' has invalid binding syntax (starts with '@{' but doesn't end with '}')"
         )
       end
     end
@@ -1383,7 +1385,7 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       it 'returns warning for invalid binding syntax' do
         warnings = validator.validate(component)
         expect(warnings).to include(
-          "Attribute 'text' in 'TextField' has invalid binding syntax (starts with '@{' but doesn't end with '}')"
+          "[TextField] Attribute 'text' in 'TextField' has invalid binding syntax (starts with '@{' but doesn't end with '}')"
         )
       end
     end
@@ -1402,7 +1404,7 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       it 'returns warning for invalid binding syntax in nested property' do
         warnings = validator.validate(component)
         expect(warnings).to include(
-          "Attribute 'shadow.color' in 'Text' has invalid binding syntax (starts with '@{' but doesn't end with '}')"
+          "[Text] Attribute 'shadow.color' in 'Text' has invalid binding syntax (starts with '@{' but doesn't end with '}')"
         )
       end
     end
@@ -1622,8 +1624,12 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       end
     end
 
-    context 'with no parent orientation (ZStack)' do
-      it 'warns that weight is not applicable' do
+    context 'with nil parent orientation (include-file root)' do
+      # (c)-drift fixed in the W3-2 unification: nil means "orientation
+      # unknown" (include-file root — the real parent may provide a valid
+      # axis), so no warning. kjui used to warn ZStack here, which was a
+      # false positive on every include root; the sjui semantics won.
+      it 'stays silent — the real parent may provide the axis' do
         component = {
           'type' => 'View',
           'width' => 'wrapContent',
@@ -1631,6 +1637,19 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
           'weight' => 1
         }
         warnings = validator.validate(component, nil, nil)
+        expect(warnings.none? { |w| w.include?("'weight'") }).to be true
+      end
+    end
+
+    context 'with an explicit non-linear orientation (ZStack)' do
+      it 'warns that weight is not applicable' do
+        component = {
+          'type' => 'View',
+          'width' => 'wrapContent',
+          'height' => 'wrapContent',
+          'weight' => 1
+        }
+        warnings = validator.validate(component, nil, 'zstack')
         expect(warnings.any? { |w| w.include?("'weight'") && w.include?('ZStack') }).to be true
       end
     end

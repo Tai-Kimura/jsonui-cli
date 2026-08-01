@@ -161,8 +161,13 @@ RSpec.describe KjuiTools::CLI::Commands::Build do
         expect(warnings.none? { |w| w.include?("'weight'") && w.include?('conflict') }).to be true
       end
 
-      it 'warns when weight is used without parent orientation' do
-        # No orientation on parent (ZStack-like)
+      it 'stays silent when the parent has no orientation attribute' do
+        # (c)-drift fixed in the W3-2 unification: the build walk passes the
+        # parent's raw orientation, which is nil both for a real ZStack and
+        # for an include-file root. nil now means "unknown, skip" (the sjui
+        # semantics) — warning here was a false positive on include roots.
+        # A caller-side sentinel for genuinely orientation-less containers
+        # is tracked as a follow-up in the W3-2 ledger.
         json_data = {
           'type' => 'View',
           'width' => 'matchParent',
@@ -178,8 +183,7 @@ RSpec.describe KjuiTools::CLI::Commands::Build do
         }
 
         warnings = build.send(:validate_json, json_data, validator, 'test', nil)
-        # Should warn about weight in ZStack (no orientation)
-        expect(warnings.any? { |w| w.include?("'weight'") && w.include?('ZStack') }).to be true
+        expect(warnings.none? { |w| w.include?("'weight'") && w.include?('ZStack') }).to be true
       end
 
       it 'handles deeply nested components with alternating orientations' do

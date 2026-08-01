@@ -340,7 +340,7 @@ RSpec.describe RjuiTools::Core::AttributeValidator do
         expect(warnings.none? { |w| w.include?("'width'") && w.include?('missing') }).to be true
       end
 
-      it 'warns about weight when no parent orientation (ZStack)' do
+      it 'stays silent about weight when parent orientation is nil (include root)' do
         component = {
           'type' => 'View',
           'width' => 'matchParent',
@@ -348,8 +348,9 @@ RSpec.describe RjuiTools::Core::AttributeValidator do
           'weight' => 1
         }
         warnings = validator.validate(component)
-        # Weight is not applicable in ZStack (no orientation)
-        expect(warnings.any? { |w| w.include?("'weight'") && w.include?('ZStack') }).to be true
+        # (c)-drift fixed in the W3-2 unification: nil means "orientation
+        # unknown" (include-file root), so no warning — the sjui semantics.
+        expect(warnings.none? { |w| w.include?("'weight'") && w.include?('ZStack') }).to be true
       end
     end
 
@@ -571,8 +572,10 @@ RSpec.describe RjuiTools::Core::AttributeValidator do
 
       it 'returns warning for invalid binding syntax' do
         warnings = validator.validate(component)
+        # Warnings carry a [file id=…]/[type] context prefix since the
+        # W3-2 unification (shared core adopted the sjui context machinery).
         expect(warnings).to include(
-          "Attribute 'text' in 'Label' has invalid binding syntax (starts with '@{' but doesn't end with '}')"
+          "[Label] Attribute 'text' in 'Label' has invalid binding syntax (starts with '@{' but doesn't end with '}')"
         )
       end
     end
@@ -588,7 +591,7 @@ RSpec.describe RjuiTools::Core::AttributeValidator do
       it 'returns warning for invalid binding syntax' do
         warnings = validator.validate(component)
         expect(warnings).to include(
-          "Attribute 'text' in 'Label' has invalid binding syntax (starts with '@{' but doesn't end with '}')"
+          "[Label] Attribute 'text' in 'Label' has invalid binding syntax (starts with '@{' but doesn't end with '}')"
         )
       end
     end
@@ -636,7 +639,7 @@ RSpec.describe RjuiTools::Core::AttributeValidator do
       it 'returns warning for invalid binding syntax' do
         warnings = validator.validate(component)
         expect(warnings).to include(
-          "Attribute 'text' in 'TextField' has invalid binding syntax (starts with '@{' but doesn't end with '}')"
+          "[TextField] Attribute 'text' in 'TextField' has invalid binding syntax (starts with '@{' but doesn't end with '}')"
         )
       end
     end
@@ -655,7 +658,7 @@ RSpec.describe RjuiTools::Core::AttributeValidator do
       it 'returns warning for invalid binding syntax in nested property' do
         warnings = validator.validate(component)
         expect(warnings).to include(
-          "Attribute 'shadow.color' in 'Label' has invalid binding syntax (starts with '@{' but doesn't end with '}')"
+          "[Label] Attribute 'shadow.color' in 'Label' has invalid binding syntax (starts with '@{' but doesn't end with '}')"
         )
       end
     end
@@ -711,8 +714,12 @@ RSpec.describe RjuiTools::Core::AttributeValidator do
       end
     end
 
-    context 'with no parent orientation (ZStack)' do
-      it 'warns that weight is not applicable' do
+    context 'with nil parent orientation (include-file root)' do
+      # (c)-drift fixed in the W3-2 unification: nil means "orientation
+      # unknown" (include-file root — the real parent may provide a valid
+      # axis), so no warning. The sjui semantics won over the old
+      # rjui/kjui ZStack guess, which false-positived on include roots.
+      it 'stays silent — the real parent may provide the axis' do
         component = {
           'type' => 'View',
           'width' => 'wrapContent',
@@ -720,6 +727,19 @@ RSpec.describe RjuiTools::Core::AttributeValidator do
           'weight' => 1
         }
         warnings = validator.validate(component, nil, nil)
+        expect(warnings.none? { |w| w.include?("'weight'") }).to be true
+      end
+    end
+
+    context 'with an explicit non-linear orientation (ZStack)' do
+      it 'warns that weight is not applicable' do
+        component = {
+          'type' => 'View',
+          'width' => 'wrapContent',
+          'height' => 'wrapContent',
+          'weight' => 1
+        }
+        warnings = validator.validate(component, nil, 'zstack')
         expect(warnings.any? { |w| w.include?("'weight'") && w.include?('ZStack') }).to be true
       end
     end
