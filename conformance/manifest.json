@@ -8,7 +8,7 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "2184c0f39907d3b874ee4c883b0cb641e29ad808bb361ff370e216224203043c",
+  "generatedFrom": "18c2a4b7cd008396f2e10246002a68122b4541dec339b0fc9c1d7ad510a62047",
   "counts": {
     "fixtures": 717,
     "assertable": 36,
@@ -2823,9 +2823,13 @@
       "aliasOf": null,
       "value": "conformanceFire",
       "platforms": [
+        "ios",
         "android"
       ],
-      "mode": "compose",
+      "mode": [
+        "swiftui",
+        "compose"
+      ],
       "deprecated": null,
       "layout": "fixtures/common/onAppear__callback_fire.layout.json",
       "test": "fixtures/common/onAppear__callback_fire.test.json",

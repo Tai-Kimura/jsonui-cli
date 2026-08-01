@@ -1403,16 +1403,17 @@ RSpec.describe SjuiTools::Core::AttributeValidator do
       common_attrs = validator.definitions['common']
       expect(common_attrs).to have_key('onAppear')
       expect(common_attrs['onAppear']['type']).to eq('string')
-      # onAppear is supported in SwiftUI and Compose; currently tagged with the
-      # shared 'compose' mode in attribute_definitions.json.
-      expect(common_attrs['onAppear']['mode']).to eq('compose')
+      # Implemented in both SwiftUI (sjui codegen + SwiftJsonUI dynamic) and
+      # Compose — the declaration is the two-mode array, and swiftui must
+      # stay a member for sjui validation to accept the attribute.
+      expect(common_attrs['onAppear']['mode']).to eq(%w[swiftui compose])
     end
 
     it 'has onDisappear defined in common attributes' do
       common_attrs = validator.definitions['common']
       expect(common_attrs).to have_key('onDisappear')
       expect(common_attrs['onDisappear']['type']).to eq('string')
-      expect(common_attrs['onDisappear']['mode']).to eq('compose')
+      expect(common_attrs['onDisappear']['mode']).to eq(%w[swiftui compose])
     end
   end
 

@@ -1472,14 +1472,17 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       common_attrs = validator.definitions['common']
       expect(common_attrs).to have_key('onAppear')
       expect(common_attrs['onAppear']['type']).to eq('string')
-      expect(common_attrs['onAppear']['mode']).to eq('compose')
+      # Both lifecycle callbacks are implemented on the SwiftUI side too
+      # (sjui codegen + SwiftJsonUI dynamic), so the declaration is the
+      # two-mode array — compose must stay a member for kjui validation.
+      expect(common_attrs['onAppear']['mode']).to eq(%w[swiftui compose])
     end
 
     it 'has onDisappear defined in common attributes' do
       common_attrs = validator.definitions['common']
       expect(common_attrs).to have_key('onDisappear')
       expect(common_attrs['onDisappear']['type']).to eq('string')
-      expect(common_attrs['onDisappear']['mode']).to eq('compose')
+      expect(common_attrs['onDisappear']['mode']).to eq(%w[swiftui compose])
     end
   end
 

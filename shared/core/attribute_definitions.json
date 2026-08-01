@@ -942,12 +942,12 @@
     "onAppear": {
       "type": "string",
       "description": "Lifecycle callback when view appears (SwiftUI/Compose only)",
-      "mode": "compose"
+      "mode": ["swiftui", "compose"]
     },
     "onDisappear": {
       "type": "string",
       "description": "Lifecycle callback when view disappears (SwiftUI/Compose only)",
-      "mode": "compose"
+      "mode": ["swiftui", "compose"]
     },
     "className": {
       "type": "string",
