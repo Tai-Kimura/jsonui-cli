@@ -44,7 +44,16 @@
                   "type": "array",
                   "items": { "type": "string" }
                 },
-                "durationMs": { "type": "number", "minimum": 0 }
+                "durationMs": { "type": "number", "minimum": 0 },
+                "attempts": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "How many times the case ran in total, retries included (1 = settled on the first run). Absent when the driver does not track attempts. Without this, a pass on the second attempt is byte-identical to a first-run pass and flake rates cannot be computed."
+                },
+                "flaky": {
+                  "type": "boolean",
+                  "description": "True when the case ultimately passed but needed more than one attempt. Absent when the driver does not track attempts; only meaningful when status is 'passed'"
+                }
               },
               "required": ["testName", "caseName", "status", "durationMs"],
               "additionalProperties": false

@@ -21,7 +21,7 @@ VALID_RESULT_STATUSES = ["passed", "failed", "skipped"]
 VALID_SKIP_REASONS = ["platform", "responsive"]
 VALID_RESULTS_TOP_LEVEL_KEYS = ["format", "version", "platform", "generatedAt", "suites"]
 VALID_SUITE_KEYS = ["suiteName", "totalDurationMs", "results"]
-VALID_RESULT_KEYS = ["testName", "caseName", "status", "skipReason", "error", "warnings", "durationMs"]
+VALID_RESULT_KEYS = ["testName", "caseName", "status", "skipReason", "error", "warnings", "durationMs", "attempts", "flaky"]
 
 
 def validate_results_data(data, source: str) -> list[str]:
@@ -98,6 +98,19 @@ def validate_results_data(data, source: str) -> list[str]:
                 warnings = case["warnings"]
                 if not isinstance(warnings, list) or not all(isinstance(w, str) for w in warnings):
                     errors.append(f"{case_path}: 'warnings' must be an array of strings")
+            if "attempts" in case:
+                attempts = case["attempts"]
+                if not isinstance(attempts, int) or isinstance(attempts, bool) or attempts < 1:
+                    errors.append(f"{case_path}: 'attempts' must be an integer >= 1")
+            if "flaky" in case:
+                flaky = case["flaky"]
+                if not isinstance(flaky, bool):
+                    errors.append(f"{case_path}: 'flaky' must be a boolean")
+                elif flaky and case.get("status") != "passed":
+                    errors.append(
+                        f"{case_path}: 'flaky' is only meaningful when status is 'passed', "
+                        f"got status: {case.get('status')!r}"
+                    )
 
     return errors
 

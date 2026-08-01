@@ -290,6 +290,10 @@
     },
     "tapAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "要素をタップ",
+        "platforms": "`retryTapIfNoChange`（ゴーストタップ緩和）は Web では受理のみ・no-op"
+      },
       "properties": {
         "action": {
           "const": "tap"
@@ -327,6 +331,9 @@
     },
     "doubleTapAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "要素をダブルタップ"
+      },
       "properties": {
         "action": {
           "const": "doubleTap"
@@ -355,6 +362,9 @@
     },
     "longPressAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "要素を長押し"
+      },
       "properties": {
         "action": {
           "const": "longPress"
@@ -389,6 +399,9 @@
     },
     "inputAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "指定要素にテキスト入力"
+      },
       "properties": {
         "action": {
           "const": "input"
@@ -423,6 +436,9 @@
     "typeTextAction": {
       "type": "object",
       "description": "Type text into the currently-focused field via the keyboard, without targeting an element id. For fields that hold keyboard focus but are not directly targetable (e.g. an invisible code-entry TextField behind visible slots): focus is established app-side (auto-focus or a prior tap on a visible container), then typeText sends the characters.",
+      "x-doc": {
+        "ja": "フォーカス中の欄へキーボード入力（要素 id 不要。不可視のコード入力欄など向け）"
+      },
       "properties": {
         "action": {
           "const": "typeText"
@@ -457,6 +473,9 @@
     },
     "clearAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "入力内容をクリア"
+      },
       "properties": {
         "action": {
           "const": "clear"
@@ -485,6 +504,9 @@
     },
     "scrollAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "指定方向へスクロール"
+      },
       "properties": {
         "action": {
           "const": "scroll"
@@ -522,6 +544,9 @@
     },
     "scrollUntilVisibleAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "要素が見えるまでスクロール（終端到達で即失敗）"
+      },
       "properties": {
         "action": {
           "const": "scrollUntilVisible"
@@ -566,6 +591,9 @@
     },
     "swipeAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "要素をスワイプ"
+      },
       "properties": {
         "action": {
           "const": "swipe"
@@ -598,6 +626,9 @@
     },
     "waitForAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "要素の出現を待機"
+      },
       "properties": {
         "action": {
           "const": "waitFor"
@@ -632,6 +663,9 @@
     },
     "waitForAnyAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "いずれかの要素の出現を待機"
+      },
       "properties": {
         "action": {
           "const": "waitForAny"
@@ -671,6 +705,9 @@
     },
     "waitAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "指定時間待機"
+      },
       "properties": {
         "action": {
           "const": "wait"
@@ -701,6 +738,9 @@
     },
     "backAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "戻る操作"
+      },
       "properties": {
         "action": {
           "const": "back"
@@ -726,6 +766,9 @@
     "hideKeyboardAction": {
       "type": "object",
       "description": "Dismiss the soft keyboard if one is visible (no-op when none). Needed when the keyboard covers the tap target and the field type has no return key (e.g. number-pad).",
+      "x-doc": {
+        "ja": "ソフトキーボードを閉じる（未表示なら no-op）"
+      },
       "properties": {
         "action": {
           "const": "hideKeyboard"
@@ -750,6 +793,9 @@
     },
     "screenshotAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "スクリーンショットを保存"
+      },
       "properties": {
         "action": {
           "const": "screenshot"
@@ -780,6 +826,9 @@
     },
     "alertTapAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "アラート／ダイアログのボタンをタップ"
+      },
       "properties": {
         "action": {
           "const": "alertTap"
@@ -816,6 +865,9 @@
     },
     "selectOptionAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "ドロップダウン／ピッカーから選択"
+      },
       "properties": {
         "action": {
           "const": "selectOption"
@@ -860,6 +912,9 @@
     },
     "tapItemAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "コレクション内のアイテムをタップ"
+      },
       "properties": {
         "action": {
           "const": "tapItem"
@@ -901,6 +956,9 @@
     },
     "selectTabAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "タブを選択"
+      },
       "properties": {
         "action": {
           "const": "selectTab"
@@ -942,6 +1000,9 @@
     },
     "readTextAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "要素のテキストを実行時変数に読む（`@{変数名}` で後続参照）"
+      },
       "properties": {
         "action": {
           "const": "readText"
@@ -982,6 +1043,9 @@
     },
     "repeatAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "ステップ群を繰り返す（`times`／`while` 併用可、安全上限 100 回）"
+      },
       "properties": {
         "action": {
           "const": "repeat"
@@ -1035,6 +1099,9 @@
     },
     "retryAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "失敗時にブロック全体を再実行"
+      },
       "properties": {
         "action": {
           "const": "retry"
@@ -1074,6 +1141,10 @@
     },
     "setLocationAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "モック位置情報を設定",
+        "platforms": "iOS: SDK 依存 ／ Android: best effort ／ Web: setGeolocation"
+      },
       "properties": {
         "action": {
           "const": "setLocation"
@@ -1111,6 +1182,10 @@
     "addMediaAction": {
       "type": "object",
       "description": "Seed media fixtures into the device/library so the app can pick them. Android: inserted into the gallery (MediaStore); iOS: seeded into the photo library via PhotoKit — SIMULATOR ONLY (on a real device seeded assets would remain in the user's photo library) and the UITest runner needs a photos-add pre-grant (`xcrun simctl privacy <udid> grant photos-add <uitest-bundle-id>.xctrunner` — the jsonui-test CLI does this automatically); Web: set on a file input. Seeding accumulates across runs on the same simulator/emulator — assert on existence or app state after picking, never on counts. Supported types: png/jpg/jpeg/gif (photo) and mp4 (video)",
+      "x-doc": {
+        "ja": "メディアフィクスチャを端末に追加（png/jpg/jpeg/gif/mp4。蓄積するため件数でなく存在を検証）",
+        "platforms": "Android: ギャラリー（MediaStore）／ iOS: PhotoKit〈シミュレータ限定・photos-add 許可は CLI が自動付与〉／ Web: file input"
+      },
       "properties": {
         "action": {
           "const": "addMedia"
@@ -1193,6 +1268,9 @@
     },
     "visibleAssertion": {
       "type": "object",
+      "x-doc": {
+        "ja": "要素が表示されている"
+      },
       "properties": {
         "assert": {
           "const": "visible"
@@ -1224,6 +1302,9 @@
     },
     "notVisibleAssertion": {
       "type": "object",
+      "x-doc": {
+        "ja": "要素が非表示または不存在"
+      },
       "properties": {
         "assert": {
           "const": "notVisible"
@@ -1255,6 +1336,9 @@
     },
     "enabledAssertion": {
       "type": "object",
+      "x-doc": {
+        "ja": "要素が有効"
+      },
       "properties": {
         "assert": {
           "const": "enabled"
@@ -1286,6 +1370,9 @@
     },
     "disabledAssertion": {
       "type": "object",
+      "x-doc": {
+        "ja": "要素が無効"
+      },
       "properties": {
         "assert": {
           "const": "disabled"
@@ -1317,6 +1404,9 @@
     },
     "textAssertion": {
       "type": "object",
+      "x-doc": {
+        "ja": "テキストを検証（`equals`／`contains`）"
+      },
       "properties": {
         "assert": {
           "const": "text"
@@ -1368,6 +1458,9 @@
     },
     "countAssertion": {
       "type": "object",
+      "x-doc": {
+        "ja": "要素数を検証（`equals: 0` は不存在で成立）"
+      },
       "properties": {
         "assert": {
           "const": "count"
@@ -1405,6 +1498,9 @@
     },
     "stateAssertion": {
       "type": "object",
+      "x-doc": {
+        "ja": "ViewModel 状態を検証（`path` はドット記法、StateProvider 必須）"
+      },
       "properties": {
         "assert": {
           "const": "state"
@@ -1442,6 +1538,9 @@
     },
     "screenshotAssertion": {
       "type": "object",
+      "x-doc": {
+        "ja": "ベースライン画像とのビジュアル比較（ベースライン無しは新規作成＋警告）"
+      },
       "properties": {
         "assert": {
           "const": "screenshot"
@@ -1502,6 +1601,9 @@
     },
     "setMocksAction": {
       "type": "object",
+      "x-doc": {
+        "ja": "エンドポイント（operationId）ごとのモックシナリオを切り替え"
+      },
       "properties": {
         "action": {
           "const": "setMocks"
@@ -1531,6 +1633,10 @@
     "setViewportAction": {
       "type": "object",
       "description": "Resize the viewport to sweep responsive breakpoints. Web only (page.setViewportSize); iOS/Android cannot freely resize a running app, so the action is a no-op with a warning there — pair dependent asserts with a matching 'when.responsive' so they skip cleanly on platforms that cannot honor the resize",
+      "x-doc": {
+        "ja": "ビューポートをリサイズ（レスポンシブ検証）",
+        "platforms": "Web のみ。iOS/Android は警告付き no-op（`when.responsive` でゲート）"
+      },
       "properties": {
         "action": {
           "const": "setViewport"
@@ -1568,6 +1674,10 @@
     "setOrientationAction": {
       "type": "object",
       "description": "Rotate to the given orientation (iOS: XCUIDevice; Android: UiDevice; Web: swaps viewport width/height in mobile-emulation contexts, otherwise a no-op with a warning)",
+      "x-doc": {
+        "ja": "画面の向きを変更",
+        "platforms": "iOS: XCUIDevice ／ Android: UiDevice ／ Web: モバイルエミュレーション時のみ（他は警告付き no-op）"
+      },
       "properties": {
         "action": {
           "const": "setOrientation"
@@ -1602,6 +1712,10 @@
     "emitHookAction": {
       "type": "object",
       "description": "Call a browser-side hook the app registered on window.__jsonuiTestHooks (e.g. an RTDB mock emitter). Web only; iOS/Android no-op with a warning — gate dependent steps with 'when.platform: web'",
+      "x-doc": {
+        "ja": "アプリが登録したテストフックを呼び出す（`window.__jsonuiTestHooks`）",
+        "platforms": "Web のみ。iOS/Android は警告付き no-op（`when.platform` でゲート）"
+      },
       "properties": {
         "action": {
           "const": "emitHook"
@@ -1637,6 +1751,10 @@
     "openedUrlAssertion": {
       "type": "object",
       "description": "Assert the most recent window.open call recorded by the runner's spy. Web only; gate with 'when.platform: web' in cross-platform tests",
+      "x-doc": {
+        "ja": "直近の `window.open` 呼び出しの URL を検証",
+        "platforms": "Web のみ（`when.platform: web` でゲート）"
+      },
       "properties": {
         "assert": {
           "const": "openedUrl"
@@ -1716,7 +1834,10 @@
         "name"
       ],
       "additionalProperties": false,
-      "description": "Assert the named screen is displayed. Does NOT assert exclusivity: embedded screens, split panes and tab hosts legitimately show several at once."
+      "description": "Assert the named screen is displayed. Does NOT assert exclusivity: embedded screens, split panes and tab hosts legitimately show several at once.",
+      "x-doc": {
+        "ja": "指定画面の表示を検証（排他は主張しない — 埋め込み／タブ等で複数同時あり得る）"
+      }
     }
   }
 }
