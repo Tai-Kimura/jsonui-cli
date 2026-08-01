@@ -2,9 +2,9 @@
 
 # JsonUI Conformance Report
 
-- Manifest: `ecf24199bb4d0d06a2993ab89cbcd69cca23728cfb61b52c9f1f90db45ae525e` (sha256)
-- Definitions: `4c8bc6b85d9c81109565edceddd2e6edf6ea51f5b5651df8e1004a78d591a0dd` (sha256)
-- Fixtures: 670 (assertable: 29, visual: 572, interactive: 35) / skipped attributes: 153
+- Manifest: `83c8708e4d49484e446a1f77e3bad55136ef63caac1ca76ca799c5f8b50bac41` (sha256)
+- Definitions: `b01bc992ef4ce5e11c1d83de119398c84f027b8d1a6081b3910fcdcb3504feab` (sha256)
+- Fixtures: 670 (assertable: 29, visual: 572, interactive: 35) / skipped attributes: 154
 
 Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
 
@@ -90,11 +90,11 @@ Each visual fixture is compared against its **control** — the same layout with
 | ios | xcuitest ios-18.6 | 717 | 601 | 0 | 0 | 116 | ⚠️ STALE |
 | web | playwright 1.61.1 | 670 | 541 | 0 | 0 | 129 | current |
 
-> ⚠️ `android.results.json` was produced against manifest `149715ab22aab62feebc4153bb91f4642bc9abb1f059666dac656750e40ff75a` but the current manifest is `ecf24199bb4d0d06a2993ab89cbcd69cca23728cfb61b52c9f1f90db45ae525e` — results are stale; re-run the android suite.
+> ⚠️ `android.results.json` was produced against manifest `149715ab22aab62feebc4153bb91f4642bc9abb1f059666dac656750e40ff75a` but the current manifest is `83c8708e4d49484e446a1f77e3bad55136ef63caac1ca76ca799c5f8b50bac41` — results are stale; re-run the android suite.
 
 > ⚠️ `android.results.json` contains 48 fixture id(s) not present in the manifest: `Check/checkedColor__static`, `Check/checked__true`, `Check/enabled__false`, `Check/enabled__true`, `Check/fontColor__static`, `Check/fontSize__static`, `Check/font__static`, `Check/iconColor__static`, `Check/iconSize__static`, `Check/icon__static` …
 
-> ⚠️ `ios.results.json` was produced against manifest `149715ab22aab62feebc4153bb91f4642bc9abb1f059666dac656750e40ff75a` but the current manifest is `ecf24199bb4d0d06a2993ab89cbcd69cca23728cfb61b52c9f1f90db45ae525e` — results are stale; re-run the ios suite.
+> ⚠️ `ios.results.json` was produced against manifest `149715ab22aab62feebc4153bb91f4642bc9abb1f059666dac656750e40ff75a` but the current manifest is `83c8708e4d49484e446a1f77e3bad55136ef63caac1ca76ca799c5f8b50bac41` — results are stale; re-run the ios suite.
 
 > ⚠️ `ios.results.json` contains 48 fixture id(s) not present in the manifest: `Check/checkedColor__static`, `Check/checked__true`, `Check/enabled__false`, `Check/enabled__true`, `Check/fontColor__static`, `Check/fontSize__static`, `Check/font__static`, `Check/iconColor__static`, `Check/iconSize__static`, `Check/icon__static` …
 
@@ -1013,6 +1013,7 @@ Each visual fixture is compared against its **control** — the same layout with
 | View | `onDragOver` | callback |
 | View | `onDragEnter` | callback |
 | View | `onDragLeave` | callback |
+| CircleView | `_comment` | definition metadata, not an attribute |
 | CircleView | `child` | structural (child container attribute) |
 | CircleView | `children` | structural (child container attribute) |
 | ScrollView | `child` | structural (child container attribute) |
