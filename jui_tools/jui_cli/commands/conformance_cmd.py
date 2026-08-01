@@ -191,6 +191,17 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
             "compared under a different one."
         ),
     )
+    baseline_update.add_argument(
+        "--threshold",
+        type=int,
+        default=None,
+        help=(
+            "Comparison threshold stored in this manifest (default: the "
+            "shared calibrated value). Per-(env, platform) recalibration — "
+            "measure the renderer's repeat-run noise first and record the "
+            "numbers in baselines/README.md."
+        ),
+    )
 
     cov = sub.add_parser(
         "coverage",
@@ -341,10 +352,15 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
     )
     artifacts_dir = Path(args.artifacts) if args.artifacts else None
     env = getattr(args, "env", None) or DEFAULT_ENV
+    threshold = getattr(args, "threshold", None)
 
     try:
         summary = update_baseline(
-            conformance_dir, args.platform, artifacts_dir=artifacts_dir, env=env
+            conformance_dir,
+            args.platform,
+            artifacts_dir=artifacts_dir,
+            env=env,
+            threshold=threshold,
         )
     except BaselineError as e:
         print(f"ERROR: {e}")

@@ -154,10 +154,15 @@ def update_baseline(
     platform: str,
     artifacts_dir: Path | None = None,
     env: str = DEFAULT_ENV,
+    threshold: int | None = None,
 ) -> BaselineUpdateSummary:
     """Hash every PNG under the platform's artifacts dir into the manifest.
 
     Deterministic: keys are sorted artifact filenames, no timestamps.
+    *threshold* overrides the stored comparison threshold for this manifest —
+    per-(env, platform) recalibration is the anticipated path when a
+    renderer's measured repeat-run noise differs from the shared default
+    (baselines/README.md records each calibration; measure before changing).
     """
     conformance_dir = Path(conformance_dir)
     if artifacts_dir is None:
@@ -183,7 +188,7 @@ def update_baseline(
         "platform": platform,
         "environment": env,
         "algorithm": ALGORITHM,
-        "threshold": DEFAULT_THRESHOLD,
+        "threshold": DEFAULT_THRESHOLD if threshold is None else int(threshold),
         "hashes": hashes,
     }
     out_path.write_text(

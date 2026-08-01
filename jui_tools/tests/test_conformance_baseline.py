@@ -240,6 +240,16 @@ class EnvironmentKeyTest(unittest.TestCase):
         self.assertIn("records environment 'ci'", comparison.error)
         self.assertEqual(comparison.compared, 0)
 
+    def test_update_stores_a_recalibrated_threshold(self):
+        summary = baseline.update_baseline(self.conf, "web", env="ci", threshold=12)
+        payload = json.loads(summary.out_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["threshold"], 12)
+        # comparisons pick the stored value up (compare_platform reads it)
+        comparison = baseline.compare_platform(
+            self.conf, "web", ["stable.png"], env="ci"
+        )
+        self.assertEqual(comparison.threshold, 12)
+
     def test_legacy_manifest_without_environment_field_still_compares(self):
         baseline.update_baseline(self.conf, "web")
         path = baseline.baseline_path(self.conf, "web")

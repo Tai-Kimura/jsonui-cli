@@ -119,6 +119,28 @@ Measured noise ceiling = **0**. Threshold stays at the cross-platform **8**
 emulator image / GPU driver drift between machines while remaining ~4x below
 the smallest genuine change measured on the 64x64 grid).
 
+### Android **ci-env** calibration (2026-08-02) — threshold 12
+
+The local numbers above are one quiet AVD talking to itself. CI is a fresh
+emulator instance per run, and cross-**instance** variance was measured over
+four full CI runs (30692120530 / 30699392057 / 30704621712 / 30706830607):
+
+| distance | screenshots (pairwise, common set) |
+|---|---|
+| 0 | 455 of 468 |
+| 3 | 12 |
+| 9–11 | the SafeAreaView / TabView family (14 shots incl. their controls) |
+
+The 9–11 band is not the renderer: the API-34 tablet **taskbar** (drawn over
+every capture) shows recents whose order depends on instrumentation-attempt
+relaunches — two stable orders, so any fixture range can flap by ~9–11 when
+an attempt boundary moves between runs. `ci/android.hashes.json` therefore
+stores **threshold 12** (measured noise ceiling 11 + 1, still 1.5x below the
+smallest genuine change measured on this host: 18). The root fix is
+host-side — hide/exclude the taskbar from capture — and drops the threshold
+back to 8 when it lands. `CheckBox_isOn__true.png` stays excluded from the
+manifest entirely (fixture-swap race, see gate_ratchet.json).
+
 The committed `android.hashes.json` was recorded from a verified-good run:
 511 pass / 132 skipped (not android-applicable) / 0 fail / 0 error on the
 v2 manifest (643 fixtures, 19 interactive).
