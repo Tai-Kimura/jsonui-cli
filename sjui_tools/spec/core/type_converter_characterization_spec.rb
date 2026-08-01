@@ -70,17 +70,18 @@ RSpec.describe SjuiTools::Core::TypeConverter do
       expect(described_class.send(:format_string_value, "'y'")).to eq('"y"')
     end
 
-    it 'escapes embedded quotes (backslashes in plain strings pass through)' do
+    it 'escapes embedded quotes' do
       expect(described_class.send(:format_string_value, 'a"b')).to eq('"a\\"b"')
     end
   end
 
   describe '.escape_string' do
-    it 'escapes double quotes; the backslash gsub is a no-op today' do
-      # `.gsub('\\', '\\\\')` replaces a backslash with a backslash — in a
-      # gsub replacement string '\\\\' collapses to one literal backslash.
-      # Recorded as-is: today's contract escapes quotes only.
-      expect(described_class.send(:escape_string, 'a\\b"c')).to eq('a\\b\\"c')
+    it 'escapes backslashes and double quotes' do
+      # Before W3-2 the backslash gsub was a no-op (`.gsub('\\', '\\\\')`
+      # collapses to replacing a backslash with itself), so a literal
+      # backslash leaked into generated source unescaped. The shared core
+      # uses the block form and doubles it, as string escaping requires.
+      expect(described_class.send(:escape_string, 'a\\b"c')).to eq('a\\\\b\\"c')
     end
   end
 
