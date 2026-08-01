@@ -405,6 +405,24 @@ module JsonUIShared
           end
         end
 
+        # Auto-generate the group-selection property for Radio components
+        # without a bound selectedValue — same contract as the focus props
+        # above: the Compose converter emits `data.selected<Group>` wiring
+        # for every radio item, so the Data type must carry the property or
+        # the generated view does not compile (caught by the codegen parity
+        # host on the Radio fixtures, 2026-08-02). Group 'default' (or no
+        # group) maps to selectedRadiogroup — the converter's spelling.
+        if json_data['type'] == 'Radio'
+          selected_value = json_data['selectedValue']
+          unless selected_value.is_a?(String) && selected_value.start_with?('@{')
+            group = (json_data['group'] || 'default').to_s
+            prop = group.downcase == 'default' ? 'selectedRadiogroup' : "selected#{group.capitalize}"
+            unless properties.any? { |p| p['name'] == prop }
+              properties << { 'name' => prop, 'class' => 'String', 'defaultValue' => '' }
+            end
+          end
+        end
+
         # Process children
         if json_data['child']
           if json_data['child'].is_a?(Array)
