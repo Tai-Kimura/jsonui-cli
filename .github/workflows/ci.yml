@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   # ------------------------------------------------------------------ #
-  # Publication hygiene. Two structural rules, stated without naming any
+  # Publication hygiene. Structural rules, stated without naming any
   # downstream identifier — spelling the vocabulary out here would be the
   # leak it is meant to prevent. The vocabulary check itself runs in the
   # pre-commit hook, whose pattern list lives outside every repository.
@@ -30,7 +30,12 @@ jobs:
   #   1. docs/ is gitignored because bug reports quote downstream app names
   #      and local paths; a force-add slips past the ignore rule silently,
   #      so the tracked set is asserted here instead.
-  #   2. No absolute home paths: they carry a username and a machine layout.
+  #   2. dev-guide/ is the PUBLISHED maintainer guide (moved out of docs/
+  #      2026-08-01): it must stay tracked — an ignore-rule mistake would
+  #      silently unpublish it — and docs/dev-guide must not come back,
+  #      or the two copies drift.
+  #   3. No absolute home paths: they carry a username and a machine layout.
+  #      (This repo-wide grep is also what audits dev-guide content.)
   # ------------------------------------------------------------------ #
   publication-hygiene:
     runs-on: ubuntu-latest
@@ -43,6 +48,17 @@ jobs:
           if [ -n "$tracked" ]; then
             echo "::error::docs/ is ignored but these files are tracked:"
             echo "$tracked"
+            exit 1
+          fi
+      - name: dev-guide/ stays tracked, with no shadow copy under docs/
+        run: |
+          tracked=$(git ls-files dev-guide/ || true)
+          if [ -z "$tracked" ]; then
+            echo "::error::dev-guide/ has no tracked files — the maintainer guide got unpublished"
+            exit 1
+          fi
+          if [ -e docs/dev-guide ]; then
+            echo "::error::docs/dev-guide reappeared — dev-guide/ is the only master (see docs/README.md)"
             exit 1
           fi
       - name: No absolute home paths in tracked files
