@@ -162,8 +162,8 @@ jobs:
     # attempt < step < job:
     #   per-attempt cap 20 min (run_conformance.sh), resumed on timeout
     #   step 75 + retry 100 + setup ~15 + upload ≈ 190 → job 210
-    # Nightly on a public repo — runner minutes are free; wall-clock only
-    # gates the nightly report.
+    # Weekly on a public repo — runner minutes are free; wall-clock only
+    # gates the weekly report.
     timeout-minutes: 210
     env:
       CONFORMANCE_DIR: ${{ github.workspace }}/conformance
@@ -242,7 +242,10 @@ jobs:
 
   # ------------------------------------------------------------------ #
   # Merge all three fresh results into REPORT.md and gate on:
-  # 0 cross-platform mismatches / 0 fail / 0 error / no stale results.
+  # 0 cross-platform mismatches / 0 fail / 0 error / no stale results /
+  # screenshots actually compared / no visual or attribute-effect
+  # regressions / missing_artifact & no_baseline within their ratchet
+  # ceilings (conformance/gate_ratchet.json).
   # ------------------------------------------------------------------ #
   report:
     runs-on: ubuntu-latest
@@ -268,74 +271,16 @@ jobs:
           pattern: results-*
           path: conformance
           merge-multiple: true
-      - name: Render report + gate (0 mismatch / 0 fail / 0 error / not stale)
-        run: |
-          python3 - <<'EOF'
-          import json, sys
-          from collections import Counter
-          from pathlib import Path
-          from jui_cli.conformance.report import generate_report
-
-          summary = generate_report(Path("conformance"))
-          print(f"report written to {summary.out_path}")
-          problems = []
-
-          expected = {"android", "ios", "web"}
-          missing = expected - set(summary.platforms)
-          if missing:
-              problems.append(f"missing platform results: {', '.join(sorted(missing))}")
-          if summary.mismatch_count:
-              problems.append(f"{summary.mismatch_count} cross-platform mismatch(es) — see REPORT.md")
-          if summary.stale_platforms:
-              problems.append(f"stale results (manifestHash != committed manifest): {', '.join(summary.stale_platforms)}")
-          for platform, ids in summary.unknown_ids.items():
-              problems.append(f"{platform}: {len(ids)} fixture id(s) not in manifest")
-          # Screenshot-hash drift vs the committed baseline. Job-green alone
-          # does not catch a visual change; if the change is intended,
-          # re-baseline with `jui conformance baseline update --platform <p>`
-          # and commit the regenerated baselines/<p>.hashes.json.
-          for platform, count in summary.visual_regressions.items():
-              if count:
-                  problems.append(f"{platform}: {count} visual regression(s) vs committed baseline — see REPORT.md")
-          # A comparison that could not run is not a pass. Silence here is
-          # what let the visual check sit inert for weeks.
-          for platform, why in summary.baseline_errors.items():
-              problems.append(f"{platform}: screenshots were not compared — {why}")
-          # Attribute effect: every fixture is also compared against its
-          # control (same layout, attribute removed). The baseline check
-          # cannot see a dropped attribute — the fixture renders the default
-          # and matches the default it recorded last time — so this is the
-          # only gate that notices an attribute going inert. Both images come
-          # from this run, so a runner upgrade cannot mask it.
-          for platform, ids in summary.inert_regressions.items():
-              problems.append(
-                  f"{platform}: {len(ids)} attribute(s) no longer change what is "
-                  f"rendered (identical to their control): {', '.join(ids[:5])}"
-                  + (" …" if len(ids) > 5 else "")
-              )
-          for platform, count in summary.inert_unrecorded.items():
-              if count:
-                  print(
-                      f"::notice::{platform}: {count} fixture(s) render identically to "
-                      "their control and are not yet recorded in control_diff.json"
-                  )
-
-          for platform in sorted(expected - missing):
-              data = json.loads(Path(f"conformance/results/{platform}.results.json").read_text())
-              tally = Counter(r["status"] for r in data["results"])
-              print(f"{platform}: {dict(tally)}")
-              bad = [r for r in data["results"] if r["status"] in ("fail", "error")]
-              for r in bad[:30]:
-                  print(f"  {r['status']:5} {r['id']} — {r.get('detail', '')}")
-              if bad:
-                  problems.append(f"{platform}: {len(bad)} fail/error result(s)")
-
-          if problems:
-              for p in problems:
-                  print(f"::error::{p}")
-              sys.exit(1)
-          print("conformance gate: OK (0 mismatch / 0 fail / 0 error)")
-          EOF
+      - name: Render report + gate (jui conformance gate)
+        # The full judgment: all three platforms selected, visual checks on.
+        # Cross-platform mismatch is judged because every result here is
+        # fresh from this run; the attribute-effect check is the only gate
+        # that notices an attribute going inert (a dropped attribute renders
+        # the default and matches the default baseline it recorded last
+        # time); the ratchets stop fixtures from quietly exiting visual
+        # coverage. Same command runs locally; logic + tests live in
+        # jui_tools/jui_cli/conformance/gate.py + tests/test_conformance_gate.py.
+        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web']))"
       - name: Upload combined report
         if: always()
         uses: actions/upload-artifact@v4

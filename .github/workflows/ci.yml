@@ -9,7 +9,7 @@ name: ci
 #
 # The former protocol-sync workflow is folded into the python-suite job here
 # (see .github/workflows/README.md). Mobile (iOS/Android) conformance is too
-# slow for per-push: see conformance-mobile.yml (nightly + manual dispatch).
+# slow for per-push: see conformance-mobile.yml (weekly + manual dispatch).
 
 on:
   push:
@@ -217,25 +217,16 @@ jobs:
       - name: Run web conformance suite
         working-directory: conformance/hosts/web
         run: npm run conformance
-      - name: Gate — zero fail / zero error
-        run: |
-          python3 - <<'EOF'
-          import json, sys
-          from collections import Counter
-          data = json.load(open("conformance/results/web.results.json"))
-          tally = Counter(r["status"] for r in data["results"])
-          print(f"web results: {dict(tally)}")
-          bad = [r for r in data["results"] if r["status"] in ("fail", "error")]
-          for r in bad[:50]:
-              print(f"  {r['status']:5} {r['id']} — {r.get('detail', '')}")
-          if bad:
-              print(f"::error::web conformance has {len(bad)} fail/error result(s)")
-              sys.exit(1)
-          EOF
-      - name: Render conformance report
-        # Fresh web results merged with the committed iOS/Android results —
-        # the authoritative 3-platform gate runs in conformance-mobile.yml.
-        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','report']))"
+      - name: Gate — zero fail / zero error (jui conformance gate)
+        # Renders REPORT.md (fresh web results merged with the committed
+        # iOS/Android results) and fails on web fail/error results. Judgment
+        # is scoped to --platform web: the committed mobile screenshots are
+        # not on this runner. --no-visual because the committed baselines
+        # were rendered on macOS and this runner is not — the authoritative
+        # 3-platform gate (visual + ratchets) runs in conformance-mobile.yml.
+        # Same command runs locally; logic lives in
+        # jui_tools/jui_cli/conformance/gate.py (tests: test_conformance_gate).
+        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','web','--no-visual']))"
       - name: Upload results + report + screenshots
         if: always()
         uses: actions/upload-artifact@v4
