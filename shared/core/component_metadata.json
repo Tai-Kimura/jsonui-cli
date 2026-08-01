@@ -501,24 +501,21 @@
     "description": "Circular shape view",
     "aliases": [],
     "platforms": {
-      "swift_generated": true,
-      "swift_dynamic": true,
-      "kotlin_generated": true,
+      "swift_generated": false,
+      "swift_dynamic": false,
+      "kotlin_generated": false,
       "kotlin_dynamic": true,
-      "react": true
+      "react": false
     },
     "platformSpecific": {
-      "swift": {
-        "view": "Circle()"
-      },
       "kotlin": {
-        "composable": "Box with CircleShape clip"
-      },
-      "react": {
-        "element": "<div> with rounded-full"
+        "composable": "Box with CircleShape clip (dynamic runtime only)"
       }
     },
-    "rules": []
+    "rules": [
+      "Only the Kotlin dynamic runtime dispatches CircleView — SwiftUI codegen/dynamic, Compose codegen and React render a fallback instead",
+      "For cross-platform layouts use View with cornerRadius"
+    ]
   },
   "GradientView": {
     "description": "Gradient background view",
@@ -528,7 +525,7 @@
       "swift_dynamic": true,
       "kotlin_generated": true,
       "kotlin_dynamic": true,
-      "react": true
+      "react": false
     },
     "platformSpecific": {
       "swift": {
@@ -536,13 +533,11 @@
       },
       "kotlin": {
         "composable": "Brush.linearGradient / radialGradient"
-      },
-      "react": {
-        "element": "<div> with background: linear-gradient(...)"
       }
     },
     "rules": [
-      "colors array defines gradient stops"
+      "colors array defines gradient stops",
+      "Not implemented in ReactJsonUI — rjui renders unmapped types as a plain View"
     ]
   },
   "Blur": {
@@ -552,18 +547,21 @@
       "swift_generated": true,
       "swift_dynamic": true,
       "kotlin_generated": false,
-      "kotlin_dynamic": false,
-      "react": true
+      "kotlin_dynamic": true,
+      "react": false
     },
     "platformSpecific": {
       "swift": {
         "view": ".blur() modifier or UIVisualEffectView"
       },
-      "react": {
-        "element": "<div> with backdrop-blur class"
+      "kotlin": {
+        "composable": "Box with Modifier.blur() (dynamic runtime only)"
       }
     },
-    "rules": []
+    "rules": [
+      "Kotlin Compose codegen dispatches only the legacy BlurView spelling; canonical Blur reaches the dynamic runtime only",
+      "Not implemented in ReactJsonUI — rjui renders unmapped types as a plain View"
+    ]
   },
   "IconLabel": {
     "description": "Icon with label combination",
@@ -573,7 +571,7 @@
       "swift_dynamic": true,
       "kotlin_generated": true,
       "kotlin_dynamic": true,
-      "react": true
+      "react": false
     },
     "platformSpecific": {
       "swift": {
@@ -581,12 +579,12 @@
       },
       "kotlin": {
         "composable": "Row with Icon + Text"
-      },
-      "react": {
-        "element": "<span> with icon + text"
       }
     },
-    "rules": []
+    "rules": [
+      "icon_on / icon_off / selected drive the two-state icon; iconPosition places the icon Left/Right/Top/Bottom",
+      "Not implemented in ReactJsonUI — rjui renders unmapped types as a plain View"
+    ]
   },
   "Web": {
     "description": "Web view / embedded browser",
@@ -596,7 +594,7 @@
       "swift_dynamic": true,
       "kotlin_generated": true,
       "kotlin_dynamic": true,
-      "react": true
+      "react": false
     },
     "platformSpecific": {
       "swift": {
@@ -604,13 +602,11 @@
       },
       "kotlin": {
         "composable": "AndroidView with WebView"
-      },
-      "react": {
-        "element": "<iframe>"
       }
     },
     "rules": [
-      "url attribute specifies the web page to load"
+      "url attribute specifies the web page to load",
+      "Not implemented in ReactJsonUI — rjui renders unmapped types as a plain View"
     ]
   },
   "SafeAreaView": {
@@ -690,11 +686,11 @@
     "description": "Text input (Android naming convention)",
     "aliases": [],
     "platforms": {
-      "swift_generated": false,
-      "swift_dynamic": false,
-      "kotlin_generated": true,
+      "swift_generated": true,
+      "swift_dynamic": true,
+      "kotlin_generated": false,
       "kotlin_dynamic": true,
-      "react": false
+      "react": true
     },
     "platformSpecific": {
       "kotlin": {
@@ -702,17 +698,18 @@
       }
     },
     "rules": [
-      "Android-specific alias for TextField functionality"
+      "Alias spelling of TextField (canonical: TextField)",
+      "The Compose codegen dispatches only the canonical TextField spelling — write TextField for kotlin_generated targets"
     ]
   },
   "Input": {
     "description": "Generic input (React naming convention)",
     "aliases": [],
     "platforms": {
-      "swift_generated": false,
-      "swift_dynamic": false,
+      "swift_generated": true,
+      "swift_dynamic": true,
       "kotlin_generated": false,
-      "kotlin_dynamic": false,
+      "kotlin_dynamic": true,
       "react": true
     },
     "platformSpecific": {
@@ -721,7 +718,8 @@
       }
     },
     "rules": [
-      "React-specific input component"
+      "Alias spelling of TextField (canonical: TextField)",
+      "The Compose codegen dispatches only the canonical TextField spelling — write TextField for kotlin_generated targets"
     ]
   },
   "Embed": {
