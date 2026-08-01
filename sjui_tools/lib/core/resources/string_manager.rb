@@ -7,13 +7,24 @@ require 'set'
 require_relative '../config_manager'
 require_relative '../project_finder'
 require_relative '../logger'
+require_relative '../generated_marker'
 require_relative '../plural_validator'
 require_relative '../layout_variant'
+require_relative '../string_manager_core'
 
 module SjuiTools
   module Core
     module Resources
-      class StringManager
+      # iOS profile over the shared string-extraction body
+      # (lib/core/string_manager_core.rb — byte-identical mirror of
+      # shared/core/string_manager_core.rb, pinned by
+      # spec/core/shared_core_mirror_spec.rb). Extraction semantics, key
+      # generation and the strings.json merge policy live in the shared
+      # core; this class owns the iOS side: the basename file namespace,
+      # Localizable.strings manual/auto sections, the sibling
+      # .stringsdict, the generated StringManager.swift and the
+      # Android→iOS format-specifier conversion.
+      class StringManager < ::JsonUIShared::StringManagerCore
         # Presence of this marker is what allows sjui build to rewrite or
         # delete a .stringsdict; a file without it is treated as
         # user-authored and left alone.
@@ -29,7 +40,7 @@ module SjuiTools
           @strings_cache = {}
           @stringsdict_keys = {}
         end
-        
+
         # Process all JSON files and extract strings
         def process_json_files(json_files)
           ensure_tmp_directory
@@ -50,7 +61,7 @@ module SjuiTools
               next if json_data['partial'] == true
 
               # Extract strings from this file
-              file_strings = extract_strings_from_json(json_data, file_name)
+              file_strings = extract_strings_from_json(json_data)
 
               # Merge with existing data (Kotlin-style: strings only, no not_defined)
               extracted_data['strings'][file_name] ||= {}
@@ -67,7 +78,7 @@ module SjuiTools
 
           extracted_data
         end
-        
+
         # Cache .strings files
         def cache_strings_files(string_files)
           @strings_cache = {}
@@ -124,19 +135,10 @@ module SjuiTools
             end
           end
 
-          # Merge extracted strings with existing strings (matching Kotlin behavior)
-          # Don't overwrite Hash values (multi-language) with extracted String values
-          # Don't overwrite any existing key (preserve manual edits)
-          total_new_strings = 0
-          extracted_data['strings'].each do |file_name, file_strings|
-            existing_strings[file_name] ||= {}
-            file_strings.each do |key, value|
-              unless existing_strings[file_name].key?(key)
-                existing_strings[file_name][key] = value
-                total_new_strings += 1
-              end
-            end
-          end
+          # Merge extracted strings into the existing data. The policy lives
+          # in the shared core: existing keys are never overwritten, so
+          # hand-edited values and multi-language Hashes survive.
+          total_new_strings = merge_extracted_strings(existing_strings, extracted_data['strings'])
 
           # Ensure Resources directory exists
           FileUtils.mkdir_p(@resources_dir) unless Dir.exist?(@resources_dir)
@@ -148,7 +150,7 @@ module SjuiTools
           # Clean up tmp file
           cleanup_tmp_files
         end
-        
+
         # Get summary of extracted strings
         def get_extraction_summary
           extracted_data = load_extracted_strings
@@ -158,7 +160,7 @@ module SjuiTools
             'total_strings' => total_strings
           }
         end
-        
+
         # Generate StringManager.swift file
         def generate_swift_file
           strings_json_path = File.join(@resources_dir, 'strings.json')
@@ -173,40 +175,40 @@ module SjuiTools
 
           # Generate Swift code
           swift_content = generate_swift_content(strings_data)
-          
+
           # Write to StringManager.swift
           resource_manager_dir = @config['resource_manager_directory'] || 'ResourceManager'
           resource_manager_path = File.join(@source_path, resource_manager_dir)
-          
+
           # Create ResourceManager directory if it doesn't exist
           FileUtils.mkdir_p(resource_manager_path) unless Dir.exist?(resource_manager_path)
-          
+
           string_manager_path = File.join(resource_manager_path, 'StringManager.swift')
-          
+
           File.write(string_manager_path, swift_content)
           Core::Logger.success "Generated StringManager.swift"
         end
-        
+
         # Apply extracted strings to .strings files
         def apply_to_strings_files
           strings_json_path = File.join(@resources_dir, 'strings.json')
-          
+
           unless File.exist?(strings_json_path)
             Core::Logger.warn "strings.json not found at #{strings_json_path}"
             return
           end
-          
+
           # Load strings.json
           strings_data = JSON.parse(File.read(strings_json_path))
-          
+
           # Get configured .strings files
           string_files = @config['string_files'] || []
-          
+
           if string_files.empty?
             Core::Logger.info "No .strings files configured"
             return
           end
-          
+
           # Process each .strings file
           string_files.each do |file_path|
             full_path = File.join(@source_path, file_path)
@@ -225,7 +227,7 @@ module SjuiTools
 
           Core::Logger.success "Applied strings to .strings files"
         end
-        
+
         # Validate plural entries in strings.json (schema + CLDR categories)
         # and reject layout string attributes that reference a plural key
         # (VM-only in v1). Raises JsonUIShared::PluralValidator::ValidationError.
@@ -239,16 +241,10 @@ module SjuiTools
             return
           end
 
-          errors = JsonUIShared::PluralValidator.validate_strings(strings_data)
           layout_files = Dir.glob(File.join(@layouts_dir, '**/*.json')).reject do |file|
             file.include?(File.join(@layouts_dir, 'Resources'))
           end
-          errors.concat(JsonUIShared::PluralValidator.validate_layout_references(strings_data, layout_files))
-          return if errors.empty?
-
-          errors.each { |e| Core::Logger.error e }
-          raise JsonUIShared::PluralValidator::ValidationError,
-                "strings.json plural validation failed (#{errors.length} error(s))"
+          validate_plural_strings_data!(strings_data, layout_files, Core::Logger)
         end
 
         # Main processing method called from ResourcesManager
@@ -283,13 +279,13 @@ module SjuiTools
           Core::Logger.info "Processed #{processed_count} files, skipped #{skipped_count} unchanged files"
           Core::Logger.info "Extracted #{summary['total_strings']} strings from #{summary['files_count']} files"
         end
-        
+
         private
-        
+
         def ensure_tmp_directory
           FileUtils.mkdir_p(@tmp_dir) unless Dir.exist?(@tmp_dir)
         end
-        
+
         def load_extracted_strings
           if File.exist?(@extracted_strings_file)
             begin
@@ -301,130 +297,15 @@ module SjuiTools
             { 'strings' => {} }
           end
         end
-        
+
         def save_extracted_strings(data)
           File.write(@extracted_strings_file, JSON.pretty_generate(data))
         end
-        
+
         def cleanup_tmp_files
           FileUtils.rm_f(@extracted_strings_file) if File.exist?(@extracted_strings_file)
         end
-        
-        def extract_strings_from_json(json_data, file_name)
-          @current_file_strings = {}
 
-          extract_strings_recursive(json_data, file_name)
-
-          @current_file_strings
-        end
-
-        def extract_strings_recursive(data, file_name = nil)
-          return unless data.is_a?(Hash)
-
-          # Check string properties (matching Kotlin implementation)
-          %w[text hint placeholder label prompt].each do |prop|
-            if data[prop].is_a?(String) && !data[prop].empty?
-              value = data[prop]
-              # Skip binding expressions
-              next if value.start_with?('@{') || value.start_with?('${')
-
-              # Skip if it's already a snake_case key (already converted)
-              # This matches Kotlin behavior - don't re-extract existing keys
-              next if value.match?(/^[a-z]+(_[a-z0-9]+)*$/)
-
-              # Normal extraction for new strings
-              extract_and_store_string(value, file_name)
-            end
-          end
-
-          # Check for partial_attributes array
-          if data['partial_attributes'].is_a?(Array)
-            data['partial_attributes'].each do |attr|
-              if attr.is_a?(Hash)
-                # Handle both { 'range' => { 'text' => '...' } } and { 'range' => '...' }
-                range = attr['range']
-                if range.is_a?(Hash) && range['text'].is_a?(String)
-                  extract_and_store_string(range['text'], file_name)
-                elsif range.is_a?(String) && !range.empty?
-                  extract_and_store_string(range, file_name)
-                end
-              end
-            end
-          end
-
-          # Recursively process children and other nested structures
-          data.each do |key, value|
-            if value.is_a?(Hash)
-              extract_strings_recursive(value, file_name)
-            elsif value.is_a?(Array)
-              value.each do |item|
-                if item.is_a?(Hash)
-                  extract_strings_recursive(item, file_name)
-                elsif item.is_a?(String) && %w[items segments].include?(key)
-                  extract_and_store_string(item, file_name) if should_extract_string?(item)
-                end
-              end
-            end
-          end
-        end
-
-        # Check if a string should be extracted (matching Kotlin implementation)
-        def should_extract_string?(value)
-          # Skip data binding expressions
-          return false if value.start_with?('@{') || value.start_with?('${')
-
-          # Skip if it's already a snake_case key (already converted)
-          # This prevents re-extracting strings that have been replaced with keys
-          # Also matches trailing underscore variants (e.g., "key_name_")
-          return false if value.match?(/^[a-z][a-z0-9]*(_[a-z0-9]+)*_?$/)
-
-          # Extract if it's a regular text string longer than 2 characters
-          # and contains alphabetic characters or Japanese characters (hiragana, katakana, kanji)
-          value.length > 2 && value.match?(/[a-zA-Z\p{Hiragana}\p{Katakana}\p{Han}]/)
-        end
-
-        # Extract and store string (matching Kotlin implementation)
-        def extract_and_store_string(value, file_name = nil)
-          return unless should_extract_string?(value)
-
-          # Generate a snake_case key from the text
-          key = generate_string_key(value)
-          @current_file_strings[key] = value
-        end
-
-        # Generate a key from text
-        # For ASCII text: convert to snake_case (matching Kotlin implementation)
-        # For Japanese/non-ASCII text: use the original text as key
-        def generate_string_key(text)
-          # Check if text contains Japanese characters (hiragana, katakana, kanji)
-          if text.match?(/[\p{Hiragana}\p{Katakana}\p{Han}]/)
-            # Use the original text as key for Japanese strings
-            # Just trim whitespace
-            text.strip
-          else
-            # Convert to snake_case for ASCII text
-            base_key = text
-              .downcase
-              .gsub(/[^a-z0-9\s_]/, '') # Remove special characters (keep underscores)
-              .gsub(/\s+/, '_')         # Replace spaces with underscores
-              .gsub(/^_+|_+$/, '')      # Remove leading/trailing underscores
-              .gsub(/__+/, '_')         # Replace multiple underscores with single
-
-            # Limit length
-            base_key = base_key[0..30] if base_key.length > 30
-
-            # Handle duplicates (append _2, _3, etc.)
-            final_key = base_key
-            counter = 2
-            while @current_file_strings.key?(final_key) && @current_file_strings[final_key] != text
-              final_key = "#{base_key}_#{counter}"
-              counter += 1
-            end
-
-            final_key
-          end
-        end
-        
         def cache_strings_file(file_path)
           @strings_cache ||= {}
           in_auto_generated_section = false
@@ -569,12 +450,18 @@ module SjuiTools
             pos ? "%#{pos}@" : "%@"
           }
         end
-        
+
         def generate_swift_content(strings_data)
+          # Deterministic marker header — no timestamp. A Time.now header
+          # here used to make every build rewrite StringManager.swift,
+          # breaking the "run twice, diff zero" idempotency invariant.
+          marker_header = Core::GeneratedMarker.comment_header(
+            source: 'Layouts/Resources/strings.json',
+            generator: 'sjui build'
+          )
+
           content = []
-          content << "// StringManager.swift"
-          content << "// Auto-generated file - DO NOT EDIT"
-          content << "// Generated at: #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}"
+          content.concat(marker_header.split("\n"))
           content << ""
           content << "import Foundation"
           content << "import SwiftJsonUI"
@@ -675,10 +562,12 @@ module SjuiTools
           content << "}"
           content << ""
           content << "// Note: String.localized() extension is provided by SwiftJsonUI library"
+          content << ""
+          content << Core::GeneratedMarker.comment_footer
 
           content.join("\n")
         end
-        
+
         def snake_to_camel(snake_str)
           # Strip trailing underscores to avoid duplicate function names
           # e.g., "key_name_" and "key_name" both become "keyName"
@@ -687,23 +576,23 @@ module SjuiTools
 
           # Convert snake_case to camelCase
           components = cleaned.split('_')
-          
+
           # If the entire string is just a number, prepend "value"
           if components.length == 1 && components[0].match?(/^\d+$/)
             return "value" + components[0].capitalize
           end
-          
+
           # If last component is just a number, combine it with the previous component
           if components.length > 1 && components.last.match?(/^\d+$/)
             # e.g., ["transfer", "caution", "1"] -> ["transfer", "caution1"]
             components[-2] = components[-2] + components[-1].capitalize
             components.pop
           end
-          
+
           return snake_str if components.empty?
           components[0] + (components[1..-1] || []).map(&:capitalize).join
         end
-        
+
         def escape_swift_string(str)
           # Escape special characters for Swift string literals
           str.gsub('\\', '\\\\')     # Backslash must be first

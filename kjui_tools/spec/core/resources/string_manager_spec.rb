@@ -98,30 +98,16 @@ RSpec.describe KjuiTools::Core::Resources::StringManager do
   end
 
   describe 'private methods' do
-    describe '#is_string_property?' do
-      it 'returns true for text property' do
-        expect(manager.send(:is_string_property?, 'text')).to be true
+    describe 'STRING_PROPERTIES (localizable attribute set)' do
+      # W3-2: is_string_property? became the shared core's
+      # STRING_PROPERTIES constant (checked inline during extraction).
+      it 'contains every localizable string attribute' do
+        expect(JsonUIShared::StringManagerCore::STRING_PROPERTIES)
+          .to contain_exactly('text', 'hint', 'placeholder', 'label', 'prompt')
       end
 
-      it 'returns true for hint property' do
-        expect(manager.send(:is_string_property?, 'hint')).to be true
-      end
-
-      it 'returns true for placeholder property' do
-        expect(manager.send(:is_string_property?, 'placeholder')).to be true
-      end
-
-      it 'returns true for label property' do
-        expect(manager.send(:is_string_property?, 'label')).to be true
-      end
-
-      it 'returns true for prompt property' do
-        expect(manager.send(:is_string_property?, 'prompt')).to be true
-      end
-
-      it 'returns false for non-string properties' do
-        expect(manager.send(:is_string_property?, 'background')).to be false
-        expect(manager.send(:is_string_property?, 'fontSize')).to be false
+      it 'excludes non-string properties' do
+        expect(JsonUIShared::StringManagerCore::STRING_PROPERTIES).not_to include('background', 'fontSize')
       end
     end
 
@@ -187,19 +173,9 @@ RSpec.describe KjuiTools::Core::Resources::StringManager do
       end
     end
 
-    describe '#snake_to_camel' do
-      it 'converts snake_case to camelCase' do
-        expect(manager.send(:snake_to_camel, 'hello_world')).to eq('helloWorld')
-      end
-
-      it 'handles single word' do
-        expect(manager.send(:snake_to_camel, 'hello')).to eq('hello')
-      end
-
-      it 'handles multiple underscores' do
-        expect(manager.send(:snake_to_camel, 'hello_big_world')).to eq('helloBigWorld')
-      end
-    end
+    # W3-2: #snake_to_camel was removed together with its only consumer,
+    # the long-disabled StringManager.kt generator (dead code since the
+    # "Disabled: StringManager.kt generation is not needed" era).
 
     describe '#create_new_strings_xml' do
       it 'creates XML document with resources root' do
