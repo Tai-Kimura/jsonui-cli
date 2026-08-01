@@ -2,12 +2,22 @@
 
 Plan 12 §3: the visual fixtures' screenshots were capture-only in v1; v2
 turns them into a *same-platform* regression signal. PNGs are never
-committed — only a perceptual-hash manifest per platform:
+committed — only a perceptual-hash manifest per render environment and
+platform:
 
 ```
-conformance/baselines/<platform>.hashes.json   # @generated, committed
-conformance/artifacts/<platform>/*.png         # local / CI artifact only
+conformance/baselines/<env>/<platform>.hashes.json   # @generated, committed
+conformance/artifacts/<platform>/*.png               # local / CI artifact only
 ```
+
+The *environment* key exists because a baseline is a fact about one
+renderer: the 2026-08-01 full CI run proved a locally-baked baseline and a
+fresh CI render disagree wholesale (ios 534/534, android 506/506 compared
+screenshots over the dhash-64 threshold) while the CI render was internally
+healthy (0 fail / 0 error, ratchets exactly on their ceilings). Comparing
+across render environments measures the environment, not the change under
+test. ``local`` is the developer-machine set; CI lanes pass their own key
+(``ci``) and compare only against baselines baked from CI artifacts.
 
 Algorithm: **dHash (difference hash), 64x64 grid = 4096 bits**.
 
@@ -40,6 +50,11 @@ from pathlib import Path
 from ..core.generated_marker import json_marker
 
 GENERATOR_NAME = "jui conformance baseline update"
+
+#: Default render-environment key. Baselines live under
+#: ``baselines/<env>/`` and only ever compare within one environment;
+#: everything defaults to the developer-machine set.
+DEFAULT_ENV = "local"
 
 #: dHash grid size: NxN bits per row comparison -> N*N bit hash.
 HASH_SIZE = 64
@@ -112,13 +127,15 @@ def hamming(hex_a: str, hex_b: str) -> int:
 # --------------------------------------------------------------------------- #
 
 
-def baseline_path(conformance_dir: Path, platform: str) -> Path:
-    return Path(conformance_dir) / "baselines" / f"{platform}.hashes.json"
+def baseline_path(conformance_dir: Path, platform: str, env: str = DEFAULT_ENV) -> Path:
+    return Path(conformance_dir) / "baselines" / env / f"{platform}.hashes.json"
 
 
-def load_baseline(conformance_dir: Path, platform: str) -> dict | None:
+def load_baseline(
+    conformance_dir: Path, platform: str, env: str = DEFAULT_ENV
+) -> dict | None:
     """Parsed baseline manifest, or None when none has been recorded."""
-    path = baseline_path(conformance_dir, platform)
+    path = baseline_path(conformance_dir, platform, env)
     if not path.is_file():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
@@ -129,10 +146,14 @@ class BaselineUpdateSummary:
     out_path: Path
     platform: str
     hashed: int = 0
+    env: str = DEFAULT_ENV
 
 
 def update_baseline(
-    conformance_dir: Path, platform: str, artifacts_dir: Path | None = None
+    conformance_dir: Path,
+    platform: str,
+    artifacts_dir: Path | None = None,
+    env: str = DEFAULT_ENV,
 ) -> BaselineUpdateSummary:
     """Hash every PNG under the platform's artifacts dir into the manifest.
 
@@ -153,13 +174,14 @@ def update_baseline(
 
     hashes = {png.name: dhash_file(png) for png in pngs}
 
-    out_path = baseline_path(conformance_dir, platform)
+    out_path = baseline_path(conformance_dir, platform, env)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "_generated": json_marker(
             source=f"conformance/artifacts/{platform}", generator=GENERATOR_NAME
         ),
         "platform": platform,
+        "environment": env,
         "algorithm": ALGORITHM,
         "threshold": DEFAULT_THRESHOLD,
         "hashes": hashes,
@@ -168,7 +190,9 @@ def update_baseline(
         json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=False) + "\n",
         encoding="utf-8",
     )
-    return BaselineUpdateSummary(out_path=out_path, platform=platform, hashed=len(hashes))
+    return BaselineUpdateSummary(
+        out_path=out_path, platform=platform, hashed=len(hashes), env=env
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -196,6 +220,7 @@ def compare_platform(
     platform: str,
     screenshot_names: list[str],
     artifacts_dir: Path | None = None,
+    env: str = DEFAULT_ENV,
 ) -> VisualComparison:
     """Compare the current artifacts of *screenshot_names* to the baseline.
 
@@ -210,12 +235,26 @@ def compare_platform(
 
     comparison = VisualComparison(platform=platform)
 
-    baseline = load_baseline(conformance_dir, platform)
+    baseline = load_baseline(conformance_dir, platform, env)
     if baseline is None:
         comparison.no_baseline = list(screenshot_names)
         return comparison
     comparison.baseline_exists = True
     comparison.threshold = int(baseline.get("threshold", DEFAULT_THRESHOLD))
+
+    # A manifest that records which environment baked it must match the
+    # environment this comparison is for — comparing across renderers is
+    # exactly the wholesale-mismatch failure the env key exists to prevent.
+    # (Manifests from before the env key have no field; their location under
+    # baselines/<env>/ is the claim.)
+    stored_env = baseline.get("environment")
+    if stored_env is not None and stored_env != env:
+        comparison.error = (
+            f"baseline {baseline_path(conformance_dir, platform, env).name} records "
+            f"environment '{stored_env}' but this comparison is for '{env}' — "
+            f"re-bake with `jui conformance baseline update --platform {platform} --env {env}`"
+        )
+        return comparison
 
     if baseline.get("algorithm") != ALGORITHM:
         comparison.algorithm_mismatch = str(baseline.get("algorithm"))

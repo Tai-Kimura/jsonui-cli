@@ -283,7 +283,16 @@ jobs:
         # time); the ratchets stop fixtures from quietly exiting visual
         # coverage. Same command runs locally; logic + tests live in
         # jui_tools/jui_cli/conformance/gate.py + tests/test_conformance_gate.py.
-        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web']))"
+        #
+        # --env ci: visual facts are per-renderer, so this lane compares only
+        # against baselines/ci/ (baked from CI artifacts) and uses the ci
+        # ratchet ceilings — never the developer-machine bakes under
+        # baselines/local/ (a locally-baked baseline vs a CI render mismatched
+        # 534/506 screenshots wholesale on 2026-08-01; that comparison
+        # measures the environment, not a regression). The attribute-effect
+        # ledger is asserted from local renders, so under this env an inert
+        # entry is a notice, not a failure (plan 25 Phase 0).
+        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web','--env','ci']))"
       - name: Upload combined report
         if: always()
         uses: actions/upload-artifact@v4

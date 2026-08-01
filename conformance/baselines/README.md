@@ -1,17 +1,42 @@
 # Screenshot baselines (same-platform visual regression)
 
 This directory holds the committed visual-regression signal for the
-conformance suite: one perceptual-hash manifest per platform
-(`<platform>.hashes.json`, `@generated` by `jui conformance baseline update`).
-**PNG screenshots are never committed** — they live under
-`conformance/artifacts/<platform>/` locally and as CI artifacts only.
+conformance suite: one perceptual-hash manifest per **render environment and
+platform** (`<env>/<platform>.hashes.json`, `@generated` by
+`jui conformance baseline update`). **PNG screenshots are never committed** —
+they live under `conformance/artifacts/<platform>/` locally and as CI
+artifacts only.
+
+## Environments (`<env>/`)
+
+A baseline is a fact about one renderer. The 2026-08-01 full CI run
+(30689985386) proved it wholesale: against locally-baked baselines a fresh,
+internally-healthy CI render (0 fail / 0 error, ratchets exactly on their
+ceilings) mismatched **every** compared screenshot on ios (534) and android
+(506) at the calibrated dhash-64 threshold 8. Comparing across render
+environments measures the environment, not the change under test — so each
+environment gets its own baseline set and only ever compares against itself:
+
+- `local/` — developer-machine renders (the pre-env-key baselines live on
+  here unchanged; local gate runs default to this set)
+- `ci/` — GitHub Actions runners (macos-15 simulator / emulator / ubuntu
+  Chromium), baked **from CI run artifacts**, never from a local render
+
+Each manifest records its `environment`; the loader refuses to compare a
+manifest under a different env key than it was baked for. Ratchet ceilings
+(`../gate_ratchet.json`) nest by the same env keys.
+
+```sh
+# bake the ci set from downloaded CI artifacts:
+jui conformance baseline update --platform ios --env ci --artifacts <downloaded>/artifacts/ios
+```
 
 ## Workflow
 
 ```sh
-# after a green suite run on <platform>:
-jui conformance baseline update --platform web     # record current rendering
-jui conformance report                             # compares artifacts vs baseline
+# after a green suite run on <platform> (local machine):
+jui conformance baseline update --platform web     # records under baselines/local/
+jui conformance report                             # compares artifacts vs baselines/local/
 ```
 
 The report's *Visual regression* section shows, per platform: compared /
@@ -19,8 +44,9 @@ regressions (distance > threshold) / **no-baseline** (screenshot without a
 recorded hash — reported, never a silent pass) / missing-artifact. Update the
 baseline only after reviewing that a visual change is intentional.
 
-Baselines only ever compare **within the same platform**. Cross-platform
-pixel comparison is out of scope by design (fonts and rasterizers differ).
+Baselines only ever compare **within the same platform and environment**.
+Cross-platform pixel comparison is out of scope by design (fonts and
+rasterizers differ).
 
 ## Algorithm
 
@@ -133,11 +159,16 @@ per-run clock drift will exceed the threshold on the status-bar band.
 {
   "_generated": { "sentinel": "@generated", "...": "..." },
   "platform": "web",
+  "environment": "local",
   "algorithm": "dhash-64",
   "threshold": 8,
   "hashes": { "<Screenshot name>.png": "<1024 hex chars>" }
 }
 ```
+
+(`environment` is absent from manifests baked before the env key existed —
+their location under `baselines/<env>/` is the claim; the next
+`baseline update` writes the field.)
 
 Keys are artifact filenames (`<Section>_<attr>__<case>.png` — the
 `screenshot` step names from the generated tests), sorted; no timestamps.

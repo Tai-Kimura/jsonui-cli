@@ -29,6 +29,17 @@ fixture silently exits visual coverage. The committed ceilings are the
 as-of-introduction reality; a count above its ceiling fails, a count below
 prints a reminder to tighten the ceiling. Lowering is routine, raising is a
 coverage regression that needs justification in the file itself.
+
+Render environments (``--env``): baselines live under ``baselines/<env>/``
+and every visual fact is relative to one environment's renderer. Ratchet
+ceilings nest by env for the same reason (a flat per-platform table is read
+as the ``local`` env). The attribute-effect ledger (control_diff.json) is
+asserted from local renders; under any other env an inert regression is
+reported as a notice, not a failure — the 2026-08-01 CI run showed 4 iOS
+entries (SelectBox/selectedValue, Switch statics) rendering identical to
+their control on the CI simulator while holding locally, i.e. the assertion
+itself is environment-scoped. Measurement still runs everywhere so the
+report keeps the visibility.
 """
 from __future__ import annotations
 
@@ -37,6 +48,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
+from .baseline import DEFAULT_ENV
 from .report import ReportSummary, generate_report
 
 RATCHET_FILENAME = "gate_ratchet.json"
@@ -61,21 +73,50 @@ class GateOutcome:
 
 
 def load_ratchet(conformance_dir: Path) -> dict[str, dict[str, int]]:
-    """Read ratchet ceilings; a missing file means every ceiling is 0."""
+    """Read ratchet ceilings; a missing file means every ceiling is 0.
+
+    Returned as read (flat per-platform, or nested per-env) — resolution to
+    one env's per-platform table happens in :func:`ratchet_for_env`, so both
+    the file and direct ``judge(ratchet=...)`` callers may use either shape.
+    """
     path = Path(conformance_dir) / RATCHET_FILENAME
     if not path.is_file():
         return {}
     data = json.loads(path.read_text(encoding="utf-8"))
-    ceilings: dict[str, dict[str, int]] = {}
+    ceilings: dict[str, dict] = {}
     for metric in RATCHET_METRICS:
         values = data.get(metric)
         if isinstance(values, dict):
-            ceilings[metric] = {
+            ceilings[metric] = values
+    return ceilings
+
+
+def ratchet_for_env(ratchet: dict, env: str) -> dict[str, dict[str, int]]:
+    """Resolve a ratchet table to ``{metric: {platform: ceiling}}`` for *env*.
+
+    Two accepted shapes per metric:
+
+    - nested by env: ``{"local": {"android": 12}, "ci": {"android": 0}}``
+    - flat per platform: ``{"android": 12}`` — the pre-env shape, read as
+      the ``local`` env (that is what every flat ceiling was measured on).
+
+    An env with no entry means every ceiling is 0 — a fresh environment
+    starts strict and earns slack only by committing measured reality.
+    """
+    resolved: dict[str, dict[str, int]] = {}
+    for metric in RATCHET_METRICS:
+        values = ratchet.get(metric)
+        if not isinstance(values, dict):
+            continue
+        nested = any(isinstance(v, dict) for v in values.values())
+        table = values.get(env, {}) if nested else (values if env == DEFAULT_ENV else {})
+        if isinstance(table, dict):
+            resolved[metric] = {
                 platform: int(ceiling)
-                for platform, ceiling in values.items()
+                for platform, ceiling in table.items()
                 if isinstance(ceiling, (int, float)) and not isinstance(ceiling, bool)
             }
-    return ceilings
+    return resolved
 
 
 def evaluate(
@@ -86,13 +127,16 @@ def evaluate(
     out_path: Path | None = None,
     visual: bool = True,
     ratchet: dict[str, dict[str, int]] | None = None,
+    env: str = DEFAULT_ENV,
 ) -> GateOutcome:
     """Render REPORT.md and judge *platforms*. Raises ReportError on bad inputs."""
     conformance_dir = Path(conformance_dir)
-    summary = generate_report(conformance_dir, results_dir=results_dir, out_path=out_path)
+    summary = generate_report(
+        conformance_dir, results_dir=results_dir, out_path=out_path, env=env
+    )
     if ratchet is None:
         ratchet = load_ratchet(conformance_dir)
-    return judge(summary, platforms, visual=visual, ratchet=ratchet)
+    return judge(summary, platforms, visual=visual, ratchet=ratchet, env=env)
 
 
 def judge(
@@ -101,9 +145,10 @@ def judge(
     *,
     visual: bool = True,
     ratchet: dict[str, dict[str, int]] | None = None,
+    env: str = DEFAULT_ENV,
 ) -> GateOutcome:
     """The pure judgment: summary in, problems/notices out. No filesystem."""
-    ratchet = ratchet or {}
+    ratchet = ratchet_for_env(ratchet or {}, env)
     selected = list(dict.fromkeys(platforms))
     outcome = GateOutcome(summary=summary)
     problems, notices = outcome.problems, outcome.notices
@@ -145,18 +190,31 @@ def judge(
                 problems.append(f"{p}: screenshots were not compared — {why}")
             count = summary.visual_regressions.get(p, 0)
             if count:
+                env_flag = f" --env {env}" if env != DEFAULT_ENV else ""
                 problems.append(
                     f"{p}: {count} visual regression(s) vs committed baseline — if "
                     f"intended, re-baseline with `jui conformance baseline update "
-                    f"--platform {p}` and commit baselines/{p}.hashes.json"
+                    f"--platform {p}{env_flag}` and commit baselines/{env}/{p}.hashes.json"
                 )
             ids = summary.inert_regressions.get(p) or []
             if ids:
                 shown = ", ".join(ids[:5]) + (" …" if len(ids) > 5 else "")
-                problems.append(
+                message = (
                     f"{p}: {len(ids)} attribute(s) no longer change what is rendered "
                     f"(identical to their control): {shown}"
                 )
+                if env == DEFAULT_ENV:
+                    problems.append(message)
+                else:
+                    # The expected-to-differ ledger is asserted from local
+                    # renders; on another renderer an identical render can be
+                    # the environment, not a regression (measured: 4 iOS
+                    # entries held locally and went inert on the CI sim).
+                    # Keep the measurement visible, don't fail on it.
+                    notices.append(
+                        message
+                        + f" — ledger assertions are local-env; informational under env '{env}'"
+                    )
             unrecorded = summary.inert_unrecorded.get(p, 0)
             if unrecorded:
                 notices.append(

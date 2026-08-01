@@ -184,6 +184,73 @@ class ComparePlatformTest(unittest.TestCase):
         self.assertEqual(comparison.compared, 0)
 
 
+@unittest.skipUnless(HAVE_PILLOW, "Pillow not installed (jui-tools[conformance])")
+class EnvironmentKeyTest(unittest.TestCase):
+    """Render-environment keying: baselines/<env>/, default ``local``.
+
+    A baseline is a fact about one renderer — the 2026-08-01 CI run proved a
+    local bake and a CI render disagree wholesale while both are internally
+    healthy. These tests pin that environments are isolated, self-describing,
+    and refuse cross-env comparison.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.conf = Path(self._tmp.name)
+        self.artifacts = self.conf / "artifacts" / "web"
+        _write_png(self.artifacts / "stable.png")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_update_defaults_to_the_local_env_dir_and_records_it(self):
+        summary = baseline.update_baseline(self.conf, "web")
+        self.assertEqual(
+            summary.out_path,
+            self.conf / "baselines" / "local" / "web.hashes.json",
+        )
+        payload = json.loads(summary.out_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["environment"], "local")
+
+    def test_update_bakes_under_a_named_env(self):
+        summary = baseline.update_baseline(self.conf, "web", env="ci")
+        self.assertEqual(
+            summary.out_path, self.conf / "baselines" / "ci" / "web.hashes.json"
+        )
+        payload = json.loads(summary.out_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["environment"], "ci")
+
+    def test_environments_are_isolated(self):
+        baseline.update_baseline(self.conf, "web")  # local only
+        comparison = baseline.compare_platform(
+            self.conf, "web", ["stable.png"], env="ci"
+        )
+        self.assertFalse(comparison.baseline_exists)
+        self.assertEqual(comparison.no_baseline, ["stable.png"])
+
+    def test_env_mismatch_refuses_to_compare(self):
+        # A ci-baked manifest copied into the local slot must not be compared
+        # as local — that IS the cross-renderer comparison the key prevents.
+        baked = baseline.update_baseline(self.conf, "web", env="ci")
+        local_path = baseline.baseline_path(self.conf, "web")
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_text(baked.out_path.read_text(encoding="utf-8"))
+        comparison = baseline.compare_platform(self.conf, "web", ["stable.png"])
+        self.assertIsNotNone(comparison.error)
+        self.assertIn("records environment 'ci'", comparison.error)
+        self.assertEqual(comparison.compared, 0)
+
+    def test_legacy_manifest_without_environment_field_still_compares(self):
+        baseline.update_baseline(self.conf, "web")
+        path = baseline.baseline_path(self.conf, "web")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        del payload["environment"]  # pre-env-key manifest: location is the claim
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        comparison = baseline.compare_platform(self.conf, "web", ["stable.png"])
+        self.assertIsNone(comparison.error)
+        self.assertEqual(comparison.compared, 1)
+
+
 class BaselineCommandTest(unittest.TestCase):
     """`jui conformance baseline` argparse dispatch."""
 
@@ -202,9 +269,10 @@ class BaselineCommandTest(unittest.TestCase):
                 platform="web",
                 conformance_dir=str(conf),
                 artifacts=None,
+                env=None,
             )
             self.assertEqual(cmd_conformance(args), 0)
-            self.assertTrue((conf / "baselines" / "web.hashes.json").is_file())
+            self.assertTrue((conf / "baselines" / "local" / "web.hashes.json").is_file())
 
     def test_missing_action_prints_usage(self):
         import argparse

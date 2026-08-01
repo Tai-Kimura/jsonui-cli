@@ -1,19 +1,35 @@
 {
   "_comment": [
-    "Ratchet ceilings for `jui conformance gate` (plan 06 §3).",
+    "Ratchet ceilings for `jui conformance gate` (plan 06 §3), per render environment (plan 25 Phase 0).",
     "missing_artifact: baseline entries whose fixture produced no screenshot this run — the way a fixture silently exits visual coverage.",
     "no_baseline: screenshots that have no baseline hash (rendered but never compared).",
-    "A count above its ceiling fails the gate. LOWERING a ceiling to match improved reality is routine and encouraged (the gate prints a notice when there is slack); RAISING one is a coverage regression and needs a justification comment here.",
-    "Initial values are the measured reality at introduction (2026-08-01 committed results)."
+    "Ceilings nest by environment key (baselines/<env>/): a visual count is a fact about one renderer, so its ceiling is too. An env with no entry gets ceiling 0 for everything — a fresh environment starts strict.",
+    "local: the 12/6/4 are baseline entries recorded on the developer machine whose fixtures no longer screenshot there (measured 2026-08-01; the same set reproduced exactly on CI vs the local baselines — deterministic, not flake).",
+    "ci: baselines are baked FROM a CI run's own artifacts, so the baseline set equals the rendered set by construction and both ceilings start at 0.",
+    "A count above its ceiling fails the gate. LOWERING a ceiling to match improved reality is routine and encouraged (the gate prints a notice when there is slack); RAISING one is a coverage regression and needs a justification comment here."
   ],
   "missing_artifact": {
-    "android": 12,
-    "ios": 6,
-    "web": 4
+    "local": {
+      "android": 12,
+      "ios": 6,
+      "web": 4
+    },
+    "ci": {
+      "android": 0,
+      "ios": 0,
+      "web": 0
+    }
   },
   "no_baseline": {
-    "android": 0,
-    "ios": 0,
-    "web": 0
+    "local": {
+      "android": 0,
+      "ios": 0,
+      "web": 0
+    },
+    "ci": {
+      "android": 0,
+      "ios": 0,
+      "web": 0
+    }
   }
 }

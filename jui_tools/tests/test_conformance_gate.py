@@ -26,6 +26,7 @@ from jui_cli.conformance.gate import (
     evaluate,
     judge,
     load_ratchet,
+    ratchet_for_env,
 )
 from jui_cli.conformance.report import ReportError, ReportSummary
 
@@ -195,6 +196,8 @@ class LoadRatchetTest(unittest.TestCase):
             self.assertEqual(load_ratchet(Path(d)), {})
 
     def test_reads_metrics_and_drops_junk_values(self):
+        # Junk-value filtering happens at env resolution (ratchet_for_env),
+        # which is the only path the gate consumes ceilings through.
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / RATCHET_FILENAME
             path.write_text(
@@ -207,10 +210,72 @@ class LoadRatchetTest(unittest.TestCase):
                     }
                 )
             )
-            ratchet = load_ratchet(Path(d))
+            ratchet = ratchet_for_env(load_ratchet(Path(d)), "local")
             self.assertEqual(ratchet["missing_artifact"], {"android": 12})
             self.assertEqual(ratchet["no_baseline"], {"web": 0})
             self.assertNotIn("unknown_metric", ratchet)
+
+
+class RatchetForEnvTest(unittest.TestCase):
+    def test_flat_table_is_the_local_env(self):
+        flat = {"missing_artifact": {"android": 12}}
+        self.assertEqual(
+            ratchet_for_env(flat, "local")["missing_artifact"], {"android": 12}
+        )
+        # Any other env gets no slack from a table measured on local renders.
+        self.assertEqual(ratchet_for_env(flat, "ci").get("missing_artifact", {}), {})
+
+    def test_nested_table_resolves_per_env_and_unknown_env_is_strict(self):
+        nested = {
+            "missing_artifact": {"local": {"android": 12}, "ci": {"android": 0}}
+        }
+        self.assertEqual(
+            ratchet_for_env(nested, "local")["missing_artifact"], {"android": 12}
+        )
+        self.assertEqual(
+            ratchet_for_env(nested, "ci")["missing_artifact"], {"android": 0}
+        )
+        self.assertEqual(
+            ratchet_for_env(nested, "staging").get("missing_artifact", {}), {}
+        )
+
+
+class JudgeEnvTest(unittest.TestCase):
+    def test_inert_regression_is_a_notice_outside_local(self):
+        summary = _summary(
+            inert_regressions={"ios": ["SelectBox/selectedValue__static"]}
+        )
+        local = judge(summary, ALL)
+        self.assertFalse(local.ok)
+        ci = judge(summary, ALL, env="ci")
+        self.assertTrue(ci.ok)
+        self.assertTrue(any("informational under env 'ci'" in n for n in ci.notices))
+
+    def test_visual_regression_fails_under_any_env_and_names_the_env(self):
+        summary = _summary(visual_regressions={"android": 2})
+        outcome = judge(summary, ALL, env="ci")
+        self.assertFalse(outcome.ok)
+        self.assertTrue(
+            any(
+                "--env ci" in p and "baselines/ci/android.hashes.json" in p
+                for p in outcome.problems
+            )
+        )
+
+    def test_nested_ratchet_is_resolved_with_the_judged_env(self):
+        nested = {
+            "missing_artifact": {"local": {"android": 12}, "ci": {"android": 0}},
+            "no_baseline": {"local": {"android": 0}, "ci": {"android": 0}},
+        }
+        at_local_ceiling = _summary(missing_artifact={"android": 12})
+        self.assertTrue(judge(at_local_ceiling, ["android"], ratchet=nested).ok)
+        over_ci_ceiling = judge(
+            at_local_ceiling, ["android"], ratchet=nested, env="ci"
+        )
+        self.assertFalse(over_ci_ceiling.ok)
+        self.assertTrue(
+            any("missing_artifact 12 > ratchet ceiling 0" in p for p in over_ci_ceiling.problems)
+        )
 
 
 class EvaluateEndToEndTest(unittest.TestCase):

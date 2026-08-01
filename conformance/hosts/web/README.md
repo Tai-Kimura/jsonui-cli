@@ -23,7 +23,7 @@ npm run conformance               # build + serve + execute + write results
 `npm run conformance` writes `conformance/results/web.results.json`
 (RESULTS_SCHEMA.md-conformant) and screenshots under
 `conformance/artifacts/web/` (gitignored — the committed regression signal
-is `conformance/baselines/web.hashes.json`). Then render the matrix with
+is `conformance/baselines/local/web.hashes.json`). Then render the matrix with
 `jui conformance report`; after reviewing intentional visual changes,
 record them with `jui conformance baseline update --platform web`
 (see `conformance/baselines/README.md`).

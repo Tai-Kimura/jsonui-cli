@@ -64,6 +64,16 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         default=None,
         help="Report output path (default: <dir>/REPORT.md)",
     )
+    report.add_argument(
+        "--env",
+        default=None,
+        help=(
+            "Render-environment key for the visual comparison — baselines are "
+            "read from baselines/<env>/ (default: local). A baseline is a fact "
+            "about one renderer; CI lanes pass their own key and never compare "
+            "against developer-machine bakes."
+        ),
+    )
 
     gate = sub.add_parser(
         "gate",
@@ -104,6 +114,16 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
             "effect, artifact ratchets). For lanes that cannot compare renders — "
             "the per-push web lane runs on a different OS than the committed "
             "baselines were rendered on and does not install Pillow."
+        ),
+    )
+    gate.add_argument(
+        "--env",
+        default=None,
+        help=(
+            "Render-environment key (default: local). Visual checks compare "
+            "against baselines/<env>/ and use that env's ratchet ceilings; the "
+            "attribute-effect ledger fails the gate only under env 'local' "
+            "(asserted there) and is reported as a notice elsewhere."
         ),
     )
 
@@ -160,6 +180,16 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         "--artifacts",
         default=None,
         help="Artifacts directory (default: <dir>/artifacts/<platform>)",
+    )
+    baseline_update.add_argument(
+        "--env",
+        default=None,
+        help=(
+            "Render-environment key to bake under (baselines/<env>/, default: "
+            "local). Bake 'ci' baselines from CI-run artifacts, never from a "
+            "local render — the manifest records the env and refuses to be "
+            "compared under a different one."
+        ),
     )
 
     cov = sub.add_parser(
@@ -299,7 +329,7 @@ def _cmd_compat_doc(args: argparse.Namespace) -> int:
 
 
 def _cmd_baseline(args: argparse.Namespace) -> int:
-    from ..conformance.baseline import BaselineError, update_baseline
+    from ..conformance.baseline import DEFAULT_ENV, BaselineError, update_baseline
 
     action = getattr(args, "baseline_action", None)
     if action != "update":
@@ -310,15 +340,21 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
         Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
     )
     artifacts_dir = Path(args.artifacts) if args.artifacts else None
+    env = getattr(args, "env", None) or DEFAULT_ENV
 
     try:
-        summary = update_baseline(conformance_dir, args.platform, artifacts_dir=artifacts_dir)
+        summary = update_baseline(
+            conformance_dir, args.platform, artifacts_dir=artifacts_dir, env=env
+        )
     except BaselineError as e:
         print(f"ERROR: {e}")
         return 1
 
     print(f"baseline written to {summary.out_path}")
-    print(f"  platform: {summary.platform}, screenshots hashed: {summary.hashed}")
+    print(
+        f"  platform: {summary.platform}, env: {summary.env}, "
+        f"screenshots hashed: {summary.hashed}"
+    )
     return 0
 
 
@@ -465,6 +501,7 @@ def _cmd_coverage(args: argparse.Namespace) -> int:
 
 
 def _cmd_report(args: argparse.Namespace) -> int:
+    from ..conformance.baseline import DEFAULT_ENV
     from ..conformance.report import ReportError, generate_report
 
     conformance_dir = (
@@ -472,9 +509,12 @@ def _cmd_report(args: argparse.Namespace) -> int:
     )
     results_dir = Path(args.results) if args.results else None
     out_path = Path(args.out) if args.out else None
+    env = getattr(args, "env", None) or DEFAULT_ENV
 
     try:
-        summary = generate_report(conformance_dir, results_dir=results_dir, out_path=out_path)
+        summary = generate_report(
+            conformance_dir, results_dir=results_dir, out_path=out_path, env=env
+        )
     except ReportError as e:
         print(f"ERROR: {e}")
         return 1
@@ -499,6 +539,7 @@ def _cmd_gate(args: argparse.Namespace) -> int:
     import hashlib
     import os
 
+    from ..conformance.baseline import DEFAULT_ENV
     from ..conformance.gate import evaluate
     from ..conformance.report import ReportError, _status_of, load_platform_results
 
@@ -508,6 +549,7 @@ def _cmd_gate(args: argparse.Namespace) -> int:
     results_dir = Path(args.results) if args.results else conformance_dir / "results"
     out_path = Path(args.out) if args.out else None
     selected = list(dict.fromkeys(args.platform))
+    env = getattr(args, "env", None) or DEFAULT_ENV
 
     try:
         outcome = evaluate(
@@ -516,6 +558,7 @@ def _cmd_gate(args: argparse.Namespace) -> int:
             results_dir=results_dir,
             out_path=out_path,
             visual=not args.no_visual,
+            env=env,
         )
     except ReportError as e:
         print(f"ERROR: {e}")
@@ -567,6 +610,6 @@ def _cmd_gate(args: argparse.Namespace) -> int:
     if set(_PLATFORMS) <= set(selected):
         checks = "0 mismatch / " + checks
     if not args.no_visual:
-        checks += " / visual + ratchets OK"
+        checks += f" / visual + ratchets OK (env {env})"
     print(f"conformance gate: OK ({', '.join(selected)} — {checks})")
     return 0
