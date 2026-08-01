@@ -61,7 +61,7 @@ converter certainly reads them.
 
 **Out of scope**, and deliberately so:
 
-- **`mode: uikit` (85 attributes).** UIKit applies attributes in the
+- **`mode: uikit` (103 attributes).** UIKit applies attributes in the
   SwiftJsonUI Swift runtime straight off the layout JSON — `SJUIButton` reads
   `attr["image"]` itself. There is no Ruby converter to scan, so every one of
   them would report as a gap. UIKit coverage is a blind spot of this check, not
@@ -70,8 +70,8 @@ converter certainly reads them.
   **The blind spot is wider than the tag**, and this is the part that misleads:
   an attribute with *no* mode declared is still measured against the Ruby
   codegen alone, so a feature the UIKit runtime fully implements reads here as
-  an iOS gap. 32 of the recorded gaps are that shape — 28 in
-  `SJUI*` / `SJUIViewCreator`, 4 in the KotlinJsonUI dynamic components — and
+  an iOS gap. 5 of the recorded gaps are that shape — all implemented in the
+  SwiftJsonUI UIKit runtime (`SJUI*`) — and
   each carries a `note` naming the surface. So read a gap as **"the codegen
   does not emit this"**, never as "the platform cannot do this": the two differ
   by a working reference implementation.

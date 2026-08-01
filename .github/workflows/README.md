@@ -23,7 +23,7 @@ The former `protocol-sync.yml` (jui_tools unit tests + sync idempotency) is
 unittest discovery, one workflow per push instead of two. The job split
 (tests, then idempotency) is preserved as ordered steps.
 
-## `conformance-mobile.yml` — nightly (18:00 UTC) + `workflow_dispatch`
+## `conformance-mobile.yml` — weekly (Sunday 18:00 UTC) + `workflow_dispatch`
 
 Full 3-platform conformance matrix. iOS/Android are too slow for per-push
 (iOS ~30 min incl. Xcode build; Android needs an emulator boot).
