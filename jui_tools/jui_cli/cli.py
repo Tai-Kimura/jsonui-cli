@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from .version import version_label
 from .commands.init_cmd import register_init_command, cmd_init
 from .commands.generate_cmd import register_generate_command, cmd_generate
 from .commands.build_cmd import register_build_command, cmd_build
@@ -24,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
         description="JsonUI cross-platform project tool",
     )
     parser.add_argument(
-        "--version", action="version", version=f"%(prog)s 0.1.0"
+        "--version", action="version", version=f"%(prog)s {version_label()}"
     )
     subparsers = parser.add_subparsers(dest="command")
 

@@ -1,9 +1,16 @@
 """Setup for jui_tools."""
+from pathlib import Path
+
 from setuptools import setup, find_packages
+
+# Single-source toolchain version: the VERSION file at the jsonui-cli root.
+# Present in both install layouts (git checkout and the bootstrap-cloned
+# ~/.jsonui-cli, whose cleanup keeps root files other than the installer's).
+_VERSION = (Path(__file__).resolve().parent.parent / "VERSION").read_text(encoding="utf-8").strip()
 
 setup(
     name="jui-tools",
-    version="0.2.0",
+    version=_VERSION,
     description="JsonUI cross-platform project tool",
     packages=find_packages(),
     python_requires=">=3.11",

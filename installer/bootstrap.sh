@@ -185,6 +185,17 @@ fi
 # neither package is fed by shared/ anymore. shared/core/*.json (Ruby tools'
 # copy target below) is unaffected. DO NOT reintroduce a shared/ copy here.
 
+# Stamp the source SHA BEFORE the cleanup below deletes .git. The installed
+# tree is not a git checkout, so this file is the only way `jui --version`
+# and `jui sync_tool` can name the commit the toolchain came from (the
+# version itself comes from the root VERSION file, which cleanup keeps).
+if git rev-parse HEAD >/dev/null 2>&1; then
+    git rev-parse HEAD > SOURCE_SHA
+    success "Stamped SOURCE_SHA ($(cut -c1-12 SOURCE_SHA))"
+else
+    warning "Could not resolve git HEAD — SOURCE_SHA not stamped"
+fi
+
 # Remove unnecessary files for production
 # Keep shared/core/ — jsonui-mcp-server's 4-layer fallback reads
 # attribute_definitions.json and component_metadata.json from there.
