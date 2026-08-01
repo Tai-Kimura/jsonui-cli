@@ -45,6 +45,7 @@ module KjuiTools
             keyboard_type: ["import androidx.compose.foundation.text.KeyboardOptions",
                             "import androidx.compose.ui.text.input.KeyboardType"],
             keyboard_actions: "import androidx.compose.foundation.text.KeyboardActions",
+            keyboard_capitalization: "import androidx.compose.ui.text.input.KeyboardCapitalization",
             focus_requester: ["import androidx.compose.ui.focus.FocusRequester",
                               "import androidx.compose.ui.focus.focusRequester"],
             focus_changed: "import androidx.compose.ui.focus.onFocusChanged",

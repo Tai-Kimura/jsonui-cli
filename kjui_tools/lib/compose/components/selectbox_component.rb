@@ -26,7 +26,7 @@ module KjuiTools
             # two-way selection binding (web reads it; selectedItem wins).
             variable = $1
             "data.#{variable}"
-          elsif json_data['selectedIndex'] && json_data['selectedIndex'].match(/@\{([^}]+)\}/)
+          elsif json_data['selectedIndex'].is_a?(String) && json_data['selectedIndex'].match(/@\{([^}]+)\}/)
             index_var = $1
             items = json_data['items']
             if items.is_a?(String) && items.match(/@\{([^}]+)\}/)
@@ -41,6 +41,13 @@ module KjuiTools
           elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
             variable = $1
             "data.#{variable}"
+          elsif json_data['selectedIndex'].is_a?(Integer) && json_data['items'].is_a?(Array)
+            # Static selectedIndex: display the addressed item, as dynamic
+            # mode does. (An Integer here used to crash the converter —
+            # `.match` on 1:Integer — leaving the template scaffold in place;
+            # caught by the codegen parity host on SelectBox/selectedIndex.)
+            item = json_data['items'][json_data['selectedIndex']]
+            item.nil? ? '""' : "\"#{item}\""
           else
             '""'
           end
@@ -64,7 +71,7 @@ module KjuiTools
             binding_variable = $1
           elsif json_data['selectedValue'] && json_data['selectedValue'].match(/@\{([^}]+)\}/)
             binding_variable = $1
-          elsif json_data['selectedIndex'] && json_data['selectedIndex'].match(/@\{([^}]+)\}/)
+          elsif json_data['selectedIndex'].is_a?(String) && json_data['selectedIndex'].match(/@\{([^}]+)\}/)
             binding_variable = $1
             is_index_binding = true
           elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)

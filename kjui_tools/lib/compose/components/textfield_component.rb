@@ -312,9 +312,15 @@ module KjuiTools
             code += "\n" + indent("contentPadding = PaddingValues(#{json_data['fieldPadding']}.dp),", depth + 1)
           end
 
-          # Text padding left - start padding for text content
-          if !is_secure && json_data['textPaddingLeft']
-            code += "\n" + indent("textPaddingStart = #{json_data['textPaddingLeft']}.dp,", depth + 1)
+          # Text padding left - start padding for text content.
+          # CustomTextField's parameter is contentPadding (PaddingValues) —
+          # `textPaddingStart` was never a parameter and did not compile
+          # (codegen parity host, TextField/textPaddingLeft, 2026-08-02).
+          # fieldPadding above wins when both are declared (one
+          # contentPadding argument only).
+          if !is_secure && json_data['textPaddingLeft'] && !json_data['fieldPadding']
+            required_imports&.add(:padding_values)
+            code += "\n" + indent("contentPadding = PaddingValues(start = #{json_data['textPaddingLeft']}.dp),", depth + 1)
           end
           
           # `tintColor` — the caret accent (UIKit vocabulary), forwarded to

@@ -251,17 +251,17 @@ module KjuiTools
             if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
               handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, 'it')
               if binding_variable
-                code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)); #{handler_call} }", depth + 1)
+                code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)); #{handler_call} },", depth + 1)
               else
-                code += "\n" + indent("onCheckedChange = { #{handler_call} }", depth + 1)
+                code += "\n" + indent("onCheckedChange = { #{handler_call} },", depth + 1)
               end
             else
-              code += "\n" + indent("onCheckedChange = { // ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName} }", depth + 1)
+              code += "\n" + indent("onCheckedChange = { /* ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName} */ },", depth + 1)
             end
           elsif binding_variable
-            code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)) }", depth + 1)
+            code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)) },", depth + 1)
           else
-            code += "\n" + indent("onCheckedChange = { }", depth + 1)
+            code += "\n" + indent("onCheckedChange = { },", depth + 1)
           end
 
           # Build modifiers
