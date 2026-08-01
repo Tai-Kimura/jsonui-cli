@@ -126,6 +126,17 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
             "(asserted there) and is reported as a notice elsewhere."
         ),
     )
+    gate.add_argument(
+        "--parity",
+        action="store_true",
+        help=(
+            "Also judge dynamic ≡ codegen: codegen-host screenshots "
+            "(artifacts/<platform>-codegen) must match the dynamic baseline "
+            "within its threshold, deviations must be recorded in "
+            "codegen_parity.json, and recorded entries must still measure — "
+            "unrecorded drift and stale entries fail."
+        ),
+    )
 
     compat = sub.add_parser(
         "compat-doc",
@@ -235,6 +246,43 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         help="Rewrite coverage.json from the current gaps (reasons are preserved)",
     )
 
+    par = sub.add_parser(
+        "parity",
+        help="Compare codegen-host screenshots against the dynamic baseline (dynamic ≡ codegen)",
+    )
+    par.add_argument(
+        "--platform",
+        required=True,
+        choices=list(_PLATFORMS),
+        help="Platform whose codegen artifacts to measure",
+    )
+    par.add_argument(
+        "--env",
+        default=None,
+        help="Render-environment key of the dynamic baseline to compare against (default: local)",
+    )
+    par.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory (default: {_DEFAULT_OUT})",
+    )
+    par.add_argument(
+        "--codegen-artifacts",
+        default=None,
+        help="Codegen screenshots directory (default: <dir>/artifacts/<platform>-codegen)",
+    )
+    par.add_argument(
+        "--update",
+        action="store_true",
+        help=(
+            "Record the measured deviations into codegen_parity.json (reasons "
+            "and notes of surviving entries are preserved; new entries get the "
+            "unreviewed marker). Without --update, unrecorded deviations and "
+            "stale entries exit non-zero — the same check `gate --parity` runs."
+        ),
+    )
+
     eff = sub.add_parser(
         "effect",
         help="Record/check which fixtures render differently from their control",
@@ -285,9 +333,81 @@ def cmd_conformance(args: argparse.Namespace) -> int:
         return _cmd_coverage(args)
     if target == "effect":
         return _cmd_effect(args)
+    if target == "parity":
+        return _cmd_parity(args)
     print(
-        "Usage: jui conformance <generate|report|gate|baseline|coverage|effect> [options]"
+        "Usage: jui conformance <generate|report|gate|baseline|coverage|effect|parity> [options]"
     )
+    return 1
+
+
+def _cmd_parity(args: argparse.Namespace) -> int:
+    from ..conformance import parity as par
+    from ..conformance.baseline import DEFAULT_ENV
+
+    conformance_dir = Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    env = getattr(args, "env", None) or DEFAULT_ENV
+    codegen_dir = Path(args.codegen_artifacts) if args.codegen_artifacts else None
+
+    result = par.measure(conformance_dir, args.platform, env=env, codegen_dir=codegen_dir)
+    if result.error:
+        print(f"ERROR: nothing was measured: {result.error}")
+        return 1
+
+    compared = len(result.matched) + len(result.mismatched)
+    print(
+        f"codegen parity ({args.platform}, env {env}, threshold {result.threshold}): "
+        f"{compared} screenshot(s) compared against the dynamic baseline"
+    )
+    print(f"  dynamic ≡ codegen: {len(result.matched)}")
+    print(f"  mismatched:        {len(result.mismatched)}")
+    print(f"  missing (no codegen render): {len(result.missing)}")
+    if result.extra:
+        print(f"  extra codegen shots without a baseline hash: {len(result.extra)}")
+
+    path = par.ledger_path(conformance_dir)
+    ledger = par.load_ledger(path)
+
+    if args.update:
+        merged = par.update_ledger(ledger, result)
+        path.write_text(par.render_ledger(merged), encoding="utf-8")
+        platform_entries = sum(1 for k in merged if k[1] == args.platform)
+        unreviewed = sum(
+            1
+            for k, e in merged.items()
+            if k[1] == args.platform and e.get("reason") == par.UNREVIEWED
+        )
+        print(
+            f"  ledger written to {path} ({platform_entries} entr(y/ies) for "
+            f"{args.platform}, {unreviewed} unreviewed)"
+        )
+        return 0
+
+    verdict = par.check(result, ledger)
+    if verdict.unrecorded:
+        print()
+        print(
+            f"{len(verdict.unrecorded)} deviation(s) not recorded in {path.name} — "
+            "fix the codegen or record + justify with `jui conformance parity --update`:"
+        )
+        for line in verdict.unrecorded[:30]:
+            print(f"  {line}")
+        if len(verdict.unrecorded) > 30:
+            print(f"  … {len(verdict.unrecorded) - 30} more")
+    if verdict.stale:
+        print()
+        print(
+            f"{len(verdict.stale)} ledger entr(y/ies) the measurement no longer supports "
+            "(codegen now matches — prune with `jui conformance parity --update`):"
+        )
+        for name in verdict.stale[:30]:
+            print(f"  {name}")
+    if verdict.ok:
+        print()
+        print(
+            f"parity OK: no unrecorded drift ({verdict.accepted} accepted deviation(s) on ledger)"
+        )
+        return 0
     return 1
 
 
@@ -575,6 +695,7 @@ def _cmd_gate(args: argparse.Namespace) -> int:
             out_path=out_path,
             visual=not args.no_visual,
             env=env,
+            parity=bool(getattr(args, "parity", False)),
         )
     except ReportError as e:
         print(f"ERROR: {e}")

@@ -128,6 +128,7 @@ def evaluate(
     visual: bool = True,
     ratchet: dict[str, dict[str, int]] | None = None,
     env: str = DEFAULT_ENV,
+    parity: bool = False,
 ) -> GateOutcome:
     """Render REPORT.md and judge *platforms*. Raises ReportError on bad inputs."""
     conformance_dir = Path(conformance_dir)
@@ -136,7 +137,46 @@ def evaluate(
     )
     if ratchet is None:
         ratchet = load_ratchet(conformance_dir)
-    return judge(summary, platforms, visual=visual, ratchet=ratchet, env=env)
+    outcome = judge(summary, platforms, visual=visual, ratchet=ratchet, env=env)
+
+    if parity and visual:
+        # dynamic ≡ codegen, judged per selected platform against the same
+        # env's dynamic baseline. Requested explicitly (--parity) — a missing
+        # codegen artifacts dir is then a failure, not a silent skip: the
+        # lane that asks for parity must actually have run the codegen host.
+        from . import parity as parity_mod
+
+        ledger = parity_mod.load_ledger(parity_mod.ledger_path(conformance_dir))
+        for p in list(dict.fromkeys(platforms)):
+            result = parity_mod.measure(conformance_dir, p, env=env)
+            verdict = parity_mod.check(result, ledger)
+            if verdict.error:
+                outcome.problems.append(f"{p}: parity not measured — {verdict.error}")
+                continue
+            if verdict.unrecorded:
+                shown = ", ".join(verdict.unrecorded[:5]) + (
+                    " …" if len(verdict.unrecorded) > 5 else ""
+                )
+                outcome.problems.append(
+                    f"{p}: {len(verdict.unrecorded)} codegen-parity deviation(s) not in "
+                    f"{parity_mod.LEDGER_NAME} — dynamic and generated code no longer "
+                    f"draw the same thing: {shown}"
+                )
+            if verdict.stale:
+                shown = ", ".join(verdict.stale[:5]) + (
+                    " …" if len(verdict.stale) > 5 else ""
+                )
+                outcome.problems.append(
+                    f"{p}: {len(verdict.stale)} stale {parity_mod.LEDGER_NAME} entr(y/ies) — "
+                    f"codegen now matches; prune with `jui conformance parity --update "
+                    f"--platform {p}`: {shown}"
+                )
+            if verdict.ok:
+                outcome.notices.append(
+                    f"{p}: codegen parity OK — {len(result.matched)} matched, "
+                    f"{verdict.accepted} accepted deviation(s) on ledger"
+                )
+    return outcome
 
 
 def judge(
