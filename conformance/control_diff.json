@@ -165,13 +165,27 @@
       "fixture": "Collection/columns__static",
       "platforms": [
         "android",
+        "ios",
         "web"
+      ]
+    },
+    {
+      "fixture": "Collection/defaultScrollAnchor__bottom",
+      "platforms": [
+        "ios"
+      ]
+    },
+    {
+      "fixture": "Collection/defaultScrollAnchor__center",
+      "platforms": [
+        "ios"
       ]
     },
     {
       "fixture": "Collection/horizontalScroll__true",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
@@ -179,6 +193,7 @@
       "fixture": "Collection/insetHorizontal__static",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
@@ -186,6 +201,7 @@
       "fixture": "Collection/insetVertical__static",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
@@ -193,6 +209,7 @@
       "fixture": "Collection/insets__static",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
@@ -200,32 +217,49 @@
       "fixture": "Collection/itemSpacing__static",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "Collection/layout__flow",
       "platforms": [
-        "android"
+        "android",
+        "ios"
       ]
     },
     {
       "fixture": "Collection/layout__flow_2",
       "platforms": [
-        "android"
+        "android",
+        "ios"
       ]
     },
     {
       "fixture": "Collection/layout__horizontal",
       "platforms": [
         "android",
+        "ios",
         "web"
+      ]
+    },
+    {
+      "fixture": "Collection/lazy__eager",
+      "platforms": [
+        "ios"
+      ]
+    },
+    {
+      "fixture": "Collection/lazy__none",
+      "platforms": [
+        "ios"
       ]
     },
     {
       "fixture": "Collection/lineSpacing__static",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
@@ -233,6 +267,7 @@
       "fixture": "Collection/orientation__horizontal",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
@@ -443,6 +478,12 @@
     },
     {
       "fixture": "Indicator/color__static",
+      "platforms": [
+        "ios"
+      ]
+    },
+    {
+      "fixture": "Indicator/hidesWhenStopped__true",
       "platforms": [
         "ios"
       ]
