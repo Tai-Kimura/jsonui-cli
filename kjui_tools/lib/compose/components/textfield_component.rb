@@ -377,14 +377,21 @@ module KjuiTools
             style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(tf_resolved_var, required_imports))
           end
 
-          # Use fontColor if specified, otherwise default to black
+          # Use fontColor if specified; the undeclared default routes through
+          # Configuration.TextField (the theming surface the dynamic component
+          # already uses) — the old hardcoded #000000 made codegen fields
+          # render darker than dynamic ones (parity family F5).
           if json_data['fontColor']
             color_value = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
             style_parts << "color = #{color_value}" if color_value
           else
-            # Default to black text
-            default_color = Helpers::ResourceResolver.process_color('#000000', required_imports)
-            style_parts << "color = #{default_color}"
+            style_parts << "color = Configuration.TextField.defaultTextColor"
+          end
+
+          # Undeclared font size follows the same Configuration default the
+          # dynamic component applies (LocalTextStyle's 16sp is not it).
+          unless tf_resolved_var
+            style_parts << "fontSize = Configuration.TextField.defaultFontSize.sp"
           end
 
           if json_data['textAlign']

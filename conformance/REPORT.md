@@ -70,7 +70,7 @@ Each visual fixture is compared against its **control** — the same layout with
 
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
-| android | 391 | 143 | 248 | 0 | 0 |
+| android | 391 | 130 | 261 | 0 | 0 |
 | ios | 422 | 130 | 292 | 0 | 0 |
 | web | 405 | 176 | 229 | 0 | 0 |
 
