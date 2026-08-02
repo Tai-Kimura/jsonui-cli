@@ -672,6 +672,19 @@ module KjuiTools
               seg = seg_lines.join("\n")
               next if dangling_lazy_dsl?(seg)
 
+              # A segment (possibly widened by merge_leading_vals) may declare
+              # `val`s whose CONSUMERS remain below the cut — lifting
+              # `val cellViewModel` + its LaunchedEffect while the
+              # `CellView(viewModel = cellViewModel)` call stays behind
+              # strands the reference (first hit by the conformance
+              # flow-layout collection). Refuse such segments outright:
+              # a declaration travels only when every consumer travels too.
+              declared_in_seg = seg.scan(/\b(?:val|var)\s+(\w+)\b/).flatten.uniq
+              unless declared_in_seg.empty?
+                trailing = (lines[(close_idx + 1)..] || []).join("\n")
+                next if declared_in_seg.any? { |v| trailing.match?(/\b#{Regexp.escape(v)}\b/) }
+              end
+
               # Cell-scope locals declared outside the segment become typed
               # parameters when their type is spellable; otherwise refuse.
               extra_params = cell_params_for(lines, seg_start, seg, env)
