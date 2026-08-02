@@ -153,7 +153,11 @@ module KjuiTools
           return nil if text.nil?
 
           code = indent("Text(", depth) + "\n"
-          code += indent("text = #{Helpers::ResourceResolver.process_text(text)},", depth + 1)
+          # required_imports must ride along: when the extractor externalized
+          # this text, the resolver emits stringResource(R.string.…) and the
+          # imports have to register with it (missing them left every
+          # IconLabel fixture uncompilable in the codegen parity host).
+          code += indent("text = #{Helpers::ResourceResolver.process_text(text, required_imports)},", depth + 1)
 
           if (color = text_color(json_data, required_imports))
             code += "\n" + indent("color = #{color},", depth + 1)

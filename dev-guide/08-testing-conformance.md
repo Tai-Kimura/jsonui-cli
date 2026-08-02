@@ -55,14 +55,29 @@
   `fixture_generator.py` は機械に徹する。**分類を変えたいときは rules を直す**。
 - 実行ホスト: web = `conformance/hosts/web/`（Vite + Playwright、rjui 実 codegen）、
   iOS = `SwiftJsonUI/ConformanceHost`、Android = `KotlinJsonUI/conformance-host`
-  （ともに **Dynamic モード**で描画。vendored driver 使用）。
+  （既定は **Dynamic モード**描画。vendored driver 使用）。
+- **codegen ホストモード（plan 25）**: 同じモバイルホストが生成コードでも描画できる。
+  `scripts/generate_codegen_host.rb`（各ホスト）が visual fixture を fx_NNNN 名で staging し
+  **本物の `sjui build` / `kjui build`** を通して registry を生成 → iOS は
+  `HOST_MODE=codegen scripts/run_conformance.sh`、Android は同スクリプトが
+  instrumentation 引数 `conformanceHostMode` に転送。出力は `codegen/<p>.results.json` +
+  `artifacts/<p>-codegen/`（dynamic の正本を汚さない）。
 - interactive fixtures は `INTERACTIVE_HOST_CONTRACT.md` の汎用 state provider 1 個で賄う
   （per-fixture ホストコード禁止。データ既定値は各プラットフォームの production パスで注入）。
 - 結果: `results/<platform>.results.json`（`RESULTS_SCHEMA.md` 準拠、manifestHash で stale 検出、
-  全 fixture 分のエントリ必須）。visual は `baselines/<platform>.hashes.json`
-  （dhash-64、Hamming 閾値 8、Pillow）。PNG はコミットしない。
+  全 fixture 分のエントリ必須）。visual は **`baselines/<env>/<platform>.hashes.json`**
+  （dhash-64、Pillow。**ベースラインはレンダ環境ごと**: `local/` = 開発機、`ci/` = CI ランナー。
+  閾値はマニフェスト格納 — 共有既定 8、ci/android のみ 12〈taskbar recents の
+  インスタンス間二値、`baselines/README.md` の較正記録参照〉）。PNG はコミットしない。
 - レポート: `jui conformance report` → `REPORT.md`（クロスプラットフォーム mismatch 表が主ゲート）。
-  baseline 更新: `jui conformance baseline update --platform <p>`。
+  baseline 更新: `jui conformance baseline update --platform <p> [--env <e>] [--threshold N]`。
+  **ci ベースラインは CI アーティファクトから焼く**（ローカルレンダ厳禁 — manifest が env を
+  記録し、別 env での比較は loader が拒否する）。
+- **parity（dynamic ≡ codegen）**: `jui conformance parity --platform <ios|android> [--env e]`
+  が codegen ホストのスクリーンショットを**同一プラットフォームの dynamic ベースライン**と
+  比較する（第 2 の正解は作らない）。乖離は `conformance/codegen_parity.json` に
+  理由付きで記録（coverage.json と同じ運用: 未記録の乖離は fail、実測が消えた entry は
+  stale で fail、`--update` で記録/剪定）。web は対象外（web ホストは元々 codegen 描画）。
 
 ## 5. CI（jsonui-cli/.github/workflows/）
 
@@ -73,7 +88,7 @@
 | python-suite | jui_tools unittest + protocol-sync 冪等性 e2e | 15m |
 | ruby-suites | rspec matrix（sjui は macos-15）Ruby 3.3 | 20m |
 | **ssot-guards** | ①`jui conformance generate` → git diff ゼロ ②attr-bindings 決定論 ③rjui vendored テーブル diff | 10m |
-| web-conformance | Node 24 + Playwright → web.results.json、0 fail / 0 error | 30m |
+| web-conformance | Node 24 + Playwright → web.results.json、gate `--env ci`（**視覚判定あり** — `baselines/ci/web` と比較。fixture 変更時は本レーンのアーティファクトから ci/web を焼き直して同 PR に載せる） | 30m |
 
 ### conformance-mobile.yml（週次: 日曜 18:00 UTC = 月曜 03:00 JST + dispatch）
 
@@ -83,7 +98,11 @@
   （良ランナー ~7 分、悪いと 6 倍）: boot ~2m + gradle ~5m + 20 分×最大 3 attempt の resumable 実行。
   `progress.jsonl` で resume、timeout でチョップされた fixture は 1 回だけ再実行してから error 扱い。
   attempt-1 のみ retry 許容
-- report: 3 job 後、ゲート = 欠落 0 / mismatch 0 / stale 0 / fail 0 / error 0 / visual regression 0
+- **ios-codegen / android-codegen**: 同じ fixture を生成コードで描画する 2 レーン
+  （sjui/kjui 実 codegen → registry → HOST_MODE=codegen。予算は dynamic レーンと同算数）
+- report: 5 job 後、ゲート = 欠落 0 / mismatch 0 / stale 0 / fail 0 / error 0 /
+  visual regression 0 / ratchet 天井内 / **parity（codegen ⇔ dynamic ci ベースライン、
+  codegen_parity.json 台帳照合）**。すべて `jui conformance gate --env ci --parity` 1 コマンド
 
 **CI 予算の鉄則**（過去の実測から）: cancelled はまず timeout 到達を疑う。fixture を増やしたら
 再採寸する（ローカル実測 × 5-7 倍が CI 目安）。attempt < step < job の算数を workflow コメントに書く。
@@ -91,7 +110,9 @@
 ## 6. よくある作業
 
 **fixture を増やす/変える**: 手書きしない。SSoT か rules.py を変更 → `jui conformance generate` →
-diff が意図どおりか確認 → 各ホストで実行 → visual なら baseline 更新 → report ゲート確認。
+diff が意図どおりか確認 → 各ホストで実行 → visual なら baseline 更新（local は手元、
+**ci は次の conformance-mobile dispatch のアーティファクトから焼き直し**）→ report ゲート確認。
+codegen ホストは staging を作り直すだけ（`generate_codegen_host.rb` 再実行）。
 
 **テストアクションを追加する**（全レイヤー横断、単一コマンドなし）:
 1. `schemas/actions.schema.json`（definitions + oneOf + **`x-doc {ja, platforms}` 必須** —
