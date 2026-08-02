@@ -100,6 +100,47 @@ representation across the three runtimes. The state vocabulary is fixed:
 `conformanceFire` handler (`set` kind), and the `confPush` / `confPop`
 handlers (`embed` kind, Embed isolated fixtures).
 
+## 4. Collection data supply (F4 Phase 2 prerequisite, 2026-08-02)
+
+Static Collection fixtures need item data to render cells, and the four
+render paths consume it differently — the only declaration channel all four
+share is the **layout root `data` section**, so that is the contract:
+
+```json
+"data": [
+  { "name": "items", "class": "CollectionDataSource", "defaultValue": [
+      { "title": "Alpha" }, { "title": "Beta" }, { "title": "Gamma" }
+  ] }
+]
+```
+
+`defaultValue` accepts two shapes:
+
+- **shorthand** — a bare array of cell dictionaries: one section holding
+  exactly these cells (the form the fixture generator emits);
+- **explicit** — `{"sections": [{"cell": <name?>, "cells": [ {...} ]}, ...]}`
+  for multi-section fixtures. The renderer takes each section's cell view
+  name from the Collection node's own `sections` declaration; a `cell` name
+  here is carried only for data-source fidelity.
+
+Host obligation per path (the host plays the consumer ViewModel's role):
+
+- **iOS dynamic**: `CollectionConverter` resolves `items: "@{prop}"` via
+  `data[prop] as? CollectionDataSource` — a raw defaultValue dictionary never
+  survives that cast, so the host must materialize a real
+  `SwiftJsonUI.CollectionDataSource` and pass it in the external data (which
+  overrides `mergeDataDefaults`). Implemented: `ConformanceHost`
+  `ConformanceStateProvider.swift` requirement 4 (2026-08-02).
+- **Android dynamic**: KotlinJsonUI consumes the `sections`/`cellTemplate`
+  route; supply status pending the four-path unification (31 F4 Phase 2).
+- **iOS / Android codegen**: generated Data classes default-initialize from
+  the layout `data` declaration (array-default support unverified — 31 F4
+  Phase 2 scope).
+
+This channel is independent of the manifest `state` block (Collection
+fixtures are static, not interactive); it exists for any fixture whose
+layout declares a `CollectionDataSource`-classed data entry.
+
 ## Fixture case types the host will encounter
 
 | case | mechanism exercised | trigger |
