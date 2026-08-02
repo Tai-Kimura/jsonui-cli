@@ -474,7 +474,21 @@ BASE_ATTRS: dict[str, dict[str, Any]] = {
     "CircleView": {"width": 100, "height": 100, "background": "#DDDDDD"},
     "GradientView": {"width": 100, "height": 100, "gradient": ["#FF0000", "#0000FF"]},
     "Blur": {"width": 100, "height": 100},
-    "Collection": {"width": 200, "height": 200, "background": "#DDDDDD"},
+    # Collections render their declared cells (F4 Phase 2): without them a
+    # bare container is all any layout attribute (columns, itemSpacing,
+    # insets...) has to act on, and every such fixture renders identically.
+    # The cell view name doubles as the layout FILE stem — iOS dynamic loads
+    # it verbatim, Android dynamic snake_cases it (identity here), the three
+    # codegens PascalCase it — so it must stay snake_case. Item data arrives
+    # through the layout root `data` section (BASE_DATA below), the one
+    # channel all four render paths share (INTERACTIVE_HOST_CONTRACT.md §4).
+    "Collection": {
+        "width": 200,
+        "height": 200,
+        "background": "#DDDDDD",
+        "sections": [{"cell": "conformance_cell"}],
+        "items": "@{items}",
+    },
     "TabView": {"width": "matchParent", "height": "matchParent", "tabs": [{"title": "One"}, {"title": "Two"}]},
     # An explicit width wider than the text is what makes `textAlign` /
     # `gravity` observable. On wrapContent these hosts are exactly as wide as
@@ -602,6 +616,63 @@ BASE_CHILDREN: dict[str, list[dict[str, Any]]] = {
     "CircleView": [],
     "Collection": [],
     "TabView": [],
+}
+
+# --------------------------------------------------------------------------- #
+# Collection cell supply (F4 Phase 2 — INTERACTIVE_HOST_CONTRACT.md §4)
+# --------------------------------------------------------------------------- #
+
+#: Layout root ``data`` section entries injected per host. The shorthand
+#: CollectionDataSource shape (bare cell array = one section) pairs with the
+#: ``sections``/``items`` base attrs above; each render path materializes it
+#: through its own production channel (generated Data-class defaults on the
+#: codegen paths, host-side materialization on the dynamic paths).
+BASE_DATA: dict[str, list[dict[str, Any]]] = {
+    "Collection": [
+        {
+            "name": "items",
+            "class": "CollectionDataSource",
+            "defaultValue": [
+                {"title": "Alpha"},
+                {"title": "Beta"},
+                {"title": "Gamma"},
+            ],
+        },
+    ],
+}
+
+#: Companion layouts (conformance-root-relative) recorded on every manifest
+#: entry whose host needs them. Companions ride the SAME distribution channel
+#: as the Embed screens: each host mirrors every manifest ``companions`` path
+#: into the directory its production loader reads (assets/Layouts on Android,
+#: Resources/Layouts on iOS, Layouts/pages on web) under the bare file name.
+BASE_COMPANIONS: dict[str, list[str]] = {
+    "Collection": ["fixtures/Collection/__cells/conformance_cell.layout.json"],
+}
+
+#: Companion layout payloads the generator writes once per run, keyed by
+#: their conformance-root-relative path. Fixed 60x28 cells keep grid effects
+#: (columns, spacing, insets) visible inside the 200x200 host without the
+#: infinite-constraint edge cases a matchParent cell hits in horizontal and
+#: flow layouts.
+SUPPORT_LAYOUTS: dict[str, dict[str, Any]] = {
+    "fixtures/Collection/__cells/conformance_cell.layout.json": {
+        "type": "View",
+        "id": "cell_root",
+        "width": 60,
+        "height": 28,
+        "background": "#3366CC",
+        "child": [
+            {
+                "type": "Label",
+                "id": "cell_title",
+                "text": "@{title}",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 4,
+            }
+        ],
+    },
 }
 
 #: Hosts for ``common`` attributes that only make sense on an interactive

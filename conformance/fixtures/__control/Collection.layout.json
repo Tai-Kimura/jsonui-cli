@@ -17,7 +17,30 @@
       "id": "target",
       "width": 200,
       "height": 200,
-      "background": "#DDDDDD"
+      "background": "#DDDDDD",
+      "sections": [
+        {
+          "cell": "conformance_cell"
+        }
+      ],
+      "items": "@{items}"
+    }
+  ],
+  "data": [
+    {
+      "name": "items",
+      "class": "CollectionDataSource",
+      "defaultValue": [
+        {
+          "title": "Alpha"
+        },
+        {
+          "title": "Beta"
+        },
+        {
+          "title": "Gamma"
+        }
+      ]
     }
   ]
 }

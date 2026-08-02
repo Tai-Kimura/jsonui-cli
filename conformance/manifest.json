@@ -11883,7 +11883,10 @@
       "test": "fixtures/Collection/lazy__lazy.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/lazy__eager",
@@ -11906,7 +11909,10 @@
       "test": "fixtures/Collection/lazy__eager.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/lazy__none",
@@ -11929,7 +11935,10 @@
       "test": "fixtures/Collection/lazy__none.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/columns__static",
@@ -11952,7 +11961,10 @@
       "test": "fixtures/Collection/columns__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/columnSpacing__static",
@@ -11975,7 +11987,10 @@
       "test": "fixtures/Collection/columnSpacing__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/itemSpacing__static",
@@ -11998,7 +12013,10 @@
       "test": "fixtures/Collection/itemSpacing__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/lineSpacing__static",
@@ -12021,7 +12039,10 @@
       "test": "fixtures/Collection/lineSpacing__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/horizontalScroll__true",
@@ -12044,7 +12065,10 @@
       "test": "fixtures/Collection/horizontalScroll__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/orientation__horizontal",
@@ -12067,7 +12091,10 @@
       "test": "fixtures/Collection/orientation__horizontal.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/orientation__vertical",
@@ -12090,7 +12117,10 @@
       "test": "fixtures/Collection/orientation__vertical.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/layout__vertical",
@@ -12113,7 +12143,10 @@
       "test": "fixtures/Collection/layout__vertical.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/layout__horizontal",
@@ -12136,7 +12169,10 @@
       "test": "fixtures/Collection/layout__horizontal.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/layout__flow",
@@ -12159,7 +12195,10 @@
       "test": "fixtures/Collection/layout__flow.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/layout__flow_2",
@@ -12182,7 +12221,10 @@
       "test": "fixtures/Collection/layout__flow_2.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/layout__leftaligned",
@@ -12205,7 +12247,10 @@
       "test": "fixtures/Collection/layout__leftaligned.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/layout__leftaligned_2",
@@ -12228,7 +12273,10 @@
       "test": "fixtures/Collection/layout__leftaligned_2.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/insets__static",
@@ -12256,7 +12304,10 @@
       "test": "fixtures/Collection/insets__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/insetHorizontal__static",
@@ -12279,7 +12330,10 @@
       "test": "fixtures/Collection/insetHorizontal__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/insetVertical__static",
@@ -12302,7 +12356,10 @@
       "test": "fixtures/Collection/insetVertical__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/contentInsets__static",
@@ -12328,7 +12385,10 @@
       "test": "fixtures/Collection/contentInsets__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/itemWeight__static",
@@ -12349,7 +12409,10 @@
       "test": "fixtures/Collection/itemWeight__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/showsHorizontalScrollIndicator__true",
@@ -12371,7 +12434,10 @@
       "test": "fixtures/Collection/showsHorizontalScrollIndicator__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/showsVerticalScrollIndicator__true",
@@ -12393,7 +12459,10 @@
       "test": "fixtures/Collection/showsVerticalScrollIndicator__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/columnCount__static",
@@ -12414,7 +12483,10 @@
       "test": "fixtures/Collection/columnCount__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/scrollAnchor__top",
@@ -12437,7 +12509,10 @@
       "test": "fixtures/Collection/scrollAnchor__top.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/scrollAnchor__center",
@@ -12460,7 +12535,10 @@
       "test": "fixtures/Collection/scrollAnchor__center.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/scrollAnchor__bottom",
@@ -12483,7 +12561,10 @@
       "test": "fixtures/Collection/scrollAnchor__bottom.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/defaultScrollAnchor__top",
@@ -12506,7 +12587,10 @@
       "test": "fixtures/Collection/defaultScrollAnchor__top.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/defaultScrollAnchor__center",
@@ -12529,7 +12613,10 @@
       "test": "fixtures/Collection/defaultScrollAnchor__center.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/defaultScrollAnchor__bottom",
@@ -12552,7 +12639,10 @@
       "test": "fixtures/Collection/defaultScrollAnchor__bottom.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/reverseLayout__true",
@@ -12573,7 +12663,10 @@
       "test": "fixtures/Collection/reverseLayout__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Collection/containerInset__static",
@@ -12594,7 +12687,10 @@
       "test": "fixtures/Collection/containerInset__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection"
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "Radio/label__static",
@@ -14520,7 +14616,10 @@
       "state": null,
       "promotedFrom": null,
       "control": null,
-      "isControl": true
+      "isControl": true,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     },
     {
       "id": "__control/GradientView",

@@ -375,6 +375,16 @@ module RjuiTools
             return to_pascal_case(base_name)
           end
 
+          # Layout-file view names ("conformance_cell") resolve exactly like
+          # the path branch above: the component rjui build generates from
+          # conformance_cell.json is ConformanceCell — the same name
+          # extract_included_components imports and
+          # extract_collection_cell_types types against. The UIKit-suffix
+          # heuristics below are for migrated UIKit CLASS names, which are
+          # always PascalCase; running a snake_case name through them emitted
+          # "conformance_CellView", a component that exists nowhere.
+          return to_pascal_case(class_name) if class_name.include?('_') || class_name.match?(/^[a-z]/)
+
           # If already PascalCase React component name (starts with uppercase, no underscores),
           # use as-is without appending 'View'
           if class_name.match?(/^[A-Z]/) && !class_name.include?('_') &&

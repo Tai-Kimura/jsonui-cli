@@ -154,7 +154,7 @@ def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> d
         root_children.append(dict(ANCHOR_NODE))
     root_children.append(target)
 
-    return {
+    layout: dict[str, Any] = {
         "_generated": json_marker(source=source_label, generator=GENERATOR_NAME),
         "type": "View",
         "id": "root",
@@ -162,6 +162,10 @@ def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> d
         "height": "matchParent",
         "child": root_children,
     }
+    base_data = rules.BASE_DATA.get(plan.host)
+    if base_data:
+        layout["data"] = [dict(entry) for entry in base_data]
+    return layout
 
 
 def build_test(plan: AttributePlan, case: CasePlan, layout_rel: str) -> dict:
@@ -315,7 +319,7 @@ def build_interactive_test(plan: InteractivePlan, spec: InteractiveSpec, layout_
 def build_manifest_entry(
     plan: AttributePlan, case: CasePlan, layout_rel: str, test_rel: str
 ) -> dict:
-    return {
+    entry = {
         "id": f"{plan.section}/{plan.attribute}__{case.name}",
         "component": plan.section,
         "attribute": plan.attribute,
@@ -344,6 +348,10 @@ def build_manifest_entry(
             else None
         ),
     }
+    companions = rules.BASE_COMPANIONS.get(plan.host)
+    if companions:
+        entry["companions"] = list(companions)
+    return entry
 
 
 # --------------------------------------------------------------------------- #
@@ -420,7 +428,7 @@ def build_control_layout(
         root_children.append(dict(ANCHOR_NODE))
     root_children.append(target)
 
-    return {
+    layout: dict[str, Any] = {
         "_generated": json_marker(source=source_label, generator=GENERATOR_NAME),
         "type": "View",
         "id": "root",
@@ -428,6 +436,10 @@ def build_control_layout(
         "height": "matchParent",
         "child": root_children,
     }
+    base_data = rules.BASE_DATA.get(host)
+    if base_data:
+        layout["data"] = [dict(entry) for entry in base_data]
+    return layout
 
 
 def build_control_test(
@@ -466,7 +478,7 @@ def build_control_test(
 def build_control_manifest_entry(
     host: str, needs_anchor: bool, layout_rel: str, test_rel: str, shape: str = ""
 ) -> dict:
-    return {
+    entry = {
         "id": control_id(host, needs_anchor, shape),
         "component": "__control",
         "attribute": None,
@@ -486,6 +498,10 @@ def build_control_manifest_entry(
         "control": None,
         "isControl": True,
     }
+    companions = rules.BASE_COMPANIONS.get(host)
+    if companions:
+        entry["companions"] = list(companions)
+    return entry
 
 
 def build_interactive_manifest_entry(
@@ -653,6 +669,19 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
         )
         summary.fixture_count += 1
         summary.control_count += 1
+
+    # Companion support layouts declared by rules.SUPPORT_LAYOUTS (today: the
+    # shared Collection cell). Written once; every manifest entry whose host
+    # lists them in rules.BASE_COMPANIONS references them by this path.
+    for rel_path, payload in rules.SUPPORT_LAYOUTS.items():
+        target = out_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        support_layout = {
+            "_generated": json_marker(source=source_label, generator=GENERATOR_NAME),
+            **payload,
+        }
+        target.write_text(_dump_json(support_layout), encoding="utf-8")
+        summary.files_written += 1
 
     # Bespoke Embed semantic fixtures (cross-file: companion embedded-screen
     # layouts under fixtures/Embed/__screens/). The generic per-attribute

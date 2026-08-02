@@ -18,7 +18,30 @@
       "width": 200,
       "height": 200,
       "background": "#DDDDDD",
+      "sections": [
+        {
+          "cell": "conformance_cell"
+        }
+      ],
+      "items": "@{items}",
       "reverseLayout": true
+    }
+  ],
+  "data": [
+    {
+      "name": "items",
+      "class": "CollectionDataSource",
+      "defaultValue": [
+        {
+          "title": "Alpha"
+        },
+        {
+          "title": "Beta"
+        },
+        {
+          "title": "Gamma"
+        }
+      ]
     }
   ]
 }

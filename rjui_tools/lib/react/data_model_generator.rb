@@ -797,6 +797,10 @@ module RjuiTools
       def format_default_value(value, ts_type, json_class = nil)
         return 'undefined' if value.nil?
 
+        if json_class == 'CollectionDataSource' && (value.is_a?(Array) || value.is_a?(Hash))
+          return collection_data_source_literal(value)
+        end
+
         case ts_type
         when 'string'
           # Handle '' as empty string (common shorthand)
@@ -822,6 +826,33 @@ module RjuiTools
             value.to_s
           end
         end
+      end
+
+      # CollectionDataSource defaultValue → constructor call. Shapes
+      # (INTERACTIVE_HOST_CONTRACT.md §4): shorthand `[ {...} ]` (one section
+      # holding these cell dicts) or explicit
+      # `{"sections" => [{"cell" => name?, "cells" => [...]}]}`. The generated
+      # collection component reads `items?.sections?.[i]?.cells?.data`, which
+      # a plain array literal never satisfies. Cell view names come from the
+      # node's own `sections` declaration — the TS section shape carries none.
+      def collection_data_source_literal(value)
+        sections =
+          if value.is_a?(Array)
+            [{ 'cells' => value }]
+          elsif value['sections'].is_a?(Array)
+            value['sections']
+          else
+            []
+          end
+        return 'new CollectionDataSource()' if sections.empty?
+
+        section_literals = sections.map do |section|
+          next nil unless section.is_a?(Hash)
+          cells = section['cells'].is_a?(Array) ? section['cells'] : []
+          "{ cells: { data: #{to_js_literal(cells)} } }"
+        end.compact
+
+        "new CollectionDataSource([#{section_literals.join(', ')}])"
       end
 
       # Render a data-section Hash/Array defaultValue as a real (recursive)
