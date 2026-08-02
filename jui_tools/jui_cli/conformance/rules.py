@@ -655,6 +655,13 @@ BASE_COMPANIONS: dict[str, list[str]] = {
 #: (columns, spacing, insets) visible inside the 200x200 host without the
 #: infinite-constraint edge cases a matchParent cell hits in horizontal and
 #: flow layouts.
+#:
+#: The ``data`` section is load-bearing: kjui/sjui Data generation derives
+#: properties from it ONLY (no binding inference), so without it the
+#: generated cell view reads ``data.title`` off a Data class that has no
+#: such property and the codegen host does not compile. rjui and the
+#: dynamic renderers infer/resolve the binding either way; the declared
+#: empty default is overridden by each rendered cell's data.
 SUPPORT_LAYOUTS: dict[str, dict[str, Any]] = {
     "fixtures/Collection/__cells/conformance_cell.layout.json": {
         "type": "View",
@@ -662,6 +669,9 @@ SUPPORT_LAYOUTS: dict[str, dict[str, Any]] = {
         "width": 60,
         "height": 28,
         "background": "#3366CC",
+        "data": [
+            {"name": "title", "class": "String", "defaultValue": ""}
+        ],
         "child": [
             {
                 "type": "Label",

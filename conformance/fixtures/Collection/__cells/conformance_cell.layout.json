@@ -12,6 +12,13 @@
   "width": 60,
   "height": 28,
   "background": "#3366CC",
+  "data": [
+    {
+      "name": "title",
+      "class": "String",
+      "defaultValue": ""
+    }
+  ],
   "child": [
     {
       "type": "Label",
