@@ -678,15 +678,6 @@
       "note": ""
     },
     {
-      "screenshot": "Blur_effectStyle__extralight.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 10,
-      "reason": "kjui-codegen-blur-approximation: the canonical 'Blur' type now dispatches (only the 'BlurView' alias used to), but the codegen BlurviewComponent approximates the effect while dynamic renders the real haze surface — residual visual difference",
-      "note": ""
-    },
-    {
       "screenshot": "CheckBox_icon__static.png",
       "platform": "android",
       "env": "local",
@@ -700,7 +691,7 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 15,
+      "distance": 16,
       "reason": "kjui-codegen-selection-icon-placement: custom icon/label cluster renders at the trailing edge (dynamic: leading) and custom icons substitute differently — selection-component wrapper alignment family, adjacent to F5",
       "note": ""
     },
@@ -714,20 +705,11 @@
       "note": ""
     },
     {
-      "screenshot": "Collection_layout__flow.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 18,
-      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": ""
-    },
-    {
       "screenshot": "GradientView_gradient__static.png",
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 19,
+      "distance": 18,
       "reason": "kjui-codegen-gradientview-placement: declared gradient colors/direction now render on both paths (the kotlin pair used to drop them); the residual is placement only — the codegen box renders offset (trailing/lower) vs dynamic's leading placement",
       "note": ""
     },
@@ -736,7 +718,7 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 19,
+      "distance": 18,
       "reason": "kjui-codegen-gradientview-placement: declared gradient colors/direction now render on both paths (the kotlin pair used to drop them); the residual is placement only — the codegen box renders offset (trailing/lower) vs dynamic's leading placement",
       "note": ""
     },
@@ -772,7 +754,7 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 22,
+      "distance": 24,
       "reason": "kjui-codegen-label-render: edgeInset positioning and highlightAttributes applied statically (codegen shows highlight color in the unpressed state — codegen-side suspect) — small Label family",
       "note": ""
     },
@@ -781,7 +763,7 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 19,
+      "distance": 18,
       "reason": "kjui-codegen-selection-icon-placement: custom icon/label cluster renders at the trailing edge (dynamic: leading) and custom icons substitute differently — selection-component wrapper alignment family, adjacent to F5",
       "note": ""
     },
@@ -790,7 +772,7 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 12,
+      "distance": 13,
       "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
       "note": ""
     },
@@ -799,7 +781,7 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 12,
+      "distance": 13,
       "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
       "note": ""
     },
@@ -808,7 +790,7 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 11,
+      "distance": 12,
       "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
       "note": ""
     },
@@ -817,7 +799,7 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 11,
+      "distance": 12,
       "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
       "note": ""
     },
@@ -826,7 +808,7 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 11,
+      "distance": 12,
       "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
       "note": ""
     },
@@ -835,7 +817,7 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 11,
+      "distance": 12,
       "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
       "note": ""
     },
@@ -844,7 +826,7 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 11,
+      "distance": 12,
       "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
       "note": ""
     },
@@ -862,7 +844,7 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 55,
+      "distance": 10,
       "reason": "kjui-codegen-web-render: inline html/content surface not rendered by the codegen host path (dynamic shows the web content)",
       "note": ""
     },
@@ -889,7 +871,7 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 19,
+      "distance": 18,
       "reason": "kjui-codegen-gradientview-placement: declared gradient colors/direction now render on both paths (the kotlin pair used to drop them); the residual is placement only — the codegen box renders offset (trailing/lower) vs dynamic's leading placement",
       "note": ""
     },
@@ -898,17 +880,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 11,
+      "distance": 12,
       "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
-      "note": ""
-    },
-    {
-      "screenshot": "control_Web.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 50,
-      "reason": "kjui-codegen-web-render: inline html/content surface not rendered by the codegen host path (dynamic shows the web content)",
       "note": ""
     },
     {

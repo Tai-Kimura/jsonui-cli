@@ -70,7 +70,7 @@ Each visual fixture is compared against its **control** — the same layout with
 
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
-| android | 391 | 140 | 251 | 0 | 0 |
+| android | 391 | 152 | 239 | 0 | 0 |
 | ios | 422 | 133 | 289 | 0 | 0 |
 | web | 405 | 186 | 219 | 0 | 0 |
 
@@ -78,11 +78,9 @@ Each visual fixture is compared against its **control** — the same layout with
 
 | Platform | Runner | Results | pass | fail | error | skipped | Manifest |
 |---|---|---|---|---|---|---|---|
-| android | uiautomator 2.3.0 | 670 | 528 | 0 | 0 | 142 | ⚠️ STALE |
+| android | uiautomator 2.3.0 | 670 | 528 | 0 | 0 | 142 | current |
 | ios | xcuitest ios-18.6 | 670 | 558 | 0 | 0 | 112 | ⚠️ STALE |
 | web | playwright 1.61.1 | 670 | 541 | 0 | 0 | 129 | current |
-
-> ⚠️ `android.results.json` was produced against manifest `ad2a425e15f6018b858f5d14a33ef7c39e9d7d64825f49e7756e6f544622864f` but the current manifest is `b752efa41f62d8928371d1ad3aa2a31e40f813db76bb5a5998969f23acd92d9d` — results are stale; re-run the android suite.
 
 > ⚠️ `ios.results.json` was produced against manifest `ad2a425e15f6018b858f5d14a33ef7c39e9d7d64825f49e7756e6f544622864f` but the current manifest is `b752efa41f62d8928371d1ad3aa2a31e40f813db76bb5a5998969f23acd92d9d` — results are stale; re-run the ios suite.
 
