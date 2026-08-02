@@ -156,6 +156,66 @@
       ]
     },
     {
+      "fixture": "Collection/columnCount__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Collection/columns__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Collection/horizontalScroll__true",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Collection/insetHorizontal__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Collection/insetVertical__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Collection/insets__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Collection/itemSpacing__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Collection/layout__horizontal",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Collection/lineSpacing__static",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "fixture": "Collection/orientation__horizontal",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
       "fixture": "GradientView/gradientDirection__horizontal",
       "platforms": [
         "android",
@@ -855,7 +915,8 @@
     {
       "fixture": "Switch/value__true",
       "platforms": [
-        "android"
+        "android",
+        "web"
       ]
     },
     {

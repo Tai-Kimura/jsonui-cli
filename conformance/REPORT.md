@@ -2,7 +2,7 @@
 
 # JsonUI Conformance Report
 
-- Manifest: `ad2a425e15f6018b858f5d14a33ef7c39e9d7d64825f49e7756e6f544622864f` (sha256)
+- Manifest: `b752efa41f62d8928371d1ad3aa2a31e40f813db76bb5a5998969f23acd92d9d` (sha256)
 - Definitions: `b01bc992ef4ce5e11c1d83de119398c84f027b8d1a6081b3910fcdcb3504feab` (sha256)
 - Fixtures: 670 (assertable: 29, visual: 572, interactive: 35) / skipped attributes: 154
 
@@ -72,15 +72,19 @@ Each visual fixture is compared against its **control** — the same layout with
 |---|---|---|---|---|---|
 | android | 391 | 140 | 251 | 0 | 0 |
 | ios | 422 | 133 | 289 | 0 | 0 |
-| web | 405 | 176 | 229 | 0 | 0 |
+| web | 405 | 186 | 219 | 0 | 0 |
 
 ## Platforms
 
 | Platform | Runner | Results | pass | fail | error | skipped | Manifest |
 |---|---|---|---|---|---|---|---|
-| android | uiautomator 2.3.0 | 670 | 528 | 0 | 0 | 142 | current |
-| ios | xcuitest ios-18.6 | 670 | 558 | 0 | 0 | 112 | current |
+| android | uiautomator 2.3.0 | 670 | 528 | 0 | 0 | 142 | ⚠️ STALE |
+| ios | xcuitest ios-18.6 | 670 | 558 | 0 | 0 | 112 | ⚠️ STALE |
 | web | playwright 1.61.1 | 670 | 541 | 0 | 0 | 129 | current |
+
+> ⚠️ `android.results.json` was produced against manifest `ad2a425e15f6018b858f5d14a33ef7c39e9d7d64825f49e7756e6f544622864f` but the current manifest is `b752efa41f62d8928371d1ad3aa2a31e40f813db76bb5a5998969f23acd92d9d` — results are stale; re-run the android suite.
+
+> ⚠️ `ios.results.json` was produced against manifest `ad2a425e15f6018b858f5d14a33ef7c39e9d7d64825f49e7756e6f544622864f` but the current manifest is `b752efa41f62d8928371d1ad3aa2a31e40f813db76bb5a5998969f23acd92d9d` — results are stale; re-run the ios suite.
 
 ## Matrix
 
