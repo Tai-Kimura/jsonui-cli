@@ -144,7 +144,12 @@ def measure(
 
 
 def load_ledger(path: Path) -> dict:
-    """``{(name, platform): entry}`` for the whole ledger."""
+    """``{(name, platform, env): entry}`` for the whole ledger.
+
+    Entries carry their render environment: a deviation measured against
+    the local baselines says nothing about the CI renderer's, and vice
+    versa. Entries written before the env field default to ``local``.
+    """
     path = Path(path)
     if not path.is_file():
         return {}
@@ -153,8 +158,10 @@ def load_ledger(path: Path) -> dict:
     for entry in raw.get("entries", []):
         name = entry.get("screenshot")
         platform = entry.get("platform")
+        env = entry.get("env", DEFAULT_ENV)
         if name and platform:
-            out[(name, platform)] = entry
+            entry.setdefault("env", env)
+            out[(name, platform, env)] = entry
     return out
 
 
@@ -163,7 +170,9 @@ def render_ledger(entries: dict) -> str:
     doc = {
         "schemaVersion": SCHEMA_VERSION,
         "_comment": (
-            "Accepted dynamic≢codegen deviations, per screenshot and platform. "
+            "Accepted dynamic≢codegen deviations, per screenshot, platform and "
+            "render environment (a deviation measured against the local "
+            "baselines says nothing about the CI renderer's). "
             "The codegen host's render of this screenshot does NOT match the "
             "committed dynamic baseline (status 'mismatch', with the measured "
             "distance) or was never produced (status 'missing'). Every entry "
@@ -176,7 +185,7 @@ def render_ledger(entries: dict) -> str:
         ),
         "entries": [
             entries[key]
-            for key in sorted(entries, key=lambda k: (k[1], k[0]))
+            for key in sorted(entries, key=lambda k: (k[2], k[1], k[0]))
         ],
     }
     return json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
@@ -191,25 +200,29 @@ def update_ledger(existing: dict, result: ParityResult) -> dict:
     says nothing about android.
     """
     merged = {
-        key: entry for key, entry in existing.items() if key[1] != result.platform
+        key: entry
+        for key, entry in existing.items()
+        if not (key[1] == result.platform and key[2] == result.env)
     }
     for name, distance in result.mismatched:
-        key = (name, result.platform)
+        key = (name, result.platform, result.env)
         prior = existing.get(key, {})
         merged[key] = {
             "screenshot": name,
             "platform": result.platform,
+            "env": result.env,
             "status": "mismatch",
             "distance": distance,
             "reason": prior.get("reason", UNREVIEWED),
             "note": prior.get("note", ""),
         }
     for name in result.missing:
-        key = (name, result.platform)
+        key = (name, result.platform, result.env)
         prior = existing.get(key, {})
         merged[key] = {
             "screenshot": name,
             "platform": result.platform,
+            "env": result.env,
             "status": "missing",
             "reason": prior.get("reason", UNREVIEWED),
             "note": prior.get("note", ""),
@@ -240,18 +253,18 @@ def check(result: ParityResult, ledger: dict) -> ParityCheck:
 
     measured = {name for name, _ in result.mismatched} | set(result.missing)
     for name, distance in result.mismatched:
-        if (name, result.platform) in ledger:
+        if (name, result.platform, result.env) in ledger:
             verdict.accepted += 1
         else:
             verdict.unrecorded.append(f"{name} (distance {distance})")
     for name in result.missing:
-        if (name, result.platform) in ledger:
+        if (name, result.platform, result.env) in ledger:
             verdict.accepted += 1
         else:
             verdict.unrecorded.append(f"{name} (missing)")
 
-    for (name, platform), _entry in ledger.items():
-        if platform == result.platform and name not in measured:
+    for (name, platform, env), _entry in ledger.items():
+        if platform == result.platform and env == result.env and name not in measured:
             verdict.stale.append(name)
 
     return verdict

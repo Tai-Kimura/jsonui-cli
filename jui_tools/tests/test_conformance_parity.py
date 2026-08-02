@@ -113,8 +113,8 @@ class ParityLedgerTest(unittest.TestCase):
         path.write_text(parity.render_ledger(merged), encoding="utf-8")
 
         ledger = parity.load_ledger(path)
-        self.assertIn(("B.png", "ios"), ledger)
-        self.assertEqual(ledger[("B.png", "ios")]["reason"], parity.UNREVIEWED)
+        self.assertIn(("B.png", "ios", "local"), ledger)
+        self.assertEqual(ledger[("B.png", "ios", "local")]["reason"], parity.UNREVIEWED)
 
         verdict = parity.check(self._measure(), ledger)
         self.assertTrue(verdict.ok)
@@ -122,11 +122,11 @@ class ParityLedgerTest(unittest.TestCase):
 
     def test_update_preserves_reviewed_reasons(self):
         first = parity.update_ledger({}, self._measure())
-        first[("B.png", "ios")]["reason"] = "font-rasterizer difference"
-        first[("B.png", "ios")]["note"] = "verified by eye 2026-08-02"
+        first[("B.png", "ios", "local")]["reason"] = "font-rasterizer difference"
+        first[("B.png", "ios", "local")]["note"] = "verified by eye 2026-08-02"
         second = parity.update_ledger(first, self._measure())
-        self.assertEqual(second[("B.png", "ios")]["reason"], "font-rasterizer difference")
-        self.assertEqual(second[("B.png", "ios")]["note"], "verified by eye 2026-08-02")
+        self.assertEqual(second[("B.png", "ios", "local")]["reason"], "font-rasterizer difference")
+        self.assertEqual(second[("B.png", "ios", "local")]["note"], "verified by eye 2026-08-02")
 
     def test_stale_entry_is_flagged_and_pruned_by_update(self):
         # Record the deviation, then fix the codegen render.
@@ -138,13 +138,14 @@ class ParityLedgerTest(unittest.TestCase):
         self.assertEqual(verdict.stale, ["B.png"])
 
         pruned = parity.update_ledger(ledger, self._measure())
-        self.assertNotIn(("B.png", "ios"), pruned)
+        self.assertNotIn(("B.png", "ios", "local"), pruned)
 
     def test_other_platforms_entries_are_untouched(self):
         ledger = {
-            ("Z.png", "android"): {
+            ("Z.png", "android", "local"): {
                 "screenshot": "Z.png",
                 "platform": "android",
+                "env": "local",
                 "status": "mismatch",
                 "distance": 20,
                 "reason": "reviewed",
@@ -152,7 +153,7 @@ class ParityLedgerTest(unittest.TestCase):
             }
         }
         merged = parity.update_ledger(ledger, self._measure())
-        self.assertIn(("Z.png", "android"), merged)
+        self.assertIn(("Z.png", "android", "local"), merged)
         verdict = parity.check(self._measure(), parity.load_ledger(parity.ledger_path(self.conf)))
         # android entry must not count as stale for an ios measurement
         self.assertNotIn("Z.png", verdict.stale)
