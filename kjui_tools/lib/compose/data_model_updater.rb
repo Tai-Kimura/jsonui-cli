@@ -397,12 +397,12 @@ module KjuiTools
             'Color.Unspecified'
           end
         when 'CollectionDataSource'
-          # Return the actual default value string or create new instance
-          if value.is_a?(String) && value == 'CollectionDataSource()'
-            'com.kotlinjsonui.data.CollectionDataSource()'
-          else
-            'com.kotlinjsonui.data.CollectionDataSource()'
-          end
+          # Materialize the declared defaultValue (INTERACTIVE_HOST_CONTRACT
+          # §4 shapes: shorthand cell array / explicit sections object) into
+          # a real constructor — this used to always emit an EMPTY
+          # CollectionDataSource(), silently dropping declared cells
+          # (31 F4 Phase 2).
+          collection_data_source_literal(value)
         when /^List<.*>$/
           # Handle generic List types
           if value.is_a?(Array) && value.empty?
@@ -425,6 +425,45 @@ module KjuiTools
           # For all other cases, use value as-is
           value
         end
+      end
+
+      # CollectionDataSource defaultValue → Kotlin constructor literal.
+      # Shapes (INTERACTIVE_HOST_CONTRACT.md §4): shorthand `[ {...} ]`
+      # (one section holding these cell dicts) or explicit
+      # `{"sections": [{"cell": name?, "cells": [ {...} ]}]}`. Cell dicts
+      # emit as mapOf(...) with string/number/boolean values only.
+      def collection_data_source_literal(value)
+        sections =
+          if value.is_a?(Array)
+            [{ 'cell' => nil, 'cells' => value }]
+          elsif value.is_a?(Hash) && value['sections'].is_a?(Array)
+            value['sections']
+          else
+            []
+          end
+        return 'com.kotlinjsonui.data.CollectionDataSource()' if sections.empty?
+
+        section_literals = sections.map do |section|
+          next nil unless section.is_a?(Hash)
+          cells = section['cells'].is_a?(Array) ? section['cells'] : []
+          cell_maps = cells.select { |c| c.is_a?(Hash) }.map do |cell|
+            pairs = cell.map do |k, v|
+              literal =
+                case v
+                when String then v.inspect
+                when true, false, Numeric then v.to_s
+                end
+              literal && "#{k.to_s.inspect} to #{literal}"
+            end.compact
+            "mapOf(#{pairs.join(', ')})"
+          end
+          view_name = section['cell'].is_a?(String) ? section['cell'].inspect : '""'
+          "com.kotlinjsonui.data.CollectionDataSection(cells = " \
+            "com.kotlinjsonui.data.CollectionDataSection.CellData(" \
+            "viewName = #{view_name}, data = listOf(#{cell_maps.join(', ')})))"
+        end.compact
+
+        "com.kotlinjsonui.data.CollectionDataSource(sections = listOf(#{section_literals.join(', ')}))"
       end
     end
   end
