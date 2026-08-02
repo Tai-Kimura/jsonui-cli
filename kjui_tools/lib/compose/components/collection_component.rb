@@ -783,9 +783,11 @@ module KjuiTools
           required_imports&.add(:arrangement)
           required_imports&.add(:launched_effect)
 
-          # Spacing
-          h_spacing = json_data['columnSpacing'] || json_data['itemSpacing'] || json_data['spacing'] || 8
-          v_spacing = json_data['lineSpacing'] || json_data['itemSpacing'] || json_data['spacing'] || 8
+          # Spacing. Undeclared means 0, the platform default — the dynamic
+          # renderer falls back to 0f, and the silent 8 here was the parity
+          # residue on Collection/layout__flow_2 after the enum fix.
+          h_spacing = json_data['columnSpacing'] || json_data['itemSpacing'] || json_data['spacing'] || 0
+          v_spacing = json_data['lineSpacing'] || json_data['itemSpacing'] || json_data['spacing'] || 0
 
           # Flow alignment
           flow_alignment = json_data['flowAlignment'] || 'leading'
