@@ -40,13 +40,17 @@ module KjuiTools
 
           code = indent("// TabView with NavigationBar", depth)
 
-          # If there's a binding, use it; otherwise create local state
+          # If there's a binding, use it; otherwise create local state seeded
+          # with the DECLARED static index — a literal selectedIndex used to
+          # fall into the else and always start at 0 (parity family
+          # kjui-codegen-tabview: the dynamic component honors it).
           if selected_binding && selected_binding.is_a?(String) && selected_binding.start_with?('@{')
             binding_prop = selected_binding.gsub(/@\{|\}/, '')
             state_expr = "data.#{binding_prop}"
             setter_expr = "viewModel.updateData(mapOf(\"#{binding_prop}\" to it))"
           else
-            code += "\n" + indent("var #{state_var} by remember { mutableStateOf(0) }", depth)
+            initial_index = selected_binding.is_a?(Numeric) ? selected_binding.to_i : selected_binding.to_s[/\A\d+\z/].to_i
+            code += "\n" + indent("var #{state_var} by remember { mutableStateOf(#{initial_index}) }", depth)
             state_expr = state_var
             setter_expr = "#{state_var} = it"
           end
@@ -103,8 +107,13 @@ module KjuiTools
                 code += "\n" + indent("contentDescription = \"#{title}\"", depth + 6)
                 code += "\n" + indent(")", depth + 5)
               else
+                # Same icon name for both states still follows the Material
+                # selected→Filled / unselected→Outlined convention — the
+                # dynamic component's filled/outlined drawable pair does the
+                # same; emitting Filled unconditionally left unselected tabs
+                # solid (parity family kjui-codegen-tabview).
                 code += "\n" + indent("Icon(", depth + 5)
-                code += "\n" + indent("imageVector = Icons.Filled.#{material_icon},", depth + 6)
+                code += "\n" + indent("imageVector = if (#{state_expr} == #{index}) Icons.Filled.#{material_icon} else Icons.Outlined.#{material_icon},", depth + 6)
                 code += "\n" + indent("contentDescription = \"#{title}\"", depth + 6)
                 code += "\n" + indent(")", depth + 5)
               end
@@ -117,17 +126,22 @@ module KjuiTools
               code += "\n" + indent("label = { Text(\"#{title}\") },", depth + 4)
             end
 
-            # Tint colors
-            if json_data['tintColor'] || json_data['unselectedColor']
-              tint = json_data['tintColor'] ? Helpers::ResourceResolver.process_color(json_data['tintColor'], required_imports) : 'MaterialTheme.colorScheme.primary'
-              unselected = json_data['unselectedColor'] ? Helpers::ResourceResolver.process_color(json_data['unselectedColor'], required_imports) : 'MaterialTheme.colorScheme.onSurfaceVariant'
-              code += "\n" + indent("colors = NavigationBarItemDefaults.colors(", depth + 4)
-              code += "\n" + indent("selectedIconColor = #{tint},", depth + 5)
-              code += "\n" + indent("selectedTextColor = #{tint},", depth + 5)
-              code += "\n" + indent("unselectedIconColor = #{unselected},", depth + 5)
-              code += "\n" + indent("unselectedTextColor = #{unselected}", depth + 5)
-              code += "\n" + indent(")", depth + 4)
-            end
+            # Tint colors — ALWAYS emitted with the same fallback chain the
+            # dynamic component uses (tintColor ?? theme primary /
+            # unselectedColor ?? onSurfaceVariant). Emitting only on declared
+            # colors left the undeclared case on NavigationBarItemDefaults'
+            # own scheme (onSecondaryContainer — near-black icons) while
+            # dynamic rendered theme-primary: same undeclared-default
+            # divergence class as CustomTextField (parity family
+            # kjui-codegen-tabview).
+            tint = json_data['tintColor'] ? Helpers::ResourceResolver.process_color(json_data['tintColor'], required_imports) : 'MaterialTheme.colorScheme.primary'
+            unselected = json_data['unselectedColor'] ? Helpers::ResourceResolver.process_color(json_data['unselectedColor'], required_imports) : 'MaterialTheme.colorScheme.onSurfaceVariant'
+            code += "\n" + indent("colors = NavigationBarItemDefaults.colors(", depth + 4)
+            code += "\n" + indent("selectedIconColor = #{tint},", depth + 5)
+            code += "\n" + indent("selectedTextColor = #{tint},", depth + 5)
+            code += "\n" + indent("unselectedIconColor = #{unselected},", depth + 5)
+            code += "\n" + indent("unselectedTextColor = #{unselected}", depth + 5)
+            code += "\n" + indent(")", depth + 4)
 
             # Badge
             if tab['badge']

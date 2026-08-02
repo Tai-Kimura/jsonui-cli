@@ -790,8 +790,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 19,
-      "reason": "kjui-codegen-tabview: tab bar composition diverges (item order/selection state/tabBarBackground not applied by codegen — dynamic shows the declared red bar, codegen does not)",
+      "distance": 12,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
       "note": ""
     },
     {
@@ -799,8 +799,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 19,
-      "reason": "kjui-codegen-tabview: tab bar composition diverges (item order/selection state/tabBarBackground not applied by codegen — dynamic shows the declared red bar, codegen does not)",
+      "distance": 12,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
       "note": ""
     },
     {
@@ -808,8 +808,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 15,
-      "reason": "kjui-codegen-tabview: tab bar composition diverges (item order/selection state/tabBarBackground not applied by codegen — dynamic shows the declared red bar, codegen does not)",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
       "note": ""
     },
     {
@@ -817,8 +817,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 12,
-      "reason": "kjui-codegen-tabview: tab bar composition diverges (item order/selection state/tabBarBackground not applied by codegen — dynamic shows the declared red bar, codegen does not)",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
       "note": ""
     },
     {
@@ -826,8 +826,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 15,
-      "reason": "kjui-codegen-tabview: tab bar composition diverges (item order/selection state/tabBarBackground not applied by codegen — dynamic shows the declared red bar, codegen does not)",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
       "note": ""
     },
     {
@@ -835,8 +835,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 15,
-      "reason": "kjui-codegen-tabview: tab bar composition diverges (item order/selection state/tabBarBackground not applied by codegen — dynamic shows the declared red bar, codegen does not)",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
       "note": ""
     },
     {
@@ -844,8 +844,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 14,
-      "reason": "kjui-codegen-tabview: tab bar composition diverges (item order/selection state/tabBarBackground not applied by codegen — dynamic shows the declared red bar, codegen does not)",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
       "note": ""
     },
     {
@@ -988,8 +988,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 15,
-      "reason": "kjui-codegen-tabview: tab bar composition diverges (item order/selection state/tabBarBackground not applied by codegen — dynamic shows the declared red bar, codegen does not)",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
       "note": ""
     },
     {

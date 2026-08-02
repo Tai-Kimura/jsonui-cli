@@ -75,9 +75,12 @@ module KjuiTools
                     "import androidx.compose.material.icons.Icons",
                     "import androidx.compose.material.icons.filled.*",
                     "import androidx.compose.material.icons.outlined.*"],
-            # TabView tab icons (tabview_component) emit Icons.Filled.<Name> only.
+            # TabView tab icons (tabview_component): selected tabs emit
+            # Icons.Filled.<Name>, unselected tabs Icons.Outlined.<Name>
+            # (the Material convention the dynamic component also follows).
             material_icons: ["import androidx.compose.material.icons.Icons",
-                             "import androidx.compose.material.icons.filled.*"],
+                             "import androidx.compose.material.icons.filled.*",
+                             "import androidx.compose.material.icons.outlined.*"],
             icon_button: "import androidx.compose.material3.IconButton",
             clickable: "import androidx.compose.foundation.clickable",
             # onLongPress Initial-pass detector (ModifierBuilder.build_long_pressable).
