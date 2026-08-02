@@ -4,15 +4,15 @@
     "missing_artifact: baseline entries whose fixture produced no screenshot this run — the way a fixture silently exits visual coverage.",
     "no_baseline: screenshots that have no baseline hash (rendered but never compared).",
     "Ceilings nest by environment key (baselines/<env>/): a visual count is a fact about one renderer, so its ceiling is too. An env with no entry gets ceiling 0 for everything — a fresh environment starts strict.",
-    "local: the 12/6/4 are baseline entries recorded on the developer machine whose fixtures no longer screenshot there (measured 2026-08-01; the same set reproduced exactly on CI vs the local baselines — deterministic, not flake).",
+    "local: 0 across the board since the 2026-08-02 clean re-bake (baselines pruned to exactly the run's referenced screenshots; the old 12/6/4 were stale entries from accumulated artifacts directories).",
     "ci: baselines are baked FROM a CI run's own artifacts, so the baseline set equals the rendered set by construction and both ceilings start at 0.",
     "A count above its ceiling fails the gate. LOWERING a ceiling to match improved reality is routine and encouraged (the gate prints a notice when there is slack); RAISING one is a coverage regression and needs a justification comment here."
   ],
   "missing_artifact": {
     "local": {
-      "android": 12,
-      "ios": 6,
-      "web": 4
+      "android": 0,
+      "ios": 0,
+      "web": 0
     },
     "ci": {
       "android": 0,

@@ -2,7 +2,7 @@
 
 # JsonUI Conformance Report
 
-- Manifest: `83c8708e4d49484e446a1f77e3bad55136ef63caac1ca76ca799c5f8b50bac41` (sha256)
+- Manifest: `ad2a425e15f6018b858f5d14a33ef7c39e9d7d64825f49e7756e6f544622864f` (sha256)
 - Definitions: `b01bc992ef4ce5e11c1d83de119398c84f027b8d1a6081b3910fcdcb3504feab` (sha256)
 - Fixtures: 670 (assertable: 29, visual: 572, interactive: 35) / skipped attributes: 154
 
@@ -26,7 +26,7 @@ _No cross-platform mismatches._
 | `common/onClick__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
 | `common/onLongPress__callback_fire` | `callback_fire` | callback | ✅ | ✅ | – | web: not applicable to web |
 | `common/onPan__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
-| `common/onAppear__callback_fire` | `callback_fire` | callback | ✅ | – | – | ios: not applicable to ios<br>web: not applicable to web |
+| `common/onAppear__callback_fire` | `callback_fire` | callback | ✅ | ✅ | – | web: not applicable to web |
 | `Label/text__binding_initial` | `binding_initial` | — | ✅ | ✅ | ✅ |  |
 | `Label/text__binding_mixed` | `binding_mixed` | — | ✅ | ✅ | ✅ |  |
 | `Label/text__binding_dot_path` | `binding_dot_path` | — | ✅ | ✅ | ✅ |  |
@@ -60,15 +60,9 @@ Screenshots are compared against `baselines/local/<platform>.hashes.json` (rende
 
 | Platform | Baseline | Compared | Regressions | No baseline | Missing artifact |
 |---|---|---|---|---|---|
-| android | threshold 8 | 434 | 0 | 72 | 8 |
-| ios | threshold 8 | 0 | 0 | 69 | 467 |
-| web | threshold 8 | 448 | 0 | 34 | 0 |
-
-> android: 72 screenshot(s) without a baseline hash (not compared — NOT a pass): `EditText_hint__static.png`, `EditText_placeholder__static.png`, `EditText_hintColor__static.png`, `EditText_inputType__static.png`, `Input_hint__static.png`, `Input_placeholder__static.png`, `Input_hintColor__static.png`, `Toggle_isOn__true.png`, `Toggle_value__static.png`, `Toggle_checked__true.png` …
-
-> ios: 69 screenshot(s) without a baseline hash (not compared — NOT a pass): `EditText_hint__static.png`, `EditText_placeholder__static.png`, `EditText_hintColor__static.png`, `Input_hint__static.png`, `Input_placeholder__static.png`, `Input_hintColor__static.png`, `Toggle_isOn__true.png`, `Toggle_value__static.png`, `Toggle_checked__true.png`, `Toggle_tint__static.png` …
-
-> web: 34 screenshot(s) without a baseline hash (not compared — NOT a pass): `control_Blur.png`, `control_Button.png`, `control_CheckBox.png`, `control_CheckBox__orientation-horizontal.png`, `control_Collection.png`, `control_GradientView.png`, `control_IconLabel.png`, `control_Image.png`, `control_Indicator.png`, `control_Label.png` …
+| android | threshold 8 | 469 | 0 | 0 | 0 |
+| ios | threshold 8 | 499 | 0 | 0 | 0 |
+| web | threshold 8 | 482 | 0 | 0 | 0 |
 
 ## Attribute effect (fixture vs control)
 
@@ -76,27 +70,17 @@ Each visual fixture is compared against its **control** — the same layout with
 
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
-| android | 391 | 140 | 251 | 0 | 0 |
-| ios | 0 | 0 | 0 | 0 | 134 |
-| web | 405 | 177 | 228 | 0 | 0 |
-
-> ios: 288 fixture(s) had no usable control screenshot (not compared — NOT a pass)
+| android | 391 | 143 | 248 | 0 | 0 |
+| ios | 422 | 130 | 292 | 0 | 0 |
+| web | 405 | 176 | 229 | 0 | 0 |
 
 ## Platforms
 
 | Platform | Runner | Results | pass | fail | error | skipped | Manifest |
 |---|---|---|---|---|---|---|---|
-| android | uiautomator 2.3.0 | 717 | 574 | 0 | 0 | 143 | ⚠️ STALE |
-| ios | xcuitest ios-18.6 | 717 | 601 | 0 | 0 | 116 | ⚠️ STALE |
+| android | uiautomator 2.3.0 | 670 | 528 | 0 | 0 | 142 | current |
+| ios | xcuitest ios-18.6 | 670 | 558 | 0 | 0 | 112 | current |
 | web | playwright 1.61.1 | 670 | 541 | 0 | 0 | 129 | current |
-
-> ⚠️ `android.results.json` was produced against manifest `149715ab22aab62feebc4153bb91f4642bc9abb1f059666dac656750e40ff75a` but the current manifest is `83c8708e4d49484e446a1f77e3bad55136ef63caac1ca76ca799c5f8b50bac41` — results are stale; re-run the android suite.
-
-> ⚠️ `android.results.json` contains 48 fixture id(s) not present in the manifest: `Check/checkedColor__static`, `Check/checked__true`, `Check/enabled__false`, `Check/enabled__true`, `Check/fontColor__static`, `Check/fontSize__static`, `Check/font__static`, `Check/iconColor__static`, `Check/iconSize__static`, `Check/icon__static` …
-
-> ⚠️ `ios.results.json` was produced against manifest `149715ab22aab62feebc4153bb91f4642bc9abb1f059666dac656750e40ff75a` but the current manifest is `83c8708e4d49484e446a1f77e3bad55136ef63caac1ca76ca799c5f8b50bac41` — results are stale; re-run the ios suite.
-
-> ⚠️ `ios.results.json` contains 48 fixture id(s) not present in the manifest: `Check/checkedColor__static`, `Check/checked__true`, `Check/enabled__false`, `Check/enabled__true`, `Check/fontColor__static`, `Check/fontSize__static`, `Check/font__static`, `Check/iconColor__static`, `Check/iconSize__static`, `Check/icon__static` …
 
 ## Matrix
 
@@ -224,7 +208,7 @@ Each visual fixture is compared against its **control** — the same layout with
 | `gravity` | `right` | visual | ✅ | ✅ | ✅ |
 | `gravity` | `centerhorizontal` | visual | ✅ | ✅ | ✅ |
 | `gravity` | `center` | visual | ✅ | ✅ | ✅ |
-| `onAppear` | `callback_fire` | interactive | ✅ | – | – |
+| `onAppear` | `callback_fire` | interactive | ✅ | ✅ | – |
 | `alignment` | `topleading` | visual | ✅ | ✅ | – |
 | `alignment` | `top` | visual | ✅ | ✅ | – |
 | `alignment` | `toptrailing` | visual | ✅ | ✅ | – |
@@ -339,7 +323,7 @@ Each visual fixture is compared against its **control** — the same layout with
 | `input` | `url` | visual | ✅ | ✅ | ✅ |
 | `input` | `password` | visual | ✅ | ✅ | ✅ |
 | `input` | `decimal` | visual | ✅ | ✅ | ✅ |
-| `inputType` | `static` | visual |  |  | – |
+| `inputType` | `static` | visual | ✅ | – | – |
 | `returnKeyType` | `done` | visual | ✅ | ✅ | ✅ |
 | `returnKeyType` | `go` | visual | ✅ | ✅ | ✅ |
 | `returnKeyType` | `next` | visual | ✅ | ✅ | ✅ |
@@ -579,7 +563,7 @@ Each visual fixture is compared against its **control** — the same layout with
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `isOn` | `true` | visual | ✅ | ✅ | ✅ |
-| `value` | `static` | visual | ✅ | ✅ | ✅ |
+| `value` | `true` | visual | ✅ | ✅ | ✅ |
 | `checked` | `true` | visual | ✅ | ✅ | ✅ |
 | `enabled` | `true` | assertable | ✅ | ✅ | ✅ |
 | `enabled` | `false` | assertable | ✅ | ✅ | ✅ |

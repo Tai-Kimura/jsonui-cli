@@ -1,6 +1,6 @@
 {
   "platform": "android",
-  "manifestHash": "149715ab22aab62feebc4153bb91f4642bc9abb1f059666dac656750e40ff75a",
+  "manifestHash": "ad2a425e15f6018b858f5d14a33ef7c39e9d7d64825f49e7756e6f544622864f",
   "runner": {
     "name": "uiautomator",
     "version": "2.3.0"
@@ -1278,6 +1278,12 @@
       "screenshot": "artifacts/android/TextField_input__decimal.png"
     },
     {
+      "id": "TextField/inputType__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextField_inputType__static.png"
+    },
+    {
       "id": "TextField/returnKeyType__done",
       "status": "pass",
       "detail": "",
@@ -1813,58 +1819,6 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/TextView_edgeInset__static.png"
-    },
-    {
-      "id": "EditText/text__static",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "EditText/hint__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/EditText_hint__static.png"
-    },
-    {
-      "id": "EditText/placeholder__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/EditText_placeholder__static.png"
-    },
-    {
-      "id": "EditText/hintColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/EditText_hintColor__static.png"
-    },
-    {
-      "id": "EditText/inputType__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/EditText_inputType__static.png"
-    },
-    {
-      "id": "Input/text__static",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "Input/hint__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Input_hint__static.png"
-    },
-    {
-      "id": "Input/placeholder__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Input_placeholder__static.png"
-    },
-    {
-      "id": "Input/hintColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Input_hintColor__static.png"
     },
     {
       "id": "Button/text__static",
@@ -2527,10 +2481,10 @@
       "screenshot": "artifacts/android/Switch_isOn__true.png"
     },
     {
-      "id": "Switch/value__static",
+      "id": "Switch/value__true",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/android/Switch_value__static.png"
+      "screenshot": "artifacts/android/Switch_value__true.png"
     },
     {
       "id": "Switch/checked__true",
@@ -2599,86 +2553,6 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/Switch_trackTintColor__static.png"
-    },
-    {
-      "id": "Toggle/isOn__true",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Toggle_isOn__true.png"
-    },
-    {
-      "id": "Toggle/value__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Toggle_value__static.png"
-    },
-    {
-      "id": "Toggle/checked__true",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Toggle_checked__true.png"
-    },
-    {
-      "id": "Toggle/enabled__true",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "Toggle/enabled__false",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "Toggle/tint__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Toggle_tint__static.png"
-    },
-    {
-      "id": "Toggle/tintColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Toggle_tintColor__static.png"
-    },
-    {
-      "id": "Toggle/onTintColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Toggle_onTintColor__static.png"
-    },
-    {
-      "id": "Toggle/thumbTintColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Toggle_thumbTintColor__static.png"
-    },
-    {
-      "id": "Toggle/offTintColor__static",
-      "status": "skipped",
-      "detail": "not applicable to android"
-    },
-    {
-      "id": "Toggle/onValueChange__callback_fire",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "Toggle/labelPosition__leading",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Toggle_labelPosition__leading.png"
-    },
-    {
-      "id": "Toggle/labelPosition__trailing",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Toggle_labelPosition__trailing.png"
-    },
-    {
-      "id": "Toggle/trackTintColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Toggle_trackTintColor__static.png"
     },
     {
       "id": "Segment/items__static",
@@ -3445,116 +3319,6 @@
       "screenshot": "artifacts/android/CheckBox_iconColor__static.png"
     },
     {
-      "id": "Check/checked__true",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Check_checked__true.png"
-    },
-    {
-      "id": "Check/isOn__true",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Check_isOn__true.png"
-    },
-    {
-      "id": "Check/label__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Check_label__static.png"
-    },
-    {
-      "id": "Check/text__static",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "Check/icon__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Check_icon__static.png"
-    },
-    {
-      "id": "Check/src__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Check_src__static.png"
-    },
-    {
-      "id": "Check/selectedIcon__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Check_selectedIcon__static.png"
-    },
-    {
-      "id": "Check/selectedIcon__alias_onSrc",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Check_selectedIcon__alias_onSrc.png"
-    },
-    {
-      "id": "Check/enabled__true",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "Check/enabled__false",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "Check/font__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Check_font__static.png"
-    },
-    {
-      "id": "Check/fontSize__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Check_fontSize__static.png"
-    },
-    {
-      "id": "Check/fontColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Check_fontColor__static.png"
-    },
-    {
-      "id": "Check/spacing__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Check_spacing__static.png"
-    },
-    {
-      "id": "Check/onValueChange__callback_fire",
-      "status": "pass",
-      "detail": ""
-    },
-    {
-      "id": "Check/checkedColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Check_checkedColor__static.png"
-    },
-    {
-      "id": "Check/uncheckedColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Check_uncheckedColor__static.png"
-    },
-    {
-      "id": "Check/iconSize__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Check_iconSize__static.png"
-    },
-    {
-      "id": "Check/iconColor__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/Check_iconColor__static.png"
-    },
-    {
       "id": "Indicator/indicatorStyle__medium",
       "status": "skipped",
       "detail": "not applicable to android"
@@ -3800,18 +3564,6 @@
       "screenshot": "artifacts/android/control_Button.png"
     },
     {
-      "id": "__control/Check",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/control_Check.png"
-    },
-    {
-      "id": "__control/Check__orientation-horizontal",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/control_Check__orientation-horizontal.png"
-    },
-    {
       "id": "__control/CheckBox",
       "status": "pass",
       "detail": "",
@@ -3828,12 +3580,6 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/control_Collection.png"
-    },
-    {
-      "id": "__control/EditText",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/control_EditText.png"
     },
     {
       "id": "__control/GradientView",
@@ -3858,12 +3604,6 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/control_Indicator.png"
-    },
-    {
-      "id": "__control/Input",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/control_Input.png"
     },
     {
       "id": "__control/Label",
@@ -3984,18 +3724,6 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/control_TextView.png"
-    },
-    {
-      "id": "__control/Toggle",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/control_Toggle.png"
-    },
-    {
-      "id": "__control/Toggle__isOn-True",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/control_Toggle__isOn-True.png"
     },
     {
       "id": "__control/View",

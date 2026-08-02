@@ -1,0 +1,2894 @@
+{
+  "schemaVersion": 1,
+  "_comment": "Accepted dynamic≢codegen deviations, per screenshot, platform and render environment (a deviation measured against the local baselines says nothing about the CI renderer's). The codegen host's render of this screenshot does NOT match the committed dynamic baseline (status 'mismatch', with the measured distance) or was never produced (status 'missing'). Every entry needs a reason: fix the codegen and drop the entry, or justify the difference here. Unrecorded deviations fail `jui conformance gate --parity`; entries the measurement no longer supports are stale and must be pruned (re-run `jui conformance parity --update`). Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
+  "entries": [
+    {
+      "screenshot": "Blur_effectStyle__dark.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 17,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Blur_effectStyle__extralight.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 10,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "CheckBox_icon__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 22,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "CheckBox_selectedIcon__alias_onSrc.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 15,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "CheckBox_selectedIcon__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 13,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_columnSpacing__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 33,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_columns__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 64,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_defaultScrollAnchor__bottom.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 33,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_defaultScrollAnchor__center.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 33,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_defaultScrollAnchor__top.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 33,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_horizontalScroll__true.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 78,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_insetHorizontal__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 40,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_insetVertical__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 39,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_insets__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 43,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_itemSpacing__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 30,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_layout__flow.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 18,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_layout__flow_2.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 34,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_layout__horizontal.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 31,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_layout__leftaligned.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 33,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_layout__leftaligned_2.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 33,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_layout__vertical.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 33,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_lazy__eager.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 34,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_lazy__lazy.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 33,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_lineSpacing__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 30,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_orientation__horizontal.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 31,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_orientation__vertical.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 33,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_reverseLayout__true.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 27,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_scrollAnchor__bottom.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 33,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_scrollAnchor__center.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 33,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Collection_scrollAnchor__top.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 33,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "GradientView_gradientDirection__horizontal.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 12,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "GradientView_gradientDirection__oblique.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 12,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "GradientView_gradientDirection__vertical.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 12,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "GradientView_gradient__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 12,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "GradientView_locations__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 12,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "IconLabel_icon_off__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 20,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "IconLabel_icon_on__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 20,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Image_renderingMode__template.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Label_edgeInset__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 12,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Label_highlightAttributes__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 22,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "NetworkImage_loadingImage__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 36,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Radio_iconSize__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 19,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TabView_selectedIndex__alias_selectedTabIndex.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 19,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TabView_selectedIndex__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 19,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TabView_showLabels__true.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 15,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TabView_tabBarBackground__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 12,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TabView_tabs__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 15,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TabView_tintColor__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 15,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TabView_unselectedColor__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 14,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextField_borderStyle__bezel.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 20,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextField_borderStyle__bezel_2.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 20,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextField_borderStyle__line.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 20,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextField_borderStyle__line_2.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 20,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextField_borderStyle__roundedrect.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 20,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextField_borderStyle__roundedrect_2.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 20,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_containerInset__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 46,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_edgeInset__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_editable__true.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_flexible__true.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 45,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_fontColor__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_fontFamily__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_fontSize__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_font__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_hintColor__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_hintFontSize__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 50,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_hintFont__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_hintLineHeightMultiple__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_hint__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 44,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_input__allphabet.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_input__alphabet.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_input__decimal.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_input__default.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_input__email.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_input__number.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_input__password.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_input__phone.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_input__url.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_keyboardType__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_lineBreakMode__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_placeholder__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_returnKeyType__continue.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_returnKeyType__done.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_returnKeyType__go.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_returnKeyType__google.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_returnKeyType__join.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_returnKeyType__next.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_returnKeyType__return.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_returnKeyType__route.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_returnKeyType__search.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_returnKeyType__send.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_returnKeyType__yahoo.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_textAlign__center.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_textAlign__center_2.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_textAlign__left.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_textAlign__left_2.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_textAlign__right.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "TextView_textAlign__right_2.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Web_html__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 55,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignBottomOfView__static.png",
+      "platform": "android",
+      "status": "missing",
+      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignBottomView__static.png",
+      "platform": "android",
+      "status": "missing",
+      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignBottom__true.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 33,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignCenterHorizontalView__static.png",
+      "platform": "android",
+      "status": "missing",
+      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignCenterVerticalView__static.png",
+      "platform": "android",
+      "status": "missing",
+      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignLeftOfView__static.png",
+      "platform": "android",
+      "status": "missing",
+      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignLeftView__static.png",
+      "platform": "android",
+      "status": "missing",
+      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignLeft__true.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 15,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignRightOfView__static.png",
+      "platform": "android",
+      "status": "missing",
+      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignRightView__static.png",
+      "platform": "android",
+      "status": "missing",
+      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignRight__true.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 25,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignTopOfView__static.png",
+      "platform": "android",
+      "status": "missing",
+      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignTopView__static.png",
+      "platform": "android",
+      "status": "missing",
+      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignTop__true.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 21,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignment__bottom.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 27,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignment__bottomleading.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 13,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignment__bottomtrailing.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 17,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignment__center.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 29,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignment__leading.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 15,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignment__top.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 21,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignment__toptrailing.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 21,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_alignment__trailing.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 18,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_centerHorizontal__true.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 24,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_centerInParent__true.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 32,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_centerVertical__true.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 15,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_maxWidth__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 51,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_paddingEnd__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 15,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "common_shadow__static.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 23,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "control_Collection.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 33,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "control_GradientView.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 12,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "control_TabView.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 15,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "control_TextView.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 47,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "control_Web.png",
+      "platform": "android",
+      "status": "mismatch",
+      "distance": 50,
+      "reason": "unreviewed-initial-measurement",
+      "note": "",
+      "env": "local"
+    },
+    {
+      "screenshot": "Button_font__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 12,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "CheckBox_fontColor__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 10,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_columnSpacing__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_columns__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 167,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_containerInset__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 199,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_contentInsets__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_defaultScrollAnchor__bottom.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_defaultScrollAnchor__center.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_defaultScrollAnchor__top.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_horizontalScroll__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 136,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_insetHorizontal__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_insetVertical__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_insets__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_itemSpacing__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_itemWeight__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_layout__flow.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 126,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_layout__flow_2.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_layout__horizontal.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 136,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_layout__leftaligned.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_layout__leftaligned_2.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_layout__vertical.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_lazy__eager.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_lazy__lazy.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_lazy__none.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 435,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_lineSpacing__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_orientation__horizontal.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 136,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_orientation__vertical.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_scrollAnchor__bottom.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_scrollAnchor__center.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_scrollAnchor__top.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_showsHorizontalScrollIndicator__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_showsVerticalScrollIndicator__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "IconLabel_fontColor__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 12,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "IconLabel_icon_off__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 23,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "IconLabel_icon_on__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 23,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Image_renderingMode__template.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 33,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Image_systemIcon__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 136,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Label_fontColor__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 12,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Label_highlightAttributes__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 24,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Label_textAlign__left.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 30,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Label_textAlign__left_2.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 30,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Label_textAlign__right.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 35,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Label_textAlign__right_2.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 35,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Progress_indicatorStyle__large.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 16,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Progress_indicatorStyle__medium.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 15,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Radio_fontColor__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 9,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Radio_iconSize__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 28,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Radio_icon__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 105,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Radio_selectedIcon__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 105,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "SafeAreaView_orientation__horizontal.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 123,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "SafeAreaView_orientation__vertical.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 123,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "SafeAreaView_safeAreaInsetPositions__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 126,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "ScrollView_orientation__horizontal.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 55,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "ScrollView_orientation__vertical.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 149,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "ScrollView_showsHorizontalScrollIndicator__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 149,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "ScrollView_showsVerticalScrollIndicator__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 149,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Segment_normalColor__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 36,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Segment_selectedColor__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 32,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Segment_selectedIndex__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 26,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Segment_tintColor__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 33,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Switch_checked__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 48,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Switch_isOn__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 48,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Switch_onTintColor__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 48,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Switch_thumbTintColor__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 37,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Switch_tintColor__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 43,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Switch_tint__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 43,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Switch_trackTintColor__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 37,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "Switch_value__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 39,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "TabView_selectedIndex__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 13,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "TabView_showLabels__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 16,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "TabView_tabBarBackground__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 16,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "TabView_tintColor__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 17,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "TabView_unselectedColor__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 16,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "TextField_clearButtonMode__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 27,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "TextField_fieldPadding__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 14,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "TextView_hintColor__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 17,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "View_direction__bottomtotop.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 155,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "View_direction__lefttoright.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 155,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "View_direction__none.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 155,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "View_direction__righttoleft.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 155,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "View_direction__toptobottom.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 155,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "View_distribution__equalcentering.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 108,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "View_distribution__equalspacing.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 108,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "View_distribution__fill.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 108,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "View_distribution__fillequally.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 108,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "View_highlighted__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "View_orientation__horizontal.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 108,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "View_orientation__vertical.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 155,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "View_safeAreaInsetPositions__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "View_spacing__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 160,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "Web_html__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 29,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignBottomOfView__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 87,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignBottomView__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignBottom__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignCenterHorizontalView__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 65,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignCenterVerticalView__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 71,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignLeftOfView__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 38,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignLeftView__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignLeft__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignRightOfView__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 72,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignRightView__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 32,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignRight__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignTopOfView__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 81,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignTopView__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignTop__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignment__bottom.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignment__bottomleading.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignment__bottomtrailing.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignment__center.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignment__leading.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignment__top.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignment__topleading.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignment__toptrailing.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alignment__trailing.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_alpha__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 57,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_background__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 150,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_borderColor__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_borderStyle__dashed.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_borderStyle__dotted.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_borderStyle__solid.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_borderWidth__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 153,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_bottomMargin__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 86,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_bottomPadding__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 81,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_centerHorizontal__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_centerInParent__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_centerVertical__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_clipToBounds__true.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_cornerRadius__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 86,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_distribution__equalcentering.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 108,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_distribution__equalspacing.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 108,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_distribution__fill.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 108,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_distribution__fillequally.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 108,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_endMargin__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 94,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_gravity__bottom.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 92,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_gravity__center.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 108,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_gravity__centerhorizontal.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 107,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_gravity__centervertical.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 95,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_gravity__left.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 90,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_gravity__right.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 100,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_gravity__top.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 90,
+      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_height__matchparent.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 244,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_height__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 58,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_height__wrapcontent.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 40,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_idealHeight__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_idealWidth__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_indexAbove__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_indexBelow__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_leftMargin__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 127,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_leftPadding__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 81,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_margins__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_maxEndMargin__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 94,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_maxHeight__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_maxStartMargin__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 78,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_maxWidth__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_minEndMargin__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 94,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_minHeight__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_minStartMargin__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 78,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_minWidth__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_opacity__alias_alpha.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 57,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_opacity__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 57,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_paddingBottom__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 105,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_paddingEnd__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 135,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_paddingLeft__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 131,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_paddingRight__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 135,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_paddingStart__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 131,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_paddingTop__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 103,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_padding__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 108,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_paddings__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 108,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_rightMargin__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 132,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_rightPadding__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 87,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_shadow__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 92,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_startMargin__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 78,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_tintColor__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_topMargin__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 87,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_topPadding__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 79,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_weight__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "common_width__matchparent.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 32,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_width__static.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 44,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "common_width__wrapcontent.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 44,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "control_Collection.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 109,
+      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "control_SafeAreaView.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 123,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "control_ScrollView.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 149,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "control_SelectBox__anchored.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 24,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "control_Switch.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 32,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "control_Switch__isOn-True.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 48,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "control_TextField__text-Clear-me.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 20,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "screenshot": "control_View.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "control_View__anchored.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 84,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "control_View__orientation-horizontal.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 108,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "control_View__orientation-vertical.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 155,
+      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
+      "note": ""
+    },
+    {
+      "screenshot": "control_Web.png",
+      "platform": "ios",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 26,
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    }
+  ]
+}

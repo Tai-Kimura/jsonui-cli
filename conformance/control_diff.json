@@ -432,12 +432,6 @@
       ]
     },
     {
-      "fixture": "Indicator/indicatorStyle__medium",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "Label/autoShrink__true",
       "platforms": [
         "android",
@@ -647,19 +641,6 @@
       "fixture": "NetworkImage/errorImage__static",
       "platforms": [
         "android"
-      ]
-    },
-    {
-      "fixture": "NetworkImage/hint__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "NetworkImage/placeholder__static",
-      "platforms": [
-        "ios",
-        "web"
       ]
     },
     {
@@ -893,14 +874,12 @@
       "fixture": "Switch/onTintColor__static",
       "platforms": [
         "android",
-        "ios",
         "web"
       ]
     },
     {
       "fixture": "Switch/thumbTintColor__static",
       "platforms": [
-        "ios",
         "web"
       ]
     },
@@ -918,12 +897,6 @@
         "android",
         "ios",
         "web"
-      ]
-    },
-    {
-      "fixture": "Switch/value__static",
-      "platforms": [
-        "ios"
       ]
     },
     {

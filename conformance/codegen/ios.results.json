@@ -192,49 +192,49 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "common/visibility__visible",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "common/visibility__invisible",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "common/visibility__gone",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "common/visibility__binding_visible",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "common/visibility__binding_invisible",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "common/visibility__binding_gone",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "common/hidden__true",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "common/hidden__false",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "common/hidden__binding_negation",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -550,24 +550,24 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "common/onclick__callback_fire",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "common/onClick__callback_fire",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "common/onLongPress__callback_fire",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "common/onPan__callback_fire",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -611,14 +611,14 @@
       "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "common/enabled__true",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "common/enabled__false",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -675,9 +675,9 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "common/onAppear__callback_fire",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -794,79 +794,79 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "Label/text__static",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Label/text__binding_initial",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Label/text__binding_mixed",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Label/text__binding_dot_path",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Label/text__binding_deep_path",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Label/text__binding_bracket_index",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Label/text__binding_bracket_scalar",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Label/text__binding_default_double",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Label/text__binding_default_single",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Label/text__binding_default_number",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Label/text__binding_default_resolved",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Label/text__binding_unresolved_flat",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Label/text__binding_unresolved_path",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Label/text__binding_number_int",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Label/text__binding_bool_text",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -1092,14 +1092,14 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "TextField/text__static",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "TextField/text__binding_twoway",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -1431,9 +1431,9 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "TextField/onTextChange__callback_fire",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -1509,14 +1509,14 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "TextView/text__static",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "TextView/text__binding_twoway",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -1759,9 +1759,9 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "TextView/onTextChange__callback_fire",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "not applicable to ios",
@@ -1831,14 +1831,14 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "Button/text__static",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Button/text__binding_initial",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -2452,14 +2452,14 @@
       "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "SelectBox/onValueChange__callback_fire",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "SelectBox/onValueChanged__callback_fire",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "not applicable to ios",
@@ -2506,14 +2506,14 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "Switch/enabled__true",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "Switch/enabled__false",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -2545,9 +2545,9 @@
       "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Switch/onValueChange__callback_fire",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "not applicable to ios",
@@ -3125,9 +3125,9 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "Radio/text__static",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -3232,9 +3232,9 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "CheckBox/text__static",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -3279,14 +3279,14 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "CheckBox/enabled__true",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "CheckBox/enabled__false",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -3313,9 +3313,9 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "CheckBox/onValueChange__callback_fire",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -3419,9 +3419,9 @@
       "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "IconLabel/text__static",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -3782,34 +3782,34 @@
       "status" : "pass"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "Embed/navigationMode__delegate_baseline",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "Embed/navigationMode__isolated_root",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Embed/navigationMode__isolated_push",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "Embed/navigationMode__isolated_pop_boundary",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "Embed/params__nested_leaf",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "Embed/params__nested_leaf_binding",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "not applicable to ios",
@@ -3817,14 +3817,14 @@
       "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "common/variantfile__regular_on_compact_tier",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "common/variantfile__compact_on_compact_tier",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "not applicable to ios",
@@ -3837,9 +3837,9 @@
       "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "common/variantfile__medium_fold_ios",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "not applicable to ios",
