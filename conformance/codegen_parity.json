@@ -691,7 +691,7 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 22,
+      "distance": 20,
       "reason": "kjui-codegen-selection-icon-placement: custom icon/label cluster renders at the trailing edge (dynamic: leading) and custom icons substitute differently — selection-component wrapper alignment family, adjacent to F5",
       "note": ""
     },
@@ -709,7 +709,7 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 13,
+      "distance": 9,
       "reason": "kjui-codegen-selection-icon-placement: custom icon/label cluster renders at the trailing edge (dynamic: leading) and custom icons substitute differently — selection-component wrapper alignment family, adjacent to F5",
       "note": ""
     },

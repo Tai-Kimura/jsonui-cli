@@ -288,11 +288,18 @@ module KjuiTools
           end
 
           # Icon tint. `iconColor` is the declared attribute for this; fontColor
-          # stays as the fallback it has always been.
+          # stays as the fallback it has always been. When neither is
+          # declared, Color.Unspecified keeps the asset's OWN colors — the
+          # dynamic component always passes `tint ?: Color.Unspecified`,
+          # while omitting the argument here left Icon()'s default
+          # LocalContentColor tint painting custom icons black (parity
+          # family kjui-codegen-selection-icon-placement).
           tint_value = json_data['iconColor'] || json_data['fontColor']
           if tint_value
             icon_color = Helpers::ResourceResolver.process_color(tint_value, required_imports)
             code += ",\n" + indent("tint = #{icon_color}", depth + 2)
+          else
+            code += ",\n" + indent("tint = Color.Unspecified", depth + 2)
           end
 
           code += "\n" + indent(")", depth + 1)
