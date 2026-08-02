@@ -264,15 +264,6 @@
       "note": ""
     },
     {
-      "screenshot": "common_alignBottom__true.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 33,
-      "reason": "kjui-dynamic-alignment: codegen is declaration-faithful (alignment/gravity and parent-align attrs position the child as declared) while DynamicView leaves children at the origin — visually confirmed on alignment__center (codegen centers, dynamic top-left). DYNAMIC-side fix candidate (KotlinJsonUI library; same 宣言忠実 precedent as the Collection 6th-wave ruling) — rides release 32",
-      "note": ""
-    },
-    {
       "screenshot": "common_alignCenterHorizontalView__static.png",
       "platform": "android",
       "env": "local",
@@ -309,15 +300,6 @@
       "note": ""
     },
     {
-      "screenshot": "common_alignLeft__true.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 15,
-      "reason": "kjui-dynamic-alignment: codegen is declaration-faithful (alignment/gravity and parent-align attrs position the child as declared) while DynamicView leaves children at the origin — visually confirmed on alignment__center (codegen centers, dynamic top-left). DYNAMIC-side fix candidate (KotlinJsonUI library; same 宣言忠実 precedent as the Collection 6th-wave ruling) — rides release 32",
-      "note": ""
-    },
-    {
       "screenshot": "common_alignRightOfView__static.png",
       "platform": "android",
       "env": "local",
@@ -336,15 +318,6 @@
       "note": ""
     },
     {
-      "screenshot": "common_alignRight__true.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 25,
-      "reason": "kjui-dynamic-alignment: codegen is declaration-faithful (alignment/gravity and parent-align attrs position the child as declared) while DynamicView leaves children at the origin — visually confirmed on alignment__center (codegen centers, dynamic top-left). DYNAMIC-side fix candidate (KotlinJsonUI library; same 宣言忠実 precedent as the Collection 6th-wave ruling) — rides release 32",
-      "note": ""
-    },
-    {
       "screenshot": "common_alignTopOfView__static.png",
       "platform": "android",
       "env": "local",
@@ -360,114 +333,6 @@
       "status": "mismatch",
       "distance": 23,
       "reason": "root testTag restored (F1) — the residual divergence is the kjui ConstraintLayout child pipeline: codegen emits bare constrained Boxes (child size/background/nested children dropped) while dynamic renders the full tree. Family: constraintlayout-child-pipeline — fix the child emit path, don't re-baseline",
-      "note": ""
-    },
-    {
-      "screenshot": "common_alignTop__true.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 21,
-      "reason": "kjui-dynamic-alignment: codegen is declaration-faithful (alignment/gravity and parent-align attrs position the child as declared) while DynamicView leaves children at the origin — visually confirmed on alignment__center (codegen centers, dynamic top-left). DYNAMIC-side fix candidate (KotlinJsonUI library; same 宣言忠実 precedent as the Collection 6th-wave ruling) — rides release 32",
-      "note": ""
-    },
-    {
-      "screenshot": "common_alignment__bottom.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 27,
-      "reason": "kjui-dynamic-alignment: codegen is declaration-faithful (alignment/gravity and parent-align attrs position the child as declared) while DynamicView leaves children at the origin — visually confirmed on alignment__center (codegen centers, dynamic top-left). DYNAMIC-side fix candidate (KotlinJsonUI library; same 宣言忠実 precedent as the Collection 6th-wave ruling) — rides release 32",
-      "note": ""
-    },
-    {
-      "screenshot": "common_alignment__bottomleading.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 13,
-      "reason": "kjui-dynamic-alignment: codegen is declaration-faithful (alignment/gravity and parent-align attrs position the child as declared) while DynamicView leaves children at the origin — visually confirmed on alignment__center (codegen centers, dynamic top-left). DYNAMIC-side fix candidate (KotlinJsonUI library; same 宣言忠実 precedent as the Collection 6th-wave ruling) — rides release 32",
-      "note": ""
-    },
-    {
-      "screenshot": "common_alignment__bottomtrailing.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 17,
-      "reason": "kjui-dynamic-alignment: codegen is declaration-faithful (alignment/gravity and parent-align attrs position the child as declared) while DynamicView leaves children at the origin — visually confirmed on alignment__center (codegen centers, dynamic top-left). DYNAMIC-side fix candidate (KotlinJsonUI library; same 宣言忠実 precedent as the Collection 6th-wave ruling) — rides release 32",
-      "note": ""
-    },
-    {
-      "screenshot": "common_alignment__center.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 29,
-      "reason": "kjui-dynamic-alignment: codegen is declaration-faithful (alignment/gravity and parent-align attrs position the child as declared) while DynamicView leaves children at the origin — visually confirmed on alignment__center (codegen centers, dynamic top-left). DYNAMIC-side fix candidate (KotlinJsonUI library; same 宣言忠実 precedent as the Collection 6th-wave ruling) — rides release 32",
-      "note": ""
-    },
-    {
-      "screenshot": "common_alignment__leading.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 15,
-      "reason": "kjui-dynamic-alignment: codegen is declaration-faithful (alignment/gravity and parent-align attrs position the child as declared) while DynamicView leaves children at the origin — visually confirmed on alignment__center (codegen centers, dynamic top-left). DYNAMIC-side fix candidate (KotlinJsonUI library; same 宣言忠実 precedent as the Collection 6th-wave ruling) — rides release 32",
-      "note": ""
-    },
-    {
-      "screenshot": "common_alignment__top.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 21,
-      "reason": "kjui-dynamic-alignment: codegen is declaration-faithful (alignment/gravity and parent-align attrs position the child as declared) while DynamicView leaves children at the origin — visually confirmed on alignment__center (codegen centers, dynamic top-left). DYNAMIC-side fix candidate (KotlinJsonUI library; same 宣言忠実 precedent as the Collection 6th-wave ruling) — rides release 32",
-      "note": ""
-    },
-    {
-      "screenshot": "common_alignment__toptrailing.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 21,
-      "reason": "kjui-dynamic-alignment: codegen is declaration-faithful (alignment/gravity and parent-align attrs position the child as declared) while DynamicView leaves children at the origin — visually confirmed on alignment__center (codegen centers, dynamic top-left). DYNAMIC-side fix candidate (KotlinJsonUI library; same 宣言忠実 precedent as the Collection 6th-wave ruling) — rides release 32",
-      "note": ""
-    },
-    {
-      "screenshot": "common_alignment__trailing.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 18,
-      "reason": "kjui-dynamic-alignment: codegen is declaration-faithful (alignment/gravity and parent-align attrs position the child as declared) while DynamicView leaves children at the origin — visually confirmed on alignment__center (codegen centers, dynamic top-left). DYNAMIC-side fix candidate (KotlinJsonUI library; same 宣言忠実 precedent as the Collection 6th-wave ruling) — rides release 32",
-      "note": ""
-    },
-    {
-      "screenshot": "common_centerHorizontal__true.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 24,
-      "reason": "kjui-dynamic-alignment: codegen is declaration-faithful (alignment/gravity and parent-align attrs position the child as declared) while DynamicView leaves children at the origin — visually confirmed on alignment__center (codegen centers, dynamic top-left). DYNAMIC-side fix candidate (KotlinJsonUI library; same 宣言忠実 precedent as the Collection 6th-wave ruling) — rides release 32",
-      "note": ""
-    },
-    {
-      "screenshot": "common_centerInParent__true.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 32,
-      "reason": "kjui-dynamic-alignment: codegen is declaration-faithful (alignment/gravity and parent-align attrs position the child as declared) while DynamicView leaves children at the origin — visually confirmed on alignment__center (codegen centers, dynamic top-left). DYNAMIC-side fix candidate (KotlinJsonUI library; same 宣言忠実 precedent as the Collection 6th-wave ruling) — rides release 32",
-      "note": ""
-    },
-    {
-      "screenshot": "common_centerVertical__true.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 15,
-      "reason": "kjui-dynamic-alignment: codegen is declaration-faithful (alignment/gravity and parent-align attrs position the child as declared) while DynamicView leaves children at the origin — visually confirmed on alignment__center (codegen centers, dynamic top-left). DYNAMIC-side fix candidate (KotlinJsonUI library; same 宣言忠実 precedent as the Collection 6th-wave ruling) — rides release 32",
       "note": ""
     },
     {

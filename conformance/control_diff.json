@@ -1219,12 +1219,6 @@
       ]
     },
     {
-      "fixture": "common/alignLeft__true",
-      "platforms": [
-        "android"
-      ]
-    },
-    {
       "fixture": "common/alignRightOfView__static",
       "platforms": [
         "android",
@@ -1252,12 +1246,6 @@
         "android",
         "ios",
         "web"
-      ]
-    },
-    {
-      "fixture": "common/alignTop__true",
-      "platforms": [
-        "android"
       ]
     },
     {
