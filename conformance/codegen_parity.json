@@ -1187,16 +1187,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 12,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "CheckBox_fontColor__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 10,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1213,7 +1204,7 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 167,
+      "distance": 231,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
       "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
     },
@@ -1222,7 +1213,7 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 199,
+      "distance": 154,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
       "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
     },
@@ -1267,7 +1258,7 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 136,
+      "distance": 126,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
       "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
     },
@@ -1321,7 +1312,7 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 126,
+      "distance": 82,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
       "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
     },
@@ -1339,7 +1330,7 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 136,
+      "distance": 126,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
       "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
     },
@@ -1393,7 +1384,7 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 435,
+      "distance": 473,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
       "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
     },
@@ -1411,7 +1402,7 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 136,
+      "distance": 126,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
       "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
     },
@@ -1470,21 +1461,12 @@
       "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
     },
     {
-      "screenshot": "IconLabel_fontColor__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 12,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
       "screenshot": "IconLabel_icon_off__static.png",
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
       "distance": 23,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1493,7 +1475,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 23,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1502,7 +1484,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 33,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1511,25 +1493,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 136,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "Label_fontColor__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 12,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "Label_highlightAttributes__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 24,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1538,7 +1502,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 30,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1547,7 +1511,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 30,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1556,7 +1520,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 35,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1565,7 +1529,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 35,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1574,7 +1538,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 16,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1582,17 +1546,8 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 15,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "Radio_fontColor__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 9,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "distance": 16,
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1601,7 +1556,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 28,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1610,7 +1565,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 105,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1619,7 +1574,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 105,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1627,7 +1582,7 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 123,
+      "distance": 50,
       "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
       "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
     },
@@ -1636,52 +1591,7 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 123,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "SafeAreaView_safeAreaInsetPositions__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 126,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "ScrollView_orientation__horizontal.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 55,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "ScrollView_orientation__vertical.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 149,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "ScrollView_showsHorizontalScrollIndicator__true.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 149,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "ScrollView_showsVerticalScrollIndicator__true.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 149,
+      "distance": 73,
       "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
       "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
     },
@@ -1691,16 +1601,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 36,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "Segment_selectedColor__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 32,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1709,7 +1610,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 26,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1718,7 +1619,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 33,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1727,7 +1628,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 48,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
       "note": ""
     },
     {
@@ -1736,7 +1637,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 48,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
       "note": ""
     },
     {
@@ -1745,7 +1646,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 48,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
       "note": ""
     },
     {
@@ -1754,7 +1655,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 37,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
       "note": ""
     },
     {
@@ -1762,8 +1663,8 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 43,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "distance": 49,
+      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
       "note": ""
     },
     {
@@ -1771,8 +1672,8 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 43,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "distance": 49,
+      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
       "note": ""
     },
     {
@@ -1781,7 +1682,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 37,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
       "note": ""
     },
     {
@@ -1790,7 +1691,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 39,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
       "note": ""
     },
     {
@@ -1799,43 +1700,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 13,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "TabView_showLabels__true.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 16,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "TabView_tabBarBackground__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 16,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "TabView_tintColor__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 17,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "TabView_unselectedColor__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 16,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1844,7 +1709,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 27,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -1853,143 +1718,8 @@
       "env": "local",
       "status": "mismatch",
       "distance": 14,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
-    },
-    {
-      "screenshot": "TextView_hintColor__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 17,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "View_direction__bottomtotop.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 155,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "View_direction__lefttoright.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 155,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "View_direction__none.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 155,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "View_direction__righttoleft.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 155,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "View_direction__toptobottom.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 155,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "View_distribution__equalcentering.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 108,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "View_distribution__equalspacing.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 108,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "View_distribution__fill.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 108,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "View_distribution__fillequally.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 108,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "View_highlighted__true.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "View_orientation__horizontal.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 108,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "View_orientation__vertical.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 155,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "View_safeAreaInsetPositions__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "View_spacing__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 160,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
     },
     {
       "screenshot": "Web_html__static.png",
@@ -1997,268 +1727,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 29,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_alignBottomOfView__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 87,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignBottomView__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignBottom__true.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignCenterHorizontalView__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 65,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignCenterVerticalView__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 71,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignLeftOfView__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 38,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignLeftView__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignLeft__true.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignRightOfView__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 72,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignRightView__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 32,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignRight__true.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignTopOfView__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 81,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignTopView__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignTop__true.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignment__bottom.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignment__bottomleading.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignment__bottomtrailing.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignment__center.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignment__leading.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignment__top.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignment__topleading.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignment__toptrailing.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alignment__trailing.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_alpha__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 57,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_background__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 150,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_borderColor__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_borderStyle__dashed.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_borderStyle__dotted.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_borderStyle__solid.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -2266,8 +1735,8 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 153,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "distance": 79,
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -2275,224 +1744,8 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 86,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_bottomPadding__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 81,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_centerHorizontal__true.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_centerInParent__true.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_centerVertical__true.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_clipToBounds__true.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_cornerRadius__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 86,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_distribution__equalcentering.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 108,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_distribution__equalspacing.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 108,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_distribution__fill.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 108,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_distribution__fillequally.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 108,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_endMargin__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 94,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_gravity__bottom.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 92,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_gravity__center.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 108,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_gravity__centerhorizontal.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 107,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_gravity__centervertical.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 95,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_gravity__left.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 90,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_gravity__right.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 100,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_gravity__top.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 90,
-      "reason": "positioning-semantics divergence (alignment/gravity/distribution family) — codegen layout math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_height__matchparent.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 244,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_height__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 58,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_height__wrapcontent.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 40,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_idealHeight__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_idealWidth__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_indexAbove__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "distance": 31,
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -2500,8 +1753,8 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "distance": 16,
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -2509,188 +1762,8 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 127,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_leftPadding__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 81,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_margins__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_maxEndMargin__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 94,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_maxHeight__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_maxStartMargin__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 78,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_maxWidth__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_minEndMargin__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 94,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_minHeight__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_minStartMargin__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 78,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_minWidth__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_opacity__alias_alpha.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 57,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_opacity__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 57,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_paddingBottom__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 105,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_paddingEnd__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 135,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_paddingLeft__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 131,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_paddingRight__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 135,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_paddingStart__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 131,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_paddingTop__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 103,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_padding__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 108,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_paddings__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 108,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "distance": 143,
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -2699,16 +1772,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 132,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_rightPadding__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 87,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -2716,26 +1780,8 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 92,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_startMargin__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 78,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_tintColor__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "distance": 104,
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -2743,54 +1789,9 @@
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 87,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "distance": 35,
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
-    },
-    {
-      "screenshot": "common_topPadding__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 79,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_weight__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
-      "note": ""
-    },
-    {
-      "screenshot": "common_width__matchparent.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 32,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_width__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 44,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "common_width__wrapcontent.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 44,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
     },
     {
       "screenshot": "control_Collection.png",
@@ -2802,30 +1803,12 @@
       "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
     },
     {
-      "screenshot": "control_SafeAreaView.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 123,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "control_ScrollView.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 149,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
       "screenshot": "control_SelectBox__anchored.png",
       "platform": "ios",
       "env": "local",
       "status": "mismatch",
-      "distance": 24,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "distance": 23,
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     },
     {
@@ -2834,7 +1817,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 32,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
       "note": ""
     },
     {
@@ -2843,7 +1826,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 48,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
       "note": ""
     },
     {
@@ -2852,44 +1835,8 @@
       "env": "local",
       "status": "mismatch",
       "distance": 20,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
-    },
-    {
-      "screenshot": "control_View.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "control_View__anchored.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 84,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "control_View__orientation-horizontal.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 108,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "control_View__orientation-vertical.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 155,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
     },
     {
       "screenshot": "control_Web.png",
@@ -2897,7 +1844,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 26,
-      "reason": "ios-host-color-provider-blocked: the SwiftUI codegen host never registers SwiftJsonUIConfiguration.colorProvider (consumers wire it at app startup; the host app does not), so every named color resolves nil — Rectangle fills fall back to Color.black, backgrounds to none. Saturation analysis: codegen artifacts have ZERO saturated pixels wherever dynamic has color. Measurement is invalid for color-bearing fixtures until the host wiring lands (25 領域, one-line fix + re-measure); do not invest in per-fixture judgment before that.",
+      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
       "note": ""
     }
   ]
