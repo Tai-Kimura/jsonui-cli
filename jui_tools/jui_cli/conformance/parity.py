@@ -39,6 +39,12 @@ SCHEMA_VERSION = 1
 
 LEDGER_NAME = "codegen_parity.json"
 
+#: Platforms with a codegen host distinct from their dynamic host. Web is
+#: deliberately absent: its conformance host already renders through the
+#: rjui codegen (conformance/hosts/web/generate.mjs), so its baseline IS
+#: the generated pipeline and parity would compare a pipeline to itself.
+PARITY_PLATFORMS = ("ios", "android")
+
 #: Reason recorded by ``--update`` for entries nobody has reviewed yet.
 #: The gate treats it as accepted (it IS recorded), but the string marks
 #: the consumption backlog grep-ably.

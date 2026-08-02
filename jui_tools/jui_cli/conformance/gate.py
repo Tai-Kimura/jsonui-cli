@@ -148,6 +148,8 @@ def evaluate(
 
         ledger = parity_mod.load_ledger(parity_mod.ledger_path(conformance_dir))
         for p in list(dict.fromkeys(platforms)):
+            if p not in parity_mod.PARITY_PLATFORMS:
+                continue  # web's host already renders through codegen
             result = parity_mod.measure(conformance_dir, p, env=env)
             verdict = parity_mod.check(result, ledger)
             if verdict.error:

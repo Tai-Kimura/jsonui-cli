@@ -117,6 +117,60 @@ jobs:
             conformance/artifacts/ios/
 
   # ------------------------------------------------------------------ #
+  # iOS codegen — the SAME fixtures through the sjui-GENERATED SwiftUI
+  # views (production pipeline). Screenshots feed `gate --parity`, which
+  # compares them against the dynamic baselines: dynamic ≡ codegen as a
+  # judged invariant instead of maintainer working memory (plan 25 A).
+  # ------------------------------------------------------------------ #
+  ios-codegen:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      CONFORMANCE_DIR: ${{ github.workspace }}/conformance
+      JSONUI_TEST_RUNNER_PATH: ${{ github.workspace }}/jsonui-test-runner
+      SJUI_TOOLS_PATH: ${{ github.workspace }}/sjui_tools
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/SwiftJsonUI
+          ref: master
+          path: SwiftJsonUI
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/jsonui-test-runner
+          path: jsonui-test-runner
+          submodules: true
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "16.4"
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - name: Install xcodeproj gem
+        run: gem install xcodeproj --no-document
+      - name: Sync fixtures + vendor the iOS test-runner driver
+        run: SwiftJsonUI/ConformanceHost/scripts/sync_fixtures.sh
+      - name: Generate the codegen fixture registry (sjui build)
+        run: ruby SwiftJsonUI/ConformanceHost/scripts/generate_codegen_host.rb
+      - name: Generate ConformanceHost.xcodeproj (codegen sources)
+        run: ruby SwiftJsonUI/ConformanceHost/scripts/generate_project.rb
+      - name: Run iOS codegen suite (headless simulator)
+        env:
+          SIMULATOR_NAME: iPhone 16 Pro
+          HOST_MODE: codegen
+        run: SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-ios-codegen
+          if-no-files-found: error
+          path: |
+            conformance/codegen/ios.results.json
+            conformance/artifacts/ios-codegen/
+
+  # ------------------------------------------------------------------ #
   # Android — KotlinJsonUI Compose dynamic host on a headless emulator
   # (KVM-accelerated on ubuntu-latest). Tablet profile matches the
   # committed baseline runs (small phones can push fixtures offscreen).
@@ -244,6 +298,80 @@ jobs:
             conformance/artifacts/android/
 
   # ------------------------------------------------------------------ #
+  # Android codegen — the SAME fixtures through the kjui-GENERATED
+  # Compose views (production pipeline); screenshots feed `gate --parity`
+  # against the dynamic baselines (plan 25 B). Same emulator budget
+  # arithmetic as the dynamic job.
+  # ------------------------------------------------------------------ #
+  android-codegen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 210
+    env:
+      CONFORMANCE_DIR: ${{ github.workspace }}/conformance
+      KJUI_TOOLS_PATH: ${{ github.workspace }}/kjui_tools
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/KotlinJsonUI
+          ref: main
+          path: KotlinJsonUI
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: ruby/setup-ruby@v1 # kjui build inside generate_codegen_host.rb
+        with:
+          ruby-version: "3.3"
+      - name: Generate the codegen fixture registry (kjui build)
+        run: ruby KotlinJsonUI/conformance-host/scripts/generate_codegen_host.rb
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run Android codegen suite (emulator)
+        id: android_codegen_emu
+        continue-on-error: true
+        timeout-minutes: 75
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_tablet
+          disable-animations: true
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: |
+            HOST_MODE=codegen KotlinJsonUI/conformance-host/scripts/run_conformance.sh --fresh
+            HOST_MODE=codegen KotlinJsonUI/conformance-host/scripts/collect_results.sh
+      - name: Retry Android codegen suite (fresh emulator)
+        if: steps.android_codegen_emu.outcome == 'failure'
+        timeout-minutes: 100
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_tablet
+          disable-animations: true
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: |
+            HOST_MODE=codegen KotlinJsonUI/conformance-host/scripts/run_conformance.sh --fresh
+            HOST_MODE=codegen KotlinJsonUI/conformance-host/scripts/collect_results.sh
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-android-codegen
+          if-no-files-found: error
+          path: |
+            conformance/codegen/android.results.json
+            conformance/artifacts/android-codegen/
+
+  # ------------------------------------------------------------------ #
   # Merge all three fresh results into REPORT.md and gate on:
   # 0 cross-platform mismatches / 0 fail / 0 error / no stale results /
   # screenshots actually compared / no visual or attribute-effect
@@ -253,7 +381,7 @@ jobs:
   report:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [web, ios, android]
+    needs: [web, ios, android, ios-codegen, android-codegen]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -292,7 +420,10 @@ jobs:
         # measures the environment, not a regression). The attribute-effect
         # ledger is asserted from local renders, so under this env an inert
         # entry is a notice, not a failure (plan 25 Phase 0).
-        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web','--env','ci']))"
+        # --parity: the codegen jobs' screenshots must match the dynamic
+        # baselines within the calibrated thresholds, with every deviation
+        # recorded + justified in codegen_parity.json (plan 25 A/B).
+        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web','--env','ci','--parity']))"
       - name: Upload combined report
         if: always()
         uses: actions/upload-artifact@v4

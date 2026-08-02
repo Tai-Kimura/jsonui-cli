@@ -178,16 +178,16 @@ class GateParityTest(unittest.TestCase):
         generate_conformance(defs_path, self.conf)
         manifest = json.loads((self.conf / "manifest.json").read_text(encoding="utf-8"))
         ids = [f["id"] for f in manifest["fixtures"]]
-        _write_results(self.conf, "web", {fixture_id: "pass" for fixture_id in ids})
+        _write_results(self.conf, "android", {fixture_id: "pass" for fixture_id in ids})
 
-        dyn = self.conf / "artifacts" / "web"
+        dyn = self.conf / "artifacts" / "android"
         _write_png(dyn / "A.png")
-        baseline.update_baseline(self.conf, "web")
+        baseline.update_baseline(self.conf, "android")
         # The synthetic results reference no screenshots, so the baked
         # baseline entry counts as missing_artifact on the DYNAMIC side —
         # give that metric slack; parity is what this test exercises.
         (self.conf / "gate_ratchet.json").write_text(
-            json.dumps({"missing_artifact": {"web": 1}}), encoding="utf-8"
+            json.dumps({"missing_artifact": {"android": 1}}), encoding="utf-8"
         )
 
     def tearDown(self):
@@ -196,7 +196,7 @@ class GateParityTest(unittest.TestCase):
     def _evaluate(self):
         from jui_cli.conformance.gate import evaluate
 
-        return evaluate(self.conf, ["web"], parity=True)
+        return evaluate(self.conf, ["android"], parity=True)
 
     def test_missing_codegen_artifacts_fail_when_parity_requested(self):
         outcome = self._evaluate()
@@ -204,14 +204,14 @@ class GateParityTest(unittest.TestCase):
         self.assertTrue(any("parity not measured" in p for p in outcome.problems))
 
     def test_unrecorded_drift_fails_and_ledgered_drift_passes(self):
-        cg = self.conf / "artifacts" / "web-codegen"
+        cg = self.conf / "artifacts" / "android-codegen"
         _write_png(cg / "A.png", box=(120, 100, 240, 180))
 
         outcome = self._evaluate()
         self.assertFalse(outcome.ok)
         self.assertTrue(any("codegen-parity deviation" in p for p in outcome.problems))
 
-        result = parity.measure(self.conf, "web")
+        result = parity.measure(self.conf, "android")
         path = parity.ledger_path(self.conf)
         path.write_text(
             parity.render_ledger(parity.update_ledger({}, result)), encoding="utf-8"
@@ -220,8 +220,34 @@ class GateParityTest(unittest.TestCase):
         self.assertTrue(outcome.ok)
         self.assertTrue(any("codegen parity OK" in n for n in outcome.notices))
 
+    def test_web_is_out_of_parity_scope(self):
+        # Web's host already renders through the rjui codegen — parity would
+        # compare a pipeline to itself, so the gate must not demand
+        # artifacts/web-codegen.
+        from jui_cli.conformance.gate import evaluate
+
+        try:
+            from .test_conformance_report import _write_results
+        except ImportError:
+            from test_conformance_report import _write_results
+        import json as _json
+
+        manifest = _json.loads((self.conf / "manifest.json").read_text(encoding="utf-8"))
+        ids = [f["id"] for f in manifest["fixtures"]]
+        _write_results(self.conf, "web", {fixture_id: "pass" for fixture_id in ids})
+        dyn = self.conf / "artifacts" / "web"
+        _write_png(dyn / "A.png")
+        baseline.update_baseline(self.conf, "web")
+        (self.conf / "gate_ratchet.json").write_text(
+            _json.dumps({"missing_artifact": {"web": 1, "android": 1}}), encoding="utf-8"
+        )
+        cg = self.conf / "artifacts" / "android-codegen"
+        _write_png(cg / "A.png")
+        outcome = evaluate(self.conf, ["web", "android"], parity=True)
+        self.assertTrue(outcome.ok, outcome.problems)
+
     def test_matching_codegen_render_passes_clean(self):
-        cg = self.conf / "artifacts" / "web-codegen"
+        cg = self.conf / "artifacts" / "android-codegen"
         _write_png(cg / "A.png")
         outcome = self._evaluate()
         self.assertTrue(outcome.ok)
