@@ -1396,6 +1396,11 @@ module KjuiTools
           "value as? Painter ?: updated.#{name}"
         when 'Color'
           "(value as? Color) ?: (value as? ULong)?.let { Color(it) } ?: updated.#{name}"
+        when 'CollectionDataSource'
+          # Fully qualified like the Data-class emission (data_model_updater):
+          # the generated ViewModel imports nothing from com.kotlinjsonui.data,
+          # so a bare cast is an unresolved reference on a fresh generation.
+          "value as? com.kotlinjsonui.data.CollectionDataSource ?: updated.#{name}"
         else
           "value as? #{kotlin_type} ?: updated.#{name}"
         end
