@@ -976,10 +976,14 @@ module KjuiTools
               code += "\n" + indent("#{cell_class}View(", depth + 4)
               code += "\n" + indent("viewModel = cellViewModel,", depth + 5)
               collection_id = json_data['id']
+              # No fillMaxWidth: the cell view defines its own size (dynamic
+              # honors the declared width; a full-width cell declares
+              # matchParent itself). Stretching here was the parity deviation
+              # measured across every android Collection fixture.
               if collection_id
-                code += "\n" + indent("modifier = Modifier.testTag(\"#{collection_id}_item_\$cellIndex\").fillMaxWidth()", depth + 5)
+                code += "\n" + indent("modifier = Modifier.testTag(\"#{collection_id}_item_\$cellIndex\")", depth + 5)
               else
-                code += "\n" + indent("modifier = Modifier.fillMaxWidth()", depth + 5)
+                code += "\n" + indent("modifier = Modifier", depth + 5)
               end
               code += "\n" + indent(")", depth + 4)
               code += "\n" + indent("}", depth + 3)
@@ -1399,10 +1403,11 @@ module KjuiTools
             out += "\n" + indent("#{cell_class}View(", depth + 3)
             out += "\n" + indent("viewModel = cellViewModel,", depth + 4)
             collection_id = json_data['id']
+            # No fillMaxWidth on cells — see the grid path note above.
             if collection_id
-              out += "\n" + indent("modifier = Modifier.testTag(\"#{collection_id}_item_\$cellIndex\").fillMaxWidth()", depth + 4)
+              out += "\n" + indent("modifier = Modifier.testTag(\"#{collection_id}_item_\$cellIndex\")", depth + 4)
             else
-              out += "\n" + indent("modifier = Modifier.fillMaxWidth()", depth + 4)
+              out += "\n" + indent("modifier = Modifier", depth + 4)
             end
             out += "\n" + indent(")", depth + 3)
             out += "\n" + indent("}", depth + 2)
@@ -1487,10 +1492,11 @@ module KjuiTools
             out += "\n" + indent("#{cell_class}View(", depth + 3)
             out += "\n" + indent("viewModel = cellViewModel,", depth + 4)
             collection_id = json_data['id']
+            # No fillMaxWidth on cells — see the grid path note above.
             if collection_id
-              out += "\n" + indent("modifier = Modifier.testTag(\"#{collection_id}_item_\$cellIndex\").fillMaxWidth()", depth + 4)
+              out += "\n" + indent("modifier = Modifier.testTag(\"#{collection_id}_item_\$cellIndex\")", depth + 4)
             else
-              out += "\n" + indent("modifier = Modifier.fillMaxWidth()", depth + 4)
+              out += "\n" + indent("modifier = Modifier", depth + 4)
             end
             out += "\n" + indent(")", depth + 3)
             out += "\n" + indent("}", depth + 2)
