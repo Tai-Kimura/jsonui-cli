@@ -377,6 +377,12 @@ module SjuiTools
             # Use StringManager for localized strings
             get_text_with_string_manager("\"#{value}\"")
           end
+        elsif json_class == 'CollectionDataSource' && (value.is_a?(Array) || value.is_a?(Hash))
+          # Materialize the declared defaultValue (INTERACTIVE_HOST_CONTRACT
+          # §4 shapes: shorthand cell array / explicit sections object) into
+          # a real initializer — passing the raw Ruby value through emitted
+          # invalid Swift and dropped declared cells (31 F4 Phase 2).
+          collection_data_source_literal(value)
         else
           # Check if default value contains a type constructor that needs mode conversion
           # e.g., "CollectionDataSource()" -> "UIKitCollectionDataSource()" in UIKit mode
@@ -390,6 +396,45 @@ module SjuiTools
           end
           value
         end
+      end
+
+      # CollectionDataSource defaultValue → Swift initializer literal.
+      # Shapes (INTERACTIVE_HOST_CONTRACT.md §4): shorthand `[ {...} ]`
+      # (one section holding these cell dicts) or explicit
+      # `{"sections" => [{"cell" => name?, "cells" => [ {...} ]}]}`.
+      # Cell dicts emit as [String: Any] literals with string/number/bool
+      # values only.
+      def collection_data_source_literal(value)
+        sections =
+          if value.is_a?(Array)
+            [{ 'cell' => nil, 'cells' => value }]
+          elsif value.is_a?(Hash) && value['sections'].is_a?(Array)
+            value['sections']
+          else
+            []
+          end
+        return 'CollectionDataSource()' if sections.empty?
+
+        section_literals = sections.map do |section|
+          next nil unless section.is_a?(Hash)
+          cells = section['cells'].is_a?(Array) ? section['cells'] : []
+          cell_dicts = cells.select { |c| c.is_a?(Hash) }.map do |cell|
+            pairs = cell.map do |k, v|
+              literal =
+                case v
+                when String then v.inspect
+                when true, false, Numeric then v.to_s
+                end
+              literal && "#{k.to_s.inspect}: #{literal}"
+            end.compact
+            pairs.empty? ? '[:]' : "[#{pairs.join(', ')}]"
+          end
+          view_name = section['cell'].is_a?(String) ? section['cell'].inspect : '""'
+          "CollectionDataSection(cells: (viewName: #{view_name}, " \
+            "data: [#{cell_dicts.join(', ')}]))"
+        end.compact
+
+        "CollectionDataSource(sections: [#{section_literals.join(', ')}])"
       end
     end
   end
