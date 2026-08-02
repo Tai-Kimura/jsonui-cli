@@ -110,7 +110,11 @@ module SjuiTools
           # Use LazyVStack for section-based collections, List for legacy single column
           has_sections = @component['sections'] && !@component['sections'].empty?
 
-          is_flow = layout == 'flow'
+          # Case-insensitive: the declared enum admits 'Flow' as well as
+          # 'flow', and dynamic reads the value after the runtime
+          # normalizer downcases it (same defect measured on kjui as
+          # parity d=32 — Collection/layout__flow_2).
+          is_flow = layout.to_s.casecmp('flow').zero?
 
           if !is_lazy
             generate_non_lazy(
