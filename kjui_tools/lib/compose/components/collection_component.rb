@@ -55,7 +55,11 @@ module KjuiTools
           layout = json_data['layout'] || json_data['orientation'] || 'vertical'
           layout = 'horizontal' if json_data['horizontalScroll'] == true
           is_horizontal = layout == 'horizontal'
-          is_flow = layout == 'flow'
+          # Case-insensitive: the declared enum admits 'Flow' as well as
+          # 'flow', and the dynamic path sees the value AFTER the runtime
+          # normalizer downcases it — reading it raw here rendered 'Flow'
+          # as a vertical stack while dynamic wrapped it (parity d=32).
+          is_flow = layout.to_s.casecmp('flow').zero?
 
           # lazy: "none" → emit Row/Column + forEachIndexed, no LazyColumn/LazyVerticalGrid
           # and no verticalScroll/horizontalScroll. Intended for Collections nested
