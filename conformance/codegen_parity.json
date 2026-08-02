@@ -5,1171 +5,1181 @@
     {
       "screenshot": "Blur_effectStyle__dark.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 17,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Blur_effectStyle__extralight.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 10,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "CheckBox_icon__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 22,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "CheckBox_selectedIcon__alias_onSrc.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 15,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "CheckBox_selectedIcon__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 13,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_columnSpacing__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 33,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_columns__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 64,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_defaultScrollAnchor__bottom.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 33,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_defaultScrollAnchor__center.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 33,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_defaultScrollAnchor__top.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 33,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_horizontalScroll__true.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 78,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_insetHorizontal__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 40,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_insetVertical__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 39,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_insets__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 43,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_itemSpacing__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 30,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_layout__flow.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 18,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_layout__flow_2.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 34,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_layout__horizontal.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 31,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_layout__leftaligned.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 33,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_layout__leftaligned_2.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 33,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_layout__vertical.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 33,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_lazy__eager.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 34,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_lazy__lazy.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 33,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_lineSpacing__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 30,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_orientation__horizontal.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 31,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_orientation__vertical.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 33,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_reverseLayout__true.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 27,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_scrollAnchor__bottom.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 33,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_scrollAnchor__center.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 33,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Collection_scrollAnchor__top.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 33,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "GradientView_gradientDirection__horizontal.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 12,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "GradientView_gradientDirection__oblique.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 12,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "GradientView_gradientDirection__vertical.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 12,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "GradientView_gradient__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 12,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "GradientView_locations__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 12,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "IconLabel_icon_off__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 20,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "IconLabel_icon_on__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 20,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Image_renderingMode__template.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 11,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Label_edgeInset__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 12,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Label_highlightAttributes__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 22,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "NetworkImage_loadingImage__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 36,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Radio_iconSize__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 19,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TabView_selectedIndex__alias_selectedTabIndex.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 19,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TabView_selectedIndex__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 19,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TabView_showLabels__true.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 15,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TabView_tabBarBackground__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 12,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TabView_tabs__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 15,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TabView_tintColor__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 15,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TabView_unselectedColor__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 14,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextField_borderStyle__bezel.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 20,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextField_borderStyle__bezel_2.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 20,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextField_borderStyle__line.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 20,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextField_borderStyle__line_2.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 20,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextField_borderStyle__roundedrect.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 20,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextField_borderStyle__roundedrect_2.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 20,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_containerInset__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 46,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_edgeInset__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_editable__true.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_flexible__true.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 45,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_fontColor__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_fontFamily__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_fontSize__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_font__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_hintColor__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_hintFontSize__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 50,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_hintFont__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_hintLineHeightMultiple__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_hint__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 44,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_input__allphabet.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_input__alphabet.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_input__decimal.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_input__default.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_input__email.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_input__number.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_input__password.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_input__phone.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_input__url.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_keyboardType__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_lineBreakMode__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_placeholder__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_returnKeyType__continue.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_returnKeyType__done.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_returnKeyType__go.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_returnKeyType__google.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_returnKeyType__join.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_returnKeyType__next.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_returnKeyType__return.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_returnKeyType__route.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_returnKeyType__search.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_returnKeyType__send.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_returnKeyType__yahoo.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_textAlign__center.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_textAlign__center_2.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_textAlign__left.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_textAlign__left_2.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_textAlign__right.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "TextView_textAlign__right_2.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Web_html__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 55,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_alignBottomOfView__static.png",
       "platform": "android",
-      "status": "missing",
-      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
-      "note": "",
-      "env": "local"
+      "env": "local",
+      "status": "mismatch",
+      "distance": 31,
+      "reason": "root testTag restored (F1) — the residual divergence is the kjui ConstraintLayout child pipeline: codegen emits bare constrained Boxes (child size/background/nested children dropped) while dynamic renders the full tree. Family: constraintlayout-child-pipeline — fix the child emit path, don't re-baseline",
+      "note": ""
     },
     {
       "screenshot": "common_alignBottomView__static.png",
       "platform": "android",
-      "status": "missing",
-      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
-      "note": "",
-      "env": "local"
+      "env": "local",
+      "status": "mismatch",
+      "distance": 10,
+      "reason": "root testTag restored (F1) — the residual divergence is the kjui ConstraintLayout child pipeline: codegen emits bare constrained Boxes (child size/background/nested children dropped) while dynamic renders the full tree. Family: constraintlayout-child-pipeline — fix the child emit path, don't re-baseline",
+      "note": ""
     },
     {
       "screenshot": "common_alignBottom__true.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 33,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_alignCenterHorizontalView__static.png",
       "platform": "android",
-      "status": "missing",
-      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
-      "note": "",
-      "env": "local"
+      "env": "local",
+      "status": "mismatch",
+      "distance": 35,
+      "reason": "root testTag restored (F1) — the residual divergence is the kjui ConstraintLayout child pipeline: codegen emits bare constrained Boxes (child size/background/nested children dropped) while dynamic renders the full tree. Family: constraintlayout-child-pipeline — fix the child emit path, don't re-baseline",
+      "note": ""
     },
     {
       "screenshot": "common_alignCenterVerticalView__static.png",
       "platform": "android",
-      "status": "missing",
-      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
-      "note": "",
-      "env": "local"
+      "env": "local",
+      "status": "mismatch",
+      "distance": 16,
+      "reason": "root testTag restored (F1) — the residual divergence is the kjui ConstraintLayout child pipeline: codegen emits bare constrained Boxes (child size/background/nested children dropped) while dynamic renders the full tree. Family: constraintlayout-child-pipeline — fix the child emit path, don't re-baseline",
+      "note": ""
     },
     {
       "screenshot": "common_alignLeftOfView__static.png",
       "platform": "android",
-      "status": "missing",
-      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
-      "note": "",
-      "env": "local"
+      "env": "local",
+      "status": "mismatch",
+      "distance": 10,
+      "reason": "root testTag restored (F1) — the residual divergence is the kjui ConstraintLayout child pipeline: codegen emits bare constrained Boxes (child size/background/nested children dropped) while dynamic renders the full tree. Family: constraintlayout-child-pipeline — fix the child emit path, don't re-baseline",
+      "note": ""
     },
     {
       "screenshot": "common_alignLeftView__static.png",
       "platform": "android",
-      "status": "missing",
-      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
-      "note": "",
-      "env": "local"
+      "env": "local",
+      "status": "mismatch",
+      "distance": 23,
+      "reason": "root testTag restored (F1) — the residual divergence is the kjui ConstraintLayout child pipeline: codegen emits bare constrained Boxes (child size/background/nested children dropped) while dynamic renders the full tree. Family: constraintlayout-child-pipeline — fix the child emit path, don't re-baseline",
+      "note": ""
     },
     {
       "screenshot": "common_alignLeft__true.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 15,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_alignRightOfView__static.png",
       "platform": "android",
-      "status": "missing",
-      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
-      "note": "",
-      "env": "local"
+      "env": "local",
+      "status": "mismatch",
+      "distance": 78,
+      "reason": "root testTag restored (F1) — the residual divergence is the kjui ConstraintLayout child pipeline: codegen emits bare constrained Boxes (child size/background/nested children dropped) while dynamic renders the full tree. Family: constraintlayout-child-pipeline — fix the child emit path, don't re-baseline",
+      "note": ""
     },
     {
       "screenshot": "common_alignRightView__static.png",
       "platform": "android",
-      "status": "missing",
-      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
-      "note": "",
-      "env": "local"
+      "env": "local",
+      "status": "mismatch",
+      "distance": 34,
+      "reason": "root testTag restored (F1) — the residual divergence is the kjui ConstraintLayout child pipeline: codegen emits bare constrained Boxes (child size/background/nested children dropped) while dynamic renders the full tree. Family: constraintlayout-child-pipeline — fix the child emit path, don't re-baseline",
+      "note": ""
     },
     {
       "screenshot": "common_alignRight__true.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 25,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_alignTopOfView__static.png",
       "platform": "android",
-      "status": "missing",
-      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
-      "note": "",
-      "env": "local"
+      "env": "local",
+      "status": "mismatch",
+      "distance": 16,
+      "reason": "root testTag restored (F1) — the residual divergence is the kjui ConstraintLayout child pipeline: codegen emits bare constrained Boxes (child size/background/nested children dropped) while dynamic renders the full tree. Family: constraintlayout-child-pipeline — fix the child emit path, don't re-baseline",
+      "note": ""
     },
     {
       "screenshot": "common_alignTopView__static.png",
       "platform": "android",
-      "status": "missing",
-      "reason": "codegen ConstraintLayout path loses the root testTag ('root' not found) — real kjui bug, fixture cannot capture",
-      "note": "",
-      "env": "local"
+      "env": "local",
+      "status": "mismatch",
+      "distance": 23,
+      "reason": "root testTag restored (F1) — the residual divergence is the kjui ConstraintLayout child pipeline: codegen emits bare constrained Boxes (child size/background/nested children dropped) while dynamic renders the full tree. Family: constraintlayout-child-pipeline — fix the child emit path, don't re-baseline",
+      "note": ""
     },
     {
       "screenshot": "common_alignTop__true.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 21,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_alignment__bottom.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 27,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_alignment__bottomleading.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 13,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_alignment__bottomtrailing.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 17,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_alignment__center.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 29,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_alignment__leading.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 15,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_alignment__top.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 21,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_alignment__toptrailing.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 21,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_alignment__trailing.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 18,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_centerHorizontal__true.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 24,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_centerInParent__true.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 32,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_centerVertical__true.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 15,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_maxWidth__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 51,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_paddingEnd__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 15,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "common_shadow__static.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 23,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "control_Collection.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 33,
       "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "control_GradientView.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 12,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "control_TabView.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 15,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "control_TextView.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 47,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "control_Web.png",
       "platform": "android",
+      "env": "local",
       "status": "mismatch",
       "distance": 50,
       "reason": "unreviewed-initial-measurement",
-      "note": "",
-      "env": "local"
+      "note": ""
     },
     {
       "screenshot": "Button_font__static.png",

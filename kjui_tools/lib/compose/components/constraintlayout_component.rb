@@ -78,6 +78,13 @@ module KjuiTools
 
           # Build modifiers
           modifiers = []
+          # id → testTag first, same contract as every other container.
+          # This path used to drop it, which made every layout whose root
+          # takes the ConstraintLayout branch (any child with align*View
+          # relative positioning) unfindable by the test driver — the
+          # conformance align* fixtures were uncapturable ("'root' not
+          # found") until this line.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))

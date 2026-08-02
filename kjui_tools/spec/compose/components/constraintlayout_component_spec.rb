@@ -45,6 +45,26 @@ RSpec.describe KjuiTools::Compose::Components::ConstraintLayoutComponent do
       expect(result).to include('createRef()')
     end
 
+    it 'keeps the id → testTag contract on the ConstraintLayout path' do
+      # Regression: this branch used to drop the root testTag, so any layout
+      # whose root has a relative-positioned child (align*View) could not be
+      # found by the test driver — the conformance align* fixtures were
+      # uncapturable until the tag was restored.
+      json_data = {
+        'type' => 'View',
+        'id' => 'root',
+        'child' => [
+          { 'type' => 'View', 'id' => 'anchor', 'width' => 50, 'height' => 50 },
+          { 'type' => 'View', 'id' => 'target', 'alignBottomOfView' => 'anchor' }
+        ]
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('ConstraintLayout(')
+      expect(result).to include('.testTag("root")')
+      expect(result).to include('.semantics { testTagsAsResourceId = true }')
+      expect(required_imports).to include(:test_tag)
+    end
+
     it 'handles single child as hash' do
       json_data = {
         'type' => 'ConstraintLayout',

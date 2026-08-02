@@ -478,53 +478,63 @@
     },
     {
       "id": "common/alignTopOfView__static",
-      "status": "fail",
-      "detail": "Element 'root' not found by resource-id within 5000ms"
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignTopOfView__static.png"
     },
     {
       "id": "common/alignBottomOfView__static",
-      "status": "fail",
-      "detail": "Element 'root' not found by resource-id within 5000ms"
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignBottomOfView__static.png"
     },
     {
       "id": "common/alignLeftOfView__static",
-      "status": "fail",
-      "detail": "Element 'root' not found by resource-id within 5000ms"
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignLeftOfView__static.png"
     },
     {
       "id": "common/alignRightOfView__static",
-      "status": "fail",
-      "detail": "Element 'root' not found by resource-id within 5000ms"
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignRightOfView__static.png"
     },
     {
       "id": "common/alignTopView__static",
-      "status": "fail",
-      "detail": "Element 'root' not found by resource-id within 5000ms"
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignTopView__static.png"
     },
     {
       "id": "common/alignBottomView__static",
-      "status": "fail",
-      "detail": "Element 'root' not found by resource-id within 5000ms"
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignBottomView__static.png"
     },
     {
       "id": "common/alignLeftView__static",
-      "status": "fail",
-      "detail": "Element 'root' not found by resource-id within 5000ms"
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignLeftView__static.png"
     },
     {
       "id": "common/alignRightView__static",
-      "status": "fail",
-      "detail": "Element 'root' not found by resource-id within 5000ms"
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignRightView__static.png"
     },
     {
       "id": "common/alignCenterVerticalView__static",
-      "status": "fail",
-      "detail": "Element 'root' not found by resource-id within 5000ms"
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignCenterVerticalView__static.png"
     },
     {
       "id": "common/alignCenterHorizontalView__static",
-      "status": "fail",
-      "detail": "Element 'root' not found by resource-id within 5000ms"
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_alignCenterHorizontalView__static.png"
     },
     {
       "id": "common/toView__static",
