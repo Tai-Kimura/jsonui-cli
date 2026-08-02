@@ -116,12 +116,16 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
         expect(result).to include('No items')
       end
 
-      it 'handles no cell classes' do
+      it 'renders nothing for an undeclared collection (declaration-faithful)' do
+        # 2026-08-02 ruling: a Collection with no cells/data declared emits
+        # no placeholder items — the old 10-item "Item ${index}" Cards were
+        # undeclared behavior.
         json_data = { 'type' => 'Collection' }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('No cellClasses specified')
-        expect(result).to include('items(10)')
-        expect(result).to include('Card(')
+        expect(result).to include('nothing rendered (declaration-faithful)')
+        expect(result).not_to include('items(10)')
+        expect(result).not_to include('Item ${index}')
+        expect(result).not_to include('Card(')
       end
 
       it 'applies cell height' do

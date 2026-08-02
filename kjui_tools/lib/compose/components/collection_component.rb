@@ -438,23 +438,9 @@ module KjuiTools
             code += "\n" + indent("}", depth + 2)
             code += "\n" + indent("}", depth + 1)
           else
-            # No cell class specified - show placeholder
-            code += "\n" + indent("// No cellClasses specified", depth + 1)
-            code += "\n" + indent("items(10) { index ->", depth + 1)
-            code += "\n" + indent("Card(", depth + 2)
-            code += "\n" + indent("modifier = Modifier", depth + 3)
-            code += "\n" + indent("    .padding(4.dp)", depth + 3)
-            code += "\n" + indent("    .fillMaxWidth()", depth + 3)
-            code += "\n" + indent("    .height(80.dp)", depth + 3)
-            code += "\n" + indent(") {", depth + 2)
-            code += "\n" + indent("Box(", depth + 3)
-            code += "\n" + indent("modifier = Modifier.fillMaxSize(),", depth + 4)
-            code += "\n" + indent("contentAlignment = Alignment.Center", depth + 4)
-            code += "\n" + indent(") {", depth + 3)
-            code += "\n" + indent("Text(\"Item ${index}\")", depth + 4)
-            code += "\n" + indent("}", depth + 3)
-            code += "\n" + indent("}", depth + 2)
-            code += "\n" + indent("}", depth + 1)
+            # Declaration-faithful (2026-08-02 ruling): no cell class
+            # declared → nothing rendered (was a 10-item placeholder Card).
+            code += "\n" + indent("// No cellClasses — nothing rendered (declaration-faithful)", depth + 1)
           end
           
           code += "\n" + indent("}", depth)

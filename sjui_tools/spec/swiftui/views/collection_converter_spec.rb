@@ -69,6 +69,18 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   end
 
   describe '#convert' do
+    context 'with no cells or data declared (declaration-faithful, 2026-08-02 ruling)' do
+      it 'renders no placeholder items' do
+        # The old fallbacks emitted a 10-item "Item \(index)" ForEach in
+        # three places — undeclared behavior, removed with the bare-Collection
+        # ruling (parity family F4).
+        code = described_class.new({ 'type' => 'Collection' }).convert
+        expect(code).not_to include('Item \\(index)')
+        expect(code).not_to include('ForEach(0..<10')
+        expect(code).to include('nothing rendered (declaration-faithful)')
+      end
+    end
+
     context 'with single column collection' do
       let(:component) do
         {

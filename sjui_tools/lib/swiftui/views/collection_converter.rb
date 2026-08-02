@@ -297,26 +297,15 @@ module SjuiTools
                       end
                       add_line "}"
                     else
-                      # Placeholder when no items binding
-                      add_line "ForEach(0..<10, id: \\.self) { index in"
-                      indent do
-                        add_line "Text(\"Item \\(index)\")"
-                        add_modifier_line ".frame(width: 150, height: 80)"
-                        add_modifier_line ".background(Color.gray.opacity(0.1))"
-                        add_modifier_line ".cornerRadius(8)"
-                      end
-                      add_line "}"
+                      # Declaration-faithful (2026-08-02 ruling): no items
+                      # binding declared → nothing rendered. The old 10-item
+                      # placeholder ForEach was undeclared behavior.
+                      add_line "// No items binding — nothing rendered (declaration-faithful)"
                     end
                   else
-                    # No cell class - show placeholder
-                    add_line "ForEach(0..<10, id: \\.self) { index in"
-                    indent do
-                      add_line "Text(\"Item \\(index)\")"
-                      add_modifier_line ".frame(width: 150, height: 80)"
-                      add_modifier_line ".background(Color.gray.opacity(0.1))"
-                      add_modifier_line ".cornerRadius(8)"
-                    end
-                    add_line "}"
+                    # Declaration-faithful: no cell class declared → nothing
+                    # rendered (was a 10-item placeholder ForEach).
+                    add_line "// No cellClasses — nothing rendered (declaration-faithful)"
                   end
                 end
             end  # End indent for CollectionStackView content
@@ -1587,17 +1576,9 @@ module SjuiTools
             end
             add_line "}"
           else
-            # No cell class specified - show placeholder
-            add_line "// No cellClasses specified"
-            add_line "ForEach(0..<10, id: \\.self) { index in"
-            indent do
-              add_line "Text(\"Item \\(index)\")"
-              add_modifier_line ".frame(maxWidth: .infinity)"
-              add_modifier_line ".frame(height: 80)"
-              add_modifier_line ".background(Color.gray.opacity(0.1))"
-              add_modifier_line ".cornerRadius(8)"
-            end
-            add_line "}"
+            # Declaration-faithful (2026-08-02 ruling): no cell class
+            # declared → nothing rendered (was a 10-item placeholder).
+            add_line "// No cellClasses — nothing rendered (declaration-faithful)"
           end
         end
         
