@@ -1,6 +1,6 @@
 {
   "platform": "android",
-  "manifestHash": "ad2a425e15f6018b858f5d14a33ef7c39e9d7d64825f49e7756e6f544622864f",
+  "manifestHash": "b752efa41f62d8928371d1ad3aa2a31e40f813db76bb5a5998969f23acd92d9d",
   "runner": {
     "name": "uiautomator",
     "version": "2.3.0"

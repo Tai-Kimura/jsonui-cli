@@ -164,6 +164,7 @@
     {
       "fixture": "Collection/columns__static",
       "platforms": [
+        "android",
         "web"
       ]
     },
@@ -176,43 +177,68 @@
     {
       "fixture": "Collection/insetHorizontal__static",
       "platforms": [
+        "android",
         "web"
       ]
     },
     {
       "fixture": "Collection/insetVertical__static",
       "platforms": [
+        "android",
         "web"
       ]
     },
     {
       "fixture": "Collection/insets__static",
       "platforms": [
+        "android",
         "web"
       ]
     },
     {
       "fixture": "Collection/itemSpacing__static",
       "platforms": [
+        "android",
         "web"
+      ]
+    },
+    {
+      "fixture": "Collection/layout__flow",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "fixture": "Collection/layout__flow_2",
+      "platforms": [
+        "android"
       ]
     },
     {
       "fixture": "Collection/layout__horizontal",
       "platforms": [
+        "android",
         "web"
       ]
     },
     {
       "fixture": "Collection/lineSpacing__static",
       "platforms": [
+        "android",
         "web"
       ]
     },
     {
       "fixture": "Collection/orientation__horizontal",
       "platforms": [
+        "android",
         "web"
+      ]
+    },
+    {
+      "fixture": "Collection/reverseLayout__true",
+      "platforms": [
+        "android"
       ]
     },
     {
