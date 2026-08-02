@@ -675,11 +675,17 @@ module KjuiTools
           # Optional per-child wrapper: a container that must place EACH
           # child in its own scope (ScrollView paging wraps every child in
           # `item { }` so the snap fling has item bounds to snap to).
+          # Optional per-child decorator: a container that must REWRITE each
+          # generated child (ConstraintLayout injects `.constrainAs(ref)` into
+          # the child's modifier chain — the child itself is produced by the
+          # real dispatch above, so it keeps testTag/size/background/children).
           wrapper = result[:child_wrapper]
-          children.each do |child|
+          decorator = result[:child_decorator]
+          children.each_with_index do |child, child_index|
             child_depth = wrapper ? depth + 2 : depth + 1
             child_code = generate_component(child, child_depth, layout_type)
             next if child_code.empty?
+            child_code = decorator.call(child, child_code, child_depth, child_index) if decorator
 
             if wrapper
               code += "\n" + ('    ' * (depth + 1)) + wrapper[:open]

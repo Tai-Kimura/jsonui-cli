@@ -41,8 +41,37 @@ RSpec.describe KjuiTools::Compose::Components::ConstraintLayoutComponent do
         }]
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('ConstraintLayout(')
-      expect(result).to include('createRef()')
+      # Container contract: the header code + children + a decorator that
+      # injects constrainAs — children render via the REAL dispatch in
+      # compose_builder (the old local mini-generators are gone).
+      expect(result).to be_a(Hash)
+      expect(result[:code]).to include('ConstraintLayout(')
+      expect(result[:code]).to include('createRef()')
+      expect(result[:layout_type]).to eq('ConstraintLayout')
+      expect(result[:children].length).to eq(1)
+      expect(result[:child_decorator]).to respond_to(:call)
+    end
+
+    it 'decorator injects constrainAs with linkTo margins from the ORIGINAL child' do
+      json_data = {
+        'type' => 'View',
+        'child' => [
+          { 'type' => 'View', 'id' => 'positioned', 'alignTop' => true, 'topMargin' => 12 }
+        ]
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      # The dispatched copy is margin-stripped (linkTo owns the offset)…
+      expect(result[:children].first).not_to have_key('topMargin')
+      # …but the injected constraint block still reads the original margins.
+      decorated = result[:child_decorator].call(
+        result[:children].first,
+        "Box(\n    modifier = Modifier\n        .testTag(\"positioned\")\n) {\n}",
+        1, 0
+      )
+      expect(decorated).to include('constrainAs(positioned)')
+      expect(decorated).to include('top.linkTo(parent.top')
+      expect(decorated).to include('12')
+      expect(decorated).to include('.testTag("positioned")')
     end
 
     it 'keeps the id → testTag contract on the ConstraintLayout path' do
@@ -59,9 +88,9 @@ RSpec.describe KjuiTools::Compose::Components::ConstraintLayoutComponent do
         ]
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('ConstraintLayout(')
-      expect(result).to include('.testTag("root")')
-      expect(result).to include('.semantics { testTagsAsResourceId = true }')
+      expect(result[:code]).to include('ConstraintLayout(')
+      expect(result[:code]).to include('.testTag("root")')
+      expect(result[:code]).to include('.semantics { testTagsAsResourceId = true }')
       expect(required_imports).to include(:test_tag)
     end
 
@@ -75,7 +104,7 @@ RSpec.describe KjuiTools::Compose::Components::ConstraintLayoutComponent do
         }
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('ConstraintLayout(')
+      expect(result[:code]).to include('ConstraintLayout(')
     end
 
     it 'uses id for constraint reference' do
@@ -89,8 +118,8 @@ RSpec.describe KjuiTools::Compose::Components::ConstraintLayoutComponent do
         }]
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('myButton')
-      expect(result).to include('createRef()')
+      expect(result[:code]).to include('myButton')
+      expect(result[:code]).to include('createRef()')
     end
 
     it 'generates constraint reference without id' do
@@ -103,7 +132,7 @@ RSpec.describe KjuiTools::Compose::Components::ConstraintLayoutComponent do
         }]
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('view_0')
+      expect(result[:code]).to include('view_0')
     end
   end
 
@@ -179,120 +208,6 @@ RSpec.describe KjuiTools::Compose::Components::ConstraintLayoutComponent do
 
     it 'returns false for non-hash' do
       expect(described_class.send(:should_apply_margins_as_padding?, nil)).to be false
-    end
-  end
-
-  describe '.generate_text_component' do
-    it 'generates basic Text' do
-      result = described_class.send(:generate_text_component, { 'text' => 'Hello' }, 0, required_imports)
-      expect(result).to include('Text(')
-      expect(result).to include('"Hello"')
-    end
-
-    it 'generates Text with data binding' do
-      result = described_class.send(:generate_text_component, { 'text' => '@{userName}' }, 0, required_imports)
-      expect(result).to include('${data.userName}')
-    end
-
-    it 'generates Text with fontSize routed through FontSpec resolve' do
-      result = described_class.send(:generate_text_component, { 'text' => 'Test', 'fontSize' => 18 }, 0, required_imports)
-      expect(result).to include('Configuration.Font.resolve(FontSpec(')
-      expect(result).to include('size = 18.sp')
-      expect(result).to match(/fontSize = resolved_constraint_text\d+\.size \?: TextUnit\.Unspecified/)
-    end
-
-    it 'generates Text with fontColor' do
-      result = described_class.send(:generate_text_component, { 'text' => 'Test', 'fontColor' => '#FF0000' }, 0, required_imports)
-      expect(result).to include('color =')
-    end
-
-    it 'generates Text with color attribute' do
-      result = described_class.send(:generate_text_component, { 'text' => 'Test', 'color' => '#FF0000' }, 0, required_imports)
-      expect(result).to include('color =')
-    end
-
-    it 'generates Text with font bold routed through FontSpec resolve' do
-      result = described_class.send(:generate_text_component, { 'text' => 'Test', 'font' => 'bold' }, 0, required_imports)
-      expect(result).to include('Configuration.Font.resolve(FontSpec(')
-      expect(result).to include('weight = FontWeight.Bold')
-      expect(result).to match(/fontWeight = resolved_constraint_text\d+\.weight/)
-    end
-
-    it 'generates Text with fontWeight bold routed through FontSpec resolve' do
-      result = described_class.send(:generate_text_component, { 'text' => 'Test', 'fontWeight' => 'bold' }, 0, required_imports)
-      expect(result).to include('Configuration.Font.resolve(FontSpec(')
-      expect(result).to include('weight = FontWeight.Bold')
-      expect(result).to match(/fontWeight = resolved_constraint_text\d+\.weight/)
-    end
-
-    it 'generates Text with textAlign center' do
-      result = described_class.send(:generate_text_component, { 'text' => 'Test', 'textAlign' => 'center' }, 0, required_imports)
-      expect(result).to include('textAlign = TextAlign.Center')
-    end
-
-    it 'generates Text with textAlign left' do
-      result = described_class.send(:generate_text_component, { 'text' => 'Test', 'textAlign' => 'left' }, 0, required_imports)
-      expect(result).to include('textAlign = TextAlign.Left')
-    end
-
-    it 'generates Text with textAlign right' do
-      result = described_class.send(:generate_text_component, { 'text' => 'Test', 'textAlign' => 'right' }, 0, required_imports)
-      expect(result).to include('textAlign = TextAlign.Right')
-    end
-  end
-
-  describe '.generate_button_component' do
-    it 'generates basic Button' do
-      result = described_class.send(:generate_button_component, { 'text' => 'Click' }, 0, required_imports)
-      expect(result).to include('Button(')
-      expect(result).to include('Text("Click")')
-    end
-
-    it 'generates Button with onclick' do
-      result = described_class.send(:generate_button_component, { 'text' => 'Click', 'onclick' => 'handleClick' }, 0, required_imports)
-      expect(result).to include('onClick = { data.handleClick?.invoke() }')
-    end
-
-    it 'generates Button with empty onClick when no handler' do
-      result = described_class.send(:generate_button_component, { 'text' => 'Click' }, 0, required_imports)
-      expect(result).to include('onClick = { }')
-    end
-
-    it 'uses default text when none provided' do
-      result = described_class.send(:generate_button_component, {}, 0, required_imports)
-      expect(result).to include('Text("Button")')
-    end
-  end
-
-  describe '.generate_image_component' do
-    it 'generates basic Image' do
-      result = described_class.send(:generate_image_component, { 'src' => 'icon' }, 0, required_imports)
-      expect(result).to include('Image(')
-      expect(result).to include('R.drawable.icon')
-    end
-
-    it 'removes file extension' do
-      result = described_class.send(:generate_image_component, { 'src' => 'icon.png' }, 0, required_imports)
-      expect(result).to include('R.drawable.icon')
-      expect(result).not_to include('.png')
-    end
-
-    it 'uses source attribute' do
-      result = described_class.send(:generate_image_component, { 'source' => 'avatar' }, 0, required_imports)
-      expect(result).to include('R.drawable.avatar')
-    end
-
-    it 'uses placeholder when no source' do
-      result = described_class.send(:generate_image_component, {}, 0, required_imports)
-      expect(result).to include('R.drawable.placeholder')
-    end
-  end
-
-  describe '.generate_box_component' do
-    it 'generates Box with empty content' do
-      result = described_class.send(:generate_box_component, {}, 0, required_imports)
-      expect(result).to include('Box(')
-      expect(result).to include('// Content')
     end
   end
 
