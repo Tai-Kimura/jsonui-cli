@@ -50,6 +50,12 @@ module KjuiTools
           # 4. Alpha/opacity - BEFORE background so alpha applies to background too
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
 
+          # 4.5 Shadow — declared `shadow` never reached containers on the
+          # codegen path (build_shadow existed but only Text called it),
+          # while the dynamic ModifierBuilder applies it here: alpha →
+          # shadow → background (parity family kjui-codegen-shadow-missing).
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+
           # 5. Background (clip + border + background)
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
 

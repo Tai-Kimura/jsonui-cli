@@ -674,7 +674,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 17,
-      "reason": "kjui-codegen-blur-missing: dynamic renders the blur surface, codegen renders nothing — Blur composable absent from the codegen path",
+      "reason": "kjui-codegen-blur-approximation: the canonical 'Blur' type now dispatches (only the 'BlurView' alias used to), but the codegen BlurviewComponent approximates the effect while dynamic renders the real haze surface — residual visual difference",
       "note": ""
     },
     {
@@ -683,7 +683,7 @@
       "env": "local",
       "status": "mismatch",
       "distance": 10,
-      "reason": "kjui-codegen-blur-missing: dynamic renders the blur surface, codegen renders nothing — Blur composable absent from the codegen path",
+      "reason": "kjui-codegen-blur-approximation: the canonical 'Blur' type now dispatches (only the 'BlurView' alias used to), but the codegen BlurviewComponent approximates the effect while dynamic renders the real haze surface — residual visual difference",
       "note": ""
     },
     {
@@ -723,39 +723,12 @@
       "note": ""
     },
     {
-      "screenshot": "GradientView_gradientDirection__horizontal.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 12,
-      "reason": "kjui-codegen-gradientview-placement: gradient box renders offset (trailing/lower) vs dynamic's leading placement — placement family, gradient itself renders on both sides",
-      "note": ""
-    },
-    {
-      "screenshot": "GradientView_gradientDirection__oblique.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 12,
-      "reason": "kjui-codegen-gradientview-placement: gradient box renders offset (trailing/lower) vs dynamic's leading placement — placement family, gradient itself renders on both sides",
-      "note": ""
-    },
-    {
-      "screenshot": "GradientView_gradientDirection__vertical.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 12,
-      "reason": "kjui-codegen-gradientview-placement: gradient box renders offset (trailing/lower) vs dynamic's leading placement — placement family, gradient itself renders on both sides",
-      "note": ""
-    },
-    {
       "screenshot": "GradientView_gradient__static.png",
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 12,
-      "reason": "kjui-codegen-gradientview-placement: gradient box renders offset (trailing/lower) vs dynamic's leading placement — placement family, gradient itself renders on both sides",
+      "distance": 19,
+      "reason": "kjui-codegen-gradientview-placement: declared gradient colors/direction now render on both paths (the kotlin pair used to drop them); the residual is placement only — the codegen box renders offset (trailing/lower) vs dynamic's leading placement",
       "note": ""
     },
     {
@@ -763,8 +736,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 12,
-      "reason": "kjui-codegen-gradientview-placement: gradient box renders offset (trailing/lower) vs dynamic's leading placement — placement family, gradient itself renders on both sides",
+      "distance": 19,
+      "reason": "kjui-codegen-gradientview-placement: declared gradient colors/direction now render on both paths (the kotlin pair used to drop them); the residual is placement only — the codegen box renders offset (trailing/lower) vs dynamic's leading placement",
       "note": ""
     },
     {
@@ -786,15 +759,6 @@
       "note": ""
     },
     {
-      "screenshot": "Image_renderingMode__template.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 11,
-      "reason": "kjui-dynamic-renderingmode: template mode should tint (codegen tints black per declaration); dynamic shows the original colors — DYNAMIC-side fix candidate, rides release 32 if confirmed against SSoT",
-      "note": ""
-    },
-    {
       "screenshot": "Label_edgeInset__static.png",
       "platform": "android",
       "env": "local",
@@ -810,15 +774,6 @@
       "status": "mismatch",
       "distance": 22,
       "reason": "kjui-codegen-label-render: edgeInset positioning and highlightAttributes applied statically (codegen shows highlight color in the unpressed state — codegen-side suspect) — small Label family",
-      "note": ""
-    },
-    {
-      "screenshot": "NetworkImage_loadingImage__static.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 36,
-      "reason": "kjui-dynamic-loadingimage: with a never-completing src the declared loadingImage should show; codegen shows it, dynamic shows nothing — DYNAMIC-side fix candidate",
       "note": ""
     },
     {
@@ -1020,21 +975,12 @@
       "note": ""
     },
     {
-      "screenshot": "common_shadow__static.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 23,
-      "reason": "kjui-codegen-shadow-missing: dynamic renders the declared drop shadow, codegen renders flat",
-      "note": ""
-    },
-    {
       "screenshot": "control_GradientView.png",
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 12,
-      "reason": "kjui-codegen-gradientview-placement: gradient box renders offset (trailing/lower) vs dynamic's leading placement — placement family, gradient itself renders on both sides",
+      "distance": 19,
+      "reason": "kjui-codegen-gradientview-placement: declared gradient colors/direction now render on both paths (the kotlin pair used to drop them); the residual is placement only — the codegen box renders offset (trailing/lower) vs dynamic's leading placement",
       "note": ""
     },
     {

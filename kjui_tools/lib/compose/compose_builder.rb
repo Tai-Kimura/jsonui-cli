@@ -362,7 +362,10 @@ module KjuiTools
         when 'GradientView'
           result = Components::GradientviewComponent.generate(json_data, depth, @required_imports, parent_type, is_root: is_root)
           handle_container_result(result, depth, parent_type)
-        when 'BlurView'
+        when 'Blur', 'BlurView'
+          # 'Blur' is the canonical SSoT type; 'BlurView' is its alias. Only
+          # the alias was dispatched, so canonical (L1-normalized) layouts
+          # rendered nothing (parity family kjui-codegen-blur-missing).
           result = Components::BlurviewComponent.generate(json_data, depth, @required_imports, parent_type, is_root: is_root)
           handle_container_result(result, depth, parent_type)
         when 'TabView'
@@ -385,7 +388,7 @@ module KjuiTools
         # without wrapping — exclude it from the skip list so this fallback
         # path applies and `visibility: "@{...}"` on an Embed node actually
         # gates rendering.
-        unless %w[View ScrollView Scroll GradientView BlurView TabView].include?(component_type)
+        unless %w[View ScrollView Scroll GradientView Blur BlurView TabView].include?(component_type)
           code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
         end
 

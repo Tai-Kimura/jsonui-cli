@@ -20,32 +20,51 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
 
-          # Add gradient background
-          # Support both 'colors' and 'items' for color list
-          colors = json_data['colors'] || json_data['items'] || ['#000000', '#FFFFFF']
-          
-          # Determine gradient direction from orientation or start/end points
-          gradient_type = if json_data['orientation']
-            case json_data['orientation']
-            when 'horizontal'
-              'horizontalGradient'
-            when 'vertical'
-              'verticalGradient'
-            when 'diagonal'
-              'linearGradient'
-            else
-              'verticalGradient'
-            end
+          # Add gradient background.
+          # The DECLARED color source is `gradient` (array) — read it first;
+          # 'colors'/'items' are undeclared legacy spellings. This path used
+          # to read only the legacy names, so every declared gradient fell to
+          # the black/white default (ios/web read the declaration; the kotlin
+          # pair was the outlier — parity family kjui-codegen-gradientview).
+          # A legacy object wrapper { colors:, items: } is tolerated.
+          colors = json_data['gradient'] || json_data['colors'] || json_data['items']
+          colors = colors['colors'] || colors['items'] if colors.is_a?(Hash)
+          colors = ['#000000', '#FFFFFF'] unless colors.is_a?(Array) && !colors.empty?
+
+          # Direction: the DECLARED attr is `gradientDirection`
+          # (enum Vertical/Horizontal/Oblique — matched case-insensitively
+          # like sjui/rjui); 'orientation' and startPoint/endPoint stay as
+          # legacy fallbacks.
+          gradient_type = case json_data['gradientDirection'].to_s.downcase
+          when 'horizontal'
+            'horizontalGradient'
+          when 'oblique'
+            'linearGradient'
+          when 'vertical'
+            'verticalGradient'
           else
-            start_point = json_data['startPoint'] || 'top'
-            end_point = json_data['endPoint'] || 'bottom'
-            case [start_point, end_point]
-            when ['top', 'bottom'], ['bottom', 'top']
-              'verticalGradient'
-            when ['left', 'right'], ['leading', 'trailing'], ['right', 'left'], ['trailing', 'leading']
-              'horizontalGradient'
+            if json_data['orientation']
+              case json_data['orientation']
+              when 'horizontal'
+                'horizontalGradient'
+              when 'vertical'
+                'verticalGradient'
+              when 'diagonal'
+                'linearGradient'
+              else
+                'verticalGradient'
+              end
             else
-              'linearGradient'
+              start_point = json_data['startPoint'] || 'top'
+              end_point = json_data['endPoint'] || 'bottom'
+              case [start_point, end_point]
+              when ['top', 'bottom'], ['bottom', 'top']
+                'verticalGradient'
+              when ['left', 'right'], ['leading', 'trailing'], ['right', 'left'], ['trailing', 'leading']
+                'horizontalGradient'
+              else
+                'linearGradient'
+              end
             end
           end
           

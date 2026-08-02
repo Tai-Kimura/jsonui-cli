@@ -158,6 +158,7 @@
     {
       "fixture": "GradientView/gradientDirection__horizontal",
       "platforms": [
+        "android",
         "ios",
         "web"
       ]
@@ -167,6 +168,12 @@
       "platforms": [
         "ios",
         "web"
+      ]
+    },
+    {
+      "fixture": "GradientView/gradientDirection__vertical",
+      "platforms": [
+        "android"
       ]
     },
     {
@@ -327,6 +334,12 @@
       "fixture": "Image/contentMode__top_2",
       "platforms": [
         "web"
+      ]
+    },
+    {
+      "fixture": "Image/renderingMode__template",
+      "platforms": [
+        "android"
       ]
     },
     {
@@ -561,6 +574,24 @@
     },
     {
       "fixture": "NetworkImage/errorImage__static",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "fixture": "NetworkImage/hint__static",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "fixture": "NetworkImage/loadingImage__static",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "fixture": "NetworkImage/placeholder__static",
       "platforms": [
         "android"
       ]
@@ -819,6 +850,12 @@
         "android",
         "ios",
         "web"
+      ]
+    },
+    {
+      "fixture": "Switch/value__true",
+      "platforms": [
+        "android"
       ]
     },
     {
@@ -1246,6 +1283,54 @@
         "android",
         "ios",
         "web"
+      ]
+    },
+    {
+      "fixture": "common/alignment__bottom",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "fixture": "common/alignment__bottomleading",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "fixture": "common/alignment__bottomtrailing",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "fixture": "common/alignment__center",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "fixture": "common/alignment__leading",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "fixture": "common/alignment__top",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "fixture": "common/alignment__toptrailing",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "fixture": "common/alignment__trailing",
+      "platforms": [
+        "android"
       ]
     },
     {
