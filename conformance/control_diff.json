@@ -171,6 +171,7 @@
     {
       "fixture": "Collection/horizontalScroll__true",
       "platforms": [
+        "android",
         "web"
       ]
     },
