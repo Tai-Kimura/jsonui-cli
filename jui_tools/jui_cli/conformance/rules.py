@@ -358,7 +358,6 @@ VALUE_OVERRIDES: dict[str, Any] = {
     "html": "<p>Conformance Sample</p>",
     "gradient": ["#FF0000", "#0000FF"],
     "locations": [0.0, 1.0],
-    "systemIcon": "star",
     "maxLength": 5,
     "pattern": "[0-9]*",
     "doneText": "Done",
@@ -380,7 +379,10 @@ VALUE_OVERRIDES: dict[str, Any] = {
     "columns": 2,
     "columnCount": 2,
     "size": 3,
-    "shadow": "#000000|2|2|4",
+    # The UIKit pipe contract is exactly five fields
+    # ('color|offsetX|offsetY|opacity|radius') — a four-field string is
+    # invalid and draws nothing on every path.
+    "shadow": "#000000|2|2|0.5|4",
     "edgeInset": [8, 8, 8, 8],
     "containerInset": 8,
     "contentSize": [200, 400],
@@ -575,6 +577,12 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     "Toggle.tint": {"isOn": True},
     "Toggle.tintColor": {"isOn": True},
     "Toggle.onTintColor": {"isOn": True},
+    # systemIcon is a BOOLEAN ("interpret `src` as an SF Symbol name") — the
+    # fixture needs `src` to actually be one, or the reinterpretation renders
+    # a missing symbol. The old string-valued fixture ("systemIcon": "star")
+    # was invalid input: the dynamic decoder fail-louded on it while codegen
+    # silently ignored it, which is a fixture bug, not a parity signal.
+    "Image.systemIcon": {"src": "star"},
 }
 
 

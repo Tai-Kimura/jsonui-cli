@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance common.shadow (static)",
-    "description": "Conformance fixture for 'shadow' on View (section: common, class: visual). Value under test: \"#000000|2|2|4\".",
+    "description": "Conformance fixture for 'shadow' on View (section: common, class: visual). Value under test: \"#000000|2|2|0.5|4\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "shadow__static",
-      "description": "Conformance fixture for 'shadow' on View (section: common, class: visual). Value under test: \"#000000|2|2|4\".",
+      "description": "Conformance fixture for 'shadow' on View (section: common, class: visual). Value under test: \"#000000|2|2|0.5|4\".",
       "steps": [
         {
           "action": "waitFor",

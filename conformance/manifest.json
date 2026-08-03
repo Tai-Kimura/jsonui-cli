@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "b01bc992ef4ce5e11c1d83de119398c84f027b8d1a6081b3910fcdcb3504feab",
   "counts": {
-    "fixtures": 670,
+    "fixtures": 671,
     "assertable": 29,
     "visual": 572,
     "interactive": 35,
-    "control": 34,
+    "control": 35,
     "skipped": 154,
     "promoted": {
       "callback": 11
@@ -2199,7 +2199,7 @@
       "host": "View",
       "writtenKey": "shadow",
       "aliasOf": null,
-      "value": "#000000|2|2|4",
+      "value": "#000000|2|2|0.5|4",
       "platforms": [
         "ios",
         "android",
@@ -8499,25 +8499,25 @@
       "control": "__control/Image"
     },
     {
-      "id": "Image/systemIcon__static",
+      "id": "Image/systemIcon__true",
       "component": "Image",
       "attribute": "systemIcon",
-      "case": "static",
+      "case": "true",
       "class": "visual",
       "host": "Image",
       "writtenKey": "systemIcon",
       "aliasOf": null,
-      "value": "star",
+      "value": true,
       "platforms": [
         "ios"
       ],
       "mode": "swiftui",
       "deprecated": null,
-      "layout": "fixtures/Image/systemIcon__static.layout.json",
-      "test": "fixtures/Image/systemIcon__static.test.json",
+      "layout": "fixtures/Image/systemIcon__true.layout.json",
+      "test": "fixtures/Image/systemIcon__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Image"
+      "control": "__control/Image__src-star"
     },
     {
       "id": "NetworkImage/hint__static",
@@ -14688,6 +14688,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/Image.layout.json",
       "test": "fixtures/__control/Image.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Image__src-star",
+      "component": "__control",
+      "attribute": null,
+      "case": "Image",
+      "class": "visual",
+      "host": "Image",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Image__src-star.layout.json",
+      "test": "fixtures/__control/Image__src-star.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

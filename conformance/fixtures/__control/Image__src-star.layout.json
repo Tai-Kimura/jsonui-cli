@@ -17,8 +17,7 @@
       "id": "target",
       "width": 140,
       "height": 80,
-      "src": "conformance_sample",
-      "systemIcon": "star"
+      "src": "star"
     }
   ]
 }
