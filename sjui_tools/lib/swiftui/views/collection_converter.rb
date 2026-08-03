@@ -1654,11 +1654,26 @@ module SjuiTools
         # (string "t|l|b|r" or array) into the section inset — while this only
         # looked at `insets`, so the SwiftUI path dropped it. `insets` wins when
         # both are present, matching UIKit's order.
-        def collection_content_insets_swift_expr
+        # insetVertical / insetHorizontal fold into the same content-padding
+        # channel (the dynamic renderer's applyCollectionContentInsets does
+        # the same). The horizontal axis keeps insetHorizontal on its
+        # insetLeading/insetTrailing params instead, so the caller excludes
+        # it there to avoid double-application.
+        def collection_content_insets_swift_expr(include_horizontal: true)
           insets = collection_insets_array(@component['insets']) ||
                    collection_insets_array(@component['contentInsets'])
-          return nil unless insets
-          top, left, bottom, right = insets
+          inset_v = @component['insetVertical']
+          inset_h = include_horizontal ? @component['insetHorizontal'] : nil
+          return nil unless insets || inset_v || inset_h
+          top, left, bottom, right = insets || [0, 0, 0, 0]
+          if inset_v
+            top += inset_v.to_i
+            bottom += inset_v.to_i
+          end
+          if inset_h
+            left += inset_h.to_i
+            right += inset_h.to_i
+          end
           "EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right})"
         end
 
@@ -1775,7 +1790,7 @@ module SjuiTools
             params << "insetTrailing: #{inset_trailing}" if inset_trailing > 0
           end
 
-          if (insets_expr = collection_content_insets_swift_expr)
+          if (insets_expr = collection_content_insets_swift_expr(include_horizontal: axis == :vertical))
             params << "contentInsets: #{insets_expr}"
           end
 

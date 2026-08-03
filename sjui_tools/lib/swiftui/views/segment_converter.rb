@@ -113,7 +113,10 @@ module SjuiTools
         # restyle segments on screens that do not.
         def apply_segment_appearance
           normal_color = @component['normalColor']
-          selected_color = @component['selectedColor'] || @component['selectedSegmentTintColor']
+          # tintColor joins the selected-tint chain: UISegmentedControl's
+          # legacy tintColor is its segment tint, and the dynamic converter
+          # already maps it there.
+          selected_color = @component['selectedColor'] || @component['selectedSegmentTintColor'] || @component['tintColor']
           return if normal_color.nil? && selected_color.nil?
 
           add_modifier_line ".onAppear {"

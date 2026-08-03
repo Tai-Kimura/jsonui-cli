@@ -37,6 +37,15 @@ module SjuiTools
           # Get text binding
           text_binding = if @component['text'] && is_binding?(@component['text'])
                           textfield_handler.get_text_binding(@component)
+                        elsif @component['text'].is_a?(String) && !@component['text'].empty?
+                          # A literal `text` seeds the field's initial content
+                          # (the UIKit runtime sets field.text and the dynamic
+                          # path renders it) — .constant("") dropped it and the
+                          # field opened empty showing its placeholder. Local
+                          # @State keeps the field editable, matching UIKit.
+                          state_name = "#{to_camel_case(@component['id'] || 'textField')}Text"
+                          @state_variables << "@State private var #{state_name}: String = #{@component['text'].inspect}"
+                          "$#{state_name}"
                         else
                           # If no binding, create a constant binding with empty string
                           ".constant(\"\")"

@@ -20,6 +20,13 @@ module SjuiTools
           if selected_index && is_binding?(selected_index)
             binding_prop = extract_binding_property(selected_index)
             add_line "TabView(selection: $data.#{binding_prop}) {"
+          elsif selected_index
+            # A literal selectedIndex seeds the initial tab (the dynamic
+            # renderer and the UIKit runtime both honor it) — without a
+            # selection binding TabView always opened the first tab.
+            state_name = "#{to_camel_case(@component['id'] || 'tabView')}Selection"
+            @state_variables << "@State private var #{state_name}: Int = #{selected_index.to_i}"
+            add_line "TabView(selection: $#{state_name}) {"
           else
             add_line "TabView {"
           end

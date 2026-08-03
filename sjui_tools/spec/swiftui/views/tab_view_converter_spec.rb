@@ -142,12 +142,14 @@ RSpec.describe SjuiTools::SwiftUI::Views::TabViewConverter do
         }
       end
 
-      it 'handles selectedTabIndex property' do
+      it 'seeds the initial tab through local selection state' do
         converter = described_class.new(component, 0, nil, mock_factory)
         code = converter.convert
 
-        # selectedTabIndex is stored but selection binding would be handled separately
-        expect(code).to include('TabView {')
+        # A literal selectedTabIndex opens that tab: without a selection
+        # binding the TabView always opened tab 0.
+        expect(code).to include('TabView(selection: $tabViewSelection) {')
+        expect(converter.state_variables).to include('@State private var tabViewSelection: Int = 1')
       end
     end
   end
