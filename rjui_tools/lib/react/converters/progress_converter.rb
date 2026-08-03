@@ -59,6 +59,10 @@ module RjuiTools
           if tint_color
             classes << "[&::-webkit-progress-value]:bg-[#{tint_color}]"
             classes << "[&::-moz-progress-bar]:bg-[#{tint_color}]"
+            # accent-color is the robust cross-engine path — the 33
+            # cross-effect sweep measured the pseudo-element classes taking
+            # no effect on the conformance chromium build.
+            classes << "[accent-color:#{tint_color}]"
           else
             classes << '[&::-webkit-progress-value]:bg-blue-500'
             classes << '[&::-moz-progress-bar]:bg-blue-500'

@@ -542,6 +542,28 @@ BASE_ATTRS: dict[str, dict[str, Any]] = {
 #:
 #: Overlay mode is worth testing, but not by the fixture for a flow attribute.
 BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
+    # Text-styling attributes need TEXT to style: the TextField/TextView base
+    # is hint-only, so font/fontColor/... rendered nothing to look at and the
+    # 33 cross-effect sweep measured platform-dependent placeholder
+    # inheritance instead of the attribute (fixture-observability family).
+    "TextView.font": {"text": "Sample"},
+    "TextView.fontColor": {"text": "Sample"},
+    "TextView.fontFamily": {"text": "Sample"},
+    "TextView.fontSize": {"text": "Sample"},
+    "TextField.font": {"text": "Sample"},
+    "TextField.fontColor": {"text": "Sample"},
+    "TextField.fontFamily": {"text": "Sample"},
+    # iconPosition/iconMargin need an ICON to position (base is text-only).
+    "IconLabel.iconPosition": {"icon_off": IMAGE_ASSET_NAME},
+    "IconLabel.iconMargin": {"icon_off": IMAGE_ASSET_NAME},
+    # Checked-state skins need the checked state to exist.
+    "CheckBox.selectedIcon": {"checked": True},
+    "Radio.selectedIcon": {"checked": True},
+    "Radio.selected_icon": {"checked": True},
+    "CheckBox.checkedColor": {"checked": True},
+    "Radio.checkedColor": {"checked": True},
+    # onTintColor colors the ON track — the switch must be on to show it.
+    "Switch.onTintColor": {"isOn": True},
     # Flow attributes need a flex container. `horizontal` is the direction that
     # makes wrapping visible with the standard 6-box child set (240px of boxes
     # in a 200px host).

@@ -105,6 +105,9 @@ module KjuiTools
             if json_data['thumbTintColor']
               checkedthumbcolor_resolved = Helpers::ResourceResolver.process_color(json_data['thumbTintColor'], required_imports)
               colors_params << "checkedThumbColor = #{checkedthumbcolor_resolved}"
+              # thumbTintColor skins the thumb in BOTH states (UIKit
+              # heritage — mirrors the dynamic component).
+              colors_params << "uncheckedThumbColor = #{checkedthumbcolor_resolved}"
             end
 
             if colors_params.any?
@@ -208,6 +211,9 @@ module KjuiTools
             if json_data['thumbTintColor']
               checkedthumbcolor_resolved = Helpers::ResourceResolver.process_color(json_data['thumbTintColor'], required_imports)
               colors_params << "checkedThumbColor = #{checkedthumbcolor_resolved}"
+              # thumbTintColor skins the thumb in BOTH states (UIKit
+              # heritage — mirrors the dynamic component).
+              colors_params << "uncheckedThumbColor = #{checkedthumbcolor_resolved}"
             end
 
             if colors_params.any?

@@ -104,8 +104,12 @@ module RjuiTools
           font_color = attributes['fontColor']
           font_color_class = font_color ? TailwindMapper.map_color(font_color, 'text') : 'text-gray-900'
 
-          # Selected colors
-          selected_bg = attributes['selectedBackground'] || 'bg-white'
+          # Selected colors. tintColor is the selected-segment accent
+          # (UISegmentedControl heritage — sjui/kjui already render it);
+          # selectedBackground stays the explicit override.
+          tint = attributes['tintColor']
+          selected_bg = attributes['selectedBackground'] ||
+                        (tint ? TailwindMapper.map_color(tint, 'bg') : 'bg-white')
           selected_text = attributes['selectedFontColor'] ? TailwindMapper.map_color(attributes['selectedFontColor'], 'text') : font_color_class
 
           base_classes = "flex-1 px-4 #{padding_class} #{font_size_class} font-medium rounded-md transition-colors cursor-pointer"

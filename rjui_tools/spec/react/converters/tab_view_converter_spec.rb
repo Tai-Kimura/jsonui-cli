@@ -63,8 +63,8 @@ RSpec.describe RjuiTools::React::Converters::TabViewConverter do
           ]
         })
         result = converter.convert
-        expect(result).to include('data.currentTab === 0')
-        expect(result).to include('data.currentTab === 1')
+        expect(result).to include('(data.currentTab ?? 0) === 0')
+        expect(result).to include('(data.currentTab ?? 0) === 1')
       end
     end
 

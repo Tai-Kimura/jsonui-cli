@@ -222,9 +222,16 @@ module RjuiTools
           selected = attributes['selectedIndex']
 
           if selected && has_binding?(selected)
-            extract_binding_property(selected)
+            "(#{extract_binding_property(selected)} ?? 0)"
+          elsif selected.is_a?(Numeric)
+            # A literal seeds the initial selection (sjui parity 0068644 did
+            # the same on ios); runtime state still overrides.
+            "(data.selectedTab ?? #{selected.to_i})"
           else
-            'data.selectedTab'
+            # Default to tab 0 — `undefined === index` selected NO tab, which
+            # left tintColor with nothing to color (33 cross-effect: TabView
+            # tintColor/selectedIndex web-inert family).
+            '(data.selectedTab ?? 0)'
           end
         end
 

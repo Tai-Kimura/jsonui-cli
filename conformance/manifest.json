@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "c869b6c324857239017d1a82a305bcac03daf330665ed8b03c5a36b6e7b02cc0",
   "counts": {
-    "fixtures": 675,
+    "fixtures": 680,
     "assertable": 29,
     "visual": 574,
     "interactive": 35,
-    "control": 37,
+    "control": 42,
     "skipped": 154,
     "promoted": {
       "callback": 11
@@ -4728,7 +4728,7 @@
       "test": "fixtures/TextField/font__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": "__control/TextField__text-Sample"
     },
     {
       "id": "TextField/fontSize__static",
@@ -4774,7 +4774,7 @@
       "test": "fixtures/TextField/fontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": "__control/TextField__text-Sample"
     },
     {
       "id": "TextField/textAlign__left",
@@ -6134,7 +6134,7 @@
       "test": "fixtures/TextField/fontFamily__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": "__control/TextField__text-Sample"
     },
     {
       "id": "TextField/disabledBackground__static",
@@ -6393,7 +6393,7 @@
       "test": "fixtures/TextView/font__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": "__control/TextView__text-Sample"
     },
     {
       "id": "TextView/fontSize__static",
@@ -6416,7 +6416,7 @@
       "test": "fixtures/TextView/fontSize__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": "__control/TextView__text-Sample"
     },
     {
       "id": "TextView/fontColor__static",
@@ -6439,7 +6439,7 @@
       "test": "fixtures/TextView/fontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": "__control/TextView__text-Sample"
     },
     {
       "id": "TextView/textAlign__left",
@@ -7424,7 +7424,7 @@
       "test": "fixtures/TextView/fontFamily__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": "__control/TextView__text-Sample"
     },
     {
       "id": "TextView/disabledBackground__static",
@@ -12803,7 +12803,7 @@
       "test": "fixtures/Radio/selectedIcon__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Radio"
+      "control": "__control/Radio__checked-True"
     },
     {
       "id": "Radio/selectedIcon__alias_selected_icon",
@@ -12825,7 +12825,7 @@
       "test": "fixtures/Radio/selectedIcon__alias_selected_icon.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Radio"
+      "control": "__control/Radio__checked-True"
     },
     {
       "id": "Radio/selected_icon__static",
@@ -12848,7 +12848,7 @@
       "test": "fixtures/Radio/selected_icon__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Radio"
+      "control": "__control/Radio__checked-True"
     },
     {
       "id": "Radio/checked__true",
@@ -13008,7 +13008,7 @@
       "test": "fixtures/Radio/checkedColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Radio"
+      "control": "__control/Radio__checked-True"
     },
     {
       "id": "Radio/uncheckedColor__static",
@@ -13256,7 +13256,7 @@
       "test": "fixtures/CheckBox/selectedIcon__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/CheckBox"
+      "control": "__control/CheckBox__checked-True"
     },
     {
       "id": "CheckBox/selectedIcon__alias_onSrc",
@@ -13278,7 +13278,7 @@
       "test": "fixtures/CheckBox/selectedIcon__alias_onSrc.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/CheckBox"
+      "control": "__control/CheckBox__checked-True"
     },
     {
       "id": "CheckBox/value__static",
@@ -13500,7 +13500,7 @@
       "test": "fixtures/CheckBox/checkedColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/CheckBox"
+      "control": "__control/CheckBox__checked-True"
     },
     {
       "id": "CheckBox/uncheckedColor__static",
@@ -14099,7 +14099,7 @@
       "test": "fixtures/IconLabel/iconPosition__left.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/IconLabel"
+      "control": "__control/IconLabel__icon-off-conformance-sample"
     },
     {
       "id": "IconLabel/iconPosition__right",
@@ -14122,7 +14122,7 @@
       "test": "fixtures/IconLabel/iconPosition__right.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/IconLabel"
+      "control": "__control/IconLabel__icon-off-conformance-sample"
     },
     {
       "id": "IconLabel/iconPosition__top",
@@ -14145,7 +14145,7 @@
       "test": "fixtures/IconLabel/iconPosition__top.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/IconLabel"
+      "control": "__control/IconLabel__icon-off-conformance-sample"
     },
     {
       "id": "IconLabel/iconPosition__bottom",
@@ -14168,7 +14168,7 @@
       "test": "fixtures/IconLabel/iconPosition__bottom.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/IconLabel"
+      "control": "__control/IconLabel__icon-off-conformance-sample"
     },
     {
       "id": "IconLabel/iconMargin__static",
@@ -14191,7 +14191,7 @@
       "test": "fixtures/IconLabel/iconMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/IconLabel"
+      "control": "__control/IconLabel__icon-off-conformance-sample"
     },
     {
       "id": "Web/html__static",
@@ -14571,6 +14571,29 @@
       "isControl": true
     },
     {
+      "id": "__control/CheckBox__checked-True",
+      "component": "__control",
+      "attribute": null,
+      "case": "CheckBox",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/CheckBox__checked-True.layout.json",
+      "test": "fixtures/__control/CheckBox__checked-True.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/CheckBox__orientation-horizontal",
       "component": "__control",
       "attribute": null,
@@ -14664,6 +14687,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/IconLabel.layout.json",
       "test": "fixtures/__control/IconLabel.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/IconLabel__icon-off-conformance-sample",
+      "component": "__control",
+      "attribute": null,
+      "case": "IconLabel",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/IconLabel__icon-off-conformance-sample.layout.json",
+      "test": "fixtures/__control/IconLabel__icon-off-conformance-sample.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -14852,6 +14899,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/Radio.layout.json",
       "test": "fixtures/__control/Radio.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Radio__checked-True",
+      "component": "__control",
+      "attribute": null,
+      "case": "Radio",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Radio__checked-True.layout.json",
+      "test": "fixtures/__control/Radio__checked-True.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -15190,6 +15261,30 @@
       "isControl": true
     },
     {
+      "id": "__control/TextField__text-Sample",
+      "component": "__control",
+      "attribute": null,
+      "case": "TextField",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/TextField__text-Sample.layout.json",
+      "test": "fixtures/__control/TextField__text-Sample.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/TextView",
       "component": "__control",
       "attribute": null,
@@ -15208,6 +15303,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/TextView.layout.json",
       "test": "fixtures/__control/TextView.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/TextView__text-Sample",
+      "component": "__control",
+      "attribute": null,
+      "case": "TextView",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/TextView__text-Sample.layout.json",
+      "test": "fixtures/__control/TextView__text-Sample.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

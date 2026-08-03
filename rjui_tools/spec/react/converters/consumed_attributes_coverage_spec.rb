@@ -263,6 +263,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       selectedFontColor
       selectedIndex
       selectedTabIndex
+      tintColor
       valueChange
     ],
     'select_box_converter.rb' => %w[background borderColor colorScheme datePickerMode datePickerStyle dateStringFormat enabled font fontColor fontSize hint hintColor items labelAttributes maximumDate minimumDate minuteInterval multiple onChange onValueChange onValueChanged placeholder placeholderColor prompt selectItemType selectedDate selectedIndex selectedValue size textAlign value],

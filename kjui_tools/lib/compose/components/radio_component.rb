@@ -103,18 +103,20 @@ module KjuiTools
                 code += "\n" + indent("}", depth + 3)
                 
                 # RadioButton colors
-                if json_data['selectedColor'] || json_data['unselectedColor'] || json_data['uncheckedColor']
+                if json_data['selectedColor'] || json_data['checkedColor'] || json_data['unselectedColor'] || json_data['uncheckedColor'] || json_data['iconColor']
                   required_imports&.add(:radio_colors)
                   colors_params = []
                   
-                  if json_data['selectedColor']
-                    selectedcolor_resolved = Helpers::ResourceResolver.process_color(json_data['selectedColor'], required_imports)
+                  selected = json_data['selectedColor'] || json_data['checkedColor']
+                  if selected
+                    selectedcolor_resolved = Helpers::ResourceResolver.process_color(selected, required_imports)
                     colors_params << "selectedColor = #{selectedcolor_resolved}"
                   end
                   
                   # `uncheckedColor` is the cross-platform spelling of the
                   # same colour; the Compose-native name wins when both exist.
-                  unselected = json_data['unselectedColor'] || json_data['uncheckedColor']
+                  # iconColor tints the (unselected) glyph as the last resort.
+                  unselected = json_data['unselectedColor'] || json_data['uncheckedColor'] || json_data['iconColor']
                   if unselected
                     unselectedcolor_resolved = Helpers::ResourceResolver.process_color(unselected, required_imports)
                     colors_params << "unselectedColor = #{unselectedcolor_resolved}"

@@ -13,13 +13,12 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "IconLabel",
+      "type": "TextField",
       "id": "target",
       "width": 200,
       "height": "wrapContent",
-      "text": "Sample",
-      "icon_off": "conformance_sample",
-      "iconPosition": "Bottom"
+      "hint": "Sample",
+      "text": "Sample"
     }
   ]
 }

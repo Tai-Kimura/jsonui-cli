@@ -30,7 +30,8 @@ module KjuiTools
           end
 
           has_label = json_data['label'] || json_data['text']
-          has_custom_icon = json_data['icon'] ||
+          # 'src' is the common spelling of the unchecked icon (33).
+          has_custom_icon = json_data['src'] || json_data['icon'] ||
                             Core::Normalization.attr_lookup(json_data, 'selectedIcon', 'onSrc')
 
           # If custom icons are specified, use IconToggleButton instead of Checkbox
@@ -229,8 +230,8 @@ module KjuiTools
           # `onSrc` is the declared alias of selectedIcon (raw L0 layouts only;
           # the normalizer rewrites it for L1).
           selected_icon_decl = Core::Normalization.attr_lookup(json_data, 'selectedIcon', 'onSrc')
-          icon = json_data['icon'] || selected_icon_decl
-          selected_icon = selected_icon_decl || json_data['icon']
+          icon = json_data['icon'] || json_data['src'] || selected_icon_decl
+          selected_icon = selected_icon_decl || json_data['icon'] || json_data['src']
 
           # Resolve icon names to drawable resources
           required_imports&.add(:painter_resource)
