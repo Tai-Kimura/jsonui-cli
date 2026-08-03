@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance CheckBox.label (static)",
-    "description": "Conformance fixture for 'label' on CheckBox (section: CheckBox, class: visual). Value under test: \"sample\".",
+    "description": "Conformance fixture for 'label' on CheckBox (section: CheckBox, class: visual). Value under test: \"Alt label\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "label__static",
-      "description": "Conformance fixture for 'label' on CheckBox (section: CheckBox, class: visual). Value under test: \"sample\".",
+      "description": "Conformance fixture for 'label' on CheckBox (section: CheckBox, class: visual). Value under test: \"Alt label\".",
       "steps": [
         {
           "action": "waitFor",

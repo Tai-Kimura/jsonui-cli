@@ -421,6 +421,10 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     ("CheckBox", "selectedIcon"): IMAGE_ALT_ASSET_NAME,
     ("Radio", "selectedIcon"): IMAGE_ALT_ASSET_NAME,
     ("Radio", "selected_icon"): IMAGE_ALT_ASSET_NAME,
+    # srcName overrides the base src — with the same asset the override is
+    # unobservable; label overrides text the same way.
+    ("Image", "srcName"): IMAGE_ALT_ASSET_NAME,
+    ("CheckBox", "label"): "Alt label",
     # `value` is Slider/Progress vocabulary in the name-keyed fallback table
     # (0.5), but Switch declares it as its boolean state alias — 0.5 is not a
     # boolean, the Compose codegen host cannot even compile it

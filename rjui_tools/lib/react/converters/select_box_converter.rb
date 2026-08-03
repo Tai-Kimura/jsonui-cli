@@ -280,6 +280,17 @@ module RjuiTools
             multiple_select? ? " defaultValue={[\"#{value}\"]}" : " defaultValue=\"#{value}\""
           elsif (index_binding = attributes['selectedIndex']) && has_binding?(index_binding)
             build_index_value_attr(index_binding)
+          elsif attributes['selectedIndex'].is_a?(Numeric)
+            # A literal selectedIndex seeds the initial selection (33
+            # cross-effect: web ignored it while ios honored it).
+            items = attributes['items']
+            if items.is_a?(Array)
+              item = items[attributes['selectedIndex'].to_i]
+              literal = item.is_a?(Hash) ? (item['value'] || item['label']) : item
+              literal ? " defaultValue=\"#{literal}\"" : ''
+            else
+              ''
+            end
           else
             ''
           end

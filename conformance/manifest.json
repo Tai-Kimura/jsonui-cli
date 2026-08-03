@@ -7946,7 +7946,7 @@
       "host": "Image",
       "writtenKey": "srcName",
       "aliasOf": null,
-      "value": "conformance_sample",
+      "value": "conformance_sample_alt",
       "platforms": [
         "ios",
         "android",
@@ -13108,7 +13108,7 @@
       "host": "CheckBox",
       "writtenKey": "label",
       "aliasOf": null,
-      "value": "sample",
+      "value": "Alt label",
       "platforms": [
         "ios",
         "android",
