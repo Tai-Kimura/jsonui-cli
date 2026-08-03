@@ -381,7 +381,15 @@ module KjuiTools
         # one. For a Checkbox the glyph is the tick, hence checkmarkColor.
         def self.icon_appearance_args(json_data, required_imports, control)
           args = []
-          args << "modifier = Modifier.size(#{json_data['iconSize'].to_i}.dp)" if json_data['iconSize']
+          # iconSize sizes the GLYPH: Material draws its glyph at a fixed
+          # 20dp, so a bare .size(N) just clips it (measured: the arc corner
+          # of a 20dp circle inside an 8dp box). Scaling by N/20 inside the
+          # N-dp box draws the glyph at the declared size.
+          if json_data['iconSize']
+            required_imports&.add(:scale)
+            size = json_data['iconSize'].to_i
+            args << format("modifier = Modifier.size(%d.dp).scale(%.2ff)", size, size / 20.0)
+          end
           # Per-state colours: selectedColor/uncheckedColor (the
           # cross-platform pair) win over the single iconColor override.
           icon_color = json_data['iconColor'] &&

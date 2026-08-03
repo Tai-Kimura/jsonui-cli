@@ -264,10 +264,14 @@ module KjuiTools
             code += "\n" + indent("onCheckedChange = { },", depth + 1)
           end
 
-          # Build modifiers
+          # Build modifiers — declared width/height must reach the control
+          # (the dynamic renderer's buildModifier applies size in the same
+          # slot); dropping them left the button at its 48dp default, which
+          # shifted the glyph and let the button's shape clip it.
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
