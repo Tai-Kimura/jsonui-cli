@@ -375,7 +375,7 @@ def _enum_decl(attr: Attribute) -> list[str]:
     `from`; `json` keeps the canonical (first-listed) spelling.
     """
     type_name = _pascal(attr.name)
-    cases = enum_cases(attr.enum_values, _entry_name)
+    cases = enum_cases(attr.enum_values, _entry_name, attr.value_alias_map)
     lines = [f"    enum class {type_name}(val json: String) {{"]
     entries = [
         f"        {name}({_kotlin_str(canonical)})"
@@ -388,7 +388,7 @@ def _enum_decl(attr: Attribute) -> list[str]:
         "            /** Case-insensitive match against the declared values. */",
         f"            fun from(raw: String): {type_name}? = when (raw.lowercase()) {{",
     ]
-    for name, lowered in enum_ci_cases(attr.enum_values, _entry_name):
+    for name, lowered in enum_ci_cases(attr.enum_values, _entry_name, attr.value_alias_map):
         rendered = ", ".join(_kotlin_str(v) for v in lowered)
         lines.append(f"                {rendered} -> {name}")
     lines += [

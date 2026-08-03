@@ -92,6 +92,7 @@ class Canonicalizer:
             node_type = canonical_type
         alias_map = self._table.aliases_for(node_type)
         deprecated_map = self._table.deprecated_for(node_type)
+        value_alias_map = self._table.value_aliases_for(node_type)
         label = self._node_label(node, node_type, path)
 
         rebuilt: dict[str, Any] = {}
@@ -126,6 +127,26 @@ class Canonicalizer:
             else:
                 target = canonical
             rebuilt[target] = value
+
+            # Declared value aliases (`valueAliases` on the definition):
+            # rewrite the alias spelling to the canonical value. Exact-match
+            # only — case leniency stays with the runtime enum readers.
+            value_aliases = value_alias_map.get(target)
+            if (
+                value_aliases
+                and isinstance(value, str)
+                and value in value_aliases
+            ):
+                canonical_value = value_aliases[value]
+                warnings.append(
+                    self._fmt(
+                        source,
+                        label,
+                        f"'{target}: {value}' is an alias spelling of "
+                        f"'{canonical_value}' — rewrote the value",
+                    )
+                )
+                rebuilt[target] = canonical_value
 
             dep = deprecated_map.get(target)
             if dep is not None:

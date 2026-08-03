@@ -20,6 +20,17 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
       expect(result).to include('LazyHorizontalGrid(')
     end
 
+    # 2026-08-03 unification (SSoT valueAliases): LeftAligned IS flow — the
+    # raw-reading codegen accepts the alias spellings like dynamic's
+    # generated enum folds them.
+    it 'routes the leftAligned alias spellings through the flow layout' do
+      %w[flow leftAligned LeftAligned].each do |spelling|
+        json_data = { 'type' => 'Collection', 'layout' => spelling }
+        result = described_class.generate(json_data, 0, Set.new)
+        expect(result).to include('FlowRow'), "expected layout: #{spelling} to render as FlowRow"
+      end
+    end
+
     it 'sets columns from config' do
       json_data = { 'type' => 'Collection', 'columns' => 3 }
       result = described_class.generate(json_data, 0, required_imports)

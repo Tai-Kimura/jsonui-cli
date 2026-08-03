@@ -64,6 +64,12 @@ class Attribute:
     kind: AttrKind
     bindable: bool = False
     enum_values: tuple[str, ...] = ()
+    #: ``((alias value, canonical value), …)`` from the definition's
+    #: ``valueAliases`` object — the enum keeps ACCEPTING the alias
+    #: spellings, but emitters fold them into the canonical case so every
+    #: runtime routes them through the canonical code path (e.g.
+    #: Collection.layout ``LeftAligned`` → ``flow``).
+    value_aliases: tuple[tuple[str, str], ...] = ()
     dimension_keywords: tuple[str, ...] = ()
     raw_kinds: tuple[str, ...] = ()
     aliases: tuple[str, ...] = ()
@@ -78,6 +84,11 @@ class Attribute:
     def context(self) -> str:
         """`component.attr` string used in generated warning messages."""
         return f"{self.component}.{self.name}"
+
+    @property
+    def value_alias_map(self) -> dict[str, str]:
+        """``{alias value: canonical value}`` (see ``value_aliases``)."""
+        return dict(self.value_aliases)
 
 
 @dataclass(frozen=True)
@@ -244,12 +255,15 @@ def classify_attr(
     if kind is AttrKind.BINDING:
         bindable = False  # binding-only is its own kind, not AttrValue-wrapped
 
+    value_aliases = _resolve_value_aliases(entry, enum_values, f"{component}.{name}")
+
     return Attribute(
         name=name,
         component=component,
         kind=kind,
         bindable=bindable,
         enum_values=enum_values,
+        value_aliases=value_aliases,
         dimension_keywords=dim_keywords,
         raw_kinds=raw_kinds,
         aliases=tuple(entry.get("aliases") or ()),
@@ -260,6 +274,44 @@ def classify_attr(
         binding_direction=str(entry.get("binding_direction") or ""),
         description=_clean_text(entry.get("description")),
     )
+
+
+def _resolve_value_aliases(
+    entry: dict, enum_values: tuple[str, ...], context: str
+) -> tuple[tuple[str, str], ...]:
+    """Validated ``valueAliases`` pairs for one attribute definition.
+
+    Authoring errors fail loudly: an alias or target outside the declared
+    enum values means the SSoT contradicts itself, and silently dropping
+    the mapping would leave each runtime free to disagree about it.
+    """
+    raw = entry.get("valueAliases")
+    if raw is None:
+        return ()
+    if not isinstance(raw, dict):
+        raise ValueError(f"{context}: valueAliases must be an object")
+    if not enum_values:
+        raise ValueError(
+            f"{context}: valueAliases declared but the attribute has no enum values"
+        )
+    declared = set(enum_values)
+    pairs: list[tuple[str, str]] = []
+    for alias, canonical in raw.items():
+        if not isinstance(alias, str) or not isinstance(canonical, str):
+            raise ValueError(f"{context}: valueAliases entries must map string to string")
+        if alias == canonical:
+            raise ValueError(f"{context}: valueAliases maps '{alias}' to itself")
+        if alias not in declared or canonical not in declared:
+            raise ValueError(
+                f"{context}: valueAliases '{alias}' -> '{canonical}' must both "
+                "appear in the declared enum values"
+            )
+        if canonical in raw:
+            raise ValueError(
+                f"{context}: valueAliases target '{canonical}' is itself an alias"
+            )
+        pairs.append((alias, canonical))
+    return tuple(pairs)
 
 
 def _resolve_kind(

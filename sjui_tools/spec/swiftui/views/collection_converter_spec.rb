@@ -254,6 +254,16 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         expect(code).to include('horizontalSpacing: 8')
         expect(code).to include('verticalSpacing: 8')
       end
+
+      # 2026-08-03 unification (SSoT valueAliases): LeftAligned IS flow —
+      # the raw-reading codegen accepts the alias spellings like dynamic's
+      # generated enum folds them.
+      it 'routes the leftAligned alias spellings through the flow layout' do
+        %w[leftAligned LeftAligned].each do |spelling|
+          code = described_class.new(flow_component.merge('layout' => spelling)).convert
+          expect(code).to include('FlowLayout'), "expected layout: #{spelling} to render as flow"
+        end
+      end
     end
 
     describe 'section header/footer insets alignment' do

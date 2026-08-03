@@ -113,8 +113,11 @@ module SjuiTools
           # Case-insensitive: the declared enum admits 'Flow' as well as
           # 'flow', and dynamic reads the value after the runtime
           # normalizer downcases it (same defect measured on kjui as
-          # parity d=32 — Collection/layout__flow_2).
-          is_flow = layout.to_s.casecmp('flow').zero?
+          # parity d=32 — Collection/layout__flow_2). 'leftAligned' is an
+          # alias spelling of flow (SSoT valueAliases, 2026-08-03
+          # unification) — dynamic folds it via the generated enum, so the
+          # raw-reading codegen must accept it too.
+          is_flow = %w[flow leftaligned].include?(layout.to_s.downcase)
 
           if !is_lazy
             generate_non_lazy(

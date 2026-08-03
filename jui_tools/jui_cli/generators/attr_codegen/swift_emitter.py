@@ -356,29 +356,43 @@ def _metadata_decls(comp: Component, model: AttrModel) -> list[str]:
     return lines
 
 
-def enum_cases(values: tuple[str, ...], namer) -> list[tuple[str, str, list[str]]]:
+def enum_cases(
+    values: tuple[str, ...],
+    namer,
+    value_aliases: dict[str, str] | None = None,
+) -> list[tuple[str, str, list[str]]]:
     """Dedupe enum values by derived case name.
 
     The definitions file keeps legacy spellings next to canonical ones
     (e.g. Collection.layout has both ``"flow"`` and ``"Flow"``); after
-    identifier derivation those merge into one case. Returns
-    ``[(case_name, canonical_value, [all_accepted_values])]`` in first-seen
-    order (deterministic — definition order is stable).
+    identifier derivation those merge into one case. Declared
+    ``valueAliases`` fold BEFORE naming, so an alias spelling with its own
+    identifier (``LeftAligned``) still lands in its canonical value's case
+    (``flow``) and every runtime routes it through the canonical code path.
+    Returns ``[(case_name, canonical_value, [all_accepted_values])]`` in
+    first-seen order (deterministic — definition order is stable).
     """
+    value_aliases = value_aliases or {}
     ordered: list[tuple[str, str, list[str]]] = []
     by_name: dict[str, list[str]] = {}
     for value in values:
-        name = namer(value)
+        canonical = value_aliases.get(value, value)
+        name = namer(canonical)
         if name in by_name:
-            by_name[name].append(value)
+            if value not in by_name[name]:
+                by_name[name].append(value)
         else:
-            accepted = [value]
+            accepted = [value] if value == canonical else [canonical, value]
             by_name[name] = accepted
-            ordered.append((name, value, accepted))
+            ordered.append((name, canonical, accepted))
     return ordered
 
 
-def enum_ci_cases(values: tuple[str, ...], namer) -> list[tuple[str, list[str]]]:
+def enum_ci_cases(
+    values: tuple[str, ...],
+    namer,
+    value_aliases: dict[str, str] | None = None,
+) -> list[tuple[str, list[str]]]:
     """Case-insensitive match table: ``[(case_name, [lowered values])]``.
 
     Lenient enum matching switches on the lowercased raw value, so the
@@ -388,7 +402,7 @@ def enum_ci_cases(values: tuple[str, ...], namer) -> list[tuple[str, list[str]]]
     """
     seen: set[str] = set()
     out: list[tuple[str, list[str]]] = []
-    for case_name, _, accepted in enum_cases(values, namer):
+    for case_name, _, accepted in enum_cases(values, namer, value_aliases):
         lowered: list[str] = []
         for value in accepted:
             lv = value.lower()
@@ -403,7 +417,7 @@ def enum_ci_cases(values: tuple[str, ...], namer) -> list[tuple[str, list[str]]]
 def _enum_decl(attr: Attribute) -> list[str]:
     type_name = _pascal(attr.name)
     lines = [f"    public enum {type_name}: String {{"]
-    for case_name, canonical, _ in enum_cases(attr.enum_values, _case_name):
+    for case_name, canonical, _ in enum_cases(attr.enum_values, _case_name, attr.value_alias_map):
         lines.append(f"        case {case_name} = {_swift_str(canonical)}")
     lines.append("    }")
     return lines
@@ -419,7 +433,7 @@ def _enum_parse_func(attr: Attribute) -> list[str]:
         "        if let s = raw as? String {",
         "            switch s.lowercased() {",
     ]
-    for case_name, lowered in enum_ci_cases(attr.enum_values, _case_name):
+    for case_name, lowered in enum_ci_cases(attr.enum_values, _case_name, attr.value_alias_map):
         rendered = ", ".join(_swift_str(v) for v in lowered)
         # Fully qualified (`TypeName.case`) — a bare `.none` in this
         # position is ambiguous with `Optional.none`.

@@ -3458,7 +3458,12 @@
         "LeftAligned",
         "leftAligned"
       ],
-      "description": "Layout type (flow: wrapping layout, LeftAligned: left-aligned wrapping)"
+      "valueAliases": {
+        "Flow": "flow",
+        "LeftAligned": "flow",
+        "leftAligned": "flow"
+      },
+      "description": "Layout type (vertical | horizontal | flow — wrapping layout packed to the leading edge). Flow/LeftAligned/leftAligned are accepted alias spellings of flow (2026-08-03 unification ruling; the old 'left-aligned wrapping' distinction was a frozen-UIKit fossil — no modern path ever implemented it)."
     },
     "insets": {
       "type": [

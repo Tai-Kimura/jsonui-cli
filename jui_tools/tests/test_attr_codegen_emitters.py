@@ -70,6 +70,47 @@ class GoldenTests(unittest.TestCase):
                 self.assertIn("@generated", content, f"{lang}/{name}")
 
 
+class ValueAliasFoldingTests(unittest.TestCase):
+    """Declared value aliases fold into the canonical enum case."""
+
+    VALUES = ("vertical", "horizontal", "flow", "Flow", "LeftAligned", "leftAligned")
+    ALIASES = {"Flow": "flow", "LeftAligned": "flow", "leftAligned": "flow"}
+
+    def test_enum_cases_fold_aliases_into_canonical_case(self):
+        from jui_cli.generators.attr_codegen.swift_emitter import enum_cases
+
+        cases = enum_cases(self.VALUES, lambda v: v.upper(), self.ALIASES)
+        names = [name for name, _, _ in cases]
+        self.assertEqual(names, ["VERTICAL", "HORIZONTAL", "FLOW"])
+        flow = next(c for c in cases if c[0] == "FLOW")
+        self.assertEqual(flow[1], "flow")  # canonical value
+        self.assertEqual(set(flow[2]), {"flow", "Flow", "LeftAligned", "leftAligned"})
+
+    def test_enum_ci_cases_route_alias_spellings_to_canonical(self):
+        from jui_cli.generators.attr_codegen.swift_emitter import enum_ci_cases
+
+        table = dict(enum_ci_cases(self.VALUES, lambda v: v.upper(), self.ALIASES))
+        self.assertIn("leftaligned", table["FLOW"])
+        self.assertIn("flow", table["FLOW"])
+
+    def test_kotlin_collection_layout_has_no_leftaligned_member(self):
+        # Against the real SSoT: the generated Layout enum folds the alias
+        # spellings — LEFT_ALIGNED disappears as a member, the spelling is
+        # still accepted and routes to FLOW.
+        model = load_model()
+        emitted = EMITTERS["kotlin"].emit(model)
+        content = emitted["CollectionAttributes.kt"]
+        self.assertNotIn("LEFT_ALIGNED", content)
+        self.assertIn('"leftaligned" -> FLOW', content)
+
+    def test_swift_collection_layout_routes_leftaligned_to_flow(self):
+        model = load_model()
+        emitted = EMITTERS["swift"].emit(model)
+        content = emitted["CollectionAttributes.swift"]
+        self.assertNotIn("leftAligned = ", content)
+        self.assertIn('"leftaligned"', content)
+
+
 class DeterminismTests(unittest.TestCase):
     def test_emitters_deterministic_on_real_definitions(self):
         model_a = load_model()

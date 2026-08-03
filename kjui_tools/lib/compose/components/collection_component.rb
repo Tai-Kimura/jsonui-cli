@@ -59,7 +59,10 @@ module KjuiTools
           # 'flow', and the dynamic path sees the value AFTER the runtime
           # normalizer downcases it — reading it raw here rendered 'Flow'
           # as a vertical stack while dynamic wrapped it (parity d=32).
-          is_flow = layout.to_s.casecmp('flow').zero?
+          # 'leftAligned' is an alias spelling of flow (SSoT valueAliases,
+          # 2026-08-03 unification) — dynamic folds it via the generated
+          # enum, so the raw-reading codegen must accept it too.
+          is_flow = %w[flow leftaligned].include?(layout.to_s.downcase)
 
           # lazy: "none" → emit Row/Column + forEachIndexed, no LazyColumn/LazyVerticalGrid
           # and no verticalScroll/horizontalScroll. Intended for Collections nested

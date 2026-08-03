@@ -82,6 +82,48 @@ class ClassifyAttrTests(unittest.TestCase):
         )
         self.assertEqual(attr.kind, AttrKind.RAW)
 
+    def test_value_aliases_parsed_and_validated(self):
+        attr = classify_attr("Collection", "layout", {
+            "type": "string",
+            "enum": ["vertical", "flow", "Flow", "LeftAligned"],
+            "valueAliases": {"Flow": "flow", "LeftAligned": "flow"},
+        })
+        self.assertEqual(
+            attr.value_alias_map, {"Flow": "flow", "LeftAligned": "flow"}
+        )
+
+    def test_value_alias_outside_enum_fails_loudly(self):
+        with self.assertRaises(ValueError):
+            classify_attr("Collection", "layout", {
+                "type": "string",
+                "enum": ["vertical", "flow"],
+                "valueAliases": {"LeftAligned": "flow"},
+            })
+
+    def test_value_alias_without_enum_fails_loudly(self):
+        with self.assertRaises(ValueError):
+            classify_attr("common", "width", {
+                "type": "string",
+                "valueAliases": {"a": "b"},
+            })
+
+    def test_value_alias_chain_fails_loudly(self):
+        with self.assertRaises(ValueError):
+            classify_attr("Collection", "layout", {
+                "type": "string",
+                "enum": ["a", "b", "c"],
+                "valueAliases": {"a": "b", "b": "c"},
+            })
+
+    def test_real_definitions_declare_leftaligned_alias_of_flow(self):
+        # The 2026-08-03 unification ruling, pinned against the bundled SSoT.
+        model = load_model(default_definitions_path())
+        collection = next(c for c in model.components if c.name == "Collection")
+        layout = next(a for a in collection.attrs if a.name == "layout")
+        self.assertEqual(layout.value_alias_map.get("LeftAligned"), "flow")
+        self.assertEqual(layout.value_alias_map.get("leftAligned"), "flow")
+        self.assertEqual(layout.value_alias_map.get("Flow"), "flow")
+
     def test_aliases_preserved(self):
         attr = classify_attr(
             "common", "opacity", {"type": ["number", "binding"], "aliases": ["alpha"]}

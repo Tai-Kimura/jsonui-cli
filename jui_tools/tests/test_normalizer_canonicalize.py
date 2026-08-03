@@ -43,6 +43,15 @@ SYNTH_DEFS = {
     "BrokenAlias": {
         "_alias_of": "NoSuchSection",
     },
+    # Enum value aliases (the LeftAligned→flow shape): the enum accepts the
+    # alias spellings, the canonicalizer rewrites them to the canonical value.
+    "Collection": {
+        "layout": {
+            "type": "string",
+            "enum": ["vertical", "horizontal", "flow", "Flow", "LeftAligned", "leftAligned"],
+            "valueAliases": {"Flow": "flow", "LeftAligned": "flow", "leftAligned": "flow"},
+        },
+    },
 }
 
 
@@ -165,6 +174,36 @@ class CanonicalizerTest(unittest.TestCase):
         self.assertEqual(tree["type"], "TextField")
         self.assertEqual(len(warnings), 2)  # rewrite note + hintColor deprecation
         self.assertIn("component alias of 'TextField'", warnings[0])
+
+    def test_value_alias_rewritten_with_warning(self):
+        for spelling in ("LeftAligned", "leftAligned", "Flow"):
+            tree, warnings = self.canon.canonicalize(
+                {"type": "Collection", "layout": spelling}
+            )
+            self.assertEqual(tree["layout"], "flow", spelling)
+            self.assertEqual(len(warnings), 1, spelling)
+            self.assertIn("alias spelling of 'flow'", warnings[0])
+
+    def test_canonical_value_untouched_without_warning(self):
+        tree, warnings = self.canon.canonicalize(
+            {"type": "Collection", "layout": "flow"}
+        )
+        self.assertEqual(tree["layout"], "flow")
+        self.assertEqual(warnings, [])
+
+    def test_value_alias_scoped_to_component(self):
+        # Another component's `layout` (not declared) keeps its value.
+        tree, warnings = self.canon.canonicalize(
+            {"type": "View", "layout": "LeftAligned"}
+        )
+        self.assertEqual(tree["layout"], "LeftAligned")
+        self.assertEqual(warnings, [])
+
+    def test_value_alias_rewrite_is_idempotent(self):
+        once, _ = self.canon.canonicalize({"type": "Collection", "layout": "leftAligned"})
+        twice, warnings = self.canon.canonicalize(once)
+        self.assertEqual(twice["layout"], "flow")
+        self.assertEqual(warnings, [])
 
     def test_synonym_type_not_rewritten(self):
         tree, warnings = self.canon.canonicalize({"type": "SeekBar", "alpha": 1})

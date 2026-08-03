@@ -135,9 +135,11 @@ class AliasTable:
         self._definitions = definitions or {}
         self._common_aliases = self._alias_map_for_section("common")
         self._common_deprecated = self._deprecated_map_for_section("common")
+        self._common_value_aliases = self._value_alias_map_for_section("common")
         # component key -> cached maps
         self._alias_cache: dict[str | None, dict[str, str]] = {}
         self._deprecated_cache: dict[str | None, dict[str, DeprecationInfo]] = {}
+        self._value_alias_cache: dict[str | None, dict[str, dict[str, str]]] = {}
 
     # ------------------------------------------------------------------
     # Construction
@@ -219,6 +221,25 @@ class AliasTable:
         self._alias_cache[key] = merged
         return merged
 
+    def value_aliases_for(self, component_type: str | None) -> dict[str, dict[str, str]]:
+        """``{attribute: {alias value: canonical value}}`` for *component_type*.
+
+        Declared via a ``valueAliases`` object on the attribute definition —
+        the enum keeps accepting the alias spellings, the canonicalizer
+        rewrites them, and attr-codegen folds them into the canonical enum
+        case (e.g. Collection.layout ``LeftAligned``/``leftAligned``/``Flow``
+        → ``flow``). Same overlay rule as :meth:`aliases_for`.
+        """
+        key = self.definition_key_for(component_type)
+        if key in self._value_alias_cache:
+            return self._value_alias_cache[key]
+        merged = {attr: dict(m) for attr, m in self._common_value_aliases.items()}
+        if key and key != "common":
+            for attr, m in self._value_alias_map_for_section(key).items():
+                merged.setdefault(attr, {}).update(m)
+        self._value_alias_cache[key] = merged
+        return merged
+
     def deprecated_for(self, component_type: str | None) -> dict[str, DeprecationInfo]:
         """``{attribute: DeprecationInfo}`` effective for *component_type*."""
         key = self.definition_key_for(component_type)
@@ -248,6 +269,26 @@ class AliasTable:
             for alias in aliases:
                 if isinstance(alias, str) and alias and alias != canonical:
                     out[alias] = canonical
+        return out
+
+    def _value_alias_map_for_section(self, key: str) -> dict[str, dict[str, str]]:
+        out: dict[str, dict[str, str]] = {}
+        for attr, spec in self._section(key).items():
+            if not isinstance(spec, dict):
+                continue
+            value_aliases = spec.get("valueAliases")
+            if not isinstance(value_aliases, dict):
+                continue
+            table = {
+                alias: canonical
+                for alias, canonical in value_aliases.items()
+                if isinstance(alias, str)
+                and isinstance(canonical, str)
+                and alias
+                and alias != canonical
+            }
+            if table:
+                out[attr] = table
         return out
 
     def _deprecated_map_for_section(self, key: str) -> dict[str, DeprecationInfo]:
