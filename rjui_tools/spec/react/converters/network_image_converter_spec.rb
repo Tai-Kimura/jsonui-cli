@@ -29,10 +29,22 @@ RSpec.describe RjuiTools::React::Converters::NetworkImageConverter do
     end
 
     context 'with placeholder/defaultImage' do
-      it 'adds placeholder attribute' do
-        converter = create_converter({ 'class' => 'NetworkImage', 'url' => 'https://example.com/image.jpg', 'defaultImage' => 'placeholder.png' })
+      # Canonical networkImage.noSrc = defaultImage (shared/core/
+      # attribute_semantics.json): defaultImage is the no-src display and
+      # travels as its own prop — never collapsed into placeholder.
+      it 'passes defaultImage as its own prop' do
+        converter = create_converter({ 'class' => 'NetworkImage', 'url' => 'https://example.com/image.jpg', 'defaultImage' => 'default.png' })
         result = converter.convert
-        expect(result).to include('placeholder="placeholder.png"')
+        expect(result).to include('defaultImage="default.png"')
+        expect(result).not_to include('placeholder=')
+      end
+
+      it 'keeps hint/placeholder/loadingImage as the loading chain' do
+        converter = create_converter({ 'class' => 'NetworkImage', 'url' => 'https://example.com/image.jpg',
+                                       'placeholder' => 'loading.png', 'defaultImage' => 'default.png' })
+        result = converter.convert
+        expect(result).to include('placeholder="loading.png"')
+        expect(result).to include('defaultImage="default.png"')
       end
     end
 

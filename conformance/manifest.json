@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "c869b6c324857239017d1a82a305bcac03daf330665ed8b03c5a36b6e7b02cc0",
   "counts": {
-    "fixtures": 671,
+    "fixtures": 675,
     "assertable": 29,
-    "visual": 572,
+    "visual": 574,
     "interactive": 35,
-    "control": 35,
+    "control": 37,
     "skipped": 154,
     "promoted": {
       "callback": 11
@@ -8528,7 +8528,7 @@
       "host": "NetworkImage",
       "writtenKey": "hint",
       "aliasOf": null,
-      "value": "conformance_sample",
+      "value": "conformance_sample_alt",
       "platforms": [
         "ios",
         "android",
@@ -8551,7 +8551,7 @@
       "host": "NetworkImage",
       "writtenKey": "placeholder",
       "aliasOf": null,
-      "value": "conformance_sample",
+      "value": "conformance_sample_alt",
       "platforms": [
         "ios",
         "android",
@@ -8597,7 +8597,7 @@
       "host": "NetworkImage",
       "writtenKey": "errorImage",
       "aliasOf": null,
-      "value": "conformance_sample",
+      "value": "conformance_sample_alt",
       "platforms": [
         "ios",
         "android"
@@ -8619,7 +8619,7 @@
       "host": "NetworkImage",
       "writtenKey": "loadingImage",
       "aliasOf": null,
-      "value": "conformance_sample",
+      "value": "conformance_sample_alt",
       "platforms": [
         "ios",
         "android"
@@ -15733,6 +15733,100 @@
         "fixtures/common/__screens/variant_state.layout.json",
         "fixtures/common/__screens/variant_state@regular.layout.json"
       ]
+    },
+    {
+      "id": "__control/View__fill-w",
+      "component": "__control",
+      "attribute": null,
+      "case": "View__fill-w",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__fill-w.layout.json",
+      "test": "fixtures/__control/View__fill-w.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "common/maxWidth__fill_clamp",
+      "component": "common",
+      "attribute": "maxWidth",
+      "case": "fill_clamp",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "maxWidth",
+      "aliasOf": null,
+      "value": 120,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/maxWidth__fill_clamp.layout.json",
+      "test": "fixtures/common/maxWidth__fill_clamp.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__fill-w"
+    },
+    {
+      "id": "__control/View__fill-h",
+      "component": "__control",
+      "attribute": null,
+      "case": "View__fill-h",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__fill-h.layout.json",
+      "test": "fixtures/__control/View__fill-h.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "common/maxHeight__fill_clamp",
+      "component": "common",
+      "attribute": "maxHeight",
+      "case": "fill_clamp",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "maxHeight",
+      "aliasOf": null,
+      "value": 120,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/maxHeight__fill_clamp.layout.json",
+      "test": "fixtures/common/maxHeight__fill_clamp.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__fill-h"
     }
   ],
   "skipped": [

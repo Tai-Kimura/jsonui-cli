@@ -133,17 +133,27 @@ module RjuiTools
         end
 
         def build_placeholder_attr
-          # `hint` is the canonical spelling; `placeholder` and `defaultImage`
-          # are the aliases (kjui already read the canonical — ios/web only
-          # read the aliases, which the pair-scan flagged).
-          placeholder = attributes['hint'] || attributes['placeholder'] || attributes['defaultImage']
-          return '' unless placeholder
-
-          if has_binding?(placeholder)
-            " placeholder={#{convert_binding(placeholder).gsub(/^\{|\}$/, '')}}"
-          else
-            " placeholder=\"#{placeholder}\""
+          # `hint` is the canonical spelling; `placeholder` and `loadingImage`
+          # are the loading-state chain. defaultImage is NOT part of it —
+          # it is the no-src display and travels as its own prop (canonical
+          # networkImage.noSrc = defaultImage, shared/core/
+          # attribute_semantics.json); collapsing it into placeholder let a
+          # declared placeholder hijack the no-src state.
+          placeholder = attributes['hint'] || attributes['placeholder'] || attributes['loadingImage']
+          attr = ''
+          if placeholder
+            attr +=
+              if has_binding?(placeholder)
+                " placeholder={#{convert_binding(placeholder).gsub(/^\{|\}$/, '')}}"
+              else
+                " placeholder=\"#{placeholder}\""
+              end
           end
+          default_image = attributes['defaultImage']
+          if default_image && !has_binding?(default_image)
+            attr += " defaultImage=\"#{default_image}\""
+          end
+          attr
         end
 
         def build_event_handler(event_name)

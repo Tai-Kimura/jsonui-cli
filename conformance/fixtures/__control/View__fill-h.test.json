@@ -1,0 +1,31 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/__control/View__fill-h.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View__fill-h",
+    "description": "Control for the maxHeight clamp-fill fixture: the same filling target WITHOUT the bound.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "View__fill-h",
+      "description": "Control for the maxHeight clamp-fill fixture: the same filling target WITHOUT the bound.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "control_View__fill-h"
+        }
+      ]
+    }
+  ]
+}

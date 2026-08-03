@@ -725,6 +725,24 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     summary.assertable_count += sum(1 for e in variant_entries if e["class"] == "assertable")
     summary.interactive_count += sum(1 for e in variant_entries if e["class"] == "interactive")
 
+    # Bespoke maxBounds clamp-fill fixtures (33 track): matchParent + a max
+    # bound must clamp to min(parent, bound) — see bounds_fixtures module
+    # docstring. Composite (two attributes), so outside the generic sweep.
+    from .bounds_fixtures import build_bounds_fixtures
+
+    bounds_files, bounds_entries = build_bounds_fixtures(source_label)
+    for rel_path, payload in bounds_files:
+        target = out_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_dump_json(payload), encoding="utf-8")
+        summary.files_written += 1
+    fixture_entries.extend(bounds_entries)
+    summary.fixture_count += len(bounds_entries)
+    summary.visual_count += sum(
+        1 for e in bounds_entries if e["class"] == "visual" and not e.get("isControl")
+    )
+    summary.control_count += sum(1 for e in bounds_entries if e.get("isControl"))
+
     skipped_entries = [
         {"component": s.section, "attribute": s.attribute, "reason": s.reason}
         for s in skipped

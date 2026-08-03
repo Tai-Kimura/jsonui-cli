@@ -57,8 +57,15 @@ module SjuiTools
 
           apply_highlight_src
 
-          # contentMode
-          if @component['contentMode']
+          # contentMode. fill/scaleToFill are the stretch — resizable WITHOUT
+          # an aspectRatio modifier fills the frame on both axes (canonical
+          # image.fill = stretch, shared/core/attribute_semantics.json;
+          # SwiftUI's ContentMode enum has no stretch member, absence of the
+          # modifier IS the spelling).
+          mode_raw = @component['contentMode'].to_s.downcase
+          if %w[fill scaletofill].include?(mode_raw)
+            # stretch: no aspectRatio modifier
+          elsif @component['contentMode']
             content_mode = map_content_mode(@component['contentMode'])
             @modifier_bag.append(:component_specific, ".aspectRatio(contentMode: #{content_mode})")
           else

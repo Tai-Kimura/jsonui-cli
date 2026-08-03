@@ -23,6 +23,11 @@ interface NetworkImageProps {
   // normalizes it, but accept it here too so the contract can't drift.
   contentMode?: 'cover' | 'contain' | 'fill' | 'none' | 'scaleDown' | 'fit';
   placeholder?: string;
+  // No-src display — the canonical networkImage.noSrc chain
+  // (shared/core/attribute_semantics.json): with no src the view shows
+  // defaultImage; placeholder belongs to the loading state; on error it
+  // shows errorImage, falling back to defaultImage.
+  defaultImage?: string;
   errorImage?: string;
   // Native browser fetch hint, forwarded to the rendered <img>. Renamed on
   // destructure because `loading` is this component's own state name.
@@ -40,20 +45,22 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
   // (shared/core/attribute_semantics.json); ios/android default the same way.
   contentMode = 'contain',
   placeholder,
+  defaultImage,
   errorImage,
   loading: fetchHint,
   onLoad,
   onError,
 }) => {
-  const [imageUrl, setImageUrl] = useState<string | null>(placeholder || null);
+  const [imageUrl, setImageUrl] = useState<string | null>(defaultImage || placeholder || null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     if (!src) {
-      // No source: reset to the placeholder (or nothing) so a row whose URL
-      // becomes empty doesn't keep showing the previous image.
-      setImageUrl(placeholder || null);
+      // No source: the canonical no-src display is defaultImage (then
+      // placeholder as grace) so a row whose URL becomes empty doesn't
+      // keep showing the previous image.
+      setImageUrl(defaultImage || placeholder || null);
       setLoading(false);
       setError(false);
       return;
@@ -71,8 +78,9 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
     img.onerror = () => {
       setError(true);
       setLoading(false);
-      if (errorImage) {
-        setImageUrl(errorImage);
+      const errorDisplay = errorImage || defaultImage;
+      if (errorDisplay) {
+        setImageUrl(errorDisplay);
       }
       onError?.();
     };
@@ -82,7 +90,7 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
       img.onload = null;
       img.onerror = null;
     };
-  }, [src, placeholder, errorImage, onLoad, onError]);
+  }, [src, placeholder, defaultImage, errorImage, onLoad, onError]);
 
   const objectFitMap: Record<string, string> = {
     cover: 'object-cover',
@@ -120,7 +128,7 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
     </div>
   );
 
-  if (error && !errorImage) {
+  if (error && !errorImage && !defaultImage) {
     return noImageFallback;
   }
 

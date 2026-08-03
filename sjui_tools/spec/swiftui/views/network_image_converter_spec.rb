@@ -58,6 +58,17 @@ RSpec.describe SjuiTools::SwiftUI::Views::NetworkImageConverter do
         expect(code).to include('contentMode: .fit')
       end
 
+      # fill = stretch (canonical image.fill = stretch,
+      # shared/core/attribute_semantics.json) — NetworkImage carries the
+      # .stretch case for it.
+      it 'maps fill and scaleToFill to .stretch' do
+        %w[fill scaleToFill].each do |mode|
+          component = { 'type' => 'NetworkImage', 'src' => 'url', 'contentMode' => mode }
+          code = described_class.new(component).convert
+          expect(code).to include('contentMode: .stretch'), "expected #{mode} -> .stretch"
+        end
+      end
+
       it 'handles center' do
         component = { 'type' => 'NetworkImage', 'src' => 'url', 'contentMode' => 'center' }
         converter = described_class.new(component)

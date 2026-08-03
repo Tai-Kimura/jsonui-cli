@@ -229,6 +229,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       hint
       imageUrl
       loading
+      loadingImage
       onClick
       onclick
       placeholder

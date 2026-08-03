@@ -64,7 +64,8 @@ module RjuiTools
           # Overlay child (absolute positioning within parent)
           if json['_overlay']
             classes << 'absolute'
-            classes << overlay_position_classes
+            position = overlay_position_classes
+            classes << position unless position.empty?
           end
 
           # Width/Height - handle matchParent with horizontal margin
@@ -1319,11 +1320,27 @@ module RjuiTools
               'left-0'
             end
 
-          # No instruction on either axis: fill the container, as an overlay
-          # child with no alignment always has.
-          return 'inset-0' if vertical.nil? && horizontal.nil? && !sibling_constraint?
+          # No instruction on either axis. A SIZED child takes bare `absolute`
+          # (auto insets): its static position is the CONTENT-box origin, so
+          # parent padding shifts it exactly like the ios/android overlay
+          # containers do — `inset-0` pins to the padding box and swallowed
+          # leftPadding/topPadding on web (33 cross-effect AAi family).
+          # Render-identical for unpadded parents. A size-less child keeps
+          # inset-0: fill the container, as an overlay child with no
+          # alignment always has.
+          if vertical.nil? && horizontal.nil? && !sibling_constraint?
+            return '' if explicitly_sized?
+            return 'inset-0'
+          end
 
           [vertical, horizontal].compact.join(' ')
+        end
+
+        # Both dimensions declared as concrete numbers — the child cannot be
+        # container-filling, so overlay positioning may rely on the static
+        # position instead of pinned edges.
+        def explicitly_sized?
+          attributes['width'].is_a?(Numeric) && attributes['height'].is_a?(Numeric)
         end
 
         # Canonical binding grammar (shared/core/binding_semantics.json):

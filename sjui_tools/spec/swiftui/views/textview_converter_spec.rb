@@ -258,6 +258,36 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextViewConverter do
       end
     end
 
+    context 'with flexible and a declared height' do
+      # Canonical textView.flexibleHeight (shared/core/
+      # attribute_semantics.json): the declared height is the GROWTH FLOOR —
+      # min = minHeight ?? height. ios used to shrink below it with content.
+      it 'uses the declared height as the growth floor' do
+        code = described_class.new(
+          { 'type' => 'TextView', 'text' => '@{x}', 'flexible' => true, 'height' => 120 }
+        ).convert
+        expect(code).to include('minHeight: 120')
+        expect(code).to include('.frame(minHeight: 120)')
+      end
+
+      it 'prefers an explicit minHeight over the declared height' do
+        code = described_class.new(
+          { 'type' => 'TextView', 'text' => '@{x}', 'flexible' => true,
+            'height' => 120, 'minHeight' => 80 }
+        ).convert
+        expect(code).to include('minHeight: 80')
+        expect(code).not_to include('minHeight: 120')
+      end
+
+      it 'ignores non-numeric heights' do
+        code = described_class.new(
+          { 'type' => 'TextView', 'text' => '@{x}', 'flexible' => true,
+            'height' => 'wrapContent' }
+        ).convert
+        expect(code).not_to include('minHeight:')
+      end
+    end
+
     context 'with minHeight and maxHeight' do
       let(:component) do
         {

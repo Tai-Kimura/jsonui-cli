@@ -34,8 +34,11 @@
     },
     "size": {
       "maxBoundsClampFill": "matchParent is clamped by maxWidth/maxHeight",
-      "ruling": "2026-08-03 user ruling (31 handoff): matchParent + maxWidth/maxHeight resolves to min(parent extent, bound) — the bound clamps the fill. Generated code is canonical (kjui emits the constraint before the fill since 847fb56); KJUI dynamic orders fillMaxWidth before widthIn, which ignores the bound entirely — reorder rides 32. Observables need new composite fixtures (matchParent+maxWidth / +maxHeight, both axes — also the first ios/web measurement of the combination); add them to this entry together with the generator extension.",
-      "observable": {}
+      "ruling": "2026-08-03 user ruling (31 handoff): matchParent + maxWidth/maxHeight resolves to min(parent extent, bound) — the bound clamps the fill. Generated code is canonical (kjui emits the constraint before the fill since 847fb56); KJUI dynamic ordered fillMaxWidth before widthIn, ignoring the bound entirely — reordered in the 33 wave (bounds precede a fill, stay after an explicit size). The composite clamp fixtures below are the observable: a clamping platform renders visibly narrower/shorter than its filled control (active); ignoring the bound renders identically (inert).",
+      "observable": {
+        "common/maxWidth__fill_clamp": "uniformly-active",
+        "common/maxHeight__fill_clamp": "uniformly-active"
+      }
     },
     "networkImage": {
       "noSrc": "defaultImage",

@@ -13,12 +13,11 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "NetworkImage",
+      "type": "View",
       "id": "target",
-      "width": 140,
-      "height": 80,
-      "defaultImage": "conformance_sample",
-      "placeholder": "conformance_sample_alt"
+      "width": "matchParent",
+      "height": 60,
+      "background": "#FF0000"
     }
   ]
 }

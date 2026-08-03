@@ -98,14 +98,22 @@ module KjuiTools
 
           code += Helpers::ModifierBuilder.format(modifiers, depth)
 
-          # Error/fallback handling - use errorImage if specified, otherwise use placeholder
-          error_image = json_data['errorImage'] || placeholder
-          if error_image
+          # Error/fallback per the canonical no-src chain
+          # (networkImage.noSrc = defaultImage, shared/core/
+          # attribute_semantics.json): with no src the view shows
+          # defaultImage; on error it shows errorImage, falling back to
+          # defaultImage. defaultImage was previously never read here —
+          # a Collection control declaring only defaultImage rendered blank.
+          default_image = json_data['defaultImage']
+          error_image = json_data['errorImage'] || default_image || placeholder
+          fallback_image = default_image || json_data['errorImage'] || placeholder
+          if error_image || fallback_image
             required_imports&.add(:painter_resource)
             required_imports&.add(:r_class)
-            drawable_name = error_image.gsub('.png', '').gsub('.jpg', '')
-            code += ",\n" + indent("error = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(drawable_name)}),", depth + 1)
-            code += "\n" + indent("fallback = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(drawable_name)})", depth + 1)
+            error_name = error_image.gsub('.png', '').gsub('.jpg', '')
+            fallback_name = fallback_image.gsub('.png', '').gsub('.jpg', '')
+            code += ",\n" + indent("error = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(error_name)}),", depth + 1)
+            code += "\n" + indent("fallback = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(fallback_name)})", depth + 1)
           end
 
           code += "\n" + indent(")", depth)

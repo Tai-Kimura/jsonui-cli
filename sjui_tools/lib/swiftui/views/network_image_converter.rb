@@ -99,6 +99,11 @@ module SjuiTools
             '.fit'
           when 'center', 'Center'
             '.center'
+          when 'fill', 'Fill', 'scaleToFill', 'ScaleToFill'
+            # fill = stretch (canonical image.fill,
+            # shared/core/attribute_semantics.json) — NetworkImage gained the
+            # .stretch case for it.
+            '.stretch'
           else
             '.fit'
           end

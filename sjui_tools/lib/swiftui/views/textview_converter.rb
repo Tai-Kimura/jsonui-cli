@@ -167,9 +167,12 @@ module SjuiTools
               add_line "flexible: true,"
             end
 
-            # minHeight
-            if @component['minHeight']
-              add_line "minHeight: #{@component['minHeight']},"
+            # minHeight. Under flexible the declared height is the GROWTH
+            # FLOOR (canonical textView.flexibleHeight, shared/core/
+            # attribute_semantics.json): min = minHeight ?? height — mirrors
+            # dynamic TextViewConverter.swift.
+            if flexible_floor
+              add_line "minHeight: #{flexible_floor},"
             end
 
             # maxHeight
@@ -239,11 +242,13 @@ module SjuiTools
 
           # Apply frame modifiers
           if @component['flexible'] == true
-            # For flexible TextViews, apply minHeight/maxHeight as frame
-            if @component['minHeight'] && @component['maxHeight']
-              @modifier_bag.append(:frame_size, ".frame(minHeight: #{@component['minHeight']}, maxHeight: #{@component['maxHeight']})")
-            elsif @component['minHeight']
-              @modifier_bag.append(:frame_size, ".frame(minHeight: #{@component['minHeight']})")
+            # Flexible: min/max as frame bounds; the declared height is the
+            # growth floor (see flexible_floor).
+            floor = flexible_floor
+            if floor && @component['maxHeight']
+              @modifier_bag.append(:frame_size, ".frame(minHeight: #{floor}, maxHeight: #{@component['maxHeight']})")
+            elsif floor
+              @modifier_bag.append(:frame_size, ".frame(minHeight: #{floor})")
             elsif @component['maxHeight']
               @modifier_bag.append(:frame_size, ".frame(maxHeight: #{@component['maxHeight']})")
             end
@@ -291,6 +296,19 @@ module SjuiTools
         # Same mapping TextFieldConverter uses; duplicated spelling would
         # drift, so keep the vocabulary identical to return_key_to_submit_label
         # there.
+        # The effective minHeight. Under flexible the declared height is the
+        # GROWTH FLOOR (canonical textView.flexibleHeight, shared/core/
+        # attribute_semantics.json): min = minHeight ?? height — the view
+        # grows past it, never shrinks below it (android is the reference).
+        # Non-numeric heights (wrapContent/matchParent) don't participate.
+        def flexible_floor
+          return @component['minHeight'] unless @component['flexible'] == true
+          return @component['minHeight'] if @component['minHeight']
+
+          height = @component['height']
+          height.is_a?(Numeric) ? height : nil
+        end
+
         def return_key_to_submit_label(return_key)
           case return_key
           when 'Done' then '.done'

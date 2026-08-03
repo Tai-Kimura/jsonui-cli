@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance NetworkImage.errorImage (static)",
-    "description": "Conformance fixture for 'errorImage' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"conformance_sample\".",
+    "description": "Conformance fixture for 'errorImage' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"conformance_sample_alt\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -19,7 +19,7 @@
   "cases": [
     {
       "name": "errorImage__static",
-      "description": "Conformance fixture for 'errorImage' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"conformance_sample\".",
+      "description": "Conformance fixture for 'errorImage' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"conformance_sample_alt\".",
       "steps": [
         {
           "action": "waitFor",

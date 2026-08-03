@@ -303,6 +303,13 @@ NON_OBSERVABLE_ATTRS = {
 #: Attributes that reference a bundled image asset. Platform host apps
 #: (plans 02/03/04) must bundle an asset with this name.
 IMAGE_ASSET_NAME = "conformance_sample"
+
+#: Distinct second asset for STATE images (NetworkImage placeholder/hint/
+#: loadingImage/errorImage). The control's base carries defaultImage with
+#: the primary asset; giving state images the same asset made every state
+#: transition unobservable — a hijacked no-src state rendered pixel-
+#: identical to the correct one. Hosts must bundle this asset too.
+IMAGE_ALT_ASSET_NAME = "conformance_sample_alt"
 IMAGE_ATTRS = {
     "src",
     "srcName",
@@ -401,9 +408,14 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     # NetworkImage's hint is its PLACEHOLDER IMAGE NAME (SSoT: "Placeholder
     # image name (primary)"), not user-facing text — the generic hint text
     # produced painterResource(R.drawable.conformance_hint) on Compose, a
-    # resource that cannot exist. Same bundled asset as every image attr.
-    ("NetworkImage", "hint"): IMAGE_ASSET_NAME,
-    ("NetworkImage", "placeholder"): IMAGE_ASSET_NAME,
+    # resource that cannot exist. State images get the DISTINCT alt asset:
+    # the control's defaultImage uses the primary one, so a state image
+    # hijacking the no-src display renders visibly different instead of
+    # pixel-identical (canonical networkImage.noSrc = defaultImage).
+    ("NetworkImage", "hint"): IMAGE_ALT_ASSET_NAME,
+    ("NetworkImage", "placeholder"): IMAGE_ALT_ASSET_NAME,
+    ("NetworkImage", "loadingImage"): IMAGE_ALT_ASSET_NAME,
+    ("NetworkImage", "errorImage"): IMAGE_ALT_ASSET_NAME,
     # `value` is Slider/Progress vocabulary in the name-keyed fallback table
     # (0.5), but Switch declares it as its boolean state alias — 0.5 is not a
     # boolean, the Compose codegen host cannot even compile it
