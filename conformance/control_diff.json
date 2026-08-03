@@ -490,19 +490,7 @@
       ]
     },
     {
-      "fixture": "Indicator/hidesWhenStopped__true",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "Indicator/indicatorStyle__large",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Indicator/indicatorStyle__medium",
       "platforms": [
         "ios"
       ]
@@ -1289,7 +1277,6 @@
     {
       "fixture": "TextView/hintLineHeightMultiple__static",
       "platforms": [
-        "android",
         "web"
       ]
     },
@@ -1709,21 +1696,9 @@
       ]
     },
     {
-      "fixture": "common/maxHeight__static",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
       "fixture": "common/maxStartMargin__static",
       "platforms": [
         "ios"
-      ]
-    },
-    {
-      "fixture": "common/maxWidth__static",
-      "platforms": [
-        "web"
       ]
     },
     {

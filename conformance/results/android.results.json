@@ -1,6 +1,6 @@
 {
   "platform": "android",
-  "manifestHash": "f29911a59c188378bb27963575a19e1cbdcf947b5e116161fc15311ae9a0f565",
+  "manifestHash": "12689184f6daa9d14f5ed36888e7a6eb282dbd2417079e4de29f603de712a9aa",
   "runner": {
     "name": "uiautomator",
     "version": "2.3.0"
@@ -3570,6 +3570,18 @@
       "screenshot": "artifacts/android/control_CheckBox.png"
     },
     {
+      "id": "__control/CheckBox__checked-True",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_CheckBox__checked-True.png"
+    },
+    {
+      "id": "__control/CheckBox__checked-True_icon-conformance-sample",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_CheckBox__checked-True_icon-conformance-sample.png"
+    },
+    {
       "id": "__control/CheckBox__orientation-horizontal",
       "status": "pass",
       "detail": "",
@@ -3592,6 +3604,12 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/control_IconLabel.png"
+    },
+    {
+      "id": "__control/IconLabel__icon-off-conformance-sample",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_IconLabel__icon-off-conformance-sample.png"
     },
     {
       "id": "__control/Image",
@@ -3634,10 +3652,22 @@
       "screenshot": "artifacts/android/control_Progress.png"
     },
     {
+      "id": "__control/Progress__value-0.5",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Progress__value-0.5.png"
+    },
+    {
       "id": "__control/Radio",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/control_Radio.png"
+    },
+    {
+      "id": "__control/Radio__checked-True",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Radio__checked-True.png"
     },
     {
       "id": "__control/Radio__orientation-horizontal",
@@ -3693,6 +3723,12 @@
       "screenshot": "artifacts/android/control_Slider.png"
     },
     {
+      "id": "__control/Slider__value-0.5",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Slider__value-0.5.png"
+    },
+    {
       "id": "__control/Switch",
       "status": "pass",
       "detail": "",
@@ -3722,10 +3758,22 @@
       "detail": "not applicable to android"
     },
     {
+      "id": "__control/TextField__text-Sample",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_TextField__text-Sample.png"
+    },
+    {
       "id": "__control/TextView",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/control_TextView.png"
+    },
+    {
+      "id": "__control/TextView__text-Sample",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_TextView__text-Sample.png"
     },
     {
       "id": "__control/View",

@@ -1,5 +1,5 @@
 {
-  "manifestHash" : "f29911a59c188378bb27963575a19e1cbdcf947b5e116161fc15311ae9a0f565",
+  "manifestHash" : "12689184f6daa9d14f5ed36888e7a6eb282dbd2417079e4de29f603de712a9aa",
   "platform" : "ios",
   "results" : [
     {
@@ -3597,6 +3597,18 @@
     },
     {
       "detail" : "",
+      "id" : "__control/CheckBox__checked-True",
+      "screenshot" : "artifacts/ios/control_CheckBox__checked-True.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/CheckBox__checked-True_icon-conformance-sample",
+      "screenshot" : "artifacts/ios/control_CheckBox__checked-True_icon-conformance-sample.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/CheckBox__orientation-horizontal",
       "screenshot" : "artifacts/ios/control_CheckBox__orientation-horizontal.png",
       "status" : "pass"
@@ -3617,6 +3629,12 @@
       "detail" : "",
       "id" : "__control/IconLabel",
       "screenshot" : "artifacts/ios/control_IconLabel.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/IconLabel__icon-off-conformance-sample",
+      "screenshot" : "artifacts/ios/control_IconLabel__icon-off-conformance-sample.png",
       "status" : "pass"
     },
     {
@@ -3663,8 +3681,20 @@
     },
     {
       "detail" : "",
+      "id" : "__control/Progress__value-0.5",
+      "screenshot" : "artifacts/ios/control_Progress__value-0.5.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/Radio",
       "screenshot" : "artifacts/ios/control_Radio.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Radio__checked-True",
+      "screenshot" : "artifacts/ios/control_Radio__checked-True.png",
       "status" : "pass"
     },
     {
@@ -3723,6 +3753,12 @@
     },
     {
       "detail" : "",
+      "id" : "__control/Slider__value-0.5",
+      "screenshot" : "artifacts/ios/control_Slider__value-0.5.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/Switch",
       "screenshot" : "artifacts/ios/control_Switch.png",
       "status" : "pass"
@@ -3753,8 +3789,20 @@
     },
     {
       "detail" : "",
+      "id" : "__control/TextField__text-Sample",
+      "screenshot" : "artifacts/ios/control_TextField__text-Sample.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/TextView",
       "screenshot" : "artifacts/ios/control_TextView.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/TextView__text-Sample",
+      "screenshot" : "artifacts/ios/control_TextView__text-Sample.png",
       "status" : "pass"
     },
     {
