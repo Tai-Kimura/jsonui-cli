@@ -40,12 +40,14 @@ module RjuiTools
 
           # Content mode to object-fit. Keys cover the canonical
           # attribute_definitions enum (fit/fill/center/top/... /AspectFit)
-          # plus the iOS/Android long forms.
+          # plus the iOS/Android long forms. Canonical semantics:
+          # shared/core/attribute_semantics.json — fill = stretch
+          # (scaleToFill synonym), AspectFill is the crop.
           content_mode = attributes['contentMode'] || attributes['scaleType']
           if content_mode
             mode_map = {
               'fit' => 'object-contain',
-              'fill' => 'object-cover',
+              'fill' => 'object-fill',
               'center' => 'object-none object-center',
               'Center' => 'object-none object-center',
               'top' => 'object-none object-top',
@@ -98,9 +100,10 @@ module RjuiTools
           # and the iOS/Android long forms into the NetworkImageProps union
           # ('cover' | 'contain' | 'fill' | 'none' | 'scaleDown') — the
           # template contract must accept every value emitted here.
+          # fill = stretch per shared/core/attribute_semantics.json.
           mode_map = {
             'fit' => 'contain',
-            'fill' => 'cover',
+            'fill' => 'fill',
             'center' => 'none',
             'Center' => 'none',
             'top' => 'none',

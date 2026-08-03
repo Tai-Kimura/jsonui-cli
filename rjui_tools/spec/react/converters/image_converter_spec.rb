@@ -202,13 +202,28 @@ RSpec.describe RjuiTools::React::Converters::ImageConverter do
         expect(classes).to include('object-fill')
       end
 
-      it 'defaults to object-cover' do
+      # Canonical rulings (shared/core/attribute_semantics.json, 2026-08-03):
+      # the default contentMode is fit on every platform, and fill is the
+      # stretch (scaleToFill synonym) — AspectFill is the crop.
+      it 'defaults to object-contain (canonical default = fit)' do
         converter = create_converter({
           'type' => 'Image',
           'src' => '/image.png'
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('object-cover')
+        expect(classes).to include('object-contain')
+        expect(classes).not_to include('object-cover')
+      end
+
+      it 'maps fill to object-fill (stretch, not crop)' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '/image.png',
+          'contentMode' => 'fill'
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('object-fill')
+        expect(classes).not_to include('object-cover')
       end
     end
 

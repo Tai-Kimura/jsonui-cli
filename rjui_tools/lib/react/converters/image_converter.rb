@@ -102,11 +102,15 @@ module RjuiTools
           classes = [super]
 
           # Content mode (canonical enum: fit/fill/center/top/... plus the
-          # iOS long forms — see attribute_definitions Image.contentMode)
+          # iOS long forms — see attribute_definitions Image.contentMode).
+          # Canonical semantics live in shared/core/attribute_semantics.json:
+          # fill = stretch (scaleToFill synonym — AspectFill is the crop),
+          # and the default is fit (image.defaultContentMode), both verified
+          # by `jui conformance gate --cross-effect`.
           case attributes['contentMode']&.downcase
           when 'fit', 'aspectfit', 'aspect_fit'
             classes << 'object-contain'
-          when 'fill', 'aspectfill', 'aspect_fill'
+          when 'aspectfill', 'aspect_fill'
             classes << 'object-cover'
           when 'center'
             classes << 'object-none object-center'
@@ -118,10 +122,10 @@ module RjuiTools
             classes << 'object-none object-left'
           when 'right'
             classes << 'object-none object-right'
-          when 'scaletofill', 'scale_to_fill'
+          when 'fill', 'scaletofill', 'scale_to_fill'
             classes << 'object-fill'
           else
-            classes << 'object-cover'
+            classes << 'object-contain'
           end
 
           # CircleImage type

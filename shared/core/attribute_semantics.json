@@ -13,6 +13,29 @@
         "common/borderStyle__dashed": "uniformly-inert",
         "common/borderStyle__dotted": "uniformly-inert"
       }
+    },
+    "image": {
+      "defaultContentMode": "fit",
+      "fill": "stretch",
+      "ruling": "2026-08-03 user rulings: (a) the default contentMode is fit on every platform — web's implicit cover default was drift; (b) fill is the stretch (scaleToFill synonym) — AspectFill is the crop. Observable consequences: a fit-valued fixture equals the default rendering and must be uniformly inert; fill/scaleToFill fixtures must differ from the fit default on every platform. Current violations are the fix queue: sjui drops fill/scaleToFill to fit (SwiftJsonUI toContentMode + sjui map_content_mode, rides 32), and web artifacts predate the rjui default/fill fix — both clear at the next re-measure.",
+      "observable": {
+        "Image/contentMode__fit": "uniformly-inert",
+        "Image/contentMode__aspectfit": "uniformly-inert",
+        "NetworkImage/contentMode__fit": "uniformly-inert",
+        "NetworkImage/contentMode__aspectfit": "uniformly-inert",
+        "Image/contentMode__fill": "uniformly-active",
+        "Image/contentMode__scaletofill": "uniformly-active"
+      }
+    },
+    "networkImage": {
+      "noSrc": "defaultImage",
+      "ruling": "2026-08-03 user ruling: with no src, NetworkImage displays defaultImage; while loading it displays the first of hint/placeholder/loadingImage; on error it displays errorImage, falling back to defaultImage. The conformance fixtures declare no src, so every state-image fixture must render exactly what the control (defaultImage) renders — uniformly inert. android currently violates: DynamicNetworkImageComponent parses defaultImage but never reads it, so the control is blank (KotlinJsonUI fix rides 32). NOTE: the fixtures currently reuse one asset for all state images; when the distinct-asset fixture improvement lands, revisit these expectations together with it.",
+      "observable": {
+        "NetworkImage/placeholder__static": "uniformly-inert",
+        "NetworkImage/hint__static": "uniformly-inert",
+        "NetworkImage/errorImage__static": "uniformly-inert",
+        "NetworkImage/loadingImage__static": "uniformly-inert"
+      }
     }
   }
 }

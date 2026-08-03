@@ -36,7 +36,9 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
   src,
   alt = '',
   className = '',
-  contentMode = 'cover',
+  // Default is fit/contain — canonical image.defaultContentMode
+  // (shared/core/attribute_semantics.json); ios/android default the same way.
+  contentMode = 'contain',
   placeholder,
   errorImage,
   loading: fetchHint,
@@ -91,7 +93,7 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
     fit: 'object-contain',
   };
 
-  const objectFitClass = objectFitMap[contentMode] || 'object-cover';
+  const objectFitClass = objectFitMap[contentMode] || 'object-contain';
 
   if (loading && placeholder) {
     return (

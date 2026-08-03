@@ -76,10 +76,13 @@ RSpec.describe RjuiTools::React::Converters::NetworkImageConverter do
     end
 
     context 'with canonical contentMode fill' do
-      it 'normalizes to cover' do
+      # fill = stretch per shared/core/attribute_semantics.json —
+      # AspectFill is the crop, and kjui already renders fill as FillBounds.
+      it 'normalizes to fill (stretch, not cover)' do
         converter = create_converter({ 'class' => 'NetworkImage', 'url' => 'https://example.com/image.jpg', 'contentMode' => 'fill' })
         result = converter.convert
-        expect(result).to include('contentMode="cover"')
+        expect(result).to include('contentMode="fill"')
+        expect(result).to include('object-fill')
       end
     end
 
