@@ -40,6 +40,16 @@ module RjuiTools
           layout.to_s.downcase == 'horizontal'
         end
 
+        # layout: flow — wrapping layout, packed to the top-left. Unified
+        # 2026-08-03: 'LeftAligned' IS flow (the accepted spellings survive
+        # as aliases, same case-insensitive read sjui/kjui use for 'Flow').
+        # sjui renders a custom flow layout, kjui a FlowRow; the CSS shape
+        # of the same thing is a wrapping flex row.
+        def flow_collection?
+          layout = attributes['orientation'] || attributes['layout'] || ''
+          %w[flow leftaligned].include?(layout.to_s.downcase)
+        end
+
         # A literal id is what ties the element to the hoisted ref, exactly as
         # it does for the focus bindings and for `{id}_item_{index}`. Without
         # one there is no stable variable name to agree on, so the attributes
@@ -129,7 +139,24 @@ module RjuiTools
           # render inside an already-scrollable parent.
           is_lazy = attributes['lazy'] != 'none'
 
-          if is_horizontal
+          if flow_collection?
+            # Flow is checked before horizontal, like sjui/kjui route to
+            # their flow generators first — the declared layout wins over
+            # the horizontalScroll boolean.
+            classes << 'flex flex-row flex-wrap content-start'
+            classes << 'overflow-y-auto' if is_lazy && attributes['scrollEnabled'] != false
+            # lineSpacing = gap between wrapped lines, itemSpacing = gap
+            # within a line (the grid branch's row/column mapping).
+            row_gap = attributes['lineSpacing']
+            col_gap = attributes['itemSpacing'] || attributes['spacing']
+            if row_gap && col_gap
+              classes << "gap-x-[#{col_gap}px] gap-y-[#{row_gap}px]"
+            elsif row_gap
+              classes << "gap-y-[#{row_gap}px]"
+            elsif col_gap
+              classes << "gap-[#{col_gap}px]"
+            end
+          elsif is_horizontal
             # Horizontal scroll collection
             classes << 'overflow-x-auto' if is_lazy
             classes << 'flex flex-row'
