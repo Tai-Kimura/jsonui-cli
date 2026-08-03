@@ -247,7 +247,10 @@ class IgnoreBottomTest(unittest.TestCase):
     """ios home-indicator strip exclusion (PLATFORM_IGNORE_BOTTOM)."""
 
     def test_bottom_strip_difference_is_ignored(self):
-        from PIL import Image
+        try:
+            from PIL import Image
+        except ImportError:  # pragma: no cover - environment dependent
+            raise unittest.SkipTest("Pillow not installed")
         import tempfile as _tf
         from pathlib import Path as _P
         from jui_cli.conformance.control_diff import diff_pixels
@@ -265,7 +268,10 @@ class IgnoreBottomTest(unittest.TestCase):
             self.assertEqual(diff_pixels(pa, pb, ignore_bottom=16), 0)
 
     def test_content_difference_still_detected_with_crop(self):
-        from PIL import Image
+        try:
+            from PIL import Image
+        except ImportError:  # pragma: no cover - environment dependent
+            raise unittest.SkipTest("Pillow not installed")
         import tempfile as _tf
         from pathlib import Path as _P
         from jui_cli.conformance.control_diff import diff_pixels
