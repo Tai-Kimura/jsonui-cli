@@ -21,38 +21,43 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
 
-          # Add blur effect.
-          #
-          # `effectStyle` is the declared attribute (enum Light / Dark /
-          # ExtraLight) and was not read at all here. Compose has no
-          # material-blur equivalent of UIVisualEffectView, so the appearance is
-          # expressed as radius + overlay: ExtraLight is the softest blur over a
-          # bright scrim, Dark the strongest over a dark one. `blurRadius` stays
-          # supported as an explicit override, and it now WINS over the style —
-          # it is the more specific instruction.
-          effect_style = json_data['effectStyle'].to_s.downcase
-          blur_radius = json_data['blurRadius'] || case effect_style
-                                                   when 'extralight' then 6
-                                                   when 'dark' then 14
-                                                   else 10
-                                                   end
-
-          # Try to use real blur modifier (available in Compose 1.3+)
-          required_imports&.add(:blur)
-          modifiers << ".blur(#{blur_radius}.dp)"
-          
-          # Background color
-          if json_data['backgroundColor']
-            bg_color = json_data['backgroundColor']
-            opacity = json_data['opacity'] || 0.8
-            modifiers << ".background(Helpers::ResourceResolver.process_color('#{bg_color}', required_imports).copy(alpha = #{opacity}f))"
-          end
-          
-          # Add corner radius if specified
+          # Add corner radius if specified (before background/blur — the
+          # dynamic chain clips first)
           if json_data['cornerRadius']
             required_imports&.add(:shape)
             modifiers << ".clip(RoundedCornerShape(#{json_data['cornerRadius']}.dp))"
           end
+
+          # `effectStyle` (enum Light / Dark / ExtraLight) is expressed the
+          # same way as the dynamic path: a translucent scrim under a real
+          # `.blur(...)` — Compose has no material-blur equivalent of
+          # UIVisualEffectView. The scrim is only the fallback when no
+          # explicit background is declared, and `blurRadius` (default 10)
+          # is a plain radius, NOT derived from the style — mirrors
+          # DynamicBlurViewComponent (effectStyleColor + resolveFloat).
+          effect_style = json_data['effectStyle'].to_s.downcase
+          blur_radius = json_data['blurRadius'] || 10
+
+          bg_source = json_data['background'] || json_data['backgroundColor']
+          bg_expr = if bg_source
+                      Helpers::ResourceResolver.process_color(bg_source, required_imports)
+                    else
+                      case effect_style
+                      when 'light' then 'Color.White.copy(alpha = 0.4f)'
+                      when 'dark' then 'Color.Black.copy(alpha = 0.4f)'
+                      when 'extralight' then 'Color.White.copy(alpha = 0.6f)'
+                      end
+                    end
+          if bg_expr
+            opacity = json_data['opacity'] || json_data['alpha']
+            bg_expr = "(#{bg_expr}).copy(alpha = #{opacity.to_f}f)" if opacity
+            modifiers << ".background(#{bg_expr})"
+          end
+
+          # Real blur modifier (Compose 1.3+), after the scrim like the
+          # dynamic chain
+          required_imports&.add(:blur)
+          modifiers << ".blur(#{blur_radius}.dp)"
           
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))

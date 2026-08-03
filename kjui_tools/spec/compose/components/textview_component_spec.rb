@@ -22,6 +22,17 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent do
       expect(required_imports).to include(:custom_textfield)
     end
 
+    # flexible: the declared height is the growth FLOOR (heightIn(min)),
+    # never a fixed .height() — with a numeric width, build_size used to
+    # leak `.height(N)` ahead of the bound and pin the box (parity family
+    # TextView/flexible__true d=9).
+    it 'emits only heightIn(min) for a flexible editor with numeric width and height' do
+      json_data = { 'type' => 'TextView', 'width' => 200, 'height' => 100, 'flexible' => true }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('.heightIn(min = 100.dp)')
+      expect(result).not_to include('.height(100.dp)')
+    end
+
     it 'generates TextField with text value' do
       json_data = { 'type' => 'TextView', 'text' => 'Hello World' }
       result = described_class.generate(json_data, 0, required_imports)

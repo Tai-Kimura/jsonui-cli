@@ -49,6 +49,10 @@ module KjuiTools
           modifiers << ".padding(bottom = #{json_data['paddingBottom'] || json_data['bottomPadding']}.dp)" if json_data['paddingBottom'] || json_data['bottomPadding']
           modifiers << ".padding(start = #{json_data['paddingLeft'] || json_data['leftPadding']}.dp)" if json_data['paddingLeft'] || json_data['leftPadding']
           modifiers << ".padding(end = #{json_data['paddingRight'] || json_data['rightPadding']}.dp)" if json_data['paddingRight'] || json_data['rightPadding']
+          # RTL-aware padding (canonical paddingStart/paddingEnd; suffix
+          # spellings accepted like the dynamic reader)
+          modifiers << ".padding(start = #{json_data['paddingStart'] || json_data['startPadding']}.dp)" if json_data['paddingStart'] || json_data['startPadding']
+          modifiers << ".padding(end = #{json_data['paddingEnd'] || json_data['endPadding']}.dp)" if json_data['paddingEnd'] || json_data['endPadding']
           
           modifiers
         end
@@ -306,21 +310,34 @@ module KjuiTools
           # pinned to parent's maxWidth. Putting widthIn first caps the
           # maxWidth bound, then fillMaxWidth fills WITHIN that cap.
           # Regression: kjui-responsive-widthin-after-fillmaxwidth-no-op.
-          if json_data['minWidth'] && json_data['maxWidth']
-            modifiers << ".widthIn(min = #{json_data['minWidth']}.dp, max = #{json_data['maxWidth']}.dp)"
-          elsif json_data['minWidth']
-            modifiers << ".widthIn(min = #{json_data['minWidth']}.dp)"
-          elsif json_data['maxWidth']
-            modifiers << ".widthIn(max = #{json_data['maxWidth']}.dp)"
-          end
+          #
+          # An EXPLICIT numeric width is the opposite case: the declared
+          # width wins over min/max bounds (all render paths agree — the
+          # dynamic chain is `.width(N).widthIn(...)`, where the fixed
+          # width pins the constraints and the bound is inert). Emitting
+          # widthIn first would clamp the declared width instead.
+          width_constraint =
+            if json_data['minWidth'] && json_data['maxWidth']
+              ".widthIn(min = #{json_data['minWidth']}.dp, max = #{json_data['maxWidth']}.dp)"
+            elsif json_data['minWidth']
+              ".widthIn(min = #{json_data['minWidth']}.dp)"
+            elsif json_data['maxWidth']
+              ".widthIn(max = #{json_data['maxWidth']}.dp)"
+            end
+          explicit_width = json_data['width'] &&
+                           json_data['width'] != 'matchParent' &&
+                           json_data['width'] != 'wrapContent' &&
+                           !(json_data['weight'] && json_data['width'] == 0)
+          modifiers << width_constraint if width_constraint && !explicit_width
 
           # Width - skip if weight is present and width is 0
           if json_data['width'] == 'matchParent'
             modifiers << ".fillMaxWidth()"
           elsif json_data['width'] == 'wrapContent'
             modifiers << ".wrapContentWidth()"
-          elsif json_data['width'] && !(json_data['weight'] && json_data['width'] == 0)
+          elsif explicit_width
             modifiers << ".width(#{process_dimension(json_data['width'])})"
+            modifiers << width_constraint if width_constraint
           end
 
           # Same outside-in argument applies to height: heightIn must be
@@ -363,13 +380,26 @@ module KjuiTools
             if json_data['maxHeight']
               modifiers << ".heightIn(max = #{json_data['maxHeight']}.dp)"
             end
-          elsif json_data['minHeight'] && json_data['maxHeight']
-            modifiers << ".heightIn(min = #{json_data['minHeight']}.dp, max = #{json_data['maxHeight']}.dp)"
-          elsif json_data['minHeight']
-            modifiers << ".heightIn(min = #{json_data['minHeight']}.dp)"
-          elsif json_data['maxHeight']
-            modifiers << ".heightIn(max = #{json_data['maxHeight']}.dp)"
           end
+
+          # Same explicit-size rule as the width axis: a declared numeric
+          # height wins over the heightIn bounds (mirror of the dynamic
+          # `.height(N).heightIn(...)` chain, where the bound is inert).
+          height_constraint =
+            if valign_emitted
+              nil # handled above (defaultMinSize + optional heightIn(max))
+            elsif json_data['minHeight'] && json_data['maxHeight']
+              ".heightIn(min = #{json_data['minHeight']}.dp, max = #{json_data['maxHeight']}.dp)"
+            elsif json_data['minHeight']
+              ".heightIn(min = #{json_data['minHeight']}.dp)"
+            elsif json_data['maxHeight']
+              ".heightIn(max = #{json_data['maxHeight']}.dp)"
+            end
+          explicit_height = json_data['height'] &&
+                            json_data['height'] != 'matchParent' &&
+                            json_data['height'] != 'wrapContent' &&
+                            !(json_data['heightWeight'] && json_data['height'] == 0)
+          modifiers << height_constraint if height_constraint && !explicit_height
 
           # Height - skip if heightWeight is present and height is 0
           fills_height = false
@@ -378,8 +408,9 @@ module KjuiTools
             fills_height = true
           elsif json_data['height'] == 'wrapContent'
             modifiers << ".wrapContentHeight()"
-          elsif json_data['height'] && !(json_data['heightWeight'] && json_data['height'] == 0)
+          elsif explicit_height
             modifiers << ".height(#{process_dimension(json_data['height'])})"
+            modifiers << height_constraint if height_constraint
           elsif parent_type == 'Column' && (json_data['weight'] || json_data['heightWeight'])
             # Weight in a vertical container fills the height slice (the
             # `.weight(..)` modifier itself is emitted by build_weight); no

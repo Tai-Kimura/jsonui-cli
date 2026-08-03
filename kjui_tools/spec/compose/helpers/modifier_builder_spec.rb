@@ -11,6 +11,21 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
       expect(result).to include('.padding(16.dp)')
     end
 
+    # RTL-aware canonical spellings (paddingStart/paddingEnd) — previously
+    # dropped entirely by the codegen path while the dynamic reader applied
+    # them. Parity family: common/paddingEnd__static (d=15).
+    it 'builds paddingStart as start padding' do
+      json_data = { 'paddingStart' => 8 }
+      result = described_class.build_padding(json_data)
+      expect(result).to include('.padding(start = 8.dp)')
+    end
+
+    it 'builds paddingEnd as end padding' do
+      json_data = { 'paddingEnd' => 8 }
+      result = described_class.build_padding(json_data)
+      expect(result).to include('.padding(end = 8.dp)')
+    end
+
     it 'builds array padding with 4 values' do
       json_data = { 'padding' => [10, 20, 30, 40] }
       result = described_class.build_padding(json_data)
@@ -137,6 +152,32 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
       expect(width_in_idx).not_to be_nil
       expect(fill_idx).not_to be_nil
       expect(width_in_idx).to be < fill_idx
+    end
+
+    # An EXPLICIT numeric size is the opposite case: the declared dimension
+    # wins over the min/max bounds — the dynamic chain `.width(N).widthIn(...)`
+    # pins the constraints first, leaving the bound inert, and all render
+    # paths agree (ios reference renders the declared width). Emitting the
+    # bound first would clamp the declared size instead.
+    # Parity family: common/maxWidth__static (codegen clamped 200 -> 150, d=51).
+    it 'emits width(N) before widthIn(max=...) when the width is explicit' do
+      json_data = { 'width' => 200, 'maxWidth' => 150 }
+      result = described_class.build_size(json_data)
+      width_idx = result.index('.width(200.dp)')
+      width_in_idx = result.index('.widthIn(max = 150.dp)')
+      expect(width_idx).not_to be_nil
+      expect(width_in_idx).not_to be_nil
+      expect(width_idx).to be < width_in_idx
+    end
+
+    it 'emits height(N) before heightIn(max=...) when the height is explicit' do
+      json_data = { 'height' => 200, 'maxHeight' => 150 }
+      result = described_class.build_size(json_data)
+      height_idx = result.index('.height(200.dp)')
+      height_in_idx = result.index('.heightIn(max = 150.dp)')
+      expect(height_idx).not_to be_nil
+      expect(height_in_idx).not_to be_nil
+      expect(height_idx).to be < height_in_idx
     end
 
     it 'emits heightIn(max=...) before fillMaxHeight when both height:matchParent and maxHeight are present' do

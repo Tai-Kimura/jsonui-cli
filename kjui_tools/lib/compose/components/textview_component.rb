@@ -193,11 +193,16 @@ module KjuiTools
 
             # TextField modifier
             textfield_modifiers = []
-            # Size - default to fillMaxWidth for text areas
+            # Size - default to fillMaxWidth for text areas.
+            # When flexible, the height is governed by the heightIn(min)
+            # emitted below — strip the height keys so build_size does not
+            # also emit a fixed .height() that would pin the constraints
+            # and neutralize the flexible bound.
+            size_source = json_data['flexible'] ? json_data.reject { |k, _| %w[height minHeight maxHeight].include?(k) } : json_data
             if json_data['width'] == 'matchParent' || !json_data['width']
               textfield_modifiers << ".fillMaxWidth()"
             else
-              textfield_modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+              textfield_modifiers.concat(Helpers::ModifierBuilder.build_size(size_source))
             end
 
             # Height for multi-line
@@ -243,11 +248,13 @@ module KjuiTools
             modifiers = []
             modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
 
-            # Size - default to fillMaxWidth for text areas
+            # Size - default to fillMaxWidth for text areas (same
+            # flexible-height stripping as the margins branch above).
+            size_source = json_data['flexible'] ? json_data.reject { |k, _| %w[height minHeight maxHeight].include?(k) } : json_data
             if json_data['width'] == 'matchParent' || !json_data['width']
               modifiers << ".fillMaxWidth()"
             else
-              modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+              modifiers.concat(Helpers::ModifierBuilder.build_size(size_source))
             end
 
             # Height for multi-line
