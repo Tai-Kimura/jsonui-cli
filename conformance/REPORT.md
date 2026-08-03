@@ -70,8 +70,8 @@ Each visual fixture is compared against its **control** — the same layout with
 
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
-| android | 393 | 203 | 190 | 0 | 0 |
-| ios | 424 | 217 | 207 | 0 | 0 |
+| android | 393 | 204 | 189 | 0 | 0 |
+| ios | 424 | 219 | 205 | 0 | 0 |
 | web | 407 | 204 | 203 | 0 | 0 |
 
 ## Cross-platform attribute effect
@@ -129,7 +129,7 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `TextView/fontFamily__static` | inert | inert | active |
 | `TextView/font__static` | inert | active | active |
 | `TextView/hintFont__static` | inert | active | inert |
-| `TextView/hintLineHeightMultiple__static` | inert | inert | active |
+| `TextView/hintLineHeightMultiple__static` | active | inert | active |
 | `TextView/textAlign__center` | inert | inert | active |
 | `TextView/textAlign__center_2` | inert | inert | active |
 | `TextView/textAlign__right` | inert | inert | active |

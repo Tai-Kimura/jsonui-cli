@@ -1,5 +1,5 @@
 {
-  "manifestHash" : "bab41192ce9a21adc32679f347c8246d703a9a8bf26fd8e7332a535f87ffc067",
+  "manifestHash" : "1d62ad8bd8b20b6129f005e865e481e2c17b01495f4b6d258baf88c7dee63e19",
   "platform" : "ios",
   "results" : [
     {
@@ -3597,6 +3597,18 @@
     },
     {
       "detail" : "",
+      "id" : "__control/CheckBox__checked-True",
+      "screenshot" : "artifacts/ios/control_CheckBox__checked-True.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/CheckBox__checked-True_icon-conformance-sample",
+      "screenshot" : "artifacts/ios/control_CheckBox__checked-True_icon-conformance-sample.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/CheckBox__orientation-horizontal",
       "screenshot" : "artifacts/ios/control_CheckBox__orientation-horizontal.png",
       "status" : "pass"
@@ -3617,6 +3629,12 @@
       "detail" : "",
       "id" : "__control/IconLabel",
       "screenshot" : "artifacts/ios/control_IconLabel.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/IconLabel__icon-off-conformance-sample",
+      "screenshot" : "artifacts/ios/control_IconLabel__icon-off-conformance-sample.png",
       "status" : "pass"
     },
     {
@@ -3663,8 +3681,20 @@
     },
     {
       "detail" : "",
+      "id" : "__control/Progress__progress-0.5",
+      "screenshot" : "artifacts/ios/control_Progress__progress-0.5.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/Radio",
       "screenshot" : "artifacts/ios/control_Radio.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Radio__checked-True",
+      "screenshot" : "artifacts/ios/control_Radio__checked-True.png",
       "status" : "pass"
     },
     {
@@ -3723,6 +3753,12 @@
     },
     {
       "detail" : "",
+      "id" : "__control/Slider__value-0.5",
+      "screenshot" : "artifacts/ios/control_Slider__value-0.5.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/Switch",
       "screenshot" : "artifacts/ios/control_Switch.png",
       "status" : "pass"
@@ -3753,8 +3789,20 @@
     },
     {
       "detail" : "",
+      "id" : "__control/TextField__text-Sample",
+      "screenshot" : "artifacts/ios/control_TextField__text-Sample.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/TextView",
       "screenshot" : "artifacts/ios/control_TextView.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/TextView__text-Sample",
+      "screenshot" : "artifacts/ios/control_TextView__text-Sample.png",
       "status" : "pass"
     },
     {
@@ -3856,6 +3904,30 @@
       "detail" : "not applicable to ios",
       "id" : "common/variantfile__state_vm_survives",
       "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__fill-w",
+      "screenshot" : "artifacts/ios/control_View__fill-w.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/maxWidth__fill_clamp",
+      "screenshot" : "artifacts/ios/common_maxWidth__fill_clamp.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__fill-h",
+      "screenshot" : "artifacts/ios/control_View__fill-h.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/maxHeight__fill_clamp",
+      "screenshot" : "artifacts/ios/common_maxHeight__fill_clamp.png",
+      "status" : "pass"
     }
   ],
   "runner" : {

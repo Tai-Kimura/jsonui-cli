@@ -1,1137 +1,1137 @@
 {
-  "schemaVersion": 1,
-  "_comment": "Accepted cross-platform attribute-effect findings, two kinds. DIVERGENCE ({fixture, platforms}): the control-diff verdict (active = the attribute changed the render, inert = it did not) disagrees across the platforms the attribute is declared for — semantic drift unless a deliberate platform idiom; the reason says which. UNIFORMLY-INERT ({fixture, verdict, declared}): a value the SSoT enumerates changes nothing on ANY platform — either it is the default rendering (say so in the reason) or it is dead/unimplemented everywhere. Unrecorded findings fail `jui conformance gate --cross-effect`; entries the measurement no longer supports are stale and must be pruned (`jui conformance cross-effect --update`). Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
-  "entries": [
-    {
-      "fixture": "Button/textAlign__center",
-      "verdict": "uniformly-inert",
-      "declared": "Center",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Button/textAlign__left",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
-      "note": ""
-    },
-    {
-      "fixture": "Button/textAlign__right",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
-      "note": ""
-    },
-    {
-      "fixture": "Collection/defaultScrollAnchor__bottom",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated collection behavior: ios renders scroll chrome/eager layout visibly at this fixture size while android/web equal their defaults — behavioral attributes need the interactive/geometry probe, not activeness. Family: collection-behavior.",
-      "note": ""
-    },
-    {
-      "fixture": "Collection/defaultScrollAnchor__center",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated collection behavior: ios renders scroll chrome/eager layout visibly at this fixture size while android/web equal their defaults — behavioral attributes need the interactive/geometry probe, not activeness. Family: collection-behavior.",
-      "note": ""
-    },
-    {
-      "fixture": "Collection/defaultScrollAnchor__top",
-      "verdict": "uniformly-inert",
-      "declared": "top",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Collection/layout__vertical",
-      "verdict": "uniformly-inert",
-      "declared": "vertical",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Collection/lazy__eager",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated collection behavior: ios renders scroll chrome/eager layout visibly at this fixture size while android/web equal their defaults — behavioral attributes need the interactive/geometry probe, not activeness. Family: collection-behavior.",
-      "note": ""
-    },
-    {
-      "fixture": "Collection/lazy__lazy",
-      "verdict": "uniformly-inert",
-      "declared": "lazy",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Collection/lazy__none",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated collection behavior: ios renders scroll chrome/eager layout visibly at this fixture size while android/web equal their defaults — behavioral attributes need the interactive/geometry probe, not activeness. Family: collection-behavior.",
-      "note": ""
-    },
-    {
-      "fixture": "Collection/orientation__vertical",
-      "verdict": "uniformly-inert",
-      "declared": "vertical",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Collection/scrollAnchor__bottom",
-      "verdict": "uniformly-inert",
-      "declared": "bottom",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Collection/scrollAnchor__center",
-      "verdict": "uniformly-inert",
-      "declared": "center",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Collection/scrollAnchor__top",
-      "verdict": "uniformly-inert",
-      "declared": "top",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "IconLabel/iconPosition__left",
-      "verdict": "uniformly-inert",
-      "declared": "Left",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Image/renderingMode__original",
-      "verdict": "uniformly-inert",
-      "declared": "original",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/autoShrink__true",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/edgeInset__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/fontFamily__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated font availability: the declared family name is not bundled on the inert platform, which falls back to the system font (identical render); the active side ships it. A cross-platform font asset is consumer territory, not a converter gap. Family: font-availability.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/lineBreakMode__char",
-      "verdict": "uniformly-inert",
-      "declared": "Char",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/lineBreakMode__clip",
-      "verdict": "uniformly-inert",
-      "declared": "Clip",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/lineBreakMode__head",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/lineBreakMode__middle",
-      "verdict": "uniformly-inert",
-      "declared": "Middle",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/lineBreakMode__tail",
-      "verdict": "uniformly-inert",
-      "declared": "Tail",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/lineBreakMode__word",
-      "verdict": "uniformly-inert",
-      "declared": "Word",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/lineHeightMultiple__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/lineSpacing__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/linkable__true",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/minimumScaleFactor__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/textAlign__left",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/textAlign__left_2",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
-      "note": ""
-    },
-    {
-      "fixture": "SafeAreaView/orientation__horizontal",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated container behavior: ios draws inset/orientation chrome at this size; android/web render the default identically. Geometry probe closes it. Family: container-behavior.",
-      "note": ""
-    },
-    {
-      "fixture": "SafeAreaView/orientation__vertical",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated container behavior: ios draws inset/orientation chrome at this size; android/web render the default identically. Geometry probe closes it. Family: container-behavior.",
-      "note": ""
-    },
-    {
-      "fixture": "SafeAreaView/safeAreaInsetPositions__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated container behavior: ios draws inset/orientation chrome at this size; android/web render the default identically. Geometry probe closes it. Family: container-behavior.",
-      "note": ""
-    },
-    {
-      "fixture": "ScrollView/orientation__horizontal",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated container behavior: ios draws inset/orientation chrome at this size; android/web render the default identically. Geometry probe closes it. Family: container-behavior.",
-      "note": ""
-    },
-    {
-      "fixture": "ScrollView/orientation__vertical",
-      "verdict": "uniformly-inert",
-      "declared": "vertical",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/datePickerMode__countdown",
-      "verdict": "uniformly-inert",
-      "declared": "countDown",
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/datePickerMode__date",
-      "verdict": "uniformly-inert",
-      "declared": "date",
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/datePickerMode__dateandtime",
-      "verdict": "uniformly-inert",
-      "declared": "dateAndTime",
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/datePickerMode__datetime",
-      "verdict": "uniformly-inert",
-      "declared": "datetime",
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/datePickerMode__time",
-      "verdict": "uniformly-inert",
-      "declared": "time",
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/datePickerStyle__automatic",
-      "verdict": "uniformly-inert",
-      "declared": "automatic",
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/datePickerStyle__compact",
-      "verdict": "uniformly-inert",
-      "declared": "compact",
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/datePickerStyle__graphical",
-      "verdict": "uniformly-inert",
-      "declared": "graphical",
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/datePickerStyle__inline",
-      "verdict": "uniformly-inert",
-      "declared": "inline",
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/datePickerStyle__wheel",
-      "verdict": "uniformly-inert",
-      "declared": "wheel",
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/datePickerStyle__wheels",
-      "verdict": "uniformly-inert",
-      "declared": "wheels",
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/fontColor__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated: the closed select control styles its label differently per platform (ios renders its own chrome label); fontSize/fontWeight forwarding landed on android (46b905c) — remaining splits are closed-control chrome. Interactive promotion measures the open state. Family: selectbox-chrome.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/fontSize__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated: the closed select control styles its label differently per platform (ios renders its own chrome label); fontSize/fontWeight forwarding landed on android (46b905c) — remaining splits are closed-control chrome. Interactive promotion measures the open state. Family: selectbox-chrome.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/font__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated: the closed select control styles its label differently per platform (ios renders its own chrome label); fontSize/fontWeight forwarding landed on android (46b905c) — remaining splits are closed-control chrome. Interactive promotion measures the open state. Family: selectbox-chrome.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/labelAttributes__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated: the closed select control styles its label differently per platform (ios renders its own chrome label); fontSize/fontWeight forwarding landed on android (46b905c) — remaining splits are closed-control chrome. Interactive promotion measures the open state. Family: selectbox-chrome.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/minuteInterval__1",
-      "verdict": "uniformly-inert",
-      "declared": 1,
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/minuteInterval__10",
-      "verdict": "uniformly-inert",
-      "declared": 10,
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/minuteInterval__12",
-      "verdict": "uniformly-inert",
-      "declared": 12,
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/minuteInterval__15",
-      "verdict": "uniformly-inert",
-      "declared": 15,
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/minuteInterval__2",
-      "verdict": "uniformly-inert",
-      "declared": 2,
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/minuteInterval__20",
-      "verdict": "uniformly-inert",
-      "declared": 20,
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/minuteInterval__3",
-      "verdict": "uniformly-inert",
-      "declared": 3,
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/minuteInterval__30",
-      "verdict": "uniformly-inert",
-      "declared": 30,
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/minuteInterval__4",
-      "verdict": "uniformly-inert",
-      "declared": 4,
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/minuteInterval__5",
-      "verdict": "uniformly-inert",
-      "declared": 5,
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/minuteInterval__6",
-      "verdict": "uniformly-inert",
-      "declared": 6,
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/minuteInterval__static",
-      "verdict": "uniformly-inert",
-      "declared": 15,
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/selectItemType__date",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated: the closed select control styles its label differently per platform (ios renders its own chrome label); fontSize/fontWeight forwarding landed on android (46b905c) — remaining splits are closed-control chrome. Interactive promotion measures the open state. Family: selectbox-chrome.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/selectItemType__normal",
-      "verdict": "uniformly-inert",
-      "declared": "Normal",
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/selectedIndex__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated: literal initial-selection seeding landed on all three platforms (89d0f87/46b905c/fd3c20c); the remaining split reflects closed-control label chrome differences pending the interactive probe. Family: selectbox-chrome.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/borderStyle__none",
-      "verdict": "uniformly-inert",
-      "declared": "none",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/fontFamily__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated font availability: the declared family name is not bundled on the inert platform, which falls back to the system font (identical render); the active side ships it. A cross-platform font asset is consumer territory, not a converter gap. Family: font-availability.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/font__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated: font weight applies to TEXT; with the W1 text base both actives render bold — the remaining inert side styles its input chrome font separately (measured single-platform). Follow the font-availability/idiom evidence per row. Family: font-chain-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/hintColor__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated: hintColor is declared deprecated for the swiftui scope (SSoT deprecation, hintAttributes is the ios spelling) — ios inert is the declared state; android/web render it. Family: hint-deprecated-scope.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/hintFontSize__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated hint metrics: single-line hint text gives line-height nothing to space and platform hint chrome quantizes small size changes; android hint styling landed (2236fe9). Residual splits are hint-chrome idiom. Family: hint-metrics.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/textAlign__center",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/textAlign__center_2",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/textAlign__left",
-      "verdict": "uniformly-inert",
-      "declared": "Left",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/textAlign__left_2",
-      "verdict": "uniformly-inert",
-      "declared": "left",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/textAlign__right",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/textAlign__right_2",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/flexible__true",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated: the growth-floor contract (textView.flexibleHeight) holds; the remaining split is textarea chrome height quantization measured per platform. Geometry probe closes it. Family: flexible-geometry.",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/fontFamily__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated font availability: the declared family name is not bundled on the inert platform, which falls back to the system font (identical render); the active side ships it. A cross-platform font asset is consumer territory, not a converter gap. Family: font-availability.",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/font__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated: font weight applies to TEXT; with the W1 text base both actives render bold — the remaining inert side styles its input chrome font separately (measured single-platform). Follow the font-availability/idiom evidence per row. Family: font-chain-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/hintFont__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated hint metrics: single-line hint text gives line-height nothing to space and platform hint chrome quantizes small size changes; android hint styling landed (2236fe9). Residual splits are hint-chrome idiom. Family: hint-metrics.",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/hintLineHeightMultiple__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated hint metrics: single-line hint text gives line-height nothing to space and platform hint chrome quantizes small size changes; android hint styling landed (2236fe9). Residual splits are hint-chrome idiom. Family: hint-metrics.",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/textAlign__center",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/textAlign__center_2",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/textAlign__left",
-      "verdict": "uniformly-inert",
-      "declared": "Left",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/textAlign__left_2",
-      "verdict": "uniformly-inert",
-      "declared": "left",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/textAlign__right",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/textAlign__right_2",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
-      "note": ""
-    },
-    {
-      "fixture": "View/direction__lefttoright",
-      "verdict": "uniformly-inert",
-      "declared": "leftToRight",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "View/direction__none",
-      "verdict": "uniformly-inert",
-      "declared": "none",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "View/direction__toptobottom",
-      "verdict": "uniformly-inert",
-      "declared": "topToBottom",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "View/distribution__equalcentering",
-      "verdict": "uniformly-inert",
-      "declared": "equalCentering",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "View/distribution__equalspacing",
-      "verdict": "uniformly-inert",
-      "declared": "equalSpacing",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "View/distribution__fill",
-      "verdict": "uniformly-inert",
-      "declared": "fill",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "View/distribution__fillequally",
-      "verdict": "uniformly-inert",
-      "declared": "fillEqually",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "common/alignBottom__true",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/alignLeftView__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/alignRight__true",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/alignment__bottom",
-      "platforms": {
-        "android": "active",
-        "ios": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/alignment__bottomleading",
-      "platforms": {
-        "android": "active",
-        "ios": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/alignment__bottomtrailing",
-      "platforms": {
-        "android": "active",
-        "ios": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/alignment__center",
-      "platforms": {
-        "android": "active",
-        "ios": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/alignment__leading",
-      "platforms": {
-        "android": "active",
-        "ios": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/alignment__top",
-      "platforms": {
-        "android": "active",
-        "ios": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/alignment__topleading",
-      "verdict": "uniformly-inert",
-      "declared": "topLeading",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "common/alignment__toptrailing",
-      "platforms": {
-        "android": "active",
-        "ios": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/alignment__trailing",
-      "platforms": {
-        "android": "active",
-        "ios": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/bottomMargin__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/bottomPadding__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/centerHorizontal__true",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/centerInParent__true",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/centerVertical__true",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/distribution__equalcentering",
-      "verdict": "uniformly-inert",
-      "declared": "equalCentering",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "common/distribution__equalspacing",
-      "verdict": "uniformly-inert",
-      "declared": "equalSpacing",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "common/distribution__fill",
-      "verdict": "uniformly-inert",
-      "declared": "fill",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "common/distribution__fillequally",
-      "verdict": "uniformly-inert",
-      "declared": "fillEqually",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "common/endMargin__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/gravity__center",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/gravity__centerhorizontal",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/gravity__left",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/gravity__right",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/gravity__top",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/margins__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/paddingBottom__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/paddingEnd__static",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/paddingRight__static",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/padding__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/paddings__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/rightMargin__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/rightPadding__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/weight__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    }
-  ]
+ "schemaVersion": 1,
+ "_comment": "Accepted cross-platform attribute-effect findings, two kinds. DIVERGENCE ({fixture, platforms}): the control-diff verdict (active = the attribute changed the render, inert = it did not) disagrees across the platforms the attribute is declared for — semantic drift unless a deliberate platform idiom; the reason says which. UNIFORMLY-INERT ({fixture, verdict, declared}): a value the SSoT enumerates changes nothing on ANY platform — either it is the default rendering (say so in the reason) or it is dead/unimplemented everywhere. Unrecorded findings fail `jui conformance gate --cross-effect`; entries the measurement no longer supports are stale and must be pruned (`jui conformance cross-effect --update`). Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
+ "entries": [
+  {
+   "fixture": "Button/textAlign__center",
+   "verdict": "uniformly-inert",
+   "declared": "Center",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "Button/textAlign__left",
+   "platforms": {
+    "android": "inert",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+   "note": ""
+  },
+  {
+   "fixture": "Button/textAlign__right",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+   "note": ""
+  },
+  {
+   "fixture": "Collection/defaultScrollAnchor__bottom",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated collection behavior: ios renders scroll chrome/eager layout visibly at this fixture size while android/web equal their defaults — behavioral attributes need the interactive/geometry probe, not activeness. Family: collection-behavior.",
+   "note": ""
+  },
+  {
+   "fixture": "Collection/defaultScrollAnchor__center",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated collection behavior: ios renders scroll chrome/eager layout visibly at this fixture size while android/web equal their defaults — behavioral attributes need the interactive/geometry probe, not activeness. Family: collection-behavior.",
+   "note": ""
+  },
+  {
+   "fixture": "Collection/defaultScrollAnchor__top",
+   "verdict": "uniformly-inert",
+   "declared": "top",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "Collection/layout__vertical",
+   "verdict": "uniformly-inert",
+   "declared": "vertical",
+   "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "Collection/lazy__eager",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated collection behavior: ios renders scroll chrome/eager layout visibly at this fixture size while android/web equal their defaults — behavioral attributes need the interactive/geometry probe, not activeness. Family: collection-behavior.",
+   "note": ""
+  },
+  {
+   "fixture": "Collection/lazy__lazy",
+   "verdict": "uniformly-inert",
+   "declared": "lazy",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "Collection/lazy__none",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated collection behavior: ios renders scroll chrome/eager layout visibly at this fixture size while android/web equal their defaults — behavioral attributes need the interactive/geometry probe, not activeness. Family: collection-behavior.",
+   "note": ""
+  },
+  {
+   "fixture": "Collection/orientation__vertical",
+   "verdict": "uniformly-inert",
+   "declared": "vertical",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "Collection/scrollAnchor__bottom",
+   "verdict": "uniformly-inert",
+   "declared": "bottom",
+   "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "Collection/scrollAnchor__center",
+   "verdict": "uniformly-inert",
+   "declared": "center",
+   "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "Collection/scrollAnchor__top",
+   "verdict": "uniformly-inert",
+   "declared": "top",
+   "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "IconLabel/iconPosition__left",
+   "verdict": "uniformly-inert",
+   "declared": "Left",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "Image/renderingMode__original",
+   "verdict": "uniformly-inert",
+   "declared": "original",
+   "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "Label/autoShrink__true",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
+   "note": ""
+  },
+  {
+   "fixture": "Label/edgeInset__static",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
+   "note": ""
+  },
+  {
+   "fixture": "Label/fontFamily__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "active"
+   },
+   "reason": "adjudicated font availability: the declared family name is not bundled on the inert platform, which falls back to the system font (identical render); the active side ships it. A cross-platform font asset is consumer territory, not a converter gap. Family: font-availability.",
+   "note": ""
+  },
+  {
+   "fixture": "Label/lineBreakMode__char",
+   "verdict": "uniformly-inert",
+   "declared": "Char",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "Label/lineBreakMode__clip",
+   "verdict": "uniformly-inert",
+   "declared": "Clip",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "Label/lineBreakMode__head",
+   "platforms": {
+    "android": "inert",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
+   "note": ""
+  },
+  {
+   "fixture": "Label/lineBreakMode__middle",
+   "verdict": "uniformly-inert",
+   "declared": "Middle",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "Label/lineBreakMode__tail",
+   "verdict": "uniformly-inert",
+   "declared": "Tail",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "Label/lineBreakMode__word",
+   "verdict": "uniformly-inert",
+   "declared": "Word",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "Label/lineHeightMultiple__static",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "inert"
+   },
+   "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
+   "note": ""
+  },
+  {
+   "fixture": "Label/lineSpacing__static",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "inert"
+   },
+   "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
+   "note": ""
+  },
+  {
+   "fixture": "Label/linkable__true",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "inert"
+   },
+   "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
+   "note": ""
+  },
+  {
+   "fixture": "Label/minimumScaleFactor__static",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "inert"
+   },
+   "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
+   "note": ""
+  },
+  {
+   "fixture": "Label/textAlign__left",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+   "note": ""
+  },
+  {
+   "fixture": "Label/textAlign__left_2",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+   "note": ""
+  },
+  {
+   "fixture": "SafeAreaView/orientation__horizontal",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated container behavior: ios draws inset/orientation chrome at this size; android/web render the default identically. Geometry probe closes it. Family: container-behavior.",
+   "note": ""
+  },
+  {
+   "fixture": "SafeAreaView/orientation__vertical",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated container behavior: ios draws inset/orientation chrome at this size; android/web render the default identically. Geometry probe closes it. Family: container-behavior.",
+   "note": ""
+  },
+  {
+   "fixture": "SafeAreaView/safeAreaInsetPositions__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated container behavior: ios draws inset/orientation chrome at this size; android/web render the default identically. Geometry probe closes it. Family: container-behavior.",
+   "note": ""
+  },
+  {
+   "fixture": "ScrollView/orientation__horizontal",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated container behavior: ios draws inset/orientation chrome at this size; android/web render the default identically. Geometry probe closes it. Family: container-behavior.",
+   "note": ""
+  },
+  {
+   "fixture": "ScrollView/orientation__vertical",
+   "verdict": "uniformly-inert",
+   "declared": "vertical",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/datePickerMode__countdown",
+   "verdict": "uniformly-inert",
+   "declared": "countDown",
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/datePickerMode__date",
+   "verdict": "uniformly-inert",
+   "declared": "date",
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/datePickerMode__dateandtime",
+   "verdict": "uniformly-inert",
+   "declared": "dateAndTime",
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/datePickerMode__datetime",
+   "verdict": "uniformly-inert",
+   "declared": "datetime",
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/datePickerMode__time",
+   "verdict": "uniformly-inert",
+   "declared": "time",
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/datePickerStyle__automatic",
+   "verdict": "uniformly-inert",
+   "declared": "automatic",
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/datePickerStyle__compact",
+   "verdict": "uniformly-inert",
+   "declared": "compact",
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/datePickerStyle__graphical",
+   "verdict": "uniformly-inert",
+   "declared": "graphical",
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/datePickerStyle__inline",
+   "verdict": "uniformly-inert",
+   "declared": "inline",
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/datePickerStyle__wheel",
+   "verdict": "uniformly-inert",
+   "declared": "wheel",
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/datePickerStyle__wheels",
+   "verdict": "uniformly-inert",
+   "declared": "wheels",
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/fontColor__static",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated: the closed select control styles its label differently per platform (ios renders its own chrome label); fontSize/fontWeight forwarding landed on android (46b905c) — remaining splits are closed-control chrome. Interactive promotion measures the open state. Family: selectbox-chrome.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/fontSize__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated: the closed select control styles its label differently per platform (ios renders its own chrome label); fontSize/fontWeight forwarding landed on android (46b905c) — remaining splits are closed-control chrome. Interactive promotion measures the open state. Family: selectbox-chrome.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/font__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated: the closed select control styles its label differently per platform (ios renders its own chrome label); fontSize/fontWeight forwarding landed on android (46b905c) — remaining splits are closed-control chrome. Interactive promotion measures the open state. Family: selectbox-chrome.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/labelAttributes__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated: the closed select control styles its label differently per platform (ios renders its own chrome label); fontSize/fontWeight forwarding landed on android (46b905c) — remaining splits are closed-control chrome. Interactive promotion measures the open state. Family: selectbox-chrome.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/minuteInterval__1",
+   "verdict": "uniformly-inert",
+   "declared": 1,
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/minuteInterval__10",
+   "verdict": "uniformly-inert",
+   "declared": 10,
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/minuteInterval__12",
+   "verdict": "uniformly-inert",
+   "declared": 12,
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/minuteInterval__15",
+   "verdict": "uniformly-inert",
+   "declared": 15,
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/minuteInterval__2",
+   "verdict": "uniformly-inert",
+   "declared": 2,
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/minuteInterval__20",
+   "verdict": "uniformly-inert",
+   "declared": 20,
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/minuteInterval__3",
+   "verdict": "uniformly-inert",
+   "declared": 3,
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/minuteInterval__30",
+   "verdict": "uniformly-inert",
+   "declared": 30,
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/minuteInterval__4",
+   "verdict": "uniformly-inert",
+   "declared": 4,
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/minuteInterval__5",
+   "verdict": "uniformly-inert",
+   "declared": 5,
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/minuteInterval__6",
+   "verdict": "uniformly-inert",
+   "declared": 6,
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/minuteInterval__static",
+   "verdict": "uniformly-inert",
+   "declared": 15,
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/selectItemType__date",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated: the closed select control styles its label differently per platform (ios renders its own chrome label); fontSize/fontWeight forwarding landed on android (46b905c) — remaining splits are closed-control chrome. Interactive promotion measures the open state. Family: selectbox-chrome.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/selectItemType__normal",
+   "verdict": "uniformly-inert",
+   "declared": "Normal",
+   "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+   "note": ""
+  },
+  {
+   "fixture": "SelectBox/selectedIndex__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "active"
+   },
+   "reason": "adjudicated: literal initial-selection seeding landed on all three platforms (89d0f87/46b905c/fd3c20c); the remaining split reflects closed-control label chrome differences pending the interactive probe. Family: selectbox-chrome.",
+   "note": ""
+  },
+  {
+   "fixture": "TextField/borderStyle__none",
+   "verdict": "uniformly-inert",
+   "declared": "none",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "TextField/fontFamily__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "active"
+   },
+   "reason": "adjudicated font availability: the declared family name is not bundled on the inert platform, which falls back to the system font (identical render); the active side ships it. A cross-platform font asset is consumer territory, not a converter gap. Family: font-availability.",
+   "note": ""
+  },
+  {
+   "fixture": "TextField/font__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "active"
+   },
+   "reason": "adjudicated: font weight applies to TEXT; with the W1 text base both actives render bold — the remaining inert side styles its input chrome font separately (measured single-platform). Follow the font-availability/idiom evidence per row. Family: font-chain-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "TextField/hintColor__static",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated: hintColor is declared deprecated for the swiftui scope (SSoT deprecation, hintAttributes is the ios spelling) — ios inert is the declared state; android/web render it. Family: hint-deprecated-scope.",
+   "note": ""
+  },
+  {
+   "fixture": "TextField/hintFontSize__static",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "inert"
+   },
+   "reason": "adjudicated hint metrics: single-line hint text gives line-height nothing to space and platform hint chrome quantizes small size changes; android hint styling landed (2236fe9). Residual splits are hint-chrome idiom. Family: hint-metrics.",
+   "note": ""
+  },
+  {
+   "fixture": "TextField/textAlign__center",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "active"
+   },
+   "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+   "note": ""
+  },
+  {
+   "fixture": "TextField/textAlign__center_2",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "active"
+   },
+   "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+   "note": ""
+  },
+  {
+   "fixture": "TextField/textAlign__left",
+   "verdict": "uniformly-inert",
+   "declared": "Left",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "TextField/textAlign__left_2",
+   "verdict": "uniformly-inert",
+   "declared": "left",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "TextField/textAlign__right",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "active"
+   },
+   "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+   "note": ""
+  },
+  {
+   "fixture": "TextField/textAlign__right_2",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "active"
+   },
+   "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+   "note": ""
+  },
+  {
+   "fixture": "TextView/flexible__true",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "active"
+   },
+   "reason": "adjudicated: the growth-floor contract (textView.flexibleHeight) holds; the remaining split is textarea chrome height quantization measured per platform. Geometry probe closes it. Family: flexible-geometry.",
+   "note": ""
+  },
+  {
+   "fixture": "TextView/fontFamily__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated font availability: the declared family name is not bundled on the inert platform, which falls back to the system font (identical render); the active side ships it. A cross-platform font asset is consumer territory, not a converter gap. Family: font-availability.",
+   "note": ""
+  },
+  {
+   "fixture": "TextView/font__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "active"
+   },
+   "reason": "adjudicated: font weight applies to TEXT; with the W1 text base both actives render bold — the remaining inert side styles its input chrome font separately (measured single-platform). Follow the font-availability/idiom evidence per row. Family: font-chain-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "TextView/hintFont__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated hint metrics: single-line hint text gives line-height nothing to space and platform hint chrome quantizes small size changes; android hint styling landed (2236fe9). Residual splits are hint-chrome idiom. Family: hint-metrics.",
+   "note": ""
+  },
+  {
+   "fixture": "TextView/hintLineHeightMultiple__static",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "text-metrics: hintLineHeightMultiple line-box semantics — android/web line-height sizes the line box (active; android revived by the 32 parity wave's LocalTextStyle fix), while ios SwiftUI lineSpacing is INTER-line only and structurally cannot show on a single-line hint (inert is the platform idiom, not a gap). Adjudicated 2026-08-04.",
+   "note": ""
+  },
+  {
+   "fixture": "TextView/textAlign__center",
+   "platforms": {
+    "android": "inert",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+   "note": ""
+  },
+  {
+   "fixture": "TextView/textAlign__center_2",
+   "platforms": {
+    "android": "inert",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+   "note": ""
+  },
+  {
+   "fixture": "TextView/textAlign__left",
+   "verdict": "uniformly-inert",
+   "declared": "Left",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "TextView/textAlign__left_2",
+   "verdict": "uniformly-inert",
+   "declared": "left",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "TextView/textAlign__right",
+   "platforms": {
+    "android": "inert",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+   "note": ""
+  },
+  {
+   "fixture": "TextView/textAlign__right_2",
+   "platforms": {
+    "android": "inert",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+   "note": ""
+  },
+  {
+   "fixture": "View/direction__lefttoright",
+   "verdict": "uniformly-inert",
+   "declared": "leftToRight",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "View/direction__none",
+   "verdict": "uniformly-inert",
+   "declared": "none",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "View/direction__toptobottom",
+   "verdict": "uniformly-inert",
+   "declared": "topToBottom",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "View/distribution__equalcentering",
+   "verdict": "uniformly-inert",
+   "declared": "equalCentering",
+   "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "View/distribution__equalspacing",
+   "verdict": "uniformly-inert",
+   "declared": "equalSpacing",
+   "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "View/distribution__fill",
+   "verdict": "uniformly-inert",
+   "declared": "fill",
+   "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "View/distribution__fillequally",
+   "verdict": "uniformly-inert",
+   "declared": "fillEqually",
+   "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "common/alignBottom__true",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/alignLeftView__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/alignRight__true",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/alignment__bottom",
+   "platforms": {
+    "android": "active",
+    "ios": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/alignment__bottomleading",
+   "platforms": {
+    "android": "active",
+    "ios": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/alignment__bottomtrailing",
+   "platforms": {
+    "android": "active",
+    "ios": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/alignment__center",
+   "platforms": {
+    "android": "active",
+    "ios": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/alignment__leading",
+   "platforms": {
+    "android": "active",
+    "ios": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/alignment__top",
+   "platforms": {
+    "android": "active",
+    "ios": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/alignment__topleading",
+   "verdict": "uniformly-inert",
+   "declared": "topLeading",
+   "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "common/alignment__toptrailing",
+   "platforms": {
+    "android": "active",
+    "ios": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/alignment__trailing",
+   "platforms": {
+    "android": "active",
+    "ios": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/bottomMargin__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/bottomPadding__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/centerHorizontal__true",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/centerInParent__true",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/centerVertical__true",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/distribution__equalcentering",
+   "verdict": "uniformly-inert",
+   "declared": "equalCentering",
+   "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "common/distribution__equalspacing",
+   "verdict": "uniformly-inert",
+   "declared": "equalSpacing",
+   "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "common/distribution__fill",
+   "verdict": "uniformly-inert",
+   "declared": "fill",
+   "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "common/distribution__fillequally",
+   "verdict": "uniformly-inert",
+   "declared": "fillEqually",
+   "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+   "note": ""
+  },
+  {
+   "fixture": "common/endMargin__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/gravity__center",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/gravity__centerhorizontal",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "active"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/gravity__left",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/gravity__right",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "active"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/gravity__top",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/margins__static",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/paddingBottom__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/paddingEnd__static",
+   "platforms": {
+    "android": "active",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/paddingRight__static",
+   "platforms": {
+    "android": "active",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/padding__static",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/paddings__static",
+   "platforms": {
+    "android": "active",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/rightMargin__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/rightPadding__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "active",
+    "web": "inert"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  },
+  {
+   "fixture": "common/weight__static",
+   "platforms": {
+    "android": "inert",
+    "ios": "inert",
+    "web": "active"
+   },
+   "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+   "note": ""
+  }
+ ]
 }
