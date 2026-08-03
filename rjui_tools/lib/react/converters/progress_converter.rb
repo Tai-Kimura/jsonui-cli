@@ -31,7 +31,15 @@ module RjuiTools
         protected
 
         def build_class_name
-          classes = [super]
+          base = super
+          # appearance-none strips the native progress chrome, so the element
+          # has no intrinsic content — wrapContent's h-fit collapses it to
+          # ZERO height and nothing rendered at all (33: every web progress
+          # comparison measured blank-vs-blank). The component's h-2 default
+          # must win when no height is declared.
+          explicit_height = attributes['height'] && attributes['height'] != 'wrapContent'
+          base = base.split.reject { |c| c == 'h-fit' }.join(' ') unless explicit_height
+          classes = [base]
 
           classes << 'w-full'
 

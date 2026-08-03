@@ -237,7 +237,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       src
       url
     ],
-    'progress_converter.rb' => %w[barHeight maximumValue progress progressHeight progressTintColor tintColor trackColor trackTintColor value],
+    'progress_converter.rb' => %w[barHeight height maximumValue progress progressHeight progressTintColor tintColor trackColor trackTintColor value],
     'radio_converter.rb' => %w[
       checked
       enabled
