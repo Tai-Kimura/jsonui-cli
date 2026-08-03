@@ -13,13 +13,13 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "Radio",
+      "type": "CheckBox",
       "id": "target",
       "width": 200,
       "height": "wrapContent",
       "text": "Sample",
       "checked": true,
-      "selected_icon": "conformance_sample_alt"
+      "icon": "conformance_sample"
     }
   ]
 }

@@ -416,6 +416,11 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     ("NetworkImage", "placeholder"): IMAGE_ALT_ASSET_NAME,
     ("NetworkImage", "loadingImage"): IMAGE_ALT_ASSET_NAME,
     ("NetworkImage", "errorImage"): IMAGE_ALT_ASSET_NAME,
+    # Selected-state icons swap against the base icon — same distinct-asset
+    # rule as the NetworkImage state images.
+    ("CheckBox", "selectedIcon"): IMAGE_ALT_ASSET_NAME,
+    ("Radio", "selectedIcon"): IMAGE_ALT_ASSET_NAME,
+    ("Radio", "selected_icon"): IMAGE_ALT_ASSET_NAME,
     # `value` is Slider/Progress vocabulary in the name-keyed fallback table
     # (0.5), but Switch declares it as its boolean state alias — 0.5 is not a
     # boolean, the Compose codegen host cannot even compile it
@@ -556,14 +561,25 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # iconPosition/iconMargin need an ICON to position (base is text-only).
     "IconLabel.iconPosition": {"icon_off": IMAGE_ASSET_NAME},
     "IconLabel.iconMargin": {"icon_off": IMAGE_ASSET_NAME},
-    # Checked-state skins need the checked state to exist.
-    "CheckBox.selectedIcon": {"checked": True},
+    # Checked-state skins need the checked state to exist, and a BASE icon
+    # distinct from the selected one — with a single asset the state swap
+    # renders identically whichever image wins (33: single-asset
+    # unobservability, the NetworkImage alt-asset precedent).
+    "CheckBox.selectedIcon": {"checked": True, "icon": IMAGE_ASSET_NAME},
+    # Radio.icon is 2P-scoped while selected_icon is 3P — the checked
+    # state alone makes the swap observable (ALT image vs default glyph).
     "Radio.selectedIcon": {"checked": True},
     "Radio.selected_icon": {"checked": True},
     "CheckBox.checkedColor": {"checked": True},
     "Radio.checkedColor": {"checked": True},
     # onTintColor colors the ON track — the switch must be on to show it.
     "Switch.onTintColor": {"isOn": True},
+    # Track/progress tints need a nonzero value or there is nothing to
+    # paint (a zero-length active track is invisible on every platform).
+    "Slider.tintColor": {"value": 0.5},
+    "Progress.tintColor": {"value": 0.5},
+    "Progress.progressTintColor": {"value": 0.5},
+    "Progress.trackTintColor": {"value": 0.5},
     # Flow attributes need a flex container. `horizontal` is the direction that
     # makes wrapping visible with the standard 6-box child set (240px of boxes
     # in a 200px host).

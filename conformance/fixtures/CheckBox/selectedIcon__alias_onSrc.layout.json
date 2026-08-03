@@ -19,7 +19,8 @@
       "height": "wrapContent",
       "text": "Sample",
       "checked": true,
-      "onSrc": "conformance_sample"
+      "icon": "conformance_sample",
+      "onSrc": "conformance_sample_alt"
     }
   ]
 }

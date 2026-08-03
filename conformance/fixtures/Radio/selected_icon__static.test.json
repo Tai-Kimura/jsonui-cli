@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance Radio.selected_icon (static)",
-    "description": "Conformance fixture for 'selected_icon' on Radio (section: Radio, class: visual). Value under test: \"conformance_sample\".",
+    "description": "Conformance fixture for 'selected_icon' on Radio (section: Radio, class: visual). Value under test: \"conformance_sample_alt\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "selected_icon__static",
-      "description": "Conformance fixture for 'selected_icon' on Radio (section: Radio, class: visual). Value under test: \"conformance_sample\".",
+      "description": "Conformance fixture for 'selected_icon' on Radio (section: Radio, class: visual). Value under test: \"conformance_sample_alt\".",
       "steps": [
         {
           "action": "waitFor",
