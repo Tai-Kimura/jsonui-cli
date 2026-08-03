@@ -5,9 +5,13 @@
   "semantics": {
     "border": {
       "widthAlone": "no-draw",
-      "ruling": "A border is drawn only when BOTH borderWidth and borderColor are declared; borderWidth alone renders nothing on every platform — there is no default border color. (2026-08-03 user ruling; supersedes the transient gray-default direction of d2c8628, unified across toolchains in 3e87b96.)",
+      "styleAlone": "no-draw",
+      "ruling": "A border is drawn only when BOTH borderWidth and borderColor are declared; borderWidth alone renders nothing on every platform — there is no default border color (2026-08-03 user ruling; supersedes the transient gray-default direction of d2c8628, unified across toolchains in 3e87b96). borderStyle alone likewise renders nothing: it styles a border the width+color pair requests, it never summons one (2026-08-03 user ruling #2). NOTE: TextField.borderStyle is a DIFFERENT attribute (UIKit text-field chrome: roundedRect/line/bezel/none) and is outside this entry.",
       "observable": {
-        "common/borderWidth__static": "uniformly-inert"
+        "common/borderWidth__static": "uniformly-inert",
+        "common/borderStyle__solid": "uniformly-inert",
+        "common/borderStyle__dashed": "uniformly-inert",
+        "common/borderStyle__dotted": "uniformly-inert"
       }
     }
   }
