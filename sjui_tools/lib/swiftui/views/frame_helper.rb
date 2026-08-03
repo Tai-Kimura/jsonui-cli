@@ -176,6 +176,17 @@ module SjuiTools
               height_is_binding = false
             end
 
+            # matchParent clamps to a declared max bound (canonical
+            # size.maxBoundsClampFill, shared/core/attribute_semantics.json):
+            # the fill frame carries the bound itself, so no modifier-order
+            # game can lose it — .frame(maxWidth: 120) IS min(parent, 120).
+            if width_value == '.infinity' && @component['maxWidth'].is_a?(Numeric)
+              width_param = @component['maxWidth']
+            end
+            if height_value == '.infinity' && @component['maxHeight'].is_a?(Numeric)
+              height_param = @component['maxHeight']
+            end
+
             if width_value && height_value
               # Check if either dimension is .infinity
               if width_value == '.infinity' && height_value == '.infinity'

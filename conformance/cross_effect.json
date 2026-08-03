@@ -1,0 +1,1826 @@
+{
+  "schemaVersion": 1,
+  "_comment": "Accepted cross-platform attribute-effect findings, two kinds. DIVERGENCE ({fixture, platforms}): the control-diff verdict (active = the attribute changed the render, inert = it did not) disagrees across the platforms the attribute is declared for — semantic drift unless a deliberate platform idiom; the reason says which. UNIFORMLY-INERT ({fixture, verdict, declared}): a value the SSoT enumerates changes nothing on ANY platform — either it is the default rendering (say so in the reason) or it is dead/unimplemented everywhere. Unrecorded findings fail `jui conformance gate --cross-effect`; entries the measurement no longer supports are stale and must be pruned (`jui conformance cross-effect --update`). Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
+  "entries": [
+    {
+      "fixture": "Blur/effectStyle__extralight",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "platform idiom — android material blur variants differ visibly; ios material styles render alike on this surface (31 measured); web CSS blur has a single variant. Family: blur-idiom.",
+      "note": ""
+    },
+    {
+      "fixture": "Blur/effectStyle__light",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "platform idiom — android material blur variants differ visibly; ios material styles render alike on this surface (31 measured); web CSS blur has a single variant. Family: blur-idiom.",
+      "note": ""
+    },
+    {
+      "fixture": "Button/font__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "Button/textAlign__center",
+      "verdict": "uniformly-inert",
+      "declared": "Center",
+      "reason": "text-box geometry — wrapContent text leaves alignment little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "Button/textAlign__left",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "text-box geometry — wrapContent text leaves alignment little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "Button/textAlign__right",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "text-box geometry — wrapContent text leaves alignment little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "CheckBox/font__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "CheckBox/iconSize__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active"
+      },
+      "reason": "selection-control skin — icon/color swaps render as the platform default on the inert side; family tracked with the kjui/sjui selection-icon work. Family: selection-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "CheckBox/label__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "selection-control skin — icon/color swaps render as the platform default on the inert side; family tracked with the kjui/sjui selection-icon work. Family: selection-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "CheckBox/selectedIcon__alias_onSrc",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "selection-control skin — icon/color swaps render as the platform default on the inert side; family tracked with the kjui/sjui selection-icon work. Family: selection-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "CheckBox/selectedIcon__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "selection-control skin — icon/color swaps render as the platform default on the inert side; family tracked with the kjui/sjui selection-icon work. Family: selection-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "CheckBox/src__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "selection-control skin — icon/color swaps render as the platform default on the inert side; family tracked with the kjui/sjui selection-icon work. Family: selection-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "CheckBox/uncheckedColor__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active"
+      },
+      "reason": "selection-control skin — icon/color swaps render as the platform default on the inert side; family tracked with the kjui/sjui selection-icon work. Family: selection-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/defaultScrollAnchor__bottom",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "collection behavior — ios renders scroll chrome/laziness visibly at this size while android/web equal their defaults; behavior needs an interactive/geometry probe. Family: collection-behavior.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/defaultScrollAnchor__center",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "collection behavior — ios renders scroll chrome/laziness visibly at this size while android/web equal their defaults; behavior needs an interactive/geometry probe. Family: collection-behavior.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/defaultScrollAnchor__top",
+      "verdict": "uniformly-inert",
+      "declared": "top",
+      "reason": "collection behavior — ios renders scroll chrome/laziness visibly at this size while android/web equal their defaults; behavior needs an interactive/geometry probe. Family: collection-behavior.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/layout__vertical",
+      "verdict": "uniformly-inert",
+      "declared": "vertical",
+      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/lazy__eager",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "collection behavior — ios renders scroll chrome/laziness visibly at this size while android/web equal their defaults; behavior needs an interactive/geometry probe. Family: collection-behavior.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/lazy__lazy",
+      "verdict": "uniformly-inert",
+      "declared": "lazy",
+      "reason": "collection behavior — ios renders scroll chrome/laziness visibly at this size while android/web equal their defaults; behavior needs an interactive/geometry probe. Family: collection-behavior.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/lazy__none",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "collection behavior — ios renders scroll chrome/laziness visibly at this size while android/web equal their defaults; behavior needs an interactive/geometry probe. Family: collection-behavior.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/orientation__vertical",
+      "verdict": "uniformly-inert",
+      "declared": "vertical",
+      "reason": "collection behavior — ios renders scroll chrome/laziness visibly at this size while android/web equal their defaults; behavior needs an interactive/geometry probe. Family: collection-behavior.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/scrollAnchor__bottom",
+      "verdict": "uniformly-inert",
+      "declared": "bottom",
+      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/scrollAnchor__center",
+      "verdict": "uniformly-inert",
+      "declared": "center",
+      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/scrollAnchor__top",
+      "verdict": "uniformly-inert",
+      "declared": "top",
+      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "GradientView/gradientDirection__vertical",
+      "verdict": "uniformly-inert",
+      "declared": "Vertical",
+      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "IconLabel/font__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "IconLabel/iconMargin__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — IconLabel layout options unwired on the inert platform(s). Family: iconlabel-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "IconLabel/iconPosition__bottom",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — IconLabel layout options unwired on the inert platform(s). Family: iconlabel-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "IconLabel/iconPosition__left",
+      "verdict": "uniformly-inert",
+      "declared": "Left",
+      "reason": "implementation-gap suspect — IconLabel layout options unwired on the inert platform(s). Family: iconlabel-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "IconLabel/iconPosition__right",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — IconLabel layout options unwired on the inert platform(s). Family: iconlabel-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "IconLabel/iconPosition__top",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — IconLabel layout options unwired on the inert platform(s). Family: iconlabel-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "IconLabel/textShadow__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — IconLabel layout options unwired on the inert platform(s). Family: iconlabel-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "Image/contentMode__bottom",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation gap — positional contentModes are unimplemented on ios (drops to fit) and android (no positional ContentScale); web object-position implements them. Family: contentmode-positions (needs alignment-based implementation on both mobile platforms).",
+      "note": ""
+    },
+    {
+      "fixture": "Image/contentMode__bottom_2",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation gap — positional contentModes are unimplemented on ios (drops to fit) and android (no positional ContentScale); web object-position implements them. Family: contentmode-positions (needs alignment-based implementation on both mobile platforms).",
+      "note": ""
+    },
+    {
+      "fixture": "Image/contentMode__center",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "contentMode residual — see the per-platform mapping table in the 33 triage doc; remaining splits are default-equality on one side. Family: contentmode-residual.",
+      "note": ""
+    },
+    {
+      "fixture": "Image/contentMode__center_2",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "contentMode residual — see the per-platform mapping table in the 33 triage doc; remaining splits are default-equality on one side. Family: contentmode-residual.",
+      "note": ""
+    },
+    {
+      "fixture": "Image/contentMode__left",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation gap — positional contentModes are unimplemented on ios (drops to fit) and android (no positional ContentScale); web object-position implements them. Family: contentmode-positions (needs alignment-based implementation on both mobile platforms).",
+      "note": ""
+    },
+    {
+      "fixture": "Image/contentMode__left_2",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation gap — positional contentModes are unimplemented on ios (drops to fit) and android (no positional ContentScale); web object-position implements them. Family: contentmode-positions (needs alignment-based implementation on both mobile platforms).",
+      "note": ""
+    },
+    {
+      "fixture": "Image/contentMode__right",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation gap — positional contentModes are unimplemented on ios (drops to fit) and android (no positional ContentScale); web object-position implements them. Family: contentmode-positions (needs alignment-based implementation on both mobile platforms).",
+      "note": ""
+    },
+    {
+      "fixture": "Image/contentMode__right_2",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation gap — positional contentModes are unimplemented on ios (drops to fit) and android (no positional ContentScale); web object-position implements them. Family: contentmode-positions (needs alignment-based implementation on both mobile platforms).",
+      "note": ""
+    },
+    {
+      "fixture": "Image/contentMode__top",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation gap — positional contentModes are unimplemented on ios (drops to fit) and android (no positional ContentScale); web object-position implements them. Family: contentmode-positions (needs alignment-based implementation on both mobile platforms).",
+      "note": ""
+    },
+    {
+      "fixture": "Image/contentMode__top_2",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation gap — positional contentModes are unimplemented on ios (drops to fit) and android (no positional ContentScale); web object-position implements them. Family: contentmode-positions (needs alignment-based implementation on both mobile platforms).",
+      "note": ""
+    },
+    {
+      "fixture": "Image/renderingMode__original",
+      "verdict": "uniformly-inert",
+      "declared": "original",
+      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "Image/srcName__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "same-asset unobservability — srcName resolves the same bundled asset as the base src, so a working implementation renders identically; needs the distinct-asset treatment. Family: fixture-observability.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/autoShrink__true",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "text-rendering minutiae — line metrics/shrink/shadow render at sub-threshold or platform-specific sizes; inert platforms show no pixel change at this fixture size. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/edgeInset__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "text-box geometry — wrapContent text leaves alignment/inset little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/fontFamily__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/lineBreakMode__char",
+      "verdict": "uniformly-inert",
+      "declared": "Char",
+      "reason": "text-rendering minutiae — line metrics/shrink/shadow render at sub-threshold or platform-specific sizes; inert platforms show no pixel change at this fixture size. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/lineBreakMode__clip",
+      "verdict": "uniformly-inert",
+      "declared": "Clip",
+      "reason": "text-rendering minutiae — line metrics/shrink/shadow render at sub-threshold or platform-specific sizes; inert platforms show no pixel change at this fixture size. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/lineBreakMode__head",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "text-rendering minutiae — line metrics/shrink/shadow render at sub-threshold or platform-specific sizes; inert platforms show no pixel change at this fixture size. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/lineBreakMode__middle",
+      "verdict": "uniformly-inert",
+      "declared": "Middle",
+      "reason": "text-rendering minutiae — line metrics/shrink/shadow render at sub-threshold or platform-specific sizes; inert platforms show no pixel change at this fixture size. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/lineBreakMode__tail",
+      "verdict": "uniformly-inert",
+      "declared": "Tail",
+      "reason": "text-rendering minutiae — line metrics/shrink/shadow render at sub-threshold or platform-specific sizes; inert platforms show no pixel change at this fixture size. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/lineBreakMode__word",
+      "verdict": "uniformly-inert",
+      "declared": "Word",
+      "reason": "text-rendering minutiae — line metrics/shrink/shadow render at sub-threshold or platform-specific sizes; inert platforms show no pixel change at this fixture size. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/lineHeightMultiple__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "text-rendering minutiae — line metrics/shrink/shadow render at sub-threshold or platform-specific sizes; inert platforms show no pixel change at this fixture size. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/lineSpacing__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "text-rendering minutiae — line metrics/shrink/shadow render at sub-threshold or platform-specific sizes; inert platforms show no pixel change at this fixture size. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/linkable__true",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "text-rendering minutiae — line metrics/shrink/shadow render at sub-threshold or platform-specific sizes; inert platforms show no pixel change at this fixture size. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/minimumScaleFactor__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "text-rendering minutiae — line metrics/shrink/shadow render at sub-threshold or platform-specific sizes; inert platforms show no pixel change at this fixture size. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/textAlign__left",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "text-box geometry — wrapContent text leaves alignment/inset little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/textAlign__left_2",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "text-box geometry — wrapContent text leaves alignment/inset little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/textShadow__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "text-rendering minutiae — line metrics/shrink/shadow render at sub-threshold or platform-specific sizes; inert platforms show no pixel change at this fixture size. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "NetworkImage/contentMode__bottom",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation gap — positional contentModes are unimplemented on ios (drops to fit) and android (no positional ContentScale); web object-position implements them. Family: contentmode-positions (needs alignment-based implementation on both mobile platforms).",
+      "note": ""
+    },
+    {
+      "fixture": "NetworkImage/contentMode__center",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "contentMode residual — see the per-platform mapping table in the 33 triage doc; remaining splits are default-equality on one side. Family: contentmode-residual.",
+      "note": ""
+    },
+    {
+      "fixture": "NetworkImage/contentMode__center_2",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "contentMode residual — see the per-platform mapping table in the 33 triage doc; remaining splits are default-equality on one side. Family: contentmode-residual.",
+      "note": ""
+    },
+    {
+      "fixture": "NetworkImage/contentMode__left",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation gap — positional contentModes are unimplemented on ios (drops to fit) and android (no positional ContentScale); web object-position implements them. Family: contentmode-positions (needs alignment-based implementation on both mobile platforms).",
+      "note": ""
+    },
+    {
+      "fixture": "NetworkImage/contentMode__right",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation gap — positional contentModes are unimplemented on ios (drops to fit) and android (no positional ContentScale); web object-position implements them. Family: contentmode-positions (needs alignment-based implementation on both mobile platforms).",
+      "note": ""
+    },
+    {
+      "fixture": "NetworkImage/contentMode__top",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation gap — positional contentModes are unimplemented on ios (drops to fit) and android (no positional ContentScale); web object-position implements them. Family: contentmode-positions (needs alignment-based implementation on both mobile platforms).",
+      "note": ""
+    },
+    {
+      "fixture": "Progress/progressTintColor__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "control-skin family — tint/track/thumb colors and initial selection render as the platform default skin on the inert side. Family: control-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "Progress/tintColor__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "control-skin family — tint/track/thumb colors and initial selection render as the platform default skin on the inert side. Family: control-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "Progress/trackTintColor__static",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "control-skin family — tint/track/thumb colors and initial selection render as the platform default skin on the inert side. Family: control-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/checkedColor__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active"
+      },
+      "reason": "selection-control skin — icon/color swaps render as the platform default on the inert side; family tracked with the kjui/sjui selection-icon work. Family: selection-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/checked__true",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "selection-control skin — icon/color swaps render as the platform default on the inert side; family tracked with the kjui/sjui selection-icon work. Family: selection-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/fontSize__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/font__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/iconColor__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active"
+      },
+      "reason": "selection-control skin — icon/color swaps render as the platform default on the inert side; family tracked with the kjui/sjui selection-icon work. Family: selection-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/selectedIcon__alias_selected_icon",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "selection-control skin — icon/color swaps render as the platform default on the inert side; family tracked with the kjui/sjui selection-icon work. Family: selection-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/selected_icon__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "selection-control skin — icon/color swaps render as the platform default on the inert side; family tracked with the kjui/sjui selection-icon work. Family: selection-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/uncheckedColor__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active"
+      },
+      "reason": "selection-control skin — icon/color swaps render as the platform default on the inert side; family tracked with the kjui/sjui selection-icon work. Family: selection-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "SafeAreaView/orientation__horizontal",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "container behavior — orientation/inset defaults render identically on the inert platforms at this fixture size. Family: container-behavior.",
+      "note": ""
+    },
+    {
+      "fixture": "SafeAreaView/orientation__vertical",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "container behavior — orientation/inset defaults render identically on the inert platforms at this fixture size. Family: container-behavior.",
+      "note": ""
+    },
+    {
+      "fixture": "SafeAreaView/safeAreaInsetPositions__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "container behavior — orientation/inset defaults render identically on the inert platforms at this fixture size. Family: container-behavior.",
+      "note": ""
+    },
+    {
+      "fixture": "ScrollView/orientation__horizontal",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "container behavior — orientation/inset defaults render identically on the inert platforms at this fixture size. Family: container-behavior.",
+      "note": ""
+    },
+    {
+      "fixture": "ScrollView/orientation__vertical",
+      "verdict": "uniformly-inert",
+      "declared": "vertical",
+      "reason": "container behavior — orientation/inset defaults render identically on the inert platforms at this fixture size. Family: container-behavior.",
+      "note": ""
+    },
+    {
+      "fixture": "Segment/tintColor__static",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "control-skin family — tint/track/thumb colors and initial selection render as the platform default skin on the inert side. Family: control-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerMode__countdown",
+      "verdict": "uniformly-inert",
+      "declared": "countDown",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerMode__date",
+      "verdict": "uniformly-inert",
+      "declared": "date",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerMode__dateandtime",
+      "verdict": "uniformly-inert",
+      "declared": "dateAndTime",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerMode__datetime",
+      "verdict": "uniformly-inert",
+      "declared": "datetime",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerMode__time",
+      "verdict": "uniformly-inert",
+      "declared": "time",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerStyle__automatic",
+      "verdict": "uniformly-inert",
+      "declared": "automatic",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerStyle__compact",
+      "verdict": "uniformly-inert",
+      "declared": "compact",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerStyle__graphical",
+      "verdict": "uniformly-inert",
+      "declared": "graphical",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerStyle__inline",
+      "verdict": "uniformly-inert",
+      "declared": "inline",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerStyle__wheel",
+      "verdict": "uniformly-inert",
+      "declared": "wheel",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerStyle__wheels",
+      "verdict": "uniformly-inert",
+      "declared": "wheels",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/fontColor__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/fontSize__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/font__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/labelAttributes__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__1",
+      "verdict": "uniformly-inert",
+      "declared": 1,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__10",
+      "verdict": "uniformly-inert",
+      "declared": 10,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__12",
+      "verdict": "uniformly-inert",
+      "declared": 12,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__15",
+      "verdict": "uniformly-inert",
+      "declared": 15,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__2",
+      "verdict": "uniformly-inert",
+      "declared": 2,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__20",
+      "verdict": "uniformly-inert",
+      "declared": 20,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__3",
+      "verdict": "uniformly-inert",
+      "declared": 3,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__30",
+      "verdict": "uniformly-inert",
+      "declared": 30,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__4",
+      "verdict": "uniformly-inert",
+      "declared": 4,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__5",
+      "verdict": "uniformly-inert",
+      "declared": 5,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__6",
+      "verdict": "uniformly-inert",
+      "declared": 6,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__static",
+      "verdict": "uniformly-inert",
+      "declared": 15,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/selectItemType__date",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/selectItemType__normal",
+      "verdict": "uniformly-inert",
+      "declared": "Normal",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/selectedIndex__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/selectedValue__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "Slider/tintColor__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "control-skin family — tint/track/thumb colors and initial selection render as the platform default skin on the inert side. Family: control-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "Switch/onTintColor__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "control-skin family — tint/track/thumb colors and initial selection render as the platform default skin on the inert side. Family: control-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "Switch/thumbTintColor__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "control-skin family — tint/track/thumb colors and initial selection render as the platform default skin on the inert side. Family: control-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TabView/selectedIndex__alias_selectedTabIndex",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "control-skin family — tint/track/thumb colors and initial selection render as the platform default skin on the inert side. Family: control-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TabView/selectedIndex__static",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "control-skin family — tint/track/thumb colors and initial selection render as the platform default skin on the inert side. Family: control-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TabView/tabBarBackground__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "control-skin family — tint/track/thumb colors and initial selection render as the platform default skin on the inert side. Family: control-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TabView/tintColor__static",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "control-skin family — tint/track/thumb colors and initial selection render as the platform default skin on the inert side. Family: control-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TabView/unselectedColor__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "control-skin family — tint/track/thumb colors and initial selection render as the platform default skin on the inert side. Family: control-skin-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/borderStyle__bezel",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "platform idiom — TextField.borderStyle is UIKit text-field chrome (roundedRect/line/bezel/none), not the common border trio; each platform draws its own field chrome. Family: textfield-chrome.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/borderStyle__bezel_2",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "platform idiom — TextField.borderStyle is UIKit text-field chrome (roundedRect/line/bezel/none), not the common border trio; each platform draws its own field chrome. Family: textfield-chrome.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/borderStyle__line",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "platform idiom — TextField.borderStyle is UIKit text-field chrome (roundedRect/line/bezel/none), not the common border trio; each platform draws its own field chrome. Family: textfield-chrome.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/borderStyle__line_2",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "platform idiom — TextField.borderStyle is UIKit text-field chrome (roundedRect/line/bezel/none), not the common border trio; each platform draws its own field chrome. Family: textfield-chrome.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/borderStyle__none",
+      "verdict": "uniformly-inert",
+      "declared": "none",
+      "reason": "platform idiom — TextField.borderStyle is UIKit text-field chrome (roundedRect/line/bezel/none), not the common border trio; each platform draws its own field chrome. Family: textfield-chrome.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/borderStyle__roundedrect",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "platform idiom — TextField.borderStyle is UIKit text-field chrome (roundedRect/line/bezel/none), not the common border trio; each platform draws its own field chrome. Family: textfield-chrome.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/borderStyle__roundedrect_2",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "platform idiom — TextField.borderStyle is UIKit text-field chrome (roundedRect/line/bezel/none), not the common border trio; each platform draws its own field chrome. Family: textfield-chrome.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/fontColor__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/fontFamily__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/font__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/hintColor__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/hintFontSize__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/textAlign__center",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "text-box geometry — wrapContent text leaves alignment little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/textAlign__center_2",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "text-box geometry — wrapContent text leaves alignment little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/textAlign__left",
+      "verdict": "uniformly-inert",
+      "declared": "Left",
+      "reason": "text-box geometry — wrapContent text leaves alignment little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/textAlign__left_2",
+      "verdict": "uniformly-inert",
+      "declared": "left",
+      "reason": "text-box geometry — wrapContent text leaves alignment little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/textAlign__right",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "text-box geometry — wrapContent text leaves alignment little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/textAlign__right_2",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "text-box geometry — wrapContent text leaves alignment little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/flexible__true",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "floor semantics verified by contract ruling; the web-active side reflects web textarea chrome differences, not the floor. Phase 3 geometry closes it. Family: flexible-geometry.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/fontColor__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/fontFamily__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/fontSize__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/font__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/hintColor__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/hintFontSize__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/hintFont__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/hintLineHeightMultiple__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "implementation-gap suspect — the font/hint styling chain is unwired on the inert platform(s); visible drift, queued as the font-chain consumption family. Family: font-chain-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/textAlign__center",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "text-box geometry — wrapContent text leaves alignment little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/textAlign__center_2",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "text-box geometry — wrapContent text leaves alignment little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/textAlign__left",
+      "verdict": "uniformly-inert",
+      "declared": "Left",
+      "reason": "text-box geometry — wrapContent text leaves alignment little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/textAlign__left_2",
+      "verdict": "uniformly-inert",
+      "declared": "left",
+      "reason": "text-box geometry — wrapContent text leaves alignment little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/textAlign__right",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "text-box geometry — wrapContent text leaves alignment little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/textAlign__right_2",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "text-box geometry — wrapContent text leaves alignment little or no slack on the inert platforms; Phase 3 geometry is the honest measurement. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "View/direction__lefttoright",
+      "verdict": "uniformly-inert",
+      "declared": "leftToRight",
+      "reason": "RTL direction — ios flips layout at this fixture, android/web wait on locale plumbing. Family: rtl-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "View/direction__none",
+      "verdict": "uniformly-inert",
+      "declared": "none",
+      "reason": "RTL direction — ios flips layout at this fixture, android/web wait on locale plumbing. Family: rtl-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "View/direction__righttoleft",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "RTL direction — ios flips layout at this fixture, android/web wait on locale plumbing. Family: rtl-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "View/direction__toptobottom",
+      "verdict": "uniformly-inert",
+      "declared": "topToBottom",
+      "reason": "RTL direction — ios flips layout at this fixture, android/web wait on locale plumbing. Family: rtl-followup.",
+      "note": ""
+    },
+    {
+      "fixture": "View/distribution__equalcentering",
+      "verdict": "uniformly-inert",
+      "declared": "equalCentering",
+      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "View/distribution__equalspacing",
+      "verdict": "uniformly-inert",
+      "declared": "equalSpacing",
+      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "View/distribution__fill",
+      "verdict": "uniformly-inert",
+      "declared": "fill",
+      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "View/distribution__fillequally",
+      "verdict": "uniformly-inert",
+      "declared": "fillEqually",
+      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignBottom__true",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignLeftView__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignRight__true",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__bottom",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__bottomleading",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__bottomtrailing",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__center",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__leading",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__top",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__topleading",
+      "verdict": "uniformly-inert",
+      "declared": "topLeading",
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__toptrailing",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__trailing",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/bottomMargin__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/bottomPadding__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/centerHorizontal__true",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/centerInParent__true",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/centerVertical__true",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/distribution__equalcentering",
+      "verdict": "uniformly-inert",
+      "declared": "equalCentering",
+      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "common/distribution__equalspacing",
+      "verdict": "uniformly-inert",
+      "declared": "equalSpacing",
+      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "common/distribution__fill",
+      "verdict": "uniformly-inert",
+      "declared": "fill",
+      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "common/distribution__fillequally",
+      "verdict": "uniformly-inert",
+      "declared": "fillEqually",
+      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "common/endMargin__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/gravity__center",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/gravity__centerhorizontal",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/gravity__left",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/gravity__right",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/gravity__top",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/margins__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/maxHeight__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/maxWidth__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/paddingBottom__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/paddingEnd__static",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/paddingRight__static",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/padding__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/paddings__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/rightMargin__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/rightPadding__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    },
+    {
+      "fixture": "common/weight__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "geometry-layer family — activeness only shows WHICH platforms moved; the position/inset deltas need the Phase 3 relational predicates to adjudicate. Family: geometry-followup (Phase 3).",
+      "note": ""
+    }
+  ]
+}

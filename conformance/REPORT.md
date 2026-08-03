@@ -2,9 +2,9 @@
 
 # JsonUI Conformance Report
 
-- Manifest: `bab41192ce9a21adc32679f347c8246d703a9a8bf26fd8e7332a535f87ffc067` (sha256)
-- Definitions: `b01bc992ef4ce5e11c1d83de119398c84f027b8d1a6081b3910fcdcb3504feab` (sha256)
-- Fixtures: 671 (assertable: 29, visual: 572, interactive: 35) / skipped attributes: 154
+- Manifest: `f29911a59c188378bb27963575a19e1cbdcf947b5e116161fc15311ae9a0f565` (sha256)
+- Definitions: `c869b6c324857239017d1a82a305bcac03daf330665ed8b03c5a36b6e7b02cc0` (sha256)
+- Fixtures: 675 (assertable: 29, visual: 574, interactive: 35) / skipped attributes: 154
 
 Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
 
@@ -60,9 +60,9 @@ Screenshots are compared against `baselines/local/<platform>.hashes.json` (rende
 
 | Platform | Baseline | Compared | Regressions | No baseline | Missing artifact |
 |---|---|---|---|---|---|
-| android | threshold 8 | 466 | 0 | 0 | 0 |
-| ios | threshold 8 | 500 | 0 | 0 | 0 |
-| web | threshold 8 | 479 | 0 | 0 | 0 |
+| android | threshold 8 | 470 | 0 | 0 | 0 |
+| ios | threshold 8 | 504 | 0 | 0 | 0 |
+| web | threshold 8 | 483 | 0 | 0 | 0 |
 
 ## Attribute effect (fixture vs control)
 
@@ -70,15 +70,15 @@ Each visual fixture is compared against its **control** — the same layout with
 
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
-| android | 391 | 160 | 231 | 0 | 0 |
-| ios | 422 | 171 | 251 | 0 | 0 |
-| web | 405 | 185 | 220 | 0 | 0 |
+| android | 393 | 164 | 229 | 0 | 0 |
+| ios | 424 | 177 | 247 | 0 | 0 |
+| web | 407 | 193 | 214 | 0 | 0 |
 
 ## Cross-platform attribute effect
 
 Pixel comparison across platforms is out of scope by design, but each platform's control-diff verdict — *did the attribute change the render?* — is platform-independent. A fixture whose activeness disagrees across the platforms its attribute is declared for is a semantic-drift suspect, and an SSoT-enumerated value that is inert on **every** platform is flagged uniformly-inert (default rendering, or dead everywhere). Only fixtures compared on **all** their in-scope platforms are judged; findings are accepted (with a reason) in `cross_effect.json` and enforced by `jui conformance gate --cross-effect`.
 
-- Compared on all in-scope platforms: 394 (consistent: 235, **diverging: 159**, **uniformly-inert declared values: 64**) · not compared everywhere: 0 · in scope on <2 platforms: 134
+- Compared on all in-scope platforms: 396 (consistent: 253, **diverging: 143**, **uniformly-inert declared values: 65**) · not compared everywhere: 0 · in scope on <2 platforms: 134
 
 | Fixture | android | ios | web |
 |---|---|---|---|
@@ -96,8 +96,6 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `CheckBox/uncheckedColor__static` | inert | active | — |
 | `Collection/defaultScrollAnchor__bottom` | inert | active | inert |
 | `Collection/defaultScrollAnchor__center` | inert | active | inert |
-| `Collection/layout__flow` | active | active | inert |
-| `Collection/layout__flow_2` | active | active | inert |
 | `Collection/lazy__eager` | inert | active | inert |
 | `Collection/lazy__none` | inert | active | inert |
 | `IconLabel/font__static` | inert | inert | active |
@@ -106,19 +104,14 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `IconLabel/iconPosition__right` | inert | inert | active |
 | `IconLabel/iconPosition__top` | active | inert | active |
 | `IconLabel/textShadow__static` | inert | inert | active |
-| `Image/contentMode__aspectfill` | active | active | inert |
-| `Image/contentMode__aspectfit` | inert | inert | active |
 | `Image/contentMode__bottom` | inert | inert | active |
 | `Image/contentMode__bottom_2` | inert | inert | active |
 | `Image/contentMode__center` | active | inert | active |
 | `Image/contentMode__center_2` | active | inert | active |
-| `Image/contentMode__fill` | active | inert | inert |
-| `Image/contentMode__fit` | inert | inert | active |
 | `Image/contentMode__left` | inert | inert | active |
 | `Image/contentMode__left_2` | inert | inert | active |
 | `Image/contentMode__right` | inert | inert | active |
 | `Image/contentMode__right_2` | inert | inert | active |
-| `Image/contentMode__scaletofill` | active | inert | active |
 | `Image/contentMode__top` | inert | inert | active |
 | `Image/contentMode__top_2` | inert | inert | active |
 | `Image/srcName__static` | inert | inert | active |
@@ -133,19 +126,12 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `Label/textAlign__left` | inert | active | inert |
 | `Label/textAlign__left_2` | inert | active | inert |
 | `Label/textShadow__static` | active | inert | active |
-| `NetworkImage/contentMode__aspectfill` | inert | active | inert |
-| `NetworkImage/contentMode__aspectfit` | inert | inert | active |
 | `NetworkImage/contentMode__bottom` | inert | inert | active |
-| `NetworkImage/contentMode__center` | inert | inert | active |
-| `NetworkImage/contentMode__center_2` | inert | inert | active |
-| `NetworkImage/contentMode__fit` | inert | inert | active |
+| `NetworkImage/contentMode__center` | active | inert | active |
+| `NetworkImage/contentMode__center_2` | active | inert | active |
 | `NetworkImage/contentMode__left` | inert | inert | active |
 | `NetworkImage/contentMode__right` | inert | inert | active |
 | `NetworkImage/contentMode__top` | inert | inert | active |
-| `NetworkImage/errorImage__static` | active | inert | — |
-| `NetworkImage/hint__static` | active | inert | inert |
-| `NetworkImage/loadingImage__static` | active | inert | — |
-| `NetworkImage/placeholder__static` | active | inert | inert |
 | `Progress/progressTintColor__static` | inert | active | inert |
 | `Progress/tintColor__static` | inert | active | inert |
 | `Progress/trackTintColor__static` | active | active | inert |
@@ -168,7 +154,7 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `SelectBox/labelAttributes__static` | inert | inert | active |
 | `SelectBox/selectItemType__date` | active | inert | active |
 | `SelectBox/selectedIndex__static` | inert | active | inert |
-| `SelectBox/selectedValue__static` | inert | active | active |
+| `SelectBox/selectedValue__static` | inert | inert | active |
 | `Slider/tintColor__static` | inert | inert | active |
 | `Switch/onTintColor__static` | active | inert | active |
 | `Switch/thumbTintColor__static` | inert | active | active |
@@ -228,7 +214,6 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `common/gravity__left` | inert | active | inert |
 | `common/gravity__right` | inert | active | active |
 | `common/gravity__top` | inert | active | inert |
-| `common/leftPadding__static` | active | active | inert |
 | `common/margins__static` | active | inert | active |
 | `common/maxHeight__static` | inert | inert | active |
 | `common/maxWidth__static` | inert | inert | active |
@@ -239,15 +224,12 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `common/paddings__static` | active | inert | active |
 | `common/rightMargin__static` | inert | active | inert |
 | `common/rightPadding__static` | inert | active | inert |
-| `common/topPadding__static` | active | active | inert |
 | `common/weight__static` | inert | inert | active |
 
 Declared values inert on every in-scope platform (default rendering, or dead everywhere):
 
 - `Button/textAlign__center` (value `'Center'`)
 - `Collection/defaultScrollAnchor__top` (value `'top'`)
-- `Collection/layout__leftaligned` (value `'LeftAligned'`)
-- `Collection/layout__leftaligned_2` (value `'leftAligned'`)
 - `Collection/layout__vertical` (value `'vertical'`)
 - `Collection/lazy__lazy` (value `'lazy'`)
 - `Collection/orientation__vertical` (value `'vertical'`)
@@ -256,13 +238,16 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 - `Collection/scrollAnchor__top` (value `'top'`)
 - `GradientView/gradientDirection__vertical` (value `'Vertical'`)
 - `IconLabel/iconPosition__left` (value `'Left'`)
+- `Image/contentMode__aspectfit` (value `'AspectFit'`)
+- `Image/contentMode__fit` (value `'fit'`)
 - `Image/renderingMode__original` (value `'original'`)
 - `Label/lineBreakMode__char` (value `'Char'`)
 - `Label/lineBreakMode__clip` (value `'Clip'`)
 - `Label/lineBreakMode__middle` (value `'Middle'`)
 - `Label/lineBreakMode__tail` (value `'Tail'`)
 - `Label/lineBreakMode__word` (value `'Word'`)
-- `NetworkImage/contentMode__fill` (value `'fill'`)
+- `NetworkImage/contentMode__aspectfit` (value `'AspectFit'`)
+- `NetworkImage/contentMode__fit` (value `'fit'`)
 - `ScrollView/orientation__vertical` (value `'vertical'`)
 - `SelectBox/datePickerMode__countdown` (value `'countDown'`)
 - `SelectBox/datePickerMode__date` (value `'date'`)
@@ -313,9 +298,9 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 
 | Platform | Runner | Results | pass | fail | error | skipped | Manifest |
 |---|---|---|---|---|---|---|---|
-| android | uiautomator 2.3.0 | 671 | 525 | 0 | 0 | 146 | current |
-| ios | xcuitest ios-18.6 | 671 | 559 | 0 | 0 | 112 | current |
-| web | playwright 1.61.1 | 671 | 538 | 0 | 0 | 133 | current |
+| android | uiautomator 2.3.0 | 675 | 529 | 0 | 0 | 146 | current |
+| ios | xcuitest ios-18.6 | 675 | 563 | 0 | 0 | 112 | current |
+| web | playwright 1.61.1 | 675 | 542 | 0 | 0 | 133 | current |
 
 ## Matrix
 
@@ -1124,6 +1109,30 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `variantfile` | `medium_fold_ios` | assertable | – | ✅ | – |
 | `variantfile` | `viewport_switch` | assertable | – | – | ✅ |
 | `variantfile` | `state_vm_survives` | interactive | – | – | ✅ |
+
+### __control
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `None` | `View__fill-w` | visual | ✅ | ✅ | ✅ |
+
+### common
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `maxWidth` | `fill_clamp` | visual | ✅ | ✅ | ✅ |
+
+### __control
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `None` | `View__fill-h` | visual | ✅ | ✅ | ✅ |
+
+### common
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `maxHeight` | `fill_clamp` | visual | ✅ | ✅ | ✅ |
 
 ## Skipped attributes
 

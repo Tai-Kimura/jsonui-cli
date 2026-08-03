@@ -241,3 +241,40 @@ class ControlDiffTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class IgnoreBottomTest(unittest.TestCase):
+    """ios home-indicator strip exclusion (PLATFORM_IGNORE_BOTTOM)."""
+
+    def test_bottom_strip_difference_is_ignored(self):
+        from PIL import Image
+        import tempfile as _tf
+        from pathlib import Path as _P
+        from jui_cli.conformance.control_diff import diff_pixels
+
+        with _tf.TemporaryDirectory() as tmp:
+            a = Image.new("RGB", (100, 200), (255, 255, 255))
+            b = Image.new("RGB", (100, 200), (255, 255, 255))
+            for x in range(100):
+                for y in range(190, 200):
+                    b.putpixel((x, y), (0, 0, 0))
+            pa, pb = _P(tmp) / "a.png", _P(tmp) / "b.png"
+            a.save(pa)
+            b.save(pb)
+            self.assertGreater(diff_pixels(pa, pb), 0)
+            self.assertEqual(diff_pixels(pa, pb, ignore_bottom=16), 0)
+
+    def test_content_difference_still_detected_with_crop(self):
+        from PIL import Image
+        import tempfile as _tf
+        from pathlib import Path as _P
+        from jui_cli.conformance.control_diff import diff_pixels
+
+        with _tf.TemporaryDirectory() as tmp:
+            a = Image.new("RGB", (100, 200), (255, 255, 255))
+            b = Image.new("RGB", (100, 200), (255, 255, 255))
+            b.putpixel((50, 50), (255, 0, 0))
+            pa, pb = _P(tmp) / "a.png", _P(tmp) / "b.png"
+            a.save(pa)
+            b.save(pb)
+            self.assertEqual(diff_pixels(pa, pb, ignore_bottom=16), 1)

@@ -1,6 +1,6 @@
 {
   "platform": "web",
-  "manifestHash": "826d6c3227616724e189419a79dbb02ad96ef59de279ea0297eefa5468bd78c3",
+  "manifestHash": "f29911a59c188378bb27963575a19e1cbdcf947b5e116161fc15311ae9a0f565",
   "runner": {
     "name": "playwright",
     "version": "1.61.1"
@@ -3839,6 +3839,30 @@
       "id": "common/variantfile__state_vm_survives",
       "status": "pass",
       "detail": ""
+    },
+    {
+      "id": "__control/View__fill-w",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__fill-w.png"
+    },
+    {
+      "id": "common/maxWidth__fill_clamp",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_maxWidth__fill_clamp.png"
+    },
+    {
+      "id": "__control/View__fill-h",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__fill-h.png"
+    },
+    {
+      "id": "common/maxHeight__fill_clamp",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_maxHeight__fill_clamp.png"
     }
   ]
 }

@@ -424,7 +424,11 @@ jobs:
         # --parity: the codegen jobs' screenshots must match the dynamic
         # baselines within the calibrated thresholds, with every deviation
         # recorded + justified in codegen_parity.json (plan 25 A/B).
-        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web','--env','ci','--parity']))"
+        # --cross-effect: cross-platform activeness agreement + semantics-
+        # contract expectations (plan 33). Enforced under env local; under
+        # this lane's env=ci findings are NOTICES by design — same
+        # env-scoping as the attribute-effect ledger above.
+        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web','--env','ci','--parity','--cross-effect']))"
       - name: Upload combined report
         if: always()
         uses: actions/upload-artifact@v4

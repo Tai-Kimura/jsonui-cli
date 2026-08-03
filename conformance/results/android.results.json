@@ -1,6 +1,6 @@
 {
   "platform": "android",
-  "manifestHash": "bab41192ce9a21adc32679f347c8246d703a9a8bf26fd8e7332a535f87ffc067",
+  "manifestHash": "f29911a59c188378bb27963575a19e1cbdcf947b5e116161fc15311ae9a0f565",
   "runner": {
     "name": "uiautomator",
     "version": "2.3.0"
@@ -3826,6 +3826,30 @@
       "id": "common/variantfile__state_vm_survives",
       "status": "skipped",
       "detail": "not applicable to android"
+    },
+    {
+      "id": "__control/View__fill-w",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_View__fill-w.png"
+    },
+    {
+      "id": "common/maxWidth__fill_clamp",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_maxWidth__fill_clamp.png"
+    },
+    {
+      "id": "__control/View__fill-h",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_View__fill-h.png"
+    },
+    {
+      "id": "common/maxHeight__fill_clamp",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_maxHeight__fill_clamp.png"
     }
   ]
 }

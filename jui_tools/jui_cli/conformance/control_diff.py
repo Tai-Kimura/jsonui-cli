@@ -72,6 +72,15 @@ DEFAULT_MIN_PIXELS = 0
 #: listed is reported but does not fail — see module docstring.
 LEDGER_NAME = "control_diff.json"
 
+#: Bottom strip (px) excluded from the fixture-vs-control comparison, per
+#: platform. iOS: the home indicator dims a few seconds after interaction
+#: settles, so two captures from the same run can catch different fade
+#: frames — measured 2026-08-03 as 14 false actives whose diff bbox was
+#: exactly the indicator strip (y 2583–2598 on a 2622px 3x screenshot).
+#: 64px covers the strip with margin; fixtures render nowhere near it
+#: (full-screen white root, content top/center).
+PLATFORM_IGNORE_BOTTOM = {"ios": 64}
+
 
 def ledger_path(conformance_dir) -> Path:
     return Path(conformance_dir) / LEDGER_NAME
@@ -174,11 +183,13 @@ def _screenshot_names(results: dict) -> dict:
     return out
 
 
-def diff_pixels(path_a: Path, path_b: Path) -> int:
+def diff_pixels(path_a: Path, path_b: Path, ignore_bottom: int = 0) -> int:
     """Number of pixels that differ between two PNGs.
 
     Different dimensions mean the renders cannot be the same image; report the
     whole frame rather than raising, so one odd fixture does not abort the run.
+    ``ignore_bottom`` crops that many pixels off BOTH images before comparing
+    — see ``PLATFORM_IGNORE_BOTTOM`` for why (ios home-indicator fade).
     """
     Image = _load_pillow()
     from PIL import ImageChops  # noqa: PLC0415 - paired with _load_pillow
@@ -187,6 +198,9 @@ def diff_pixels(path_a: Path, path_b: Path) -> int:
         a, b = ia.convert("RGB"), ib.convert("RGB")
         if a.size != b.size:
             return a.size[0] * a.size[1]
+        if ignore_bottom > 0 and a.size[1] > ignore_bottom:
+            box = (0, 0, a.size[0], a.size[1] - ignore_bottom)
+            a, b = a.crop(box), b.crop(box)
         diff = ImageChops.difference(a, b)
         # getbbox() is the C fast path and answers "any pixel at all?" — worth
         # the early exit because most comparisons are one or the other extreme.
@@ -249,7 +263,9 @@ def compare(
             continue
 
         try:
-            changed = diff_pixels(png_a, png_b)
+            changed = diff_pixels(
+                png_a, png_b, ignore_bottom=PLATFORM_IGNORE_BOTTOM.get(platform, 0)
+            )
         except BaselineError as exc:
             result.error = str(exc)
             return result

@@ -384,12 +384,6 @@
       ]
     },
     {
-      "fixture": "Image/contentMode__aspectfit",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
       "fixture": "Image/contentMode__bottom",
       "platforms": [
         "web"
@@ -419,12 +413,6 @@
       "fixture": "Image/contentMode__fill",
       "platforms": [
         "android"
-      ]
-    },
-    {
-      "fixture": "Image/contentMode__fit",
-      "platforms": [
-        "web"
       ]
     },
     {
@@ -710,12 +698,6 @@
       ]
     },
     {
-      "fixture": "NetworkImage/contentMode__aspectfit",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
       "fixture": "NetworkImage/contentMode__bottom",
       "platforms": [
         "web"
@@ -729,12 +711,6 @@
     },
     {
       "fixture": "NetworkImage/contentMode__center_2",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "NetworkImage/contentMode__fit",
       "platforms": [
         "web"
       ]
@@ -755,30 +731,6 @@
       "fixture": "NetworkImage/contentMode__top",
       "platforms": [
         "web"
-      ]
-    },
-    {
-      "fixture": "NetworkImage/errorImage__static",
-      "platforms": [
-        "android"
-      ]
-    },
-    {
-      "fixture": "NetworkImage/hint__static",
-      "platforms": [
-        "android"
-      ]
-    },
-    {
-      "fixture": "NetworkImage/loadingImage__static",
-      "platforms": [
-        "android"
-      ]
-    },
-    {
-      "fixture": "NetworkImage/placeholder__static",
-      "platforms": [
-        "android"
       ]
     },
     {
@@ -1025,7 +977,6 @@
     {
       "fixture": "SelectBox/selectedValue__static",
       "platforms": [
-        "ios",
         "web"
       ]
     },
