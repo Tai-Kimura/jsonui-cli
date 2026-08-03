@@ -76,6 +76,18 @@ module SjuiTools
           end
           add_line "}"
 
+          # Mirror the dynamic ToggleConverter's layout contract (measured as
+          # the whole Switch parity family, d=37-49):
+          # - no label -> hide the empty label slot; otherwise SwiftUI keeps a
+          #   full-width row with the control pinned trailing while dynamic
+          #   (and kjui/rjui) hug the control.
+          # - explicit wrapContent -> hug content instead of Toggle's greedy
+          #   full-width layout.
+          add_modifier_line '.labelsHidden()' if text.to_s.empty?
+          if @component['width'] == 'wrapContent'
+            add_modifier_line '.fixedSize(horizontal: true, vertical: false)'
+          end
+
           # toggleStyle
           if @component['toggleStyle']
             case @component['toggleStyle']
