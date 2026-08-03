@@ -40,6 +40,8 @@ module KjuiTools
             shadow: "import androidx.compose.ui.draw.shadow",
             drop_shadow: ["import androidx.compose.ui.draw.dropShadow",
                           "import androidx.compose.ui.graphics.shadow.Shadow"],
+            dp_offset: "import androidx.compose.ui.unit.DpOffset",
+            scale: "import androidx.compose.ui.draw.scale",
             compose_key: "import androidx.compose.runtime.key",
             arrangement: "import androidx.compose.foundation.layout.Arrangement",
             keyboard_type: ["import androidx.compose.foundation.text.KeyboardOptions",

@@ -217,11 +217,20 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
   describe '.build_shadow' do
     let(:imports) { Set.new }
 
-    it 'builds simple shadow' do
-      json_data = { 'shadow' => '#000000' }
+    it 'parses the five-field UIKit pipe contract' do
+      json_data = { 'shadow' => '#000000|2|2|0.5|4' }
       result = described_class.build_shadow(json_data, imports)
       expect(result.first).to include('.dropShadow(')
-      expect(result.first).to include('radius = 4.dp')
+      expect(result.first).to include('radius = 4.0.dp')
+      expect(result.first).to include('offset = DpOffset(2.0.dp, 2.0.dp)')
+      expect(result.first).to include('alpha = 0.5f')
+      expect(imports).to include(:dp_offset)
+    end
+
+    it 'draws nothing for a malformed string — anything but five fields is invalid' do
+      json_data = { 'shadow' => '#000000' }
+      result = described_class.build_shadow(json_data, imports)
+      expect(result).to be_empty
     end
 
     it 'builds complex shadow with radius' do
@@ -232,7 +241,7 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
     end
 
     it 'adds drop_shadow import' do
-      json_data = { 'shadow' => '#000000' }
+      json_data = { 'shadow' => '#000000|2|2|0.5|4' }
       described_class.build_shadow(json_data, imports)
       expect(imports).to include(:drop_shadow)
     end
@@ -293,7 +302,7 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
     let(:imports) { Set.new }
 
     it 'registers :rectangle_shape when shadow has no cornerRadius (string form)' do
-      json_data = { 'shadow' => '#000000' }
+      json_data = { 'shadow' => '#000000|2|2|0.5|4' }
       described_class.build_shadow(json_data, imports)
       expect(imports).to include(:rectangle_shape)
     end

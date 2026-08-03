@@ -406,21 +406,43 @@ module KjuiTools
           modifiers = []
           
           if json_data['shadow']
-            required_imports&.add(:drop_shadow)
+            if json_data['cornerRadius']
+              shape = "RoundedCornerShape(#{json_data['cornerRadius']}.dp)"
+            else
+              shape = "RectangleShape"
+            end
 
+            shadow_args = nil
             if json_data['shadow'].is_a?(String)
-              required_imports&.add(:rectangle_shape)
-              modifiers << ".dropShadow(shape = RectangleShape, shadow = Shadow(radius = 4.dp))"
+              # The string form is the UIKit pipe contract
+              # 'color|offsetX|offsetY|opacity|radius' — exactly five
+              # fields; anything else draws nothing (the canonical guard
+              # all render paths share).
+              parts = json_data['shadow'].split('|', -1)
+              if parts.length == 5
+                color = ResourceResolver.process_color(parts[0], required_imports)
+                required_imports&.add(:dp_offset)
+                shadow_args = "radius = #{parts[4].to_f}.dp, color = #{color}, " \
+                              "offset = DpOffset(#{parts[1].to_f}.dp, #{parts[2].to_f}.dp), alpha = #{parts[3].to_f}f"
+              end
             elsif json_data['shadow'].is_a?(Hash)
               shadow = json_data['shadow']
-              radius = shadow['radius'] || 4
-              if json_data['cornerRadius']
-                shape = "RoundedCornerShape(#{json_data['cornerRadius']}.dp)"
-              else
-                required_imports&.add(:rectangle_shape)
-                shape = "RectangleShape"
+              args = ["radius = #{shadow['radius'] || 4}.dp"]
+              if shadow['color']
+                args << "color = #{ResourceResolver.process_color(shadow['color'], required_imports)}"
               end
-              modifiers << ".dropShadow(shape = #{shape}, shadow = Shadow(radius = #{radius}.dp))"
+              if shadow['offsetX'] || shadow['offsetY']
+                required_imports&.add(:dp_offset)
+                args << "offset = DpOffset(#{(shadow['offsetX'] || 0).to_f}.dp, #{(shadow['offsetY'] || 0).to_f}.dp)"
+              end
+              args << "alpha = #{shadow['opacity'].to_f}f" if shadow['opacity']
+              shadow_args = args.join(', ')
+            end
+
+            if shadow_args
+              required_imports&.add(:drop_shadow)
+              required_imports&.add(:rectangle_shape) if shape == "RectangleShape"
+              modifiers << ".dropShadow(shape = #{shape}, shadow = Shadow(#{shadow_args}))"
             end
           end
           

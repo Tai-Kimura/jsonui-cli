@@ -269,7 +269,17 @@ module RjuiTools
             offset_x = shadow['offsetX'] || 0
             offset_y = shadow['offsetY'] || 2
             color = shadow['color'] || 'rgba(0,0,0,0.1)'
+            color = shadow_color_with_alpha(color, shadow['opacity']) if shadow['opacity']
             "[box-shadow:#{offset_x}px_#{offset_y}px_#{radius}px_#{color}]"
+          elsif shadow.is_a?(String) && shadow.include?('|')
+            # The pipe form is the UIKit contract
+            # 'color|offsetX|offsetY|opacity|radius' — exactly five fields;
+            # anything else draws nothing (the canonical guard all render
+            # paths share).
+            parts = shadow.split('|', -1)
+            return '' unless parts.length == 5
+            color = shadow_color_with_alpha(parts[0], parts[3].to_f)
+            "[box-shadow:#{parts[1].to_f}px_#{parts[2].to_f}px_#{parts[4].to_f}px_#{color}]"
           elsif shadow.is_a?(String)
             SHADOW_MAP[shadow] || 'shadow'
           elsif shadow == true
@@ -303,6 +313,22 @@ module RjuiTools
           classes << map_color(border_color, 'border') if border_color
           classes << map_border_style(border_style) if border_style
           classes.compact.reject(&:empty?).join(' ')
+        end
+
+        # Fold a 0..1 opacity into the colour as a #RRGGBBAA alpha byte —
+        # box-shadow has no separate opacity channel. Non-hex colours pass
+        # through untouched.
+        def shadow_color_with_alpha(color, opacity)
+          alpha = (opacity.to_f.clamp(0.0, 1.0) * 255).round
+          h = color.to_s.strip
+          if h =~ /\A#([0-9a-fA-F]{6})\z/
+            format('#%s%02X', Regexp.last_match(1), alpha)
+          elsif h =~ /\A#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])\z/
+            m = Regexp.last_match
+            format('#%s%s%s%s%s%s%02X', m[1], m[1], m[2], m[2], m[3], m[3], alpha)
+          else
+            h
+          end
         end
 
         def map_border_style(style)

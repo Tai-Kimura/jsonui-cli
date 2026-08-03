@@ -268,18 +268,33 @@ RSpec.describe SjuiTools::SwiftUI::Views::BaseViewConverter do
       end
     end
 
-    context 'with shadow (simple)' do
+    context 'with shadow (pipe string)' do
       let(:component) do
         {
           'type' => 'View',
-          'shadow' => true
+          'shadow' => '#000000|2|2|0.5|4'
         }
       end
 
-      it 'adds default shadow' do
+      it 'parses the five-field UIKit contract' do
         converter = test_converter.new(component)
         code = converter.convert
-        expect(code).to include('.shadow(radius: 5)')
+        expect(code).to match(/\.shadow\(color: \(.+\)\.opacity\(0\.5\), radius: 4\.0, x: 2\.0, y: 2\.0\)/)
+      end
+    end
+
+    context 'with shadow (malformed string)' do
+      let(:component) do
+        {
+          'type' => 'View',
+          'shadow' => '#000000|2|2|4'
+        }
+      end
+
+      it 'draws nothing — anything but exactly five fields is invalid' do
+        converter = test_converter.new(component)
+        code = converter.convert
+        expect(code).not_to include('.shadow')
       end
     end
 
