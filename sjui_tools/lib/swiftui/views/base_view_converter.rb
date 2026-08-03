@@ -441,11 +441,14 @@ module SjuiTools
 
           # ボーダー（cornerRadiusの直後、marginsの前に適用）
           # Dynamic mode: CommonModifiers.swift line 59
-          if @component['borderWidth'] && @component['borderColor']
+          # borderColor is optional: the dynamic path defaults the stroke to
+          # .gray, so borderWidth alone must draw — requiring both dropped
+          # the border entirely (parity d=79 on common/borderWidth__static).
+          if @component['borderWidth']
             border_color_value = @component['borderColor']
             # Skip if borderColor is a binding - handled by view_binding_handler
             unless border_color_value.is_a?(String) && border_color_value.start_with?('@{')
-              color = get_swiftui_color(border_color_value)
+              color = border_color_value ? get_swiftui_color(border_color_value) : 'Color.gray'
               border_code = build_border_overlay(color, (@component['cornerRadius'] || 0).to_i, @component['borderWidth'].to_i)
               @modifier_bag.register(:border, border_code)
             end
