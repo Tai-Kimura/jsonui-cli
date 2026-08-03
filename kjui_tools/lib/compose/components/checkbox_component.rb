@@ -2,6 +2,7 @@
 
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../../core/normalization'
 
 module KjuiTools
   module Compose
@@ -29,7 +30,8 @@ module KjuiTools
           end
 
           has_label = json_data['label'] || json_data['text']
-          has_custom_icon = json_data['icon'] || json_data['selectedIcon']
+          has_custom_icon = json_data['icon'] ||
+                            Core::Normalization.attr_lookup(json_data, 'selectedIcon', 'onSrc')
 
           # If custom icons are specified, use IconToggleButton instead of Checkbox
           if has_custom_icon
@@ -224,8 +226,11 @@ module KjuiTools
           # Each state falls back to the OTHER supplied asset, not to a Material
           # icon name: this branch only runs when the layout named at least one
           # drawable, and `R.drawable.check_box` does not exist in the app.
-          icon = json_data['icon'] || json_data['selectedIcon']
-          selected_icon = json_data['selectedIcon'] || json_data['icon']
+          # `onSrc` is the declared alias of selectedIcon (raw L0 layouts only;
+          # the normalizer rewrites it for L1).
+          selected_icon_decl = Core::Normalization.attr_lookup(json_data, 'selectedIcon', 'onSrc')
+          icon = json_data['icon'] || selected_icon_decl
+          selected_icon = selected_icon_decl || json_data['icon']
 
           # Resolve icon names to drawable resources
           required_imports&.add(:painter_resource)
