@@ -27,8 +27,11 @@ module SjuiTools
                                # the Data model never grows and did not
                                # compile (codegen parity host, __control/
                                # Segment, 2026-08-02). Picker tags are Int.
+                               # Seeded with the literal selectedIndex — a
+                               # hard-coded 0 opened segment One regardless
+                               # of the declaration.
                                state_var = "selected#{id.split('_').map(&:capitalize).join}"
-                               add_state_variable(state_var, "Int", "0")
+                               add_state_variable(state_var, "Int", initial_selection.to_i.to_s)
                                "$#{state_var}"
                              end
           
