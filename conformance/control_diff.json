@@ -49,6 +49,7 @@
     {
       "fixture": "Button/font__static",
       "platforms": [
+        "ios",
         "web"
       ]
     },
@@ -167,6 +168,18 @@
         "android",
         "ios",
         "web"
+      ]
+    },
+    {
+      "fixture": "Collection/containerInset__static",
+      "platforms": [
+        "ios"
+      ]
+    },
+    {
+      "fixture": "Collection/contentInsets__static",
+      "platforms": [
+        "ios"
       ]
     },
     {
@@ -349,12 +362,16 @@
     {
       "fixture": "IconLabel/icon_off__static",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "IconLabel/icon_on__static",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
@@ -461,7 +478,8 @@
     {
       "fixture": "Image/renderingMode__template",
       "platforms": [
-        "android"
+        "android",
+        "ios"
       ]
     },
     {
@@ -472,6 +490,12 @@
     },
     {
       "fixture": "Image/systemIcon__static",
+      "platforms": [
+        "ios"
+      ]
+    },
+    {
+      "fixture": "Image/systemIcon__true",
       "platforms": [
         "ios"
       ]
@@ -490,6 +514,12 @@
     },
     {
       "fixture": "Indicator/indicatorStyle__large",
+      "platforms": [
+        "ios"
+      ]
+    },
+    {
+      "fixture": "Indicator/indicatorStyle__medium",
       "platforms": [
         "ios"
       ]
@@ -601,6 +631,18 @@
         "android",
         "ios",
         "web"
+      ]
+    },
+    {
+      "fixture": "Label/textAlign__left",
+      "platforms": [
+        "ios"
+      ]
+    },
+    {
+      "fixture": "Label/textAlign__left_2",
+      "platforms": [
+        "ios"
       ]
     },
     {
@@ -725,6 +767,24 @@
       ]
     },
     {
+      "fixture": "Progress/color__static",
+      "platforms": [
+        "ios"
+      ]
+    },
+    {
+      "fixture": "Progress/indicatorStyle__large",
+      "platforms": [
+        "ios"
+      ]
+    },
+    {
+      "fixture": "Progress/indicatorStyle__medium",
+      "platforms": [
+        "ios"
+      ]
+    },
+    {
       "fixture": "Progress/progressTintColor__static",
       "platforms": [
         "ios"
@@ -740,6 +800,12 @@
       "fixture": "Progress/trackTintColor__static",
       "platforms": [
         "android",
+        "ios"
+      ]
+    },
+    {
+      "fixture": "Radio/checkedColor__static",
+      "platforms": [
         "ios"
       ]
     },
@@ -772,9 +838,23 @@
       ]
     },
     {
+      "fixture": "Radio/iconColor__static",
+      "platforms": [
+        "ios"
+      ]
+    },
+    {
+      "fixture": "Radio/iconSize__static",
+      "platforms": [
+        "android",
+        "ios"
+      ]
+    },
+    {
       "fixture": "Radio/icon__static",
       "platforms": [
-        "android"
+        "android",
+        "ios"
       ]
     },
     {
@@ -786,13 +866,32 @@
     {
       "fixture": "Radio/selectedIcon__static",
       "platforms": [
-        "android"
+        "android",
+        "ios"
       ]
     },
     {
       "fixture": "Radio/selected_icon__static",
       "platforms": [
         "android"
+      ]
+    },
+    {
+      "fixture": "Radio/uncheckedColor__static",
+      "platforms": [
+        "ios"
+      ]
+    },
+    {
+      "fixture": "SafeAreaView/orientation__horizontal",
+      "platforms": [
+        "ios"
+      ]
+    },
+    {
+      "fixture": "SafeAreaView/orientation__vertical",
+      "platforms": [
+        "ios"
       ]
     },
     {
@@ -961,6 +1060,7 @@
     {
       "fixture": "Switch/thumbTintColor__static",
       "platforms": [
+        "ios",
         "web"
       ]
     },
@@ -984,13 +1084,15 @@
       "fixture": "Switch/value__true",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "TabView/selectedIndex__alias_selectedTabIndex",
       "platforms": [
-        "android"
+        "android",
+        "ios"
       ]
     },
     {
@@ -1063,6 +1165,12 @@
     },
     {
       "fixture": "TextField/clearButtonMode__static",
+      "platforms": [
+        "ios"
+      ]
+    },
+    {
+      "fixture": "TextField/fieldPadding__static",
       "platforms": [
         "ios"
       ]
@@ -1329,6 +1437,7 @@
     {
       "fixture": "Web/html__static",
       "platforms": [
+        "ios",
         "web"
       ]
     },
@@ -1479,13 +1588,6 @@
       ]
     },
     {
-      "fixture": "common/borderWidth__static",
-      "platforms": [
-        "ios",
-        "web"
-      ]
-    },
-    {
       "fixture": "common/bottomMargin__static",
       "platforms": [
         "ios"
@@ -1608,6 +1710,7 @@
     {
       "fixture": "common/indexBelow__static",
       "platforms": [
+        "ios",
         "web"
       ]
     },
@@ -1759,6 +1862,7 @@
       "fixture": "common/shadow__static",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },

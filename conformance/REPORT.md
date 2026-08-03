@@ -2,9 +2,9 @@
 
 # JsonUI Conformance Report
 
-- Manifest: `b752efa41f62d8928371d1ad3aa2a31e40f813db76bb5a5998969f23acd92d9d` (sha256)
+- Manifest: `bab41192ce9a21adc32679f347c8246d703a9a8bf26fd8e7332a535f87ffc067` (sha256)
 - Definitions: `b01bc992ef4ce5e11c1d83de119398c84f027b8d1a6081b3910fcdcb3504feab` (sha256)
-- Fixtures: 670 (assertable: 29, visual: 572, interactive: 35) / skipped attributes: 154
+- Fixtures: 671 (assertable: 29, visual: 572, interactive: 35) / skipped attributes: 154
 
 Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
 
@@ -60,9 +60,9 @@ Screenshots are compared against `baselines/local/<platform>.hashes.json` (rende
 
 | Platform | Baseline | Compared | Regressions | No baseline | Missing artifact |
 |---|---|---|---|---|---|
-| android | threshold 8 | 469 | 0 | 0 | 0 |
-| ios | threshold 8 | 499 | 0 | 0 | 0 |
-| web | threshold 8 | 482 | 0 | 0 | 0 |
+| android | threshold 8 | 466 | 0 | 0 | 0 |
+| ios | threshold 8 | 500 | 0 | 0 | 0 |
+| web | threshold 8 | 479 | 0 | 0 | 0 |
 
 ## Attribute effect (fixture vs control)
 
@@ -70,19 +70,252 @@ Each visual fixture is compared against its **control** — the same layout with
 
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
-| android | 391 | 152 | 239 | 0 | 0 |
-| ios | 422 | 133 | 289 | 0 | 0 |
-| web | 405 | 186 | 219 | 0 | 0 |
+| android | 391 | 155 | 236 | 0 | 0 |
+| ios | 422 | 171 | 251 | 0 | 0 |
+| web | 405 | 185 | 220 | 0 | 0 |
+
+## Cross-platform attribute effect
+
+Pixel comparison across platforms is out of scope by design, but each platform's control-diff verdict — *did the attribute change the render?* — is platform-independent. A fixture whose activeness disagrees across the platforms its attribute is declared for is a semantic-drift suspect, and an SSoT-enumerated value that is inert on **every** platform is flagged uniformly-inert (default rendering, or dead everywhere). Only fixtures compared on **all** their in-scope platforms are judged; findings are accepted (with a reason) in `cross_effect.json` and enforced by `jui conformance gate --cross-effect`.
+
+- Compared on all in-scope platforms: 394 (consistent: 234, **diverging: 160**, **uniformly-inert declared values: 63**) · not compared everywhere: 0 · in scope on <2 platforms: 134
+
+| Fixture | android | ios | web |
+|---|---|---|---|
+| `Blur/effectStyle__extralight` | active | inert | inert |
+| `Blur/effectStyle__light` | active | inert | inert |
+| `Button/font__static` | inert | active | active |
+| `Button/textAlign__left` | inert | inert | active |
+| `Button/textAlign__right` | active | inert | active |
+| `CheckBox/font__static` | active | inert | active |
+| `CheckBox/iconSize__static` | inert | active | — |
+| `CheckBox/label__static` | active | inert | inert |
+| `CheckBox/selectedIcon__alias_onSrc` | active | inert | — |
+| `CheckBox/selectedIcon__static` | active | inert | — |
+| `CheckBox/src__static` | inert | active | inert |
+| `CheckBox/uncheckedColor__static` | inert | active | — |
+| `Collection/defaultScrollAnchor__bottom` | inert | active | inert |
+| `Collection/defaultScrollAnchor__center` | inert | active | inert |
+| `Collection/layout__flow` | active | active | inert |
+| `Collection/layout__flow_2` | active | active | inert |
+| `Collection/lazy__eager` | inert | active | inert |
+| `Collection/lazy__none` | inert | active | inert |
+| `GradientView/gradientDirection__oblique` | inert | active | active |
+| `GradientView/gradientDirection__vertical` | active | inert | inert |
+| `IconLabel/font__static` | inert | inert | active |
+| `IconLabel/iconMargin__static` | inert | inert | active |
+| `IconLabel/iconPosition__bottom` | active | inert | active |
+| `IconLabel/iconPosition__right` | inert | inert | active |
+| `IconLabel/iconPosition__top` | active | inert | active |
+| `IconLabel/textShadow__static` | inert | inert | active |
+| `Image/contentMode__aspectfill` | active | active | inert |
+| `Image/contentMode__aspectfit` | inert | inert | active |
+| `Image/contentMode__bottom` | inert | inert | active |
+| `Image/contentMode__bottom_2` | inert | inert | active |
+| `Image/contentMode__center` | active | inert | active |
+| `Image/contentMode__center_2` | active | inert | active |
+| `Image/contentMode__fill` | active | inert | inert |
+| `Image/contentMode__fit` | inert | inert | active |
+| `Image/contentMode__left` | inert | inert | active |
+| `Image/contentMode__left_2` | inert | inert | active |
+| `Image/contentMode__right` | inert | inert | active |
+| `Image/contentMode__right_2` | inert | inert | active |
+| `Image/contentMode__scaletofill` | active | inert | active |
+| `Image/contentMode__top` | inert | inert | active |
+| `Image/contentMode__top_2` | inert | inert | active |
+| `Image/srcName__static` | inert | inert | active |
+| `Label/autoShrink__true` | active | inert | active |
+| `Label/edgeInset__static` | active | inert | active |
+| `Label/fontFamily__static` | inert | active | active |
+| `Label/highlightAttributes__static` | inert | active | active |
+| `Label/highlightColor__static` | inert | active | active |
+| `Label/lineBreakMode__head` | inert | inert | active |
+| `Label/minimumScaleFactor__static` | active | inert | inert |
+| `Label/textAlign__left` | inert | active | inert |
+| `Label/textAlign__left_2` | inert | active | inert |
+| `Label/textShadow__static` | active | inert | active |
+| `NetworkImage/contentMode__aspectfill` | inert | active | inert |
+| `NetworkImage/contentMode__aspectfit` | inert | inert | active |
+| `NetworkImage/contentMode__bottom` | inert | inert | active |
+| `NetworkImage/contentMode__center` | inert | inert | active |
+| `NetworkImage/contentMode__center_2` | inert | inert | active |
+| `NetworkImage/contentMode__fit` | inert | inert | active |
+| `NetworkImage/contentMode__left` | inert | inert | active |
+| `NetworkImage/contentMode__right` | inert | inert | active |
+| `NetworkImage/contentMode__top` | inert | inert | active |
+| `NetworkImage/errorImage__static` | active | inert | — |
+| `NetworkImage/hint__static` | active | inert | inert |
+| `NetworkImage/loadingImage__static` | active | inert | — |
+| `NetworkImage/placeholder__static` | active | inert | inert |
+| `Progress/progressTintColor__static` | inert | active | inert |
+| `Progress/tintColor__static` | inert | active | inert |
+| `Progress/trackTintColor__static` | active | active | inert |
+| `Radio/checkedColor__static` | inert | active | — |
+| `Radio/checked__true` | inert | inert | active |
+| `Radio/fontSize__static` | inert | active | active |
+| `Radio/font__static` | inert | active | active |
+| `Radio/iconColor__static` | inert | active | — |
+| `Radio/selectedIcon__alias_selected_icon` | active | inert | — |
+| `Radio/selected_icon__static` | active | inert | inert |
+| `Radio/uncheckedColor__static` | inert | active | — |
+| `SafeAreaView/orientation__horizontal` | inert | active | inert |
+| `SafeAreaView/orientation__vertical` | inert | active | inert |
+| `SafeAreaView/safeAreaInsetPositions__static` | inert | active | inert |
+| `ScrollView/orientation__horizontal` | inert | active | inert |
+| `Segment/tintColor__static` | active | active | inert |
+| `SelectBox/fontColor__static` | active | inert | active |
+| `SelectBox/fontSize__static` | inert | inert | active |
+| `SelectBox/font__static` | inert | inert | active |
+| `SelectBox/labelAttributes__static` | inert | inert | active |
+| `SelectBox/selectItemType__date` | active | inert | active |
+| `SelectBox/selectedIndex__static` | inert | active | inert |
+| `SelectBox/selectedValue__static` | inert | active | active |
+| `Slider/tintColor__static` | inert | inert | active |
+| `Switch/onTintColor__static` | active | inert | active |
+| `Switch/thumbTintColor__static` | inert | active | active |
+| `TabView/selectedIndex__alias_selectedTabIndex` | active | active | inert |
+| `TabView/selectedIndex__static` | active | active | inert |
+| `TabView/tabBarBackground__static` | active | inert | active |
+| `TabView/tintColor__static` | active | active | inert |
+| `TabView/unselectedColor__static` | active | inert | active |
+| `TextField/borderStyle__bezel` | active | inert | inert |
+| `TextField/borderStyle__bezel_2` | active | inert | inert |
+| `TextField/borderStyle__line` | active | inert | active |
+| `TextField/borderStyle__line_2` | active | inert | active |
+| `TextField/borderStyle__roundedrect` | active | active | inert |
+| `TextField/borderStyle__roundedrect_2` | active | active | inert |
+| `TextField/fontColor__static` | inert | inert | active |
+| `TextField/fontFamily__static` | inert | active | active |
+| `TextField/font__static` | inert | active | active |
+| `TextField/hintColor__static` | active | inert | active |
+| `TextField/hintFontSize__static` | active | inert | inert |
+| `TextField/textAlign__center` | inert | active | active |
+| `TextField/textAlign__center_2` | inert | active | active |
+| `TextField/textAlign__right` | inert | active | active |
+| `TextField/textAlign__right_2` | inert | active | active |
+| `TextView/fontColor__static` | inert | inert | active |
+| `TextView/fontFamily__static` | inert | inert | active |
+| `TextView/fontSize__static` | inert | active | active |
+| `TextView/font__static` | inert | inert | active |
+| `TextView/hintColor__static` | inert | active | active |
+| `TextView/hintFontSize__static` | inert | active | active |
+| `TextView/hintFont__static` | inert | active | inert |
+| `TextView/hintLineHeightMultiple__static` | active | inert | active |
+| `TextView/textAlign__center` | inert | inert | active |
+| `TextView/textAlign__center_2` | inert | inert | active |
+| `TextView/textAlign__right` | inert | inert | active |
+| `TextView/textAlign__right_2` | inert | inert | active |
+| `View/direction__righttoleft` | inert | active | inert |
+| `Web/html__static` | inert | active | active |
+| `common/alignBottom__true` | active | inert | inert |
+| `common/alignLeftView__static` | inert | inert | active |
+| `common/alignRight__true` | active | inert | inert |
+| `common/alignment__bottom` | active | inert | — |
+| `common/alignment__bottomleading` | active | inert | — |
+| `common/alignment__bottomtrailing` | active | inert | — |
+| `common/alignment__center` | active | inert | — |
+| `common/alignment__leading` | active | inert | — |
+| `common/alignment__top` | active | inert | — |
+| `common/alignment__toptrailing` | active | inert | — |
+| `common/alignment__trailing` | active | inert | — |
+| `common/bottomMargin__static` | inert | active | inert |
+| `common/bottomPadding__static` | inert | active | inert |
+| `common/centerHorizontal__true` | active | inert | active |
+| `common/centerInParent__true` | active | inert | active |
+| `common/centerVertical__true` | active | inert | active |
+| `common/endMargin__static` | inert | active | inert |
+| `common/gravity__center` | active | inert | active |
+| `common/gravity__centerhorizontal` | inert | active | active |
+| `common/gravity__left` | inert | active | inert |
+| `common/gravity__right` | inert | active | active |
+| `common/gravity__top` | inert | active | inert |
+| `common/leftPadding__static` | active | active | inert |
+| `common/margins__static` | active | inert | active |
+| `common/maxHeight__static` | inert | inert | active |
+| `common/maxWidth__static` | inert | inert | active |
+| `common/paddingBottom__static` | inert | active | inert |
+| `common/paddingEnd__static` | active | active | inert |
+| `common/paddingRight__static` | active | active | inert |
+| `common/padding__static` | active | inert | active |
+| `common/paddings__static` | active | inert | active |
+| `common/rightMargin__static` | inert | active | inert |
+| `common/rightPadding__static` | inert | active | inert |
+| `common/topPadding__static` | active | active | inert |
+| `common/weight__static` | inert | inert | active |
+
+Declared values inert on every in-scope platform (default rendering, or dead everywhere):
+
+- `Button/textAlign__center` (value `'Center'`)
+- `Collection/defaultScrollAnchor__top` (value `'top'`)
+- `Collection/layout__leftaligned` (value `'LeftAligned'`)
+- `Collection/layout__leftaligned_2` (value `'leftAligned'`)
+- `Collection/layout__vertical` (value `'vertical'`)
+- `Collection/lazy__lazy` (value `'lazy'`)
+- `Collection/orientation__vertical` (value `'vertical'`)
+- `Collection/scrollAnchor__bottom` (value `'bottom'`)
+- `Collection/scrollAnchor__center` (value `'center'`)
+- `Collection/scrollAnchor__top` (value `'top'`)
+- `IconLabel/iconPosition__left` (value `'Left'`)
+- `Image/renderingMode__original` (value `'original'`)
+- `Label/lineBreakMode__char` (value `'Char'`)
+- `Label/lineBreakMode__clip` (value `'Clip'`)
+- `Label/lineBreakMode__middle` (value `'Middle'`)
+- `Label/lineBreakMode__tail` (value `'Tail'`)
+- `Label/lineBreakMode__word` (value `'Word'`)
+- `NetworkImage/contentMode__fill` (value `'fill'`)
+- `ScrollView/orientation__vertical` (value `'vertical'`)
+- `SelectBox/datePickerMode__countdown` (value `'countDown'`)
+- `SelectBox/datePickerMode__date` (value `'date'`)
+- `SelectBox/datePickerMode__dateandtime` (value `'dateAndTime'`)
+- `SelectBox/datePickerMode__datetime` (value `'datetime'`)
+- `SelectBox/datePickerMode__time` (value `'time'`)
+- `SelectBox/datePickerStyle__automatic` (value `'automatic'`)
+- `SelectBox/datePickerStyle__compact` (value `'compact'`)
+- `SelectBox/datePickerStyle__graphical` (value `'graphical'`)
+- `SelectBox/datePickerStyle__inline` (value `'inline'`)
+- `SelectBox/datePickerStyle__wheel` (value `'wheel'`)
+- `SelectBox/datePickerStyle__wheels` (value `'wheels'`)
+- `SelectBox/minuteInterval__1` (value `1`)
+- `SelectBox/minuteInterval__10` (value `10`)
+- `SelectBox/minuteInterval__12` (value `12`)
+- `SelectBox/minuteInterval__15` (value `15`)
+- `SelectBox/minuteInterval__2` (value `2`)
+- `SelectBox/minuteInterval__20` (value `20`)
+- `SelectBox/minuteInterval__3` (value `3`)
+- `SelectBox/minuteInterval__30` (value `30`)
+- `SelectBox/minuteInterval__4` (value `4`)
+- `SelectBox/minuteInterval__5` (value `5`)
+- `SelectBox/minuteInterval__6` (value `6`)
+- `SelectBox/minuteInterval__static` (value `15`)
+- `SelectBox/selectItemType__normal` (value `'Normal'`)
+- `TextField/borderStyle__none` (value `'none'`)
+- `TextField/textAlign__left` (value `'Left'`)
+- `TextField/textAlign__left_2` (value `'left'`)
+- `TextView/textAlign__left` (value `'Left'`)
+- `TextView/textAlign__left_2` (value `'left'`)
+- `View/direction__lefttoright` (value `'leftToRight'`)
+- `View/direction__none` (value `'none'`)
+- `View/direction__toptobottom` (value `'topToBottom'`)
+- `View/distribution__equalcentering` (value `'equalCentering'`)
+- `View/distribution__equalspacing` (value `'equalSpacing'`)
+- `View/distribution__fill` (value `'fill'`)
+- `View/distribution__fillequally` (value `'fillEqually'`)
+- `common/alignment__topleading` (value `'topLeading'`)
+- `common/borderStyle__dashed` (value `'dashed'`)
+- `common/borderStyle__dotted` (value `'dotted'`)
+- `common/borderStyle__solid` (value `'solid'`)
+- `common/distribution__equalcentering` (value `'equalCentering'`)
+- `common/distribution__equalspacing` (value `'equalSpacing'`)
+- `common/distribution__fill` (value `'fill'`)
+- `common/distribution__fillequally` (value `'fillEqually'`)
 
 ## Platforms
 
 | Platform | Runner | Results | pass | fail | error | skipped | Manifest |
 |---|---|---|---|---|---|---|---|
-| android | uiautomator 2.3.0 | 670 | 528 | 0 | 0 | 142 | current |
-| ios | xcuitest ios-18.6 | 670 | 558 | 0 | 0 | 112 | ⚠️ STALE |
-| web | playwright 1.61.1 | 670 | 541 | 0 | 0 | 129 | current |
-
-> ⚠️ `ios.results.json` was produced against manifest `ad2a425e15f6018b858f5d14a33ef7c39e9d7d64825f49e7756e6f544622864f` but the current manifest is `b752efa41f62d8928371d1ad3aa2a31e40f813db76bb5a5998969f23acd92d9d` — results are stale; re-run the ios suite.
+| android | uiautomator 2.3.0 | 671 | 525 | 0 | 0 | 146 | current |
+| ios | xcuitest ios-18.6 | 671 | 559 | 0 | 0 | 112 | current |
+| web | playwright 1.61.1 | 671 | 538 | 0 | 0 | 133 | current |
 
 ## Matrix
 
@@ -481,7 +714,7 @@ Each visual fixture is compared against its **control** — the same layout with
 | `loading` | `eager` | visual | – | – | ✅ |
 | `loadingImage` | `static` | visual | ✅ | ✅ | – |
 | `errorImage` | `static` | visual | ✅ | ✅ | – |
-| `systemIcon` | `static` | visual | – | ✅ | – |
+| `systemIcon` | `true` | visual | – | ✅ | – |
 
 ### NetworkImage
 
@@ -840,7 +1073,8 @@ Each visual fixture is compared against its **control** — the same layout with
 | `None` | `GradientView` | visual | ✅ | ✅ | ✅ |
 | `None` | `IconLabel` | visual | ✅ | ✅ | ✅ |
 | `None` | `Image` | visual | ✅ | ✅ | ✅ |
-| `None` | `Indicator` | visual | ✅ | ✅ | ✅ |
+| `None` | `Image` | visual | – | ✅ | – |
+| `None` | `Indicator` | visual | – | ✅ | – |
 | `None` | `Label` | visual | ✅ | ✅ | ✅ |
 | `None` | `Label` | visual | ✅ | ✅ | ✅ |
 | `None` | `NetworkImage` | visual | ✅ | ✅ | ✅ |
@@ -853,13 +1087,13 @@ Each visual fixture is compared against its **control** — the same layout with
 | `None` | `SelectBox` | visual | ✅ | ✅ | ✅ |
 | `None` | `SelectBox` | visual | ✅ | ✅ | ✅ |
 | `None` | `SelectBox` | visual | ✅ | ✅ | ✅ |
-| `None` | `SelectBox` | visual | ✅ | ✅ | ✅ |
+| `None` | `SelectBox` | visual | – | ✅ | – |
 | `None` | `Slider` | visual | ✅ | ✅ | ✅ |
 | `None` | `Switch` | visual | ✅ | ✅ | ✅ |
 | `None` | `Switch` | visual | ✅ | ✅ | ✅ |
 | `None` | `TabView` | visual | ✅ | ✅ | ✅ |
 | `None` | `TextField` | visual | ✅ | ✅ | ✅ |
-| `None` | `TextField` | visual | ✅ | ✅ | ✅ |
+| `None` | `TextField` | visual | – | ✅ | – |
 | `None` | `TextView` | visual | ✅ | ✅ | ✅ |
 | `None` | `View` | visual | ✅ | ✅ | ✅ |
 | `None` | `View` | visual | ✅ | ✅ | ✅ |

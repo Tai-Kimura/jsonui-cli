@@ -678,38 +678,20 @@
       "note": ""
     },
     {
-      "screenshot": "CheckBox_icon__static.png",
+      "screenshot": "Blur_effectStyle__extralight.png",
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 20,
-      "reason": "kjui-codegen-selection-icon-placement: custom icon/label cluster renders at the trailing edge (dynamic: leading) and custom icons substitute differently — selection-component wrapper alignment family, adjacent to F5",
-      "note": ""
-    },
-    {
-      "screenshot": "CheckBox_selectedIcon__alias_onSrc.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 16,
-      "reason": "kjui-codegen-selection-icon-placement: custom icon/label cluster renders at the trailing edge (dynamic: leading) and custom icons substitute differently — selection-component wrapper alignment family, adjacent to F5",
-      "note": ""
-    },
-    {
-      "screenshot": "CheckBox_selectedIcon__static.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 9,
-      "reason": "kjui-codegen-selection-icon-placement: custom icon/label cluster renders at the trailing edge (dynamic: leading) and custom icons substitute differently — selection-component wrapper alignment family, adjacent to F5",
-      "note": ""
+      "distance": 10,
+      "reason": "approximation",
+      "note": "Blur approximation family (same as effectStyle dark): the dynamic renderer and kjui codegen approximate UIKit blur styles with different Compose blur/tint stacks; extralight hovers at the threshold (d=10) and joined the ledger on the 2026-08-03 re-bake."
     },
     {
       "screenshot": "GradientView_gradient__static.png",
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 18,
+      "distance": 19,
       "reason": "kjui-codegen-gradientview-placement: declared gradient colors/direction now render on both paths (the kotlin pair used to drop them); the residual is placement only — the codegen box renders offset (trailing/lower) vs dynamic's leading placement",
       "note": ""
     },
@@ -718,26 +700,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 18,
+      "distance": 19,
       "reason": "kjui-codegen-gradientview-placement: declared gradient colors/direction now render on both paths (the kotlin pair used to drop them); the residual is placement only — the codegen box renders offset (trailing/lower) vs dynamic's leading placement",
-      "note": ""
-    },
-    {
-      "screenshot": "IconLabel_icon_off__static.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 20,
-      "reason": "kjui-codegen-selection-icon-placement: custom icon/label cluster renders at the trailing edge (dynamic: leading) and custom icons substitute differently — selection-component wrapper alignment family, adjacent to F5",
-      "note": ""
-    },
-    {
-      "screenshot": "IconLabel_icon_on__static.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 20,
-      "reason": "kjui-codegen-selection-icon-placement: custom icon/label cluster renders at the trailing edge (dynamic: leading) and custom icons substitute differently — selection-component wrapper alignment family, adjacent to F5",
       "note": ""
     },
     {
@@ -754,17 +718,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 24,
+      "distance": 22,
       "reason": "kjui-codegen-label-render: edgeInset positioning and highlightAttributes applied statically (codegen shows highlight color in the unpressed state — codegen-side suspect) — small Label family",
-      "note": ""
-    },
-    {
-      "screenshot": "Radio_iconSize__static.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 18,
-      "reason": "kjui-codegen-selection-icon-placement: custom icon/label cluster renders at the trailing edge (dynamic: leading) and custom icons substitute differently — selection-component wrapper alignment family, adjacent to F5",
       "note": ""
     },
     {
@@ -772,8 +727,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 13,
-      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
+      "distance": 12,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
       "note": ""
     },
     {
@@ -781,8 +736,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 13,
-      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
+      "distance": 12,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
       "note": ""
     },
     {
@@ -790,8 +745,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 12,
-      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
       "note": ""
     },
     {
@@ -799,8 +754,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 12,
-      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
       "note": ""
     },
     {
@@ -808,8 +763,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 12,
-      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
       "note": ""
     },
     {
@@ -817,8 +772,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 12,
-      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
       "note": ""
     },
     {
@@ -826,8 +781,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 12,
-      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
       "note": ""
     },
     {
@@ -871,7 +826,7 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 18,
+      "distance": 19,
       "reason": "kjui-codegen-gradientview-placement: declared gradient colors/direction now render on both paths (the kotlin pair used to drop them); the residual is placement only — the codegen box renders offset (trailing/lower) vs dynamic's leading placement",
       "note": ""
     },
@@ -880,413 +835,8 @@
       "platform": "android",
       "env": "local",
       "status": "mismatch",
-      "distance": 12,
-      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks now match dynamic (d 19/15 → 11-12, visually identical); the residual is the icon glyph source — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. Converging means promoting the drawables to the base library and referencing them from generated code (release-32 rider candidate)",
-      "note": ""
-    },
-    {
-      "screenshot": "Button_font__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 12,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "Collection_insetHorizontal__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 83,
-      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "Collection_insets__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 83,
-      "reason": "collection static-render divergence (codegen defaults vs dynamic) — systematic family, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "IconLabel_icon_off__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 23,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "IconLabel_icon_on__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 23,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "Image_renderingMode__template.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 33,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "Image_systemIcon__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 136,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "Label_textAlign__left.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 30,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "Label_textAlign__left_2.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 30,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "Label_textAlign__right.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 35,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "Label_textAlign__right_2.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 35,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "Progress_indicatorStyle__large.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 16,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "Progress_indicatorStyle__medium.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 16,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "Radio_iconSize__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 28,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "Radio_icon__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 105,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "Radio_selectedIcon__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 105,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "SafeAreaView_orientation__horizontal.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 50,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "SafeAreaView_orientation__vertical.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 73,
-      "reason": "container sizing divergence (width/height/View family) — codegen frame math vs dynamic, converter fix tracked",
-      "note": "color-provider pollution: codegen artifact has zero saturated pixels while dynamic has color — distance is unreliable until the ios host registers colorProvider (25); re-measure before working this family"
-    },
-    {
-      "screenshot": "Segment_normalColor__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 36,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "Segment_selectedIndex__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 26,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "Segment_tintColor__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 33,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "Switch_checked__true.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 48,
-      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
-      "note": ""
-    },
-    {
-      "screenshot": "Switch_isOn__true.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 48,
-      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
-      "note": ""
-    },
-    {
-      "screenshot": "Switch_onTintColor__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 48,
-      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
-      "note": ""
-    },
-    {
-      "screenshot": "Switch_thumbTintColor__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 37,
-      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
-      "note": ""
-    },
-    {
-      "screenshot": "Switch_tintColor__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 49,
-      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
-      "note": ""
-    },
-    {
-      "screenshot": "Switch_tint__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 49,
-      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
-      "note": ""
-    },
-    {
-      "screenshot": "Switch_trackTintColor__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 37,
-      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
-      "note": ""
-    },
-    {
-      "screenshot": "Switch_value__true.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 39,
-      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
-      "note": ""
-    },
-    {
-      "screenshot": "TabView_selectedIndex__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 13,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "TextField_clearButtonMode__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 27,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "TextField_fieldPadding__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 14,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "Web_html__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 29,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "common_borderWidth__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 79,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "common_bottomMargin__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 31,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "common_indexBelow__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 16,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "common_leftMargin__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 143,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "common_rightMargin__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 132,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "common_shadow__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 104,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "common_topMargin__static.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 35,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "control_SelectBox__anchored.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 23,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "control_Switch.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 32,
-      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
-      "note": ""
-    },
-    {
-      "screenshot": "control_Switch__isOn-True.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 48,
-      "reason": "switch static-render divergence (tint/thumb statics codegen vs dynamic) — post-colorProvider true drift",
-      "note": ""
-    },
-    {
-      "screenshot": "control_TextField__text-Clear-me.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 20,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
-      "note": ""
-    },
-    {
-      "screenshot": "control_Web.png",
-      "platform": "ios",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 26,
-      "reason": "post-colorProvider true drift — needs per-fixture review (was masked by the color-provider gap)",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
       "note": ""
     }
   ]

@@ -1,6 +1,6 @@
 {
   "platform": "web",
-  "manifestHash": "b752efa41f62d8928371d1ad3aa2a31e40f813db76bb5a5998969f23acd92d9d",
+  "manifestHash": "bab41192ce9a21adc32679f347c8246d703a9a8bf26fd8e7332a535f87ffc067",
   "runner": {
     "name": "playwright",
     "version": "1.61.1"
@@ -2090,7 +2090,7 @@
       "detail": "not applicable to web"
     },
     {
-      "id": "Image/systemIcon__static",
+      "id": "Image/systemIcon__true",
       "status": "skipped",
       "detail": "not applicable to web"
     },
@@ -3613,10 +3613,14 @@
       "screenshot": "artifacts/web/control_Image.png"
     },
     {
+      "id": "__control/Image__src-star",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
       "id": "__control/Indicator",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/control_Indicator.png"
+      "status": "skipped",
+      "detail": "not applicable to web"
     },
     {
       "id": "__control/Label",
@@ -3692,9 +3696,8 @@
     },
     {
       "id": "__control/SelectBox__anchored",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/control_SelectBox__anchored.png"
+      "status": "skipped",
+      "detail": "not applicable to web"
     },
     {
       "id": "__control/Slider",
@@ -3728,9 +3731,8 @@
     },
     {
       "id": "__control/TextField__text-Clear-me",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/control_TextField__text-Clear-me.png"
+      "status": "skipped",
+      "detail": "not applicable to web"
     },
     {
       "id": "__control/TextView",

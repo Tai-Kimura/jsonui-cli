@@ -1,6 +1,6 @@
 {
   "platform": "android",
-  "manifestHash": "b752efa41f62d8928371d1ad3aa2a31e40f813db76bb5a5998969f23acd92d9d",
+  "manifestHash": "bab41192ce9a21adc32679f347c8246d703a9a8bf26fd8e7332a535f87ffc067",
   "runner": {
     "name": "uiautomator",
     "version": "2.3.0"
@@ -2081,7 +2081,7 @@
       "screenshot": "artifacts/android/Image_errorImage__static.png"
     },
     {
-      "id": "Image/systemIcon__static",
+      "id": "Image/systemIcon__true",
       "status": "skipped",
       "detail": "not applicable to android"
     },
@@ -3600,10 +3600,14 @@
       "screenshot": "artifacts/android/control_Image.png"
     },
     {
+      "id": "__control/Image__src-star",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
       "id": "__control/Indicator",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/control_Indicator.png"
+      "status": "skipped",
+      "detail": "not applicable to android"
     },
     {
       "id": "__control/Label",
@@ -3679,9 +3683,8 @@
     },
     {
       "id": "__control/SelectBox__anchored",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/control_SelectBox__anchored.png"
+      "status": "skipped",
+      "detail": "not applicable to android"
     },
     {
       "id": "__control/Slider",
@@ -3715,9 +3718,8 @@
     },
     {
       "id": "__control/TextField__text-Clear-me",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/control_TextField__text-Clear-me.png"
+      "status": "skipped",
+      "detail": "not applicable to android"
     },
     {
       "id": "__control/TextView",

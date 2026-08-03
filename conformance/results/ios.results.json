@@ -1,5 +1,5 @@
 {
-  "manifestHash" : "b752efa41f62d8928371d1ad3aa2a31e40f813db76bb5a5998969f23acd92d9d",
+  "manifestHash" : "bab41192ce9a21adc32679f347c8246d703a9a8bf26fd8e7332a535f87ffc067",
   "platform" : "ios",
   "results" : [
     {
@@ -2093,8 +2093,8 @@
     },
     {
       "detail" : "",
-      "id" : "Image/systemIcon__static",
-      "screenshot" : "artifacts/ios/Image_systemIcon__static.png",
+      "id" : "Image/systemIcon__true",
+      "screenshot" : "artifacts/ios/Image_systemIcon__true.png",
       "status" : "pass"
     },
     {
@@ -3623,6 +3623,12 @@
       "detail" : "",
       "id" : "__control/Image",
       "screenshot" : "artifacts/ios/control_Image.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Image__src-star",
+      "screenshot" : "artifacts/ios/control_Image__src-star.png",
       "status" : "pass"
     },
     {
