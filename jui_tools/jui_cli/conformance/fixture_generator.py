@@ -476,8 +476,14 @@ def build_control_test(
 
 
 def build_control_manifest_entry(
-    host: str, needs_anchor: bool, layout_rel: str, test_rel: str, shape: str = ""
+    host: str, needs_anchor: bool, layout_rel: str, test_rel: str, shape: str = "",
+    platforms: set | None = None,
 ) -> dict:
+    # Canonical platform ordering, restricted to the consumers' union.
+    platform_list = (
+        [p for p in rules.ALL_PLATFORMS if p in platforms]
+        if platforms else list(rules.ALL_PLATFORMS)
+    )
     entry = {
         "id": control_id(host, needs_anchor, shape),
         "component": "__control",
@@ -488,7 +494,7 @@ def build_control_manifest_entry(
         "writtenKey": None,
         "aliasOf": None,
         "value": None,
-        "platforms": list(rules.ALL_PLATFORMS),
+        "platforms": platform_list,
         "mode": None,
         "deprecated": None,
         "layout": layout_rel,
@@ -578,8 +584,11 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     fixture_entries: list[dict] = []
 
     promoted: dict[str, int] = {}
-    # (host, needs_anchor) shapes that need a control fixture.
-    needed_controls: set = set()
+    # (host, needs_anchor, shape) shapes that need a control fixture, mapped
+    # to the union of their consumers' platforms — a control consumed only by
+    # a platform-restricted fixture must not run anywhere else (an ios-only
+    # SF-Symbol src broke the android codegen host as R.drawable.star).
+    needed_controls: dict[tuple, set] = {}
     # macOS filesystems are case-insensitive; attribute names differing only
     # by case (onclick / onClick) must not share a fixture file path. The
     # suffix assignment follows definition order — fully deterministic.
@@ -634,9 +643,8 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
             else:
                 summary.visual_count += 1
                 if plan.attribute not in rules.NON_OBSERVABLE_ATTRS:
-                    needed_controls.add(
-                        (plan.host, plan.needs_anchor, control_shape(plan.host, plan.attribute))
-                    )
+                    control_key = (plan.host, plan.needs_anchor, control_shape(plan.host, plan.attribute))
+                    needed_controls.setdefault(control_key, set()).update(plan.platforms)
 
     # One control per shape the visual fixtures actually used. Generated after
     # the sweep so an unused host does not get a control nobody compares to.
@@ -646,7 +654,8 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     shape_extras = {
         shape_name(e): e for e in rules.BASE_ATTRS_BY_ATTRIBUTE.values()
     }
-    for host, needs_anchor, shape in sorted(needed_controls):
+    for host, needs_anchor, shape in sorted(needed_controls.keys()):
+        control_platforms = needed_controls[(host, needs_anchor, shape)]
         control_dir.mkdir(exist_ok=True)
         stem = control_id(host, needs_anchor, shape).split("/", 1)[1]
         layout_rel = f"fixtures/__control/{stem}.layout.json"
@@ -664,7 +673,8 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
 
         fixture_entries.append(
             build_control_manifest_entry(
-                host, needs_anchor, layout_rel, test_rel, shape
+                host, needs_anchor, layout_rel, test_rel, shape,
+                platforms=control_platforms,
             )
         )
         summary.fixture_count += 1

@@ -14704,9 +14704,7 @@
       "aliasOf": null,
       "value": null,
       "platforms": [
-        "ios",
-        "android",
-        "web"
+        "ios"
       ],
       "mode": null,
       "deprecated": null,
@@ -14728,9 +14726,7 @@
       "aliasOf": null,
       "value": null,
       "platforms": [
-        "ios",
-        "android",
-        "web"
+        "ios"
       ],
       "mode": null,
       "deprecated": null,
@@ -15040,9 +15036,7 @@
       "aliasOf": null,
       "value": null,
       "platforms": [
-        "ios",
-        "android",
-        "web"
+        "ios"
       ],
       "mode": null,
       "deprecated": null,
@@ -15184,9 +15178,7 @@
       "aliasOf": null,
       "value": null,
       "platforms": [
-        "ios",
-        "android",
-        "web"
+        "ios"
       ],
       "mode": null,
       "deprecated": null,
