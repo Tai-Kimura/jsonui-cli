@@ -94,23 +94,30 @@ module SjuiTools
             end
           else
             # 個別のマージン設定（バインディング対応）
-            if top_margin
+            # ZStack children: the parent's apply_zstack_positioning emits the
+            # SAME four individual margins as a .offset (full-margin
+            # frame-context semantics) — emitting .padding here too
+            # double-applied them (measured +12pt for a declared 8 in the
+            # centered conformance frame). start/endMargin are not part of
+            # the offset computation and keep their padding.
+            offset_owns = @component['_zstack_margin_offset']
+            if top_margin && !offset_owns
               @modifier_bag.append(:margin, ".padding(.top, #{margin_value(top_margin)})")
             end
-            if bottom_margin
+            if bottom_margin && !offset_owns
               @modifier_bag.append(:margin, ".padding(.bottom, #{margin_value(bottom_margin)})")
             end
 
             # RTL aware margins take precedence over left/right
             if start_margin
               @modifier_bag.append(:margin, ".padding(.leading, #{margin_value(start_margin)})")
-            elsif left_margin
+            elsif left_margin && !offset_owns
               @modifier_bag.append(:margin, ".padding(.leading, #{margin_value(left_margin)})")
             end
 
             if end_margin
               @modifier_bag.append(:margin, ".padding(.trailing, #{margin_value(end_margin)})")
-            elsif right_margin
+            elsif right_margin && !offset_owns
               @modifier_bag.append(:margin, ".padding(.trailing, #{margin_value(right_margin)})")
             end
           end

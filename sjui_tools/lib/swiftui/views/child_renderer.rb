@@ -10,6 +10,10 @@ module SjuiTools
           # ZStackの場合、位置関係の処理
           if !orientation
             add_line "Group {"
+            # See ChildRenderingHelper: the .offset from
+            # apply_zstack_positioning owns individual margins here; the
+            # child's own .padding for the same margins double-applied them.
+            child['_zstack_margin_offset'] = true
           end
           
           # weightプロパティの処理

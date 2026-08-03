@@ -8,6 +8,13 @@ module SjuiTools
           if !orientation
             # 通常のZStackでの子要素をグループ化
             add_line "Group {"
+            # ZStack children receive their individual margins as the
+            # .offset apply_zstack_positioning emits (the full-margin
+            # frame-context semantics); the child's own .padding for the
+            # SAME margins double-applied them (measured: +12pt for a
+            # declared 8 in the centered conformance frame — padding
+            # half-shift + offset). One mechanism owns the margin.
+            child['_zstack_margin_offset'] = true
           end
           
           # Wrap with VisibilityWrapper if visibility is set
