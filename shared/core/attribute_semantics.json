@@ -27,6 +27,16 @@
         "Image/contentMode__scaletofill": "uniformly-active"
       }
     },
+    "textView": {
+      "flexibleHeight": "declared height is the growth floor",
+      "ruling": "2026-08-03 user ruling (31 handoff): with flexible enabled, the declared height is the floor the view GROWS from — it never shrinks below it to follow smaller content. android's behavior is canonical; ios (both paths) shrank with content and must adopt the floor formula min = minHeight ?? height ?? default (rides 32). web measures 'has effect' — verify it matches floor semantics before recording it anywhere. No activeness observable: at fixture content size a correct floor renders identically to the control (that is WHY the android control_diff entry was removed in e78af64); the mechanical check belongs to the Phase 3 geometry layer.",
+      "observable": {}
+    },
+    "size": {
+      "maxBoundsClampFill": "matchParent is clamped by maxWidth/maxHeight",
+      "ruling": "2026-08-03 user ruling (31 handoff): matchParent + maxWidth/maxHeight resolves to min(parent extent, bound) — the bound clamps the fill. Generated code is canonical (kjui emits the constraint before the fill since 847fb56); KJUI dynamic orders fillMaxWidth before widthIn, which ignores the bound entirely — reorder rides 32. Observables need new composite fixtures (matchParent+maxWidth / +maxHeight, both axes — also the first ios/web measurement of the combination); add them to this entry together with the generator extension.",
+      "observable": {}
+    },
     "networkImage": {
       "noSrc": "defaultImage",
       "ruling": "2026-08-03 user ruling: with no src, NetworkImage displays defaultImage; while loading it displays the first of hint/placeholder/loadingImage; on error it displays errorImage, falling back to defaultImage. The conformance fixtures declare no src, so every state-image fixture must render exactly what the control (defaultImage) renders — uniformly inert. android currently violates: DynamicNetworkImageComponent parses defaultImage but never reads it, so the control is blank (KotlinJsonUI fix rides 32). NOTE: the fixtures currently reuse one asset for all state images; when the distinct-asset fixture improvement lands, revisit these expectations together with it.",
