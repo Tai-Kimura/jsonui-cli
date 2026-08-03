@@ -22,6 +22,7 @@ from typing import Any
 
 from . import baseline as baseline_mod
 from . import control_diff as control_diff_mod
+from . import cross_effect as cross_effect_mod
 
 REPORT_GENERATOR = "jui conformance report"
 
@@ -85,6 +86,18 @@ class ReportSummary:
     #: platform -> count of fixtures indistinguishable from their control and
     #: NOT yet recorded. Reported, not failed — see control_diff.
     inert_unrecorded: dict[str, int] = field(default_factory=dict)
+    #: fixture -> SSoT-declared platforms, for every control-bearing fixture.
+    #: Carried so the gate can re-measure cross-platform activeness over its
+    #: *selected* platforms (the report section below spans all loaded ones).
+    effect_scope: dict[str, list[str]] = field(default_factory=dict)
+    #: platform -> {fixture: "active"|"inert"} — the control-diff verdicts,
+    #: the input to cross_effect.measure. A platform whose comparison errored
+    #: contributes no verdicts (its fixtures count as not compared).
+    effect_verdicts: dict[str, dict[str, str]] = field(default_factory=dict)
+    #: fixture -> declared enum value, for fixtures testing an SSoT-enumerated
+    #: value — the population of the uniformly-inert check. Empty when the
+    #: attribute definitions were not available to the report run.
+    effect_enum_values: dict[str, object] = field(default_factory=dict)
 
 
 class ReportError(RuntimeError):
@@ -177,6 +190,7 @@ def render_report(
     visual: dict[str, "baseline_mod.VisualComparison"] | None = None,
     diffs: dict[str, "control_diff_mod.DiffResult"] | None = None,
     env: str = baseline_mod.DEFAULT_ENV,
+    enum_values: dict[str, object] | None = None,
 ) -> tuple[str, ReportSummary]:
     """Render REPORT.md content. Pure function of its inputs (deterministic).
 
@@ -409,6 +423,69 @@ def render_report(
                 )
     lines.append("")
 
+    # --- 1e. Cross-platform attribute effect (activeness agreement) --- #
+    lines.append("## Cross-platform attribute effect")
+    lines.append("")
+    lines.append(
+        "Pixel comparison across platforms is out of scope by design, but each "
+        "platform's control-diff verdict — *did the attribute change the render?* — "
+        "is platform-independent. A fixture whose activeness disagrees across the "
+        "platforms its attribute is declared for is a semantic-drift suspect, and "
+        "an SSoT-enumerated value that is inert on **every** platform is flagged "
+        "uniformly-inert (default rendering, or dead everywhere). Only fixtures "
+        "compared on **all** their in-scope platforms are judged; findings are "
+        f"accepted (with a reason) in `{cross_effect_mod.LEDGER_NAME}` and "
+        "enforced by `jui conformance gate --cross-effect`."
+    )
+    lines.append("")
+    summary.effect_scope = cross_effect_mod.scope_from_manifest(manifest)
+    summary.effect_verdicts = cross_effect_mod.verdicts_from_diffs(diffs or {})
+    summary.effect_enum_values = dict(enum_values or {})
+    cross = cross_effect_mod.measure(
+        summary.effect_scope,
+        summary.effect_verdicts,
+        platform_names,
+        summary.effect_enum_values,
+    )
+    if len(platform_names) < 2:
+        lines.append("_Fewer than two platforms loaded — nothing to cross-compare._")
+    else:
+        lines.append(
+            f"- Compared on all in-scope platforms: "
+            f"{len(cross.consistent) + len(cross.mismatched)} "
+            f"(consistent: {len(cross.consistent)}, "
+            f"**diverging: {len(cross.mismatched)}**, "
+            f"**uniformly-inert declared values: {len(cross.uniform_inert)}**) · "
+            f"not compared everywhere: {len(cross.not_compared)} · "
+            f"in scope on <2 platforms: {cross.out_of_scope}"
+        )
+        if not enum_values:
+            lines.append(
+                "- _Attribute definitions unavailable to this run — the "
+                "uniformly-inert check did not participate._"
+            )
+        if cross.mismatched:
+            lines.append("")
+            header = ["Fixture"] + platform_names
+            lines.append("| " + " | ".join(header) + " |")
+            lines.append("|" + "---|" * len(header))
+            for fid in sorted(cross.mismatched):
+                verdicts = cross.mismatched[fid]
+                cells = [f"`{fid}`"] + [
+                    verdicts.get(name, "—") for name in platform_names
+                ]
+                lines.append("| " + " | ".join(cells) + " |")
+        if cross.uniform_inert:
+            lines.append("")
+            lines.append(
+                "Declared values inert on every in-scope platform "
+                "(default rendering, or dead everywhere):"
+            )
+            lines.append("")
+            for fid in sorted(cross.uniform_inert):
+                lines.append(f"- `{fid}` (value `{cross.uniform_inert[fid]!r}`)")
+    lines.append("")
+
     # --- 2. Platform summaries + staleness --- #
     lines.append("## Platforms")
     lines.append("")
@@ -509,8 +586,15 @@ def generate_report(
     results_dir: Path | None = None,
     out_path: Path | None = None,
     env: str = baseline_mod.DEFAULT_ENV,
+    definitions_path: Path | None = None,
 ) -> ReportSummary:
-    """Read manifest + results and write REPORT.md. Returns a summary."""
+    """Read manifest + results and write REPORT.md. Returns a summary.
+
+    *definitions_path* feeds the uniformly-inert check (which fixtures test
+    an SSoT-enumerated value). Left as None it resolves to the repo layout
+    (``<conformance_dir>/../shared/core/attribute_definitions.json``); a
+    missing file just disables that check — the report says so.
+    """
     conformance_dir = Path(conformance_dir)
     manifest_path = conformance_dir / "manifest.json"
     if not manifest_path.is_file():
@@ -549,8 +633,23 @@ def generate_report(
             conformance_dir, p.platform, manifest, p.results
         )
 
+    if definitions_path is None:
+        definitions_path = (
+            conformance_dir.parent / "shared" / "core" / "attribute_definitions.json"
+        )
+    enum_values: dict[str, object] = {}
+    if Path(definitions_path).is_file():
+        definitions = json.loads(Path(definitions_path).read_text(encoding="utf-8"))
+        enum_values = cross_effect_mod.enum_fixture_values(manifest, definitions)
+
     content, summary = render_report(
-        manifest, manifest_hash, platforms, visual=visual, diffs=diffs, env=env
+        manifest,
+        manifest_hash,
+        platforms,
+        visual=visual,
+        diffs=diffs,
+        env=env,
+        enum_values=enum_values,
     )
 
     if out_path is None:

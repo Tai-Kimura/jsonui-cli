@@ -22,6 +22,9 @@ Checks, per selected platform:
   and the ``missing_artifact`` / ``no_baseline`` ratchets below
 - cross-platform mismatches, only when all three platforms are selected
   (fewer selected platforms means the other results are not from this run)
+- with ``--cross-effect``: activeness agreement across the selected
+  platforms (see :mod:`.cross_effect`) — unrecorded findings and stale
+  ``cross_effect.json`` entries fail under env ``local``, notice elsewhere
 
 Ratchets (``conformance/gate_ratchet.json``): ``missing_artifact`` counts
 baseline entries whose fixture produced no screenshot this run — the way a
@@ -49,6 +52,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .baseline import DEFAULT_ENV
+from . import cross_effect as cross_effect_mod
 from .report import ReportSummary, generate_report
 
 RATCHET_FILENAME = "gate_ratchet.json"
@@ -129,6 +133,7 @@ def evaluate(
     ratchet: dict[str, dict[str, int]] | None = None,
     env: str = DEFAULT_ENV,
     parity: bool = False,
+    cross_effect: bool = False,
 ) -> GateOutcome:
     """Render REPORT.md and judge *platforms*. Raises ReportError on bad inputs."""
     conformance_dir = Path(conformance_dir)
@@ -138,6 +143,22 @@ def evaluate(
     if ratchet is None:
         ratchet = load_ratchet(conformance_dir)
     outcome = judge(summary, platforms, visual=visual, ratchet=ratchet, env=env)
+
+    if cross_effect:
+        if not visual:
+            outcome.problems.append(
+                "--cross-effect needs the visual checks: activeness verdicts come "
+                "from the fixture-vs-control comparison, which --no-visual skips"
+            )
+        else:
+            ledger = cross_effect_mod.load_ledger(
+                cross_effect_mod.ledger_path(conformance_dir)
+            )
+            problems, notices = judge_cross_effect(
+                summary, platforms, ledger, env=env
+            )
+            outcome.problems.extend(problems)
+            outcome.notices.extend(notices)
 
     if parity and visual:
         # dynamic ≡ codegen, judged per selected platform against the same
@@ -287,3 +308,79 @@ def judge(
                     )
 
     return outcome
+
+
+def judge_cross_effect(
+    summary: ReportSummary,
+    platforms: Sequence[str],
+    ledger: dict,
+    *,
+    env: str = DEFAULT_ENV,
+) -> tuple[list[str], list[str]]:
+    """Judge cross-platform activeness agreement. Pure: (problems, notices).
+
+    Comparison spans the *selected* platforms only — results for unselected
+    platforms are committed snapshots, not this run's (same reasoning as the
+    status-mismatch check). Activeness verdicts, like the control_diff
+    ledger, are asserted from local renders: under any other env a finding
+    is a notice, not a failure (measured 2026-08-01: attributes hold locally
+    and go inert on the CI simulator).
+    """
+    problems: list[str] = []
+    notices: list[str] = []
+    selected = list(dict.fromkeys(platforms))
+    if len(selected) < 2:
+        problems.append(
+            "--cross-effect needs at least two selected platforms — activeness "
+            f"agreement across {selected or ['(none)']} compares nothing"
+        )
+        return problems, notices
+
+    result = cross_effect_mod.measure(
+        summary.effect_scope,
+        summary.effect_verdicts,
+        selected,
+        summary.effect_enum_values,
+    )
+    verdict = cross_effect_mod.check(result, ledger)
+
+    def _report(message: str) -> None:
+        if env == DEFAULT_ENV:
+            problems.append(message)
+        else:
+            notices.append(
+                message
+                + f" — activeness is asserted local-env; informational under env '{env}'"
+            )
+
+    if verdict.unrecorded:
+        shown = "; ".join(verdict.unrecorded[:5]) + (
+            " …" if len(verdict.unrecorded) > 5 else ""
+        )
+        _report(
+            f"{len(verdict.unrecorded)} cross-platform attribute-effect finding(s) "
+            f"not in {cross_effect_mod.LEDGER_NAME} — fix the platform or record + "
+            f"justify with `jui conformance cross-effect --update`: {shown}"
+        )
+    if verdict.stale:
+        shown = ", ".join(verdict.stale[:5]) + (" …" if len(verdict.stale) > 5 else "")
+        _report(
+            f"{len(verdict.stale)} stale {cross_effect_mod.LEDGER_NAME} entr(y/ies) — "
+            f"the measurement no longer supports them; prune with "
+            f"`jui conformance cross-effect --update`: {shown}"
+        )
+    if verdict.unverified:
+        shown = ", ".join(verdict.unverified[:5]) + (
+            " …" if len(verdict.unverified) > 5 else ""
+        )
+        notices.append(
+            f"{len(verdict.unverified)} {cross_effect_mod.LEDGER_NAME} entr(y/ies) "
+            f"could not be verified this run (fixture not compared everywhere): {shown}"
+        )
+    if verdict.ok:
+        judged = len(result.consistent) + len(result.mismatched)
+        notices.append(
+            f"cross-effect OK ({', '.join(selected)}): {judged} fixture(s) judged, "
+            f"{verdict.accepted} accepted finding(s) on ledger"
+        )
+    return problems, notices

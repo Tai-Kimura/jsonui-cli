@@ -137,6 +137,20 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
             "unrecorded drift and stale entries fail."
         ),
     )
+    gate.add_argument(
+        "--cross-effect",
+        action="store_true",
+        dest="cross_effect",
+        help=(
+            "Also judge cross-platform activeness agreement: a fixture's "
+            "control-diff verdict (active/inert) must agree across the selected "
+            "platforms its attribute is declared for, and SSoT-enumerated values "
+            "must not be inert everywhere. Findings must be recorded in "
+            "cross_effect.json, and recorded entries must still measure — "
+            "unrecorded findings and stale entries fail (env 'local'; a notice "
+            "elsewhere). Needs ≥2 selected platforms and the visual checks."
+        ),
+    )
 
     compat = sub.add_parser(
         "compat-doc",
@@ -283,6 +297,54 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         ),
     )
 
+    cross = sub.add_parser(
+        "cross-effect",
+        help=(
+            "Compare attribute activeness (control-diff verdicts) across platforms "
+            "— disagreement is semantic drift unless ledgered with a reason"
+        ),
+    )
+    cross.add_argument(
+        "--platform",
+        action="append",
+        choices=list(_PLATFORMS),
+        help=(
+            "Platform to include in the comparison (repeatable; default: all "
+            "three). At least two are required — activeness agreement across "
+            "one platform compares nothing."
+        ),
+    )
+    cross.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory (default: {_DEFAULT_OUT})",
+    )
+    cross.add_argument(
+        "--results",
+        default=None,
+        help="Results directory (default: <dir>/results)",
+    )
+    cross.add_argument(
+        "--definitions",
+        default=None,
+        help=(
+            "Path to attribute_definitions.json, for the uniformly-inert check "
+            f"(default: {_DEFAULT_DEFINITIONS})"
+        ),
+    )
+    cross.add_argument(
+        "--update",
+        action="store_true",
+        help=(
+            "Record the measured findings into cross_effect.json (reasons and "
+            "notes of entries whose fact still holds are preserved; new entries "
+            "get the unreviewed marker; entries no longer supported are pruned). "
+            "Without --update, unrecorded findings and stale entries exit "
+            "non-zero — the same check `gate --cross-effect` runs."
+        ),
+    )
+
     eff = sub.add_parser(
         "effect",
         help="Record/check which fixtures render differently from their control",
@@ -335,9 +397,159 @@ def cmd_conformance(args: argparse.Namespace) -> int:
         return _cmd_effect(args)
     if target == "parity":
         return _cmd_parity(args)
+    if target == "cross-effect":
+        return _cmd_cross_effect(args)
     print(
-        "Usage: jui conformance <generate|report|gate|baseline|coverage|effect|parity> [options]"
+        "Usage: jui conformance <generate|report|gate|baseline|coverage|effect|parity|cross-effect> [options]"
     )
+    return 1
+
+
+def _cmd_cross_effect(args: argparse.Namespace) -> int:
+    import hashlib
+    import json
+
+    from ..conformance import control_diff as control_diff_mod
+    from ..conformance import cross_effect as ce
+    from ..conformance.report import load_platform_results
+
+    conformance_dir = (
+        Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    )
+    results_dir = Path(args.results) if args.results else conformance_dir / "results"
+    platforms = (
+        list(dict.fromkeys(args.platform)) if args.platform else list(_PLATFORMS)
+    )
+    if len(platforms) < 2:
+        print(
+            "ERROR: cross-effect needs at least two platforms — activeness "
+            "agreement across one compares nothing"
+        )
+        return 1
+
+    manifest_path = conformance_dir / "manifest.json"
+    if not manifest_path.is_file():
+        print(f"ERROR: manifest not found: {manifest_path}")
+        return 1
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+
+    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash)}
+    diffs = {}
+    for platform in platforms:
+        pr = loaded.get(platform)
+        if pr is None:
+            print(f"note: no results for {platform} — its fixtures count as not compared")
+            continue
+        if pr.stale:
+            print(
+                f"note: {platform} results are stale vs the current manifest — "
+                "activeness verdicts are within-run facts, but re-run the suite "
+                "before trusting fixture-level conclusions"
+            )
+        diffs[platform] = control_diff_mod.compare(
+            conformance_dir, platform, manifest, pr.results
+        )
+        if diffs[platform].error:
+            print(f"note: {platform} comparison errored — {diffs[platform].error}")
+
+    definitions_path = (
+        Path(args.definitions) if args.definitions else _DEFAULT_DEFINITIONS
+    )
+    enum_values: dict = {}
+    if definitions_path.is_file():
+        enum_values = ce.enum_fixture_values(
+            manifest, json.loads(definitions_path.read_text(encoding="utf-8"))
+        )
+    else:
+        print(
+            f"note: {definitions_path} not found — the uniformly-inert check "
+            "did not participate"
+        )
+
+    result = ce.measure(
+        ce.scope_from_manifest(manifest),
+        ce.verdicts_from_diffs(diffs),
+        platforms,
+        enum_values,
+    )
+
+    judged = len(result.consistent) + len(result.mismatched)
+    print(
+        f"cross-effect ({', '.join(platforms)}): {judged} fixture(s) compared on "
+        f"all their in-scope platforms"
+    )
+    print(f"  consistent:          {len(result.consistent)}")
+    print(f"  diverging:           {len(result.mismatched)}")
+    print(f"  uniformly-inert:     {len(result.uniform_inert)} (declared enum values)")
+    print(f"  not compared everywhere: {len(result.not_compared)}")
+    print(f"  in scope on <2 platforms: {result.out_of_scope}")
+    if result.mismatched:
+        print()
+        print("diverging fixtures (activeness disagrees):")
+        for fid in sorted(result.mismatched)[:40]:
+            verdicts = result.mismatched[fid]
+            label = ", ".join(f"{p}: {verdicts[p]}" for p in sorted(verdicts))
+            print(f"  {fid} — {label}")
+        if len(result.mismatched) > 40:
+            print(f"  … {len(result.mismatched) - 40} more")
+    if result.uniform_inert:
+        print()
+        print("declared values inert on every in-scope platform:")
+        for fid in sorted(result.uniform_inert)[:40]:
+            print(f"  {fid} — value {result.uniform_inert[fid]!r}")
+        if len(result.uniform_inert) > 40:
+            print(f"  … {len(result.uniform_inert) - 40} more")
+
+    path = ce.ledger_path(conformance_dir)
+    ledger = ce.load_ledger(path)
+
+    if args.update:
+        merged = ce.update_ledger(ledger, result)
+        path.write_text(ce.render_ledger(merged), encoding="utf-8")
+        unreviewed = sum(
+            1 for e in merged.values() if e.get("reason") == ce.UNREVIEWED
+        )
+        print()
+        print(
+            f"  ledger written to {path} ({len(merged)} entr(y/ies), "
+            f"{unreviewed} unreviewed)"
+        )
+        return 0
+
+    verdict = ce.check(result, ledger)
+    if verdict.unrecorded:
+        print()
+        print(
+            f"{len(verdict.unrecorded)} finding(s) not recorded in {path.name} — "
+            "fix the platform or record + justify with `jui conformance "
+            "cross-effect --update`:"
+        )
+        for line in verdict.unrecorded[:40]:
+            print(f"  {line}")
+        if len(verdict.unrecorded) > 40:
+            print(f"  … {len(verdict.unrecorded) - 40} more")
+    if verdict.stale:
+        print()
+        print(
+            f"{len(verdict.stale)} ledger entr(y/ies) the measurement no longer "
+            "supports (prune with `jui conformance cross-effect --update`):"
+        )
+        for fid in verdict.stale[:40]:
+            print(f"  {fid}")
+    if verdict.unverified:
+        print()
+        print(
+            f"note: {len(verdict.unverified)} ledger entr(y/ies) could not be "
+            "verified this run (fixture not compared everywhere)"
+        )
+    if verdict.ok:
+        print()
+        print(
+            f"cross-effect OK: no unrecorded findings "
+            f"({verdict.accepted} accepted on ledger)"
+        )
+        return 0
     return 1
 
 
@@ -696,6 +908,7 @@ def _cmd_gate(args: argparse.Namespace) -> int:
             visual=not args.no_visual,
             env=env,
             parity=bool(getattr(args, "parity", False)),
+            cross_effect=bool(getattr(args, "cross_effect", False)),
         )
     except ReportError as e:
         print(f"ERROR: {e}")
@@ -748,5 +961,7 @@ def _cmd_gate(args: argparse.Namespace) -> int:
         checks = "0 mismatch / " + checks
     if not args.no_visual:
         checks += f" / visual + ratchets OK (env {env})"
+    if getattr(args, "cross_effect", False):
+        checks += " / cross-effect OK"
     print(f"conformance gate: OK ({', '.join(selected)} — {checks})")
     return 0
