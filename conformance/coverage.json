@@ -24,7 +24,6 @@
       "component": "Radio",
       "attribute": "selected_icon",
       "platforms": [
-        "ios",
         "android"
       ],
       "reason": "legacy",
