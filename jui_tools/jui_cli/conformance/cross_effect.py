@@ -42,6 +42,18 @@ the measurement no longer supports is stale and must be pruned. The first
 measurement IS the adjudication queue — fix the platform, or justify the
 difference. The machine detects disagreement; deciding what "the same"
 means stays human work.
+
+Adjudicated rulings graduate out of the ledger into the **semantics
+contract** (``shared/core/attribute_semantics.json``, the
+``binding_semantics.json`` pattern): the ruling is declared once, its
+``observable`` block states the expected cross-platform effect, and this
+checker verifies it every run — expected-and-measured is verified,
+expected-but-contradicted is a contract violation (a failure no ledger
+reason can excuse; changing the semantics means changing the contract).
+Contract-covered fixtures need no ledger entry, and one left behind is
+stale. Comments in the toolchains point at the contract instead of
+restating it — comment canon rots (the border ruling reversed direction
+twice in 48 hours while living as comments).
 """
 from __future__ import annotations
 
@@ -67,8 +79,41 @@ UNIFORMLY_INERT = "uniformly-inert"
 UNREVIEWED = "unreviewed-initial-measurement"
 
 
+#: Contract expectation values an ``observable`` block may declare.
+UNIFORMLY_ACTIVE = "uniformly-active"
+CONTRACT_EXPECTATIONS = (UNIFORMLY_INERT, UNIFORMLY_ACTIVE)
+
+CONTRACT_NAME = "attribute_semantics.json"
+
+
 def ledger_path(conformance_dir) -> Path:
     return Path(conformance_dir) / LEDGER_NAME
+
+
+def contract_path(conformance_dir) -> Path:
+    """The semantics contract in the repo layout (shared/core beside conformance/)."""
+    return Path(conformance_dir).parent / "shared" / "core" / CONTRACT_NAME
+
+
+def load_contract(path) -> dict[str, str]:
+    """``{fixture_id: expectation}`` from the contract's ``observable`` blocks.
+
+    Permissive on unknown expectation values so a newer contract does not
+    brick an older checker; the pytest suite is where authoring errors get
+    caught loudly.
+    """
+    path = Path(path)
+    if not path.is_file():
+        return {}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    out: dict[str, str] = {}
+    for entry in (raw.get("semantics") or {}).values():
+        if not isinstance(entry, dict):
+            continue
+        for fid, expected in (entry.get("observable") or {}).items():
+            if expected in CONTRACT_EXPECTATIONS:
+                out[fid] = expected
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -84,6 +129,9 @@ class CrossEffectResult:
     platforms: list[str] = field(default_factory=list)
     #: fixtures whose verdict agrees on every in-scope platform
     consistent: list[str] = field(default_factory=list)
+    #: ``{fixture: agreed verdict}`` for the consistent fixtures — what the
+    #: contract expectations are judged against
+    agreed_verdicts: dict[str, str] = field(default_factory=dict)
     #: ``{fixture: {platform: "active"|"inert"}}`` — the drift suspects
     mismatched: dict[str, dict[str, str]] = field(default_factory=dict)
     #: ``{fixture: declared enum value}`` — consistent, but inert everywhere
@@ -192,6 +240,7 @@ def measure(
         agreed = set(fixture_verdicts.values())
         if len(agreed) == 1:
             result.consistent.append(fid)
+            result.agreed_verdicts[fid] = next(iter(agreed))
             if agreed == {INERT} and fid in enum_values:
                 result.uniform_inert[fid] = enum_values[fid]
         else:
@@ -264,7 +313,11 @@ def render_ledger(entries: dict[str, dict]) -> str:
     return json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
 
 
-def update_ledger(existing: dict[str, dict], result: CrossEffectResult) -> dict[str, dict]:
+def update_ledger(
+    existing: dict[str, dict],
+    result: CrossEffectResult,
+    contract: dict[str, str] | None = None,
+) -> dict[str, dict]:
     """Fold one measurement into the ledger entries.
 
     Measured findings replace their fixtures' entries — an entry whose
@@ -274,10 +327,21 @@ def update_ledger(existing: dict[str, dict], result: CrossEffectResult) -> dict[
     longer flags drop off the ledger. Fixtures the run could not compare
     keep their entries untouched: an unverified assertion is not a resolved
     one.
+
+    Contract-covered fixtures are never written (and existing entries are
+    dropped): a violation of declared semantics cannot be accepted with a
+    ledger reason — either fix the platform or change the contract.
     """
+    covered = set(contract or {})
     compared = set(result.consistent) | set(result.mismatched)
-    merged = {fid: entry for fid, entry in existing.items() if fid not in compared}
+    merged = {
+        fid: entry
+        for fid, entry in existing.items()
+        if fid not in compared and fid not in covered
+    }
     for fid, verdicts in result.mismatched.items():
+        if fid in covered:
+            continue
         prior = existing.get(fid, {})
         fact_holds = prior.get("platforms") == verdicts
         merged[fid] = {
@@ -287,6 +351,8 @@ def update_ledger(existing: dict[str, dict], result: CrossEffectResult) -> dict[
             "note": prior.get("note", "") if fact_holds else "",
         }
     for fid, declared in result.uniform_inert.items():
+        if fid in covered:
+            continue
         prior = existing.get(fid, {})
         fact_holds = (
             prior.get("verdict") == UNIFORMLY_INERT and prior.get("declared") == declared
@@ -319,27 +385,66 @@ class CrossEffectCheck:
     unverified: list[str] = field(default_factory=list)
     #: measured findings covered by a matching ledger entry
     accepted: int = 0
+    #: contract expectations the measurement contradicts — failures no
+    #: ledger reason can excuse (changing the semantics means changing the
+    #: contract, not accepting the violation)
+    contract_violations: list[str] = field(default_factory=list)
+    #: contract expectations measured and holding
+    contract_verified: int = 0
+    #: contract expectations the run could not compare (notice)
+    contract_unverified: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
-        return not self.unrecorded and not self.stale
+        return not self.unrecorded and not self.stale and not self.contract_violations
 
 
 def _format_verdicts(verdicts: dict[str, str]) -> str:
     return ", ".join(f"{p}: {verdicts[p]}" for p in sorted(verdicts))
 
 
-def check(result: CrossEffectResult, ledger: dict[str, dict]) -> CrossEffectCheck:
-    """Judge one measurement against the ledger. Pure.
+def check(
+    result: CrossEffectResult,
+    ledger: dict[str, dict],
+    contract: dict[str, str] | None = None,
+) -> CrossEffectCheck:
+    """Judge one measurement against the ledger and the semantics contract. Pure.
 
     An entry is accepted only while it records the measured fact: a
     divergence entry whose pattern changed, or a uniformly-inert entry whose
     fixture now diverges (and vice versa), justified something else — the
     finding is unrecorded again and the obsolete entry is stale.
+
+    A contract-covered fixture is judged against the declared semantics
+    instead of the ledger: measurement holding the expectation is verified,
+    contradicting it is a violation, and a ledger entry left behind for a
+    covered fixture is stale (the contract is now the record).
     """
+    contract = contract or {}
+    covered = set(contract)
     verdict = CrossEffectCheck()
 
+    for fid, expected in sorted(contract.items()):
+        if fid in result.mismatched:
+            verdict.contract_violations.append(
+                f"{fid}: contract expects {expected}, measured diverging "
+                f"({_format_verdicts(result.mismatched[fid])})"
+            )
+        elif fid in result.agreed_verdicts:
+            wanted = INERT if expected == UNIFORMLY_INERT else ACTIVE
+            agreed = result.agreed_verdicts[fid]
+            if agreed == wanted:
+                verdict.contract_verified += 1
+            else:
+                verdict.contract_violations.append(
+                    f"{fid}: contract expects {expected}, measured uniformly {agreed}"
+                )
+        else:
+            verdict.contract_unverified.append(fid)
+
     for fid, verdicts in sorted(result.mismatched.items()):
+        if fid in covered:
+            continue  # judged as a contract violation above
         entry = ledger.get(fid)
         if entry is not None and entry.get("platforms") == verdicts:
             verdict.accepted += 1
@@ -357,6 +462,8 @@ def check(result: CrossEffectResult, ledger: dict[str, dict]) -> CrossEffectChec
             verdict.unrecorded.append(f"{fid} ({_format_verdicts(verdicts)})")
 
     for fid, declared in sorted(result.uniform_inert.items()):
+        if fid in covered:
+            continue  # the contract is the record for this fixture
         entry = ledger.get(fid)
         if (
             entry is not None
@@ -373,6 +480,11 @@ def check(result: CrossEffectResult, ledger: dict[str, dict]) -> CrossEffectChec
     compared = set(result.consistent) | set(result.mismatched)
     for fid in sorted(ledger):
         entry = ledger[fid]
+        if fid in covered:
+            # Redundant regardless of what this run measured — the contract
+            # supersedes the ledger for this fixture.
+            verdict.stale.append(fid)
+            continue
         if fid not in compared:
             verdict.unverified.append(fid)
             continue

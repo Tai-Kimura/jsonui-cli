@@ -154,8 +154,11 @@ def evaluate(
             ledger = cross_effect_mod.load_ledger(
                 cross_effect_mod.ledger_path(conformance_dir)
             )
+            contract = cross_effect_mod.load_contract(
+                cross_effect_mod.contract_path(conformance_dir)
+            )
             problems, notices = judge_cross_effect(
-                summary, platforms, ledger, env=env
+                summary, platforms, ledger, contract=contract, env=env
             )
             outcome.problems.extend(problems)
             outcome.notices.extend(notices)
@@ -315,6 +318,7 @@ def judge_cross_effect(
     platforms: Sequence[str],
     ledger: dict,
     *,
+    contract: dict | None = None,
     env: str = DEFAULT_ENV,
 ) -> tuple[list[str], list[str]]:
     """Judge cross-platform activeness agreement. Pure: (problems, notices).
@@ -342,7 +346,7 @@ def judge_cross_effect(
         selected,
         summary.effect_enum_values,
     )
-    verdict = cross_effect_mod.check(result, ledger)
+    verdict = cross_effect_mod.check(result, ledger, contract)
 
     def _report(message: str) -> None:
         if env == DEFAULT_ENV:
@@ -353,6 +357,23 @@ def judge_cross_effect(
                 + f" — activeness is asserted local-env; informational under env '{env}'"
             )
 
+    if verdict.contract_violations:
+        shown = "; ".join(verdict.contract_violations[:5]) + (
+            " …" if len(verdict.contract_violations) > 5 else ""
+        )
+        _report(
+            f"{len(verdict.contract_violations)} semantics-contract violation(s) "
+            f"({cross_effect_mod.CONTRACT_NAME}) — fix the platform or change the "
+            f"contract, a ledger reason cannot excuse these: {shown}"
+        )
+    if verdict.contract_unverified:
+        shown = ", ".join(verdict.contract_unverified[:5]) + (
+            " …" if len(verdict.contract_unverified) > 5 else ""
+        )
+        notices.append(
+            f"{len(verdict.contract_unverified)} contract expectation(s) could not "
+            f"be verified this run (fixture not compared everywhere): {shown}"
+        )
     if verdict.unrecorded:
         shown = "; ".join(verdict.unrecorded[:5]) + (
             " …" if len(verdict.unrecorded) > 5 else ""
@@ -381,6 +402,7 @@ def judge_cross_effect(
         judged = len(result.consistent) + len(result.mismatched)
         notices.append(
             f"cross-effect OK ({', '.join(selected)}): {judged} fixture(s) judged, "
-            f"{verdict.accepted} accepted finding(s) on ledger"
+            f"{verdict.accepted} accepted finding(s) on ledger, "
+            f"{verdict.contract_verified} contract expectation(s) verified"
         )
     return problems, notices

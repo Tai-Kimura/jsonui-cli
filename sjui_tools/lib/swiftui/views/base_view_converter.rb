@@ -441,9 +441,9 @@ module SjuiTools
 
           # ボーダー（cornerRadiusの直後、marginsの前に適用）
           # Dynamic mode: CommonModifiers.swift line 59
-          # Both attributes are required to draw: borderWidth alone means no
-          # border (canonical cross-platform semantics — android draws
-          # nothing either, and the ios dynamic path guards the same way).
+          # Both-attributes guard — the canonical ruling lives in
+          # shared/core/attribute_semantics.json (border.widthAlone), verified
+          # by `jui conformance gate --cross-effect`.
           if @component['borderWidth'] && @component['borderColor']
             border_color_value = @component['borderColor']
             # Skip if borderColor is a binding - handled by view_binding_handler

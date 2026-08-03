@@ -324,6 +324,104 @@ class UpdateLedgerTest(unittest.TestCase):
         self.assertEqual(again["f/u"]["reason"], "value is the default")
 
 
+class ContractTest(unittest.TestCase):
+    """The semantics contract supersedes the ledger for covered fixtures."""
+
+    CONTRACT = {"common/borderWidth__static": ce.UNIFORMLY_INERT}
+
+    def test_expectation_holding_is_verified(self):
+        result = _result(
+            consistent=["common/borderWidth__static"],
+            agreed_verdicts={"common/borderWidth__static": ce.INERT},
+        )
+        verdict = ce.check(result, {}, self.CONTRACT)
+        self.assertTrue(verdict.ok)
+        self.assertEqual(verdict.contract_verified, 1)
+
+    def test_uniformly_active_measurement_violates_inert_expectation(self):
+        result = _result(
+            consistent=["common/borderWidth__static"],
+            agreed_verdicts={"common/borderWidth__static": ce.ACTIVE},
+        )
+        verdict = ce.check(result, {}, self.CONTRACT)
+        self.assertFalse(verdict.ok)
+        self.assertIn("measured uniformly active", verdict.contract_violations[0])
+
+    def test_divergence_on_covered_fixture_is_a_violation_not_a_finding(self):
+        result = _result(mismatched={"common/borderWidth__static": dict(DIVERGENCE)})
+        verdict = ce.check(result, {}, self.CONTRACT)
+        self.assertEqual(len(verdict.contract_violations), 1)
+        self.assertEqual(verdict.unrecorded, [])
+
+    def test_covered_uniform_inert_needs_no_ledger_entry(self):
+        # An enum fixture the contract expects inert must not demand a
+        # ledger reason on top — the contract is the record.
+        contract = {"f/u": ce.UNIFORMLY_INERT}
+        result = _result(
+            consistent=["f/u"],
+            agreed_verdicts={"f/u": ce.INERT},
+            uniform_inert={"f/u": "vertical"},
+        )
+        verdict = ce.check(result, {}, contract)
+        self.assertTrue(verdict.ok)
+        self.assertEqual(verdict.unrecorded, [])
+        self.assertEqual(verdict.contract_verified, 1)
+
+    def test_ledger_entry_for_covered_fixture_is_stale(self):
+        ledger = {"common/borderWidth__static": {
+            "fixture": "common/borderWidth__static",
+            "platforms": dict(DIVERGENCE), "reason": "pre-contract"}}
+        result = _result(
+            consistent=["common/borderWidth__static"],
+            agreed_verdicts={"common/borderWidth__static": ce.INERT},
+        )
+        verdict = ce.check(result, ledger, self.CONTRACT)
+        self.assertEqual(verdict.stale, ["common/borderWidth__static"])
+
+    def test_uncompared_expectation_is_unverified_notice(self):
+        verdict = ce.check(_result(), {}, self.CONTRACT)
+        self.assertTrue(verdict.ok)
+        self.assertEqual(
+            verdict.contract_unverified, ["common/borderWidth__static"]
+        )
+
+    def test_update_ledger_never_writes_covered_fixtures(self):
+        result = _result(mismatched={"common/borderWidth__static": dict(DIVERGENCE)})
+        existing = {"common/borderWidth__static": {
+            "fixture": "common/borderWidth__static",
+            "platforms": dict(DIVERGENCE), "reason": "pre-contract"}}
+        merged = ce.update_ledger(existing, result, self.CONTRACT)
+        self.assertEqual(merged, {})
+
+    def test_load_contract_reads_observable_blocks(self):
+        doc = {
+            "version": 1,
+            "semantics": {
+                "border": {
+                    "widthAlone": "no-draw",
+                    "observable": {"common/borderWidth__static": "uniformly-inert"},
+                },
+                "unknown": {"observable": {"f/x": "sometimes-active"}},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / ce.CONTRACT_NAME
+            path.write_text(json.dumps(doc), encoding="utf-8")
+            contract = ce.load_contract(path)
+        self.assertEqual(contract, {"common/borderWidth__static": ce.UNIFORMLY_INERT})
+
+    def test_repo_contract_parses_and_covers_border(self):
+        # The committed pilot entry must stay machine-readable.
+        repo_contract = (
+            Path(__file__).resolve().parents[2]
+            / "shared" / "core" / ce.CONTRACT_NAME
+        )
+        contract = ce.load_contract(repo_contract)
+        self.assertEqual(
+            contract.get("common/borderWidth__static"), ce.UNIFORMLY_INERT
+        )
+
+
 def _summary(**overrides) -> ReportSummary:
     summary = ReportSummary(out_path=Path("REPORT.md"), platforms=list(ALL))
     summary.effect_scope = {"f/x": list(ALL)}
@@ -376,6 +474,19 @@ class JudgeCrossEffectTest(unittest.TestCase):
         problems, notices = judge_cross_effect(_summary(), ["ios", "android"], {})
         self.assertEqual(problems, [])
         self.assertTrue(any("cross-effect OK" in n for n in notices))
+
+    def test_contract_violation_is_a_problem_under_local(self):
+        contract = {"f/x": ce.UNIFORMLY_INERT}
+        problems, _ = judge_cross_effect(_summary(), ALL, {}, contract=contract)
+        self.assertTrue(any("semantics-contract violation" in p for p in problems))
+
+    def test_contract_violation_downgrades_off_local(self):
+        contract = {"f/x": ce.UNIFORMLY_INERT}
+        problems, notices = judge_cross_effect(
+            _summary(), ALL, {}, contract=contract, env="ci"
+        )
+        self.assertEqual(problems, [])
+        self.assertTrue(any("semantics-contract violation" in n for n in notices))
 
 
 if __name__ == "__main__":

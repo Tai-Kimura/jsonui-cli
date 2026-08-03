@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "title": "JsonUI attribute semantics — observable cross-platform contract",
+  "notes": "Hand-authored canonical rulings (semantic-drift track 33, established 2026-08-03). Each adjudicated attribute-semantics ruling is declared ONCE here; the 'observable' block states the cross-platform effect expectation that `jui conformance gate --cross-effect` verifies mechanically against every platform's control-diff verdicts (expectation values: 'uniformly-inert' = the fixture must render identically to its control on every in-scope platform; 'uniformly-active' = it must differ on every in-scope platform). Toolchain code comments must POINT here instead of restating the rule — comment canon rots (the border ruling reversed direction twice within 48 hours while living as comments in three toolchains). Canonical choices are design decisions, not majority votes of existing implementations. Add one entry per ruling as the cross-effect adjudication queue is consumed.",
+  "semantics": {
+    "border": {
+      "widthAlone": "no-draw",
+      "ruling": "A border is drawn only when BOTH borderWidth and borderColor are declared; borderWidth alone renders nothing on every platform — there is no default border color. (2026-08-03 user ruling; supersedes the transient gray-default direction of d2c8628, unified across toolchains in 3e87b96.)",
+      "observable": {
+        "common/borderWidth__static": "uniformly-inert"
+      }
+    }
+  }
+}

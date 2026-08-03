@@ -334,6 +334,15 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         ),
     )
     cross.add_argument(
+        "--semantics",
+        default=None,
+        help=(
+            "Path to the attribute-semantics contract; adjudicated rulings are "
+            "verified from it instead of the ledger "
+            f"(default: {_REPO_ROOT / 'shared' / 'core' / 'attribute_semantics.json'})"
+        ),
+    )
+    cross.add_argument(
         "--update",
         action="store_true",
         help=(
@@ -467,6 +476,13 @@ def _cmd_cross_effect(args: argparse.Namespace) -> int:
             "did not participate"
         )
 
+    semantics_path = (
+        Path(args.semantics)
+        if getattr(args, "semantics", None)
+        else _REPO_ROOT / "shared" / "core" / ce.CONTRACT_NAME
+    )
+    contract = ce.load_contract(semantics_path)
+
     result = ce.measure(
         ce.scope_from_manifest(manifest),
         ce.verdicts_from_diffs(diffs),
@@ -505,7 +521,7 @@ def _cmd_cross_effect(args: argparse.Namespace) -> int:
     ledger = ce.load_ledger(path)
 
     if args.update:
-        merged = ce.update_ledger(ledger, result)
+        merged = ce.update_ledger(ledger, result, contract)
         path.write_text(ce.render_ledger(merged), encoding="utf-8")
         unreviewed = sum(
             1 for e in merged.values() if e.get("reason") == ce.UNREVIEWED
@@ -517,7 +533,22 @@ def _cmd_cross_effect(args: argparse.Namespace) -> int:
         )
         return 0
 
-    verdict = ce.check(result, ledger)
+    verdict = ce.check(result, ledger, contract)
+    if verdict.contract_violations:
+        print()
+        print(
+            f"{len(verdict.contract_violations)} semantics-contract violation(s) "
+            f"({semantics_path.name}) — fix the platform or change the contract, "
+            "a ledger reason cannot excuse these:"
+        )
+        for line in verdict.contract_violations[:40]:
+            print(f"  {line}")
+    if verdict.contract_unverified:
+        print()
+        print(
+            f"note: {len(verdict.contract_unverified)} contract expectation(s) "
+            "could not be verified this run (fixture not compared everywhere)"
+        )
     if verdict.unrecorded:
         print()
         print(
@@ -547,7 +578,8 @@ def _cmd_cross_effect(args: argparse.Namespace) -> int:
         print()
         print(
             f"cross-effect OK: no unrecorded findings "
-            f"({verdict.accepted} accepted on ledger)"
+            f"({verdict.accepted} accepted on ledger, "
+            f"{verdict.contract_verified} contract expectation(s) verified)"
         )
         return 0
     return 1

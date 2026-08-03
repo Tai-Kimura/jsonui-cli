@@ -263,10 +263,10 @@ module RjuiTools
           # Shadow
           classes << TailwindMapper.map_shadow(attributes['shadow']) if attributes['shadow']
 
-          # Border — both attributes are required to draw: borderWidth alone
-          # means no border (canonical cross-platform semantics; android and
-          # ios guard the same way). Tailwind preflight would otherwise give
-          # a width-only declaration its default border color.
+          # Border — both-attributes guard; the canonical ruling lives in
+          # shared/core/attribute_semantics.json (border.widthAlone), verified
+          # by `jui conformance gate --cross-effect`. Tailwind preflight would
+          # otherwise give a width-only declaration its default border color.
           if attributes['borderWidth'] && attributes['borderColor']
             border_width_binding = attributes['borderWidth'] && has_binding?(attributes['borderWidth'])
             border_color_binding = attributes['borderColor'] && has_binding?(attributes['borderColor'])
