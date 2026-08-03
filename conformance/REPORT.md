@@ -70,7 +70,7 @@ Each visual fixture is compared against its **control** — the same layout with
 
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
-| android | 391 | 155 | 236 | 0 | 0 |
+| android | 391 | 160 | 231 | 0 | 0 |
 | ios | 422 | 171 | 251 | 0 | 0 |
 | web | 405 | 185 | 220 | 0 | 0 |
 
@@ -78,7 +78,7 @@ Each visual fixture is compared against its **control** — the same layout with
 
 Pixel comparison across platforms is out of scope by design, but each platform's control-diff verdict — *did the attribute change the render?* — is platform-independent. A fixture whose activeness disagrees across the platforms its attribute is declared for is a semantic-drift suspect, and an SSoT-enumerated value that is inert on **every** platform is flagged uniformly-inert (default rendering, or dead everywhere). Only fixtures compared on **all** their in-scope platforms are judged; findings are accepted (with a reason) in `cross_effect.json` and enforced by `jui conformance gate --cross-effect`.
 
-- Compared on all in-scope platforms: 394 (consistent: 234, **diverging: 160**, **uniformly-inert declared values: 63**) · not compared everywhere: 0 · in scope on <2 platforms: 134
+- Compared on all in-scope platforms: 394 (consistent: 235, **diverging: 159**, **uniformly-inert declared values: 64**) · not compared everywhere: 0 · in scope on <2 platforms: 134
 
 | Fixture | android | ios | web |
 |---|---|---|---|
@@ -100,8 +100,6 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `Collection/layout__flow_2` | active | active | inert |
 | `Collection/lazy__eager` | inert | active | inert |
 | `Collection/lazy__none` | inert | active | inert |
-| `GradientView/gradientDirection__oblique` | inert | active | active |
-| `GradientView/gradientDirection__vertical` | active | inert | inert |
 | `IconLabel/font__static` | inert | inert | active |
 | `IconLabel/iconMargin__static` | inert | inert | active |
 | `IconLabel/iconPosition__bottom` | active | inert | active |
@@ -127,9 +125,10 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `Label/autoShrink__true` | active | inert | active |
 | `Label/edgeInset__static` | active | inert | active |
 | `Label/fontFamily__static` | inert | active | active |
-| `Label/highlightAttributes__static` | inert | active | active |
-| `Label/highlightColor__static` | inert | active | active |
 | `Label/lineBreakMode__head` | inert | inert | active |
+| `Label/lineHeightMultiple__static` | active | inert | inert |
+| `Label/lineSpacing__static` | active | inert | inert |
+| `Label/linkable__true` | active | inert | inert |
 | `Label/minimumScaleFactor__static` | active | inert | inert |
 | `Label/textAlign__left` | inert | active | inert |
 | `Label/textAlign__left_2` | inert | active | inert |
@@ -193,6 +192,7 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `TextField/textAlign__center_2` | inert | active | active |
 | `TextField/textAlign__right` | inert | active | active |
 | `TextField/textAlign__right_2` | inert | active | active |
+| `TextView/flexible__true` | inert | active | active |
 | `TextView/fontColor__static` | inert | inert | active |
 | `TextView/fontFamily__static` | inert | inert | active |
 | `TextView/fontSize__static` | inert | active | active |
@@ -206,7 +206,6 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `TextView/textAlign__right` | inert | inert | active |
 | `TextView/textAlign__right_2` | inert | inert | active |
 | `View/direction__righttoleft` | inert | active | inert |
-| `Web/html__static` | inert | active | active |
 | `common/alignBottom__true` | active | inert | inert |
 | `common/alignLeftView__static` | inert | inert | active |
 | `common/alignRight__true` | active | inert | inert |
@@ -255,6 +254,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 - `Collection/scrollAnchor__bottom` (value `'bottom'`)
 - `Collection/scrollAnchor__center` (value `'center'`)
 - `Collection/scrollAnchor__top` (value `'top'`)
+- `GradientView/gradientDirection__vertical` (value `'Vertical'`)
 - `IconLabel/iconPosition__left` (value `'Left'`)
 - `Image/renderingMode__original` (value `'original'`)
 - `Label/lineBreakMode__char` (value `'Char'`)

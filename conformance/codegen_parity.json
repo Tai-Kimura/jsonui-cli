@@ -669,60 +669,6 @@
       "note": "reason inherited from the local-env entry (identical 425/74 split both envs — drift is pipeline-semantic, not environmental)"
     },
     {
-      "screenshot": "Blur_effectStyle__dark.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 17,
-      "reason": "kjui-codegen-blur-approximation: the canonical 'Blur' type now dispatches (only the 'BlurView' alias used to), but the codegen BlurviewComponent approximates the effect while dynamic renders the real haze surface — residual visual difference",
-      "note": ""
-    },
-    {
-      "screenshot": "Blur_effectStyle__extralight.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 10,
-      "reason": "approximation",
-      "note": "Blur approximation family (same as effectStyle dark): the dynamic renderer and kjui codegen approximate UIKit blur styles with different Compose blur/tint stacks; extralight hovers at the threshold (d=10) and joined the ledger on the 2026-08-03 re-bake."
-    },
-    {
-      "screenshot": "GradientView_gradient__static.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 19,
-      "reason": "kjui-codegen-gradientview-placement: declared gradient colors/direction now render on both paths (the kotlin pair used to drop them); the residual is placement only — the codegen box renders offset (trailing/lower) vs dynamic's leading placement",
-      "note": ""
-    },
-    {
-      "screenshot": "GradientView_locations__static.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 19,
-      "reason": "kjui-codegen-gradientview-placement: declared gradient colors/direction now render on both paths (the kotlin pair used to drop them); the residual is placement only — the codegen box renders offset (trailing/lower) vs dynamic's leading placement",
-      "note": ""
-    },
-    {
-      "screenshot": "Label_edgeInset__static.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 12,
-      "reason": "kjui-codegen-label-render: edgeInset positioning and highlightAttributes applied statically (codegen shows highlight color in the unpressed state — codegen-side suspect) — small Label family",
-      "note": ""
-    },
-    {
-      "screenshot": "Label_highlightAttributes__static.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 22,
-      "reason": "kjui-codegen-label-render: edgeInset positioning and highlightAttributes applied statically (codegen shows highlight color in the unpressed state — codegen-side suspect) — small Label family",
-      "note": ""
-    },
-    {
       "screenshot": "TabView_selectedIndex__alias_selectedTabIndex.png",
       "platform": "android",
       "env": "local",
@@ -783,51 +729,6 @@
       "status": "mismatch",
       "distance": 11,
       "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
-      "note": ""
-    },
-    {
-      "screenshot": "TextView_flexible__true.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 9,
-      "reason": "textview-wrapper divergence (codegen editor layout vs dynamic) — systematic family, converter fix tracked",
-      "note": ""
-    },
-    {
-      "screenshot": "Web_html__static.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 10,
-      "reason": "kjui-codegen-web-render: inline html/content surface not rendered by the codegen host path (dynamic shows the web content)",
-      "note": ""
-    },
-    {
-      "screenshot": "common_maxWidth__static.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 51,
-      "reason": "kjui-codegen-sizing: container width under maxWidth/paddingEnd clamps differently (codegen narrower/shifted) — android analog of the ios container-sizing family",
-      "note": ""
-    },
-    {
-      "screenshot": "common_paddingEnd__static.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 15,
-      "reason": "kjui-codegen-sizing: container width under maxWidth/paddingEnd clamps differently (codegen narrower/shifted) — android analog of the ios container-sizing family",
-      "note": ""
-    },
-    {
-      "screenshot": "control_GradientView.png",
-      "platform": "android",
-      "env": "local",
-      "status": "mismatch",
-      "distance": 19,
-      "reason": "kjui-codegen-gradientview-placement: declared gradient colors/direction now render on both paths (the kotlin pair used to drop them); the residual is placement only — the codegen box renders offset (trailing/lower) vs dynamic's leading placement",
       "note": ""
     },
     {

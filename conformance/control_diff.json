@@ -301,14 +301,9 @@
     {
       "fixture": "GradientView/gradientDirection__oblique",
       "platforms": [
+        "android",
         "ios",
         "web"
-      ]
-    },
-    {
-      "fixture": "GradientView/gradientDirection__vertical",
-      "platforms": [
-        "android"
       ]
     },
     {
@@ -580,6 +575,7 @@
     {
       "fixture": "Label/highlightAttributes__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ]
@@ -587,6 +583,7 @@
     {
       "fixture": "Label/highlightColor__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ]
@@ -598,9 +595,27 @@
       ]
     },
     {
+      "fixture": "Label/lineHeightMultiple__static",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
       "fixture": "Label/lineHeight__static",
       "platforms": [
         "web"
+      ]
+    },
+    {
+      "fixture": "Label/lineSpacing__static",
+      "platforms": [
+        "android"
+      ]
+    },
+    {
+      "fixture": "Label/linkable__true",
+      "platforms": [
+        "android"
       ]
     },
     {
@@ -1271,7 +1286,6 @@
     {
       "fixture": "TextView/flexible__true",
       "platforms": [
-        "android",
         "ios",
         "web"
       ]
@@ -1437,6 +1451,7 @@
     {
       "fixture": "Web/html__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ]
