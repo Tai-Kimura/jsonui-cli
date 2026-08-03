@@ -145,6 +145,7 @@ module KjuiTools
             LaunchedEffect: "import androidx.compose.runtime.LaunchedEffect",
             launched_effect: "import androidx.compose.runtime.LaunchedEffect",
             disposable_effect: "import androidx.compose.runtime.DisposableEffect",
+            alignment: "import androidx.compose.ui.Alignment",
             bias_alignment: "import androidx.compose.ui.BiasAlignment",
             circle_shape: "import androidx.compose.foundation.shape.CircleShape",
             alpha: "import androidx.compose.ui.draw.alpha",

@@ -53,7 +53,17 @@ module SjuiTools
             @modifier_bag.append(:component_specific, ".renderingMode(#{mode})")
           end
 
-          @modifier_bag.append(:component_specific, ".resizable()")
+          mode_raw = @component['contentMode'].to_s.downcase
+          positional_alignment = {
+            'center' => '.center', 'top' => '.top', 'bottom' => '.bottom',
+            'left' => '.leading', 'right' => '.trailing'
+          }[mode_raw]
+
+          # Positional contentModes draw the image UNSCALED, aligned inside
+          # the declared frame and cropped (UIKit contentMode positions —
+          # 33 cross-effect: both mobile platforms dropped them to fit).
+          # No .resizable(): intrinsic size is the point.
+          @modifier_bag.append(:component_specific, ".resizable()") unless positional_alignment
 
           apply_highlight_src
 
@@ -62,8 +72,14 @@ module SjuiTools
           # image.fill = stretch, shared/core/attribute_semantics.json;
           # SwiftUI's ContentMode enum has no stretch member, absence of the
           # modifier IS the spelling).
-          mode_raw = @component['contentMode'].to_s.downcase
-          if %w[fill scaletofill].include?(mode_raw)
+          if positional_alignment
+            w = @component['width']
+            h = @component['height']
+            if w.is_a?(Numeric) && h.is_a?(Numeric)
+              @modifier_bag.append(:component_specific, ".frame(width: #{w}, height: #{h}, alignment: #{positional_alignment})")
+              @modifier_bag.append(:component_specific, ".clipped()")
+            end
+          elsif %w[fill scaletofill].include?(mode_raw)
             # stretch: no aspectRatio modifier
           elsif @component['contentMode']
             content_mode = map_content_mode(@component['contentMode'])

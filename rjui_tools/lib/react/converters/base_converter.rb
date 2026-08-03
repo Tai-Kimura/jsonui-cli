@@ -117,10 +117,16 @@ module RjuiTools
           # prop via attribute_definitions/<Component>.json — otherwise the
           # wrapper <div> steals keys like CodeBlock#maxHeight that the
           # custom component uses for its own purpose.
+          # An EXPLICIT numeric size wins over its max bound (canonical
+          # size.maxBoundsClampFill corollary — kjui/ios pin the declared
+          # dimension and leave the bound inert; CSS max-* would clamp it,
+          # which the 33 geometry diagnosis measured as a web-only shrink).
+          explicit_w = attributes['width'].is_a?(Numeric)
+          explicit_h = attributes['height'].is_a?(Numeric)
           classes << TailwindMapper.map_min_width(attributes['minWidth'])   if attributes['minWidth']   && decoration_allowed?('minWidth')
-          classes << TailwindMapper.map_max_width(attributes['maxWidth'])   if attributes['maxWidth']   && decoration_allowed?('maxWidth')
+          classes << TailwindMapper.map_max_width(attributes['maxWidth'])   if attributes['maxWidth']   && !explicit_w && decoration_allowed?('maxWidth')
           classes << TailwindMapper.map_min_height(attributes['minHeight']) if attributes['minHeight'] && decoration_allowed?('minHeight')
-          classes << TailwindMapper.map_max_height(attributes['maxHeight']) if attributes['maxHeight'] && decoration_allowed?('maxHeight')
+          classes << TailwindMapper.map_max_height(attributes['maxHeight']) if attributes['maxHeight'] && !explicit_h && decoration_allowed?('maxHeight')
 
           # Padding (array format)
           classes << TailwindMapper.map_padding(attributes['padding'] || attributes['paddings'])

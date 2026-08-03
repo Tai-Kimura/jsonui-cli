@@ -88,15 +88,25 @@ module KjuiTools
           # Content mode (case-insensitive)
           if json_data['contentMode']
             required_imports&.add(:content_scale)
-            case json_data['contentMode'].to_s.downcase
+            mode = json_data['contentMode'].to_s.downcase
+            case mode
             when 'aspectfill'
               code += ",\n" + indent("contentScale = ContentScale.Crop", depth + 1)
             when 'aspectfit'
               code += ",\n" + indent("contentScale = ContentScale.Fit", depth + 1)
             when 'fill', 'scaletofill'
               code += ",\n" + indent("contentScale = ContentScale.FillBounds", depth + 1)
-            when 'center'
+            when 'center', 'top', 'bottom', 'left', 'right'
+              # Positional modes draw unscaled and aligned (UIKit contentMode
+              # positions — mirrors the dynamic component).
               code += ",\n" + indent("contentScale = ContentScale.None", depth + 1)
+              alignment = {
+                'top' => 'Alignment.TopCenter', 'bottom' => 'Alignment.BottomCenter',
+                'left' => 'Alignment.CenterStart', 'right' => 'Alignment.CenterEnd',
+                'center' => 'Alignment.Center'
+              }[mode]
+              required_imports&.add(:alignment)
+              code += ",\n" + indent("alignment = #{alignment}", depth + 1)
             end
           end
           
