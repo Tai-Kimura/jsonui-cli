@@ -49,8 +49,9 @@ RSpec.describe RjuiTools::React::Converters::ProgressConverter do
       it 'applies progress tint color' do
         converter = create_converter({ 'class' => 'Progress', 'value' => 50, 'tintColor' => '#FF5500' })
         result = converter.convert
-        expect(result).to include('[&::-webkit-progress-value]:bg-[#FF5500]')
-        expect(result).to include('[&::-moz-progress-bar]:bg-[#FF5500]')
+        expect(result).to include('[&::-webkit-progress-value]:bg-[color:var(--pv-color)]')
+        expect(result).to include("'--pv-color'")
+        expect(result).to include('[&::-moz-progress-bar]:bg-[color:var(--pv-color)]')
       end
     end
 
@@ -58,7 +59,7 @@ RSpec.describe RjuiTools::React::Converters::ProgressConverter do
       it 'applies progress tint color' do
         converter = create_converter({ 'class' => 'Progress', 'value' => 50, 'progressTintColor' => '#00FF00' })
         result = converter.convert
-        expect(result).to include('[&::-webkit-progress-value]:bg-[#00FF00]')
+        expect(result).to include('[&::-webkit-progress-value]:bg-[color:var(--pv-color)]')
       end
     end
 
@@ -66,7 +67,8 @@ RSpec.describe RjuiTools::React::Converters::ProgressConverter do
       it 'applies track background color' do
         converter = create_converter({ 'class' => 'Progress', 'value' => 50, 'trackTintColor' => '#EEEEEE' })
         result = converter.convert
-        expect(result).to include('[&::-webkit-progress-bar]:bg-[#EEEEEE]')
+        expect(result).to include('[&::-webkit-progress-bar]:bg-[color:var(--pb-color)]')
+        expect(result).to include("'--pb-color'")
       end
     end
 

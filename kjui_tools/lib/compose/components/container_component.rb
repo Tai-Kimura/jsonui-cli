@@ -91,7 +91,7 @@ module KjuiTools
           # since it is the primary spelling.
           gravity = json_data['gravity'] || alignment_as_gravity(json_data['alignment'])
           if gravity
-            gravity_code = add_gravity_settings(layout, gravity, depth)
+            gravity_code = add_gravity_settings(layout, gravity, depth, json_data)
             # Each clause is emitted with a leading comma, which is only correct
             # when an argument precedes it. A container with gravity but no
             # modifiers has none — that emitted `Column(,`, which does not
@@ -216,7 +216,7 @@ module KjuiTools
           ALIGNMENT_GRAVITY[alignment.downcase]
         end
 
-        def self.add_gravity_settings(layout, gravity, depth)
+        def self.add_gravity_settings(layout, gravity, depth, json_data = {})
           code = ""
 
           # Normalize gravity to array of strings
@@ -227,6 +227,12 @@ module KjuiTools
                           end
 
           if layout == 'Column'
+            # RTL on a column mirrors the inline axis — children anchor to
+            # the trailing edge (matches ios and the dynamic
+            # LocalLayoutDirection path; 33 cross-effect).
+            if json_data['direction'] == 'rightToLeft' && gravity_parts.empty?
+              code += ",\n" + indent("horizontalAlignment = Alignment.End", depth + 1)
+            end
             gravity_parts.each do |g|
               case g
               when 'top'

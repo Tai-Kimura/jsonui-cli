@@ -242,10 +242,13 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       checked
       enabled
       group
+      icon
       items
       label
       onValueChange
+      selectedIcon
       selectedValue
+      selected_icon
       spacing
       text
       tintColor
@@ -315,18 +318,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       selectable
       text
     ],
-    'toggle_converter.rb' => %w[
-      checked
-      enabled
-      isOn
-      label
-      onTintColor
-      onValueChange
-      spacing
-      text
-      tint
-      tintColor
-    ],
+    'toggle_converter.rb' => %w[checked enabled icon isOn label onTintColor onValueChange selectedIcon spacing src text tint tintColor],
     'view_converter.rb' => %w[bottomPadding centerHorizontal centerInParent centerVertical distribution draggable flexWrap height highlightBackground highlighted leftPadding onClick onDragEnter onDragLeave onDragOver onDragStart onDrop onLongPress onPan onPinch onclick orientation padding paddingBottom paddingEnd paddingLeft paddingRight paddingStart paddingTop paddings rightPadding safeAreaInsetPositions spacing tapBackground topPadding],
     'web_converter.rb' => %w[accessibilityLabel allow allowCamera allowDownloads allowGeolocation allowMicrophone allowModals allowPopupsToEscapeSandbox allowsFullScreen allowsInlineMediaPlayback html htmlContent javaScriptCanOpenWindowsAutomatically javaScriptEnabled lazyLoad loading sandbox scrollEnabled src title url]
   }.freeze
@@ -355,7 +347,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'tab_view_converter.rb' => %w[],
     'text_field_converter.rb' => %w[autoFocus becomeFirstResponder editable name onChange readOnly],
     'text_view_converter.rb' => %w[autoFocus becomeFirstResponder lines name onChange placeholderColor readOnly],
-    'toggle_converter.rb' => %w[label spacing text],
+    'toggle_converter.rb' => %w[icon label selectedIcon spacing src text],
     'view_converter.rb' => %w[],
     'web_converter.rb' => %w[accessibilityLabel allowCamera allowDownloads allowGeolocation allowMicrophone allowModals allowPopupsToEscapeSandbox allowsFullScreen allowsInlineMediaPlayback htmlContent javaScriptCanOpenWindowsAutomatically javaScriptEnabled lazyLoad loading scrollEnabled src title]
   }.freeze

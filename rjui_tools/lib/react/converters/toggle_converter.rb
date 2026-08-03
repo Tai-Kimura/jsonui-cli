@@ -15,7 +15,10 @@ module RjuiTools
           id_attr = build_id_attr
           testid_attr = build_testid_attr
           tag_attr = build_tag_attr
-          text = attributes['text'] || attributes['label'] || ''
+          # 'label' is the CheckBox-specific spelling and wins over the
+          # generic text (kjui reads the same order — 33 cross-effect
+          # adjudication: label overrides text on every platform).
+          text = attributes['label'] || attributes['text'] || ''
 
           # Get state binding
           checked_attr = build_checked_attr
@@ -32,12 +35,29 @@ module RjuiTools
             # Checkbox with label. The layout `id` lands on the <label>
             # wrapper, so reflect the disabled state there too (the native
             # `disabled` attr only exists on the inner <input>).
-            <<~JSX.chomp
-              #{indent_str(indent)}<label#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
-              #{indent_str(indent + 2)}<input type="checkbox"#{checked_attr}#{on_change}#{disabled_attr}#{checkbox_style} />
-              #{indent_str(indent + 2)}<span>#{convert_text_binding(text)}</span>
-              #{indent_str(indent)}</label>
-            JSX
+            # Custom icon checkbox: hidden input + state-swapped images
+            # ('src' is the unchecked spelling, selectedIcon the checked one
+            # — 33 cross-effect: web rendered the native box for them).
+            icon_off = attributes['icon'] || attributes['src']
+            icon_on = attributes['selectedIcon'] || icon_off
+            if icon_off || icon_on
+              off_src = icon_off || icon_on
+              control_jsx =
+                "<input type=\"checkbox\"#{checked_attr}#{on_change}#{disabled_attr} className=\"peer sr-only\" />"                 "<img src=\"#{off_src}\" alt=\"\" className=\"w-6 h-6 peer-checked:hidden\" />"                 "<img src=\"#{icon_on}\" alt=\"\" className=\"w-6 h-6 hidden peer-checked:block\" />"
+              <<~JSX.chomp
+                #{indent_str(indent)}<label#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
+                #{indent_str(indent + 2)}#{control_jsx}
+                #{indent_str(indent + 2)}<span>#{convert_text_binding(text)}</span>
+                #{indent_str(indent)}</label>
+              JSX
+            else
+              <<~JSX.chomp
+                #{indent_str(indent)}<label#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
+                #{indent_str(indent + 2)}<input type="checkbox"#{checked_attr}#{on_change}#{disabled_attr}#{checkbox_style} />
+                #{indent_str(indent + 2)}<span>#{convert_text_binding(text)}</span>
+                #{indent_str(indent)}</label>
+              JSX
+            end
           end
 
           wrap_with_visibility(jsx, indent)

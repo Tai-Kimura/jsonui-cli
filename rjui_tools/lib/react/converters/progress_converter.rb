@@ -14,7 +14,12 @@ module RjuiTools
           tag_attr = build_tag_attr
 
           value_attr = build_value_attr
-          max_attr = " max={#{attributes['maximumValue'] || 100}}"
+          # Canonical Progress value range is 0..1 (ios/android render it so);
+          # max=100 shrank a 0.5 value to a 0.5% sliver — invisible, which is
+          # how every web tint measured inert (33 cross-effect).
+          literal_value = attributes['value'] || attributes['progress']
+          default_max = literal_value.is_a?(Numeric) && literal_value <= 1 ? 1 : 100
+          max_attr = " max={#{attributes['maximumValue'] || default_max}}"
 
           jsx = <<~JSX.chomp
             #{indent_str(indent)}<progress#{id_attr} className="#{class_name}"#{value_attr}#{max_attr}#{base_style_attr}#{testid_attr}#{tag_attr} />
@@ -44,25 +49,26 @@ module RjuiTools
           # Custom progress bar styling
           classes << '[&::-webkit-progress-bar]:rounded-full'
 
-          # Track color
+          # Track color (CSS variable — see the tint comment below).
           track_color = attributes['trackTintColor'] || attributes['trackColor']
           if track_color
-            classes << "[&::-webkit-progress-bar]:bg-[#{track_color}]"
+            @dynamic_styles['--pb-color'] = color_style_expr(track_color)
+            classes << '[&::-webkit-progress-bar]:bg-[color:var(--pb-color)]'
           else
             classes << '[&::-webkit-progress-bar]:bg-gray-200'
           end
 
           classes << '[&::-webkit-progress-value]:rounded-full'
 
-          # Progress color
+          # Progress color. The raw value may resolve to a PALETTE NAME
+          # (bg-[dark_red] is not a color) — route through CSS variables the
+          # inline style sets from ColorManager, so the pseudo-elements get
+          # a real color on every build (33 cross-effect).
           tint_color = attributes['tintColor'] || attributes['progressTintColor']
           if tint_color
-            classes << "[&::-webkit-progress-value]:bg-[#{tint_color}]"
-            classes << "[&::-moz-progress-bar]:bg-[#{tint_color}]"
-            # accent-color is the robust cross-engine path — the 33
-            # cross-effect sweep measured the pseudo-element classes taking
-            # no effect on the conformance chromium build.
-            classes << "[accent-color:#{tint_color}]"
+            @dynamic_styles['--pv-color'] = color_style_expr(tint_color)
+            classes << '[&::-webkit-progress-value]:bg-[color:var(--pv-color)]'
+            classes << '[&::-moz-progress-bar]:bg-[color:var(--pv-color)]'
           else
             classes << '[&::-webkit-progress-value]:bg-blue-500'
             classes << '[&::-moz-progress-bar]:bg-blue-500'

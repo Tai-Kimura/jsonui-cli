@@ -425,6 +425,9 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     # unobservable; label overrides text the same way.
     ("Image", "srcName"): IMAGE_ALT_ASSET_NAME,
     ("CheckBox", "label"): "Alt label",
+    # 8 equals the cross-platform default gap — indistinguishable from the
+    # control on any platform that implements it.
+    ("IconLabel", "iconMargin"): 16,
     # `value` is Slider/Progress vocabulary in the name-keyed fallback table
     # (0.5), but Switch declares it as its boolean state alias — 0.5 is not a
     # boolean, the Compose codegen host cannot even compile it

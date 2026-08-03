@@ -486,6 +486,10 @@ module RjuiTools
           o = orientation.to_s.downcase
           return 'flex-col-reverse' if o == 'vertical' && d == 'bottomtotop'
           return 'flex-row-reverse' if o == 'horizontal' && d == 'righttoleft'
+          # RTL on a vertical column mirrors the inline axis: children anchor
+          # to the trailing edge (matches the ios render — 33 cross-effect:
+          # web/android ignored rightToLeft on columns).
+          return 'items-end' if o == 'vertical' && d == 'righttoleft'
 
           ''
         end

@@ -14179,7 +14179,7 @@
       "host": "IconLabel",
       "writtenKey": "iconMargin",
       "aliasOf": null,
-      "value": 8,
+      "value": 16,
       "platforms": [
         "ios",
         "android",

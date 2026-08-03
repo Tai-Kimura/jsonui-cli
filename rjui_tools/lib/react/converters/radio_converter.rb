@@ -89,6 +89,24 @@ module RjuiTools
           state_attrs = build_state_attrs(selected_binding, on_change, radio_value)
           state_attrs = checked_attr if state_attrs.empty?
 
+          # Custom icon radio: hidden input + state-swapped images (the kjui/
+          # sjui icon path — 33 cross-effect: web rendered the native circle
+          # for declared icons). 'selected_icon' is the declared snake alias.
+          icon_off = attributes['icon']
+          icon_on = attributes['selectedIcon'] || attributes['selected_icon']
+          if icon_on || icon_off
+            off_src = icon_off || icon_on
+            on_src = icon_on || icon_off
+            control_jsx =
+              "<input type=\"radio\" name=\"#{group}\" value=\"#{radio_value}\"#{state_attrs}#{disabled_attr} className=\"peer sr-only\" />"               "<img src=\"#{off_src}\" alt=\"\" className=\"w-6 h-6 peer-checked:hidden\" />"               "<img src=\"#{on_src}\" alt=\"\" className=\"w-6 h-6 hidden peer-checked:block\" />"
+            return <<~JSX.chomp
+              #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center #{item_gap_class}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
+              #{indent_str(indent + 2)}#{control_jsx}
+              #{indent_str(indent + 2)}<span>#{convert_text_binding(text)}</span>
+              #{indent_str(indent)}</label>
+            JSX
+          end
+
           <<~JSX.chomp
             #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center #{item_gap_class}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
             #{indent_str(indent + 2)}<input type="radio" name="#{group}" value="#{radio_value}"#{state_attrs}#{disabled_attr}#{input_style} />
