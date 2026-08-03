@@ -8,19 +8,23 @@ module KjuiTools
     module Components
       class ProgressComponent
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
-          # Progress can have a value (determinate) or be indeterminate
-          has_value = json_data['value'] || json_data['bind']
-          
+          # Progress can have a value (determinate) or be indeterminate.
+          # `progress` is the canonical determinate value (0..1, declared in
+          # attribute_definitions); `value` is the undeclared legacy spelling
+          # (see shared/core/attribute_semantics.json → progressValue).
+          literal = json_data['progress'] || json_data['value']
+          has_value = literal || json_data['bind']
+
           if has_value
             # Determinate progress (LinearProgressIndicator)
             value = if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
               variable = $1
               "data.#{variable}.toFloat()"
-            elsif json_data['value'] && json_data['value'].match(/@\{([^}]+)\}/)
+            elsif literal && literal.to_s.match(/@\{([^}]+)\}/)
               variable = $1
               "data.#{variable}.toFloat()"
-            elsif json_data['value']
-              "#{json_data['value']}f"
+            elsif literal
+              "#{literal}f"
             else
               '0f'
             end

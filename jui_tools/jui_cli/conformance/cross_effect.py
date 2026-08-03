@@ -95,24 +95,32 @@ def contract_path(conformance_dir) -> Path:
     return Path(conformance_dir).parent / "shared" / "core" / CONTRACT_NAME
 
 
-def load_contract(path) -> dict[str, str]:
+def load_contract(path) -> dict:
     """``{fixture_id: expectation}`` from the contract's ``observable`` blocks.
 
-    Permissive on unknown expectation values so a newer contract does not
-    brick an older checker; the pytest suite is where authoring errors get
-    caught loudly.
+    An expectation is either one of ``CONTRACT_EXPECTATIONS`` or a
+    per-platform verdict pattern (``{"ios": "inert", "android": "active",
+    ...}``) — the machine memory for an adjudicated EXPECTED difference
+    (platform idiom): the divergence must keep exactly that shape, and both
+    disappearing and mutating fail the gate. Permissive on unknown values so
+    a newer contract does not brick an older checker; the pytest suite is
+    where authoring errors get caught loudly.
     """
     path = Path(path)
     if not path.is_file():
         return {}
     raw = json.loads(path.read_text(encoding="utf-8"))
-    out: dict[str, str] = {}
+    out: dict = {}
     for entry in (raw.get("semantics") or {}).values():
         if not isinstance(entry, dict):
             continue
         for fid, expected in (entry.get("observable") or {}).items():
             if expected in CONTRACT_EXPECTATIONS:
                 out[fid] = expected
+            elif isinstance(expected, dict) and expected and all(
+                v in (ACTIVE, INERT) for v in expected.values()
+            ):
+                out[fid] = dict(expected)
     return out
 
 
@@ -425,6 +433,28 @@ def check(
     verdict = CrossEffectCheck()
 
     for fid, expected in sorted(contract.items()):
+        if isinstance(expected, dict):
+            # Expected difference (adjudicated platform idiom): the
+            # divergence must keep exactly this shape — disappearing OR
+            # mutating is a contract violation.
+            if fid in result.mismatched:
+                if result.mismatched[fid] == expected:
+                    verdict.contract_verified += 1
+                else:
+                    verdict.contract_violations.append(
+                        f"{fid}: contract expects the divergence "
+                        f"({_format_verdicts(expected)}), measured "
+                        f"({_format_verdicts(result.mismatched[fid])})"
+                    )
+            elif fid in result.agreed_verdicts:
+                verdict.contract_violations.append(
+                    f"{fid}: contract expects the divergence "
+                    f"({_format_verdicts(expected)}), measured uniformly "
+                    f"{result.agreed_verdicts[fid]}"
+                )
+            else:
+                verdict.contract_unverified.append(fid)
+            continue
         if fid in result.mismatched:
             verdict.contract_violations.append(
                 f"{fid}: contract expects {expected}, measured diverging "

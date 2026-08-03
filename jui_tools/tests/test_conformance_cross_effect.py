@@ -422,6 +422,49 @@ class ContractTest(unittest.TestCase):
         )
 
 
+class ExpectedDifferenceTest(unittest.TestCase):
+    """Pattern expectations: an adjudicated divergence must keep its shape."""
+
+    PATTERN = {"ios": ce.INERT, "android": ce.ACTIVE, "web": ce.INERT}
+    CONTRACT = {"Blur/effectStyle__light": {"ios": ce.INERT, "android": ce.ACTIVE, "web": ce.INERT}}
+
+    def test_matching_divergence_is_verified(self):
+        result = _result(mismatched={"Blur/effectStyle__light": dict(self.PATTERN)})
+        verdict = ce.check(result, {}, self.CONTRACT)
+        self.assertTrue(verdict.ok)
+        self.assertEqual(verdict.contract_verified, 1)
+        self.assertEqual(verdict.unrecorded, [])
+
+    def test_mutated_pattern_is_a_violation(self):
+        flipped = {"ios": ce.ACTIVE, "android": ce.ACTIVE, "web": ce.INERT}
+        result = _result(mismatched={"Blur/effectStyle__light": flipped})
+        verdict = ce.check(result, {}, self.CONTRACT)
+        self.assertFalse(verdict.ok)
+        self.assertIn("expects the divergence", verdict.contract_violations[0])
+
+    def test_disappeared_divergence_is_a_violation(self):
+        result = _result(
+            consistent=["Blur/effectStyle__light"],
+            agreed_verdicts={"Blur/effectStyle__light": ce.INERT},
+        )
+        verdict = ce.check(result, {}, self.CONTRACT)
+        self.assertFalse(verdict.ok)
+        self.assertIn("measured uniformly inert", verdict.contract_violations[0])
+
+    def test_loader_accepts_pattern_observables(self):
+        doc = {"semantics": {"blur": {"observable": {
+            "Blur/effectStyle__light": {"ios": "inert", "android": "active", "web": "inert"},
+            "Blur/bogus": {"ios": "sometimes"},
+        }}}}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / ce.CONTRACT_NAME
+            path.write_text(json.dumps(doc), encoding="utf-8")
+            contract = ce.load_contract(path)
+        self.assertEqual(
+            contract, {"Blur/effectStyle__light": {"ios": "inert", "android": "active", "web": "inert"}}
+        )
+
+
 def _summary(**overrides) -> ReportSummary:
     summary = ReportSummary(out_path=Path("REPORT.md"), platforms=list(ALL))
     summary.effect_scope = {"f/x": list(ALL)}

@@ -17,7 +17,7 @@
     "image": {
       "defaultContentMode": "fit",
       "fill": "stretch",
-      "ruling": "2026-08-03 user rulings: (a) the default contentMode is fit on every platform — web's implicit cover default was drift; (b) fill is the stretch (scaleToFill synonym) — AspectFill is the crop. Observable consequences: a fit-valued fixture equals the default rendering and must be uniformly inert; fill/scaleToFill fixtures must differ from the fit default on every platform. Current violations are the fix queue: sjui drops fill/scaleToFill to fit (SwiftJsonUI toContentMode + sjui map_content_mode, rides 32), and web artifacts predate the rjui default/fill fix — both clear at the next re-measure.",
+      "ruling": "2026-08-03 user rulings: (a) the default contentMode is fit on every platform — web's implicit cover default was drift (fixed in rjui, 22d96b4); (b) fill is the stretch (scaleToFill synonym) — AspectFill is the crop. All three platforms now implement the full mapping including the positional modes (unscaled + aligned + cropped; sjui/kjui/SwiftJsonUI/KotlinJsonUI, 33 wave). Observables: fit-valued fixtures equal the default rendering (uniformly inert); fill/scaleToFill differ from it everywhere (uniformly active). Verified on the 33 round-3 measurement.",
       "observable": {
         "Image/contentMode__fit": "uniformly-inert",
         "Image/contentMode__aspectfit": "uniformly-inert",
@@ -29,25 +29,108 @@
     },
     "textView": {
       "flexibleHeight": "declared height is the growth floor",
-      "ruling": "2026-08-03 user ruling (31 handoff): with flexible enabled, the declared height is the floor the view GROWS from — it never shrinks below it to follow smaller content. android's behavior is canonical; ios (both paths) shrank with content and must adopt the floor formula min = minHeight ?? height ?? default (rides 32). web measures 'has effect' — verify it matches floor semantics before recording it anywhere. No activeness observable: at fixture content size a correct floor renders identically to the control (that is WHY the android control_diff entry was removed in e78af64); the mechanical check belongs to the Phase 3 geometry layer.",
+      "ruling": "2026-08-03 user ruling (31 handoff): with flexible enabled, the declared height is the floor the view GROWS from — it never shrinks below it to follow smaller content. android's behavior is canonical; ios (both paths) shrank with content and must adopt the floor formula min = minHeight ?? height ?? default (landed in the 33 wave: SwiftJsonUI dynamic + sjui codegen, floor formula min = minHeight ?? height). web measures 'has effect' — verify it matches floor semantics before recording it anywhere. No activeness observable: at fixture content size a correct floor renders identically to the control (that is WHY the android control_diff entry was removed in e78af64); the mechanical check belongs to the geometry probe (systematic-detection optimization track).",
       "observable": {}
     },
     "size": {
       "maxBoundsClampFill": "matchParent is clamped by maxWidth/maxHeight",
-      "ruling": "2026-08-03 user ruling (31 handoff): matchParent + maxWidth/maxHeight resolves to min(parent extent, bound) — the bound clamps the fill. Generated code is canonical (kjui emits the constraint before the fill since 847fb56); KJUI dynamic ordered fillMaxWidth before widthIn, ignoring the bound entirely — reordered in the 33 wave (bounds precede a fill, stay after an explicit size). The composite clamp fixtures below are the observable: a clamping platform renders visibly narrower/shorter than its filled control (active); ignoring the bound renders identically (inert).",
+      "ruling": "2026-08-03 user ruling (31 handoff): matchParent + maxWidth/maxHeight resolves to min(parent extent, bound) — the bound clamps the fill. Generated code is canonical (kjui emits the constraint before the fill since 847fb56); KJUI dynamic ordered fillMaxWidth before widthIn, ignoring the bound entirely — reordered in the 33 wave (bounds precede a fill, stay after an explicit size). The composite clamp fixtures below are the observable: a clamping platform renders visibly narrower/shorter than its filled control (active); ignoring the bound renders identically (inert). Companion precedence (2026-08-03 campaign adjudication): an EXPLICIT numeric dimension pins the constraints and its bound stays inert (kjui codegen 847fb56, ios 35efc2b, rjui skips max-* under an explicit size); bounds in turn clamp a FILL. Order: explicit > bounds > fill.",
       "observable": {
         "common/maxWidth__fill_clamp": "uniformly-active",
         "common/maxHeight__fill_clamp": "uniformly-active"
-      }
+      },
+      "explicitOverBounds": "an explicit numeric dimension wins over its min/max bound"
     },
     "networkImage": {
       "noSrc": "defaultImage",
-      "ruling": "2026-08-03 user ruling: with no src, NetworkImage displays defaultImage; while loading it displays the first of hint/placeholder/loadingImage; on error it displays errorImage, falling back to defaultImage. The conformance fixtures declare no src, so every state-image fixture must render exactly what the control (defaultImage) renders — uniformly inert. android currently violates: DynamicNetworkImageComponent parses defaultImage but never reads it, so the control is blank (KotlinJsonUI fix rides 32). NOTE: the fixtures currently reuse one asset for all state images; when the distinct-asset fixture improvement lands, revisit these expectations together with it.",
+      "ruling": "2026-08-03 user ruling: with no src, NetworkImage displays defaultImage; while loading it displays the first of hint/placeholder/loadingImage; on error it displays errorImage, falling back to defaultImage. Implemented on all platforms in the 33 wave (KotlinJsonUI defaultImage read + Coil fallback chain; ios placeholder no longer collapses over defaultImage; rjui defaultImage prop + template state machine). State-image fixtures use the DISTINCT conformance_sample_alt asset, so a hijacked no-src state renders visibly — the uniformly-inert observables verify the chain end-to-end.",
       "observable": {
         "NetworkImage/placeholder__static": "uniformly-inert",
         "NetworkImage/hint__static": "uniformly-inert",
         "NetworkImage/errorImage__static": "uniformly-inert",
         "NetworkImage/loadingImage__static": "uniformly-inert"
+      }
+    },
+    "margins": {
+      "offsetModel": "ZStack/overlay child margins are full-margin offsets; an explicit center declaration disables that axis margin; margins arrays and start/endMargin apply as padding",
+      "ruling": "2026-08-03 campaign adjudication (31/33 rounds, measured bbox evidence in the 33 geometry diagnosis table): an overlay (ZStack) child offsets by the FULL margin on each declared edge; declaring centerInParent/centerHorizontal/centerVertical disables the margin on the centered axis; the margins array and the RTL start/endMargin spellings resolve as padding-equivalent insets. Divergent rows are ledgered per-fixture with their measured deltas; the mechanical closure is the geometry probe (systematic-detection optimization track, de-scoped from the completion gate). No activeness observable: position deltas are invisible to fixture-vs-control activeness when every platform moves.",
+      "observable": {}
+    },
+    "gravityDefaults": {
+      "defaultGravity": "top|start",
+      "ruling": "2026-08-03 campaign adjudication: the default content gravity is top|start on every container (CollectionStack pins Top; SafeAreaView spacer layouts anchor start). A platform centering by default is the deviant. No activeness observable — default-vs-default renders identically; the geometry probe closes it mechanically.",
+      "observable": {}
+    },
+    "shadow": {
+      "stringPipe": "five-field strict",
+      "ruling": "2026-08-03 campaign adjudication (31 wave, unified in 3e87b96/ca65fb6): the shadow string pipe format is exactly five fields (color|offsetX|offsetY|blur|opacity); any other count renders NOTHING on every platform — no partial parsing, no platform default. The conformance fixtures ship the valid five-field pipe; a malformed-count probe belongs to the validator, not the render layer.",
+      "observable": {}
+    },
+    "gradient": {
+      "defaultDirection": "vertical",
+      "ruling": "2026-08-03 campaign adjudication (31 gradient family): the default gradient direction is vertical (top to bottom) on every platform; an explicit \"vertical\" therefore equals the default rendering.",
+      "observable": {
+        "GradientView/gradientDirection__vertical": "uniformly-inert"
+      }
+    },
+    "skinIdioms": {
+      "demarcation": "control chrome may differ per platform; the DIFFERENCE ITSELF is contract-pinned",
+      "ruling": "2026-08-03 campaign adjudication: platform-owned control chrome is a legitimate difference, but only in its adjudicated SHAPE — the observable pins each accepted divergence as an expected-difference pattern, so both disappearing and mutating fail the gate. Members: Blur effectStyle (android material variants differ visibly, ios materials render alike on flat surfaces per the 31 saturation analysis, web CSS blur is single-variant), TextField.borderStyle (UIKit field chrome — each platform draws its own; web renders none for the UIKit-only bezel variants), TabView.showLabels (ios hides tab labels, android/web keep the labeled bar). The tabview glyph-source family is the codegen-side counterpart, pinned permanently in codegen_parity.json (2026-08-03 user ruling).",
+      "observable": {
+        "Blur/effectStyle__extralight": {
+          "ios": "inert",
+          "android": "active",
+          "web": "inert"
+        },
+        "Blur/effectStyle__light": {
+          "ios": "inert",
+          "android": "active",
+          "web": "inert"
+        },
+        "TextField/borderStyle__bezel": {
+          "ios": "inert",
+          "android": "active",
+          "web": "inert"
+        },
+        "TextField/borderStyle__bezel_2": {
+          "ios": "inert",
+          "android": "active",
+          "web": "inert"
+        },
+        "TextField/borderStyle__line": {
+          "ios": "inert",
+          "android": "active",
+          "web": "active"
+        },
+        "TextField/borderStyle__line_2": {
+          "ios": "inert",
+          "android": "active",
+          "web": "active"
+        },
+        "TextField/borderStyle__roundedrect": {
+          "ios": "active",
+          "android": "active",
+          "web": "inert"
+        },
+        "TextField/borderStyle__roundedrect_2": {
+          "ios": "active",
+          "android": "active",
+          "web": "inert"
+        },
+        "TabView/showLabels__true": {
+          "ios": "active",
+          "android": "inert",
+          "web": "inert"
+        }
+      }
+    },
+    "progressValue": {
+      "canonical": "progress",
+      "legacy": "value",
+      "undeclaredDefault": "0 (empty bar) on a determinate ProgressView; kjui renders indeterminate chrome when nothing is declared",
+      "ruling": "2026-08-04 campaign adjudication (closing the last unreviewed cross-effect row): `progress` is the canonical determinate value attribute (declared 0..1 in attribute_definitions); `value` is the undeclared legacy runtime spelling every reader keeps as fallback, canonical-first. Undeclared progress must NOT default to a nonzero fill — ios (dynamic + sjui codegen) defaulted to 0.5, which made the control half-full and the progress:0.5 fixture measured inert; android (both paths) read only the legacy `value` and ignored the canonical attribute entirely. Fixed canonical-first on every path (SwiftJsonUI ProgressConverter, sjui progress_converter.rb, KotlinJsonUI DynamicProgressComponent, kjui progress_component.rb, rjui progress_converter.rb). The observable pins the repair: a half-full bar must differ from its undeclared control on every platform.",
+      "observable": {
+        "Progress/progress__static": "uniformly-active"
       }
     }
   }

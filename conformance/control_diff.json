@@ -49,6 +49,7 @@
     {
       "fixture": "Button/font__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ]
@@ -72,6 +73,13 @@
       "platforms": [
         "android",
         "web"
+      ]
+    },
+    {
+      "fixture": "CheckBox/checkedColor__static",
+      "platforms": [
+        "android",
+        "ios"
       ]
     },
     {
@@ -102,12 +110,14 @@
       "fixture": "CheckBox/font__static",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "CheckBox/iconSize__static",
       "platforms": [
+        "android",
         "ios"
       ]
     },
@@ -129,30 +139,37 @@
     {
       "fixture": "CheckBox/label__static",
       "platforms": [
-        "android"
+        "android",
+        "ios",
+        "web"
       ]
     },
     {
       "fixture": "CheckBox/selectedIcon__alias_onSrc",
       "platforms": [
-        "android"
+        "android",
+        "ios"
       ]
     },
     {
       "fixture": "CheckBox/selectedIcon__static",
       "platforms": [
-        "android"
+        "android",
+        "ios"
       ]
     },
     {
       "fixture": "CheckBox/src__static",
       "platforms": [
-        "ios"
+        "android",
+        "ios",
+        "web"
       ]
     },
     {
       "fixture": "CheckBox/uncheckedColor__static",
       "platforms": [
+        "android",
         "ios"
       ]
     },
@@ -238,18 +255,36 @@
       "fixture": "Collection/layout__flow",
       "platforms": [
         "android",
-        "ios"
+        "ios",
+        "web"
       ]
     },
     {
       "fixture": "Collection/layout__flow_2",
       "platforms": [
         "android",
-        "ios"
+        "ios",
+        "web"
       ]
     },
     {
       "fixture": "Collection/layout__horizontal",
+      "platforms": [
+        "android",
+        "ios",
+        "web"
+      ]
+    },
+    {
+      "fixture": "Collection/layout__leftaligned",
+      "platforms": [
+        "android",
+        "ios",
+        "web"
+      ]
+    },
+    {
+      "fixture": "Collection/layout__leftaligned_2",
       "platforms": [
         "android",
         "ios",
@@ -325,12 +360,16 @@
     {
       "fixture": "IconLabel/font__static",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "IconLabel/iconMargin__static",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
@@ -338,12 +377,15 @@
       "fixture": "IconLabel/iconPosition__bottom",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "IconLabel/iconPosition__right",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
@@ -351,6 +393,7 @@
       "fixture": "IconLabel/iconPosition__top",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
@@ -373,6 +416,8 @@
     {
       "fixture": "IconLabel/textShadow__static",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
@@ -380,18 +425,23 @@
       "fixture": "Image/contentMode__aspectfill",
       "platforms": [
         "android",
-        "ios"
+        "ios",
+        "web"
       ]
     },
     {
       "fixture": "Image/contentMode__bottom",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "Image/contentMode__bottom_2",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
@@ -399,6 +449,7 @@
       "fixture": "Image/contentMode__center",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
@@ -406,36 +457,47 @@
       "fixture": "Image/contentMode__center_2",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "Image/contentMode__fill",
       "platforms": [
-        "android"
+        "android",
+        "ios",
+        "web"
       ]
     },
     {
       "fixture": "Image/contentMode__left",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "Image/contentMode__left_2",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "Image/contentMode__right",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "Image/contentMode__right_2",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
@@ -443,18 +505,23 @@
       "fixture": "Image/contentMode__scaletofill",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "Image/contentMode__top",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "Image/contentMode__top_2",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
@@ -468,6 +535,8 @@
     {
       "fixture": "Image/srcName__static",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
@@ -656,6 +725,7 @@
       "fixture": "Label/textShadow__static",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
@@ -682,42 +752,64 @@
     {
       "fixture": "NetworkImage/contentMode__aspectfill",
       "platforms": [
-        "ios"
+        "android",
+        "ios",
+        "web"
       ]
     },
     {
       "fixture": "NetworkImage/contentMode__bottom",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "NetworkImage/contentMode__center",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "NetworkImage/contentMode__center_2",
       "platforms": [
+        "android",
+        "ios",
+        "web"
+      ]
+    },
+    {
+      "fixture": "NetworkImage/contentMode__fill",
+      "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "NetworkImage/contentMode__left",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "NetworkImage/contentMode__right",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "NetworkImage/contentMode__top",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
@@ -742,31 +834,47 @@
     {
       "fixture": "Progress/progressTintColor__static",
       "platforms": [
-        "ios"
+        "android",
+        "ios",
+        "web"
+      ]
+    },
+    {
+      "fixture": "Progress/progress__static",
+      "platforms": [
+        "android",
+        "ios",
+        "web"
       ]
     },
     {
       "fixture": "Progress/tintColor__static",
       "platforms": [
-        "ios"
+        "android",
+        "ios",
+        "web"
       ]
     },
     {
       "fixture": "Progress/trackTintColor__static",
       "platforms": [
         "android",
-        "ios"
+        "ios",
+        "web"
       ]
     },
     {
       "fixture": "Radio/checkedColor__static",
       "platforms": [
+        "android",
         "ios"
       ]
     },
     {
       "fixture": "Radio/checked__true",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
@@ -781,6 +889,7 @@
     {
       "fixture": "Radio/fontSize__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ]
@@ -788,6 +897,7 @@
     {
       "fixture": "Radio/font__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ]
@@ -795,6 +905,7 @@
     {
       "fixture": "Radio/iconColor__static",
       "platforms": [
+        "android",
         "ios"
       ]
     },
@@ -815,7 +926,8 @@
     {
       "fixture": "Radio/selectedIcon__alias_selected_icon",
       "platforms": [
-        "android"
+        "android",
+        "ios"
       ]
     },
     {
@@ -828,12 +940,15 @@
     {
       "fixture": "Radio/selected_icon__static",
       "platforms": [
-        "android"
+        "android",
+        "ios",
+        "web"
       ]
     },
     {
       "fixture": "Radio/uncheckedColor__static",
       "platforms": [
+        "android",
         "ios"
       ]
     },
@@ -891,7 +1006,8 @@
       "fixture": "Segment/tintColor__static",
       "platforms": [
         "android",
-        "ios"
+        "ios",
+        "web"
       ]
     },
     {
@@ -959,12 +1075,15 @@
     {
       "fixture": "SelectBox/selectedIndex__static",
       "platforms": [
-        "ios"
+        "ios",
+        "web"
       ]
     },
     {
       "fixture": "SelectBox/selectedValue__static",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
@@ -977,6 +1096,8 @@
     {
       "fixture": "Slider/tintColor__static",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
@@ -1008,12 +1129,14 @@
       "fixture": "Switch/onTintColor__static",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "Switch/thumbTintColor__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ]
@@ -1046,13 +1169,21 @@
       "fixture": "TabView/selectedIndex__alias_selectedTabIndex",
       "platforms": [
         "android",
-        "ios"
+        "ios",
+        "web"
       ]
     },
     {
       "fixture": "TabView/selectedIndex__static",
       "platforms": [
         "android",
+        "ios",
+        "web"
+      ]
+    },
+    {
+      "fixture": "TabView/showLabels__true",
+      "platforms": [
         "ios"
       ]
     },
@@ -1060,6 +1191,7 @@
       "fixture": "TabView/tabBarBackground__static",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
@@ -1067,13 +1199,15 @@
       "fixture": "TabView/tintColor__static",
       "platforms": [
         "android",
-        "ios"
+        "ios",
+        "web"
       ]
     },
     {
       "fixture": "TabView/unselectedColor__static",
       "platforms": [
         "android",
+        "ios",
         "web"
       ]
     },
@@ -1132,6 +1266,8 @@
     {
       "fixture": "TextField/fontColor__static",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
@@ -1232,6 +1368,8 @@
     {
       "fixture": "TextView/fontColor__static",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ]
     },
@@ -1244,6 +1382,7 @@
     {
       "fixture": "TextView/fontSize__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ]
@@ -1251,12 +1390,14 @@
     {
       "fixture": "TextView/font__static",
       "platforms": [
+        "ios",
         "web"
       ]
     },
     {
       "fixture": "TextView/hintColor__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ]
@@ -1264,6 +1405,7 @@
     {
       "fixture": "TextView/hintFontSize__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ]
@@ -1347,7 +1489,9 @@
     {
       "fixture": "View/direction__righttoleft",
       "platforms": [
-        "ios"
+        "android",
+        "ios",
+        "web"
       ]
     },
     {
@@ -1679,7 +1823,8 @@
       "fixture": "common/leftPadding__static",
       "platforms": [
         "android",
-        "ios"
+        "ios",
+        "web"
       ]
     },
     {
@@ -1696,9 +1841,25 @@
       ]
     },
     {
+      "fixture": "common/maxHeight__fill_clamp",
+      "platforms": [
+        "android",
+        "ios",
+        "web"
+      ]
+    },
+    {
       "fixture": "common/maxStartMargin__static",
       "platforms": [
         "ios"
+      ]
+    },
+    {
+      "fixture": "common/maxWidth__fill_clamp",
+      "platforms": [
+        "android",
+        "ios",
+        "web"
       ]
     },
     {
@@ -1827,7 +1988,8 @@
       "fixture": "common/topPadding__static",
       "platforms": [
         "android",
-        "ios"
+        "ios",
+        "web"
       ]
     },
     {

@@ -1,5 +1,5 @@
 {
-  "manifestHash" : "12689184f6daa9d14f5ed36888e7a6eb282dbd2417079e4de29f603de712a9aa",
+  "manifestHash" : "1d62ad8bd8b20b6129f005e865e481e2c17b01495f4b6d258baf88c7dee63e19",
   "platform" : "ios",
   "results" : [
     {
@@ -3681,8 +3681,8 @@
     },
     {
       "detail" : "",
-      "id" : "__control/Progress__value-0.5",
-      "screenshot" : "artifacts/ios/control_Progress__value-0.5.png",
+      "id" : "__control/Progress__progress-0.5",
+      "screenshot" : "artifacts/ios/control_Progress__progress-0.5.png",
       "status" : "pass"
     },
     {

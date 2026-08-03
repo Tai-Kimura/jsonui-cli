@@ -17,7 +17,7 @@ module RjuiTools
           # Canonical Progress value range is 0..1 (ios/android render it so);
           # max=100 shrank a 0.5 value to a 0.5% sliver — invisible, which is
           # how every web tint measured inert (33 cross-effect).
-          literal_value = attributes['value'] || attributes['progress']
+          literal_value = attributes['progress'] || attributes['value']
           default_max = literal_value.is_a?(Numeric) && literal_value <= 1 ? 1 : 100
           max_attr = " max={#{attributes['maximumValue'] || default_max}}"
 
@@ -86,7 +86,9 @@ module RjuiTools
         end
 
         def build_value_attr
-          value = with_bind_fallback(attributes['value'] || attributes['progress']) || 0
+          # `progress` is canonical; `value` is the legacy spelling
+          # (shared/core/attribute_semantics.json → progressValue).
+          value = with_bind_fallback(attributes['progress'] || attributes['value']) || 0
 
           if has_binding?(value)
             prop = extract_binding_property(value)

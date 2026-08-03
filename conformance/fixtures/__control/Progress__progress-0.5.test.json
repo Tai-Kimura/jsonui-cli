@@ -1,7 +1,7 @@
 {
   "type": "screen",
   "source": {
-    "layout": "fixtures/__control/Progress__value-0.5.layout.json"
+    "layout": "fixtures/__control/Progress__progress-0.5.layout.json"
   },
   "metadata": {
     "name": "conformance control Progress",
@@ -15,7 +15,7 @@
   "platform": "all",
   "cases": [
     {
-      "name": "Progress__value-0.5",
+      "name": "Progress__progress-0.5",
       "description": "Control for Progress: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
       "steps": [
         {
@@ -24,7 +24,7 @@
         },
         {
           "action": "screenshot",
-          "name": "control_Progress__value-0.5"
+          "name": "control_Progress__progress-0.5"
         }
       ]
     }

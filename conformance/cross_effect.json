@@ -3,26 +3,6 @@
   "_comment": "Accepted cross-platform attribute-effect findings, two kinds. DIVERGENCE ({fixture, platforms}): the control-diff verdict (active = the attribute changed the render, inert = it did not) disagrees across the platforms the attribute is declared for — semantic drift unless a deliberate platform idiom; the reason says which. UNIFORMLY-INERT ({fixture, verdict, declared}): a value the SSoT enumerates changes nothing on ANY platform — either it is the default rendering (say so in the reason) or it is dead/unimplemented everywhere. Unrecorded findings fail `jui conformance gate --cross-effect`; entries the measurement no longer supports are stale and must be pruned (`jui conformance cross-effect --update`). Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
   "entries": [
     {
-      "fixture": "Blur/effectStyle__extralight",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated platform idiom: android material blur variants differ visibly; ios materials render alike on this flat surface (31 saturation analysis); web CSS blur has a single variant. Family: blur-idiom.",
-      "note": ""
-    },
-    {
-      "fixture": "Blur/effectStyle__light",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated platform idiom: android material blur variants differ visibly; ios materials render alike on this flat surface (31 saturation analysis); web CSS blur has a single variant. Family: blur-idiom.",
-      "note": ""
-    },
-    {
       "fixture": "Button/textAlign__center",
       "verdict": "uniformly-inert",
       "declared": "Center",
@@ -47,26 +27,6 @@
         "web": "active"
       },
       "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
-      "note": ""
-    },
-    {
-      "fixture": "CheckBox/label__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated selection-skin residue: fixes landed for src/selectedIcon/colors (91f1d7b et al.); rows still splitting after round-2 are CONFIRMED remaining gaps listed in the 33 report residue table for the follow-up patch — each names its deviant platform. Family: selection-skin-residue.",
-      "note": ""
-    },
-    {
-      "fixture": "CheckBox/src__static",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated selection-skin residue: fixes landed for src/selectedIcon/colors (91f1d7b et al.); rows still splitting after round-2 are CONFIRMED remaining gaps listed in the 33 report residue table for the follow-up patch — each names its deviant platform. Family: selection-skin-residue.",
       "note": ""
     },
     {
@@ -159,37 +119,10 @@
       "note": ""
     },
     {
-      "fixture": "GradientView/gradientDirection__vertical",
-      "verdict": "uniformly-inert",
-      "declared": "Vertical",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "IconLabel/iconMargin__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated: android fixes landed (91f1d7b); rows still splitting after round-2 are in the residue table with their deviant named. Family: iconlabel-residue.",
-      "note": ""
-    },
-    {
       "fixture": "IconLabel/iconPosition__left",
       "verdict": "uniformly-inert",
       "declared": "Left",
       "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "IconLabel/textShadow__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated: android fixes landed (91f1d7b); rows still splitting after round-2 are in the residue table with their deviant named. Family: iconlabel-residue.",
       "note": ""
     },
     {
@@ -332,82 +265,6 @@
         "web": "inert"
       },
       "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
-      "note": ""
-    },
-    {
-      "fixture": "Progress/progressTintColor__static",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated CONFIRMED web gap: both the pseudo-element classes and accent-color left the conformance chromium <progress> unstyled (fix attempt 1bc284b); a div-based progress restyle is the recorded follow-up. ios/android render the tints. Family: progress-web-residue.",
-      "note": ""
-    },
-    {
-      "fixture": "Progress/tintColor__static",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated CONFIRMED web gap: both the pseudo-element classes and accent-color left the conformance chromium <progress> unstyled (fix attempt 1bc284b); a div-based progress restyle is the recorded follow-up. ios/android render the tints. Family: progress-web-residue.",
-      "note": ""
-    },
-    {
-      "fixture": "Progress/trackTintColor__static",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated CONFIRMED web gap: both the pseudo-element classes and accent-color left the conformance chromium <progress> unstyled (fix attempt 1bc284b); a div-based progress restyle is the recorded follow-up. ios/android render the tints. Family: progress-web-residue.",
-      "note": ""
-    },
-    {
-      "fixture": "Radio/checkedColor__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active"
-      },
-      "reason": "adjudicated selection-skin residue: fixes landed for src/selectedIcon/colors (91f1d7b et al.); rows still splitting after round-2 are CONFIRMED remaining gaps listed in the 33 report residue table for the follow-up patch — each names its deviant platform. Family: selection-skin-residue.",
-      "note": ""
-    },
-    {
-      "fixture": "Radio/iconColor__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active"
-      },
-      "reason": "adjudicated selection-skin residue: fixes landed for src/selectedIcon/colors (91f1d7b et al.); rows still splitting after round-2 are CONFIRMED remaining gaps listed in the 33 report residue table for the follow-up patch — each names its deviant platform. Family: selection-skin-residue.",
-      "note": ""
-    },
-    {
-      "fixture": "Radio/selectedIcon__alias_selected_icon",
-      "platforms": {
-        "android": "active",
-        "ios": "inert"
-      },
-      "reason": "adjudicated selection-skin residue: fixes landed for src/selectedIcon/colors (91f1d7b et al.); rows still splitting after round-2 are CONFIRMED remaining gaps listed in the 33 report residue table for the follow-up patch — each names its deviant platform. Family: selection-skin-residue.",
-      "note": ""
-    },
-    {
-      "fixture": "Radio/selected_icon__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated selection-skin residue: fixes landed for src/selectedIcon/colors (91f1d7b et al.); rows still splitting after round-2 are CONFIRMED remaining gaps listed in the 33 report residue table for the follow-up patch — each names its deviant platform. Family: selection-skin-residue.",
-      "note": ""
-    },
-    {
-      "fixture": "Radio/uncheckedColor__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active"
-      },
-      "reason": "adjudicated selection-skin residue: fixes landed for src/selectedIcon/colors (91f1d7b et al.); rows still splitting after round-2 are CONFIRMED remaining gaps listed in the 33 report residue table for the follow-up patch — each names its deviant platform. Family: selection-skin-residue.",
       "note": ""
     },
     {
@@ -686,80 +543,10 @@
       "note": ""
     },
     {
-      "fixture": "TabView/showLabels__true",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated: ios hides tab labels for showLabels handling while android/web keep the default labeled bar — tab chrome idiom, geometry probe closes the residual. Family: control-chrome.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/borderStyle__bezel",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated platform idiom: TextField.borderStyle is UIKit field chrome (roundedRect/line/bezel/none); each platform draws its own chrome and web deliberately renders none for the UIKit-only variants. Family: textfield-chrome.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/borderStyle__bezel_2",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated platform idiom: TextField.borderStyle is UIKit field chrome (roundedRect/line/bezel/none); each platform draws its own chrome and web deliberately renders none for the UIKit-only variants. Family: textfield-chrome.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/borderStyle__line",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated platform idiom: TextField.borderStyle is UIKit field chrome (roundedRect/line/bezel/none); each platform draws its own chrome and web deliberately renders none for the UIKit-only variants. Family: textfield-chrome.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/borderStyle__line_2",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated platform idiom: TextField.borderStyle is UIKit field chrome (roundedRect/line/bezel/none); each platform draws its own chrome and web deliberately renders none for the UIKit-only variants. Family: textfield-chrome.",
-      "note": ""
-    },
-    {
       "fixture": "TextField/borderStyle__none",
       "verdict": "uniformly-inert",
       "declared": "none",
       "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/borderStyle__roundedrect",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated platform idiom: TextField.borderStyle is UIKit field chrome (roundedRect/line/bezel/none); each platform draws its own chrome and web deliberately renders none for the UIKit-only variants. Family: textfield-chrome.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/borderStyle__roundedrect_2",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated platform idiom: TextField.borderStyle is UIKit field chrome (roundedRect/line/bezel/none); each platform draws its own chrome and web deliberately renders none for the UIKit-only variants. Family: textfield-chrome.",
       "note": ""
     },
     {
@@ -972,16 +759,6 @@
       "verdict": "uniformly-inert",
       "declared": "none",
       "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "View/direction__righttoleft",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated RTL: ios flips the layout for rightToLeft; android/web await locale plumbing (layoutDirection/dir wiring) — recorded follow-up. Family: rtl-residue.",
       "note": ""
     },
     {

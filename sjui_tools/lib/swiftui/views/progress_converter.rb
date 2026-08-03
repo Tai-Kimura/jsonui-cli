@@ -8,7 +8,10 @@ module SjuiTools
       class ProgressConverter < BaseViewConverter
         def convert
           id = @component['id'] || 'progress'
-          progress = @component['progress'] || 0.5
+          # Undeclared progress renders an EMPTY bar (0); a nonzero default made
+          # the control half-full and progress:0.5 fixtures measured inert
+          # (see shared/core/attribute_semantics.json → progressValue).
+          progress = @component['progress'] || 0
           
           # Get progress value (binding or static)
           progress_value = if @component['progress'] && is_binding?(@component['progress'])

@@ -583,10 +583,14 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     "Switch.onTintColor": {"isOn": True},
     # Track/progress tints need a nonzero value or there is nothing to
     # paint (a zero-length active track is invisible on every platform).
+    # Slider's canonical value attribute is `value`; Progress's is `progress`
+    # (`value` is the undeclared legacy spelling there — see
+    # shared/core/attribute_semantics.json → progressValue).
     "Slider.tintColor": {"value": 0.5},
-    "Progress.tintColor": {"value": 0.5},
-    "Progress.progressTintColor": {"value": 0.5},
-    "Progress.trackTintColor": {"value": 0.5},
+    "Progress.color": {"progress": 0.5},
+    "Progress.tintColor": {"progress": 0.5},
+    "Progress.progressTintColor": {"progress": 0.5},
+    "Progress.trackTintColor": {"progress": 0.5},
     # Flow attributes need a flex container. `horizontal` is the direction that
     # makes wrapping visible with the standard 6-box child set (240px of boxes
     # in a 200px host).

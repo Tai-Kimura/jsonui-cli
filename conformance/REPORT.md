@@ -2,7 +2,7 @@
 
 # JsonUI Conformance Report
 
-- Manifest: `12689184f6daa9d14f5ed36888e7a6eb282dbd2417079e4de29f603de712a9aa` (sha256)
+- Manifest: `1d62ad8bd8b20b6129f005e865e481e2c17b01495f4b6d258baf88c7dee63e19` (sha256)
 - Definitions: `c869b6c324857239017d1a82a305bcac03daf330665ed8b03c5a36b6e7b02cc0` (sha256)
 - Fixtures: 683 (assertable: 29, visual: 574, interactive: 35) / skipped attributes: 154
 
@@ -70,15 +70,15 @@ Each visual fixture is compared against its **control** — the same layout with
 
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
-| android | 393 | 196 | 197 | 0 | 0 |
-| ios | 424 | 213 | 211 | 0 | 0 |
-| web | 407 | 196 | 211 | 0 | 0 |
+| android | 393 | 203 | 190 | 0 | 0 |
+| ios | 424 | 217 | 207 | 0 | 0 |
+| web | 407 | 204 | 203 | 0 | 0 |
 
 ## Cross-platform attribute effect
 
 Pixel comparison across platforms is out of scope by design, but each platform's control-diff verdict — *did the attribute change the render?* — is platform-independent. A fixture whose activeness disagrees across the platforms its attribute is declared for is a semantic-drift suspect, and an SSoT-enumerated value that is inert on **every** platform is flagged uniformly-inert (default rendering, or dead everywhere). Only fixtures compared on **all** their in-scope platforms are judged; findings are accepted (with a reason) in `cross_effect.json` and enforced by `jui conformance gate --cross-effect`.
 
-- Compared on all in-scope platforms: 396 (consistent: 300, **diverging: 96**, **uniformly-inert declared values: 65**) · not compared everywhere: 0 · in scope on <2 platforms: 134
+- Compared on all in-scope platforms: 396 (consistent: 313, **diverging: 83**, **uniformly-inert declared values: 65**) · not compared everywhere: 0 · in scope on <2 platforms: 134
 
 | Fixture | android | ios | web |
 |---|---|---|---|
@@ -86,14 +86,10 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `Blur/effectStyle__light` | active | inert | inert |
 | `Button/textAlign__left` | inert | inert | active |
 | `Button/textAlign__right` | active | inert | active |
-| `CheckBox/label__static` | active | inert | inert |
-| `CheckBox/src__static` | active | active | inert |
 | `Collection/defaultScrollAnchor__bottom` | inert | active | inert |
 | `Collection/defaultScrollAnchor__center` | inert | active | inert |
 | `Collection/lazy__eager` | inert | active | inert |
 | `Collection/lazy__none` | inert | active | inert |
-| `IconLabel/iconMargin__static` | inert | active | active |
-| `IconLabel/textShadow__static` | inert | active | active |
 | `Label/autoShrink__true` | active | inert | active |
 | `Label/edgeInset__static` | active | inert | active |
 | `Label/fontFamily__static` | inert | active | active |
@@ -104,14 +100,6 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `Label/minimumScaleFactor__static` | active | inert | inert |
 | `Label/textAlign__left` | inert | active | inert |
 | `Label/textAlign__left_2` | inert | active | inert |
-| `Progress/progressTintColor__static` | active | active | inert |
-| `Progress/tintColor__static` | active | active | inert |
-| `Progress/trackTintColor__static` | active | active | inert |
-| `Radio/checkedColor__static` | inert | active | — |
-| `Radio/iconColor__static` | inert | active | — |
-| `Radio/selectedIcon__alias_selected_icon` | active | inert | — |
-| `Radio/selected_icon__static` | active | inert | inert |
-| `Radio/uncheckedColor__static` | inert | active | — |
 | `SafeAreaView/orientation__horizontal` | inert | active | inert |
 | `SafeAreaView/orientation__vertical` | inert | active | inert |
 | `SafeAreaView/safeAreaInsetPositions__static` | inert | active | inert |
@@ -146,7 +134,6 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `TextView/textAlign__center_2` | inert | inert | active |
 | `TextView/textAlign__right` | inert | inert | active |
 | `TextView/textAlign__right_2` | inert | inert | active |
-| `View/direction__righttoleft` | inert | active | inert |
 | `common/alignBottom__true` | active | inert | inert |
 | `common/alignLeftView__static` | inert | inert | active |
 | `common/alignRight__true` | active | inert | inert |

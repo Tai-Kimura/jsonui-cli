@@ -10926,7 +10926,7 @@
       "test": "fixtures/Progress/tintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Progress__value-0.5"
+      "control": "__control/Progress__progress-0.5"
     },
     {
       "id": "Progress/progressTintColor__static",
@@ -10949,7 +10949,7 @@
       "test": "fixtures/Progress/progressTintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Progress__value-0.5"
+      "control": "__control/Progress__progress-0.5"
     },
     {
       "id": "Progress/trackTintColor__static",
@@ -10972,7 +10972,7 @@
       "test": "fixtures/Progress/trackTintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Progress__value-0.5"
+      "control": "__control/Progress__progress-0.5"
     },
     {
       "id": "Progress/progressViewStyle__static",
@@ -11119,7 +11119,7 @@
       "test": "fixtures/Progress/color__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Progress"
+      "control": "__control/Progress__progress-0.5"
     },
     {
       "id": "View/orientation__horizontal",
@@ -14904,7 +14904,7 @@
       "isControl": true
     },
     {
-      "id": "__control/Progress__value-0.5",
+      "id": "__control/Progress__progress-0.5",
       "component": "__control",
       "attribute": null,
       "case": "Progress",
@@ -14920,8 +14920,8 @@
       ],
       "mode": null,
       "deprecated": null,
-      "layout": "fixtures/__control/Progress__value-0.5.layout.json",
-      "test": "fixtures/__control/Progress__value-0.5.test.json",
+      "layout": "fixtures/__control/Progress__progress-0.5.layout.json",
+      "test": "fixtures/__control/Progress__progress-0.5.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
