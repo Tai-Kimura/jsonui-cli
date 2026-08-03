@@ -74,7 +74,12 @@ module SjuiTools
             # Data model never grows (uncompilable; caught by the codegen
             # parity host on __control/Radio, 2026-08-02). The items-based
             # branch above already references it bare.
-            add_state_variable(state_var, "String", '""')
+            # A literal `checked: true` seeds the group state with this
+            # option's value — the dynamic path renders it selected while an
+            # empty seed left every literal-checked radio unselected
+            # (32 parity: checked__true / checkedColor / the checked control).
+            checked_literal = @component['checked'] == true || @component['isOn'] == true
+            add_state_variable(state_var, "String", checked_literal ? "\"#{radio_value}\"" : '""')
             
             # カスタムRadioButton実装
             add_line "HStack {"
@@ -132,8 +137,11 @@ module SjuiTools
         # to have any effect, because an SF Symbol otherwise scales with the
         # font rather than the frame.
         def add_radio_icon_lines(selected_expr)
+          # snake_case rows (icon / selected_icon) are declared aliases the
+          # dynamic path reads — the camelCase-only read left the declared
+          # asset unrendered (d=166, 32 parity).
           icon = @component['icon']
-          selected_icon = @component['selectedIcon']
+          selected_icon = @component['selectedIcon'] || @component['selected_icon']
           size = @component['iconSize']
           icon_color = @component['iconColor'] ? get_swiftui_color(@component['iconColor']) : nil
 

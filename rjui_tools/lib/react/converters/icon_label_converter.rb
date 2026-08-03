@@ -140,7 +140,9 @@ module RjuiTools
 
           # Icon margin
           icon_position = (attributes['iconPosition'] || 'Left').downcase
-          margin = attributes['iconMargin'] || attributes['spacing'] || 4
+          # 5 is the cross-platform canonical default (IconLabelView.swift and
+          # both mobile dynamic converters) — 4 was an rjui-only deviation.
+          margin = attributes['iconMargin'] || attributes['spacing'] || 5
           margin_class = case icon_position
                         when 'top' then "mb-[#{margin}px]"
                         when 'bottom' then "mt-[#{margin}px]"

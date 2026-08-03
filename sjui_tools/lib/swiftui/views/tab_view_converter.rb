@@ -157,6 +157,16 @@ module SjuiTools
               add_modifier_line ".toolbarBackground(#{color}, for: .tabBar)"
             end
             add_modifier_line ".toolbarBackground(.visible, for: .tabBar)"
+            # toolbarBackground alone leaves the bar unstyled on the
+            # conformance render — the dynamic path routes through the
+            # UITabBar appearance proxy for the same reason (33 cross-effect);
+            # mirror it so both paths paint the bar (32 parity).
+            unless is_binding?(bg_color)
+              color = get_swiftui_color(bg_color)
+              add_modifier_line ".onAppear {"
+              add_modifier_line "    UITabBar.appearance().backgroundColor = UIColor(#{color})"
+              add_modifier_line "}"
+            end
           end
 
           # unselectedColor — SwiftUI exposes no modifier for the inactive tab

@@ -175,6 +175,12 @@ module SjuiTools
                 else
                   add_line "selectedIndex: #{@component['selectedIndex']},"
                 end
+              elsif @component['selectedValue'] && !is_binding?(@component['selectedValue']) &&
+                    items.is_a?(Array) && (idx = items.index(@component['selectedValue']))
+                # A literal selectedValue resolves to its item index at
+                # generation time — the dynamic path does the same lookup
+                # (32 parity: the declared selection rendered empty here).
+                add_line "selectedIndex: #{idx},"
               end
             end
 

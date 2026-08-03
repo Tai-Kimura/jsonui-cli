@@ -27,6 +27,9 @@ module KjuiTools
       # meaning between dynamic and generated mode.
       class IconLabelComponent
         # Matches IconLabelView.swift's own default.
+        # 5 is the cross-platform canonical (IconLabelView.swift and the ios
+        # dynamic converter both default to 5) — the KJUI dynamic 8f fallback
+        # was the deviant side (32 parity re-measure).
         DEFAULT_ICON_MARGIN = 5
         DEFAULT_ICON_SIZE = 24
 

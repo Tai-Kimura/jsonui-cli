@@ -13,7 +13,10 @@ module SjuiTools
 
         def convert
           id = @component['id'] || 'checkbox'
-          text = @component['text'] || @component['label'] || ""
+          # `label` is the specific declared row and wins over `text` — both
+          # dynamic paths read label first (32 parity: the label fixture
+          # rendered its text fallback here).
+          text = @component['label'] || @component['text'] || ""
 
           # Get icon names
           icon = @component['icon'] || @component['src']
@@ -69,6 +72,10 @@ module SjuiTools
             if @component['fontStyle']
               weight = get_font_weight(@component['fontStyle'])
               add_line "fontWeight: .#{weight}," if weight
+            elsif %w[bold semibold medium].include?(@component['font'].to_s.downcase)
+              # `font: "bold"` doubles as the weight spelling (Button/Radio
+              # dynamic precedent) — the label rendered regular here.
+              add_line "fontWeight: .#{@component['font'].to_s.downcase},"
             end
 
             # Font color

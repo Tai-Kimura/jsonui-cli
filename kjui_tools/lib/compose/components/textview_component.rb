@@ -46,10 +46,13 @@ module KjuiTools
           end
           if multiple
             # Compose has no multiplier, so it resolves against the hint's own
-            # size (falling back to the field's, then Material's default).
-            required_imports&.add(:text_style)
-            base_size = size || json_data['fontSize'] || 14
-            args << "style = TextStyle(lineHeight = #{format_sp(base_size.to_f * multiple.to_f)}.sp)"
+            # size (falling back to the field's, then M3 bodyLarge's 16).
+            # The style derives from LocalTextStyle — a bare TextStyle()
+            # discarded the M3 placeholder typography (the theme-destruction
+            # class; the dynamic component mirrors this exactly).
+            required_imports&.add(:local_text_style)
+            base_size = size || json_data['fontSize'] || 16
+            args << "style = LocalTextStyle.current.copy(lineHeight = #{format_sp(base_size.to_f * multiple.to_f)}.sp)"
           end
 
           return "\n" + indent("placeholder = { Text(#{placeholder}) },", depth + 1) if args.length == 1

@@ -90,7 +90,10 @@ module KjuiTools
           # parts and travels the same path — gravity wins when both are set,
           # since it is the primary spelling.
           gravity = json_data['gravity'] || alignment_as_gravity(json_data['alignment'])
-          if gravity
+          # direction: rightToLeft on a Column needs add_gravity_settings even
+          # with no gravity declared — its trailing-edge branch is exactly the
+          # gravity-less case (it was unreachable behind `if gravity`).
+          if gravity || (json_data['direction'] == 'rightToLeft' && layout == 'Column')
             gravity_code = add_gravity_settings(layout, gravity, depth, json_data)
             # Each clause is emitted with a leading comma, which is only correct
             # when an argument precedes it. A container with gravity but no

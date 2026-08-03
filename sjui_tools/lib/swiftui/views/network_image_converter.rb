@@ -104,6 +104,11 @@ module SjuiTools
             # shared/core/attribute_semantics.json) — NetworkImage gained the
             # .stretch case for it.
             '.stretch'
+          when 'top', 'Top', 'bottom', 'Bottom', 'left', 'Left', 'right', 'Right'
+            # Positional modes draw unscaled and aligned — NetworkImage has
+            # carried the cases since the contentMode wave; the map dropped
+            # them to .fit (32 parity, d=50-79).
+            ".#{mode.downcase}"
           else
             '.fit'
           end

@@ -28,8 +28,13 @@ module KjuiTools
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           required_imports&.add(:async_image)
 
-          # NetworkImage uses 'source' or 'url' for image URL
-          url = process_data_binding(json_data['source'] || json_data['url'] || json_data['src'] || '')
+          # NetworkImage uses 'source' or 'url' for image URL. An absent
+          # source must be a NULL model, not "": Coil routes an empty string
+          # through the request/error path (errorImage), while null selects
+          # the fallback (defaultImage) — the canonical no-src state
+          # (networkImage.noSrc; the dynamic component nulls empty URLs too).
+          raw_source = json_data['source'] || json_data['url'] || json_data['src']
+          url = raw_source.nil? ? 'null' : process_data_binding(raw_source)
           # Support 'hint' (primary), 'placeholder' and the legacy
           # 'loadingImage' spelling — all name the in-flight image.
           placeholder = json_data['hint'] || json_data['placeholder'] || json_data['loadingImage']

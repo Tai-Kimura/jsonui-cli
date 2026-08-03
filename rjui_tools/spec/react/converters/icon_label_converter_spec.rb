@@ -28,7 +28,7 @@ RSpec.describe RjuiTools::React::Converters::IconLabelConverter do
         converter = create_converter({ 'class' => 'IconLabel', 'text' => 'Text', 'icon' => 'icon.png' })
         result = converter.convert
         expect(result).to include('flex-row')
-        expect(result).to include('mr-[4px]')
+        expect(result).to include('mr-[5px]')
       end
     end
 
@@ -37,7 +37,7 @@ RSpec.describe RjuiTools::React::Converters::IconLabelConverter do
         converter = create_converter({ 'class' => 'IconLabel', 'text' => 'Text', 'icon' => 'icon.png', 'iconPosition' => 'Right' })
         result = converter.convert
         expect(result).to include('flex-row-reverse')
-        expect(result).to include('ml-[4px]')
+        expect(result).to include('ml-[5px]')
       end
     end
 
@@ -46,7 +46,7 @@ RSpec.describe RjuiTools::React::Converters::IconLabelConverter do
         converter = create_converter({ 'class' => 'IconLabel', 'text' => 'Text', 'icon' => 'icon.png', 'iconPosition' => 'Top' })
         result = converter.convert
         expect(result).to include('flex-col')
-        expect(result).to include('mb-[4px]')
+        expect(result).to include('mb-[5px]')
       end
     end
 
@@ -55,7 +55,7 @@ RSpec.describe RjuiTools::React::Converters::IconLabelConverter do
         converter = create_converter({ 'class' => 'IconLabel', 'text' => 'Text', 'icon' => 'icon.png', 'iconPosition' => 'Bottom' })
         result = converter.convert
         expect(result).to include('flex-col-reverse')
-        expect(result).to include('mt-[4px]')
+        expect(result).to include('mt-[5px]')
       end
     end
 

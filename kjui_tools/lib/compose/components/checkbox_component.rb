@@ -86,6 +86,13 @@ module KjuiTools
               code += "\n" + indent("onCheckedChange = { }", depth + 2)
             end
 
+            # iconSize on the labeled default checkbox sizes the box itself —
+            # the dynamic labeled path does the same (it was only emitted on
+            # the unlabeled branch; 32 parity re-measure).
+            if json_data['iconSize']
+              code += ",\n" + indent("modifier = Modifier.size(#{json_data['iconSize'].to_i}.dp)", depth + 2)
+            end
+
             code += "\n" + indent(")", depth + 1)
 
             # Spacer with configurable spacing

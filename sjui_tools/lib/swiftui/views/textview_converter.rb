@@ -28,8 +28,12 @@ module SjuiTools
             # model never grows (caught compiling the codegen parity host:
             # every no-binding TextView fixture failed with "no dynamic
             # member 'targetText'"). Radio's fallback is the precedent.
+            # A literal `text` seeds the editor's initial content (TextField's
+            # literal-seed precedent) — an empty seed dropped the declared
+            # text and the editor rendered placeholder-gray (32 parity).
             state_var = "#{id}Text"
-            add_state_variable(state_var, "String", '""')
+            seed = text_binding.is_a?(String) && !text_binding.empty? ? text_binding.inspect : '""'
+            add_state_variable(state_var, "String", seed)
             binding_path = state_var
           end
 

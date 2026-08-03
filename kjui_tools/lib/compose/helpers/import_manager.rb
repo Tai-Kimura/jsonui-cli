@@ -25,6 +25,7 @@ module KjuiTools
             text_overflow: "import androidx.compose.ui.text.style.TextOverflow",
             text_auto_size: "import androidx.compose.foundation.text.TextAutoSize",
             text_style: "import androidx.compose.ui.text.TextStyle",
+            local_text_style: "import androidx.compose.material3.LocalTextStyle",
             font_weight: "import androidx.compose.ui.text.font.FontWeight",
             font_family: ["import androidx.compose.ui.text.font.Font",
                           "import androidx.compose.ui.text.font.FontFamily"],

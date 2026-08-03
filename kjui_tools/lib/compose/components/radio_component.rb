@@ -279,10 +279,10 @@ module KjuiTools
             if json_data['fontColor'] || json_data['textColor']
               text_color = json_data['fontColor'] || json_data['textColor']
               color_resolved = Helpers::ResourceResolver.process_color(text_color, required_imports)
-              code += "\n" + indent("    Text(\"#{text}\", color = #{color_resolved})", depth)
+              code += "\n" + indent("    Text(\"#{text}\", color = #{color_resolved}#{label_font_args(json_data, required_imports)})", depth)
             else
               # Default to black color
-              code += "\n" + indent("    Text(\"#{text}\", color = Color.Black)", depth)
+              code += "\n" + indent("    Text(\"#{text}\", color = Color.Black#{label_font_args(json_data, required_imports)})", depth)
             end
           end
           
@@ -436,6 +436,27 @@ module KjuiTools
           icon_map[icon_name] || 'Icons.Outlined.Star'  # Default fallback to star
         end
         
+        # Label font args mirroring the dynamic component: `font` is the
+        # weight spelling (bold/semibold/medium), `fontSize` a declared sp
+        # size. Both were dropped on the codegen label (33 cross-effect;
+        # dynamic reads them since the parse-but-never-read wave).
+        def self.label_font_args(json_data, required_imports)
+          args = ''
+          weight = case json_data['font'].to_s.downcase
+                   when 'bold' then 'FontWeight.Bold'
+                   when 'semibold' then 'FontWeight.SemiBold'
+                   when 'medium' then 'FontWeight.Medium'
+                   end
+          if weight
+            required_imports&.add(:font_weight)
+            args += ", fontWeight = #{weight}"
+          end
+          if json_data['fontSize']
+            args += ", fontSize = #{json_data['fontSize']}.sp"
+          end
+          args
+        end
+
         def self.indent(text, level)
           return text if level == 0
           spaces = '    ' * level

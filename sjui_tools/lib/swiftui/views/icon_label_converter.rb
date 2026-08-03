@@ -72,8 +72,14 @@ module SjuiTools
               add_line "selectedFontColor: #{color},"
             end
             
-            # fontName
-            if @component['font'] && @component['font'] != 'bold'
+            # fontName — weight spellings route to fontWeight instead
+            # (IconLabelView carries the weight; the converter dropped
+            # `font: "bold"` on the floor — 32 parity). fontWeight is emitted
+            # AFTER isSelected: Swift call sites follow the init's declared
+            # argument order (fontName, isSelected, fontWeight).
+            font_value = @component['font'].to_s
+            font_weight = font_value.downcase if %w[bold semibold medium].include?(font_value.downcase)
+            if @component['font'] && !font_weight
               add_line "fontName: \"#{@component['font']}\","
             end
 
@@ -83,6 +89,10 @@ module SjuiTools
             # isSelected to false and the converter never passed anything.
             if (selected = selected_expression)
               add_line "isSelected: #{selected},"
+            end
+
+            if font_weight
+              add_line "fontWeight: .#{font_weight},"
             end
 
             # action for button (最後のパラメータなのでカンマなし)
