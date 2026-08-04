@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/maxHeight__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.maxHeight (binding)",
+    "description": "Conformance fixture for 'maxHeight' on View (section: common, class: visual). Value under test: \"@{boundMaxHeight}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "maxHeight__binding",
+      "description": "Conformance fixture for 'maxHeight' on View (section: common, class: visual). Value under test: \"@{boundMaxHeight}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_maxHeight__binding"
+        }
+      ]
+    }
+  ]
+}

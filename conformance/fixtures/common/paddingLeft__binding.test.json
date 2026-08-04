@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/paddingLeft__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.paddingLeft (binding)",
+    "description": "Conformance fixture for 'paddingLeft' on View (section: common, class: visual). Value under test: \"@{boundPaddingLeft}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "paddingLeft__binding",
+      "description": "Conformance fixture for 'paddingLeft' on View (section: common, class: visual). Value under test: \"@{boundPaddingLeft}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_paddingLeft__binding"
+        }
+      ]
+    }
+  ]
+}

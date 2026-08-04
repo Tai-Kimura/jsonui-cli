@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/maxWidth__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.maxWidth (binding)",
+    "description": "Conformance fixture for 'maxWidth' on View (section: common, class: visual). Value under test: \"@{boundMaxWidth}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "maxWidth__binding",
+      "description": "Conformance fixture for 'maxWidth' on View (section: common, class: visual). Value under test: \"@{boundMaxWidth}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_maxWidth__binding"
+        }
+      ]
+    }
+  ]
+}

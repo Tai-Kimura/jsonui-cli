@@ -10,9 +10,9 @@
   "schemaVersion": 2,
   "generatedFrom": "ed696903716308210a918a2bfaa36f0c12f20272efd2b3691635ca54fe0e1b62",
   "counts": {
-    "fixtures": 808,
+    "fixtures": 834,
     "assertable": 33,
-    "visual": 668,
+    "visual": 694,
     "interactive": 35,
     "control": 72,
     "skipped": 151,
@@ -183,6 +183,29 @@
       "control": "__control/View"
     },
     {
+      "id": "common/minWidth__binding",
+      "component": "common",
+      "attribute": "minWidth",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "minWidth",
+      "aliasOf": null,
+      "value": "@{boundMinWidth}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/minWidth__binding.layout.json",
+      "test": "fixtures/common/minWidth__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
       "id": "common/maxWidth__static",
       "component": "common",
       "attribute": "maxWidth",
@@ -201,6 +224,29 @@
       "deprecated": null,
       "layout": "fixtures/common/maxWidth__static.layout.json",
       "test": "fixtures/common/maxWidth__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
+      "id": "common/maxWidth__binding",
+      "component": "common",
+      "attribute": "maxWidth",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "maxWidth",
+      "aliasOf": null,
+      "value": "@{boundMaxWidth}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/maxWidth__binding.layout.json",
+      "test": "fixtures/common/maxWidth__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/View"
@@ -229,6 +275,29 @@
       "control": "__control/View"
     },
     {
+      "id": "common/minHeight__binding",
+      "component": "common",
+      "attribute": "minHeight",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "minHeight",
+      "aliasOf": null,
+      "value": "@{boundMinHeight}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/minHeight__binding.layout.json",
+      "test": "fixtures/common/minHeight__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
       "id": "common/maxHeight__static",
       "component": "common",
       "attribute": "maxHeight",
@@ -247,6 +316,29 @@
       "deprecated": null,
       "layout": "fixtures/common/maxHeight__static.layout.json",
       "test": "fixtures/common/maxHeight__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
+      "id": "common/maxHeight__binding",
+      "component": "common",
+      "attribute": "maxHeight",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "maxHeight",
+      "aliasOf": null,
+      "value": "@{boundMaxHeight}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/maxHeight__binding.layout.json",
+      "test": "fixtures/common/maxHeight__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/View"
@@ -666,6 +758,29 @@
       "deprecated": null,
       "layout": "fixtures/common/cornerRadius__static.layout.json",
       "test": "fixtures/common/cornerRadius__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
+      "id": "common/cornerRadius__binding",
+      "component": "common",
+      "attribute": "cornerRadius",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "cornerRadius",
+      "aliasOf": null,
+      "value": "@{boundCornerRadius}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/cornerRadius__binding.layout.json",
+      "test": "fixtures/common/cornerRadius__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/View"
@@ -1180,6 +1295,29 @@
       "control": "__control/View__orientation-horizontal"
     },
     {
+      "id": "common/padding__binding",
+      "component": "common",
+      "attribute": "padding",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "padding",
+      "aliasOf": null,
+      "value": "@{boundPadding}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/padding__binding.layout.json",
+      "test": "fixtures/common/padding__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__orientation-horizontal"
+    },
+    {
       "id": "common/paddings__static",
       "component": "common",
       "attribute": "paddings",
@@ -1231,6 +1369,29 @@
       "control": "__control/View__orientation-horizontal"
     },
     {
+      "id": "common/paddingTop__binding",
+      "component": "common",
+      "attribute": "paddingTop",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "paddingTop",
+      "aliasOf": null,
+      "value": "@{boundPaddingTop}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/paddingTop__binding.layout.json",
+      "test": "fixtures/common/paddingTop__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__orientation-horizontal"
+    },
+    {
       "id": "common/paddingBottom__static",
       "component": "common",
       "attribute": "paddingBottom",
@@ -1249,6 +1410,29 @@
       "deprecated": null,
       "layout": "fixtures/common/paddingBottom__static.layout.json",
       "test": "fixtures/common/paddingBottom__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__orientation-horizontal"
+    },
+    {
+      "id": "common/paddingBottom__binding",
+      "component": "common",
+      "attribute": "paddingBottom",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "paddingBottom",
+      "aliasOf": null,
+      "value": "@{boundPaddingBottom}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/paddingBottom__binding.layout.json",
+      "test": "fixtures/common/paddingBottom__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/View__orientation-horizontal"
@@ -1277,6 +1461,29 @@
       "control": "__control/View__orientation-horizontal"
     },
     {
+      "id": "common/paddingLeft__binding",
+      "component": "common",
+      "attribute": "paddingLeft",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "paddingLeft",
+      "aliasOf": null,
+      "value": "@{boundPaddingLeft}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/paddingLeft__binding.layout.json",
+      "test": "fixtures/common/paddingLeft__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__orientation-horizontal"
+    },
+    {
       "id": "common/paddingRight__static",
       "component": "common",
       "attribute": "paddingRight",
@@ -1295,6 +1502,29 @@
       "deprecated": null,
       "layout": "fixtures/common/paddingRight__static.layout.json",
       "test": "fixtures/common/paddingRight__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__orientation-horizontal"
+    },
+    {
+      "id": "common/paddingRight__binding",
+      "component": "common",
+      "attribute": "paddingRight",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "paddingRight",
+      "aliasOf": null,
+      "value": "@{boundPaddingRight}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/paddingRight__binding.layout.json",
+      "test": "fixtures/common/paddingRight__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/View__orientation-horizontal"
@@ -1323,6 +1553,29 @@
       "control": "__control/View__orientation-horizontal"
     },
     {
+      "id": "common/paddingStart__binding",
+      "component": "common",
+      "attribute": "paddingStart",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "paddingStart",
+      "aliasOf": null,
+      "value": "@{boundPaddingStart}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/paddingStart__binding.layout.json",
+      "test": "fixtures/common/paddingStart__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__orientation-horizontal"
+    },
+    {
       "id": "common/paddingEnd__static",
       "component": "common",
       "attribute": "paddingEnd",
@@ -1341,6 +1594,29 @@
       "deprecated": null,
       "layout": "fixtures/common/paddingEnd__static.layout.json",
       "test": "fixtures/common/paddingEnd__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__orientation-horizontal"
+    },
+    {
+      "id": "common/paddingEnd__binding",
+      "component": "common",
+      "attribute": "paddingEnd",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "paddingEnd",
+      "aliasOf": null,
+      "value": "@{boundPaddingEnd}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/paddingEnd__binding.layout.json",
+      "test": "fixtures/common/paddingEnd__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/View__orientation-horizontal"
@@ -1369,6 +1645,29 @@
       "control": "__control/View"
     },
     {
+      "id": "common/rightPadding__binding",
+      "component": "common",
+      "attribute": "rightPadding",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "rightPadding",
+      "aliasOf": null,
+      "value": "@{boundRightPadding}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/rightPadding__binding.layout.json",
+      "test": "fixtures/common/rightPadding__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
       "id": "common/leftPadding__static",
       "component": "common",
       "attribute": "leftPadding",
@@ -1387,6 +1686,29 @@
       "deprecated": null,
       "layout": "fixtures/common/leftPadding__static.layout.json",
       "test": "fixtures/common/leftPadding__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
+      "id": "common/leftPadding__binding",
+      "component": "common",
+      "attribute": "leftPadding",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "leftPadding",
+      "aliasOf": null,
+      "value": "@{boundLeftPadding}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/leftPadding__binding.layout.json",
+      "test": "fixtures/common/leftPadding__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/View"
@@ -1415,6 +1737,29 @@
       "control": "__control/View"
     },
     {
+      "id": "common/topPadding__binding",
+      "component": "common",
+      "attribute": "topPadding",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "topPadding",
+      "aliasOf": null,
+      "value": "@{boundTopPadding}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/topPadding__binding.layout.json",
+      "test": "fixtures/common/topPadding__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
       "id": "common/bottomPadding__static",
       "component": "common",
       "attribute": "bottomPadding",
@@ -1433,6 +1778,29 @@
       "deprecated": null,
       "layout": "fixtures/common/bottomPadding__static.layout.json",
       "test": "fixtures/common/bottomPadding__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
+      "id": "common/bottomPadding__binding",
+      "component": "common",
+      "attribute": "bottomPadding",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "bottomPadding",
+      "aliasOf": null,
+      "value": "@{boundBottomPadding}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/bottomPadding__binding.layout.json",
+      "test": "fixtures/common/bottomPadding__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/View"
@@ -4324,6 +4692,29 @@
       "control": "__control/Label"
     },
     {
+      "id": "Label/fontSize__binding",
+      "component": "Label",
+      "attribute": "fontSize",
+      "case": "binding",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "fontSize",
+      "aliasOf": null,
+      "value": "@{boundFontSize}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/fontSize__binding.layout.json",
+      "test": "fixtures/Label/fontSize__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Label"
+    },
+    {
       "id": "Label/fontColor__static",
       "component": "Label",
       "attribute": "fontColor",
@@ -4677,6 +5068,29 @@
       "deprecated": null,
       "layout": "fixtures/Label/lines__static.layout.json",
       "test": "fixtures/Label/lines__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Label__text-1d8efd05"
+    },
+    {
+      "id": "Label/lines__binding",
+      "component": "Label",
+      "attribute": "lines",
+      "case": "binding",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "lines",
+      "aliasOf": null,
+      "value": "@{boundLines}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/lines__binding.layout.json",
+      "test": "fixtures/Label/lines__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Label__text-1d8efd05"
@@ -5531,6 +5945,29 @@
       "deprecated": null,
       "layout": "fixtures/TextField/fontSize__static.layout.json",
       "test": "fixtures/TextField/fontSize__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/TextField"
+    },
+    {
+      "id": "TextField/fontSize__binding",
+      "component": "TextField",
+      "attribute": "fontSize",
+      "case": "binding",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "fontSize",
+      "aliasOf": null,
+      "value": "@{boundFontSize}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/fontSize__binding.layout.json",
+      "test": "fixtures/TextField/fontSize__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/TextField"
@@ -7780,6 +8217,29 @@
       "deprecated": null,
       "layout": "fixtures/TextView/fontSize__static.layout.json",
       "test": "fixtures/TextView/fontSize__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/TextView__text-Sample"
+    },
+    {
+      "id": "TextView/fontSize__binding",
+      "component": "TextView",
+      "attribute": "fontSize",
+      "case": "binding",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "fontSize",
+      "aliasOf": null,
+      "value": "@{boundFontSize}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/fontSize__binding.layout.json",
+      "test": "fixtures/TextView/fontSize__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/TextView__text-Sample"
@@ -12585,6 +13045,29 @@
       "control": "__control/Slider__value-0.5"
     },
     {
+      "id": "Slider/minimum__binding",
+      "component": "Slider",
+      "attribute": "minimum",
+      "case": "binding",
+      "class": "visual",
+      "host": "Slider",
+      "writtenKey": "minimum",
+      "aliasOf": null,
+      "value": "@{boundMinimum}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Slider/minimum__binding.layout.json",
+      "test": "fixtures/Slider/minimum__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Slider__value-0.5"
+    },
+    {
       "id": "Slider/maximum__static",
       "component": "Slider",
       "attribute": "maximum",
@@ -12649,6 +13132,29 @@
       "deprecated": null,
       "layout": "fixtures/Slider/maximum__alias_maxValue.layout.json",
       "test": "fixtures/Slider/maximum__alias_maxValue.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Slider__value-0.5"
+    },
+    {
+      "id": "Slider/maximum__binding",
+      "component": "Slider",
+      "attribute": "maximum",
+      "case": "binding",
+      "class": "visual",
+      "host": "Slider",
+      "writtenKey": "maximum",
+      "aliasOf": null,
+      "value": "@{boundMaximum}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Slider/maximum__binding.layout.json",
+      "test": "fixtures/Slider/maximum__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Slider__value-0.5"
@@ -13316,6 +13822,33 @@
       "deprecated": null,
       "layout": "fixtures/View/spacing__static.layout.json",
       "test": "fixtures/View/spacing__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__orientation-horizontal"
+    },
+    {
+      "id": "View/spacing__binding",
+      "component": "View",
+      "attribute": "spacing",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "spacing",
+      "aliasOf": null,
+      "value": "@{boundSpacing}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": [
+        "swiftui",
+        "compose",
+        "react"
+      ],
+      "deprecated": null,
+      "layout": "fixtures/View/spacing__binding.layout.json",
+      "test": "fixtures/View/spacing__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/View__orientation-horizontal"
@@ -14935,6 +15468,29 @@
       "control": "__control/Radio"
     },
     {
+      "id": "Radio/fontSize__binding",
+      "component": "Radio",
+      "attribute": "fontSize",
+      "case": "binding",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": "fontSize",
+      "aliasOf": null,
+      "value": "@{boundFontSize}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Radio/fontSize__binding.layout.json",
+      "test": "fixtures/Radio/fontSize__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Radio"
+    },
+    {
       "id": "Radio/fontColor__static",
       "component": "Radio",
       "attribute": "fontColor",
@@ -15549,6 +16105,29 @@
       "control": "__control/CheckBox"
     },
     {
+      "id": "CheckBox/fontSize__binding",
+      "component": "CheckBox",
+      "attribute": "fontSize",
+      "case": "binding",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": "fontSize",
+      "aliasOf": null,
+      "value": "@{boundFontSize}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/fontSize__binding.layout.json",
+      "test": "fixtures/CheckBox/fontSize__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/CheckBox"
+    },
+    {
       "id": "CheckBox/fontColor__static",
       "component": "CheckBox",
       "attribute": "fontColor",
@@ -15590,6 +16169,29 @@
       "deprecated": null,
       "layout": "fixtures/CheckBox/spacing__static.layout.json",
       "test": "fixtures/CheckBox/spacing__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/CheckBox__orientation-horizontal"
+    },
+    {
+      "id": "CheckBox/spacing__binding",
+      "component": "CheckBox",
+      "attribute": "spacing",
+      "case": "binding",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": "spacing",
+      "aliasOf": null,
+      "value": "@{boundSpacing}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/spacing__binding.layout.json",
+      "test": "fixtures/CheckBox/spacing__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/CheckBox__orientation-horizontal"

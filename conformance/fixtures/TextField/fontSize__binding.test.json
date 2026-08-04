@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/fontSize__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.fontSize (binding)",
+    "description": "Conformance fixture for 'fontSize' on TextField (section: TextField, class: visual). Value under test: \"@{boundFontSize}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontSize__binding",
+      "description": "Conformance fixture for 'fontSize' on TextField (section: TextField, class: visual). Value under test: \"@{boundFontSize}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_fontSize__binding"
+        }
+      ]
+    }
+  ]
+}

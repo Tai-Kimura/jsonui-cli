@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/padding__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.padding (binding)",
+    "description": "Conformance fixture for 'padding' on View (section: common, class: visual). Value under test: \"@{boundPadding}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "padding__binding",
+      "description": "Conformance fixture for 'padding' on View (section: common, class: visual). Value under test: \"@{boundPadding}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_padding__binding"
+        }
+      ]
+    }
+  ]
+}

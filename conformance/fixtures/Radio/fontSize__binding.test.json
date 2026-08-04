@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/fontSize__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.fontSize (binding)",
+    "description": "Conformance fixture for 'fontSize' on Radio (section: Radio, class: visual). Value under test: \"@{boundFontSize}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontSize__binding",
+      "description": "Conformance fixture for 'fontSize' on Radio (section: Radio, class: visual). Value under test: \"@{boundFontSize}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_fontSize__binding"
+        }
+      ]
+    }
+  ]
+}

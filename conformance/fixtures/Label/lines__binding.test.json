@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/lines__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.lines (binding)",
+    "description": "Conformance fixture for 'lines' on Label (section: Label, class: visual). Value under test: \"@{boundLines}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "lines__binding",
+      "description": "Conformance fixture for 'lines' on Label (section: Label, class: visual). Value under test: \"@{boundLines}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_lines__binding"
+        }
+      ]
+    }
+  ]
+}

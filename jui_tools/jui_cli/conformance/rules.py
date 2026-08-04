@@ -727,34 +727,13 @@ BOUND_CASE_CLASSES: dict[tuple[str, str], str] = {
 #: binding belongs would make the suite green and leave the defect unmeasured,
 #: which is the failure mode this whole wave exists to remove.
 BOUND_CASES_BLOCKED: dict[tuple[str, str], str] = {
-    # --- the codegen emits source that does not compile (26) --------------- #
-    ('CheckBox', 'fontSize'): "bound-uncompilable",
-    ('CheckBox', 'spacing'): "bound-uncompilable",
-    ('Label', 'fontSize'): "bound-uncompilable",
-    ('Label', 'lines'): "bound-uncompilable",
-    ('Radio', 'fontSize'): "bound-uncompilable",
-    ('Slider', 'maximum'): "bound-uncompilable",
-    ('Slider', 'minimum'): "bound-uncompilable",
-    ('TextField', 'fontSize'): "bound-uncompilable",
-    ('TextView', 'fontSize'): "bound-uncompilable",
-    ('View', 'spacing'): "bound-uncompilable",
-    ('common', 'bottomPadding'): "bound-uncompilable",
-    ('common', 'cornerRadius'): "bound-uncompilable",
-    ('common', 'leftPadding'): "bound-uncompilable",
-    ('common', 'maxHeight'): "bound-uncompilable",
-    ('common', 'maxWidth'): "bound-uncompilable",
-    ('common', 'minHeight'): "bound-uncompilable",
-    ('common', 'minWidth'): "bound-uncompilable",
-    ('common', 'padding'): "bound-uncompilable",
-    ('common', 'paddingBottom'): "bound-uncompilable",
-    ('common', 'paddingEnd'): "bound-uncompilable",
-    ('common', 'paddingLeft'): "bound-uncompilable",
-    ('common', 'paddingRight'): "bound-uncompilable",
-    ('common', 'paddingStart'): "bound-uncompilable",
-    ('common', 'paddingTop'): "bound-uncompilable",
-    ('common', 'rightPadding'): "bound-uncompilable",
-    ('common', 'topPadding'): "bound-uncompilable",
     # --- the web host's tsc rejects the emitted type (6) ------------------- #
+    # All six are web, i.e. lane A. The 26 `bound-uncompilable` entries that
+    # stood here came out on 2026-08-05: A/B/C's fixes cleared the class
+    # entirely (codegen-effect at 07f2296: 0 on all three platforms), and F
+    # and G built their hosts against the unblocked fixtures first — the
+    # differential only asks whether `@{` survived into the output, so a
+    # zero there is not by itself proof that the host compiles.
     ('Label', 'textAlign'): "web-typecheck",
     ('Label', 'highlightColor'): "web-typecheck",
     ('TextField', 'hintColor'): "web-typecheck",
