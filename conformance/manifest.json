@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "4db3e271874b1eeb90615345b2c3d1d695dd748a46086e1c626e684f9d2455c9",
   "counts": {
-    "fixtures": 742,
+    "fixtures": 743,
     "assertable": 29,
     "visual": 607,
     "interactive": 35,
-    "control": 71,
+    "control": 72,
     "skipped": 151,
     "promoted": {
       "callback": 11
@@ -14377,7 +14377,7 @@
       "test": "fixtures/Indicator/hidesWhenStopped__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Indicator"
+      "control": "__control/Indicator__animating-False"
     },
     {
       "id": "GradientView/gradient__static",
@@ -15707,6 +15707,28 @@
       "deprecated": null,
       "layout": "fixtures/__control/Indicator.layout.json",
       "test": "fixtures/__control/Indicator.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Indicator__animating-False",
+      "component": "__control",
+      "attribute": null,
+      "case": "Indicator",
+      "class": "visual",
+      "host": "Indicator",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Indicator__animating-False.layout.json",
+      "test": "fixtures/__control/Indicator__animating-False.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

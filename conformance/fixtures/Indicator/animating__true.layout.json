@@ -17,8 +17,7 @@
       "id": "target",
       "width": "wrapContent",
       "height": "wrapContent",
-      "animating": false,
-      "hidesWhenStopped": true
+      "animating": true
     }
   ]
 }

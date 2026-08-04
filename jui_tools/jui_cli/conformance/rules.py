@@ -900,6 +900,14 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # supplies `src`, so the fallback arm was unreachable.
     "Image.errorImage": {"src": None},
     "Image.loadingImage": {"src": None},
+    # `hidesWhenStopped` decides what a STOPPED indicator does — keep its space
+    # or collapse out of the layout — so it is only ever read on the
+    # `animating == false` branch (sjui indicator_converter.rb:23, kjui
+    # indicator_component.rb:13). `animating` defaults to true, and Indicator
+    # has no BASE_ATTRS entry, so the fixture was always a spinning indicator
+    # and the branch was unreachable. Unblocked by E declaring `animating`
+    # (the attribute existed in three converters and in no schema).
+    "Indicator.hidesWhenStopped": {"animating": False},
     # kjui puts the label on whichever side `labelPosition` names, but only on
     # the labelled path (switch_component.rb:144/170) — and a Switch's label is
     # `labelAttributes.text`. Switch has no BASE_ATTRS entry at all, so there
