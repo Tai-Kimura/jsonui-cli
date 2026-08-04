@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/showsHorizontalScrollIndicator__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.showsHorizontalScrollIndicator (false)",
+    "description": "Conformance fixture for 'showsHorizontalScrollIndicator' on Collection (section: Collection, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": [
+    "ios",
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "showsHorizontalScrollIndicator__false",
+      "description": "Conformance fixture for 'showsHorizontalScrollIndicator' on Collection (section: Collection, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_showsHorizontalScrollIndicator__false"
+        }
+      ]
+    }
+  ]
+}

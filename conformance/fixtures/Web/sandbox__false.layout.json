@@ -13,22 +13,12 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "ScrollView",
+      "type": "Web",
       "id": "target",
       "width": 200,
       "height": 200,
-      "background": "#DDDDDD",
-      "orientation": "horizontal",
-      "child": [
-        {
-          "type": "View",
-          "id": "content",
-          "width": 150,
-          "height": 600,
-          "background": "#FF0000"
-        }
-      ],
-      "showsHorizontalScrollIndicator": true
+      "html": "<p>Sample</p>",
+      "sandbox": false
     }
   ]
 }

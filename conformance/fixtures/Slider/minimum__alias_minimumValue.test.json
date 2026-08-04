@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance Slider.minimum (alias_minimumValue)",
-    "description": "Conformance fixture for 'minimum' on Slider (section: Slider, class: visual). Value under test: 0.",
+    "description": "Conformance fixture for 'minimum' on Slider (section: Slider, class: visual). Value under test: 0.25.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "minimum__alias_minimumValue",
-      "description": "Conformance fixture for 'minimum' on Slider (section: Slider, class: visual). Value under test: 0.",
+      "description": "Conformance fixture for 'minimum' on Slider (section: Slider, class: visual). Value under test: 0.25.",
       "steps": [
         {
           "action": "waitFor",

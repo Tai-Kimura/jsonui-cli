@@ -304,6 +304,19 @@ NON_OBSERVABLE_ATTRS = {
     # enum fixtures would be counted as "identical to control, investigate" —
     # the same false-positive block 34 cleared on web (39 of 235).
     "contentType",
+    # --- lane A §5(3), the six A named explicitly ------------------------- #
+    # Validation and semantics that live in the DOM/a11y layer, never in the
+    # frame: the submit/reset role of a button, an image's alt text, an input's
+    # length cap and validation pattern and required flag, a view's drag
+    # affordance. The codegen probe still measures every one of them — this
+    # only stops the SCREENSHOT check from filing "identical to its control"
+    # against something a camera cannot see.
+    "buttonType",
+    "alt",
+    "maxLength",
+    "pattern",
+    "required",
+    "draggable",
 }
 
 
@@ -532,6 +545,33 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     ("Radio", "icon"): "circle",
     ("Radio", "selectedIcon"): "checkmark.circle.fill",
     ("Radio", "selected_icon"): "checkmark.circle.fill",
+    # --- representative == platform default, non-enum half (lane A §5) ------ #
+    #
+    # Same defect as PREFERRED_PRIMARY_CASE below, for attributes with no enum
+    # to reorder: the name-keyed fallback happened to pick the value the
+    # platform already uses, so the fixture rendered its control.
+    #
+    # Booleans whose platform default is ON — the indicator spins, the
+    # scrollbars show, the tabs are labelled, the text view is editable and
+    # selectable, the iframe is sandboxed — so `true` was a no-op.
+    ("Collection", "showsHorizontalScrollIndicator"): False,
+    ("Collection", "showsVerticalScrollIndicator"): False,
+    ("ScrollView", "showsHorizontalScrollIndicator"): False,
+    ("ScrollView", "showsVerticalScrollIndicator"): False,
+    ("TabView", "showLabels"): False,
+    ("TextView", "editable"): False,
+    ("TextView", "selectable"): False,
+    ("Web", "sandbox"): False,
+    ("Indicator", "animating"): False,
+    ("Indicator", "hidesWhenStopped"): False,
+    # DEFAULT_NUMBER (8) is also the cross-platform default gap.
+    ("CheckBox", "spacing"): 16,
+    # rjui's own fallback is `attributes['minimumScaleFactor'] || 0.5`, so the
+    # generic 0.5 was the default spelled out.
+    ("Label", "minimumScaleFactor"): 0.25,
+    # A slider's floor defaults to 0. Kept below the companion `value: 0.5` so
+    # the thumb still has somewhere to sit.
+    ("Slider", "minimum"): 0.25,
 }
 
 #: Extra representative values appended AFTER the primary case, for attributes
@@ -564,6 +604,39 @@ PREFERRED_PRIMARY_CASE: dict[tuple[str, str], Any] = {
     # select_box_converter.rb:487). The enum leads with `automatic`, which is
     # exactly the arm that emits nothing.
     ("SelectBox", "datePickerStyle"): "graphical",
+    # --- representative == platform default (lane A §5, 2026-08-05) --------- #
+    #
+    # These enums lead with the value the platform already renders when the
+    # attribute is absent, so the fixture and its control come out identical
+    # and the visual check reads "identical to control, investigate" — a false
+    # positive that looks exactly like a dropped attribute. Every value still
+    # gets its own fixture; this only moves the REPRESENTATIVE off the default.
+    # The replacements are the machine's own second value (`codegen-effect`
+    # `representativeValueCandidates`), not hand-picked.
+    ("Collection", "defaultScrollAnchor"): "center",
+    ("Collection", "layout"): "horizontal",
+    ("Collection", "lazy"): "eager",
+    ("GradientView", "gradientDirection"): "Horizontal",
+    ("IconLabel", "iconPosition"): "Right",
+    ("Image", "contentMode"): "fill",
+    ("Image", "renderingMode"): "template",
+    ("Label", "lineBreakMode"): "Clip",
+    ("ScrollView", "scrollMode"): "window",
+    ("SelectBox", "datePickerMode"): "time",
+    ("SelectBox", "selectItemType"): "Date",
+    ("Switch", "labelPosition"): "trailing",
+    ("TextView", "lineBreakMode"): "Clip",
+    ("TextView", "resize"): "both",
+    ("View", "direction"): "bottomToTop",
+    ("View", "distribution"): "fillEqually",
+    ("common", "alignment"): "top",
+    ("common", "distribution"): "fillEqually",
+    # `circle` renders the arm an icon-less radio already renders (kjui maps it
+    # to the default RadioButton), so it was the default in disguise. `square`
+    # reaches the Checkbox arm; `circle` stays as the second case.
+    ("Radio", "icon"): "square",
+    ("Radio", "selectedIcon"): "checkmark.square.fill",
+    ("Radio", "selected_icon"): "checkmark.square.fill",
 }
 
 #: Text-ish string attributes that read better with a hint payload.
@@ -1582,7 +1655,14 @@ def _visual_cases(section: str, attribute: str, defn: dict) -> list[CasePlan]:
     found, value = representative_value(section, attribute, defn)
     if found:
         if isinstance(value, bool):
-            cases.append(CasePlan(name="true", value=True, written_key=attribute))
+            # Name from the VALUE, not from the type. Hard-coding `True` here
+            # meant a boolean attribute whose platform default is already true
+            # could not be given a non-default representative at all — the
+            # override was read and then thrown away, and the fixture went on
+            # rendering exactly what its control rendered.
+            cases.append(
+                CasePlan(name=str(value).lower(), value=value, written_key=attribute)
+            )
         else:
             cases.append(CasePlan(name="static", value=value, written_key=attribute))
 

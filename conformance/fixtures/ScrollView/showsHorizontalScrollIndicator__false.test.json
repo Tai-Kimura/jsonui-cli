@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/ScrollView/showsHorizontalScrollIndicator__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance ScrollView.showsHorizontalScrollIndicator (false)",
+    "description": "Conformance fixture for 'showsHorizontalScrollIndicator' on ScrollView (section: ScrollView, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "ScrollView"
+    ]
+  },
+  "platform": [
+    "ios",
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "showsHorizontalScrollIndicator__false",
+      "description": "Conformance fixture for 'showsHorizontalScrollIndicator' on ScrollView (section: ScrollView, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "ScrollView_showsHorizontalScrollIndicator__false"
+        }
+      ]
+    }
+  ]
+}

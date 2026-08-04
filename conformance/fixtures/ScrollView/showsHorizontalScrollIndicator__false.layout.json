@@ -13,19 +13,22 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "TabView",
+      "type": "ScrollView",
       "id": "target",
-      "width": "matchParent",
-      "height": "matchParent",
-      "tabs": [
+      "width": 200,
+      "height": 200,
+      "background": "#DDDDDD",
+      "orientation": "horizontal",
+      "child": [
         {
-          "title": "One"
-        },
-        {
-          "title": "Two"
+          "type": "View",
+          "id": "content",
+          "width": 150,
+          "height": 600,
+          "background": "#FF0000"
         }
       ],
-      "showLabels": true
+      "showsHorizontalScrollIndicator": false
     }
   ]
 }

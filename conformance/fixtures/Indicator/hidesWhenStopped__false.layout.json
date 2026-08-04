@@ -13,12 +13,12 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "TextView",
+      "type": "Indicator",
       "id": "target",
-      "width": 200,
-      "height": 100,
-      "hint": "Sample",
-      "selectable": true
+      "width": "wrapContent",
+      "height": "wrapContent",
+      "animating": false,
+      "hidesWhenStopped": false
     }
   ]
 }

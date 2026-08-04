@@ -13,19 +13,35 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "TextField",
+      "type": "Collection",
       "id": "target",
       "width": 200,
-      "height": "wrapContent",
-      "hint": "Sample",
-      "text": "@{inputText}"
+      "height": 200,
+      "background": "#DDDDDD",
+      "sections": [
+        {
+          "cell": "conformance_cell"
+        }
+      ],
+      "items": "@{items}",
+      "showsVerticalScrollIndicator": false
     }
   ],
   "data": [
     {
-      "name": "inputText",
-      "class": "String",
-      "defaultValue": ""
+      "name": "items",
+      "class": "CollectionDataSource",
+      "defaultValue": [
+        {
+          "title": "Alpha"
+        },
+        {
+          "title": "Beta"
+        },
+        {
+          "title": "Gamma"
+        }
+      ]
     }
   ]
 }

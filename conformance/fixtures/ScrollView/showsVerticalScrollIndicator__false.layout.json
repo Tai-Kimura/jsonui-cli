@@ -13,35 +13,21 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "Collection",
+      "type": "ScrollView",
       "id": "target",
       "width": 200,
       "height": 200,
       "background": "#DDDDDD",
-      "sections": [
+      "child": [
         {
-          "cell": "conformance_cell"
+          "type": "View",
+          "id": "content",
+          "width": 150,
+          "height": 600,
+          "background": "#FF0000"
         }
       ],
-      "items": "@{items}",
-      "showsVerticalScrollIndicator": true
-    }
-  ],
-  "data": [
-    {
-      "name": "items",
-      "class": "CollectionDataSource",
-      "defaultValue": [
-        {
-          "title": "Alpha"
-        },
-        {
-          "title": "Beta"
-        },
-        {
-          "title": "Gamma"
-        }
-      ]
+      "showsVerticalScrollIndicator": false
     }
   ]
 }

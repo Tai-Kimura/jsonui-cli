@@ -19,7 +19,7 @@
       "height": "wrapContent",
       "text": "Sample",
       "autoShrink": true,
-      "minimumScaleFactor": 0.5
+      "minimumScaleFactor": 0.25
     }
   ]
 }

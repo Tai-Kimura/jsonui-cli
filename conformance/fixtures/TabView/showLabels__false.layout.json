@@ -13,21 +13,19 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "ScrollView",
+      "type": "TabView",
       "id": "target",
-      "width": 200,
-      "height": 200,
-      "background": "#DDDDDD",
-      "child": [
+      "width": "matchParent",
+      "height": "matchParent",
+      "tabs": [
         {
-          "type": "View",
-          "id": "content",
-          "width": 150,
-          "height": 600,
-          "background": "#FF0000"
+          "title": "One"
+        },
+        {
+          "title": "Two"
         }
       ],
-      "showsVerticalScrollIndicator": true
+      "showLabels": false
     }
   ]
 }
