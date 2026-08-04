@@ -296,6 +296,15 @@ module KjuiTools
                 // Generated Compose code from #{json_reference}.json
                 // This will be updated when you run 'kjui build'
                 // >>> GENERATED_CODE_START
+                // The placeholder body must not name a DATA property. This
+                // block is rewritten by `kjui build` from the layout, and the
+                // Data class is rewritten from the same source — so a
+                // `data.title` seeded here outlives the property whenever the
+                // rewrite does not reach this file, and the view stops
+                // compiling against its own Data class. The ViewModel template
+                // below carried the same seed and did exactly that to 238
+                // conformance fixtures. Data-independent text keeps the
+                // placeholder's job and compiles against any Data class.
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -303,7 +312,7 @@ module KjuiTools
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = data.title,
+                        text = "#{view_name}",
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold
                     )
