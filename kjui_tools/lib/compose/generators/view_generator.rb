@@ -388,12 +388,25 @@ module KjuiTools
 
                 // >>> GENERATED_CODE_START
                 // Auto-generated updateData function - updated by 'kjui build'
+                //
+                // The `when` starts EMPTY on purpose. `kjui build` rewrites this
+                // block from the layout's data section, and it rewrites the Data
+                // class from the same source — so a property named here that the
+                // data section does not declare survives in the ViewModel after
+                // the build has already removed it from `#{view_name}Data`, and
+                // `updated.copy(x = ...)` stops compiling. A `"title"` branch was
+                // seeded here and did exactly that to 238 conformance fixtures.
+                // The shape below is byte-identical to what
+                // ComposeBuilder#generate_update_data_function emits for a view
+                // with no declared properties.
+                private var _lastUpdateData: Map<String, Any>? = null
                 fun updateData(updates: Map<String, Any>) {
+                    if (updates == _lastUpdateData) return
+                    _lastUpdateData = updates
                     _data.update { current ->
                         var updated = current
                         updates.forEach { (key, value) ->
                             updated = when (key) {
-                                "title" -> updated.copy(title = value as? String ?: updated.title)
                                 else -> updated
                             }
                         }

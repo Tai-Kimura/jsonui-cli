@@ -148,8 +148,11 @@ RSpec.describe KjuiTools::Compose::Helpers::BoundValue do
     end
 
     it 'folds case on both sides when the static path folded it' do
+      # `toString()` first — the bound property need not be a String
+      # (`fontWeight` accepts a number), and `Int.lowercase()` is a type error
+      # the binding spelling cannot reveal.
       expect(described.enum('@{align}', mapping, bound_default: 'X', lowercase: true))
-        .to include('data.align?.lowercase()')
+        .to include('data.align?.toString()?.lowercase()')
     end
   end
 

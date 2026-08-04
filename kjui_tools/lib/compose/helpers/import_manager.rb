@@ -66,10 +66,6 @@ module KjuiTools
             safe_area_padding: ["import androidx.compose.foundation.layout.systemBarsPadding",
                                 "import androidx.compose.foundation.layout.statusBarsPadding",
                                 "import androidx.compose.foundation.layout.navigationBarsPadding"],
-            # `common.tintColor` on a plain node: draw the node, then paint
-            # its own pixels in the tint (plan 49 lane C).
-            color_filter_tint: ["import androidx.compose.ui.draw.drawWithContent",
-                                "import androidx.compose.ui.graphics.BlendMode"],
             shadow_style: ["import androidx.compose.ui.text.TextStyle",
                            "import androidx.compose.ui.graphics.Shadow",
                            "import androidx.compose.ui.geometry.Offset"],

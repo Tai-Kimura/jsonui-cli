@@ -589,20 +589,6 @@ module KjuiTools
             end
           end
 
-          # `tintColor` is declared on `common`, and Compose read it only
-          # per-component (switch / image / segment) — a tintColor on a plain
-          # View was dropped (plan 49 lane C: common.tintColor, C0 unread +
-          # C1 dropped). On a container the UIKit meaning of tint is "the
-          # colour my content is drawn in", which is what a Compose
-          # `LocalContentColor` would carry; the modifier-level equivalent
-          # available on any node is a source-in tint over the node's own
-          # drawing, so that is what the shared path emits.
-          if json_data['tintColor']
-            required_imports&.add(:color_filter_tint)
-            tint = ResourceResolver.process_color(json_data['tintColor'], required_imports)
-            modifiers << ".drawWithContent { drawContent(); drawRect(color = #{tint}, blendMode = BlendMode.SrcIn) }"
-          end
-
           # clipToBounds — declared boolean|binding. A plain truthiness test
           # froze `"@{flag}"` permanently ON (plan 49 lane C, bound-frozen).
           clip_state = BoundValue.bool(json_data['clipToBounds'])

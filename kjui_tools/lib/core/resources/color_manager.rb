@@ -41,7 +41,9 @@ module KjuiTools
           save_colors_json if any_extracted? || @migrated
           save_defined_colors_json if @undefined_colors.any?
 
-          generate_color_manager_kotlin if @config['resource_manager_directory']
+          # Unconditional: see generate_color_manager_kotlin. The emit
+          # references ColorManager whether or not this key is configured.
+          generate_color_manager_kotlin
         end
 
         def apply_to_color_assets
@@ -143,10 +145,27 @@ module KjuiTools
         # Kotlin code generation
         # ========================================================================
 
-        def generate_color_manager_kotlin
-          return unless @config['resource_manager_directory']
+        # `ColorManager.kt` is not optional output. The Compose codegen emits
+        # `ColorManager.compose.color(...)` for any color attribute bound to a
+        # String property and imports `com.kotlinjsonui.generated.ColorManager`
+        # to go with it — so a project that never configured
+        # `resource_manager_directory` got an emit referencing a class the
+        # build had decided not to write. That is what broke five `__binding`
+        # fixtures in the android codegen host, whose staging config sets no
+        # such key (plan 49 lane C).
+        #
+        # The package is FIXED (`com.kotlinjsonui.generated`, see
+        # generate_kotlin_code), so the path is derivable rather than a
+        # convention: `<source_directory>/kotlin/com/kotlinjsonui/generated`.
+        # That is byte-for-byte what the shipping consumers configure by hand
+        # (`app/src/main` + this suffix), so the default changes nothing for a
+        # project that already declares the key.
+        DEFAULT_RESOURCE_MANAGER_SUFFIX = File.join('kotlin', 'com', 'kotlinjsonui', 'generated').freeze
 
-          resource_manager_dir = File.join(@source_path, @config['resource_manager_directory'])
+        def generate_color_manager_kotlin
+          configured = @config['resource_manager_directory'] ||
+                       File.join(@config['source_directory'] || 'src/main', DEFAULT_RESOURCE_MANAGER_SUFFIX)
+          resource_manager_dir = File.join(@source_path, configured)
           FileUtils.mkdir_p(resource_manager_dir)
 
           output_file = File.join(resource_manager_dir, 'ColorManager.kt')

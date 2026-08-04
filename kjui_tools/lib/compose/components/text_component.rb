@@ -362,11 +362,15 @@ module KjuiTools
 
           # Auto shrink text using TextAutoSize (auto-size emit stays here;
           # maxLines / overflow defer to the consolidated emit below).
+          # `autoSize` is a named argument, so it may be emitted AT MOST once —
+          # `autoShrink` and `minimumScaleFactor` both ask for auto-shrink and
+          # each used to append its own, which kotlinc rejects with "an argument
+          # is already passed". Same consolidation `maxLines`/`overflow` got
+          # above, and for the same reason. An explicit `minimumScaleFactor`
+          # wins: it names the floor, where `autoShrink` only implies 0.5.
+          auto_size_factor = nil
           if json_data['autoShrink']
-            font_size = json_data['fontSize'] || 14
-            min_font_size = (font_size.to_f * 0.5).round(1)
-            required_imports&.add(:text_auto_size)
-            component_code += ",\n" + indent("autoSize = TextAutoSize.StepBased(minFontSize = #{min_font_size}.sp)", depth + 1)
+            auto_size_factor = 0.5
             max_lines_value ||= '1'
             overflow_value ||= 'TextOverflow.Ellipsis'
           end
@@ -375,11 +379,15 @@ module KjuiTools
           if json_data['minimumScaleFactor']
             # Same `.to_f` freeze as lineHeightMultiple: a bound factor made
             # minFontSize 0.sp (plan 49 lane C: Label.minimumScaleFactor).
-            required_imports&.add(:text_auto_size)
-            min_font_size = scaled_sp(json_data['fontSize'] || 14, json_data['minimumScaleFactor'], round: true)
-            component_code += ",\n" + indent("autoSize = TextAutoSize.StepBased(minFontSize = #{min_font_size})", depth + 1)
+            auto_size_factor = json_data['minimumScaleFactor']
             max_lines_value ||= '1'
             overflow_value ||= 'TextOverflow.Ellipsis'
+          end
+
+          if auto_size_factor
+            required_imports&.add(:text_auto_size)
+            min_font_size = scaled_sp(json_data['fontSize'] || 14, auto_size_factor, round: true)
+            component_code += ",\n" + indent("autoSize = TextAutoSize.StepBased(minFontSize = #{min_font_size})", depth + 1)
           end
 
           # `lineBreakMode`, when explicitly set, takes precedence over the

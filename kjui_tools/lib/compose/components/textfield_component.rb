@@ -127,7 +127,7 @@ module KjuiTools
             max_len = Helpers::BoundValue.int(json_data['maxLength'])
             code += indent("LaunchedEffect(#{state_var}.text) { val limit = #{max_len}; " \
                            "if (limit > 0 && #{state_var}.text.length > limit) " \
-                           "#{state_var}.edit { delete(limit, length) } }", depth) + "\n"
+                           "#{state_var}.edit { replace(limit, length, \"\") } }", depth) + "\n"
           end
 
           if has_data_binding

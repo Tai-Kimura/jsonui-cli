@@ -1314,9 +1314,17 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
       expect(mods.join).to include('parseColor("#FF0000")')
     end
 
-    it 'tints a plain node that declares tintColor' do
+    # `tintColor` is an ACCENT colour, not a paint-over: sjui emits `.tint(...)`
+    # and rjui `accentColor`. Compose's peer is `LocalContentColor`, which is a
+    # CompositionLocalProvider wrapping the content — not something a modifier
+    # list can express. A `drawWithContent { ... colorResource(...) }` emit was
+    # tried here and withdrawn: it repainted the whole node (children included)
+    # in a flat colour, and `colorResource` is `@Composable` so it cannot be
+    # called from a draw lambda at all. Recorded in the lane report as needing
+    # a wrapper rather than a modifier.
+    it 'does not paint over a plain node that declares tintColor' do
       expect(described_class.build_background('background' => '#FFFFFF', 'tintColor' => '#FF0000').join)
-        .to include('BlendMode.SrcIn')
+        .not_to include('drawWithContent')
     end
   end
 end

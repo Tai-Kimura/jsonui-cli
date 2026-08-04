@@ -231,7 +231,12 @@ module KjuiTools
           inner = BindingExpression.extract_inner(value)
           p = BindingExpression.parse(inner)
           access = "data.#{p.path}"
-          access = "#{access}?.lowercase()" if lowercase
+          # `toString()` first: the property may not be a String. `fontWeight`
+          # declares `["string", "number", "binding"]`, so `data.x.lowercase()`
+          # does not resolve when the layout bound it to an Int — a type error
+          # that no amount of `@{...}` analysis can see, because the spelling
+          # carries no type.
+          access = "#{access}?.toString()?.lowercase()" if lowercase
           subject = if BindingExpression.property_nullable?(p.path) || lowercase
                       fallback = p.has_default && p.default.is_a?(String) ? p.default : ''
                       "#{access} ?: #{BindingExpression.quote(fallback)}"

@@ -2,6 +2,7 @@
 
 require 'json'
 require_relative 'bound_value'
+require_relative 'resource_resolver'
 
 module KjuiTools
   module Compose
@@ -16,6 +17,9 @@ module KjuiTools
       class FontSpecHelper
         # Aliases accepted at the JSON layer that aren't keys in the shared
         # weight mapping. These are normalised to a key that IS in the mapping.
+        # Data-section classes that mean "this binding carries a weight NUMBER".
+        NUMERIC_PROPERTY_CLASSES = %w[Int Integer Long Double Float CGFloat Number].freeze
+
         WEIGHT_ALIASES = {
           'normal' => 'regular',
           'extralight' => 'ultralight',
@@ -143,6 +147,16 @@ module KjuiTools
 
           unless BoundValue.bound?(value)
             return weight_literal_for(value)
+          end
+
+          # A NUMERIC property is a weight value (`500`), not a vocabulary
+          # word — the SSoT declares `["string", "number", "binding"]` — and
+          # running it through the name table would collapse every numeric
+          # weight onto the default. The data section knows which it is.
+          inner = BindingExpression.extract_inner(value)
+          path = BindingExpression.parse(inner).path
+          if NUMERIC_PROPERTY_CLASSES.include?(ResourceResolver.get_property_class(path).to_s)
+            return "FontWeight(#{BoundValue.int(value, fallback: 400)})"
           end
 
           # The static path downcases before the lookup, so the runtime one has
