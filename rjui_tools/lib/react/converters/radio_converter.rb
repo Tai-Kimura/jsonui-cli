@@ -8,6 +8,14 @@ module RjuiTools
       class RadioConverter < BaseConverter
         def convert(indent = 2)
           class_name = build_class_name
+          # In the single-radio shape the gap-bearing <label> IS the subtree
+          # root, so a bound `spacing` has to reach @dynamic_styles BEFORE the
+          # root's style attribute is rendered. Emitting a second style={{…}}
+          # on the same tag would be a duplicate JSX attribute (TS17001) —
+          # the Fx0375 shape SliderConverter documents. The group shape puts
+          # the gap on inner labels the root's style cannot reach, and those
+          # carry their own (see item_gap_parts).
+          @root_gap_class = root_item_gap_class if (attributes['items'] || []).empty?
           style_attr = build_style_attr
           id_attr = build_id_attr
           testid_attr = build_testid_attr
@@ -52,13 +60,13 @@ module RjuiTools
           disabled_attr = build_disabled_attr
           tint_color = attributes['tintColor']
 
-          gap = item_gap_class
+          gap, gap_style = item_gap_parts
           items_jsx = items.map do |item|
             escaped_item = item.gsub('"', '&quot;')
             input_style = tint_color ? " style={{ accentColor: '#{tint_color}' }}" : ''
             state_attrs = build_state_attrs(selected_binding, on_change, escaped_item)
             <<~JSX.chomp
-              #{indent_str(indent + 2)}<label className="flex items-center #{gap} cursor-pointer">
+              #{indent_str(indent + 2)}<label className="flex items-center #{gap} cursor-pointer"#{gap_style}>
               #{indent_str(indent + 4)}<input type="radio" name="#{group}" value="#{escaped_item}"#{state_attrs}#{disabled_attr}#{input_style} />
               #{indent_str(indent + 4)}<span>#{item}</span>
               #{indent_str(indent + 2)}</label>
@@ -106,7 +114,7 @@ module RjuiTools
             control_jsx =
               "<input type=\"radio\" name=\"#{group}\" value=\"#{radio_value}\"#{state_attrs}#{disabled_attr} className=\"peer sr-only\" />"               "<img src=\"#{off_src}\" alt=\"\" className=\"w-6 h-6 peer-checked:hidden\" />"               "<img src=\"#{on_src}\" alt=\"\" className=\"w-6 h-6 hidden peer-checked:block\" />"
             return <<~JSX.chomp
-              #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center #{item_gap_class}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
+              #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center #{@root_gap_class}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
               #{indent_str(indent + 2)}#{control_jsx}
               #{indent_str(indent + 2)}<span>#{convert_text_binding(text)}</span>
               #{indent_str(indent)}</label>
@@ -114,7 +122,7 @@ module RjuiTools
           end
 
           <<~JSX.chomp
-            #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center #{item_gap_class}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
+            #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center #{@root_gap_class}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
             #{indent_str(indent + 2)}<input type="radio" name="#{group}" value="#{radio_value}"#{state_attrs}#{disabled_attr}#{input_style} />
             #{indent_str(indent + 2)}<span>#{convert_text_binding(text)}</span>
             #{indent_str(indent)}</label>
@@ -124,9 +132,22 @@ module RjuiTools
         # `spacing` — the gap between the radio control and its label text
         # (kjui reads the same attribute for the row arrangement). Default
         # keeps the historical gap-2 (8px).
-        def item_gap_class
-          spacing = attributes['spacing']
+        # Root-label shape. A bound value has no place in an arbitrary-value
+        # class — it produced `gap-[@{v}px]`, which matches nothing — so it
+        # folds into the root's own inline `gap` and the class falls back to
+        # the historical default.
+        def root_item_gap_class
+          spacing = bound_length_style('gap', attributes['spacing'])
           spacing ? "gap-[#{spacing}px]" : 'gap-2'
+        end
+
+        # Inner-label shape: [class, style attribute]. The root's style
+        # cannot reach these labels, so a bound gap becomes theirs.
+        def item_gap_parts
+          spacing = attributes['spacing']
+          return [spacing ? "gap-[#{spacing}px]" : 'gap-2', ''] unless (expr = bound_value_expr(spacing))
+
+          ['gap-2', style_attr_for({ 'gap' => "`${#{expr}}px`" })]
         end
 
         # A single radio with no group selection still honours `checked` —

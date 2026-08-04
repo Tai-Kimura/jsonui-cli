@@ -44,7 +44,11 @@ module RjuiTools
           # shared/core/attribute_semantics.json — fill = stretch
           # (scaleToFill synonym), AspectFill is the crop.
           content_mode = attributes['contentMode'] || attributes['scaleType']
-          if content_mode
+          if apply_bound_content_mode(content_mode)
+            # A bound value matched no key and fell to the `||` fallback,
+            # which built the dead class `object-@{v}`. object-fit /
+            # object-position are owned by the inline style instead.
+          elsif content_mode
             mode_map = {
               'fit' => 'object-contain',
               'fill' => 'object-fill',
@@ -69,9 +73,11 @@ module RjuiTools
           # Circle image
           classes << 'rounded-full' if attributes['circle'] || attributes['circleImage']
 
-          # Corner radius class (if using Tailwind standard values)
+          # Corner radius class (if using Tailwind standard values). A bound
+          # radius is already an inline `borderRadius` from the base pass;
+          # this arbitrary-value class would only restate it as dead text.
           corner_radius = attributes['cornerRadius']
-          if corner_radius && !attributes['circle'] && !attributes['circleImage']
+          if corner_radius && !has_binding?(corner_radius) && !attributes['circle'] && !attributes['circleImage']
             classes << "rounded-[#{corner_radius}px]"
           end
 
@@ -119,6 +125,15 @@ module RjuiTools
             'AspectFill' => 'cover',
             'AspectFit' => 'contain'
           }
+
+          # A bound value cannot be normalised at codegen time, and quoting it
+          # handed the component the four characters `@{v}` — outside the
+          # NetworkImageProps union, so the prop was simply wrong. The
+          # normalisation moves into the emitted expression.
+          if (expr = bound_value_expr(content_mode))
+            lookup = js_object_literal(mode_map.transform_keys(&:downcase))
+            return " contentMode={(#{lookup})[String(#{expr}).toLowerCase()] ?? 'contain'}"
+          end
 
           mapped_mode = mode_map[content_mode] || content_mode
           " contentMode=\"#{mapped_mode}\""

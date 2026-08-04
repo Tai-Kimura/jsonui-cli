@@ -28,10 +28,18 @@ module RjuiTools
           value_attr = build_value_attr
           on_change = build_on_change
           disabled_attr = build_disabled_attr
-          step_attr = step_value ? " step={#{step_value}}" : ''
+
+          # `min` / `max` / `step` are JSX attributes in CODE position, so a
+          # bound value was interpolated raw and the emit was `min={@{v}}` —
+          # not a program. Every Slider written the way the SSoT describes
+          # (all four bounds spellings are declared `["number","binding"]`)
+          # broke the consumer's build outright, and no validator said a word.
+          min_expr = jsx_value_expr(min_value)
+          max_expr = jsx_value_expr(max_value)
+          step_attr = step_value ? " step={#{jsx_value_expr(step_value)}}" : ''
 
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<input#{id_attr} type="range" className="#{class_name}" min={#{min_value}} max={#{max_value}}#{step_attr}#{value_attr}#{on_change}#{disabled_attr}#{base_style_attr}#{testid_attr}#{tag_attr} />
+            #{indent_str(indent)}<input#{id_attr} type="range" className="#{class_name}" min={#{min_expr}} max={#{max_expr}}#{step_attr}#{value_attr}#{on_change}#{disabled_attr}#{base_style_attr}#{testid_attr}#{tag_attr} />
           JSX
 
           wrap_with_visibility(jsx, indent)

@@ -74,12 +74,51 @@ module RjuiTools
         end
 
         def build_switch_element(checked_attr, on_change, disabled_attr, tint_color, thumb_color, off_tint_color)
+          # A bound colour cannot be an arbitrary-value class: `bg-[@{v}]`
+          # matches nothing, so the track and the knob simply lost their
+          # colour. These spans are composed here rather than being the
+          # subtree root, so they carry their own inline style.
+          #
+          # The OFF track colour and the knob colour are unconditional and go
+          # straight into `backgroundColor`. The ON colour is behind
+          # `peer-checked:` — a pseudo-class no inline declaration can be
+          # scoped to — so it rides a custom property that the variant reads
+          # back on the same element.
+          track_style = {}
+          off_class =
+            if has_binding?(off_tint_color)
+              track_style['backgroundColor'] = color_style_expr(off_tint_color)
+              nil
+            else
+              "bg-[#{off_tint_color}]"
+            end
+          on_class =
+            if has_binding?(tint_color)
+              track_style['--jui-switch-on'] = color_style_expr(tint_color)
+              'peer-checked:bg-[var(--jui-switch-on)]'
+            else
+              "peer-checked:bg-[#{tint_color}]"
+            end
+
+          knob_style = {}
+          knob_color_class =
+            if has_binding?(thumb_color)
+              knob_style['backgroundColor'] = color_style_expr(thumb_color)
+              nil
+            else
+              "bg-[#{thumb_color}]"
+            end
+
+          track_classes = ['absolute inset-0', off_class, 'rounded-full transition-colors duration-200', on_class].compact.join(' ')
+          knob_classes = ['absolute left-[2px] top-[2px] w-[27px] h-[27px]', knob_color_class,
+                          'rounded-full shadow transition-transform duration-200 peer-checked:translate-x-[20px]'].compact.join(' ')
+
           # Create iOS-style toggle with hidden checkbox and styled span
           <<~HTML.gsub("\n", '').gsub(/\s+/, ' ').strip
             <span className="relative inline-block w-[51px] h-[31px]">
               <input type="checkbox" className="sr-only peer"#{checked_attr}#{on_change}#{disabled_attr} />
-              <span className="absolute inset-0 bg-[#{off_tint_color}] rounded-full transition-colors duration-200 peer-checked:bg-[#{tint_color}]" />
-              <span className="absolute left-[2px] top-[2px] w-[27px] h-[27px] bg-[#{thumb_color}] rounded-full shadow transition-transform duration-200 peer-checked:translate-x-[20px]" />
+              <span className="#{track_classes}"#{style_attr_for(track_style)} />
+              <span className="#{knob_classes}"#{style_attr_for(knob_style)} />
             </span>
           HTML
         end

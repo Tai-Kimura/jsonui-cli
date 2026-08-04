@@ -22,7 +22,24 @@ module RjuiTools
         # render loops detect this prefix and emit `...<value>` instead.
         SPREAD_KEY_PREFIX = '__SPREAD__'
 
+        # A JS expression to emit verbatim into the FontSpec instead of a
+        # literal to quote.
+        #
+        # A bound `fontFamily` / `font` only has a value at runtime, and the
+        # quoting path turned it into `family: '@{v}'` — the provider was
+        # handed the four characters `@{v}`, returned its fallback, and
+        # nothing warned (plan 41 bound-literal-leak). Routing the binding
+        # through the provider rather than translating it here is also what
+        # keeps the JsonUI weight vocabulary in one place: the provider
+        # already owns shared/core/font_weight_mapping.json, and a second
+        # copy inlined into the generated page would drift from it (40).
+        JsExpr = Struct.new(:source)
+
         module_function
+
+        def js_expr(source)
+          JsExpr.new(source)
+        end
 
         # Build a JS expression like:
         #   ...Configuration.Font.resolve({ family: 'Helvetica', weight: 'bold', size: 16, italic: false })
@@ -132,14 +149,18 @@ module RjuiTools
         end
 
         def js_string(value)
+          return value.source.to_s if value.is_a?(JsExpr)
+
           escaped = value.to_s.gsub('\\', '\\\\').gsub("'", "\\\\'")
           "'#{escaped}'"
         end
 
         # Render the weight as a JS literal. Numeric → bare number,
-        # everything else → quoted string.
+        # JsExpr → the expression itself, everything else → quoted string.
         def format_weight(weight)
+          return weight.source.to_s if weight.is_a?(JsExpr)
           return weight.to_s if weight.is_a?(Numeric)
+
           js_string(weight)
         end
       end

@@ -59,9 +59,16 @@ module RjuiTools
           # attributes in the definitions/runtimes, but the web has a
           # single hover/active affordance — both map onto it here
           # (tapBackground wins when both are present).
+          #
+          # A bound state color cannot be a palette class — `map_color` sees a
+          # string that does not start with `#`, calls it a palette name and
+          # emits `hover:bg-@{v}`. The binding goes to a CSS custom property
+          # that the variant utility reads back; see
+          # BaseConverter#bound_state_color_class.
           tap_background = attributes['tapBackground'] || attributes['highlightBackground']
           if tap_background
-            hover_color = TailwindMapper.map_color(tap_background, 'hover:bg')
+            hover_color = bound_state_color_class(tap_background, custom_property: '--jui-tap-bg', prefix: 'hover:bg') ||
+                          TailwindMapper.map_color(tap_background, 'hover:bg')
             classes << hover_color
           else
             classes << 'hover:opacity-80'
@@ -69,7 +76,8 @@ module RjuiTools
 
           # Active/pressed state
           if tap_background
-            active_color = TailwindMapper.map_color(tap_background, 'active:bg')
+            active_color = bound_state_color_class(tap_background, custom_property: '--jui-tap-bg', prefix: 'active:bg') ||
+                           TailwindMapper.map_color(tap_background, 'active:bg')
             classes << active_color
           end
 
@@ -77,20 +85,23 @@ module RjuiTools
           # definitions alias of highlightColor)
           highlight_color = attributes['highlightColor']
           if highlight_color
-            hover_text = TailwindMapper.map_color(highlight_color, 'hover:text')
+            hover_text = bound_state_color_class(highlight_color, custom_property: '--jui-highlight-color', prefix: 'hover:text') ||
+                         TailwindMapper.map_color(highlight_color, 'hover:text')
             classes << hover_text
           end
 
           # Disabled state
           if attributes['disabledBackground']
-            disabled_bg = TailwindMapper.map_color(attributes['disabledBackground'], 'disabled:bg')
+            disabled_bg = bound_state_color_class(attributes['disabledBackground'], custom_property: '--jui-disabled-bg', prefix: 'disabled:bg') ||
+                          TailwindMapper.map_color(attributes['disabledBackground'], 'disabled:bg')
             classes << disabled_bg
           else
             classes << 'disabled:opacity-50'
           end
 
           if attributes['disabledFontColor']
-            disabled_text = TailwindMapper.map_color(attributes['disabledFontColor'], 'disabled:text')
+            disabled_text = bound_state_color_class(attributes['disabledFontColor'], custom_property: '--jui-disabled-color', prefix: 'disabled:text') ||
+                            TailwindMapper.map_color(attributes['disabledFontColor'], 'disabled:text')
             classes << disabled_text
           end
 
@@ -102,9 +113,12 @@ module RjuiTools
         def build_style_attr
           super
 
-          # Corner radius
-          if attributes['cornerRadius']
-            @dynamic_styles['borderRadius'] = "'#{attributes['cornerRadius']}px'"
+          # Corner radius. The static form keeps its own quoted-px spelling;
+          # a bound one is already in `borderRadius` from the base pass, and
+          # overwriting it here would put the characters `@{v}` back.
+          corner_radius = attributes['cornerRadius']
+          if corner_radius && !has_binding?(corner_radius)
+            @dynamic_styles['borderRadius'] = "'#{corner_radius}px'"
           end
 
           return '' if @dynamic_styles.nil? || @dynamic_styles.empty?
@@ -116,7 +130,12 @@ module RjuiTools
             format_dynamic_style_pair(key, value)
           end
 
-          " style={{ #{style_pairs.join(', ')} }}"
+          # `React.CSSProperties` admits only known properties, so the
+          # `--jui-*` keys a bound state colour writes need the same assertion
+          # BaseConverter#build_style_attr applies — an @generated file that
+          # fails the consumer's tsc cannot be patched downstream.
+          cast = custom_property_styles? ? ' as React.CSSProperties' : ''
+          " style={{ #{style_pairs.join(', ')} }#{cast}}"
         end
 
         def build_on_click

@@ -107,25 +107,30 @@ module RjuiTools
           # fill = stretch (scaleToFill synonym — AspectFill is the crop),
           # and the default is fit (image.defaultContentMode), both verified
           # by `jui conformance gate --cross-effect`.
-          case attributes['contentMode']&.downcase
-          when 'fit', 'aspectfit', 'aspect_fit'
-            classes << 'object-contain'
-          when 'aspectfill', 'aspect_fill'
-            classes << 'object-cover'
-          when 'center'
-            classes << 'object-none object-center'
-          when 'top'
-            classes << 'object-none object-top'
-          when 'bottom'
-            classes << 'object-none object-bottom'
-          when 'left'
-            classes << 'object-none object-left'
-          when 'right'
-            classes << 'object-none object-right'
-          when 'fill', 'scaletofill', 'scale_to_fill'
-            classes << 'object-fill'
-          else
-            classes << 'object-contain'
+          # A bound value has no spelling to match, so it fell straight
+          # through to the `else` and every binding froze on object-contain.
+          # It routes to the CSS pair instead (BaseConverter's shared table).
+          unless apply_bound_content_mode(attributes['contentMode'])
+            case attributes['contentMode']&.downcase
+            when 'fit', 'aspectfit', 'aspect_fit'
+              classes << 'object-contain'
+            when 'aspectfill', 'aspect_fill'
+              classes << 'object-cover'
+            when 'center'
+              classes << 'object-none object-center'
+            when 'top'
+              classes << 'object-none object-top'
+            when 'bottom'
+              classes << 'object-none object-bottom'
+            when 'left'
+              classes << 'object-none object-left'
+            when 'right'
+              classes << 'object-none object-right'
+            when 'fill', 'scaletofill', 'scale_to_fill'
+              classes << 'object-fill'
+            else
+              classes << 'object-contain'
+            end
           end
 
           # CircleImage type
@@ -144,9 +149,12 @@ module RjuiTools
         def build_style_attr
           super
 
-          # Corner radius (for non-circle images)
-          if attributes['cornerRadius'] && json['type'] != 'CircleImage'
-            @dynamic_styles['borderRadius'] = "'#{attributes['cornerRadius']}px'"
+          # Corner radius (for non-circle images). A bound one is already in
+          # `borderRadius` from the base pass; re-writing it here would put
+          # the characters `@{v}` back into the style.
+          corner_radius = attributes['cornerRadius']
+          if corner_radius && !has_binding?(corner_radius) && json['type'] != 'CircleImage'
+            @dynamic_styles['borderRadius'] = "'#{corner_radius}px'"
           end
 
           return '' if @dynamic_styles.nil? || @dynamic_styles.empty?
@@ -158,7 +166,11 @@ module RjuiTools
             format_dynamic_style_pair(key, value)
           end
 
-          " style={{ #{style_pairs.join(', ')} }}"
+          # Same `React.CSSProperties` assertion BaseConverter applies: a
+          # custom-property key is not a known CSS property and fails a strict
+          # consumer's tsc, and an @generated file cannot be patched there.
+          cast = custom_property_styles? ? ' as React.CSSProperties' : ''
+          " style={{ #{style_pairs.join(', ')} }#{cast}}"
         end
 
         def build_onclick_attr

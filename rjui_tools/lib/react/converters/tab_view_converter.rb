@@ -23,6 +23,8 @@ module RjuiTools
             build_tab_item(tab, index, selected_binding)
           end.join("\n")
 
+          nav_class, nav_style = build_nav_parts
+
           # Build tab content panels
           tab_panels_jsx = tabs.each_with_index.map do |tab, index|
             build_tab_panel(tab, index, selected_binding, indent + 4)
@@ -33,7 +35,7 @@ module RjuiTools
             #{indent_str(indent + 2)}<div className="flex-1 overflow-auto">
             #{tab_panels_jsx}
             #{indent_str(indent + 2)}</div>
-            #{indent_str(indent + 2)}<nav className="#{build_nav_class}">
+            #{indent_str(indent + 2)}<nav className="#{nav_class}"#{nav_style}>
             #{tab_items_jsx}
             #{indent_str(indent + 2)}</nav>
             #{indent_str(indent)}</div>
@@ -64,22 +66,32 @@ module RjuiTools
           finalize_classes(classes)
         end
 
-        def build_nav_class
+        # [class, style attribute] for the tab bar.
+        #
+        # The bound branch used to emit `bg-white # fallback` and stop there,
+        # so a bound tabBarBackground was indistinguishable from declaring
+        # nothing at all — the binding was dropped without a class, a style or
+        # a warning. The <nav> is an inner element, so the root's
+        # @dynamic_styles cannot reach it and it carries its own style. The
+        # white class stays as the value the runtime falls back to.
+        def build_nav_parts
           classes = ['flex', 'border-t', 'border-gray-200']
+          style = {}
 
           # Tab bar background
-          if attributes['tabBarBackground']
-            if has_binding?(attributes['tabBarBackground'])
-              # Handle binding - will need dynamic style
-              classes << 'bg-white' # fallback
+          tab_bar_background = attributes['tabBarBackground']
+          if tab_bar_background
+            if has_binding?(tab_bar_background)
+              style['backgroundColor'] = color_style_expr(tab_bar_background)
+              classes << 'bg-white'
             else
-              classes << TailwindMapper.map_color(attributes['tabBarBackground'], 'bg')
+              classes << TailwindMapper.map_color(tab_bar_background, 'bg')
             end
           else
             classes << 'bg-white'
           end
 
-          finalize_classes(classes)
+          [finalize_classes(classes), style_attr_for(style)]
         end
 
         def build_tab_item(tab, index, selected_binding)

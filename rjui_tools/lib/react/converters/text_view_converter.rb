@@ -39,6 +39,20 @@ module RjuiTools
           @attributes['cornerRadius'] ||= text_view_defaults['cornerRadius']
         end
 
+        # The declared `resize` enum is the CSS `resize` vocabulary, one
+        # Tailwind utility each.
+        #
+        # A value outside the enum keeps the historical presence-only reading:
+        # any truthy value meant "resizable", which emitted no class at all
+        # and left the textarea on the browser default — `resize: both`, i.e.
+        # `resize`. Absent or false still means `resize-none`.
+        RESIZE_UTILITIES = {
+          'none' => 'resize-none',
+          'both' => 'resize',
+          'horizontal' => 'resize-x',
+          'vertical' => 'resize-y'
+        }.freeze
+
         def build_class_name
           classes = [super]
 
@@ -46,7 +60,19 @@ module RjuiTools
           classes << 'border'
           classes << 'outline-none'
           classes << 'focus:ring-2 focus:ring-blue-500'
-          classes << 'resize-none' unless attributes['resize']
+          # `resize` is declared `["none","both","horizontal","vertical"]` —
+          # the CSS `resize` vocabulary exactly. Only the PRESENCE of the key
+          # was read (`unless attributes['resize']`), so all four values
+          # produced the same textarea and the three non-default ones were
+          # unreachable. The enum maps one-to-one onto the Tailwind utility.
+          resize = attributes['resize']
+          if !resize
+            classes << 'resize-none'
+          elsif (resize_expr = bound_value_expr(resize))
+            dynamic_styles['resize'] = resize_expr
+          else
+            classes << RESIZE_UTILITIES.fetch(resize.to_s.downcase, 'resize')
+          end
 
           # Scrollable
           classes << 'overflow-auto' if attributes['scrollEnabled'] != false
@@ -58,9 +84,15 @@ module RjuiTools
           # interpolating the raw value emits `placeholder-#FF0000`, which is
           # not a Tailwind class at all (rjui-offpalette-hex-dead-tailwind-class
           # — the policy existed, this caller predated it).
+          #
+          # A BOUND colour is not a palette name either, and map_color made
+          # `placeholder-@{v}`. `::placeholder` is a pseudo-element that no
+          # inline declaration can reach, so the binding rides a custom
+          # property the arbitrary value reads back.
           if attributes['hintColor'] || attributes['placeholderColor']
             color = attributes['hintColor'] || attributes['placeholderColor']
-            classes << TailwindMapper.map_color(color, 'placeholder')
+            classes << (bound_state_color_class(color, custom_property: '--jui-hint-color', prefix: 'placeholder') ||
+                        TailwindMapper.map_color(color, 'placeholder'))
           elsif attributes['hintAttributes'] && attributes['hintAttributes']['fontColor']
             classes << TailwindMapper.map_color(
               attributes['hintAttributes']['fontColor'], 'placeholder'
@@ -117,15 +149,24 @@ module RjuiTools
           # its own scrollbar rather than truncating, so this only matters for
           # the read-only/one-line styling cases, but the declared attribute
           # must not be silently dropped).
-          if attributes['lineBreakMode']
-            case attributes['lineBreakMode']
-            when 'Head'
-              @dynamic_styles['textOverflow'] = "'ellipsis'"
-              @dynamic_styles['direction'] = "'rtl'"
-              @dynamic_styles['textAlign'] = "'left'"
-            when 'Middle', 'Tail', 'Clip'
-              @dynamic_styles['textOverflow'] = "'ellipsis'"
-            end
+          #
+          # Two of the six declared values are WRAP modes, not truncation:
+          # `Char` breaks mid-word, `Word` is ordinary word wrapping. Neither
+          # had a branch, so both fell through to the unconditional
+          # `overflow: hidden` below and were given truncation behaviour —
+          # the opposite of what they ask for. Only the truncating modes clip.
+          case attributes['lineBreakMode']
+          when 'Char'
+            @dynamic_styles['wordBreak'] = "'break-all'"
+          when 'Word'
+            @dynamic_styles['overflowWrap'] = "'break-word'"
+          when 'Head'
+            @dynamic_styles['textOverflow'] = "'ellipsis'"
+            @dynamic_styles['direction'] = "'rtl'"
+            @dynamic_styles['textAlign'] = "'left'"
+            @dynamic_styles['overflow'] = "'hidden'"
+          when 'Middle', 'Tail', 'Clip'
+            @dynamic_styles['textOverflow'] = "'ellipsis'"
             @dynamic_styles['overflow'] = "'hidden'"
           end
 

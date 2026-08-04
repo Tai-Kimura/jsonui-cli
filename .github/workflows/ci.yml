@@ -244,14 +244,19 @@ jobs:
       - name: Generate fixtures into the host (rjui codegen)
         working-directory: conformance/hosts/web
         run: ./generate.sh
-      - name: Typecheck ratchet — generated code must not gain type errors
+      - name: Typecheck — generated code must have zero type errors
         # The host is the production rjui codegen output, so a type error here
         # is one in every consumer's @generated tree, which nobody downstream
-        # can patch. Known count is pinned in typecheck-baseline.json; the
-        # remaining errors have three independent owners, so gating on zero
-        # would leave the hole open (plan 37).
+        # can patch.
+        #
+        # This was a RATCHET while the count was being worked down: the errors
+        # had three independent owners, so gating on zero would have left the
+        # hole open (plan 37). The count reached zero (plan 44 Phase 2), and a
+        # ratchet pinned at zero is just a plain typecheck with a second file
+        # to keep in sync — so the baseline and the ratchet script are gone
+        # and this is the gate they were building toward (plan 44 Phase 4).
         working-directory: conformance/hosts/web
-        run: npm run typecheck:ratchet
+        run: npm run typecheck
       - name: Run web conformance suite
         working-directory: conformance/hosts/web
         run: npm run conformance

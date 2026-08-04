@@ -157,14 +157,26 @@ module RjuiTools
             classes << wrap unless wrap.empty?
           end
 
-          # Center alignment
-          classes << 'items-center' if attributes['centerHorizontal']
-          classes << 'justify-center' if attributes['centerVertical']
-          classes << 'items-center justify-center' if attributes['centerInParent']
+          # Center alignment. The container spelling of the same frozen family
+          # BaseConverter fixes for the self-centering margins: a `"@{v}"`
+          # string is truthy in Ruby, so the children were centered whatever
+          # the binding resolved to.
+          classes << 'items-center' if bound_flag_style('alignItems', attributes['centerHorizontal'], on: 'center')
+          classes << 'justify-center' if bound_flag_style('justifyContent', attributes['centerVertical'], on: 'center')
+          center_in_parent = attributes['centerInParent']
+          if (center_expr = bound_value_expr(center_in_parent))
+            dynamic_styles['alignItems']     = "#{center_expr} ? 'center' : undefined"
+            dynamic_styles['justifyContent'] = "#{center_expr} ? 'center' : undefined"
+          elsif center_in_parent
+            classes << 'items-center justify-center'
+          end
 
-          # Gap/Spacing
-          if attributes['spacing']
-            spacing = TailwindMapper::PADDING_MAP[attributes['spacing']] || attributes['spacing']
+          # Gap/Spacing. A bound value fell through the PADDING_MAP lookup to
+          # its own raw text and built `gap-@{v}`, a class that matches
+          # nothing.
+          spacing_value = bound_length_style('gap', attributes['spacing'])
+          if spacing_value
+            spacing = TailwindMapper::PADDING_MAP[spacing_value] || spacing_value
             classes << "gap-#{spacing}"
           end
 
@@ -191,13 +203,26 @@ module RjuiTools
           # Highlight/Tap background effects (using hover/active states)
           if attributes['tapBackground'] || attributes['highlightBackground']
             tap_bg = attributes['tapBackground'] || attributes['highlightBackground']
-            classes << "active:#{TailwindMapper.map_color(tap_bg, 'bg')}" if tap_bg.is_a?(String)
+            bound_class = bound_state_color_class(tap_bg, custom_property: '--jui-tap-bg', prefix: 'active:bg')
+            if bound_class
+              classes << bound_class
+            elsif tap_bg.is_a?(String)
+              classes << "active:#{TailwindMapper.map_color(tap_bg, 'bg')}"
+            end
           end
 
-          # Highlighted state (initial highlight)
+          # Highlighted state (initial highlight).
+          #
+          # This used to APPEND a second `bg-*` to a class list that already
+          # carried the base `background` — and Tailwind precedence comes from
+          # the order rules appear in the stylesheet, not from the order they
+          # appear in the attribute, so which colour won was arbitrary (the
+          # same trap LabelConverter documents for two `text-*` classes). The
+          # highlight is a state that REPLACES the base, so it goes to the
+          # inline style, which beats any class deterministically.
           if attributes['highlighted']
             highlight_bg = attributes['highlightBackground'] || '#E5E7EB'
-            classes << TailwindMapper.map_color(highlight_bg, 'bg')
+            dynamic_styles['backgroundColor'] = color_style_expr(highlight_bg)
           end
 
           # Transition for smooth effects

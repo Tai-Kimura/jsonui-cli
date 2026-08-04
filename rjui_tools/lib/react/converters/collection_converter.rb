@@ -137,14 +137,28 @@ module RjuiTools
           is_horizontal = horizontal_collection?
           # lazy: "none" → drop overflow scroll classes; Collection is expected to
           # render inside an already-scrollable parent.
-          is_lazy = attributes['lazy'] != 'none'
+          #
+          # A BOUND value is a string, and `"@{v}" != 'none'` is always true,
+          # so a Collection whose container shape is chosen at runtime could
+          # never reach the `none` shape — it froze on scrolling. (`lazy` vs
+          # `eager` is not a distinction web makes: the emit is a plain
+          # `.map()` either way, so there is no virtualization to switch off.
+          # `none` is the only one of the three that changes the DOM here.)
+          # The scroll classes stay as the default and the inline style
+          # overrides them when the runtime value turns out to be `none`.
+          lazy = attributes['lazy']
+          lazy_expr = bound_value_expr(lazy)
+          is_lazy = lazy_expr ? true : lazy != 'none'
 
           if flow_collection?
             # Flow is checked before horizontal, like sjui/kjui route to
             # their flow generators first — the declared layout wins over
             # the horizontalScroll boolean.
             classes << 'flex flex-row flex-wrap content-start'
-            classes << 'overflow-y-auto' if is_lazy && attributes['scrollEnabled'] != false
+            if is_lazy && attributes['scrollEnabled'] != false
+              classes << 'overflow-y-auto'
+              dynamic_styles['overflowY'] = "#{lazy_expr} === 'none' ? 'visible' : 'auto'" if lazy_expr
+            end
             # lineSpacing = gap between wrapped lines, itemSpacing = gap
             # within a line (the grid branch's row/column mapping).
             # `columnSpacing` is the SSoT's own name for the column gap and
@@ -163,9 +177,15 @@ module RjuiTools
             end
           elsif is_horizontal
             # Horizontal scroll collection
-            classes << 'overflow-x-auto' if is_lazy
+            if is_lazy
+              classes << 'overflow-x-auto'
+              dynamic_styles['overflowX'] = "#{lazy_expr} === 'none' ? 'visible' : 'auto'" if lazy_expr
+            end
             classes << 'flex flex-row'
-            classes << 'flex-nowrap' if is_lazy && attributes['scrollEnabled'] != false
+            if is_lazy && attributes['scrollEnabled'] != false
+              classes << 'flex-nowrap'
+              dynamic_styles['flexWrap'] = "#{lazy_expr} === 'none' ? 'wrap' : 'nowrap'" if lazy_expr
+            end
             # For horizontal: columnSpacing (or lineSpacing/itemSpacing) = gap between items
             spacing = attributes['columnSpacing'] || attributes['lineSpacing'] || attributes['itemSpacing'] || attributes['spacing']
             classes << "gap-[#{spacing}px]" if spacing
@@ -175,7 +195,10 @@ module RjuiTools
             # time so we always route through the grid path below to keep
             # the layout structure stable across runtime column changes.
             classes << 'flex flex-col'
-            classes << 'overflow-y-auto' if is_lazy && attributes['scrollEnabled'] != false
+            if is_lazy && attributes['scrollEnabled'] != false
+              classes << 'overflow-y-auto'
+              dynamic_styles['overflowY'] = "#{lazy_expr} === 'none' ? 'visible' : 'auto'" if lazy_expr
+            end
             # lineSpacing for vertical spacing between items
             spacing = attributes['lineSpacing'] || attributes['itemSpacing'] || attributes['spacing']
             classes << "gap-[#{spacing}px]" if spacing

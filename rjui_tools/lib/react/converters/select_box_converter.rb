@@ -75,9 +75,31 @@ module RjuiTools
             classes << 'px-3 py-2'
           end
 
-          # Hint/placeholder color for when no value is selected
+          # Hint/placeholder color for when no value is selected.
+          #
+          # This was read and then thrown away unless `selectedValue` was a
+          # binding: the class swap below is the only consumer, and it only
+          # exists when there is a runtime condition to swap on. A declared
+          # hintColor on a plain select reached nothing at all, which is the
+          # C0 finding. The placeholder <option> now carries it too, so the
+          # attribute is read in both shapes.
+          #
+          # A BOUND colour cannot be a palette class either — `text-@{v}`
+          # matches nothing — so it rides a custom property. It has to be
+          # recorded here, in build_class_name, which owns @dynamic_styles and
+          # runs before the style attribute is rendered.
           hint_color = attributes['hintColor'] || attributes['placeholderColor']
           @select_hint_color = hint_color || 'gray-400'
+          @declared_hint_color = hint_color
+          @select_hint_class =
+            if selected_value_bound?
+              bound_state_color_class(hint_color, custom_property: '--jui-hint-color', prefix: 'text') ||
+                "text-#{@select_hint_color}"
+            else
+              # No runtime condition to swap on, so the class is never emitted
+              # — registering the custom property would leave dead style.
+              "text-#{@select_hint_color}"
+            end
 
           # Disabled state. The binding form used to push a `${...}` into the
           # class list, which finalize_classes split on whitespace and, when no
@@ -166,14 +188,22 @@ module RjuiTools
         end
 
         # Build className attribute for select, with dynamic hint color when no value is selected
+        # Is the selected value a binding? The hint/normal class swap only
+        # exists when there is a runtime condition to swap on, and
+        # build_class_name has to know the same answer to decide whether the
+        # hint colour needs a custom property.
+        def selected_value_bound?
+          value_binding = with_bind_fallback(attributes['selectedValue'] || attributes['value'])
+          !!(value_binding && has_binding?(value_binding))
+        end
+
         def build_select_class_attr(class_name)
-          hint_color = @select_hint_color
           value_binding = with_bind_fallback(attributes['selectedValue'] || attributes['value'])
 
           expressions = []
           if value_binding && has_binding?(value_binding)
             prop = extract_binding_property(value_binding)
-            hint_class = "text-#{hint_color}"
+            hint_class = @select_hint_class
             font_color = attributes['fontColor']
             normal_class = font_color ? "text-#{font_color}" : ''
             expressions << "${#{prop} ? '#{normal_class}' : '#{hint_class}'}"
@@ -185,6 +215,16 @@ module RjuiTools
           return "className=\"#{class_name}\"" if expressions.empty?
 
           "className={`#{class_name} #{expressions.join(' ')}`}"
+        end
+
+        # The placeholder <option>'s own colour. Emitted only when hintColor
+        # (or its placeholderColor alias) was actually DECLARED — the
+        # `gray-400` fallback must stay a class so every existing select keeps
+        # the markup it had.
+        def hint_option_style
+          return '' unless @declared_hint_color
+
+          style_attr_for({ 'color' => color_style_expr(@declared_hint_color) })
         end
 
         def resolve_hint_text(hint)
@@ -207,7 +247,7 @@ module RjuiTools
           # A list box has no closed state to label, so a blank row there is just
           # a selectable item meaning "nothing".
           hint_option = hint && !multiple_select? ?
-            "\n#{indent_str(indent + 2)}<option value=\"\">#{hint_text}</option>" : ''
+            "\n#{indent_str(indent + 2)}<option value=\"\"#{hint_option_style}>#{hint_text}</option>" : ''
           class_attr = build_select_class_attr(class_name)
 
           # Canonical items are a plain string array ([String] — matches
@@ -252,7 +292,7 @@ module RjuiTools
             # Placeholder row is selectable (no `disabled hidden`) so picking
             # it clears the value back to "" — the unselected state mirrors
             # iOS / Android SelectBox behavior.
-            options_jsx = "#{indent_str(indent + 2)}<option value=\"\">#{hint_text}</option>\n#{options_jsx}"
+            options_jsx = "#{indent_str(indent + 2)}<option value=\"\"#{hint_option_style}>#{hint_text}</option>\n#{options_jsx}"
           end
 
           class_attr = build_select_class_attr(class_name)
@@ -402,9 +442,12 @@ module RjuiTools
                          ''
                        end
 
-          # Min/max date
-          min_attr = attributes['minimumDate'] ? " min=\"#{attributes['minimumDate']}\"" : ''
-          max_attr = attributes['maximumDate'] ? " max=\"#{attributes['maximumDate']}\"" : ''
+          # Min/max date. Both are declared binding-capable, and the quoted
+          # interpolation handed the <input> the literal characters `@{v}` —
+          # not a date, so the browser drops the bound and the field accepts
+          # anything. A binding becomes a JSX expression.
+          min_attr = date_bound_attr('min', attributes['minimumDate'])
+          max_attr = date_bound_attr('max', attributes['maximumDate'])
 
           # minuteInterval / datePickerStyle
           step_attr = build_minute_interval_attr(input_type)
@@ -465,6 +508,15 @@ module RjuiTools
         def date_string_format
           format = attributes['dateStringFormat']
           format.is_a?(String) && !format.empty? ? format : nil
+        end
+
+        # `min` / `max` on the date input: a static value stays a quoted
+        # literal, a bound one becomes the expression it stands for.
+        def date_bound_attr(name, value)
+          return '' unless value
+
+          expr = bound_value_expr(value)
+          expr ? " #{name}={#{expr}}" : " #{name}=\"#{value}\""
         end
 
         # minuteInterval — `step` is in seconds, so the interval is minutes * 60.

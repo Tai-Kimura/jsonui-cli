@@ -133,7 +133,9 @@ module RjuiTools
           classes << TailwindMapper.map_max_height(attributes['maxHeight']) if attributes['maxHeight'] && !explicit_h && decoration_allowed?('maxHeight') && !apply_bound_dimension('maxHeight')
 
           # Padding (array format)
-          classes << TailwindMapper.map_padding(attributes['padding'] || attributes['paddings'])
+          classes << TailwindMapper.map_padding(
+            bound_length_style('padding', attributes['padding'] || attributes['paddings'])
+          )
 
           # Individual paddings (topPadding, bottomPadding, leftPadding, rightPadding)
           # Also support paddingTop, paddingRight, paddingBottom, paddingLeft format
@@ -184,7 +186,8 @@ module RjuiTools
           end
 
           # Corner radius
-          classes << TailwindMapper.map_corner_radius(attributes['cornerRadius']) if attributes['cornerRadius']
+          corner_radius = bound_length_style('borderRadius', attributes['cornerRadius'])
+          classes << TailwindMapper.map_corner_radius(corner_radius) if corner_radius
 
           # Text color - check for dynamic binding
           if attributes['fontColor']
@@ -219,13 +222,31 @@ module RjuiTools
             # Pick the weight-bearing string for the FontSpec. fontWeight
             # wins over `font` so explicit weight overrides a polymorphic
             # `font` (which can carry weight names too).
+            #
+            # A bound fontWeight keeps its own inline-style route below, so
+            # it stays out of the spec exactly as before. A bound `font` has
+            # no other route — it used to be dropped here and then dropped
+            # again by `map_font`'s vocabulary case — so it goes into the
+            # spec as the expression itself.
             spec_weight = font_weight_attr || font_attr
-            spec_weight = nil if spec_weight.is_a?(String) && has_binding?(spec_weight)
+            if spec_weight.is_a?(String) && has_binding?(spec_weight)
+              spec_weight =
+                if has_binding?(font_weight_attr)
+                  nil
+                else
+                  Helpers::FontSpecHelper.js_expr(bound_value_expr(spec_weight))
+                end
+            end
 
             spec_size = font_size_attr.is_a?(Numeric) ? font_size_attr : nil
 
+            spec_family = font_family_attr
+            if has_binding?(spec_family)
+              spec_family = Helpers::FontSpecHelper.js_expr(bound_value_expr(spec_family))
+            end
+
             spread = Helpers::FontSpecHelper.build_resolve_spread(
-              family: font_family_attr,
+              family: spec_family,
               weight: spec_weight,
               size:   spec_size,
               italic: false
@@ -245,12 +266,32 @@ module RjuiTools
               @dynamic_styles['fontWeight'] = convert_binding(font_weight_attr)
             end
           else
-            # Font size
-            classes << TailwindMapper.map_font_size(font_size_attr) if font_size_attr
+            # Font size. A bound size is a px inline style — no Tailwind
+            # class can carry a value that exists only at runtime, and
+            # `map_font_size` used to build the dead class `text-[@{v}px]`.
+            font_size_value = bound_length_style('fontSize', font_size_attr)
+            classes << TailwindMapper.map_font_size(font_size_value) if font_size_value
 
             # Font - can be weight name (bold, semibold) or font family alias (monospace).
             # TailwindMapper.map_font already discriminates between the two.
-            if font_attr
+            #
+            # It can only do that discrimination on a value it can SEE, so a
+            # bound `font` fell through its case to `''` and vanished. The
+            # binding routes through `Configuration.Font.resolve` instead —
+            # the same provider the fontFamily branch uses, which is where
+            # the weight vocabulary already lives. Reimplementing that
+            # vocabulary as a runtime lookup here would be a second copy of
+            # shared/core/font_weight_mapping.json, and a copied vocabulary
+            # drifts (40). `font` lands in the WEIGHT slot, matching the
+            # spec routing above and both other platforms (kjui
+            # `attrs['fontWeight'] || attrs['font']`, sjui `fontWeight:`).
+            if (font_expr = bound_value_expr(font_attr))
+              bound_spread = Helpers::FontSpecHelper.build_resolve_spread(
+                weight: Helpers::FontSpecHelper.js_expr(font_expr),
+                italic: false
+              )
+              @dynamic_styles['__SPREAD__font'] = bound_spread if bound_spread
+            elsif font_attr
               font_class = TailwindMapper.map_font(font_attr)
               classes << font_class if font_class && !font_class.empty?
             end
@@ -265,8 +306,14 @@ module RjuiTools
             end
           end
 
-          # Text align
-          classes << TailwindMapper.map_text_align(attributes['textAlign'])
+          # Text align. The declared vocabulary (Left/Center/Right in either
+          # case) IS the CSS one, and CSS keyword values are case-insensitive,
+          # so a bound value goes straight into the property — no runtime
+          # lookup, and no second copy of the vocabulary. `map_text_align`
+          # matched on a `case` and silently returned '' for a binding.
+          classes << TailwindMapper.map_text_align(
+            bound_enum_style('textAlign', attributes['textAlign'])
+          )
 
           # Orientation (flex)
           classes << TailwindMapper.map_orientation(attributes['orientation'])
@@ -351,8 +398,11 @@ module RjuiTools
             classes << 'pointer-events-none'
           end
 
-          # Clip to bounds
-          classes << TailwindMapper.map_overflow(attributes['clipToBounds']) if attributes['clipToBounds']
+          # Clip to bounds. `map_overflow` is a bare truthiness test, and a
+          # `"@{v}"` string is truthy in Ruby — every bound clipToBounds
+          # froze to overflow-hidden regardless of what the value became.
+          clip_to_bounds = bound_flag_style('overflow', attributes['clipToBounds'], on: 'hidden')
+          classes << TailwindMapper.map_overflow(clip_to_bounds) if clip_to_bounds
 
           # Z-index
           classes << TailwindMapper.map_z_index(attributes['zIndex']) if attributes['zIndex']
@@ -377,15 +427,29 @@ module RjuiTools
             classes << TailwindMapper.map_z_index(1)
           end
 
-          # Flex grow (weight)
-          classes << TailwindMapper.map_flex_grow(attributes['weight']) if attributes['weight']
+          # Flex grow (weight). `map_flex_grow` calls `.to_f` on its argument
+          # and `"@{v}".to_f` is 0.0, so every bound weight froze to
+          # `flex-none` — the exact opposite of what a weight is for.
+          weight = bound_number_style('flexGrow', attributes['weight'])
+          classes << TailwindMapper.map_flex_grow(weight) if weight
 
           # Self-centering (for non-View elements like Image, Label)
           # centerHorizontal: center this element horizontally within parent
           # centerVertical: center this element vertically within parent
-          classes << 'mx-auto' if attributes['centerHorizontal']
-          classes << 'my-auto' if attributes['centerVertical']
-          if attributes['centerInParent']
+          #
+          # These are the plainest form of the frozen family: `if
+          # attributes['centerVertical']` is a Ruby truthiness test, and the
+          # STRING `"@{v}"` is truthy whatever the binding resolves to — the
+          # element was centered unconditionally. mx-auto / my-auto are
+          # `margin-inline: auto` / `margin-block: auto`, so the bound form
+          # is the same declaration behind a runtime condition.
+          classes << 'mx-auto' if bound_flag_style('marginInline', attributes['centerHorizontal'], on: 'auto')
+          classes << 'my-auto' if bound_flag_style('marginBlock', attributes['centerVertical'], on: 'auto')
+          center_in_parent = attributes['centerInParent']
+          if (center_expr = bound_value_expr(center_in_parent))
+            dynamic_styles['marginInline'] = "#{center_expr} ? 'auto' : undefined"
+            dynamic_styles['marginBlock']  = "#{center_expr} ? 'auto' : undefined"
+          elsif center_in_parent
             classes << 'mx-auto'
             classes << 'my-auto'
           end
@@ -658,10 +722,213 @@ module RjuiTools
         # the declared-but-unread ledger — and a helper that resolved the names
         # itself would blind both, quietly inventing sixteen coverage gaps.
         def static_spacing(css_property, value)
-          return value unless has_binding?(value)
+          bound_length_style(css_property, value)
+        end
 
-          @dynamic_styles[css_property] = "`${#{extract_binding_property(value)}}px`"
+        # ------------------------------------------------------------------
+        # The bound-value emitter series
+        # ------------------------------------------------------------------
+        #
+        # A Tailwind class is a compile-time string. It cannot carry a value
+        # that only exists at runtime. Every defect plan 41 classified as
+        # bound-literal-leak / bound-uncompilable / bound-frozen is that one
+        # mistake made in a different place — a `"@{v}"` STRING handed to a
+        # code path written for a static value:
+        #
+        #   TailwindMapper.map_font_size("@{v}")  => "text-[@{v}px]"  dead class
+        #   TailwindMapper.map_text_align("@{v}") => ""               dropped
+        #   `if <the centerVertical read>`         => truthy           frozen ON
+        #   `<the lineSpacing read>.to_f`          => 0.0              frozen
+        #   `"min={#{<the minValue read>}}"`       => "min={@{v}}"     not a program
+        #
+        # (Written as prose rather than as the actual subscripts because both
+        # coverage scanners match those LITERALLY, comments included — this
+        # comment first recorded `lineSpacing` and `minValue` as attributes
+        # BaseConverter consumes.)
+        #
+        # The guard sits at the EMIT boundary, not at the read entry.
+        # The typed attribute read deliberately hands back the raw `"@{v}"`, and the
+        # paths that already do the right thing — color_style_expr,
+        # apply_bound_dimension, build_visibility_info, apply_hidden_binding —
+        # depend on receiving it. Filtering at the entry would break those, and
+        # would only move the defect class from "frozen" to "silently dropped".
+        #
+        # The universal sink is the inline style. `@dynamic_styles` values are
+        # emitted as arbitrary JS expressions, so a runtime value lands there in
+        # whatever shape CSS wants: `${x}px`, a bare number, a ternary, an object
+        # lookup. Classes cannot carry a runtime value; CSS properties can. That
+        # also settles specificity in the safe direction — inline always beats a
+        # class, so the side that declared the binding wins.
+        #
+        # `jsx_value_expr` covers the one context that is not a style: a JSX
+        # attribute in code position (`min={…}`, `rows={…}`).
+        #
+        # Every emitter is ADDITIVE: a static value is returned untouched and
+        # takes the byte-identical path it took before. And every one takes the
+        # VALUE, never the attribute name, so the subscript reads stay at the
+        # call site where `consumed_attributes_coverage_spec` and
+        # `jui conformance coverage` scan for them — 41 blinded both by passing
+        # names into a helper and invented sixteen coverage gaps.
+        #
+        # (Both scanners match the subscript LITERALLY, in comments too. Do not
+        # write one as an example here: this comment did, and the coverage spec
+        # promptly recorded the placeholder as a consumed attribute.)
+
+        # The JS expression that produces `value` at runtime, or nil when the
+        # value carries no binding.
+        #
+        # A whole-value binding becomes the bare reference (`data.x`) so the
+        # caller can use it as a number, a boolean or an object key. A value
+        # that only CONTAINS a binding ("@{w}px solid") keeps its surrounding
+        # text and becomes a template literal, because dropping the literal
+        # part would change what the author wrote.
+        def bound_value_expr(value)
+          str = value.to_s
+          return nil unless has_binding?(str)
+
+          # Whole-value binding: `@{…}` and nothing else. Tested by "no SECOND
+          # `@{` opener" rather than by scanning for `}`, so a default literal
+          # that contains a brace (`@{x ?? '}'}`) still resolves as one
+          # expression — and `"@{a} @{b}"`, which is not a whole-value
+          # binding at all, does not (it satisfies is_binding_format? on the
+          # ends alone, and the old subscript arithmetic turned it into the
+          # garbage property `a} @{b`).
+          if is_binding_format?(str) && str.index('@{', 2).nil?
+            return add_viewmodel_data_prefix(extract_binding_value(str))
+          end
+
+          interpolated = str.gsub(/@\{([^}]+)\}/) { "${#{add_viewmodel_data_prefix(::Regexp.last_match(1))}}" }
+          "`#{interpolated}`"
+        end
+
+        # Length attribute: the CSS property takes px.
+        def bound_length_style(css_property, value)
+          expr = bound_value_expr(value)
+          return value unless expr
+
+          dynamic_styles[css_property] = "`${#{expr}}px`"
           nil
+        end
+
+        # Unitless number (lineHeight, flexGrow, …).
+        def bound_number_style(css_property, value)
+          expr = bound_value_expr(value)
+          return value unless expr
+
+          dynamic_styles[css_property] = expr
+          nil
+        end
+
+        # Boolean flag whose ON state is one fixed CSS declaration. `off:`
+        # defaults to `undefined`, which is React's "do not emit this property"
+        # — the element keeps whatever the classes gave it, which is what a
+        # false flag has always meant.
+        def bound_flag_style(css_property, value, on:, off: nil)
+          expr = bound_value_expr(value)
+          return value unless expr
+
+          dynamic_styles[css_property] = "#{expr} ? '#{on}' : #{off.nil? ? 'undefined' : "'#{off}'"}"
+          nil
+        end
+
+        # Enum attribute. With no `map:` the declared vocabulary IS the CSS
+        # vocabulary and the runtime value is emitted straight. With a `map:`
+        # the translation that the static path does at codegen time has to
+        # happen at runtime instead, so it is emitted as an object lookup —
+        # an unmapped value yields undefined, i.e. the property is not set,
+        # which is the same answer the static path gives for a value it does
+        # not recognise.
+        def bound_enum_style(css_property, value, map: nil)
+          expr = bound_value_expr(value)
+          return value unless expr
+
+          dynamic_styles[css_property] =
+            map ? "(#{js_object_literal(map)})[#{expr}]" : expr
+          nil
+        end
+
+        # A STATE color — `hover:` / `active:` / `disabled:`. This is the one
+        # family the inline style cannot take directly: an inline declaration
+        # applies unconditionally, and CSS has no way to scope it to a
+        # pseudo-class. `map_color` was handed the raw `"@{v}"`, decided it
+        # was a palette name because it does not start with `#`, and built
+        # `active:bg-@{v}` — a class that matches nothing.
+        #
+        # An inline style CAN set a custom property, and a variant utility CAN
+        # read one back, so the binding lands on `--jui-*` and the class
+        # becomes `active:bg-[var(--jui-*)]`. That class is a literal in the
+        # emitted source, so Tailwind's scanner still generates it — which is
+        # why the var name is fixed per state rather than composed per node.
+        #
+        # Returns nil for a static value, leaving the caller's existing
+        # palette path byte-identical.
+        def bound_state_color_class(value, custom_property:, prefix:)
+          return nil unless has_binding?(value)
+
+          dynamic_styles[custom_property] = color_style_expr(value)
+          "#{prefix}-[var(#{custom_property})]"
+        end
+
+        # A JSX attribute in CODE position: `min={…}`, `rows={…}`, `step={…}`.
+        # Returns the JS expression to place inside the braces — the binding
+        # reference when bound, the value's own literal spelling otherwise.
+        # This is the context that produced `min={@{v}}`, an emit that is not
+        # a program: the generated file does not compile at all.
+        def jsx_value_expr(value)
+          bound_value_expr(value) || value.to_s
+        end
+
+        # contentMode → the CSS pair, keyed by the LOWERCASED spelling so a
+        # runtime lookup can normalise the way the static `case` does with
+        # `&.downcase`. Covers the union of the canonical enum and the
+        # iOS/Android long forms.
+        #
+        # The static paths keep their own tables on purpose. ImageConverter's
+        # `case` and NetworkImageConverter's two maps do not accept the same
+        # spellings — `aspect_fit` is only in the first, `centerCrop` and
+        # `fitXY` only in the second — so folding them into this one would
+        # change what a STATIC layout emits, which this lane may not do. That
+        # three-way disagreement is a finding in its own right; it is written
+        # up in the lane report rather than fixed here.
+        CONTENT_MODE_OBJECT_FIT = {
+          'fit' => 'contain', 'aspectfit' => 'contain', 'aspect_fit' => 'contain',
+          'scaleaspectfit' => 'contain', 'fitcenter' => 'contain',
+          'fill' => 'fill', 'scaletofill' => 'fill', 'scale_to_fill' => 'fill', 'fitxy' => 'fill',
+          'aspectfill' => 'cover', 'aspect_fill' => 'cover',
+          'scaleaspectfill' => 'cover', 'centercrop' => 'cover',
+          'center' => 'none', 'top' => 'none', 'bottom' => 'none',
+          'left' => 'none', 'right' => 'none'
+        }.freeze
+
+        CONTENT_MODE_OBJECT_POSITION = {
+          'center' => 'center', 'top' => 'top', 'bottom' => 'bottom',
+          'left' => 'left', 'right' => 'right'
+        }.freeze
+
+        # Route a bound contentMode to object-fit / object-position. Returns
+        # true when the binding was routed, false for a static value so the
+        # caller's own vocabulary table stays on its exact previous path.
+        def apply_bound_content_mode(value)
+          expr = bound_value_expr(value)
+          return false unless expr
+
+          key = "String(#{expr}).toLowerCase()"
+          dynamic_styles['objectFit'] =
+            "(#{js_object_literal(CONTENT_MODE_OBJECT_FIT)})[#{key}] ?? 'contain'"
+          dynamic_styles['objectPosition'] =
+            "(#{js_object_literal(CONTENT_MODE_OBJECT_POSITION)})[#{key}]"
+          true
+        end
+
+        def js_object_literal(map)
+          '{ ' + map.map { |k, v| "'#{k}': '#{v}'" }.join(', ') + ' }'
+        end
+
+        # `@dynamic_styles` is initialized by `build_class_name`; converters
+        # that route a binding before (or without) calling it get the hash
+        # created on demand rather than a NoMethodError on nil.
+        def dynamic_styles
+          @dynamic_styles ||= {}
         end
 
         # A bound size pins the element exactly like a numeric one: it must not
@@ -686,6 +953,19 @@ module RjuiTools
           # CSS custom properties (starting with --) need to be quoted in JSX
           key_str = key.start_with?('--') ? "'#{key}'" : key
           "#{key_str}: #{clean_value}"
+        end
+
+        # Render a standalone `style={{ … }}` for an element that is NOT the
+        # subtree root. `@dynamic_styles` belongs to the root tag, so an inner
+        # element a converter composes itself (the Switch track and knob, say)
+        # has no way to reach it — and a runtime colour has nowhere else to
+        # go, since an arbitrary-value class cannot hold one.
+        def style_attr_for(pairs)
+          return '' if pairs.nil? || pairs.empty?
+
+          rendered = pairs.map { |key, value| format_dynamic_style_pair(key, value) }
+          cast = pairs.keys.any? { |key| key.to_s.start_with?('--') } ? ' as React.CSSProperties' : ''
+          " style={{ #{rendered.join(', ')} }#{cast}}"
         end
 
         # Build className attribute, handling landscape responsive with template literal.
@@ -1302,7 +1582,10 @@ module RjuiTools
             'numeric'
           when 'decimal', 'decimalpad'
             'decimal'
-          when 'tel', 'phonenumber'
+          # `phone` is the spelling attribute_definitions actually declares;
+          # only the UIKit long forms were listed, so the one value a layout
+          # author is told to write mapped to nothing.
+          when 'tel', 'phone', 'phonenumber'
             'tel'
           when 'email'
             'email'
