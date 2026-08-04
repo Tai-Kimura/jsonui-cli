@@ -8,7 +8,7 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "8b1430817d166338d709ca2730cd97f1812d2bcb941b05f4b02c59b523062513",
+  "generatedFrom": "df3c1cf50003de7c0fa572a8ea66ce0e10aee2eaf56e75441fb27ea3ab3eafd1",
   "counts": {
     "fixtures": 698,
     "assertable": 29,
@@ -10504,6 +10504,29 @@
       "control": "__control/Segment"
     },
     {
+      "id": "Segment/fontColor__alias_normalColor",
+      "component": "Segment",
+      "attribute": "fontColor",
+      "case": "alias_normalColor",
+      "class": "visual",
+      "host": "Segment",
+      "writtenKey": "normalColor",
+      "aliasOf": "Segment/fontColor__static",
+      "value": "#FF0000",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Segment/fontColor__alias_normalColor.layout.json",
+      "test": "fixtures/Segment/fontColor__alias_normalColor.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Segment"
+    },
+    {
       "id": "Segment/selectedFontColor__static",
       "component": "Segment",
       "attribute": "selectedFontColor",
@@ -10527,43 +10550,24 @@
       "control": "__control/Segment"
     },
     {
-      "id": "Segment/normalColor__static",
+      "id": "Segment/selectedFontColor__alias_selectedColor",
       "component": "Segment",
-      "attribute": "normalColor",
-      "case": "static",
-      "class": "visual",
-      "host": "Segment",
-      "writtenKey": "normalColor",
-      "aliasOf": null,
-      "value": "#FF0000",
-      "platforms": [
-        "ios"
-      ],
-      "mode": "swiftui",
-      "deprecated": null,
-      "layout": "fixtures/Segment/normalColor__static.layout.json",
-      "test": "fixtures/Segment/normalColor__static.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": "__control/Segment"
-    },
-    {
-      "id": "Segment/selectedColor__static",
-      "component": "Segment",
-      "attribute": "selectedColor",
-      "case": "static",
+      "attribute": "selectedFontColor",
+      "case": "alias_selectedColor",
       "class": "visual",
       "host": "Segment",
       "writtenKey": "selectedColor",
-      "aliasOf": null,
+      "aliasOf": "Segment/selectedFontColor__static",
       "value": "#FF0000",
       "platforms": [
-        "ios"
+        "ios",
+        "android",
+        "web"
       ],
-      "mode": "swiftui",
+      "mode": null,
       "deprecated": null,
-      "layout": "fixtures/Segment/selectedColor__static.layout.json",
-      "test": "fixtures/Segment/selectedColor__static.test.json",
+      "layout": "fixtures/Segment/selectedFontColor__alias_selectedColor.layout.json",
+      "test": "fixtures/Segment/selectedFontColor__alias_selectedColor.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Segment"

@@ -2879,33 +2879,21 @@
     },
     "tintColor": {
       "type": "string",
-      "description": "Tint color of the selected segment's background - hex string or color name from colors.json"
+      "description": "Accent color of the SELECTED segment - a background fill on ios/web, the indicator on Compose. Hex string or color name from colors.json"
     },
     "fontColor": {
       "type": "string",
-      "description": "Label color of the UNSELECTED segments - hex string or color name from colors.json"
+      "description": "Label color of the UNSELECTED segments - hex string or color name from colors.json",
+      "aliases": [
+        "normalColor"
+      ]
     },
     "selectedFontColor": {
       "type": "string",
-      "description": "Label color of the selected segment, falling back to fontColor - hex string or color name from colors.json"
-    },
-    "normalColor": {
-      "type": [
-        "string",
-        "binding"
-      ],
-      "description": "Normal state color - hex string or color name from colors.json (binding supported)",
-      "platform": "swift",
-      "mode": "swiftui"
-    },
-    "selectedColor": {
-      "type": [
-        "string",
-        "binding"
-      ],
-      "description": "Selected state color - hex string or color name from colors.json (binding supported)",
-      "platform": "swift",
-      "mode": "swiftui"
+      "description": "Label color of the selected segment, falling back to fontColor - hex string or color name from colors.json",
+      "aliases": [
+        "selectedColor"
+      ]
     },
     "valueChange": {
       "type": "string",

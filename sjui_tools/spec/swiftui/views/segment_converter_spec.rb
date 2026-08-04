@@ -222,10 +222,10 @@ RSpec.describe SjuiTools::SwiftUI::Views::SegmentConverter do
     # SwiftUI's segmented Picker has no per-state colour modifier, so both the
     # UIKit runtime and the SwiftUI Dynamic runtime go through
     # UISegmentedControl.appearance(). The codegen read neither attribute.
-    describe 'normalColor / selectedColor' do
+    describe 'selected tint and unselected label' do
       it 'sets the selected segment tint' do
         code = described_class.new(
-          { 'type' => 'Segment', 'items' => %w[One Two], 'selectedColor' => '#FF0000' }
+          { 'type' => 'Segment', 'items' => %w[One Two], 'tintColor' => '#FF0000' }
         ).convert
 
         expect(code).to include('UISegmentedControl.appearance()')
@@ -234,7 +234,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::SegmentConverter do
 
       it 'sets the unselected title colour' do
         code = described_class.new(
-          { 'type' => 'Segment', 'items' => %w[One Two], 'normalColor' => '#0000FF' }
+          { 'type' => 'Segment', 'items' => %w[One Two], 'fontColor' => '#0000FF' }
         ).convert
 
         expect(code).to include('setTitleTextAttributes')
@@ -243,7 +243,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::SegmentConverter do
 
       it 'applies in onAppear, since appearance() is process-wide' do
         code = described_class.new(
-          { 'type' => 'Segment', 'items' => %w[One Two], 'normalColor' => '#0000FF' }
+          { 'type' => 'Segment', 'items' => %w[One Two], 'fontColor' => '#0000FF' }
         ).convert
 
         expect(code).to include('.onAppear {')
@@ -256,9 +256,9 @@ RSpec.describe SjuiTools::SwiftUI::Views::SegmentConverter do
       end
     end
 
-    # fontColor / selectedFontColor are the cross-platform spellings of the two
-    # label colours; normalColor is the swift-only legacy name for the first
-    # (contract: semantics.segmentLabelColors).
+    # fontColor / selectedFontColor are the label colours; normalColor /
+    # selectedColor are their declared aliases, resolved by the normalizer
+    # before the converter sees the node (contract: semantics.segmentLabelColors).
     describe 'fontColor / selectedFontColor' do
       it 'sets the unselected title colour from fontColor' do
         code = described_class.new(
@@ -286,10 +286,9 @@ RSpec.describe SjuiTools::SwiftUI::Views::SegmentConverter do
         expect(code).to include('for: .selected')
       end
 
-      it 'prefers fontColor over the legacy normalColor' do
+      it 'reads canonical names only, leaving aliases to the normalizer' do
         code = described_class.new(
-          { 'type' => 'Segment', 'items' => %w[One Two],
-            'fontColor' => '#0000FF', 'normalColor' => '#123456' }
+          { 'type' => 'Segment', 'items' => %w[One Two], 'normalColor' => '#123456' }
         ).convert
 
         expect(code).not_to include('123456')

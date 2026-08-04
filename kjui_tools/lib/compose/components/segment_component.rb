@@ -63,23 +63,34 @@ module KjuiTools
           # Label colours: fontColor is the unselected label and
           # selectedFontColor the selected one, falling back to fontColor
           # (contract: semantics.segmentLabelColors). normalColor / selectedColor
-          # are the legacy spellings and still resolve behind them.
+          # are declared aliases — the normalizer canonicalizes them, so only the
+          # canonical spellings are read here.
           # Normal text color (contentColor) - for unselected tabs
-          if json_data['fontColor'] || json_data['normalColor']
-            normal_color = Helpers::ResourceResolver.process_color(json_data['fontColor'] || json_data['normalColor'], required_imports)
+          if json_data['fontColor']
+            normal_color = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
             colors_params << "contentColor = #{normal_color}"
           end
           
-          # Selected text color (selectedContentColor) 
-          if json_data['selectedFontColor'] || json_data['fontColor'] || json_data['selectedColor'] || json_data['tintColor'] || json_data['selectedSegmentTintColor']
-            color = json_data['selectedFontColor'] || json_data['fontColor'] || json_data['selectedColor'] || json_data['tintColor'] || json_data['selectedSegmentTintColor']
+          # Selected text color (selectedContentColor)
+          if json_data['selectedFontColor'] || json_data['fontColor']
+            color = json_data['selectedFontColor'] || json_data['fontColor']
             selected_color = Helpers::ResourceResolver.process_color(color, required_imports)
             colors_params << "selectedContentColor = #{selected_color}"
           end
-          
-          # Indicator color - only if specified
-          if json_data['indicatorColor']
-            indicator_color = Helpers::ResourceResolver.process_color(json_data['indicatorColor'], required_imports)
+
+          # Selected-segment background. tintColor paints the SELECTED SEGMENT'S
+          # BACKGROUND on every platform (ios selectedSegmentTintColor, web bg-*);
+          # android used to feed it into the label colour instead, so the same
+          # declaration coloured different things (contract:
+          # semantics.segmentLabelColors). The indicator is this component's
+          # selected-state background — its default is Configuration.Segment
+          # .defaultSelectedBackgroundColor. indicatorColor was an undeclared
+          # second spelling for the same thing and is no longer read.
+          if json_data['tintColor'] || json_data['selectedSegmentTintColor']
+            indicator_color = Helpers::ResourceResolver.process_color(
+              json_data['tintColor'] || json_data['selectedSegmentTintColor'],
+              required_imports
+            )
             colors_params << "indicatorColor = #{indicator_color}"
           end
           
@@ -167,8 +178,8 @@ module KjuiTools
               
               # Generate text with color based on selection
               # Store color info for later use
-              normal_color = json_data['fontColor'] || json_data['normalColor']
-              selected_color = json_data['selectedFontColor'] || json_data['fontColor'] || json_data['selectedColor'] || json_data['tintColor'] || json_data['selectedSegmentTintColor']
+              normal_color = json_data['fontColor']
+              selected_color = json_data['selectedFontColor'] || json_data['fontColor']
               
               if normal_color || selected_color
                 # Need to handle text color based on selection
@@ -277,8 +288,8 @@ module KjuiTools
             code += "\n" + indent("},", depth + 3)
             
             # Generate text with color based on selection for dynamic segments
-            normal_color = json_data['fontColor'] || json_data['normalColor']
-            selected_color = json_data['selectedFontColor'] || json_data['fontColor'] || json_data['selectedColor'] || json_data['tintColor'] || json_data['selectedSegmentTintColor']
+            normal_color = json_data['fontColor']
+            selected_color = json_data['selectedFontColor'] || json_data['fontColor']
             
             if normal_color || selected_color
               code += "\n" + indent("text = {", depth + 3)

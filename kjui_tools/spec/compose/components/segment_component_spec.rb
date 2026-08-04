@@ -126,26 +126,29 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
       expect(result).to include('containerColor')
     end
 
-    it 'generates Segment with normalColor' do
+    it 'generates Segment with fontColor' do
       json_data = {
         'type' => 'Segment',
-        'normalColor' => '#666666',
+        'fontColor' => '#666666',
         'items' => ['A', 'B']
       }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('contentColor')
     end
 
-    it 'generates Segment with selectedColor' do
+    it 'generates Segment with selectedFontColor' do
       json_data = {
         'type' => 'Segment',
-        'selectedColor' => '#007AFF',
+        'selectedFontColor' => '#007AFF',
         'items' => ['A', 'B']
       }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('selectedContentColor')
     end
 
+    # tintColor is the SELECTED segment's accent on every platform; on Compose
+    # that is the TabRow indicator, not the label (contract:
+    # semantics.segmentLabelColors → tintColorAlignment).
     it 'generates Segment with tintColor' do
       json_data = {
         'type' => 'Segment',
@@ -153,17 +156,20 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
         'items' => ['A', 'B']
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('selectedContentColor')
+      expect(result).to include('indicatorColor')
+      expect(result).not_to include('selectedContentColor')
     end
 
-    it 'generates Segment with indicatorColor' do
+    # indicatorColor was an undeclared second spelling of the same slot and is
+    # no longer read — tintColor is the declared one.
+    it 'ignores the undeclared indicatorColor spelling' do
       json_data = {
         'type' => 'Segment',
         'indicatorColor' => '#0000FF',
         'items' => ['A', 'B']
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('indicatorColor')
+      expect(result).not_to include('indicatorColor')
     end
 
     it 'generates Segment with onValueChange handler' do
@@ -210,8 +216,8 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
       json_data = {
         'type' => 'Segment',
         'selectedIndex' => 0,
-        'selectedColor' => '#FF0000',
-        'normalColor' => '#999999',
+        'selectedFontColor' => '#FF0000',
+        'fontColor' => '#999999',
         'items' => ['A', 'B']
       }
       result = described_class.generate(json_data, 0, required_imports)
@@ -223,8 +229,8 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
       json_data = {
         'type' => 'Segment',
         'selectedIndex' => '@{tab}',
-        'selectedColor' => '#FF0000',
-        'normalColor' => '#999999',
+        'selectedFontColor' => '#FF0000',
+        'fontColor' => '#999999',
         'items' => ['A', 'B']
       }
       result = described_class.generate(json_data, 0, required_imports)
@@ -357,12 +363,21 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
         expect(result).to include('selectedContentColor =')
       end
 
-      it 'still honours the legacy normalColor spelling' do
+      it 'sends tintColor to the selected background, not the label' do
+        result = described_class.generate(
+          { 'type' => 'Segment', 'items' => %w[A B], 'tintColor' => '#FF0000' }, 0, required_imports
+        )
+
+        expect(result).to include('indicatorColor =')
+        expect(result).not_to include('selectedContentColor =')
+      end
+
+      it 'leaves the alias spellings to the normalizer' do
         result = described_class.generate(
           { 'type' => 'Segment', 'items' => %w[A B], 'normalColor' => '#0000FF' }, 0, required_imports
         )
 
-        expect(result).to include('contentColor =')
+        expect(result).not_to include('contentColor = Color(0xFF0000FF)')
       end
     end
   end
