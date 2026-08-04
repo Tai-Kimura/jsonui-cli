@@ -70,7 +70,7 @@ module JsonUI
         { name: 'paging', kind: :boolean }.freeze,
         # Reverse the layout direction of the Collection grid. When true, section order in the generated code is also reversed so that JSON definition order (index 0 first) matches the visual top-to-bottom order on iOS (which does not support reverseLayout). Compose's reverseLayout then flips the entire list so index 0 appears at the bottom.
         { name: 'reverseLayout', kind: :boolean }.freeze,
-        # Anchor point for scroll target (default: bottom)
+        # Anchor point for the scrollTo target. Measured 2026-08-05: ios (sjui collection_converter.rb:1138), web (rjui build_command.rb:768) and the Compose GRID path (kjui collection_component.rb:313) all fall back to bottom, so bottom is the declared default. The Compose LIST path emits no anchor offset unless the attribute is explicitly declared, which lands the target at top - that is a divergence in that one path, not a second default. [default: bottom]
         { name: 'scrollAnchor', kind: :enum, values: ['top', 'center', 'bottom'].freeze }.freeze,
         # Whether scrollTo uses animation (default: true)
         { name: 'scrollAnimated', kind: :boolean }.freeze,

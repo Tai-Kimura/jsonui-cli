@@ -15,27 +15,23 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
-        # Maximum value (binding supported)
-        { name: 'maxValue', kind: :number, bindable: true }.freeze,
-        # Maximum value (alias for maxValue) (binding supported)
+        # Maximum value (binding supported). `maxValue` / `maximumValue` are accepted alias spellings.
         { name: 'maximum', kind: :number, bindable: true, aliases: ['maximumValue', 'maxValue'].freeze }.freeze,
         # Image at maximum end
         { name: 'maximumValueImage', kind: :string }.freeze,
-        # Minimum value (binding supported)
-        { name: 'minValue', kind: :number, bindable: true }.freeze,
-        # Minimum value (alias for minValue) (binding supported)
+        # Minimum value (binding supported). `minValue` / `minimumValue` are accepted alias spellings.
         { name: 'minimum', kind: :number, bindable: true, aliases: ['minimumValue', 'minValue'].freeze }.freeze,
         # Image at minimum end
         { name: 'minimumValueImage', kind: :string }.freeze,
         # Value change handler - binding only (@{functionName})
         { name: 'onValueChange', kind: :binding, aliases: ['onValueChanged'].freeze }.freeze,
-        # Deprecated on swift. [DEPRECATED: SwiftUI Slider uses unified tint only.]
+        # Colour of the filled portion of the track - hex string or color name from colors.json. Was declared deprecated on swift ("SwiftUI Slider uses unified tint only"); retracted 2026-08-05 because Progress, also SwiftUI, maps the same attribute to .tint(). Unimplemented on the Slider path, not impossible.
         { name: 'progressTintColor', kind: :string }.freeze,
         # Step increment value
         { name: 'step', kind: :number }.freeze,
         # Tint color - hex string or color name from colors.json
         { name: 'tintColor', kind: :string }.freeze,
-        # Deprecated on swift. [DEPRECATED: SwiftUI Slider uses unified tint only.]
+        # Colour of the unfilled track - hex string or color name from colors.json. Deprecation retracted with progressTintColor: SwiftUI Progress reaches the same result through .background().
         { name: 'trackTintColor', kind: :string }.freeze,
         # Current value (binding for two-way) [binding: two-way]
         { name: 'value', kind: :number, bindable: true }.freeze,

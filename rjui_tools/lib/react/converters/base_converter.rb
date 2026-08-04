@@ -321,57 +321,51 @@ module RjuiTools
           # Shadow
           classes << TailwindMapper.map_shadow(attributes['shadow']) if attributes['shadow']
 
-          # Border.
+          # Border — both-attributes guard. **The PAIR is what requests a
+          # border**; neither half requests one on its own, and there is no
+          # default border colour. `borderStyle` alone draws nothing either:
+          # it decorates a border the pair asked for, it never summons one.
           #
-          # **`borderWidth` is what summons a border.** A width of nothing is
-          # not a border, so `borderColor` and `borderStyle` modify something
-          # that has to already exist — writing either alone is like writing
-          # `fontColor` on a component with no text. `borderStyle` carries a
-          # `default` in the SSoT ("solid"), and a default STYLE presupposes a
-          # subject; it does not put a solid border on every view.
+          # The ruling lives in shared/core/attribute_semantics.json
+          # (`semantics.border`), is a 2026-08-03 USER ruling, and its five
+          # `observable` entries are a machine gate — `jui conformance gate
+          # --cross-effect` checks them against control_diff, so making any
+          # single declaration draw turns the next 3PF measure red.
           #
-          # This replaced an AND gate (`borderWidth && borderColor`) that
-          # dropped a declared width whenever no colour came with it. The
-          # colour then needs a fallback, and it is emitted EXPLICITLY rather
-          # than left to Tailwind's preflight: preflight's border-color is
-          # `currentColor`, i.e. the inherited text colour, so a width-only
-          # border would have come out a different colour on web than on the
-          # other two. `#000000` matches UIKit's `CALayer.borderColor` default
-          # and the Compose lane's `Color.Black` — the three platforms taking
-          # the SAME fallback is the point. The SSoT owes `borderColor` a
-          # `default` declaration, and when it lands this follows it.
-          #
-          # NOTE for the next reader: `shared/core/attribute_semantics.json`
-          # still says `border.widthAlone: "no-draw"` and lists
-          # `common/borderWidth__static` as `uniformly-inert`. That entry
-          # predates this change and the matching ones in sjui
-          # (base_view_converter#border_overlay) and kjui. It is E's file, so
-          # this lane cannot update it — see the 49-A report.
-          border_width = attributes['borderWidth']
-          if border_width
-            border_color = attributes['borderColor']
-            border_style = attributes['borderStyle']
-            border_width_binding = has_binding?(border_width)
-            border_color_binding = border_color && has_binding?(border_color)
-            border_style_binding = border_style && has_binding?(border_style)
+          # Do not re-derive this from attribute_definitions.json. The
+          # `"default": "solid"` on `borderStyle` is the trap: it proves style
+          # is a MODIFIER, and it is tempting to conclude that `borderWidth`
+          # must therefore be what summons the border. That conclusion has now
+          # been reached — and reverted — three times (`d2c8628` took the
+          # gray-default direction and the user ruling superseded it; plan 49
+          # took it again across all three toolchains and it was reverted
+          # again). Rulings live once, in attribute_semantics.json, verified
+          # by cross-effect (`d119189`); read that file before reasoning from
+          # types, enums and defaults.
+          if attributes['borderWidth'] && attributes['borderColor']
+            border_width_binding = attributes['borderWidth'] && has_binding?(attributes['borderWidth'])
+            border_color_binding = attributes['borderColor'] && has_binding?(attributes['borderColor'])
+            border_style_binding = attributes['borderStyle'] && has_binding?(attributes['borderStyle'])
 
             if border_width_binding || border_color_binding || border_style_binding
               # Dynamic border - use inline styles
               if border_width_binding
-                prop = convert_binding(border_width).gsub(/[{}]/, '')
+                prop = convert_binding(attributes['borderWidth']).gsub(/[{}]/, '')
                 @dynamic_styles['borderWidth'] = "`${#{prop}}px`"
-              else
-                @dynamic_styles['borderWidth'] = "'#{border_width}px'"
+              elsif attributes['borderWidth']
+                @dynamic_styles['borderWidth'] = "'#{attributes['borderWidth']}px'"
               end
-              @dynamic_styles['borderColor'] = color_style_expr(border_color || BORDER_COLOR_FALLBACK)
+              if border_color_binding
+                @dynamic_styles['borderColor'] = color_style_expr(attributes['borderColor'])
+              elsif attributes['borderColor']
+                @dynamic_styles['borderColor'] = color_style_expr(attributes['borderColor'])
+              end
               if border_style_binding
-                @dynamic_styles['borderStyle'] = convert_binding(border_style)
+                @dynamic_styles['borderStyle'] = convert_binding(attributes['borderStyle'])
               end
-              classes << 'border-solid' unless border_style
+              classes << 'border-solid' unless attributes['borderStyle']
             else
-              classes << TailwindMapper.map_border(
-                border_width, border_color || BORDER_COLOR_FALLBACK, border_style
-              )
+              classes << TailwindMapper.map_border(attributes['borderWidth'], attributes['borderColor'], attributes['borderStyle'])
             end
           end
 
@@ -595,12 +589,6 @@ module RjuiTools
         def unwrap_jsx_braces(expr)
           expr.to_s.gsub(/\A\{|\}\z/, '')
         end
-
-        # The border colour a width-only declaration falls back to. Matches
-        # UIKit's `CALayer.borderColor` default and the Compose lane's
-        # `Color.Black`; the three platforms agreeing matters more than the
-        # particular value, and the SSoT owes `borderColor` a `default`.
-        BORDER_COLOR_FALLBACK = '#000000'
 
         # Values CSS already understands. Everything else in a color
         # attribute is a colors.json key.

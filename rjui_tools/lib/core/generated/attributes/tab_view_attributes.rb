@@ -15,8 +15,6 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
-        # Tab change handler - binding only (@{functionName})
-        { name: 'onTabChange', kind: :binding }.freeze,
         # Tab/page selection change handler. Canonical; prefer over onTabChange/onPageChanged. [binding: one-way]
         { name: 'onValueChange', kind: :string, bindable: true, aliases: ['onTabChange', 'onPageChanged'].freeze }.freeze,
         # Currently selected tab index (binding for two-way) [binding: two-way]

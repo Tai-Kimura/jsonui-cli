@@ -30,7 +30,7 @@ module JsonUI
         { name: 'autocorrectionType', kind: :enum, values: ['default', 'yes', 'no', 'on', 'off', 'true', 'false'].freeze }.freeze,
         # Border style
         { name: 'borderStyle', kind: :enum, values: ['none', 'line', 'bezel', 'roundedRect', 'RoundedRect', 'Line', 'Bezel'].freeze }.freeze,
-        # Caret styling attributes (fontColor for cursor color) [DEPRECATED: SwiftUI cannot style the caret (iOS 17 has partial .tint API).]
+        # Caret styling attributes (fontColor for cursor color)
         { name: 'caretAttributes', kind: :object }.freeze,
         # Clear button mode
         { name: 'clearButtonMode', kind: :string }.freeze,
@@ -118,8 +118,6 @@ module JsonUI
         { name: 'rightViewMode', kind: :string }.freeze,
         # Secure text entry for passwords (can be data binding)
         { name: 'secure', kind: :boolean, bindable: true }.freeze,
-        # Spell checking type [DEPRECATED: Compose does not expose spell-checking control.]
-        { name: 'spellCheckingType', kind: :string }.freeze,
         # Text content (binding for two-way) [binding: two-way]
         { name: 'text', kind: :string, bindable: true }.freeze,
         # Text alignment

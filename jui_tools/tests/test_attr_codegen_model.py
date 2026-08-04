@@ -6,6 +6,7 @@ raw fallback / skip) plus a sanity pass over the real bundled
 """
 from __future__ import annotations
 
+import json
 import unittest
 
 from jui_cli.generators.attr_codegen.model import (
@@ -233,8 +234,45 @@ class RealDefinitionsTests(unittest.TestCase):
     def test_known_skips_present(self):
         skipped = {(s.component, s.name) for s in self.model.skipped}
         self.assertIn(("Collection", "onItemAppear"), skipped)
-        self.assertIn(("Collection", "onPageChanged"), skipped)
         self.assertIn(("common", "generatedBy"), skipped)
+
+    def test_no_alias_is_cancelled_by_a_declaration_of_its_own_name(self):
+        """An alias spelling must not ALSO be a declared attribute.
+
+        `alias_map` redirects a spelling only `if alias not in rows`, where
+        rows is common merged with the component — so declaring the alias
+        name as an attribute of its own silently cancels the redirect, and
+        the two spellings become unrelated attributes that drift apart. It
+        is invisible: the `aliases` list still reads as if it were wired.
+
+        Plan 49 found seven of these at once (Slider.minimum/minValue,
+        common.opacity/alpha, Button.highlightColor/hilightColor, ...); the
+        Slider pair had already reached the conformance run as unaccounted
+        inert verdicts. Cleaning them up is not enough — without this test
+        the next one lands the same way, so the check is the fix.
+        """
+        definitions = json.loads(default_definitions_path().read_text("utf-8"))
+        common = {
+            k: v for k, v in definitions["common"].items() if isinstance(v, dict)
+        }
+        offenders = []
+        for section, attrs in definitions.items():
+            if section == "_comment" or not isinstance(attrs, dict):
+                continue
+            # Mirrors alias_map(): common merged with the component section.
+            rows = dict(common)
+            if section != "common":
+                rows.update({k: v for k, v in attrs.items() if isinstance(v, dict)})
+            for canonical, spec in rows.items():
+                for alias in spec.get("aliases") or []:
+                    if alias in rows:
+                        offenders.append(f"{section}.{canonical} -> '{alias}'")
+        self.assertEqual(
+            sorted(set(offenders)),
+            [],
+            "alias spellings cancelled by a declaration of the same name — "
+            "delete the standalone entry and keep only the `aliases` row",
+        )
 
     def test_width_height_are_bindable_dimensions(self):
         by_name = {a.name: a for a in self.model.common.attrs}

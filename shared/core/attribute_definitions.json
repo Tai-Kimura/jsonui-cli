@@ -231,7 +231,8 @@
         "string",
         "binding"
       ],
-      "description": "Border color - hex string or color name from colors.json (binding supported)"
+      "default": "#000000",
+      "description": "Border color - hex string or color name from colors.json (binding supported). Defaults to opaque black when borderWidth is declared without it. The default is a fixed literal rather than CSS's `currentColor` on purpose: currentColor inherits the TEXT colour, so the same View declaration would draw a different border depending on what it happens to contain, and Compose has no border colour default at all (Modifier.border requires one). A fixed value is also what the rest of this family already does - borderStyle declares \"solid\". NOTE: SJUITextField.defaultBorderColor is lightGray, a component-level UIKit chrome default that predates this and is deliberately not unified with it."
     },
     "borderStyle": {
       "type": "string",
@@ -243,15 +244,6 @@
       "default": "solid",
       "description": "Border line style - solid (default), dashed, or dotted"
     },
-    "alpha": {
-      "type": [
-        "number",
-        "binding"
-      ],
-      "min": 0,
-      "max": 1,
-      "description": "Opacity (0-1) - can be data binding"
-    },
     "opacity": {
       "type": [
         "number",
@@ -259,7 +251,7 @@
       ],
       "min": 0,
       "max": 1,
-      "description": "Opacity (0-1), alias for alpha - can be data binding",
+      "description": "Opacity (0-1) - can be data binding. `alpha` is an accepted alias spelling.",
       "aliases": [
         "alpha"
       ]
@@ -1221,9 +1213,7 @@
         "array",
         "string"
       ],
-      "description": "Edge insets as array or pipe-separated string",
-      "deprecated": "kotlin",
-      "deprecation_note": "Compose Text has no edgeInset; use padding* instead."
+      "description": "Edge insets as array or pipe-separated string. Applied on every platform including Compose, where it maps to .padding() (kjui text_component.rb / DynamicTextComponent.kt) - the former \"Compose Text has no edgeInset\" deprecation was contradicted by that implementation and was retracted 2026-08-05."
     },
     "underline": {
       "type": [
@@ -1727,9 +1717,7 @@
           "type": "string",
           "description": "Caret color - hex string or color name from colors.json"
         }
-      },
-      "deprecated": "swiftui",
-      "deprecation_note": "SwiftUI cannot style the caret (iOS 17 has partial .tint API)."
+      }
     },
     "onTextChange": {
       "type": "string",
@@ -1767,13 +1755,6 @@
         "false": "no"
       },
       "description": "Auto-correction type. UIKit's vocabulary; `on`/`true` and `off`/`false` are accepted alias spellings of yes/no. `default` means \"leave it to the platform\" — web deliberately emits nothing for it."
-    },
-    "spellCheckingType": {
-      "type": "string",
-      "description": "Spell checking type",
-      "platform": "swift",
-      "deprecated": "swift",
-      "deprecation_note": "Compose does not expose spell-checking control."
     },
     "clearButtonMode": {
       "type": "string",
@@ -2192,9 +2173,7 @@
         "number",
         "array"
       ],
-      "description": "The UIKit spelling of containerInset (content inset). Same accepted shapes: a single number, or an array of 1/2/4 numbers. Deprecated on kotlin.",
-      "deprecated": "kotlin",
-      "deprecation_note": "Compose Text has no edgeInset; use padding* instead."
+      "description": "The UIKit spelling of containerInset (content inset). Same accepted shapes: a single number, or an array of 1/2/4 numbers. Was declared deprecated on kotlin (\"Compose Text has no edgeInset\"); retracted 2026-08-05 because Label.edgeInset maps to .padding() on Compose in both the codegen and the dynamic renderer. Unimplemented on the Compose TextView path, not impossible."
     }
   },
   "EditText": {
@@ -2244,10 +2223,6 @@
       "aliases": [
         "hilightColor"
       ]
-    },
-    "hilightColor": {
-      "type": "string",
-      "description": "Highlight color - hex string or color name from colors.json (typo alias)"
     },
     "tapBackground": {
       "type": "string",
@@ -2893,10 +2868,6 @@
       "platform": "swift",
       "mode": "uikit"
     },
-    "onToggle": {
-      "type": "binding",
-      "description": "Toggle handler function - binding only (@{functionName}). Alias of onValueChange."
-    },
     "onValueChange": {
       "type": "binding",
       "description": "Value change handler - binding only (@{functionName})",
@@ -2940,9 +2911,7 @@
     },
     "trackTintColor": {
       "type": "string",
-      "description": "Deprecated on swift.",
-      "deprecated": "swift",
-      "deprecation_note": "SwiftUI Toggle uses unified tint only."
+      "description": "Colour of the switch track - hex string or color name from colors.json. Deprecation retracted with the Slider pair; a SwiftUI Toggle is not limited to a unified tint any more than Progress is."
     }
   },
   "Toggle": {
@@ -3011,37 +2980,23 @@
       "description": "Current value (binding for two-way)",
       "binding_direction": "two-way"
     },
-    "minValue": {
-      "type": [
-        "number",
-        "binding"
-      ],
-      "description": "Minimum value (binding supported)"
-    },
     "minimum": {
       "type": [
         "number",
         "binding"
       ],
-      "description": "Minimum value (alias for minValue) (binding supported)",
+      "description": "Minimum value (binding supported). `minValue` / `minimumValue` are accepted alias spellings.",
       "aliases": [
         "minimumValue",
         "minValue"
       ]
-    },
-    "maxValue": {
-      "type": [
-        "number",
-        "binding"
-      ],
-      "description": "Maximum value (binding supported)"
     },
     "maximum": {
       "type": [
         "number",
         "binding"
       ],
-      "description": "Maximum value (alias for maxValue) (binding supported)",
+      "description": "Maximum value (binding supported). `maxValue` / `maximumValue` are accepted alias spellings.",
       "aliases": [
         "maximumValue",
         "maxValue"
@@ -3077,15 +3032,11 @@
     },
     "progressTintColor": {
       "type": "string",
-      "description": "Deprecated on swift.",
-      "deprecated": "swift",
-      "deprecation_note": "SwiftUI Slider uses unified tint only."
+      "description": "Colour of the filled portion of the track - hex string or color name from colors.json. Was declared deprecated on swift (\"SwiftUI Slider uses unified tint only\"); retracted 2026-08-05 because Progress, also SwiftUI, maps the same attribute to .tint(). Unimplemented on the Slider path, not impossible."
     },
     "trackTintColor": {
       "type": "string",
-      "description": "Deprecated on swift.",
-      "deprecated": "swift",
-      "deprecation_note": "SwiftUI Slider uses unified tint only."
+      "description": "Colour of the unfilled track - hex string or color name from colors.json. Deprecation retracted with progressTintColor: SwiftUI Progress reaches the same result through .background()."
     }
   },
   "Progress": {
@@ -3670,7 +3621,8 @@
         "center",
         "bottom"
       ],
-      "description": "Anchor point for scroll target (default: bottom)"
+      "default": "bottom",
+      "description": "Anchor point for the scrollTo target. Measured 2026-08-05: ios (sjui collection_converter.rb:1138), web (rjui build_command.rb:768) and the Compose GRID path (kjui collection_component.rb:313) all fall back to bottom, so bottom is the declared default. The Compose LIST path emits no anchor offset unless the attribute is explicitly declared, which lands the target at top - that is a divergence in that one path, not a second default."
     },
     "defaultScrollAnchor": {
       "type": "string",
@@ -3712,10 +3664,6 @@
     "currentPage": {
       "type": "binding",
       "description": "Current page index for paging collections (binding supported)"
-    },
-    "onPageChanged": {
-      "type": "callback",
-      "description": "Called with the new page index (Int) when the user swipes to a different page"
     },
     "containerInset": {
       "type": "array",
@@ -4000,6 +3948,18 @@
     "_comment": "Component alias of CheckBox. Resolved by the L1 normalizer type rewrite and by every validator/codegen consumer - do not add attribute copies here."
   },
   "Indicator": {
+    "animating": {
+      "type": [
+        "boolean",
+        "binding"
+      ],
+      "default": true,
+      "description": "Whether the indicator is spinning. Defaults to true: an Indicator with nothing declared animates. `false` stops it, and hidesWhenStopped then decides whether the stopped indicator keeps its space or collapses out of the layout \u2014 which is why hidesWhenStopped is only ever read on this branch (sjui indicator_converter.rb:23, kjui indicator_component.rb:13).",
+      "platform": [
+        "swift",
+        "kotlin"
+      ]
+    },
     "indicatorStyle": {
       "type": "string",
       "enum": [
@@ -4275,10 +4235,6 @@
       "type": "boolean",
       "default": true,
       "description": "Whether to show tab labels (default: true)"
-    },
-    "onTabChange": {
-      "type": "binding",
-      "description": "Tab change handler - binding only (@{functionName})"
     },
     "onValueChange": {
       "type": [

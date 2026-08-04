@@ -43,8 +43,6 @@ module JsonUI
         { name: 'alignTopView', kind: :string }.freeze,
         # String alternative to numeric gravity. Resolves to SwiftUI Alignment / Compose Arrangement+Alignment.
         { name: 'alignment', kind: :enum, values: ['topLeading', 'top', 'topTrailing', 'leading', 'center', 'trailing', 'bottomLeading', 'bottom', 'bottomTrailing'].freeze }.freeze,
-        # Opacity (0-1) - can be data binding
-        { name: 'alpha', kind: :number, bindable: true }.freeze,
         # Aspect ratio height (binding supported)
         { name: 'aspectHeight', kind: :number, bindable: true }.freeze,
         # Aspect ratio width (binding supported)
@@ -61,7 +59,7 @@ module JsonUI
         { name: 'binding_group', kind: :raw }.freeze,
         # Binding ID
         { name: 'binding_id', kind: :string }.freeze,
-        # Border color - hex string or color name from colors.json (binding supported)
+        # Border color - hex string or color name from colors.json (binding supported). Defaults to opaque black when borderWidth is declared without it. The default is a fixed literal rather than CSS's `currentColor` on purpose: currentColor inherits the TEXT colour, so the same View declaration would draw a different border depending on what it happens to contain, and Compose has no border colour default at all (Modifier.border requires one). A fixed value is also what the rest of this family already does - borderStyle declares "solid". NOTE: SJUITextField.defaultBorderColor is lightGray, a component-level UIKit chrome default that predates this and is deliberately not unified with it. [default: #000000]
         { name: 'borderColor', kind: :string, bindable: true }.freeze,
         # Border line style - solid (default), dashed, or dotted [default: solid]
         { name: 'borderStyle', kind: :enum, values: ['solid', 'dashed', 'dotted'].freeze }.freeze,
@@ -223,7 +221,7 @@ module JsonUI
         { name: 'onPinch', kind: :binding }.freeze,
         # Click handler function name (selector-based, lowercase) - string only, no binding [accepts: string | array]
         { name: 'onclick', kind: :raw }.freeze,
-        # Opacity (0-1), alias for alpha - can be data binding
+        # Opacity (0-1) - can be data binding. `alpha` is an accepted alias spelling.
         { name: 'opacity', kind: :number, bindable: true, aliases: ['alpha'].freeze }.freeze,
         # Uniform padding value (binding supported)
         { name: 'padding', kind: :number, bindable: true }.freeze,

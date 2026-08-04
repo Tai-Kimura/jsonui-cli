@@ -25,7 +25,7 @@ module JsonUI
         { name: 'dataDetectorTypes', kind: :string }.freeze,
         # Background color when disabled - hex string or color name from colors.json
         { name: 'disabledBackground', kind: :string }.freeze,
-        # The UIKit spelling of containerInset (content inset). Same accepted shapes: a single number, or an array of 1/2/4 numbers. Deprecated on kotlin. [accepts: number | array; DEPRECATED: Compose Text has no edgeInset; use padding* instead.]
+        # The UIKit spelling of containerInset (content inset). Same accepted shapes: a single number, or an array of 1/2/4 numbers. Was declared deprecated on kotlin ("Compose Text has no edgeInset"); retracted 2026-08-05 because Label.edgeInset maps to .padding() on Compose in both the codegen and the dynamic renderer. Unimplemented on the Compose TextView path, not impossible. [accepts: number | array]
         { name: 'edgeInset', kind: :raw }.freeze,
         # Enable/disable editing
         { name: 'editable', kind: :boolean }.freeze,

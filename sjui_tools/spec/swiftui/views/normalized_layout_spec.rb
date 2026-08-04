@@ -154,12 +154,19 @@ RSpec.describe 'L1-normalized layout consumption' do
       expect(warnings.join).to include("Unknown attribute 'minimumValue'")
     end
 
-    it 'still accepts standalone-declared spellings on L1 (alpha has its own definition)' do
+    # `alpha` used to be exempt from the rule above: it was declared BOTH as
+    # an alias of `opacity` and as an attribute in its own right, and the
+    # standalone declaration is what made it survive the canonical-only pass.
+    # That double declaration also cancelled the alias redirect entirely
+    # (alias_map skips a spelling that is also declared), so 49-E removed it
+    # along with six others. `alpha` is now a pure alias and is rejected on
+    # L1 exactly like `minimumValue`.
+    it 'rejects alpha on L1 too, now that it is a pure alias of opacity' do
       validator.normalized = true
       warnings = validator.validate(
         { 'type' => 'View', 'width' => 100, 'height' => 100, 'alpha' => 0.5 }, 'View'
       )
-      expect(warnings.join).not_to include('alpha')
+      expect(warnings.join).to include("Unknown attribute 'alpha'")
     end
 
     it 'accepts canonical names and the $jui marker on L1 input' do

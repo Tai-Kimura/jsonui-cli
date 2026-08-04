@@ -33,8 +33,6 @@ module JsonUI
         { name: 'highlightBackground', kind: :string }.freeze,
         # Highlight color - hex string or color name from colors.json (binding supported)
         { name: 'highlightColor', kind: :string, bindable: true, aliases: ['hilightColor'].freeze }.freeze,
-        # Highlight color - hex string or color name from colors.json (typo alias)
-        { name: 'hilightColor', kind: :string }.freeze,
         # Button image - asset name (binding supported)
         { name: 'image', kind: :string, bindable: true }.freeze,
         # Background when tapped - hex string or color name from colors.json

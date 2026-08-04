@@ -30,8 +30,6 @@ module JsonUI
         { name: 'offTintColor', kind: :string, bindable: true }.freeze,
         # Track color when on - hex string or color name from colors.json
         { name: 'onTintColor', kind: :string }.freeze,
-        # Toggle handler function - binding only (@{functionName}). Alias of onValueChange.
-        { name: 'onToggle', kind: :binding }.freeze,
         # Value change handler - binding only (@{functionName})
         { name: 'onValueChange', kind: :binding, aliases: ['onToggle'].freeze }.freeze,
         # Thumb tint color - hex string or color name from colors.json (binding supported)
@@ -40,7 +38,7 @@ module JsonUI
         { name: 'tint', kind: :string, bindable: true }.freeze,
         # Tint color - hex string or color name from colors.json (alias)
         { name: 'tintColor', kind: :string }.freeze,
-        # Deprecated on swift. [DEPRECATED: SwiftUI Toggle uses unified tint only.]
+        # Colour of the switch track - hex string or color name from colors.json. Deprecation retracted with the Slider pair; a SwiftUI Toggle is not limited to a unified tint any more than Progress is.
         { name: 'trackTintColor', kind: :string }.freeze,
         # Switch state alias (binding for two-way) [binding: two-way]
         { name: 'value', kind: :boolean, bindable: true }.freeze,

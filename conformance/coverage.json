@@ -3,24 +3,6 @@
   "_comment": "Declared attributes no platform converter reads. Hand-maintained: close a gap by implementing it (then delete the entry) or by narrowing platform/mode in attribute_definitions.json. reason is one of: dynamic-key, legacy, platform-na, runtime-only, unimplemented.",
   "entries": [
     {
-      "component": "Button",
-      "attribute": "hilightColor",
-      "platforms": [
-        "web"
-      ],
-      "reason": "legacy",
-      "note": "alias — normalized to its canonical spelling before conversion"
-    },
-    {
-      "component": "Collection",
-      "attribute": "onPageChanged",
-      "platforms": [
-        "web"
-      ],
-      "reason": "legacy",
-      "note": "alias — normalized to its canonical spelling before conversion"
-    },
-    {
       "component": "ScrollView",
       "attribute": "minZoom",
       "platforms": [
@@ -31,48 +13,30 @@
     },
     {
       "component": "Slider",
-      "attribute": "maxValue",
-      "platforms": [
-        "web"
-      ],
-      "reason": "legacy",
-      "note": "alias — normalized to its canonical spelling before conversion"
-    },
-    {
-      "component": "Slider",
-      "attribute": "minValue",
-      "platforms": [
-        "web"
-      ],
-      "reason": "legacy",
-      "note": "alias — normalized to its canonical spelling before conversion"
-    },
-    {
-      "component": "Switch",
-      "attribute": "onToggle",
-      "platforms": [
-        "web"
-      ],
-      "reason": "legacy",
-      "note": "alias — normalized to its canonical spelling before conversion"
-    },
-    {
-      "component": "View",
-      "attribute": "direction",
+      "attribute": "progressTintColor",
       "platforms": [
         "ios"
       ],
       "reason": "unimplemented",
-      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
+      "note": "49-E が deprecation を撤回した結果 ios が検査対象に戻った。「SwiftUI は単一 tint しか持てない」という主張は同じ SwiftUI の Progress が progressTintColor→.tint() / trackTintColor→.background() を実装していることで反証済み。不可能ではなく未実装なので、F(SwiftJsonUI dynamic)/B(sjui codegen)の実装待ちとして記帳する。"
     },
     {
-      "component": "common",
-      "attribute": "alpha",
+      "component": "Slider",
+      "attribute": "trackTintColor",
       "platforms": [
-        "web"
+        "ios"
       ],
-      "reason": "legacy",
-      "note": "alias — normalized to its canonical spelling before conversion"
+      "reason": "unimplemented",
+      "note": "49-E が deprecation を撤回した結果 ios が検査対象に戻った。「SwiftUI は単一 tint しか持てない」という主張は同じ SwiftUI の Progress が progressTintColor→.tint() / trackTintColor→.background() を実装していることで反証済み。不可能ではなく未実装なので、F(SwiftJsonUI dynamic)/B(sjui codegen)の実装待ちとして記帳する。"
+    },
+    {
+      "component": "Switch",
+      "attribute": "trackTintColor",
+      "platforms": [
+        "ios"
+      ],
+      "reason": "unimplemented",
+      "note": "49-E が deprecation を撤回した結果 ios が検査対象に戻った。「SwiftUI は単一 tint しか持てない」という主張は同じ SwiftUI の Progress が progressTintColor→.tint() / trackTintColor→.background() を実装していることで反証済み。不可能ではなく未実装なので、F(SwiftJsonUI dynamic)/B(sjui codegen)の実装待ちとして記帳する。"
     }
   ]
 }

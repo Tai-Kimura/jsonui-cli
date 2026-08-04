@@ -240,8 +240,11 @@ raise 'declared? common failed' unless SliderAttributes.declared?('opacity')
 raise 'declared? undeclared failed' if SliderAttributes.declared?('customProp')
 raise 'alias_map failed' unless SliderAttributes.alias_map['minimumValue'] == 'minimum'
 raise 'rows failed' unless SliderAttributes.rows['minimum'][:kind] == :number
-# `alpha` is an alias of opacity AND its own row — never redirected.
-raise 'standalone alias row failed' if SliderAttributes.alias_map.key?('alpha')
+# `alpha` redirects to `opacity`. It used to be declared as its own row as
+# well, which cancelled the redirect (alias_map skips a spelling that is
+# also a declared attribute) — plan 49-E removed seven such self-cancelling
+# declarations and added a guard test, so the redirect must now be live.
+raise 'alias redirect failed' unless SliderAttributes.alias_map['alpha'] == 'opacity'
 puts 'RUBY_RUNTIME_OK'
 """
         with tempfile.TemporaryDirectory() as tmp:
