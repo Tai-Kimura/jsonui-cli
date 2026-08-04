@@ -298,6 +298,12 @@ NON_OBSERVABLE_ATTRS = {
     "autocapitalize",
     "enterKeyHint",
     "nextFocus",
+    # contentType is the autofill HINT: iOS sets `.textContentType`, web sets
+    # the `autoComplete` attribute, Android picks a keyboard variant. None of
+    # the three puts a pixel in the captured frame, so every one of its 39
+    # enum fixtures would be counted as "identical to control, investigate" —
+    # the same false-positive block 34 cleared on web (39 of 235).
+    "contentType",
 }
 
 
@@ -790,6 +796,14 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     "paddingRight": {"orientation": "horizontal"},
     "paddingStart": {"orientation": "horizontal"},
     "paddingEnd": {"orientation": "horizontal"},
+    # `highlighted` is the other half of a pair, like border/borderColor:
+    # `return if highlight_bg.nil?` (sjui base_view_converter.rb:730), which
+    # faithfully mirrors UIKit's SJUIView:187 — a highlighted state with no
+    # highlight colour has nothing to draw. The probe wrote the flag alone and
+    # read it as an unread spelling. (borderColor/borderWidth are the same
+    # family and were closed on the device side by `--paired`; this one closes
+    # with a base attribute.) Handed over by lane B.
+    "View.highlighted": {"highlightBackground": "#FF0000"},
     # `direction` reverses the children of an ORIENTED container; with no
     # orientation the canonical answer is "no effect", so the fixture has to
     # supply one or it can never show anything.
@@ -1465,9 +1479,29 @@ def _prefer_primary(section: str, attribute: str, cases: list[CasePlan]) -> list
     return [cases[index]] + cases[:index] + cases[index + 1:]
 
 
+def canonical_enum_values(defn: dict, enum_values: list[Any]) -> list[Any]:
+    """*enum_values* with the ``valueAliases`` spellings removed.
+
+    ``valueAliases`` maps a non-canonical spelling to the canonical one, and
+    the L1 normalizer rewrites it before any converter sees it — so an alias
+    fixture renders the canonical value's picture a second time. Nine spellings
+    across three platforms is 27 screenshots of something already covered, and
+    `Collection.layout` alone was shooting three of them.
+
+    Alias RESOLUTION still gets its regression probe: `_with_alias_cases`
+    covers the attribute-name aliases, and the value aliases are checked where
+    they are implemented — in the normalizer, not the camera.
+    """
+    aliases = defn.get("valueAliases")
+    if not isinstance(aliases, dict) or not aliases:
+        return enum_values
+    return [v for v in enum_values if v not in aliases]
+
+
 def _visual_cases(section: str, attribute: str, defn: dict) -> list[CasePlan]:
     """Enum values expand into one case each; scalars get a single case."""
     base_types, enum_values = normalize_type(defn)
+    enum_values = canonical_enum_values(defn, enum_values)
     cases: list[CasePlan] = []
 
     for name, value in dedupe_case_names(enum_values):

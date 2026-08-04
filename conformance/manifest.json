@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "df3c1cf50003de7c0fa572a8ea66ce0e10aee2eaf56e75441fb27ea3ab3eafd1",
   "counts": {
-    "fixtures": 712,
+    "fixtures": 710,
     "assertable": 29,
-    "visual": 579,
+    "visual": 576,
     "interactive": 35,
-    "control": 69,
+    "control": 70,
     "skipped": 154,
     "promoted": {
       "callback": 11
@@ -5577,7 +5577,7 @@
       "test": "fixtures/TextField/contentType__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/secure__true",
@@ -11585,7 +11585,7 @@
       "test": "fixtures/View/highlighted__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__highlightBackground--FF0000"
     },
     {
       "id": "View/flexWrap__nowrap",
@@ -12245,84 +12245,6 @@
       "deprecated": null,
       "layout": "fixtures/Collection/layout__flow.layout.json",
       "test": "fixtures/Collection/layout__flow.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": "__control/Collection",
-      "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
-      ]
-    },
-    {
-      "id": "Collection/layout__flow_2",
-      "component": "Collection",
-      "attribute": "layout",
-      "case": "flow_2",
-      "class": "visual",
-      "host": "Collection",
-      "writtenKey": "layout",
-      "aliasOf": null,
-      "value": "Flow",
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/Collection/layout__flow_2.layout.json",
-      "test": "fixtures/Collection/layout__flow_2.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": "__control/Collection",
-      "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
-      ]
-    },
-    {
-      "id": "Collection/layout__leftaligned",
-      "component": "Collection",
-      "attribute": "layout",
-      "case": "leftaligned",
-      "class": "visual",
-      "host": "Collection",
-      "writtenKey": "layout",
-      "aliasOf": null,
-      "value": "LeftAligned",
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/Collection/layout__leftaligned.layout.json",
-      "test": "fixtures/Collection/layout__leftaligned.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": "__control/Collection",
-      "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
-      ]
-    },
-    {
-      "id": "Collection/layout__leftaligned_2",
-      "component": "Collection",
-      "attribute": "layout",
-      "case": "leftaligned_2",
-      "class": "visual",
-      "host": "Collection",
-      "writtenKey": "layout",
-      "aliasOf": null,
-      "value": "leftAligned",
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/Collection/layout__leftaligned_2.layout.json",
-      "test": "fixtures/Collection/layout__leftaligned_2.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Collection",
@@ -16098,6 +16020,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/View.layout.json",
       "test": "fixtures/__control/View.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/View__highlightBackground--FF0000",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__highlightBackground--FF0000.layout.json",
+      "test": "fixtures/__control/View__highlightBackground--FF0000.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
