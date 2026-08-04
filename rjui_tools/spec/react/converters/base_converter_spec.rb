@@ -486,6 +486,73 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
     end
   end
 
+  # The SSoT declares `["number", "binding"]` for all sixteen per-side
+  # spacing attributes, and a bound value used to reach `closest_padding`,
+  # which does `(k - value).abs` over the spacing scale: `jui build` ABORTED
+  # with a TypeError on a layout written exactly the way the declaration
+  # describes (plan 41 codegen differential).
+  describe 'bound per-side spacing' do
+    it 'routes a bound padding into the inline style as px' do
+      converter = create_converter({ 'type' => 'View', 'paddingTop' => '@{gap}' })
+      expect(converter.send(:build_class_name)).not_to include('pt-')
+      expect(converter.send(:build_style_attr)).to include('paddingTop: `${data.gap}px`')
+    end
+
+    it 'reads the alternate spelling of the same side' do
+      converter = create_converter({ 'type' => 'View', 'topPadding' => '@{gap}' })
+      converter.send(:build_class_name)
+      expect(converter.send(:build_style_attr)).to include('paddingTop: `${data.gap}px`')
+    end
+
+    it 'routes a bound margin into the inline style as px' do
+      converter = create_converter({ 'type' => 'View', 'bottomMargin' => '@{gap}' })
+      expect(converter.send(:build_class_name)).not_to include('mb-')
+      expect(converter.send(:build_style_attr)).to include('marginBottom: `${data.gap}px`')
+    end
+
+    it 'keeps the RTL spellings logical rather than physical' do
+      converter = create_converter({
+        'type' => 'View', 'paddingStart' => '@{lead}', 'endMargin' => '@{trail}'
+      })
+      converter.send(:build_class_name)
+      style = converter.send(:build_style_attr)
+      expect(style).to include('paddingInlineStart: `${data.lead}px`')
+      expect(style).to include('marginInlineEnd: `${data.trail}px`')
+    end
+
+    it 'covers every side of both properties' do
+      converter = create_converter({
+        'type' => 'View',
+        'paddingTop' => '@{a}', 'paddingRight' => '@{b}',
+        'paddingBottom' => '@{c}', 'paddingLeft' => '@{d}',
+        'topMargin' => '@{e}', 'rightMargin' => '@{f}',
+        'bottomMargin' => '@{g}', 'leftMargin' => '@{h}'
+      })
+      converter.send(:build_class_name)
+      style = converter.send(:build_style_attr)
+      %w[paddingTop paddingRight paddingBottom paddingLeft
+         marginTop marginRight marginBottom marginLeft].each do |property|
+        expect(style).to include("#{property}: `${data.")
+      end
+    end
+
+    # The whole point of routing the binding out BEFORE `closest_padding`:
+    # that function is the road every static padding travels, and moving it
+    # would move every fixture in the conformance suite.
+    it 'leaves static spacing on the Tailwind class path, untouched' do
+      converter = create_converter({
+        'type' => 'View', 'paddingTop' => 8, 'topMargin' => 16,
+        'paddingStart' => 4, 'leftPadding' => 12
+      })
+      classes = converter.send(:build_class_name)
+      expect(classes).to include('pt-2')
+      expect(classes).to include('pl-3')
+      expect(classes).to include('ps-1')
+      expect(classes).to include('mt-4')
+      expect(converter.send(:build_style_attr)).to eq('')
+    end
+  end
+
   describe '#build_style_attr with CSS custom properties' do
     it 'asserts React.CSSProperties when a custom property is present' do
       converter = create_converter({ 'type' => 'View' })

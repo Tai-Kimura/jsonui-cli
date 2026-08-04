@@ -138,16 +138,16 @@ module RjuiTools
           # Individual paddings (topPadding, bottomPadding, leftPadding, rightPadding)
           # Also support paddingTop, paddingRight, paddingBottom, paddingLeft format
           classes << TailwindMapper.map_individual_paddings(
-            attributes['topPadding'] || attributes['paddingTop'],
-            attributes['rightPadding'] || attributes['paddingRight'],
-            attributes['bottomPadding'] || attributes['paddingBottom'],
-            attributes['leftPadding'] || attributes['paddingLeft']
+            static_spacing('paddingTop', attributes['topPadding'] || attributes['paddingTop']),
+            static_spacing('paddingRight', attributes['rightPadding'] || attributes['paddingRight']),
+            static_spacing('paddingBottom', attributes['bottomPadding'] || attributes['paddingBottom']),
+            static_spacing('paddingLeft', attributes['leftPadding'] || attributes['paddingLeft'])
           )
 
           # RTL-aware paddings (paddingStart, paddingEnd)
           classes << TailwindMapper.map_rtl_paddings(
-            attributes['paddingStart'],
-            attributes['paddingEnd']
+            static_spacing('paddingInlineStart', attributes['paddingStart']),
+            static_spacing('paddingInlineEnd', attributes['paddingEnd'])
           )
 
           # Insets (alternative padding format)
@@ -159,16 +159,16 @@ module RjuiTools
 
           # Individual margins (topMargin, bottomMargin, leftMargin, rightMargin)
           classes << TailwindMapper.map_individual_margins(
-            attributes['topMargin'],
-            attributes['rightMargin'],
-            attributes['bottomMargin'],
-            attributes['leftMargin']
+            static_spacing('marginTop', attributes['topMargin']),
+            static_spacing('marginRight', attributes['rightMargin']),
+            static_spacing('marginBottom', attributes['bottomMargin']),
+            static_spacing('marginLeft', attributes['leftMargin'])
           )
 
           # RTL-aware margins (startMargin, endMargin)
           classes << TailwindMapper.map_rtl_margins(
-            attributes['startMargin'],
-            attributes['endMargin']
+            static_spacing('marginInlineStart', attributes['startMargin']),
+            static_spacing('marginInlineEnd', attributes['endMargin'])
           )
 
           # Background - check for dynamic binding or gradient
@@ -632,6 +632,36 @@ module RjuiTools
 
           @dynamic_styles[attr] = "`${#{extract_binding_property(value)}}px`"
           true
+        end
+
+        # The same contract for the per-side spacing attributes, which the SSoT
+        # also declares as `["number", "binding"]`.
+        #
+        # Without this a bound value reached `TailwindMapper.closest_padding`,
+        # which does `(k - value).abs` over the spacing scale and raised
+        # `TypeError: String can't be coerced into Integer` — `jui build` on a
+        # layout written exactly the way the SSoT describes ABORTED. Sixteen
+        # attributes were in that state (plan 41 codegen differential); kjui
+        # resolves the same declaration to `.padding(data.v.dp)` and sjui to
+        # `.padding(.top, data.v)`, so px is once again the web spelling of a
+        # contract the other two already honour.
+        #
+        # Returns the value to hand the Tailwind mapper, and nil once the
+        # binding has been routed to the inline style. Deliberately additive:
+        # a numeric value is returned untouched and takes the byte-identical
+        # path it took before, because `closest_padding` is the road every
+        # STATIC padding travels and moving that would move every fixture.
+        #
+        # It takes the VALUE, not the attribute names, so the subscript reads
+        # stay at the call site. Two scanners look for them there — this tree's
+        # consumed-attribute spec and `jui conformance coverage`, which builds
+        # the declared-but-unread ledger — and a helper that resolved the names
+        # itself would blind both, quietly inventing sixteen coverage gaps.
+        def static_spacing(css_property, value)
+          return value unless has_binding?(value)
+
+          @dynamic_styles[css_property] = "`${#{extract_binding_property(value)}}px`"
+          nil
         end
 
         # A bound size pins the element exactly like a numeric one: it must not

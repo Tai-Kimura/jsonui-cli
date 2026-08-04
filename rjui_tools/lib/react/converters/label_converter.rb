@@ -294,7 +294,16 @@ module RjuiTools
           end
 
           # Line clamp for multiple lines
-          if attributes['lines'] && attributes['lines'] > 0
+          #
+          # A BOUND cap has no class — `line-clamp-N` needs N at build time —
+          # so it goes to the inline style, which is where the utility class
+          # expands to anyway. Routed here, before the numeric comparison:
+          # `"@{n}" > 0` raised `ArgumentError: comparison of String with 0
+          # failed` and took `jui build` down on a layout written the way the
+          # SSoT declares the attribute (`["number", "binding"]`, plan 41).
+          if has_binding?(attributes['lines'])
+            apply_bound_line_clamp(attributes['lines'])
+          elsif attributes['lines'] && attributes['lines'] > 0
             if attributes['lines'] == 1
               classes << 'truncate'
             else
@@ -406,7 +415,11 @@ module RjuiTools
               @dynamic_styles['textOverflow'] = "'ellipsis'"
             end
             @dynamic_styles['overflow'] = "'hidden'"
-            @dynamic_styles['whiteSpace'] = "'nowrap'" unless attributes['lines'] && attributes['lines'] > 1
+            # A bound cap is multi-line as far as this decision goes — the
+            # runtime number decides how many, and `nowrap` would defeat any
+            # cap above one. Tested before the comparison for the same reason
+            # as the clamp above: `"@{n}" > 1` raises.
+            @dynamic_styles['whiteSpace'] = "'nowrap'" unless multiline_cap?
           end
 
           # autoShrink - use CSS font-size clamp or viewport units
@@ -432,6 +445,27 @@ module RjuiTools
         end
 
         private
+
+        # Whether the line cap allows more than one line. A bound cap counts:
+        # its value is not known here, and treating it as single-line would
+        # emit `white-space: nowrap` that defeats whatever the runtime asks
+        # for.
+        def multiline_cap?
+          lines = attributes['lines']
+          return true if has_binding?(lines)
+
+          !!lines && lines > 1
+        end
+
+        # The inline-style form of `line-clamp-N` for a cap that only exists
+        # at runtime. These four declarations are what the Tailwind utility
+        # expands to, so a bound cap renders the same way a static one does.
+        def apply_bound_line_clamp(value)
+          @dynamic_styles['display'] = "'-webkit-box'"
+          @dynamic_styles['WebkitBoxOrient'] = "'vertical'"
+          @dynamic_styles['WebkitLineClamp'] = unwrap_jsx_braces(convert_binding(value))
+          @dynamic_styles['overflow'] = "'hidden'"
+        end
 
         # Render text with partial attributes.
         #

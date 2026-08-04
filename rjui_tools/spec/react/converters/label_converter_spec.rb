@@ -68,6 +68,50 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         expect(classes).not_to include('truncate')
         expect(classes).not_to match(/line-clamp/)
       end
+
+      # `lines` is declared `["number", "binding"]`, and `"@{n}" > 0` raised
+      # `ArgumentError: comparison of String with 0 failed` — `jui build`
+      # aborted on the declared spelling (plan 41). A runtime cap cannot be a
+      # `line-clamp-N` class, so it becomes the four declarations that class
+      # expands to.
+      it 'routes a bound line cap into the inline style' do
+        converter = create_converter({
+          'type' => 'Label',
+          'text' => 'Test',
+          'lines' => '@{maxLines}'
+        })
+        expect(converter.send(:build_class_name)).not_to match(/line-clamp|truncate/)
+        style = converter.send(:build_style_attr)
+        expect(style).to include("display: '-webkit-box'")
+        expect(style).to include("WebkitBoxOrient: 'vertical'")
+        expect(style).to include('WebkitLineClamp: data.maxLines')
+        expect(style).to include("overflow: 'hidden'")
+      end
+
+      it 'does not force nowrap on a bound cap' do
+        # The runtime number decides how many lines; `nowrap` would defeat
+        # any cap above one, and the comparison that used to make this
+        # decision raised on a bound value.
+        converter = create_converter({
+          'type' => 'Label',
+          'text' => 'Test',
+          'lines' => '@{maxLines}',
+          'lineBreakMode' => 'Tail'
+        })
+        converter.send(:build_class_name)
+        expect(converter.send(:build_style_attr)).not_to include("whiteSpace: 'nowrap'")
+      end
+
+      it 'still forces nowrap on a single static line' do
+        converter = create_converter({
+          'type' => 'Label',
+          'text' => 'Test',
+          'lines' => 1,
+          'lineBreakMode' => 'Tail'
+        })
+        converter.send(:build_class_name)
+        expect(converter.send(:build_style_attr)).to include("whiteSpace: 'nowrap'")
+      end
     end
 
     context 'with underline' do
