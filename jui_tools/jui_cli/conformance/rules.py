@@ -317,7 +317,52 @@ NON_OBSERVABLE_ATTRS = {
     "pattern",
     "required",
     "draggable",
+    # --- lane F family-B group A1, the ones that hold on every host --------- #
+    # A press-state background, with no press in a still capture.
+    "tapBackground",
+    # Scroll indicators fade out when the view is idle, which is exactly when
+    # the screenshot is taken.
+    "showsVerticalScrollIndicator",
 }
+
+#: Same contract as :data:`NON_OBSERVABLE_ATTRS`, but scoped to one component.
+#:
+#: Needed because most of these names ARE observable somewhere else:
+#: `Slider.tintColor` paints a track, `Switch.value` is a checked state,
+#: `Segment.items` are the visible tabs. Only the listed pairing is off-frame.
+#:
+#: Source: lane F's family-B read (46/46), group A1 — "a static screenshot
+#: cannot photograph this", as distinct from "the fixture is shaped wrong".
+#: Changing the fixture does not help, and re-measuring does not either; what
+#: was missing was the ledger entry.
+NON_OBSERVABLE_BY_SECTION: set[tuple[str, str]] = {
+    # Press states. The capture is taken at rest, with no finger on the screen.
+    ("Button", "highlightColor"),
+    # tint IS the caret, and an unfocused field has no caret.
+    ("TextField", "tintColor"),
+    # A radio's group is the mutual-exclusion key and its value is what gets
+    # submitted. Neither draws. (`CheckBox.value` / `Switch.value` DO — they
+    # are the checked state — which is why this is scoped.)
+    ("Radio", "group"),
+    ("Radio", "value"),
+    # Everything below is inside the picker SHEET; the fixture photographs the
+    # closed control. `items` additionally only reaches the closed label
+    # through `initialSelectedIndex`, which the fixture does not declare, and
+    # both `selectItemType` faces render their initial empty string.
+    ("SelectBox", "items"),
+    ("SelectBox", "selectItemType"),
+    ("SelectBox", "datePickerStyle"),
+    ("SelectBox", "minuteInterval"),
+    ("SelectBox", "dateStringFormat"),
+}
+
+
+def is_non_observable(section: str, attribute: str) -> bool:
+    """True when no static capture can show this attribute, at any value."""
+    return (
+        attribute in NON_OBSERVABLE_ATTRS
+        or (section, attribute) in NON_OBSERVABLE_BY_SECTION
+    )
 
 
 #: Attributes that reference a bundled image asset. Platform host apps

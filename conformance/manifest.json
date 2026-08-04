@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "ed696903716308210a918a2bfaa36f0c12f20272efd2b3691635ca54fe0e1b62",
   "counts": {
-    "fixtures": 834,
+    "fixtures": 832,
     "assertable": 33,
     "visual": 694,
     "interactive": 35,
-    "control": 72,
+    "control": 70,
     "skipped": 151,
     "promoted": {
       "callback": 11
@@ -601,7 +601,7 @@
       "test": "fixtures/common/tapBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Button"
+      "control": null
     },
     {
       "id": "common/tapBackground__binding",
@@ -624,7 +624,7 @@
       "test": "fixtures/common/tapBackground__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Button"
+      "control": null
     },
     {
       "id": "common/highlightBackground__static",
@@ -7563,7 +7563,7 @@
       "test": "fixtures/TextField/tintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/onTextChange__callback_fire",
@@ -9836,7 +9836,7 @@
       "test": "fixtures/Button/highlightColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Button"
+      "control": null
     },
     {
       "id": "Button/highlightColor__alias_hilightColor",
@@ -9859,7 +9859,7 @@
       "test": "fixtures/Button/highlightColor__alias_hilightColor.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Button"
+      "control": null
     },
     {
       "id": "Button/highlightColor__binding",
@@ -9882,7 +9882,7 @@
       "test": "fixtures/Button/highlightColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Button"
+      "control": null
     },
     {
       "id": "Button/tapBackground__static",
@@ -9905,7 +9905,7 @@
       "test": "fixtures/Button/tapBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Button"
+      "control": null
     },
     {
       "id": "Button/highlightBackground__static",
@@ -11282,7 +11282,7 @@
       "test": "fixtures/SelectBox/items__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox"
+      "control": null
     },
     {
       "id": "SelectBox/selectItemType__date",
@@ -11305,7 +11305,7 @@
       "test": "fixtures/SelectBox/selectItemType__date.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox"
+      "control": null
     },
     {
       "id": "SelectBox/selectItemType__normal",
@@ -11328,7 +11328,7 @@
       "test": "fixtures/SelectBox/selectItemType__normal.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox"
+      "control": null
     },
     {
       "id": "SelectBox/selectedIndex__static",
@@ -11510,7 +11510,7 @@
       "test": "fixtures/SelectBox/datePickerStyle__graphical.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/datePickerStyle__automatic",
@@ -11533,7 +11533,7 @@
       "test": "fixtures/SelectBox/datePickerStyle__automatic.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/datePickerStyle__wheel",
@@ -11556,7 +11556,7 @@
       "test": "fixtures/SelectBox/datePickerStyle__wheel.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/datePickerStyle__wheels",
@@ -11579,7 +11579,7 @@
       "test": "fixtures/SelectBox/datePickerStyle__wheels.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/datePickerStyle__compact",
@@ -11602,7 +11602,7 @@
       "test": "fixtures/SelectBox/datePickerStyle__compact.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/datePickerStyle__inline",
@@ -11625,7 +11625,7 @@
       "test": "fixtures/SelectBox/datePickerStyle__inline.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/dateStringFormat__static",
@@ -11648,7 +11648,7 @@
       "test": "fixtures/SelectBox/dateStringFormat__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__selectItemType-Date_selectedDate--pickedDate"
+      "control": null
     },
     {
       "id": "SelectBox/minimumDate__static",
@@ -11763,7 +11763,7 @@
       "test": "fixtures/SelectBox/minuteInterval__1.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__datePickerMode-time_selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/minuteInterval__2",
@@ -11786,7 +11786,7 @@
       "test": "fixtures/SelectBox/minuteInterval__2.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__datePickerMode-time_selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/minuteInterval__3",
@@ -11809,7 +11809,7 @@
       "test": "fixtures/SelectBox/minuteInterval__3.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__datePickerMode-time_selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/minuteInterval__4",
@@ -11832,7 +11832,7 @@
       "test": "fixtures/SelectBox/minuteInterval__4.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__datePickerMode-time_selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/minuteInterval__5",
@@ -11855,7 +11855,7 @@
       "test": "fixtures/SelectBox/minuteInterval__5.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__datePickerMode-time_selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/minuteInterval__6",
@@ -11878,7 +11878,7 @@
       "test": "fixtures/SelectBox/minuteInterval__6.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__datePickerMode-time_selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/minuteInterval__10",
@@ -11901,7 +11901,7 @@
       "test": "fixtures/SelectBox/minuteInterval__10.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__datePickerMode-time_selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/minuteInterval__12",
@@ -11924,7 +11924,7 @@
       "test": "fixtures/SelectBox/minuteInterval__12.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__datePickerMode-time_selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/minuteInterval__15",
@@ -11947,7 +11947,7 @@
       "test": "fixtures/SelectBox/minuteInterval__15.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__datePickerMode-time_selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/minuteInterval__20",
@@ -11970,7 +11970,7 @@
       "test": "fixtures/SelectBox/minuteInterval__20.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__datePickerMode-time_selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/minuteInterval__30",
@@ -11993,7 +11993,7 @@
       "test": "fixtures/SelectBox/minuteInterval__30.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__datePickerMode-time_selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/minuteInterval__static",
@@ -12016,7 +12016,7 @@
       "test": "fixtures/SelectBox/minuteInterval__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__datePickerMode-time_selectItemType-Date"
+      "control": null
     },
     {
       "id": "SelectBox/font__static",
@@ -14185,7 +14185,7 @@
       "test": "fixtures/ScrollView/showsVerticalScrollIndicator__false.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/ScrollView"
+      "control": null
     },
     {
       "id": "ScrollView/contentSize__static",
@@ -14843,7 +14843,7 @@
       "test": "fixtures/Collection/showsVerticalScrollIndicator__false.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection",
+      "control": null,
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]
@@ -15194,7 +15194,7 @@
       "test": "fixtures/Radio/group__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Radio"
+      "control": null
     },
     {
       "id": "Radio/icon__square",
@@ -15396,7 +15396,7 @@
       "test": "fixtures/Radio/value__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Radio"
+      "control": null
     },
     {
       "id": "Radio/font__static",
@@ -18333,30 +18333,6 @@
       "isControl": true
     },
     {
-      "id": "__control/SelectBox__datePickerMode-time_selectItemType-Date",
-      "component": "__control",
-      "attribute": null,
-      "case": "SelectBox",
-      "class": "visual",
-      "host": "SelectBox",
-      "writtenKey": null,
-      "aliasOf": null,
-      "value": null,
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/__control/SelectBox__datePickerMode-time_selectItemType-Date.layout.json",
-      "test": "fixtures/__control/SelectBox__datePickerMode-time_selectItemType-Date.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": null,
-      "isControl": true
-    },
-    {
       "id": "__control/SelectBox__selectItemType-Date",
       "component": "__control",
       "attribute": null,
@@ -18375,30 +18351,6 @@
       "deprecated": null,
       "layout": "fixtures/__control/SelectBox__selectItemType-Date.layout.json",
       "test": "fixtures/__control/SelectBox__selectItemType-Date.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": null,
-      "isControl": true
-    },
-    {
-      "id": "__control/SelectBox__selectItemType-Date_selectedDate--pickedDate",
-      "component": "__control",
-      "attribute": null,
-      "case": "SelectBox",
-      "class": "visual",
-      "host": "SelectBox",
-      "writtenKey": null,
-      "aliasOf": null,
-      "value": null,
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/__control/SelectBox__selectItemType-Date_selectedDate--pickedDate.layout.json",
-      "test": "fixtures/__control/SelectBox__selectItemType-Date_selectedDate--pickedDate.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

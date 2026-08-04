@@ -397,7 +397,7 @@ def build_manifest_entry(
                 control_shape(plan.host, plan.attribute, case.name),
             )
             if plan.cls == rules.CLASS_VISUAL
-            and plan.attribute not in rules.NON_OBSERVABLE_ATTRS
+            and not rules.is_non_observable(plan.section, plan.attribute)
             else None
         ),
     }
@@ -722,7 +722,7 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
                 summary.assertable_count += 1
             else:
                 summary.visual_count += 1
-                if plan.attribute not in rules.NON_OBSERVABLE_ATTRS:
+                if not rules.is_non_observable(plan.section, plan.attribute):
                     case_extra = rules.base_attrs_for(plan.host, plan.attribute, case.name)
                     shape = shape_name(case_extra)
                     control_key = (plan.host, plan.needs_anchor, shape)
