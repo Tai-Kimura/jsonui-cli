@@ -298,8 +298,43 @@ def _attribute_case_reads(src: str) -> set:
     return keys
 
 
+def deprecated_platforms(defn: dict) -> set:
+    """Platforms a `deprecated` token takes OUT of the coverage universe.
+
+    `deprecated` is platform-scoped in the SSoT — its values are the same
+    language/mode tokens `platform` and `mode` use (`swift`, `kotlin`,
+    `swiftui`, `uikit`, …), not a boolean. Reading it as a boolean is how
+    `Slider.trackTintColor` (deprecated on swift, live on android and web,
+    read by no converter on either) stayed invisible to this check: one
+    platform's deprecation excused every platform.
+
+    `uikit` resolves to no hosted platform, so deprecating there subtracts
+    nothing — the SwiftUI path still supports the attribute. An unrecognised
+    token drops the whole attribute, which is what this function did for
+    every token before: a vocabulary miss must never silently WIDEN the
+    universe and flood the gate with gaps nobody has looked at.
+    """
+    raw = defn.get("deprecated")
+    if not raw:
+        return set()
+    tags = raw if isinstance(raw, list) else [raw]
+    out: set = set()
+    for tag in tags:
+        if tag in PLATFORM_TAGS:
+            out.add(PLATFORM_TAGS[tag])
+        elif tag in MODE_TAGS:
+            out |= MODE_TAGS[tag]
+        else:
+            return set(PLATFORMS)
+    return out
+
+
 def applicable_platforms(defn: dict) -> tuple:
-    """Platforms an attribute is declared for, honouring `platform` + `mode`."""
+    """Platforms an attribute is declared for, honouring `platform` + `mode`.
+
+    Platforms the attribute is `deprecated` on are excluded — see
+    :func:`deprecated_platforms`.
+    """
     scope: set | None = None
 
     raw = defn.get("platform")
@@ -324,16 +359,20 @@ def applicable_platforms(defn: dict) -> tuple:
             mode_scope |= MODE_TAGS.get(tag, set(PLATFORMS))
         scope = mode_scope if scope is None else (scope & mode_scope)
 
+    gone = deprecated_platforms(defn)
     if scope is None:
-        return PLATFORMS
-    return tuple(p for p in PLATFORMS if p in scope)
+        scope = set(PLATFORMS)
+    return tuple(p for p in PLATFORMS if p in scope and p not in gone)
 
 
 def in_scope(component: str, attribute: str, defn) -> bool:
-    """False for definition metadata and non-renderer attributes."""
+    """False for definition metadata and non-renderer attributes.
+
+    Deprecation is NOT judged here — it narrows
+    :func:`applicable_platforms` instead, so an attribute deprecated on one
+    platform keeps being checked on the platforms where it is still live.
+    """
     if not isinstance(defn, dict):
-        return False
-    if defn.get("deprecated"):
         return False
     reason = rules._untestable_reason(component, attribute, defn)
     return reason not in NON_RENDERER_REASONS

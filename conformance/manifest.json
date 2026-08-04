@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "c869b6c324857239017d1a82a305bcac03daf330665ed8b03c5a36b6e7b02cc0",
   "counts": {
-    "fixtures": 683,
+    "fixtures": 696,
     "assertable": 29,
     "visual": 574,
     "interactive": 35,
-    "control": 45,
+    "control": 58,
     "skipped": 154,
     "promoted": {
       "callback": 11
@@ -532,7 +532,7 @@
       "test": "fixtures/common/disabledBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Button"
+      "control": "__control/Button__enabled-False"
     },
     {
       "id": "common/defaultBackground__static",
@@ -2234,7 +2234,7 @@
       "test": "fixtures/common/clipToBounds__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "common/onclick__callback_fire",
@@ -3677,7 +3677,7 @@
       "test": "fixtures/Label/hint__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__no-text"
     },
     {
       "id": "Label/placeholder__static",
@@ -3700,7 +3700,7 @@
       "test": "fixtures/Label/placeholder__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__no-text"
     },
     {
       "id": "Label/font__static",
@@ -3920,7 +3920,7 @@
       "test": "fixtures/Label/selected__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__highlightAttributes-cb049517"
     },
     {
       "id": "Label/textAlign__left",
@@ -4081,7 +4081,7 @@
       "test": "fixtures/Label/lines__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__text-1d8efd05"
     },
     {
       "id": "Label/lineBreakMode__char",
@@ -4461,7 +4461,7 @@
       "test": "fixtures/Label/hintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__hint-Conformance-Hint_no-text"
     },
     {
       "id": "Label/highlightAttributes__static",
@@ -4636,7 +4636,7 @@
       "test": "fixtures/TextField/placeholder__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": "__control/TextField__no-hint"
     },
     {
       "id": "TextField/hintColor__static",
@@ -5598,7 +5598,7 @@
       "test": "fixtures/TextField/secure__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": "__control/TextField__text-Sample"
     },
     {
       "id": "TextField/fieldPadding__static",
@@ -6155,7 +6155,7 @@
       "test": "fixtures/TextField/disabledBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": "__control/TextField__enabled-False"
     },
     {
       "id": "TextField/placeholderColor__static",
@@ -6178,7 +6178,7 @@
       "test": "fixtures/TextField/placeholderColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": "__control/TextField__no-hint_placeholder-Conformance-Hint"
     },
     {
       "id": "TextView/text__static",
@@ -6278,7 +6278,7 @@
       "test": "fixtures/TextView/placeholder__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": "__control/TextView__no-hint"
     },
     {
       "id": "TextView/hintColor__static",
@@ -7445,7 +7445,7 @@
       "test": "fixtures/TextView/disabledBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": "__control/TextView__enabled-False"
     },
     {
       "id": "TextView/edgeInset__static",
@@ -7619,7 +7619,7 @@
       "test": "fixtures/Button/disabledFontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Button"
+      "control": "__control/Button__enabled-False"
     },
     {
       "id": "Button/highlightColor__static",
@@ -10587,7 +10587,7 @@
       "test": "fixtures/Slider/minValue__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Slider"
+      "control": "__control/Slider__value-0.5"
     },
     {
       "id": "Slider/minimum__static",
@@ -10610,7 +10610,7 @@
       "test": "fixtures/Slider/minimum__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Slider"
+      "control": "__control/Slider__value-0.5"
     },
     {
       "id": "Slider/minimum__alias_minimumValue",
@@ -10633,7 +10633,7 @@
       "test": "fixtures/Slider/minimum__alias_minimumValue.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Slider"
+      "control": "__control/Slider__value-0.5"
     },
     {
       "id": "Slider/minimum__alias_minValue",
@@ -10656,7 +10656,7 @@
       "test": "fixtures/Slider/minimum__alias_minValue.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Slider"
+      "control": "__control/Slider__value-0.5"
     },
     {
       "id": "Slider/maxValue__static",
@@ -10679,7 +10679,7 @@
       "test": "fixtures/Slider/maxValue__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Slider"
+      "control": "__control/Slider__value-0.5"
     },
     {
       "id": "Slider/maximum__static",
@@ -10702,7 +10702,7 @@
       "test": "fixtures/Slider/maximum__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Slider"
+      "control": "__control/Slider__value-0.5"
     },
     {
       "id": "Slider/maximum__alias_maximumValue",
@@ -10725,7 +10725,7 @@
       "test": "fixtures/Slider/maximum__alias_maximumValue.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Slider"
+      "control": "__control/Slider__value-0.5"
     },
     {
       "id": "Slider/maximum__alias_maxValue",
@@ -10748,7 +10748,7 @@
       "test": "fixtures/Slider/maximum__alias_maxValue.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Slider"
+      "control": "__control/Slider__value-0.5"
     },
     {
       "id": "Slider/tintColor__static",
@@ -10834,7 +10834,7 @@
       "test": "fixtures/Slider/step__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Slider"
+      "control": "__control/Slider__value-0.5"
     },
     {
       "id": "Slider/progressTintColor__static",
@@ -10857,7 +10857,7 @@
       "test": "fixtures/Slider/progressTintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Slider"
+      "control": "__control/Slider__value-0.5"
     },
     {
       "id": "Slider/trackTintColor__static",
@@ -10880,7 +10880,7 @@
       "test": "fixtures/Slider/trackTintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Slider"
+      "control": "__control/Slider__value-0.5"
     },
     {
       "id": "Progress/progress__static",
@@ -11987,7 +11987,7 @@
       "test": "fixtures/Collection/columnSpacing__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Collection",
+      "control": "__control/Collection__columns-2",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]
@@ -13566,7 +13566,7 @@
       "test": "fixtures/CheckBox/iconColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/CheckBox"
+      "control": "__control/CheckBox__checked-True"
     },
     {
       "id": "Indicator/indicatorStyle__medium",
@@ -13908,7 +13908,7 @@
       "test": "fixtures/IconLabel/selected__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/IconLabel"
+      "control": "__control/IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000"
     },
     {
       "id": "IconLabel/font__static",
@@ -14030,7 +14030,7 @@
       "test": "fixtures/IconLabel/selectedFontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/IconLabel"
+      "control": "__control/IconLabel__selected-True"
     },
     {
       "id": "IconLabel/icon_on__static",
@@ -14547,6 +14547,30 @@
       "isControl": true
     },
     {
+      "id": "__control/Button__enabled-False",
+      "component": "__control",
+      "attribute": null,
+      "case": "Button",
+      "class": "visual",
+      "host": "Button",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Button__enabled-False.layout.json",
+      "test": "fixtures/__control/Button__enabled-False.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/CheckBox",
       "component": "__control",
       "attribute": null,
@@ -14668,6 +14692,33 @@
       ]
     },
     {
+      "id": "__control/Collection__columns-2",
+      "component": "__control",
+      "attribute": null,
+      "case": "Collection",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Collection__columns-2.layout.json",
+      "test": "fixtures/__control/Collection__columns-2.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
       "id": "__control/GradientView",
       "component": "__control",
       "attribute": null,
@@ -14734,6 +14785,54 @@
       "deprecated": null,
       "layout": "fixtures/__control/IconLabel__icon-off-conformance-sample.layout.json",
       "test": "fixtures/__control/IconLabel__icon-off-conformance-sample.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000",
+      "component": "__control",
+      "attribute": null,
+      "case": "IconLabel",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000.layout.json",
+      "test": "fixtures/__control/IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/IconLabel__selected-True",
+      "component": "__control",
+      "attribute": null,
+      "case": "IconLabel",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/IconLabel__selected-True.layout.json",
+      "test": "fixtures/__control/IconLabel__selected-True.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -14832,6 +14931,78 @@
       "isControl": true
     },
     {
+      "id": "__control/Label__highlightAttributes-cb049517",
+      "component": "__control",
+      "attribute": null,
+      "case": "Label",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Label__highlightAttributes-cb049517.layout.json",
+      "test": "fixtures/__control/Label__highlightAttributes-cb049517.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Label__hint-Conformance-Hint_no-text",
+      "component": "__control",
+      "attribute": null,
+      "case": "Label",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Label__hint-Conformance-Hint_no-text.layout.json",
+      "test": "fixtures/__control/Label__hint-Conformance-Hint_no-text.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Label__no-text",
+      "component": "__control",
+      "attribute": null,
+      "case": "Label",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Label__no-text.layout.json",
+      "test": "fixtures/__control/Label__no-text.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/Label__selected-True",
       "component": "__control",
       "attribute": null,
@@ -14850,6 +15021,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/Label__selected-True.layout.json",
       "test": "fixtures/__control/Label__selected-True.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Label__text-1d8efd05",
+      "component": "__control",
+      "attribute": null,
+      "case": "Label",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Label__text-1d8efd05.layout.json",
+      "test": "fixtures/__control/Label__text-1d8efd05.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -15310,6 +15505,76 @@
       "isControl": true
     },
     {
+      "id": "__control/TextField__enabled-False",
+      "component": "__control",
+      "attribute": null,
+      "case": "TextField",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/TextField__enabled-False.layout.json",
+      "test": "fixtures/__control/TextField__enabled-False.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/TextField__no-hint",
+      "component": "__control",
+      "attribute": null,
+      "case": "TextField",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/TextField__no-hint.layout.json",
+      "test": "fixtures/__control/TextField__no-hint.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/TextField__no-hint_placeholder-Conformance-Hint",
+      "component": "__control",
+      "attribute": null,
+      "case": "TextField",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/TextField__no-hint_placeholder-Conformance-Hint.layout.json",
+      "test": "fixtures/__control/TextField__no-hint_placeholder-Conformance-Hint.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/TextField__text-Clear-me",
       "component": "__control",
       "attribute": null,
@@ -15374,6 +15639,52 @@
       "deprecated": null,
       "layout": "fixtures/__control/TextView.layout.json",
       "test": "fixtures/__control/TextView.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/TextView__enabled-False",
+      "component": "__control",
+      "attribute": null,
+      "case": "TextView",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/TextView__enabled-False.layout.json",
+      "test": "fixtures/__control/TextView__enabled-False.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/TextView__no-hint",
+      "component": "__control",
+      "attribute": null,
+      "case": "TextView",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/TextView__no-hint.layout.json",
+      "test": "fixtures/__control/TextView__no-hint.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

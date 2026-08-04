@@ -17,7 +17,6 @@
       "id": "target",
       "width": 200,
       "height": "wrapContent",
-      "text": "Sample",
       "placeholder": "Conformance Hint"
     }
   ]

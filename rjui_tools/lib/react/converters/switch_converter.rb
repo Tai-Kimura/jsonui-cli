@@ -24,7 +24,11 @@ module RjuiTools
           tint_color = attributes['onTintColor'] || attributes['tint'] ||
                        attributes['tintColor'] || '#34C759'
           thumb_color = attributes['thumbTintColor'] || '#FFFFFF'
-          off_tint_color = attributes['offTintColor'] || '#E5E7EB'
+          # `trackTintColor` is the declared spelling for the track itself and
+          # skins the OFF state; `onTintColor` overrides it when on
+          # (switch.trackColors in shared/core/attribute_semantics.json).
+          off_tint_color = attributes['trackTintColor'] ||
+                           attributes['offTintColor'] || '#E5E7EB'
 
           # iOS-style toggle switch using pure CSS
           switch_html = build_switch_element(checked_attr, on_change, disabled_attr, tint_color, thumb_color, off_tint_color)

@@ -149,8 +149,12 @@ module SjuiTools
               add_line "cornerRadius: #{@component['cornerRadius']},"
             end
 
-            # containerInset (also accept paddings as containerInset for TextView)
-            inset = @component['containerInset'] || @component['paddings']
+            # containerInset (also accept paddings as containerInset for TextView).
+            # `edgeInset` is the UIKit spelling of the same content inset — the
+            # Label converter already reads it, and routing it here is what took
+            # TextView.edgeInset off the coverage gap ledger.
+            inset = @component['containerInset'] || @component['edgeInset'] ||
+                    @component['paddings']
             if inset
               if inset.is_a?(Array)
                 case inset.length

@@ -258,9 +258,13 @@ module KjuiTools
             placeholder_code = "placeholder = { Text("
             placeholder_code += "\n" + indent("text = #{placeholder}", depth + 2)
 
-            # Use hintColor if specified, otherwise use Configuration default
-            if json_data['hintColor']
-              hint_color = Helpers::ResourceResolver.process_color(json_data['hintColor'], required_imports)
+            # Use hintColor if specified, otherwise use Configuration default.
+            # `placeholderColor` is the alias spelling of hintColor (SSoT:
+            # "Placeholder color"); reading it here is what took it off the
+            # coverage gap ledger.
+            hint_color_value = json_data['hintColor'] || json_data['placeholderColor']
+            if hint_color_value
+              hint_color = Helpers::ResourceResolver.process_color(hint_color_value, required_imports)
               placeholder_code += ",\n" + indent("color = #{hint_color}", depth + 2)
             else
               placeholder_code += ",\n" + indent("color = Configuration.TextField.defaultPlaceholderColor", depth + 2)
@@ -325,8 +329,13 @@ module KjuiTools
           
           # `tintColor` — the caret accent (UIKit vocabulary), forwarded to
           # CustomTextField's cursorColor (KotlinJsonUI >= 2.17.1).
-          if json_data['tintColor']
-            cursor_color = Helpers::ResourceResolver.process_color(json_data['tintColor'], required_imports)
+          # `caretAttributes.fontColor` is the object form of the same fact and
+          # reads behind it, matching sjui's `tintColor || caretAttributes`.
+          caret_attrs = json_data['caretAttributes']
+          caret_color_value = json_data['tintColor'] ||
+                              (caret_attrs.is_a?(Hash) ? caret_attrs['fontColor'] : nil)
+          if caret_color_value
+            cursor_color = Helpers::ResourceResolver.process_color(caret_color_value, required_imports)
             code += "\n" + indent("cursorColor = #{cursor_color},", depth + 1)
           end
 

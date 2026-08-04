@@ -736,7 +736,10 @@ def _cmd_inert_audit(args: argparse.Namespace) -> int:
         defaults=ia.attribute_defaults(definitions),
         control_identical=ia.control_identical_fixtures(conformance_dir, manifest),
         manifest=manifest,
-        fallback_value=rules_mod.DEFAULT_STRING,
+        fallback_values=(rules_mod.DEFAULT_STRING, rules_mod.DEFAULT_NUMBER),
+        sibling_active=ia.sibling_value_evidence(
+            manifest, ce.verdicts_from_diffs(diffs), result
+        ),
     )
 
     print(f"inert-audit ({', '.join(platforms)}):")

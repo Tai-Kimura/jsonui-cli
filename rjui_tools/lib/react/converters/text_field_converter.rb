@@ -65,6 +65,17 @@ module RjuiTools
             classes << "placeholder-#{color}"
           end
 
+          # Placeholder FONT. `::placeholder` is a pseudo-element, so it is
+          # unreachable from the inline style the rest of the font handling
+          # uses — Tailwind's `placeholder:` variant with an arbitrary value is
+          # the only surface that can carry it.
+          if (hint_font = attributes['hintFont'])
+            classes << "placeholder:[font-family:#{hint_font.to_s.gsub(/\s+/, '_')}]"
+          end
+          if (hint_font_size = attributes['hintFontSize'])
+            classes << "placeholder:[font-size:#{hint_font_size}px]"
+          end
+
           # Disabled state
           if attributes['enabled'] == false || attributes['enabled'].is_a?(String)
             if attributes['disabledBackground']

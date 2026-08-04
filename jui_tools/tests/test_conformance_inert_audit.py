@@ -228,13 +228,27 @@ class TriageTest(unittest.TestCase):
                 value="sample",
             )
         )
-        result = self._queued(manifest, fallback_value="sample")
+        result = self._queued(manifest, fallback_values=("sample", 8))
         self.assertEqual(result.items[0].family, ia.FAMILY_TYPE_FALLBACK_VALUE)
         self.assertIn("rules.py", result.items[0].evidence)
 
+    def test_numeric_type_fallback_value(self):
+        # 8 is also what platforms pick as their own default spacing — the
+        # kjui CheckBox literally reads `json_data['spacing'] || 8`.
+        manifest = _manifest(
+            _fixture(
+                "CheckBox/spacing__static",
+                component="CheckBox",
+                attribute="spacing",
+                value=8,
+            )
+        )
+        result = self._queued(manifest, fallback_values=("sample", 8))
+        self.assertEqual(result.items[0].family, ia.FAMILY_TYPE_FALLBACK_VALUE)
+
     def test_a_domain_value_is_not_a_type_fallback(self):
         manifest = _manifest(_fixture("Label/hint__static", value="Conformance Hint"))
-        result = self._queued(manifest, fallback_value="sample")
+        result = self._queued(manifest, fallback_values=("sample", 8))
         self.assertEqual(result.items[0].family, ia.FAMILY_UNTRIAGED)
 
     def test_alias_of_a_queued_canonical(self):
@@ -281,6 +295,81 @@ class TriageTest(unittest.TestCase):
         ia.triage(result, manifest=manifest)
         self.assertEqual([i.fixture for i in result.items], ["Slider/maximum__alias_maxValue"])
         self.assertEqual(result.items[0].family, ia.FAMILY_UNTRIAGED)
+
+
+class SiblingValueTest(unittest.TestCase):
+    """The one hypothesis a screenshot round is expensive to rule out."""
+
+    def _setup(self, verdicts_by_platform, inert_platforms=ALL):
+        manifest = _manifest(
+            _fixture("Label/textTransform__none", component="Label",
+                     attribute="textTransform", value="none", platforms=inert_platforms),
+            _fixture("Label/textTransform__uppercase", component="Label",
+                     attribute="textTransform", value="uppercase", platforms=inert_platforms),
+            _fixture("Label/lines__static", component="Label", attribute="lines", value=2,
+                     platforms=inert_platforms),
+        )
+        result = _audit(manifest, verdicts_by_platform, inert_platforms)
+        proof = ia.sibling_value_evidence(manifest, verdicts_by_platform, result)
+        ia.triage(result, manifest=manifest, sibling_active=proof)
+        return result, proof
+
+    def test_active_sibling_on_every_unattributed_platform(self):
+        verdicts = _verdicts(**{
+            p: {
+                "Label/textTransform__none": "inert",
+                "Label/textTransform__uppercase": "active",
+                "Label/lines__static": "inert",
+            }
+            for p in ALL
+        })
+        result, proof = self._setup(verdicts)
+        families = {i.fixture: i.family for i in result.items}
+        self.assertEqual(
+            families["Label/textTransform__none"], ia.FAMILY_SIBLING_VALUE_ACTIVE
+        )
+        self.assertEqual(
+            proof["Label/textTransform__none"],
+            {p: ["Label/textTransform__uppercase"] for p in ALL},
+        )
+        # `lines` has no sibling at all — nothing to demonstrate.
+        self.assertEqual(families["Label/lines__static"], ia.FAMILY_UNTRIAGED)
+
+    def test_one_platform_reading_it_does_not_excuse_another(self):
+        verdicts = _verdicts(
+            ios={
+                "Label/textTransform__none": "inert",
+                "Label/textTransform__uppercase": "active",
+                "Label/lines__static": "inert",
+            },
+            android={
+                "Label/textTransform__none": "inert",
+                "Label/textTransform__uppercase": "inert",
+                "Label/lines__static": "inert",
+            },
+            web={
+                "Label/textTransform__none": "inert",
+                "Label/textTransform__uppercase": "active",
+                "Label/lines__static": "inert",
+            },
+        )
+        result, proof = self._setup(verdicts)
+        families = {i.fixture: i.family for i in result.items}
+        # android has no live demonstration, so the whole item stays open.
+        self.assertNotIn("Label/textTransform__none", proof)
+        self.assertEqual(families["Label/textTransform__none"], ia.FAMILY_UNTRIAGED)
+
+    def test_a_fixture_is_not_its_own_sibling(self):
+        verdicts = _verdicts(**{
+            p: {
+                "Label/textTransform__none": "inert",
+                "Label/textTransform__uppercase": "inert",
+                "Label/lines__static": "inert",
+            }
+            for p in ALL
+        })
+        _result, proof = self._setup(verdicts)
+        self.assertEqual(proof, {})
 
 
 class LoaderTest(unittest.TestCase):

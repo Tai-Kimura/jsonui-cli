@@ -493,7 +493,14 @@ module SjuiTools
             end
             
             # 親のpadding
-            add_line "parentPadding: EdgeInsets(top: #{parent_padding_top}, leading: #{parent_padding_left}, bottom: #{parent_padding_bottom}, trailing: #{parent_padding_right})"
+            add_line "parentPadding: EdgeInsets(top: #{parent_padding_top}, leading: #{parent_padding_left}, bottom: #{parent_padding_bottom}, trailing: #{parent_padding_right}),"
+
+            # コンテナ自身のサイズ意図。これを渡さないと matchParent の親が
+            # コンテンツサイズに縮み、alignTop / centerVertical などの
+            # 親相対制約が「子と同じ大きさの箱」の中で解決されて全て無効化される
+            # (SwiftJsonUI >= 10.13.0 の RelativePositionContainer 引数)
+            add_line "containerWidthMode: #{get_size_mode(@component['width'])},"
+            add_line "containerHeightMode: #{get_size_mode(@component['height'])}"
           end
           add_line ")"
         end

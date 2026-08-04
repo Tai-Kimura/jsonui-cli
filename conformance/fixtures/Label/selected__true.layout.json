@@ -18,6 +18,9 @@
       "width": 200,
       "height": "wrapContent",
       "text": "Sample",
+      "highlightAttributes": {
+        "fontColor": "#FF0000"
+      },
       "selected": true
     }
   ]

@@ -481,6 +481,15 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
 HINT_ATTRS = {"hint", "placeholder"}
 HINT_TEXT = "Conformance Hint"
 
+#: Text long enough to wrap several times inside the 200pt text hosts, for
+#: attributes that only act once there is MORE content than fits (line caps,
+#: break modes). The one-word base text made every such value render the same
+#: pixels as its control.
+LONG_TEXT = (
+    "Sample text long enough to wrap onto several lines inside the "
+    "two hundred point wide conformance hosts"
+)
+
 #: Fallback representative values by scalar type.
 DEFAULT_NUMBER = 8
 DEFAULT_STRING = "sample"
@@ -581,6 +590,64 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     "Radio.checkedColor": {"checked": True},
     # onTintColor colors the ON track — the switch must be on to show it.
     "Switch.onTintColor": {"isOn": True},
+    # --- plan 34 fixture-observability round (2026-08-04) ------------------ #
+    # `placeholder` is declared as an ALIAS of `hint`, and the base injects
+    # `hint` — so the fixture carried both spellings, the primary won, and the
+    # alias could never move a pixel however correctly it resolved. Same for
+    # Label, whose hint only shows "when empty" and whose base supplies text.
+    "Label.hint": {"text": None},
+    "Label.placeholder": {"text": None},
+    # hintColor styles the HINT, so the hint has to be the thing rendering:
+    # drop the base text (a non-empty Label never shows its hint) AND supply
+    # the hint itself, or the fixture is an empty label with a colour setting.
+    "Label.hintColor": {"text": None, "hint": HINT_TEXT},
+    "TextField.placeholder": {"hint": None},
+    "TextView.placeholder": {"hint": None},
+    # placeholderColor styles the PLACEHOLDER, so the placeholder spelling has
+    # to be the one rendering — with the base hint present, hintColor governs.
+    "TextField.placeholderColor": {"hint": None, "placeholder": HINT_TEXT},
+    # Range attributes move the thumb only if there IS a thumb position: with
+    # no value declared the thumb sits at an end on every platform and the
+    # range can be anything (ios pinned it at min, android at max, web at the
+    # midpoint — all three inert). Same reason Slider.tintColor already has it.
+    "Slider.maximum": {"value": 0.5},
+    "Slider.maxValue": {"value": 0.5},
+    "Slider.minimum": {"value": 0.5},
+    "Slider.minValue": {"value": 0.5},
+    "Slider.step": {"value": 0.5},
+    "Slider.trackTintColor": {"value": 0.5},
+    "Slider.progressTintColor": {"value": 0.5},
+    # iconColor maps to the CHECKMARK (kjui: Material checkmarkColor, sjui:
+    # the glyph tint) — an unchecked box draws no checkmark to tint.
+    "CheckBox.iconColor": {"checked": True},
+    # `selected` chooses icon_on over icon_off and selectedFontColor over
+    # fontColor (SSoT), so both alternatives must exist for the swap to show;
+    # and selectedFontColor is only in force while selected.
+    "IconLabel.selected": {
+        "icon_off": IMAGE_ASSET_NAME,
+        "icon_on": IMAGE_ALT_ASSET_NAME,
+        "selectedFontColor": "#FF0000",
+    },
+    "IconLabel.selectedFontColor": {"selected": True},
+    # Label.selected switches the label to highlightAttributes (SSoT) — with
+    # none declared there is nothing to switch TO.
+    "Label.selected": {"highlightAttributes": {"fontColor": "#FF0000"}},
+    # Disabled skins need the disabled state, which IS reachable in a static
+    # capture (unlike pressed/tapped).
+    "disabledBackground": {"enabled": False},
+    "disabledFontColor": {"enabled": False},
+    # secure masks TEXT; the base is hint-only, so there was nothing to mask.
+    "TextField.secure": {"text": "Sample"},
+    # columnSpacing is the gap BETWEEN columns — the default single-column
+    # collection has no gap to size.
+    "Collection.columnSpacing": {"columns": 2},
+    # clipToBounds needs something to clip: the stacked base children fit
+    # inside the host, a horizontal row of them overflows it.
+    "clipToBounds": {"orientation": "horizontal"},
+    # A line CAP needs more lines than the cap: the one-word base text fits
+    # on a single line, so any maximum renders the same pixels.
+    "Label.lines": {"text": LONG_TEXT},
+    "IconLabel.lines": {"text": LONG_TEXT},
     # Track/progress tints need a nonzero value or there is nothing to
     # paint (a zero-length active track is invisible on every platform).
     # Slider's canonical value attribute is `value`; Progress's is `progress`
@@ -655,11 +722,31 @@ def base_attrs_for(host: str, attribute: str) -> dict[str, Any]:
     matters when two components share an attribute name and only one has the
     driver — injecting `selected` into a Button fixture would put an attribute
     Button does not declare into the layout.
+
+    A value of ``None`` REMOVES the base key instead of adding one — see
+    :func:`apply_base_overrides`.
     """
     scoped = BASE_ATTRS_BY_ATTRIBUTE.get(f"{host}.{attribute}")
     if scoped is not None:
         return scoped
     return BASE_ATTRS_BY_ATTRIBUTE.get(attribute, {})
+
+
+def apply_base_overrides(base: dict[str, Any], extra: dict[str, Any] | None) -> None:
+    """Merge *extra* into *base*, treating ``None`` as "drop this base key".
+
+    Adding attributes is not always what makes a fixture observable —
+    sometimes the base is what hides it. `TextField.placeholder` is declared
+    as an alias of `hint`, and the base injects `hint: "Sample"`, so the
+    fixture carried both spellings: the primary won and the alias could never
+    move a pixel however correctly it resolved. Removal is the fix, and it
+    has to travel with the CONTROL too, or the pair stops being comparable.
+    """
+    for key, value in (extra or {}).items():
+        if value is None:
+            base.pop(key, None)
+        else:
+            base[key] = value
 
 
 #: Children injected into container hosts so layout attributes are observable.

@@ -126,9 +126,12 @@ module RjuiTools
 
           # Hint/placeholder color is now handled via Tailwind class in build_class_name
 
-          # Container inset (internal padding)
-          if attributes['containerInset']
-            inset = attributes['containerInset']
+          # Container inset (internal padding). `edgeInset` is the UIKit
+          # spelling of the same content inset (the Label converter already
+          # reads it) — routing it here took TextView.edgeInset off the
+          # coverage gap ledger.
+          if attributes['containerInset'] || attributes['edgeInset']
+            inset = attributes['containerInset'] || attributes['edgeInset']
             if inset.is_a?(Array)
               case inset.length
               when 1

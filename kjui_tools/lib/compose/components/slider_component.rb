@@ -89,11 +89,19 @@ module KjuiTools
 
           code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
           
-          # Slider colors. `tintColor` is the UIKit accent: it colours the
-          # thumb and the active track; the specific names win over it.
+          # Slider colors. The canonical spellings are the ones
+          # attribute_definitions declares — `progressTintColor` for the
+          # filled track, `trackTintColor` for the unfilled one; the
+          # minimum/maximumTrackTintColor pair is the undeclared UIKit
+          # legacy and reads canonical-first behind them (see the
+          # slider.trackColors entry in shared/core/attribute_semantics.json).
+          # `tintColor` is the UIKit accent: it colours the thumb and the
+          # active track when nothing more specific is declared.
           thumb_tint = json_data['thumbTintColor'] || json_data['tintColor']
-          active_tint = json_data['minimumTrackTintColor'] || json_data['tintColor']
-          if active_tint || json_data['maximumTrackTintColor'] || thumb_tint
+          active_tint = json_data['progressTintColor'] ||
+                        json_data['minimumTrackTintColor'] || json_data['tintColor']
+          inactive_tint = json_data['trackTintColor'] || json_data['maximumTrackTintColor']
+          if active_tint || inactive_tint || thumb_tint
             required_imports&.add(:slider_colors)
             colors_params = []
             
@@ -107,8 +115,8 @@ module KjuiTools
               colors_params << "activeTrackColor = #{activetrackcolor_resolved}"
             end
             
-            if json_data['maximumTrackTintColor']
-              inactivetrackcolor_resolved = Helpers::ResourceResolver.process_color(json_data['maximumTrackTintColor'], required_imports)
+            if inactive_tint
+              inactivetrackcolor_resolved = Helpers::ResourceResolver.process_color(inactive_tint, required_imports)
               colors_params << "inactiveTrackColor = #{inactivetrackcolor_resolved}"
             end
             

@@ -93,13 +93,22 @@ module KjuiTools
           # Switch colors
           # tint and tintColor are aliases for onTintColor
           track_color = json_data['onTintColor'] || json_data['tint'] || json_data['tintColor']
-          if track_color || json_data['thumbTintColor']
+          # `trackTintColor` is the declared spelling for the track itself —
+          # it skins the OFF state, which `onTintColor` overrides when on
+          # (switch.trackColors in shared/core/attribute_semantics.json).
+          off_track_color = json_data['trackTintColor'] || json_data['offTintColor']
+          if track_color || off_track_color || json_data['thumbTintColor']
             required_imports&.add(:switch_colors)
             colors_params = []
 
             if track_color
               checkedtrackcolor_resolved = Helpers::ResourceResolver.process_color(track_color, required_imports)
               colors_params << "checkedTrackColor = #{checkedtrackcolor_resolved}"
+            end
+
+            if off_track_color
+              uncheckedtrackcolor_resolved = Helpers::ResourceResolver.process_color(off_track_color, required_imports)
+              colors_params << "uncheckedTrackColor = #{uncheckedtrackcolor_resolved}"
             end
 
             if json_data['thumbTintColor']
@@ -197,15 +206,21 @@ module KjuiTools
             code += "\n" + indent("onCheckedChange = { }", depth + 2)
           end
 
-          # Switch colors
+          # Switch colors — same canonical/legacy pair as the block above.
           track_color = json_data['onTintColor'] || json_data['tint'] || json_data['tintColor']
-          if track_color || json_data['thumbTintColor']
+          off_track_color = json_data['trackTintColor'] || json_data['offTintColor']
+          if track_color || off_track_color || json_data['thumbTintColor']
             required_imports&.add(:switch_colors)
             colors_params = []
 
             if track_color
               checkedtrackcolor_resolved = Helpers::ResourceResolver.process_color(track_color, required_imports)
               colors_params << "checkedTrackColor = #{checkedtrackcolor_resolved}"
+            end
+
+            if off_track_color
+              uncheckedtrackcolor_resolved = Helpers::ResourceResolver.process_color(off_track_color, required_imports)
+              colors_params << "uncheckedTrackColor = #{uncheckedtrackcolor_resolved}"
             end
 
             if json_data['thumbTintColor']

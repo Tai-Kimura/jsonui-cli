@@ -122,9 +122,40 @@ class ScopingTests(unittest.TestCase):
         self.assertFalse(coverage.in_scope("common", "$jui", {"type": "string"}))
         self.assertFalse(coverage.in_scope("View", "style", {"type": "string"}))
 
-    def test_deprecated_attributes_are_not_gaps(self):
-        self.assertFalse(
-            coverage.in_scope("View", "old", {"type": "string", "deprecated": True})
+    def test_deprecation_narrows_the_platforms_it_names_only(self):
+        # `deprecated` carries the same language/mode tokens as `platform`.
+        # Reading it as a boolean excused every platform for one platform's
+        # deprecation — how Slider.trackTintColor (deprecated on swift, live
+        # and unread on android+web) stayed invisible to this check.
+        defn = {"type": "string", "deprecated": "swift"}
+        self.assertTrue(coverage.in_scope("Slider", "trackTintColor", defn))
+        self.assertEqual(("android", "web"), coverage.applicable_platforms(defn))
+
+    def test_mode_deprecation_resolves_through_the_mode_table(self):
+        self.assertEqual(
+            ("android", "web"),
+            coverage.applicable_platforms({"type": "string", "deprecated": "swiftui"}),
+        )
+        # uikit is not hosted, so deprecating there takes nothing away.
+        self.assertEqual(
+            coverage.PLATFORMS,
+            coverage.applicable_platforms({"type": "string", "deprecated": "uikit"}),
+        )
+
+    def test_an_unrecognised_deprecation_token_drops_the_whole_attribute(self):
+        # Conservative on purpose: a vocabulary miss must not WIDEN the
+        # universe and flood the gate with gaps nobody has adjudicated.
+        defn = {"type": "string", "deprecated": True}
+        self.assertEqual((), coverage.applicable_platforms(defn))
+        defn_all = {"type": "string", "deprecated": ["swift", "kotlin", "react"]}
+        self.assertEqual((), coverage.applicable_platforms(defn_all))
+
+    def test_deprecated_platform_is_not_reported_as_a_gap(self):
+        defs = _defs(Slider={"trackTintColor": {"type": "string", "deprecated": "swift"}})
+        gaps = coverage.find_gaps(defs, {"ios": {}, "android": {}, "web": {}})
+        self.assertEqual(
+            ["Slider.trackTintColor [android]", "Slider.trackTintColor [web]"],
+            sorted(str(g) for g in gaps),
         )
 
     def test_callbacks_stay_in_scope(self):

@@ -103,14 +103,24 @@ FAMILY_VALUE_IS_DEFAULT = "value-is-default"
 #: an alias spelling whose canonical fixture is in the queue too — one
 #: adjudication covers both; the alias inherits it
 FAMILY_ALIAS_OF_QUEUED = "alias-of-queued-canonical"
-#: the fixture value is the generator's TYPE-level fallback
-#: (``rules.DEFAULT_STRING``), not a value chosen from the attribute's
-#: domain. ``hintFont: "sample"`` names no font and ``keyboardAppearance:
-#: "sample"`` names no appearance, so the render cannot differ however
-#: correctly the attribute is implemented. The disposition is fixture work —
-#: give the attribute a representative value in ``rules.py`` and re-measure —
-#: not an adjudication about the implementation.
+#: the fixture value is one of the generator's TYPE-level fallbacks
+#: (``rules.DEFAULT_STRING`` / ``rules.DEFAULT_NUMBER``), not a value chosen
+#: from the attribute's domain. ``hintFont: "sample"`` names no font, and the
+#: numeric fallback 8 is a value platforms routinely use as their own default
+#: (``spacing = json_data['spacing'] || 8`` in the kjui CheckBox is exactly
+#: that collision) — either way the render cannot differ however correctly
+#: the attribute is implemented. The disposition is fixture work — give the
+#: attribute a representative value in ``rules.py`` and re-measure — not an
+#: adjudication about the implementation.
 FAMILY_TYPE_FALLBACK_VALUE = "type-fallback-value"
+#: another declared value of the SAME attribute IS active on every platform
+#: where this one is unattributed. The attribute is therefore demonstrably
+#: implemented there, which narrows the question from "is this a gap?" to
+#: "why is THIS value inert?" — it equals the platform default, or the value
+#: alone is dropped. Evidence, not a verdict: ``contentMode__fill`` was a
+#: real bug while its sibling values worked. Still a human call, but a much
+#: cheaper one, and it rules out the expensive hypothesis.
+FAMILY_SIBLING_VALUE_ACTIVE = "sibling-value-active"
 #: nothing mechanical applies — the human round owns it
 FAMILY_UNTRIAGED = "untriaged"
 
@@ -395,13 +405,54 @@ def _kind(fid, scope, measured, enum_values):
 # --------------------------------------------------------------------------- #
 
 
+def sibling_value_evidence(
+    manifest: dict, verdicts: dict, result: InertAudit
+) -> dict:
+    """``{fixture: {platform: [sibling fixtures active there]}}``. Pure.
+
+    Siblings are the other fixtures testing the SAME (component, attribute) —
+    the generator emits one per declared enum value plus the representative
+    cases. A sibling that moves pixels on a platform is a live demonstration
+    that the platform reads the attribute, which is the one hypothesis a
+    screenshot round is expensive to rule out.
+
+    Only recorded when the demonstration holds on EVERY platform where the
+    item is unattributed: "android reads it" says nothing about web.
+    """
+    siblings: dict = {}
+    for entry in manifest.get("fixtures", []):
+        if not entry.get("control") or entry.get("isControl"):
+            continue
+        key = (entry.get("component"), entry.get("attribute"))
+        siblings.setdefault(key, []).append(entry["id"])
+
+    out: dict = {}
+    for item in result.items:
+        others = [
+            s
+            for s in siblings.get((item.component, item.attribute), [])
+            if s != item.fixture
+        ]
+        proof = {}
+        for platform in item.inert_on:
+            active = [
+                s for s in others if verdicts.get(platform, {}).get(s) == "active"
+            ]
+            if active:
+                proof[platform] = sorted(active)
+        if proof and set(proof) == set(item.inert_on):
+            out[item.fixture] = proof
+    return out
+
+
 def triage(
     result: InertAudit,
     *,
     defaults: dict | None = None,
     control_identical: dict | None = None,
     manifest: dict | None = None,
-    fallback_value: object = None,
+    fallback_values=(),
+    sibling_active: dict | None = None,
 ) -> InertAudit:
     """Tag queue items the existing canonical data can close. Pure; in place.
 
@@ -438,10 +489,10 @@ def triage(
                 "the definition of a default-valued fixture"
             )
             continue
-        if fallback_value is not None and item.value == fallback_value:
+        if any(item.value == v for v in fallback_values):
             item.family = FAMILY_TYPE_FALLBACK_VALUE
             item.evidence = (
-                f"value is the generator's type-level fallback ({fallback_value!r}), "
+                f"value is the generator's type-level fallback ({item.value!r}), "
                 "not a value from the attribute's domain — give the attribute a "
                 "representative value in rules.py and re-measure"
             )
@@ -452,6 +503,18 @@ def triage(
             item.evidence = (
                 f"alias spelling ({item.fixture.rsplit('__', 1)[-1]}) of the queued "
                 f"canonical fixture {canonical} — one adjudication covers both"
+            )
+            continue
+        proof = (sibling_active or {}).get(item.fixture)
+        if proof:
+            shown = "; ".join(
+                f"{p}: {', '.join(proof[p][:2])}" for p in sorted(proof)
+            )
+            item.family = FAMILY_SIBLING_VALUE_ACTIVE
+            item.evidence = (
+                f"another declared value of {item.component}.{item.attribute} is "
+                f"active on every unattributed platform ({shown}) — the attribute "
+                "is read there, so this is a value-level question, not a gap"
             )
             continue
         item.family = FAMILY_UNTRIAGED

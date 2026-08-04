@@ -132,7 +132,7 @@ def plan_definitions(
 def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> dict:
     """One minimal layout: root View + (anchor?) + target component."""
     base = dict(rules.BASE_ATTRS.get(plan.host, {}))
-    base.update(rules.base_attrs_for(plan.host, plan.attribute))
+    rules.apply_base_overrides(base, rules.base_attrs_for(plan.host, plan.attribute))
 
     target: dict[str, Any] = {"type": plan.host, "id": rules.TARGET_ID}
     target["width"] = base.get("width", "wrapContent")
@@ -392,12 +392,31 @@ def control_id(host: str, needs_anchor: bool, shape: str = "") -> str:
 _SHAPE_UNSAFE = re.compile(r"[^A-Za-z0-9.-]+")
 
 
+#: Longest a single key-value part may render before it is replaced by a
+#: digest. The shape name becomes a FILENAME (and, through it, a screenshot
+#: name and a test id), so a base value like a paragraph of wrapping text
+#: would otherwise produce a 100+ character path component.
+_SHAPE_PART_MAX = 28
+
+
+def _shape_part(key: str, value) -> str:
+    """One `key-value` fragment, sanitised and length-bounded."""
+    if value is None:
+        # `None` REMOVES the base key (see rules.apply_base_overrides), and
+        # "text-None" reads as "text set to the string None" — say what it is.
+        return _SHAPE_UNSAFE.sub("-", f"no-{key}").strip("-")
+    part = _SHAPE_UNSAFE.sub("-", f"{key}-{value}").strip("-")
+    if len(part) <= _SHAPE_PART_MAX:
+        return part
+    digest = hashlib.sha1(f"{key}={value!r}".encode("utf-8")).hexdigest()[:8]
+    return f"{_SHAPE_UNSAFE.sub('-', key).strip('-')}-{digest}"
+
+
 def shape_name(extra: dict | None) -> str:
     """Stable name for a set of extra base attributes."""
     if not extra:
         return ""
-    parts = (f"{k}-{v}" for k, v in sorted(extra.items()))
-    return "_".join(_SHAPE_UNSAFE.sub("-", part).strip("-") for part in parts)
+    return "_".join(_shape_part(k, v) for k, v in sorted(extra.items()))
 
 
 def control_shape(host: str, attribute: str) -> str:
@@ -410,7 +429,7 @@ def build_control_layout(
 ) -> dict:
     """The target component with its base attributes and nothing else."""
     base = dict(rules.BASE_ATTRS.get(host, {}))
-    base.update(extra or {})
+    rules.apply_base_overrides(base, extra)
 
     target: dict[str, Any] = {"type": host, "id": rules.TARGET_ID}
     target["width"] = base.get("width", "wrapContent")

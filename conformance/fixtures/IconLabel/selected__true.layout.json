@@ -18,6 +18,9 @@
       "width": 200,
       "height": "wrapContent",
       "text": "Sample",
+      "icon_off": "conformance_sample",
+      "icon_on": "conformance_sample_alt",
+      "selectedFontColor": "#FF0000",
       "selected": true
     }
   ]

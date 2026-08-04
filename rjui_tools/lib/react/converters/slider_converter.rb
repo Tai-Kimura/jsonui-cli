@@ -115,10 +115,15 @@ module RjuiTools
         def build_slider_style_attr
           style_parts = []
 
-          tint_color = attributes['tintColor'] || attributes['minimumTrackTintColor']
+          # `progressTintColor` / `trackTintColor` are the spellings
+          # attribute_definitions declares; minimum/maximumTrackTintColor are
+          # the undeclared UIKit legacy and read behind them, canonical-first
+          # (slider.trackColors in shared/core/attribute_semantics.json).
+          tint_color = attributes['progressTintColor'] || attributes['tintColor'] ||
+                       attributes['minimumTrackTintColor']
           style_parts << "accentColor: '#{tint_color}'" if tint_color
 
-          max_track_color = attributes['maximumTrackTintColor']
+          max_track_color = attributes['trackTintColor'] || attributes['maximumTrackTintColor']
           style_parts << "backgroundColor: '#{max_track_color}'" if max_track_color
 
           return '' if style_parts.empty?
