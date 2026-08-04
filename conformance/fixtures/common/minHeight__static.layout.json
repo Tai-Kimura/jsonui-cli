@@ -16,7 +16,7 @@
       "type": "View",
       "id": "target",
       "width": 200,
-      "height": 200,
+      "height": "wrapContent",
       "background": "#DDDDDD",
       "child": [
         {
@@ -62,7 +62,7 @@
           "background": "#00AAAA"
         }
       ],
-      "minHeight": 50
+      "minHeight": 150
     }
   ]
 }

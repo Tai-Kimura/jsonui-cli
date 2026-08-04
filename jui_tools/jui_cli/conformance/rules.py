@@ -487,6 +487,12 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     # family-B read, group A2. Off-centre stops squeeze the blend into the
     # middle half, which no default produces.
     ("GradientView", "locations"): [0.25, 0.75],
+    # Above the content the freed box falls to (40pt children), so the floor
+    # actually lifts. The generic 50 would have worked too; 150 matches the
+    # ceiling fixtures' scale and leaves no doubt which side of the content it
+    # is on.
+    ("common", "minWidth"): 150,
+    ("common", "minHeight"): 150,
     ("Image", "src"): IMAGE_ALT_ASSET_NAME,
     ("NetworkImage", "defaultImage"): IMAGE_ALT_ASSET_NAME,
     # NetworkImage's hint is its PLACEHOLDER IMAGE NAME (SSoT: "Placeholder
@@ -1108,6 +1114,19 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # columnSpacing is the gap BETWEEN columns — the default single-column
     # collection has no gap to size.
     "Collection.columnSpacing": {"columns": 2},
+    # A FLOOR only lifts a box that would otherwise be smaller than it, and the
+    # View base is a fixed 200pt square — so `minWidth: 50` lost to the 200 and
+    # the fixture measured the fixed width, not the floor. Freeing the axis lets
+    # the box fall to its content (the overlaid 40pt children) so the floor has
+    # something to lift it off. Lane F's family-B read, group A2, the last of
+    # the six.
+    #
+    # `maxWidth` / `maxHeight` need no such treatment: a CEILING of 150 does
+    # clamp a 200pt box, which is why only the floors were inert. The
+    # matchParent-plus-ceiling case has its own bespoke fixtures
+    # (conformance.bounds_fixtures).
+    "minWidth": {"width": "wrapContent"},
+    "minHeight": {"height": "wrapContent"},
     # clipToBounds needs something to clip: the stacked base children fit
     # inside the host, a horizontal row of them overflows it.
     "clipToBounds": {"orientation": "horizontal"},

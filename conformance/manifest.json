@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "ed696903716308210a918a2bfaa36f0c12f20272efd2b3691635ca54fe0e1b62",
   "counts": {
-    "fixtures": 842,
+    "fixtures": 844,
     "assertable": 33,
     "visual": 700,
     "interactive": 35,
-    "control": 74,
+    "control": 76,
     "skipped": 151,
     "promoted": {
       "callback": 11
@@ -168,7 +168,7 @@
       "host": "View",
       "writtenKey": "minWidth",
       "aliasOf": null,
-      "value": 50,
+      "value": 150,
       "platforms": [
         "ios",
         "android",
@@ -180,7 +180,7 @@
       "test": "fixtures/common/minWidth__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__width-wrapContent"
     },
     {
       "id": "common/minWidth__binding",
@@ -203,7 +203,7 @@
       "test": "fixtures/common/minWidth__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__width-wrapContent"
     },
     {
       "id": "common/maxWidth__static",
@@ -260,7 +260,7 @@
       "host": "View",
       "writtenKey": "minHeight",
       "aliasOf": null,
-      "value": 50,
+      "value": 150,
       "platforms": [
         "ios",
         "android",
@@ -272,7 +272,7 @@
       "test": "fixtures/common/minHeight__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__height-wrapContent"
     },
     {
       "id": "common/minHeight__binding",
@@ -295,7 +295,7 @@
       "test": "fixtures/common/minHeight__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__height-wrapContent"
     },
     {
       "id": "common/maxHeight__static",
@@ -19013,6 +19013,30 @@
       "isControl": true
     },
     {
+      "id": "__control/View__height-wrapContent",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__height-wrapContent.layout.json",
+      "test": "fixtures/__control/View__height-wrapContent.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/View__highlightBackground--FF0000",
       "component": "__control",
       "attribute": null,
@@ -19151,6 +19175,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/View__root.orientation-horizontal.layout.json",
       "test": "fixtures/__control/View__root.orientation-horizontal.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/View__width-wrapContent",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__width-wrapContent.layout.json",
+      "test": "fixtures/__control/View__width-wrapContent.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

@@ -15,8 +15,8 @@
     {
       "type": "View",
       "id": "target",
-      "width": "wrapContent",
-      "height": 200,
+      "width": 200,
+      "height": "wrapContent",
       "background": "#DDDDDD",
       "child": [
         {
@@ -61,15 +61,7 @@
           "height": 40,
           "background": "#00AAAA"
         }
-      ],
-      "minWidth": "@{boundMinWidth}"
-    }
-  ],
-  "data": [
-    {
-      "name": "boundMinWidth",
-      "class": "Int",
-      "defaultValue": 150
+      ]
     }
   ]
 }
