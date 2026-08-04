@@ -10,9 +10,9 @@
   "schemaVersion": 2,
   "generatedFrom": "ed696903716308210a918a2bfaa36f0c12f20272efd2b3691635ca54fe0e1b62",
   "counts": {
-    "fixtures": 832,
+    "fixtures": 838,
     "assertable": 33,
-    "visual": 694,
+    "visual": 700,
     "interactive": 35,
     "control": 70,
     "skipped": 151,
@@ -5050,6 +5050,29 @@
       "control": "__control/Label"
     },
     {
+      "id": "Label/textAlign__binding",
+      "component": "Label",
+      "attribute": "textAlign",
+      "case": "binding",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "textAlign",
+      "aliasOf": null,
+      "value": "@{boundTextAlign}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/textAlign__binding.layout.json",
+      "test": "fixtures/Label/textAlign__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Label"
+    },
+    {
       "id": "Label/lines__static",
       "component": "Label",
       "attribute": "lines",
@@ -5666,6 +5689,29 @@
       "control": "__control/Label__selected-True"
     },
     {
+      "id": "Label/highlightColor__binding",
+      "component": "Label",
+      "attribute": "highlightColor",
+      "case": "binding",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "highlightColor",
+      "aliasOf": null,
+      "value": "@{boundHighlightColor}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/highlightColor__binding.layout.json",
+      "test": "fixtures/Label/highlightColor__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Label__selected-True"
+    },
+    {
       "id": "Label/fontWeight__static",
       "component": "Label",
       "attribute": "fontWeight",
@@ -5830,6 +5876,29 @@
       "deprecated": null,
       "layout": "fixtures/TextField/hintColor__alias_placeholderColor.layout.json",
       "test": "fixtures/TextField/hintColor__alias_placeholderColor.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/TextField"
+    },
+    {
+      "id": "TextField/hintColor__binding",
+      "component": "TextField",
+      "attribute": "hintColor",
+      "case": "binding",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "hintColor",
+      "aliasOf": null,
+      "value": "@{boundHintColor}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/hintColor__binding.layout.json",
+      "test": "fixtures/TextField/hintColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/TextField"
@@ -8079,6 +8148,29 @@
       "deprecated": null,
       "layout": "fixtures/TextView/hintColor__static.layout.json",
       "test": "fixtures/TextView/hintColor__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/TextView"
+    },
+    {
+      "id": "TextView/hintColor__binding",
+      "component": "TextView",
+      "attribute": "hintColor",
+      "case": "binding",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "hintColor",
+      "aliasOf": null,
+      "value": "@{boundHintColor}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/hintColor__binding.layout.json",
+      "test": "fixtures/TextView/hintColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/TextView"
@@ -10565,6 +10657,29 @@
       "control": "__control/Image"
     },
     {
+      "id": "Image/contentMode__binding",
+      "component": "Image",
+      "attribute": "contentMode",
+      "case": "binding",
+      "class": "visual",
+      "host": "Image",
+      "writtenKey": "contentMode",
+      "aliasOf": null,
+      "value": "@{boundContentMode}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Image/contentMode__binding.layout.json",
+      "test": "fixtures/Image/contentMode__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Image"
+    },
+    {
       "id": "Image/renderingMode__template",
       "component": "Image",
       "attribute": "renderingMode",
@@ -11075,6 +11190,29 @@
       "deprecated": null,
       "layout": "fixtures/NetworkImage/contentMode__center_2.layout.json",
       "test": "fixtures/NetworkImage/contentMode__center_2.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/NetworkImage"
+    },
+    {
+      "id": "NetworkImage/contentMode__binding",
+      "component": "NetworkImage",
+      "attribute": "contentMode",
+      "case": "binding",
+      "class": "visual",
+      "host": "NetworkImage",
+      "writtenKey": "contentMode",
+      "aliasOf": null,
+      "value": "@{boundContentMode}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/NetworkImage/contentMode__binding.layout.json",
+      "test": "fixtures/NetworkImage/contentMode__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/NetworkImage"

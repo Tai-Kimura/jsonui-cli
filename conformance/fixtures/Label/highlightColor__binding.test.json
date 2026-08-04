@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/highlightColor__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.highlightColor (binding)",
+    "description": "Conformance fixture for 'highlightColor' on Label (section: Label, class: visual). Value under test: \"@{boundHighlightColor}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "highlightColor__binding",
+      "description": "Conformance fixture for 'highlightColor' on Label (section: Label, class: visual). Value under test: \"@{boundHighlightColor}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_highlightColor__binding"
+        }
+      ]
+    }
+  ]
+}

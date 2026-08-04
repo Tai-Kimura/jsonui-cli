@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/NetworkImage/contentMode__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance NetworkImage.contentMode (binding)",
+    "description": "Conformance fixture for 'contentMode' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"@{boundContentMode}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "NetworkImage"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "contentMode__binding",
+      "description": "Conformance fixture for 'contentMode' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"@{boundContentMode}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "NetworkImage_contentMode__binding"
+        }
+      ]
+    }
+  ]
+}

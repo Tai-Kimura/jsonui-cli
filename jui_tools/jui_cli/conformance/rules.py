@@ -777,19 +777,20 @@ BOUND_CASE_CLASSES: dict[tuple[str, str], str] = {
 #: binding belongs would make the suite green and leave the defect unmeasured,
 #: which is the failure mode this whole wave exists to remove.
 BOUND_CASES_BLOCKED: dict[tuple[str, str], str] = {
-    # --- the web host's tsc rejects the emitted type (6) ------------------- #
-    # All six are web, i.e. lane A. The 26 `bound-uncompilable` entries that
-    # stood here came out on 2026-08-05: A/B/C's fixes cleared the class
-    # entirely (codegen-effect at 07f2296: 0 on all three platforms), and F
-    # and G built their hosts against the unblocked fixtures first — the
-    # differential only asks whether `@{` survived into the output, so a
-    # zero there is not by itself proof that the host compiles.
-    ('Label', 'textAlign'): "web-typecheck",
-    ('Label', 'highlightColor'): "web-typecheck",
-    ('TextField', 'hintColor'): "web-typecheck",
-    ('TextView', 'hintColor'): "web-typecheck",
-    ('Image', 'contentMode'): "web-typecheck",
-    ('NetworkImage', 'contentMode'): "web-typecheck",
+    # Empty, and that is the point: every hold this table ever carried came
+    # out because the lane that owned the defect fixed it.
+    #
+    # 26 were `bound-uncompilable` — the raw `Modifier.width(@{v}.dp)`
+    # interpolation the wave opened on — cleared by A/B/C. The last six were
+    # rejected by the web host's `tsc`: `React.CSSProperties` is mostly unions
+    # of string literals, so a value only known to be `string` fails to assign,
+    # and four of the six converters had additionally dropped the
+    # `as React.CSSProperties` cast while hand-copying the same style loop
+    # (A, 5f22168).
+    #
+    # Keep the table. A bound fixture that stops a host from building takes
+    # that whole platform's run with it, so the next one needs somewhere to be
+    # declared with its reason rather than quietly deleted.
 }
 
 

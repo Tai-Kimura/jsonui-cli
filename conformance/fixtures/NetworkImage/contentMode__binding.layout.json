@@ -1,0 +1,31 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "root",
+  "width": "matchParent",
+  "height": "matchParent",
+  "child": [
+    {
+      "type": "NetworkImage",
+      "id": "target",
+      "width": 140,
+      "height": 80,
+      "defaultImage": "conformance_sample",
+      "contentMode": "@{boundContentMode}"
+    }
+  ],
+  "data": [
+    {
+      "name": "boundContentMode",
+      "class": "String",
+      "defaultValue": "fit"
+    }
+  ]
+}
