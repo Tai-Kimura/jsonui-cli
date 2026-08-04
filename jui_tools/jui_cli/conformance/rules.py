@@ -868,12 +868,20 @@ UNSHAPEABLE_FIXTURES: dict[tuple[str, str], dict[str, str]] = {
         "verify": "mechanism:root-children",
     },
     ("Collection", "scrollAnchor"): {
-        "owner": "E",
-        "reason": "only read inside the scrollTo path, and scrollTo's data "
-                  "property has no class that compiles on more than one host "
-                  "(iOS wants PassthroughSubject, Compose reads it as String, "
-                  "and kjui passes an unknown class through verbatim)",
-        "verify": "ssot:collection-scrollTo-class",
+        # E closed their half in 9930e18: the canonical class is now a plain
+        # value (String with cellIdProperty, otherwise Int), and the SSoT no
+        # longer prescribes `PassthroughSubject<Int, Never>` — naming a Combine
+        # transport in a cross-platform schema is what put it in consumers'
+        # data sections, where kjui passes an unknown class through verbatim
+        # and the Kotlin build dies. E's own description records the rest of
+        # the gap, which is why the owner moved rather than the entry closing.
+        "owner": "B",
+        "reason": "sjui still emits `data.<prop>.throttle(...)`, so it demands "
+                  "the publisher spelling instead of deriving the transport "
+                  "from the canonical value class — until it does, no single "
+                  "declared class survives all three hosts and the fixture "
+                  "cannot be built",
+        "verify": "sjui:derives-scrollTo-transport",
     },
 }
 
