@@ -262,7 +262,6 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       height
       items
       onValueChange
-      selectedBackground
       selectedFontColor
       selectedIndex
       selectedTabIndex
@@ -341,7 +340,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'progress_converter.rb' => %w[barHeight maximumValue progressHeight trackColor value],
     'radio_converter.rb' => %w[items],
     'scroll_view_converter.rb' => %w[contentInset horizontalScroll],
-    'segment_converter.rb' => %w[backgroundColor fontColor fontSize selectedBackground selectedFontColor selectedTabIndex],
+    'segment_converter.rb' => %w[backgroundColor fontSize selectedTabIndex],
     'select_box_converter.rb' => %w[onChange placeholderColor textAlign value],
     'slider_converter.rb' => %w[maximumTrackTintColor minimumTrackTintColor range],
     'switch_converter.rb' => %w[label text],

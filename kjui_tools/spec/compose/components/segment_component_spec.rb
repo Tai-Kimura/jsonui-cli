@@ -336,5 +336,34 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
 
       expect(result).to include('data.onTabChange?.invoke("segment", 0)')
     end
+
+    # fontColor is the unselected label and selectedFontColor the selected one,
+    # falling back to fontColor (contract: semantics.segmentLabelColors). The
+    # legacy normalColor / selectedColor spellings resolve behind them.
+    describe 'label colours' do
+      it 'fills contentColor from fontColor' do
+        result = described_class.generate(
+          { 'type' => 'Segment', 'items' => %w[A B], 'fontColor' => '#0000FF' }, 0, required_imports
+        )
+
+        expect(result).to include('contentColor =')
+      end
+
+      it 'fills selectedContentColor from selectedFontColor' do
+        result = described_class.generate(
+          { 'type' => 'Segment', 'items' => %w[A B], 'selectedFontColor' => '#00FF00' }, 0, required_imports
+        )
+
+        expect(result).to include('selectedContentColor =')
+      end
+
+      it 'still honours the legacy normalColor spelling' do
+        result = described_class.generate(
+          { 'type' => 'Segment', 'items' => %w[A B], 'normalColor' => '#0000FF' }, 0, required_imports
+        )
+
+        expect(result).to include('contentColor =')
+      end
+    end
   end
 end

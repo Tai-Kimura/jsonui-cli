@@ -60,15 +60,19 @@ module KjuiTools
             colors_params << "containerColor = Color.Transparent"
           end
           
+          # Label colours: fontColor is the unselected label and
+          # selectedFontColor the selected one, falling back to fontColor
+          # (contract: semantics.segmentLabelColors). normalColor / selectedColor
+          # are the legacy spellings and still resolve behind them.
           # Normal text color (contentColor) - for unselected tabs
-          if json_data['normalColor']
-            normal_color = Helpers::ResourceResolver.process_color(json_data['normalColor'], required_imports)
+          if json_data['fontColor'] || json_data['normalColor']
+            normal_color = Helpers::ResourceResolver.process_color(json_data['fontColor'] || json_data['normalColor'], required_imports)
             colors_params << "contentColor = #{normal_color}"
           end
           
           # Selected text color (selectedContentColor) 
-          if json_data['selectedColor'] || json_data['tintColor'] || json_data['selectedSegmentTintColor']
-            color = json_data['selectedColor'] || json_data['tintColor'] || json_data['selectedSegmentTintColor']
+          if json_data['selectedFontColor'] || json_data['fontColor'] || json_data['selectedColor'] || json_data['tintColor'] || json_data['selectedSegmentTintColor']
+            color = json_data['selectedFontColor'] || json_data['fontColor'] || json_data['selectedColor'] || json_data['tintColor'] || json_data['selectedSegmentTintColor']
             selected_color = Helpers::ResourceResolver.process_color(color, required_imports)
             colors_params << "selectedContentColor = #{selected_color}"
           end
@@ -163,8 +167,8 @@ module KjuiTools
               
               # Generate text with color based on selection
               # Store color info for later use
-              normal_color = json_data['normalColor']
-              selected_color = json_data['selectedColor'] || json_data['tintColor'] || json_data['selectedSegmentTintColor']
+              normal_color = json_data['fontColor'] || json_data['normalColor']
+              selected_color = json_data['selectedFontColor'] || json_data['fontColor'] || json_data['selectedColor'] || json_data['tintColor'] || json_data['selectedSegmentTintColor']
               
               if normal_color || selected_color
                 # Need to handle text color based on selection
@@ -273,8 +277,8 @@ module KjuiTools
             code += "\n" + indent("},", depth + 3)
             
             # Generate text with color based on selection for dynamic segments
-            normal_color = json_data['normalColor']
-            selected_color = json_data['selectedColor'] || json_data['tintColor'] || json_data['selectedSegmentTintColor']
+            normal_color = json_data['fontColor'] || json_data['normalColor']
+            selected_color = json_data['selectedFontColor'] || json_data['fontColor'] || json_data['selectedColor'] || json_data['tintColor'] || json_data['selectedSegmentTintColor']
             
             if normal_color || selected_color
               code += "\n" + indent("text = {", depth + 3)

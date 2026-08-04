@@ -255,5 +255,45 @@ RSpec.describe SjuiTools::SwiftUI::Views::SegmentConverter do
         expect(code).not_to include('UISegmentedControl.appearance()')
       end
     end
+
+    # fontColor / selectedFontColor are the cross-platform spellings of the two
+    # label colours; normalColor is the swift-only legacy name for the first
+    # (contract: semantics.segmentLabelColors).
+    describe 'fontColor / selectedFontColor' do
+      it 'sets the unselected title colour from fontColor' do
+        code = described_class.new(
+          { 'type' => 'Segment', 'items' => %w[One Two], 'fontColor' => '#0000FF' }
+        ).convert
+
+        expect(code).to include('setTitleTextAttributes')
+        expect(code).to include('for: .normal')
+      end
+
+      it 'sets the selected title colour from selectedFontColor' do
+        code = described_class.new(
+          { 'type' => 'Segment', 'items' => %w[One Two], 'selectedFontColor' => '#00FF00' }
+        ).convert
+
+        expect(code).to include('for: .selected')
+      end
+
+      it 'gives the selected title fontColor when selectedFontColor is absent' do
+        code = described_class.new(
+          { 'type' => 'Segment', 'items' => %w[One Two], 'fontColor' => '#0000FF' }
+        ).convert
+
+        expect(code).to include('for: .normal')
+        expect(code).to include('for: .selected')
+      end
+
+      it 'prefers fontColor over the legacy normalColor' do
+        code = described_class.new(
+          { 'type' => 'Segment', 'items' => %w[One Two],
+            'fontColor' => '#0000FF', 'normalColor' => '#123456' }
+        ).convert
+
+        expect(code).not_to include('123456')
+      end
+    end
   end
 end

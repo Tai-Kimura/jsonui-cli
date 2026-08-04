@@ -100,24 +100,27 @@ module RjuiTools
             'py-2'
           end
 
-          # Font color
+          # Label colors. fontColor is the UNSELECTED label and selectedFontColor
+          # the selected one, falling back to fontColor (contract:
+          # semantics.segmentLabelColors). fontColor used to be the selected
+          # label's fallback while the unselected one was hardcoded, so a dark
+          # tint left the label unreadable with no way to declare otherwise.
           font_color = attributes['fontColor']
-          font_color_class = font_color ? TailwindMapper.map_color(font_color, 'text') : 'text-gray-900'
+          unselected_text = font_color ? TailwindMapper.map_color(font_color, 'text') : 'text-gray-500 hover:text-gray-700'
+          selected_font = attributes['selectedFontColor'] || font_color
+          selected_text = selected_font ? TailwindMapper.map_color(selected_font, 'text') : 'text-gray-900'
 
-          # Selected colors. tintColor is the selected-segment accent
-          # (UISegmentedControl heritage — sjui/kjui already render it);
-          # selectedBackground stays the explicit override.
+          # tintColor is the selected-segment background accent
+          # (UISegmentedControl heritage — sjui/kjui already render it).
           tint = attributes['tintColor']
-          selected_bg = attributes['selectedBackground'] ||
-                        (tint ? TailwindMapper.map_color(tint, 'bg') : 'bg-white')
-          selected_text = attributes['selectedFontColor'] ? TailwindMapper.map_color(attributes['selectedFontColor'], 'text') : font_color_class
+          selected_bg = tint ? TailwindMapper.map_color(tint, 'bg') : 'bg-white'
 
           base_classes = "flex-1 px-4 #{padding_class} #{font_size_class} font-medium rounded-md transition-colors cursor-pointer"
           disabled_class = attributes['enabled'] == false ? ' cursor-not-allowed' : ''
 
           if has_binding?(selected_index)
             prop = extract_binding_property(selected_index)
-            "#{base_classes}#{disabled_class} ${#{prop} === #{index} ? '#{selected_bg} #{selected_text} shadow' : 'text-gray-500 hover:text-gray-700'}"
+            "#{base_classes}#{disabled_class} ${#{prop} === #{index} ? '#{selected_bg} #{selected_text} shadow' : '#{unselected_text}'}"
           else
             # Static selectedIndex — resolve the selected state at generation
             # time (the old code emitted a bare `selectedIndex` identifier,
@@ -125,7 +128,7 @@ module RjuiTools
             selected_classes = if selected_index.to_i == index
                                  "#{selected_bg} #{selected_text} shadow"
                                else
-                                 'text-gray-500 hover:text-gray-700'
+                                 unselected_text
                                end
             "#{base_classes}#{disabled_class} #{selected_classes}"
           end

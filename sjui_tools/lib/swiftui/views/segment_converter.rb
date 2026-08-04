@@ -115,12 +115,17 @@ module SjuiTools
         # `.onAppear` rather than at build time: a screen that sets it should not
         # restyle segments on screens that do not.
         def apply_segment_appearance
-          normal_color = @component['normalColor']
+          # fontColor is the cross-platform spelling of the unselected label
+          # colour and selectedFontColor of the selected one, falling back to
+          # fontColor (contract: semantics.segmentLabelColors). normalColor is
+          # the swift-only legacy spelling of the same slot and still resolves.
+          normal_color = @component['fontColor'] || @component['normalColor']
+          selected_font_color = @component['selectedFontColor'] || @component['fontColor']
           # tintColor joins the selected-tint chain: UISegmentedControl's
           # legacy tintColor is its segment tint, and the dynamic converter
           # already maps it there.
           selected_color = @component['selectedColor'] || @component['selectedSegmentTintColor'] || @component['tintColor']
-          return if normal_color.nil? && selected_color.nil?
+          return if normal_color.nil? && selected_color.nil? && selected_font_color.nil?
 
           add_modifier_line ".onAppear {"
           indent do
@@ -130,6 +135,9 @@ module SjuiTools
             end
             if normal_color
               add_line "appearance.setTitleTextAttributes([.foregroundColor: UIColor(#{get_swiftui_color(normal_color)})], for: .normal)"
+            end
+            if selected_font_color
+              add_line "appearance.setTitleTextAttributes([.foregroundColor: UIColor(#{get_swiftui_color(selected_font_color)})], for: .selected)"
             end
           end
           add_line "}"

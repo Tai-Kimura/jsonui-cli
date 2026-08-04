@@ -2879,7 +2879,15 @@
     },
     "tintColor": {
       "type": "string",
-      "description": "Tint color - hex string or color name from colors.json"
+      "description": "Tint color of the selected segment's background - hex string or color name from colors.json"
+    },
+    "fontColor": {
+      "type": "string",
+      "description": "Label color of the UNSELECTED segments - hex string or color name from colors.json"
+    },
+    "selectedFontColor": {
+      "type": "string",
+      "description": "Label color of the selected segment, falling back to fontColor - hex string or color name from colors.json"
     },
     "normalColor": {
       "type": [

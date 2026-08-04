@@ -140,5 +140,46 @@ RSpec.describe RjuiTools::React::Converters::SegmentConverter do
         expect(result).to include('{data.showTabs !== "gone" &&')
       end
     end
+
+    # fontColor is the UNSELECTED label, selectedFontColor the selected one.
+    # A brand-coloured tint used to leave the label at a hardcoded gray with no
+    # way to declare otherwise (contract: semantics.segmentLabelColors).
+    context 'label colours' do
+      let(:base) { { 'class' => 'Segment', 'items' => %w[One Two], 'selectedIndex' => 0 } }
+
+      it 'colours the unselected label from fontColor' do
+        result = create_converter(base.merge('fontColor' => 'primary')).convert
+
+        expect(result).to include('text-primary')
+        expect(result).not_to include('text-gray-500')
+      end
+
+      it 'colours the selected label from selectedFontColor' do
+        result = create_converter(base.merge('selectedFontColor' => 'on_primary')).convert
+
+        expect(result).to include('text-on_primary')
+      end
+
+      it 'falls back to fontColor for the selected label' do
+        result = create_converter(base.merge('fontColor' => 'primary')).convert
+        buttons = result.lines.grep(/<button/)
+
+        expect(buttons.size).to eq(2)
+        expect(buttons).to all(include('text-primary'))
+      end
+
+      it 'keeps the hardcoded defaults when neither is declared' do
+        result = create_converter(base).convert
+
+        expect(result).to include('text-gray-500')
+        expect(result).to include('text-gray-900')
+      end
+
+      it 'paints the selected background from tintColor' do
+        result = create_converter(base.merge('tintColor' => 'primary')).convert
+
+        expect(result).to include('bg-primary')
+      end
+    end
   end
 end

@@ -17,6 +17,8 @@ module JsonUI
       ATTRS = [
         # Size segments by content
         { name: 'apportionsSegmentWidthsByContent', kind: :boolean }.freeze,
+        # Label color of the UNSELECTED segments - hex string or color name from colors.json
+        { name: 'fontColor', kind: :string }.freeze,
         # Segment items array [required]
         { name: 'items', kind: :array }.freeze,
         # Momentary selection mode
@@ -27,9 +29,11 @@ module JsonUI
         { name: 'onValueChange', kind: :binding }.freeze,
         # Selected state color - hex string or color name from colors.json (binding supported)
         { name: 'selectedColor', kind: :string, bindable: true }.freeze,
+        # Label color of the selected segment, falling back to fontColor - hex string or color name from colors.json
+        { name: 'selectedFontColor', kind: :string }.freeze,
         # Initially selected index (binding for two-way) [binding: two-way]
         { name: 'selectedIndex', kind: :number, bindable: true }.freeze,
-        # Tint color - hex string or color name from colors.json
+        # Tint color of the selected segment's background - hex string or color name from colors.json
         { name: 'tintColor', kind: :string }.freeze,
         # Value change event
         { name: 'valueChange', kind: :string }.freeze,
