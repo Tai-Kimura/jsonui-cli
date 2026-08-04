@@ -114,13 +114,40 @@ RSpec.describe RjuiTools::React::Converters::RadioConverter do
         expect(result).to include('value="sample"')
       end
 
+      # A STATIC selectedValue is folded rather than compared. Both sides
+      # would be string LITERALS, and TypeScript narrows each to its own
+      # literal type, so `"sample" === "sample"` is TS2367 "no overlap" — an
+      # error inside an @generated file no consumer can patch. The converter
+      # knows the answer at codegen time, so it emits the answer.
       it 'checks the radio when selectedValue matches its value' do
         converter = create_converter({ 'class' => 'Radio', 'text' => 'Sample',
                                        'id' => 'target', 'value' => 'sample',
                                        'selectedValue' => 'sample' })
         result = converter.convert
 
-        expect(result).to include('checked={"sample" === "sample"}')
+        expect(result).to include('checked={true}')
+        expect(result).not_to include('===')
+      end
+
+      it 'leaves the radio unchecked when a static selectedValue names another option' do
+        converter = create_converter({ 'class' => 'Radio', 'text' => 'Sample',
+                                       'id' => 'target', 'value' => 'sample',
+                                       'selectedValue' => 'other' })
+        result = converter.convert
+
+        expect(result).to include('checked={false}')
+        expect(result).not_to include('===')
+      end
+
+      # The BOUND form still compares: the left side is a runtime value with
+      # no literal type for TypeScript to narrow.
+      it 'still compares when selectedValue is a binding' do
+        converter = create_converter({ 'class' => 'Radio', 'text' => 'Sample',
+                                       'id' => 'target', 'value' => 'sample',
+                                       'selectedValue' => '@{picked}' })
+        result = converter.convert
+
+        expect(result).to include('checked={data.picked === "sample"}')
       end
 
       it 'falls back to the node id when value is not declared' do

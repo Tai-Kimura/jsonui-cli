@@ -205,9 +205,31 @@ module RjuiTools
         # (or readOnly) to satisfy React; static selections emit readOnly.
         # Data closure props are always optional (type_converter makes all
         # function types `| undefined`), so calls must be optional-chained.
+        # The literal `selectedValue` behind a `build_selected_binding` result,
+        # or nil when that result was a binding expression (`data.x`, unquoted).
+        def static_selected_value(selected_binding)
+          selected_binding[/\A"(.*)"\z/m, 1]
+        end
+
         def build_state_attrs(selected_binding, on_change, value_literal)
           if selected_binding
-            checked = " checked={#{selected_binding} === \"#{value_literal}\"}"
+            # A STATIC `selectedValue` puts a string literal on both sides of
+            # the comparison, and TypeScript narrows each to its own literal
+            # type — so `"Beta" === "Alpha"` is TS2367, "these types have no
+            # overlap". That is an error inside an @generated file, which no
+            # consumer can patch, and it fails the host typecheck.
+            #
+            # The converter knows the answer at codegen time, so it emits the
+            # answer instead of the comparison. Only the BOUND form still
+            # compares, and there the left side is a runtime value with no
+            # literal type to narrow.
+            static_selected = static_selected_value(selected_binding)
+            checked =
+              if static_selected
+                " checked={#{static_selected == value_literal}}"
+              else
+                " checked={#{selected_binding} === \"#{value_literal}\"}"
+              end
             if on_change
               "#{checked} onChange={() => #{on_change}?.(\"#{value_literal}\")}"
             else
