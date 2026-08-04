@@ -18,7 +18,15 @@
       "width": 200,
       "height": "wrapContent",
       "hint": "Sample",
+      "text": "@{inputText}",
       "maxLength": 5
+    }
+  ],
+  "data": [
+    {
+      "name": "inputText",
+      "class": "String",
+      "defaultValue": ""
     }
   ]
 }

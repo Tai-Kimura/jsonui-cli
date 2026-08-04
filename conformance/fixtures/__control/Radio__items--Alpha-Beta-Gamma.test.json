@@ -1,7 +1,7 @@
 {
   "type": "screen",
   "source": {
-    "layout": "fixtures/__control/Radio__value-sample.layout.json"
+    "layout": "fixtures/__control/Radio__items--Alpha-Beta-Gamma.layout.json"
   },
   "metadata": {
     "name": "conformance control Radio",
@@ -15,7 +15,7 @@
   "platform": "all",
   "cases": [
     {
-      "name": "Radio__value-sample",
+      "name": "Radio__items--Alpha-Beta-Gamma",
       "description": "Control for Radio: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
       "steps": [
         {
@@ -24,7 +24,7 @@
         },
         {
           "action": "screenshot",
-          "name": "control_Radio__value-sample"
+          "name": "control_Radio__items--Alpha-Beta-Gamma"
         }
       ]
     }

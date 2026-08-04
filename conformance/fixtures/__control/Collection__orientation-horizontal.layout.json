@@ -13,16 +13,35 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "SelectBox",
+      "type": "Collection",
       "id": "target",
       "width": 200,
-      "height": "wrapContent",
-      "items": [
-        "One",
-        "Two"
+      "height": 200,
+      "background": "#DDDDDD",
+      "sections": [
+        {
+          "cell": "conformance_cell"
+        }
       ],
-      "selectItemType": "Date",
-      "datePickerMode": "countDown"
+      "items": "@{items}",
+      "orientation": "horizontal"
+    }
+  ],
+  "data": [
+    {
+      "name": "items",
+      "class": "CollectionDataSource",
+      "defaultValue": [
+        {
+          "title": "Alpha"
+        },
+        {
+          "title": "Beta"
+        },
+        {
+          "title": "Gamma"
+        }
+      ]
     }
   ]
 }

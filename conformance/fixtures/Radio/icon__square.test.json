@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/icon__square.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.icon (square)",
+    "description": "Conformance fixture for 'icon' on Radio (section: Radio, class: visual). Value under test: \"square\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "icon__square",
+      "description": "Conformance fixture for 'icon' on Radio (section: Radio, class: visual). Value under test: \"square\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_icon__square"
+        }
+      ]
+    }
+  ]
+}

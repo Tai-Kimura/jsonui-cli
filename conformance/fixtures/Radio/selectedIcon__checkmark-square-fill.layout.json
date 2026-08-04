@@ -13,14 +13,13 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "Label",
+      "type": "Radio",
       "id": "target",
       "width": 200,
       "height": "wrapContent",
-      "hintAttributes": {
-        "fontSize": 12
-      },
-      "placeholder": "Conformance Hint"
+      "text": "Sample",
+      "checked": true,
+      "selectedIcon": "checkmark.square.fill"
     }
   ]
 }

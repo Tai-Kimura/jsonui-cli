@@ -17,10 +17,10 @@
       "id": "target",
       "width": 200,
       "height": "wrapContent",
+      "hint": "Conformance Hint",
       "hintAttributes": {
         "fontSize": 12
-      },
-      "placeholder": "Conformance Hint"
+      }
     }
   ]
 }

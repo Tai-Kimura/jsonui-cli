@@ -13,14 +13,21 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "Label",
+      "type": "ScrollView",
       "id": "target",
       "width": 200,
-      "height": "wrapContent",
-      "hintAttributes": {
-        "fontSize": 12
-      },
-      "placeholder": "Conformance Hint"
+      "height": 200,
+      "background": "#DDDDDD",
+      "orientation": "horizontal",
+      "child": [
+        {
+          "type": "View",
+          "id": "content",
+          "width": 150,
+          "height": 600,
+          "background": "#FF0000"
+        }
+      ]
     }
   ]
 }

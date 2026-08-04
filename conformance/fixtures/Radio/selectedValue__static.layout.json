@@ -18,8 +18,12 @@
       "width": 200,
       "height": "wrapContent",
       "text": "Sample",
-      "value": "sample",
-      "selectedValue": "sample"
+      "items": [
+        "Alpha",
+        "Beta",
+        "Gamma"
+      ],
+      "selectedValue": "Beta"
     }
   ]
 }

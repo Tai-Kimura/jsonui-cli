@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance Collection.itemWeight (static)",
-    "description": "Conformance fixture for 'itemWeight' on Collection (section: Collection, class: visual). Value under test: 8.",
+    "description": "Conformance fixture for 'itemWeight' on Collection (section: Collection, class: visual). Value under test: 0.5.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,7 +18,7 @@
   "cases": [
     {
       "name": "itemWeight__static",
-      "description": "Conformance fixture for 'itemWeight' on Collection (section: Collection, class: visual). Value under test: 8.",
+      "description": "Conformance fixture for 'itemWeight' on Collection (section: Collection, class: visual). Value under test: 0.5.",
       "steps": [
         {
           "action": "waitFor",

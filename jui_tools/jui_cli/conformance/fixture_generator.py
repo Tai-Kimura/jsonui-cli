@@ -131,8 +131,9 @@ def plan_definitions(
 
 def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> dict:
     """One minimal layout: root View + (anchor?) + target component."""
+    extra = rules.base_attrs_for(plan.host, plan.attribute)
     base = dict(rules.BASE_ATTRS.get(plan.host, {}))
-    rules.apply_base_overrides(base, rules.base_attrs_for(plan.host, plan.attribute))
+    rules.apply_base_overrides(base, extra)
 
     target: dict[str, Any] = {"type": plan.host, "id": rules.TARGET_ID}
     target["width"] = base.get("width", "wrapContent")
@@ -160,12 +161,25 @@ def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> d
         "id": "root",
         "width": "matchParent",
         "height": "matchParent",
+        **rules.split_root_attrs(extra),
         "child": root_children,
     }
-    base_data = rules.BASE_DATA.get(plan.host)
-    if base_data:
-        layout["data"] = [dict(entry) for entry in base_data]
+    _attach_data(layout, plan.host, base)
     return layout
+
+
+def _attach_data(layout: dict, host: str, base: dict) -> None:
+    """Write the layout's ``data`` section: host defaults + binding companions.
+
+    Both are load-bearing for the codegen paths, which derive the generated
+    Data type from this section alone.
+    """
+    entries = [dict(e) for e in (rules.BASE_DATA.get(host) or [])]
+    entries.extend(
+        rules.binding_data_entries(base, {e["name"] for e in entries})
+    )
+    if entries:
+        layout["data"] = entries
 
 
 def build_test(plan: AttributePlan, case: CasePlan, layout_rel: str) -> dict:
@@ -466,11 +480,10 @@ def build_control_layout(
         "id": "root",
         "width": "matchParent",
         "height": "matchParent",
+        **rules.split_root_attrs(extra),
         "child": root_children,
     }
-    base_data = rules.BASE_DATA.get(host)
-    if base_data:
-        layout["data"] = [dict(entry) for entry in base_data]
+    _attach_data(layout, host, base)
     return layout
 
 

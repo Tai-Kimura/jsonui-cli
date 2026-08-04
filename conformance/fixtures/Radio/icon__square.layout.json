@@ -13,10 +13,12 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "Label",
+      "type": "Radio",
       "id": "target",
       "width": 200,
-      "height": "wrapContent"
+      "height": "wrapContent",
+      "text": "Sample",
+      "icon": "square"
     }
   ]
 }

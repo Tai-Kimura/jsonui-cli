@@ -18,6 +18,9 @@
       "width": 200,
       "height": "wrapContent",
       "hint": "Conformance Hint",
+      "hintAttributes": {
+        "fontSize": 12
+      },
       "hintColor": "#FF0000"
     }
   ]

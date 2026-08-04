@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance Radio.selectedValue (static)",
-    "description": "Conformance fixture for 'selectedValue' on Radio (section: Radio, class: visual). Value under test: \"sample\".",
+    "description": "Conformance fixture for 'selectedValue' on Radio (section: Radio, class: visual). Value under test: \"Beta\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "selectedValue__static",
-      "description": "Conformance fixture for 'selectedValue' on Radio (section: Radio, class: visual). Value under test: \"sample\".",
+      "description": "Conformance fixture for 'selectedValue' on Radio (section: Radio, class: visual). Value under test: \"Beta\".",
       "steps": [
         {
           "action": "waitFor",

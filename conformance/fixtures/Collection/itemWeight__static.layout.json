@@ -24,7 +24,8 @@
         }
       ],
       "items": "@{items}",
-      "itemWeight": 8
+      "columns": 2,
+      "itemWeight": 0.5
     }
   ],
   "data": [

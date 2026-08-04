@@ -21,6 +21,8 @@
         "One",
         "Two"
       ],
+      "selectItemType": "Date",
+      "datePickerMode": "date",
       "minimumDate": "2020-01-01"
     }
   ]

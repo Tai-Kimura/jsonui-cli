@@ -17,6 +17,9 @@
       "id": "target",
       "width": 200,
       "height": "wrapContent",
+      "hintAttributes": {
+        "fontSize": 12
+      },
       "hint": "Conformance Hint"
     }
   ]

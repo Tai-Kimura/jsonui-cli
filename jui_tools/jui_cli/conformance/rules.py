@@ -19,6 +19,7 @@ special-cased; :mod:`fixture_generator` stays purely mechanical.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -497,6 +498,66 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
         "fontColor": "#FF0000",
         "textAlign": "Center",
     },
+    # --- plan 49-D round (2026-08-05): values outside the attribute's own
+    # --- domain, which no converter can read however correctly it is written.
+    #
+    # `return unless value > 0 && value <= 1.0` (sjui collection_converter.rb:
+    # 1713) — the name-keyed fallback DEFAULT_NUMBER (8) is outside the domain,
+    # so the fixture could only ever measure the guard.
+    ("Collection", "itemWeight"): 0.5,
+    # `value` is Slider/Progress vocabulary in the name-keyed table (0.5), but
+    # CheckBox/Radio declare it as `any`: the checked state's associated value.
+    # sjui reads `@component['value'] == true` for the checkbox seed, so 0.5
+    # can never be the checked state; Radio's is the option's IDENTITY within
+    # the group (`radio_value = @component['value'] || id`), i.e. a name.
+    ("CheckBox", "value"): True,
+    ("Radio", "value"): "optionB",
+    # `selectedValue` names WHICH option of the group is selected, so it has to
+    # be one of the group's items or it selects nothing — see the `items`
+    # companion below.
+    ("Radio", "selectedValue"): "Beta",
+    # Radio icons are a VOCABULARY, not an asset name: kjui matches them
+    # against SF-Symbol spellings and maps each to a Material icon
+    # (radio_component.rb:209-236, map_icon_name:423-437), and anything outside
+    # the table falls to the same `Icons.Outlined.Star` — so two arbitrary
+    # asset names emitted byte-identical text and the value read as unread.
+    # `circle`/`square` (+ their `checkmark.*.fill` selected forms) are the
+    # spellings both the SwiftUI and the Compose sides name.
+    ("Radio", "icon"): "circle",
+    ("Radio", "selectedIcon"): "checkmark.circle.fill",
+    ("Radio", "selected_icon"): "checkmark.circle.fill",
+}
+
+#: Extra representative values appended AFTER the primary case, for attributes
+#: whose converters branch on a closed vocabulary the SSoT does not enumerate.
+#:
+#: One value can only ever prove "the spelling is read"; proving the VALUE is
+#: read needs a second one that lands in a DIFFERENT branch. Without it
+#: `codegen_effect` derives its second value by appending to the first
+#: (`circle` -> `circleTwo`), which falls straight back to the vocabulary's
+#: default arm and emits identical text — the C2 "presence-only" verdict.
+EXTRA_CASES: dict[tuple[str, str], list[Any]] = {
+    # `circle` -> the default RadioButton arm, `square` -> the Checkbox arm.
+    ("Radio", "icon"): ["square"],
+    # `checkmark.circle.fill` -> the RadioButton arm, `checkmark.square.fill`
+    # -> the custom IconButton arm (the square arm additionally needs
+    # `icon: square`, which this fixture does not carry).
+    ("Radio", "selectedIcon"): ["checkmark.square.fill"],
+    ("Radio", "selected_icon"): ["checkmark.square.fill"],
+}
+
+#: Enum value promoted to the FRONT of an attribute's case list.
+#:
+#: Every enum value still gets its own fixture; this only decides which one is
+#: the attribute's *representative* — the value the alias probe mirrors and the
+#: codegen differential calls `primary`. When the first value in the SSoT enum
+#: is one the converters deliberately ignore, the representative measures the
+#: rejection instead of the attribute.
+PREFERRED_PRIMARY_CASE: dict[tuple[str, str], Any] = {
+    # `return '' unless %w[graphical inline].include?(style)` (rjui
+    # select_box_converter.rb:487). The enum leads with `automatic`, which is
+    # exactly the arm that emits nothing.
+    ("SelectBox", "datePickerStyle"): "graphical",
 }
 
 #: Text-ish string attributes that read better with a hint payload.
@@ -608,11 +669,15 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # state alone makes the swap observable (ALT image vs default glyph).
     "Radio.selectedIcon": {"checked": True},
     "Radio.selected_icon": {"checked": True},
-    # selectedValue names WHICH option is selected, so the probe needs the
-    # radio to own that identity — `value` is the option's identity and the
-    # node id is only its fallback. Without the companion the comparison comes
-    # out false for a reason that has nothing to do with the attribute.
-    "Radio.selectedValue": {"value": "sample"},
+    # selectedValue is the GROUP's selection binding, and every platform only
+    # has a group to select from when the radio declares `items`: sjui takes
+    # the group path on `items.any?` (radio_converter.rb:13) and kjui reads the
+    # spelling only inside generate_radio_group_with_items
+    # (radio_component.rb:293-295). A single radio has no selection to name —
+    # its own identity is `value` — so the old `{value: "sample"}` companion
+    # was answering a different question. The representative value is one of
+    # these items (VALUE_OVERRIDES_BY_SECTION: "Beta").
+    "Radio.selectedValue": {"items": ["Alpha", "Beta", "Gamma"]},
     "CheckBox.checkedColor": {"checked": True},
     "Radio.checkedColor": {"checked": True},
     # onTintColor colors the ON track — the switch must be on to show it.
@@ -629,12 +694,30 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # `hint` — so the fixture carried both spellings, the primary won, and the
     # alias could never move a pixel however correctly it resolved. Same for
     # Label, whose hint only shows "when empty" and whose base supplies text.
-    "Label.hint": {"text": None},
-    "Label.placeholder": {"text": None},
+    #
+    # Dropping the text is necessary but NOT sufficient (49-D re-measure): the
+    # canonical Label hint contract — UIKit SJUILabel, mirrored by all three
+    # codegens — requires BOTH keys, `hint` AND `hintAttributes`
+    # (rjui label_converter.rb:89 `return nil unless attrs.is_a?(Hash) …`,
+    # sjui label_converter.rb:392 label_hint_config, kjui text_component.rb:
+    # 457). With no hintAttributes the styled-hint swap never happens and the
+    # fixture emitted an empty label on every platform. `hintAttributes` here
+    # carries NO fontColor on purpose, so `hintColor` is the one that decides
+    # the colour (`attrs['fontColor'] || hintColor`).
+    "Label.hint": {"text": None, "hintAttributes": {"fontSize": 12}},
+    "Label.placeholder": {"text": None, "hintAttributes": {"fontSize": 12}},
     # hintColor styles the HINT, so the hint has to be the thing rendering:
     # drop the base text (a non-empty Label never shows its hint) AND supply
     # the hint itself, or the fixture is an empty label with a colour setting.
-    "Label.hintColor": {"text": None, "hint": HINT_TEXT},
+    "Label.hintColor": {
+        "text": None,
+        "hint": HINT_TEXT,
+        "hintAttributes": {"fontSize": 12},
+    },
+    # minimumScaleFactor is the FLOOR of the auto-shrink, read only inside
+    # `if attributes['autoShrink']` (rjui label_converter.rb:450). Without the
+    # switch there is no shrinking for a floor to bound.
+    "Label.minimumScaleFactor": {"autoShrink": True},
     "TextField.placeholder": {"hint": None},
     "TextView.placeholder": {"hint": None},
     # placeholderColor styles the PLACEHOLDER, so the placeholder spelling has
@@ -728,9 +811,70 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # IS a date picker; without this the fixture renders the ordinary
     # options list and the attribute is never consulted.
     "SelectBox.datePickerStyle": {"selectItemType": "Date"},
-    "SelectBox.dateStringFormat": {"selectItemType": "Date"},
+    # `dateStringFormat` is the shape the VIEWMODEL holds, so it is only
+    # consulted while converting a BOUND value in and out of the input's ISO
+    # spelling (rjui select_box_converter.rb:391 `if format` — inside the
+    # `has_binding?(date_value)` arm). A date picker with no bound date has no
+    # value to reformat, so the declared format was never read.
+    "SelectBox.dateStringFormat": {
+        "selectItemType": "Date",
+        "selectedDate": "@{pickedDate}",
+    },
     # minuteInterval is a step through minutes, so it needs a time-bearing mode.
     "SelectBox.minuteInterval": {"selectItemType": "Date", "datePickerMode": "time"},
+    # Same date-branch gate, four attributes the earlier round missed.
+    # `colorScheme` is consumed only by build_date_style_attr (rjui
+    # select_box_converter.rb:426); the bounds and the mode are date-only on
+    # all three platforms.
+    "SelectBox.datePickerMode": {"selectItemType": "Date"},
+    "SelectBox.colorScheme": {"selectItemType": "Date"},
+    "SelectBox.minimumDate": {"selectItemType": "Date", "datePickerMode": "date"},
+    "SelectBox.maximumDate": {"selectItemType": "Date", "datePickerMode": "date"},
+    # itemWeight is the fraction of the container width ONE ITEM takes, which
+    # is a grid concept: sjui applies it from apply_grid_padding /
+    # apply_insets_only (collection_converter.rb:1606/1834) and the default
+    # single-column CollectionStackView path reaches neither. Measured: with
+    # `columns: 2` the fixture emits `.containerRelativeFrame(...)` and its
+    # control does not; without it the two are byte-identical.
+    #
+    # `Collection.scrollAnchor` is the other half of this family and is NOT
+    # fixable here — see the 49-D report. It needs `scrollTo` as a companion,
+    # `scrollTo` is a `binding`, and the data property behind it has no class
+    # that compiles on more than one codegen host (iOS wants
+    # `PassthroughSubject<String, Never>`, Compose emits `raw.isEmpty()` /
+    # `substringBefore` on it, i.e. String, and kjui's map_to_kotlin_type
+    # passes an unknown class straight through). Handed to E + C.
+    "Collection.itemWeight": {"columns": 2},
+    # The horizontal indicator is only configurable on a horizontal scroller —
+    # sjui gates both hosts on it (scrollview_converter.rb:58,
+    # collection_converter.rb:1753). Unscoped: Collection and ScrollView both
+    # declare the attribute and both have the gate.
+    "showsHorizontalScrollIndicator": {"orientation": "horizontal"},
+    # `errorImage` / `loadingImage` on a NON-network Image are fallback
+    # imagery for a missing `src`, never an in-flight or failed state (kjui
+    # image_component.rb:12-15 says so in its own words) — they are read only
+    # in the `src`-absent arm (sjui image_converter.rb:36/42). The base
+    # supplies `src`, so the fallback arm was unreachable.
+    "Image.errorImage": {"src": None},
+    "Image.loadingImage": {"src": None},
+    # kjui puts the label on whichever side `labelPosition` names, but only on
+    # the labelled path (switch_component.rb:144/170) — and a Switch's label is
+    # `labelAttributes.text`. Switch has no BASE_ATTRS entry at all, so there
+    # was no label to place.
+    "Switch.labelPosition": {"labelAttributes": {"text": "Sample"}},
+    # SwiftUI has no maximum-length primitive, so sjui enforces maxLength by
+    # truncating on change and writing BACK — which needs somewhere to write:
+    # `return unless raw.is_a?(String) && is_binding?(raw)` on the text
+    # (textfield_converter.rb:519, and its own comment at 511-513). The base is
+    # hint-only, with no bound text.
+    "TextField.maxLength": {"text": "@{inputText}"},
+    # `weight` is a share of the PARENT's main axis, and every platform gates
+    # it on that parent being a Row/Column (kjui modifier_builder.rb:105
+    # `parent_orientation`, sjui view_converter.rb:160). The fixture root is a
+    # plain View — an overlay — so there was no axis to take a share of. The
+    # `root.` prefix puts the orientation on the ROOT node rather than on the
+    # target (see `split_root_attrs`).
+    "weight": {"root.orientation": "horizontal"},
     # The ON-state colours are invisible on an off switch, so the fixture
     # rendered pixel-identical to its control and read as inert.
     "Switch.tint": {"isOn": True},
@@ -766,6 +910,10 @@ def base_attrs_for(host: str, attribute: str) -> dict[str, Any]:
     return BASE_ATTRS_BY_ATTRIBUTE.get(attribute, {})
 
 
+#: Prefix marking a companion that belongs on the ROOT node, not the target.
+ROOT_ATTR_PREFIX = "root."
+
+
 def apply_base_overrides(base: dict[str, Any], extra: dict[str, Any] | None) -> None:
     """Merge *extra* into *base*, treating ``None`` as "drop this base key".
 
@@ -775,12 +923,90 @@ def apply_base_overrides(base: dict[str, Any], extra: dict[str, Any] | None) -> 
     fixture carried both spellings: the primary won and the alias could never
     move a pixel however correctly it resolved. Removal is the fix, and it
     has to travel with the CONTROL too, or the pair stops being comparable.
+
+    ``root.``-prefixed keys are skipped here: they configure the fixture's
+    ROOT node (see :func:`split_root_attrs`), not the component under test.
     """
     for key, value in (extra or {}).items():
+        if key.startswith(ROOT_ATTR_PREFIX):
+            continue
         if value is None:
             base.pop(key, None)
         else:
             base[key] = value
+
+
+def split_root_attrs(extra: dict[str, Any] | None) -> dict[str, Any]:
+    """The ``root.``-prefixed companions in *extra*, with the prefix stripped.
+
+    Some attributes are read off the PARENT rather than off the node that
+    declares them — `weight` is a share of the parent's main axis, and every
+    platform ignores it unless that parent is a Row/Column. Nothing the
+    fixture writes on the target can create that condition, so the companion
+    has to land on the root.
+
+    They ride the same table (and therefore the same shape name) as the target
+    companions, so a fixture whose root was widened is still compared against a
+    control widened the same way.
+    """
+    return {
+        key[len(ROOT_ATTR_PREFIX):]: value
+        for key, value in (extra or {}).items()
+        if key.startswith(ROOT_ATTR_PREFIX)
+    }
+
+
+#: ``@{name}`` binding companions whose data property is not a String.
+#:
+#: Empty today: every companion binding is String on all three codegen paths
+#: (`data.inputText.count` / `String(newValue.prefix(n))` on iOS,
+#: `data.pickedDate.toDate(format:)` for the date companion). A class outside
+#: the narrow cross-platform vocabulary — `String` / `Int` / `Boolean` /
+#: `CollectionDataSource` — does not survive kjui's `map_to_kotlin_type`,
+#: which passes unknown classes through verbatim into Kotlin source.
+BINDING_DATA_CLASSES: dict[str, str] = {}
+
+_BINDING_RE = re.compile(r"^@\{([A-Za-z_][A-Za-z0-9_]*)\}$")
+
+#: Default class for an auto-declared binding companion.
+BINDING_DATA_DEFAULT_CLASS = "String"
+
+#: Default value per declared class, so the generated Data type compiles.
+_BINDING_DATA_DEFAULTS: dict[str, Any] = {"String": "", "Int": 0, "Boolean": False}
+
+
+def binding_data_entries(
+    attrs: dict[str, Any], already_declared: set[str]
+) -> list[dict[str, Any]]:
+    """``data`` entries for every ``@{name}`` companion in *attrs*.
+
+    kjui and sjui derive the generated Data type from the layout's ``data``
+    section ONLY — they never infer a property from a binding expression — so a
+    companion like ``{"text": "@{inputText}"}`` produces a view that reads
+    ``data.inputText`` off a class with no such property, and the codegen host
+    does not compile. Declaring the property is what makes the companion
+    usable at all.
+
+    Only *companion* bindings are declared: the value under test comes from the
+    case plan, and the static fixture suite never writes a binding there.
+    """
+    entries: list[dict[str, Any]] = []
+    seen = set(already_declared)
+    for value in attrs.values():
+        if not isinstance(value, str):
+            continue
+        match = _BINDING_RE.match(value.strip())
+        if match is None:
+            continue
+        name = match.group(1)
+        if name in seen:
+            continue
+        seen.add(name)
+        cls = BINDING_DATA_CLASSES.get(name, BINDING_DATA_DEFAULT_CLASS)
+        entries.append(
+            {"name": name, "class": cls, "defaultValue": _BINDING_DATA_DEFAULTS.get(cls, "")}
+        )
+    return entries
 
 
 #: Children injected into container hosts so layout attributes are observable.
@@ -1224,6 +1450,21 @@ def plan_attribute(
     )
 
 
+def _prefer_primary(section: str, attribute: str, cases: list[CasePlan]) -> list[CasePlan]:
+    """Move the declared representative case to the front, if one is declared.
+
+    The set of fixtures is unchanged — only which one is the attribute's
+    representative (see :data:`PREFERRED_PRIMARY_CASE`).
+    """
+    preferred = PREFERRED_PRIMARY_CASE.get((section, attribute))
+    if preferred is None:
+        return cases
+    index = next((i for i, c in enumerate(cases) if c.value == preferred), None)
+    if index is None or index == 0:
+        return cases
+    return [cases[index]] + cases[:index] + cases[index + 1:]
+
+
 def _visual_cases(section: str, attribute: str, defn: dict) -> list[CasePlan]:
     """Enum values expand into one case each; scalars get a single case."""
     base_types, enum_values = normalize_type(defn)
@@ -1234,7 +1475,7 @@ def _visual_cases(section: str, attribute: str, defn: dict) -> list[CasePlan]:
 
     if enum_values and not ({"number", "boolean"} & base_types):
         # Enum fully covers string-typed attributes.
-        return cases
+        return _prefer_primary(section, attribute, cases)
 
     found, value = representative_value(section, attribute, defn)
     if found:
@@ -1242,7 +1483,13 @@ def _visual_cases(section: str, attribute: str, defn: dict) -> list[CasePlan]:
             cases.append(CasePlan(name="true", value=True, written_key=attribute))
         else:
             cases.append(CasePlan(name="static", value=value, written_key=attribute))
-    return cases
+
+    # Second (third...) value from a vocabulary the SSoT does not enumerate:
+    # the case name is the value's own slug, so it stays greppable and stable.
+    for name, extra in dedupe_case_names(EXTRA_CASES.get((section, attribute), [])):
+        cases.append(CasePlan(name=name, value=extra, written_key=attribute))
+
+    return _prefer_primary(section, attribute, cases)
 
 
 def _with_alias_cases(

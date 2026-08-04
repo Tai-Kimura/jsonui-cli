@@ -22,7 +22,15 @@
         "Two"
       ],
       "selectItemType": "Date",
+      "selectedDate": "@{pickedDate}",
       "dateStringFormat": "yyyy-MM-dd"
+    }
+  ],
+  "data": [
+    {
+      "name": "pickedDate",
+      "class": "String",
+      "defaultValue": ""
     }
   ]
 }

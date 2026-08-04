@@ -13,14 +13,12 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "Label",
+      "type": "CheckBox",
       "id": "target",
       "width": 200,
       "height": "wrapContent",
-      "hintAttributes": {
-        "fontSize": 12
-      },
-      "placeholder": "Conformance Hint"
+      "text": "Sample",
+      "value": true
     }
   ]
 }

@@ -21,6 +21,8 @@
         "One",
         "Two"
       ],
+      "selectItemType": "Date",
+      "datePickerMode": "date",
       "maximumDate": "2030-12-31"
     }
   ]

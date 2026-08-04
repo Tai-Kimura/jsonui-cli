@@ -13,12 +13,16 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "Radio",
+      "type": "SelectBox",
       "id": "target",
       "width": 200,
       "height": "wrapContent",
-      "text": "Sample",
-      "value": "sample"
+      "items": [
+        "One",
+        "Two"
+      ],
+      "selectItemType": "Date",
+      "datePickerMode": "date"
     }
   ]
 }

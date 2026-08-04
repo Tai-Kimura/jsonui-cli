@@ -13,14 +13,13 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "Label",
+      "type": "Switch",
       "id": "target",
-      "width": 200,
+      "width": "wrapContent",
       "height": "wrapContent",
-      "hintAttributes": {
-        "fontSize": 12
-      },
-      "placeholder": "Conformance Hint"
+      "labelAttributes": {
+        "text": "Sample"
+      }
     }
   ]
 }

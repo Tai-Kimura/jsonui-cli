@@ -17,10 +17,8 @@
       "id": "target",
       "width": 200,
       "height": "wrapContent",
-      "hintAttributes": {
-        "fontSize": 12
-      },
-      "placeholder": "Conformance Hint"
+      "text": "Sample",
+      "autoShrink": true
     }
   ]
 }

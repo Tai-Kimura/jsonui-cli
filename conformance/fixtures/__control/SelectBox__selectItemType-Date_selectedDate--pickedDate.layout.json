@@ -13,11 +13,23 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "Label",
+      "type": "SelectBox",
       "id": "target",
       "width": 200,
       "height": "wrapContent",
-      "hint": "Conformance Hint"
+      "items": [
+        "One",
+        "Two"
+      ],
+      "selectItemType": "Date",
+      "selectedDate": "@{pickedDate}"
+    }
+  ],
+  "data": [
+    {
+      "name": "pickedDate",
+      "class": "String",
+      "defaultValue": ""
     }
   ]
 }

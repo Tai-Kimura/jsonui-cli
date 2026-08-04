@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/CheckBox/value__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance CheckBox.value (true)",
+    "description": "Conformance fixture for 'value' on CheckBox (section: CheckBox, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "CheckBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "value__true",
+      "description": "Conformance fixture for 'value' on CheckBox (section: CheckBox, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "CheckBox_value__true"
+        }
+      ]
+    }
+  ]
+}
