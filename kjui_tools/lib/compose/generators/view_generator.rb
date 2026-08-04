@@ -9,6 +9,10 @@ module KjuiTools
   module Compose
     module Generators
       class ViewGenerator
+        # The scaffold's stand-in body. `kjui build` asserts that no generated
+        # view still carries it — see Cli::Commands::Build#stranded_placeholder_views.
+        SCAFFOLD_PLACEHOLDER = "Run 'kjui build' to generate Compose code"
+
         def initialize(name, options = {})
           @name = name
           @options = options
@@ -320,7 +324,7 @@ module KjuiTools
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "Run 'kjui build' to generate Compose code",
+                        text = "#{SCAFFOLD_PLACEHOLDER}",
                         fontSize = 14.sp,
                         color = Color.Gray
                     )

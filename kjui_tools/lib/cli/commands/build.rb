@@ -213,6 +213,7 @@ module KjuiTools
           # Track new includes and style dependencies
           new_including_files = {}
           new_style_dependencies = {}
+          failed_files = []
 
           # Filter files that need update
           files_to_update = []
@@ -328,15 +329,61 @@ module KjuiTools
 
             rescue JSON::ParserError => e
               Core::Logger.error "Failed to parse #{json_file}: #{e.message}"
+              failed_files << relative_path
             rescue => e
               Core::Logger.error "Failed to process #{json_file}: #{e.message}"
+              failed_files << relative_path
             end
           end
 
           # Save cache for next build
           cache_manager.save_cache(new_including_files, new_style_dependencies)
 
+          # A per-file failure used to be logged and stepped over, and the
+          # build still ended with "completed!". The layout keeps whatever the
+          # scaffold left behind — `build_file` creates the placeholder view
+          # BEFORE it can raise — so the run produces a tree that is missing
+          # generated code for those layouts while reporting success.
+          #
+          # That was survivable only because the placeholder used to name a
+          # data property and the Kotlin compiler caught it. Making the
+          # placeholder data-independent (so it compiles anywhere) removed the
+          # last thing that noticed, which is exactly how a partial build
+          # turned into a silent one. The build has to say so itself.
+          # Plan 49 lane C, G's finding.
+          unless failed_files.empty?
+            Core::Logger.error "#{failed_files.length} layout(s) failed to build:"
+            failed_files.each { |f| Core::Logger.error "  #{f}" }
+            exit 1
+          end
+
+          # Belt and braces for the same failure mode arriving another way:
+          # whatever the reason, a view still carrying the scaffold
+          # placeholder has no generated code in it.
+          stranded = stranded_placeholder_views(source_path, config)
+          unless stranded.empty?
+            Core::Logger.error "#{stranded.length} view(s) still contain the scaffold placeholder — " \
+                               "their generated code was never written:"
+            stranded.first(20).each { |f| Core::Logger.error "  #{f}" }
+            Core::Logger.error "  … #{stranded.length - 20} more" if stranded.length > 20
+            exit 1
+          end
+
           Core::Logger.success "Compose build completed!"
+        end
+
+        # Views whose GENERATED_CODE block still holds the scaffold
+        # placeholder. Compiling is not evidence that a view was generated —
+        # the placeholder compiles fine and draws a plausible screen.
+        def stranded_placeholder_views(source_path, config)
+          require_relative '../../compose/generators/view_generator'
+          view_dir = File.join(source_path, config['source_directory'] || 'src/main',
+                               config['view_directory'] || 'kotlin/views')
+          return [] unless Dir.exist?(view_dir)
+
+          Dir.glob(File.join(view_dir, '**', '*GeneratedView.kt')).select do |f|
+            File.read(f).include?(Compose::Generators::ViewGenerator::SCAFFOLD_PLACEHOLDER)
+          end.map { |f| f.sub("#{source_path}/", '') }
         end
       end
     end
