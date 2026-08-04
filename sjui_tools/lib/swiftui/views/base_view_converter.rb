@@ -563,14 +563,20 @@ module SjuiTools
           end
 
           # tintColor（アクセントカラー）
+          #
+          # The bound branch used to emit the property bare — `.tint(data.x)`
+          # — and `.tint()` takes a `Color`. Against the usual String property
+          # naming a colour that is `cannot convert value of type 'String' to
+          # expected argument type 'Color'`, which stopped the whole ios
+          # conformance host on `common/tintColor__binding`. Nothing caught it
+          # earlier because the binding DID reach the output: `codegen-effect`
+          # asks whether it survived, not whether it typechecks.
+          #
+          # `get_swiftui_color` handles both spellings and both data types —
+          # a String property is wrapped in `getColor(for:)`, a Color-typed
+          # one passes through — so the branch goes away with the defect.
           if @component['tintColor']
-            tint_color = @component['tintColor']
-            if is_binding?(tint_color)
-              @modifier_bag.register(:tint_color, ".tint(#{binding_data_expr(tint_color)})")
-            else
-              color = get_swiftui_color(tint_color)
-              @modifier_bag.register(:tint_color, ".tint(#{color})")
-            end
+            @modifier_bag.register(:tint_color, ".tint(#{get_swiftui_color(@component['tintColor'])})")
           end
 
           # バインディング関連プロパティ（コメントとして記録）

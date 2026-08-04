@@ -146,27 +146,26 @@ module SjuiTools
 
           # Note: tintColor is handled by BaseViewConverter.apply_modifiers
 
-          # Apply tab bar background (iOS 16+)
+          # Apply tab bar background (iOS 16+).
+          #
+          # The bound branch built `Color(data.x)`, which is the ASSET-CATALOG
+          # initializer `Color(_ name: String, bundle:)`. It compiles, so
+          # nothing complained, and then it looked up an asset named after
+          # whatever the property held — a hex string or a colors.json name
+          # resolved to nothing. `get_swiftui_color` is the registry route
+          # every other colour here takes.
           if @component['tabBarBackground']
             bg_color = @component['tabBarBackground']
-            if is_binding?(bg_color)
-              binding_prop = extract_binding_property(bg_color)
-              add_modifier_line ".toolbarBackground(Color(data.#{binding_prop}), for: .tabBar)"
-            else
-              color = get_swiftui_color(bg_color)
-              add_modifier_line ".toolbarBackground(#{color}, for: .tabBar)"
-            end
+            color = get_swiftui_color(bg_color)
+            add_modifier_line ".toolbarBackground(#{color}, for: .tabBar)"
             add_modifier_line ".toolbarBackground(.visible, for: .tabBar)"
             # toolbarBackground alone leaves the bar unstyled on the
             # conformance render — the dynamic path routes through the
             # UITabBar appearance proxy for the same reason (33 cross-effect);
             # mirror it so both paths paint the bar (32 parity).
-            unless is_binding?(bg_color)
-              color = get_swiftui_color(bg_color)
-              add_modifier_line ".onAppear {"
-              add_modifier_line "    UITabBar.appearance().backgroundColor = UIColor(#{color})"
-              add_modifier_line "}"
-            end
+            add_modifier_line ".onAppear {"
+            add_modifier_line "    UITabBar.appearance().backgroundColor = UIColor(#{color})"
+            add_modifier_line "}"
           end
 
           # unselectedColor — SwiftUI exposes no modifier for the inactive tab
@@ -175,11 +174,9 @@ module SjuiTools
           # for their UIKit-only appearance keys.
           unselected = @component['unselectedColor']
           if unselected
-            color = if is_binding?(unselected)
-                      "Color(data.#{extract_binding_property(unselected)})"
-                    else
-                      get_swiftui_color(unselected)
-                    end
+            # Same asset-catalog trap as tabBarBackground above: `Color(data.x)`
+            # compiles and resolves nothing.
+            color = get_swiftui_color(unselected)
             add_modifier_line ".onAppear {"
             add_modifier_line "    UITabBar.appearance().unselectedItemTintColor = UIColor(#{color})"
             add_modifier_line "}"

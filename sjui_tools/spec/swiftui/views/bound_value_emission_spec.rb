@@ -370,6 +370,39 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       expect(code.scan('.stroke(').length).to eq(1)
     end
 
+    # A bound colour is usually a String property naming one, and every
+    # colour slot in SwiftUI takes a `Color`. The generated code kept the
+    # binding — `codegen-effect` asks whether it survived, not whether it
+    # typechecks — and the ios conformance host stopped on
+    # `cannot convert value of type 'String' to expected argument type
+    # 'Color'`. Compiling 621 generated views is what found it.
+    it 'a bound colour is resolved, not pasted into a Color slot' do
+      SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+        'brand' => { 'class' => 'String', 'defaultValue' => '#FF0000' }
+      }
+      %w[tintColor background tapBackground].each do |attribute|
+        code = convert_tree('type' => 'View', attribute => '@{brand}',
+                            'child' => [{ 'type' => 'Label', 'text' => 'a' }])
+        expect_no_leak(code)
+        expect(code).to include('getColor(for: data.brand)'),
+                        "#{attribute} must resolve the colour, not hand a String to a Color slot"
+      end
+    ensure
+      SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {}
+    end
+
+    it 'a Color-typed property passes through untouched' do
+      SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+        'accent' => { 'class' => 'Color', 'defaultValue' => 'Color.red' }
+      }
+      code = convert_tree('type' => 'View', 'tintColor' => '@{accent}',
+                          'child' => [{ 'type' => 'Label', 'text' => 'a' }])
+      expect(code).to include('.tint(data.accent)')
+      expect(code).not_to include('getColor(for: data.accent)')
+    ensure
+      SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {}
+    end
+
     it 'a bound clipToBounds resolves at render time' do
       expect(convert_tree('type' => 'View', 'clipToBounds' => true,
                           'child' => [{ 'type' => 'Label', 'text' => 'a' }]))

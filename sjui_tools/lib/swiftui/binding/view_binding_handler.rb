@@ -1,11 +1,19 @@
 # frozen_string_literal: true
 
 require_relative 'binding_expression'
+require_relative '../views/color_helper'
 
 module SjuiTools
   module SwiftUI
     module Binding
       class ViewBindingHandler
+        # A colour slot takes a `Color`, and a bound colour is usually a
+        # String property naming one. `ColorHelper#get_swiftui_color` is the
+        # canonical emitter for that — it knows to wrap a String property in
+        # `getColor(for:)` and to pass a `Color`-typed property straight
+        # through, which is a distinction this class had no way to make.
+        include SjuiTools::SwiftUI::Views::ColorHelper
+
         def initialize
           @binding_code = []
         end
@@ -46,8 +54,7 @@ module SjuiTools
             # Visibility is handled by VisibilityWrapper in child_renderer.rb, not here
             nil
           when 'background'
-            color_expr = resolve_color_binding_expr(binding)
-            ".background(#{color_expr})"
+            ".background(#{get_swiftui_color(value)})"
           when 'cornerRadius'
             ".cornerRadius(#{binding})"
           when 'opacity', 'alpha'
@@ -90,11 +97,23 @@ module SjuiTools
           # relative positioning, where the container's `parentPadding`
           # already owns the inset and a modifier here would double it.
 
-          # Color attributes
+          # Color attributes.
+          #
+          # These pasted the bound PROPERTY into a `Color` slot, so a layout
+          # writing `tintColor: "@{brand}"` against a String property emitted
+          # `.tint(data.brand)` — no `@{` left in the output, and the build
+          # dies on `cannot convert value of type 'String' to expected
+          # argument type 'Color'`. `jui conformance codegen-effect` cannot
+          # see it: the binding DID reach the output and the check asks
+          # whether it survived, not whether it typechecks. It took compiling
+          # the conformance host to find (plan 49, ios host stopped on
+          # `common/tintColor__binding`). The same shape as the padding and
+          # border branches above — a value context this class was not
+          # emitting for.
           when 'tintColor'
-            ".tint(#{binding})"
+            ".tint(#{get_swiftui_color(value)})"
           when 'tapBackground', 'highlightBackground'
-            ".background(#{binding})"
+            ".background(#{get_swiftui_color(value)})"
           # Border attributes are NOT handled here, for the reasons padding
           # is not (above): `BaseViewConverter#border_overlay` owns the whole
           # rule — what summons a border, what colour it falls back to, and
@@ -134,11 +153,14 @@ module SjuiTools
           nil
         end
 
-        # Resolve a binding expression to a Color value
-        # If the binding is a String property (color name), wraps with getColor(for:)
-        # If it's already a Color property, returns as-is
+        # Resolve an ALREADY-PARSED binding expression to a Color.
+        #
+        # Kept for the two subclass handlers that call it with a parsed
+        # expression rather than the raw value. It assumes the property is a
+        # String naming a colour; `get_swiftui_color` is the fuller answer
+        # (it reads the data section and passes a `Color`-typed property
+        # through untouched) and is what the cases above use.
         def resolve_color_binding_expr(binding)
-          # Use getColor(for:) to handle both String color names and Color values
           "SwiftJsonUIConfiguration.shared.getColor(for: #{binding}) ?? Color.clear"
         end
 
