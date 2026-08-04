@@ -18,7 +18,6 @@
       "width": 200,
       "height": 200,
       "background": "#DDDDDD",
-      "borderWidth": 1,
       "child": [
         {
           "type": "View",

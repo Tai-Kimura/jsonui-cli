@@ -796,20 +796,22 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     "paddingRight": {"orientation": "horizontal"},
     "paddingStart": {"orientation": "horizontal"},
     "paddingEnd": {"orientation": "horizontal"},
-    # `borderStyle` is a modifier on a border that `borderWidth` has to summon
-    # first — the 2026-08-05 border ruling: `borderWidth` alone draws,
-    # `borderColor` alone and `borderStyle` alone do not, and the SSoT backs it
-    # by declaring `"default": "solid"` on borderStyle only (a style default
-    # presupposes the thing it styles). So a lone borderStyle fixture is
-    # CORRECTLY inert, and measuring B's new ios dashed/dotted needs the pair.
+    # NO `borderStyle` companion here, deliberately. A border is drawn only
+    # when `borderWidth` AND `borderColor` are both declared — there is no
+    # default border colour — so `borderStyle` alone is CORRECTLY inert and its
+    # fixture must stay a lone declaration. The ruling lives in
+    # `shared/core/attribute_semantics.json` -> `semantics.border`
+    # (`widthAlone: no-draw`, `styleAlone: no-draw`), and its own text records
+    # that the gray-default direction was tried and withdrawn.
     #
-    # `borderColor` is deliberately absent: E is declaring a default for it and
-    # this fixture is what verifies "no colour declared" behaviour.
+    # A `{borderWidth: 1}` companion was added here on 2026-08-05 and taken
+    # back the same day: it was reasoned from `attribute_definitions.json`
+    # (only borderStyle declares `"default": "solid"`, so something must summon
+    # the border and width looked like the summoner). The default proves style
+    # is a MODIFIER; it says nothing about which key summons. **Read
+    # attribute_semantics.json before inferring semantics from a type, an enum
+    # or a default** — that is where rulings live (commit d119189).
     #
-    # Scoped to the View host, not written bare: `common.borderStyle`
-    # (solid/dashed/dotted) and `TextField.borderStyle` (none/line/bezel/
-    # roundedRect) are DIFFERENT vocabularies that happen to share a name.
-    "View.borderStyle": {"borderWidth": 1},
     # The "top-left family". `alignTop` / `alignLeft` pin the target to the
     # parent edge it is ALREADY at — the root stacks its children at the
     # top-start corner — so the attribute asked for the position the target
