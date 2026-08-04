@@ -8,11 +8,11 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "c869b6c324857239017d1a82a305bcac03daf330665ed8b03c5a36b6e7b02cc0",
+  "generatedFrom": "8b1430817d166338d709ca2730cd97f1812d2bcb941b05f4b02c59b523062513",
   "counts": {
-    "fixtures": 696,
+    "fixtures": 698,
     "assertable": 29,
-    "visual": 574,
+    "visual": 576,
     "interactive": 35,
     "control": 58,
     "skipped": 154,
@@ -10476,6 +10476,52 @@
       "deprecated": null,
       "layout": "fixtures/Segment/tintColor__static.layout.json",
       "test": "fixtures/Segment/tintColor__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Segment"
+    },
+    {
+      "id": "Segment/fontColor__static",
+      "component": "Segment",
+      "attribute": "fontColor",
+      "case": "static",
+      "class": "visual",
+      "host": "Segment",
+      "writtenKey": "fontColor",
+      "aliasOf": null,
+      "value": "#FF0000",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Segment/fontColor__static.layout.json",
+      "test": "fixtures/Segment/fontColor__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Segment"
+    },
+    {
+      "id": "Segment/selectedFontColor__static",
+      "component": "Segment",
+      "attribute": "selectedFontColor",
+      "case": "static",
+      "class": "visual",
+      "host": "Segment",
+      "writtenKey": "selectedFontColor",
+      "aliasOf": null,
+      "value": "#FF0000",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Segment/selectedFontColor__static.layout.json",
+      "test": "fixtures/Segment/selectedFontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Segment"
