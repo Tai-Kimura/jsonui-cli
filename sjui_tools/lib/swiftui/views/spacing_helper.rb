@@ -1,7 +1,11 @@
+require_relative 'margin_expression_helper'
+
 module SjuiTools
   module SwiftUI
     module Views
       module SpacingHelper
+        include MarginExpressionHelper
+
         # パディングを適用（UIKitに合わせてpaddingsに統一）
         def apply_padding
           padding = @component['paddings'] || @component['padding']
@@ -101,29 +105,37 @@ module SjuiTools
             # centered conformance frame). start/endMargin are not part of
             # the offset computation and keep their padding.
             offset_owns = @component['_zstack_margin_offset']
-            top_pad = margin_padding(top_margin, bottom_margin, offset_owns, :vertical)
-            bottom_pad = margin_padding(bottom_margin, top_margin, offset_owns, :vertical)
-            left_pad = margin_padding(left_margin, right_margin, offset_owns, :horizontal)
-            right_pad = margin_padding(right_margin, left_margin, offset_owns, :horizontal)
+            if offset_owns
+              # One shared inset per AXIS, not per edge: both edges pad by
+              # the same amount, so computing it twice would spell the same
+              # value two ways (min(a, b) and min(b, a)).
+              top_pad = bottom_pad = shared_margin_padding(top_margin, bottom_margin, :vertical)
+              left_pad = right_pad = shared_margin_padding(left_margin, right_margin, :horizontal)
+            else
+              top_pad = declared_margin(top_margin)
+              bottom_pad = declared_margin(bottom_margin)
+              left_pad = declared_margin(left_margin)
+              right_pad = declared_margin(right_margin)
+            end
 
             if top_pad
-              @modifier_bag.append(:margin, ".padding(.top, #{margin_value(top_pad)})")
+              @modifier_bag.append(:margin, ".padding(.top, #{top_pad})")
             end
             if bottom_pad
-              @modifier_bag.append(:margin, ".padding(.bottom, #{margin_value(bottom_pad)})")
+              @modifier_bag.append(:margin, ".padding(.bottom, #{bottom_pad})")
             end
 
             # RTL aware margins take precedence over left/right
             if start_margin
               @modifier_bag.append(:margin, ".padding(.leading, #{margin_value(start_margin)})")
             elsif left_pad
-              @modifier_bag.append(:margin, ".padding(.leading, #{margin_value(left_pad)})")
+              @modifier_bag.append(:margin, ".padding(.leading, #{left_pad})")
             end
 
             if end_margin
               @modifier_bag.append(:margin, ".padding(.trailing, #{margin_value(end_margin)})")
             elsif right_pad
-              @modifier_bag.append(:margin, ".padding(.trailing, #{margin_value(right_pad)})")
+              @modifier_bag.append(:margin, ".padding(.trailing, #{right_pad})")
             end
           end
 
@@ -132,30 +144,48 @@ module SjuiTools
 
         private
 
-        # How much of one edge's margin this pass still owns.
-        #
-        # Outside a ZStack, all of it. Inside one, the parent emits the child's
-        # individual margins as an .offset, so padding them here again
-        # double-applied them (measured +12pt for a declared 8). But the offset
-        # carries the DIFFERENCE of the two opposing margins and nothing more,
-        # so suppressing padding outright annihilated a symmetric pair: 10/10
-        # cancels to an offset of zero and the declaration rendered as no
-        # margin at all. Split the declaration the way it decomposes — the
-        # shared inset min(a, b) belongs to padding, the difference to the
-        # offset.
-        #
-        # Two cases keep the pre-existing "offset owns everything" behaviour:
-        # an axis the child centres, which semantics.margins disables outright
-        # (apply_zstack_positioning zeroes that component too), and a pair with
-        # no comparable common inset — a bound margin has no value at
-        # generation time, and mixed signs share no inset to lift.
-        def margin_padding(value, opposite, offset_owns, axis)
-          return value unless offset_owns
-          return nil if centered_axis?(axis)
-          return nil unless value.is_a?(Numeric) && opposite.is_a?(Numeric)
+        # A declared margin as the Swift value to pad by, nil when the
+        # attribute is absent. Outside a ZStack every declared margin is
+        # padding, bindings included.
+        def declared_margin(value)
+          value.nil? ? nil : margin_value(value)
+        end
 
-          shared = [value, opposite].min
-          shared.positive? ? shared : nil
+        # The inset one AXIS still pads for itself inside a ZStack, or nil
+        # for no padding at all.
+        #
+        # The parent emits the child's individual margins as an .offset, so
+        # padding them here again double-applied them (measured +12pt for a
+        # declared 8). But the offset carries the DIFFERENCE of the two
+        # opposing margins and nothing more, so suppressing padding outright
+        # annihilated a symmetric pair: 10/10 cancels to an offset of zero and
+        # the declaration rendered as no margin at all. Split the declaration
+        # the way it decomposes — the shared inset min(a, b) belongs to
+        # padding, the difference to the offset.
+        #
+        # A pair where either edge is a binding has no comparable inset HERE,
+        # but it does at runtime, so the comparison is emitted as Swift —
+        # max(0, min(a, b)), the same expression DynamicModifierHelper
+        # evaluates. Leaving it to the offset instead would annihilate a
+        # symmetric bound margin exactly the way the numeric one used to.
+        #
+        # An axis the child centres pads by nothing: semantics.margins
+        # disables the margin there outright (apply_zstack_positioning zeroes
+        # that component too). A single declared edge has no opposite to share
+        # with, and a numeric pair whose smaller side is <= 0 has no inset to
+        # lift.
+        def shared_margin_padding(value, opposite, axis)
+          return nil if centered_axis?(axis)
+          return nil if value.nil? || opposite.nil?
+
+          numeric = margin_number(value)
+          opposite_numeric = margin_number(opposite)
+          if numeric && opposite_numeric
+            shared = [numeric, opposite_numeric].min
+            return shared.positive? ? shared.to_s : nil
+          end
+
+          "max(0, min(#{margin_operand(value)}, #{margin_operand(opposite)}))"
         end
 
         # centerInParent disables both axes, centerHorizontal/centerVertical

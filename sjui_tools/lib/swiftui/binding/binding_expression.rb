@@ -140,6 +140,25 @@ module SjuiTools
           "#{base} ?? #{default}"
         end
 
+        # Swift expression for a NUMERIC value context — a bound margin
+        # that lands in CGFloat arithmetic, and anything else that has to
+        # be a number rather than merely be displayed. Optional properties
+        # are unwrapped with the inline default (or 0) because an Optional
+        # cannot be subtracted or passed to min(); a non-numeric inline
+        # default is not a number either, so it falls back to 0.
+        #
+        # No outer parentheses, same as swift_text_expr: '??' binds looser
+        # than arithmetic, so a caller placing this in an expression must
+        # bracket it (CGFloat(...) already does).
+        def swift_number_expr(inner, prefix: 'data')
+          parsed = parse(inner)
+          base = "#{prefix}.#{parsed.path}"
+          return base if non_optional?(parsed.path)
+
+          default = parsed.default_kind == :number ? swift_default_literal(parsed) : '0'
+          "#{base} ?? #{default}"
+        end
+
         # Swift expression for a two-way Binding<T> position. Canonically the
         # inner must be a single flat identifier; defaults/negation are
         # validator errors (binding-two-way-complex) — the path alone is

@@ -117,6 +117,101 @@ RSpec.describe SjuiTools::SwiftUI::Views::PositioningHelper do
       end
     end
 
+    # Margins are declared ["number", "binding"], so "@{gap}" is a valid
+    # value here — and subtracting it as a Ruby String raised
+    # NoMethodError, i.e. a layout written exactly as the SSoT allows
+    # crashed the generator. `.offset` takes an expression, so one is
+    # emitted rather than the declaration being refused.
+    context 'with a bound margin' do
+      it 'emits the difference as a Swift expression instead of crashing' do
+        helper = helper_class.new
+        expect {
+          helper.apply_zstack_positioning(
+            { 'id' => 'child1', 'type' => 'View', 'leftMargin' => '@{gap}' }, 0
+          )
+        }.not_to raise_error
+
+        offset_code = helper.generated_code.find { |c| c.include?('.offset') }
+        expect(offset_code).to eq('.offset(x: CGFloat(data.gap ?? 0), y: 0)')
+      end
+
+      it 'subtracts a bound edge from a numeric one' do
+        helper = helper_class.new
+        helper.apply_zstack_positioning(
+          { 'id' => 'child1', 'type' => 'View', 'topMargin' => 20, 'bottomMargin' => '@{gap}' }, 0
+        )
+
+        offset_code = helper.generated_code.find { |c| c.include?('.offset') }
+        expect(offset_code).to eq('.offset(x: 0, y: 20 - CGFloat(data.gap ?? 0))')
+      end
+
+      it 'negates a lone bound margin on the far edge' do
+        helper = helper_class.new
+        helper.apply_zstack_positioning(
+          { 'id' => 'child1', 'type' => 'View', 'rightMargin' => '@{gap}' }, 0
+        )
+
+        offset_code = helper.generated_code.find { |c| c.include?('.offset') }
+        expect(offset_code).to eq('.offset(x: -(CGFloat(data.gap ?? 0)), y: 0)')
+      end
+
+      # The same expression on both edges cancels — the pair is a pure
+      # inset, and SpacingHelper emits it as padding.
+      it 'cancels a symmetric bound margin to no offset' do
+        helper = helper_class.new
+        helper.apply_zstack_positioning(
+          { 'id' => 'child1', 'type' => 'View', 'topMargin' => '@{gap}', 'bottomMargin' => '@{gap}' }, 0
+        )
+
+        expect(helper.generated_code.select { |c| c.include?('.offset') }).to be_empty
+      end
+
+      it 'still resets a centred axis' do
+        helper = helper_class.new
+        helper.apply_zstack_positioning(
+          { 'id' => 'child1', 'type' => 'View', 'leftMargin' => '@{gap}', 'centerHorizontal' => true }, 0
+        )
+
+        expect(helper.generated_code.select { |c| c.include?('.offset') }).to be_empty
+      end
+
+      # An Optional cannot be subtracted, so the unwrap is what keeps the
+      # generated Swift compiling; a property with a data-section
+      # defaultValue is non-optional and needs none.
+      it 'drops the unwrap for a non-optional property' do
+        Thread.current[:sjui_data_definitions] = { 'gap' => { 'defaultValue' => 8 } }
+        helper = helper_class.new
+        helper.apply_zstack_positioning(
+          { 'id' => 'child1', 'type' => 'View', 'leftMargin' => '@{gap}' }, 0
+        )
+
+        offset_code = helper.generated_code.find { |c| c.include?('.offset') }
+        expect(offset_code).to eq('.offset(x: CGFloat(data.gap), y: 0)')
+      ensure
+        Thread.current[:sjui_data_definitions] = nil
+      end
+
+      it 'unwraps with the inline default when the binding carries one' do
+        helper = helper_class.new
+        helper.apply_zstack_positioning(
+          { 'id' => 'child1', 'type' => 'View', 'leftMargin' => '@{gap ?? 12}' }, 0
+        )
+
+        offset_code = helper.generated_code.find { |c| c.include?('.offset') }
+        expect(offset_code).to eq('.offset(x: CGFloat(data.gap ?? 12), y: 0)')
+      end
+
+      it 'reads a numeric string as a number, which also used to crash' do
+        helper = helper_class.new
+        helper.apply_zstack_positioning(
+          { 'id' => 'child1', 'type' => 'View', 'leftMargin' => '10' }, 0
+        )
+
+        offset_code = helper.generated_code.find { |c| c.include?('.offset') }
+        expect(offset_code).to eq('.offset(x: 10, y: 0)')
+      end
+    end
+
     context 'with relative positioning' do
       let(:child) do
         {

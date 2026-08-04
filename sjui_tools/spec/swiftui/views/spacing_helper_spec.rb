@@ -256,8 +256,38 @@ RSpec.describe SjuiTools::SwiftUI::Views::SpacingHelper do
         expect(helper.generated_code).to be_empty
       end
 
-      it 'leaves a bound margin to the offset' do
+      # A bound margin has no value HERE, but it does at runtime, so the
+      # comparison is emitted as Swift — the same expression the library
+      # evaluates. Leaving it to the offset would annihilate a symmetric
+      # bound margin the way the numeric one used to.
+      it 'compares a bound pair at runtime instead of giving up' do
         helper.component = { 'topMargin' => '@{gap}', 'bottomMargin' => '@{gap}', '_zstack_margin_offset' => true }
+        helper.apply_margins
+
+        expect(helper.generated_code).to include('.padding(.top, max(0, min(CGFloat(data.gap ?? 0), CGFloat(data.gap ?? 0))))')
+        expect(helper.generated_code).to include('.padding(.bottom, max(0, min(CGFloat(data.gap ?? 0), CGFloat(data.gap ?? 0))))')
+      end
+
+      it 'mixes a bound edge with a numeric one' do
+        helper.component = { 'leftMargin' => '@{gap}', 'rightMargin' => 12, '_zstack_margin_offset' => true }
+        helper.apply_margins
+
+        expect(helper.generated_code).to include('.padding(.leading, max(0, min(CGFloat(data.gap ?? 0), 12)))')
+        expect(helper.generated_code).to include('.padding(.trailing, max(0, min(CGFloat(data.gap ?? 0), 12)))')
+      end
+
+      it 'has nothing to share when only one edge is bound' do
+        helper.component = { 'topMargin' => '@{gap}', '_zstack_margin_offset' => true }
+        helper.apply_margins
+
+        expect(helper.generated_code).to be_empty
+      end
+
+      it 'still lifts nothing on a centred axis when the margin is bound' do
+        helper.component = {
+          'topMargin' => '@{gap}', 'bottomMargin' => '@{gap}',
+          'centerVertical' => true, '_zstack_margin_offset' => true
+        }
         helper.apply_margins
 
         expect(helper.generated_code).to be_empty

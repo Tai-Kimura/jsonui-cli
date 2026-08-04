@@ -1,7 +1,11 @@
+require_relative 'margin_expression_helper'
+
 module SjuiTools
   module SwiftUI
     module Views
       module PositioningHelper
+        include MarginExpressionHelper
+
         def apply_zstack_positioning(child, index)
           # 各子要素の位置を調整
           # SwiftJsonUIの各種margin属性を使用してoffsetを計算
@@ -33,8 +37,8 @@ module SjuiTools
           if !has_relative_positioning
             # 通常のoffset計算
             # ZStackでは左上を基準にoffsetを計算
-            offset_x = left_margin - right_margin
-            offset_y = top_margin - bottom_margin
+            offset_x = margin_difference(left_margin, right_margin)
+            offset_y = margin_difference(top_margin, bottom_margin)
             
             # SwiftJsonUIの位置属性を処理
             # centerInParent
@@ -61,13 +65,48 @@ module SjuiTools
             end
             
             # offsetを適用
-            if offset_x != 0 || offset_y != 0
+            if offset_component?(offset_x) || offset_component?(offset_y)
               add_modifier_line ".offset(x: #{offset_x}, y: #{offset_y})"
             end
           end
-          
+
           # z-indexの処理（デフォルトは描画順序）
           add_modifier_line ".zIndex(#{index})"
+        end
+
+        private
+
+        # The difference of two opposing margins — the offset a ZStack
+        # child gets from the parent (semantics.margins).
+        #
+        # Margins are declared `["number", "binding"]`, so `"@{gap}"` is a
+        # valid value here, and subtracting it as a Ruby String raised
+        # NoMethodError: a layout written exactly as the SSoT allows
+        # crashed the generator. A bound margin has no value at generation
+        # time, but `.offset` takes an expression, so one is emitted —
+        # the tool's own output format is not a reason to reject a
+        # declaration it accepts.
+        def margin_difference(value, opposite)
+          left = margin_number(value)
+          right = margin_number(opposite)
+          return left - right if left && right
+
+          minuend = margin_operand(value)
+          subtrahend = margin_operand(opposite)
+          # Same expression on both edges cancels — a symmetric bound
+          # margin is a pure inset and belongs entirely to the padding
+          # SpacingHelper emits.
+          return 0 if minuend == subtrahend
+          return minuend if subtrahend == '0'
+          return "-(#{subtrahend})" if minuend == '0'
+
+          "#{minuend} - #{subtrahend}"
+        end
+
+        # An expression cannot be compared to zero here, so it always
+        # emits; a number still only emits when it moves the child.
+        def offset_component?(offset)
+          offset.is_a?(Numeric) ? offset != 0 : true
         end
       end
     end
