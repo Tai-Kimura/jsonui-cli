@@ -484,5 +484,111 @@ class RenderTest(unittest.TestCase):
         )
 
 
+class CompletenessRatchetTest(unittest.TestCase):
+    """The Phase 3 ledger: both directions, and neither of them vacuous."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def _result(self, *fixture_ids, verdict="inert"):
+        manifest = _manifest(*[_fixture(f) for f in fixture_ids])
+        return _audit(
+            manifest,
+            _verdicts(**{p: {f: verdict for f in fixture_ids} for p in ALL}),
+        )
+
+    def test_an_unrecorded_inert_verdict_is_reported(self):
+        # The whole point: an attribute that quietly stops rendering produces
+        # a fixture identical to its control and nothing else. If this passed
+        # silently the ratchet would be decoration.
+        result = self._result("common/a__static")
+        unrecorded, stale = ia.check_ledger(result, {})
+        self.assertEqual([i.fixture for i in unrecorded], ["common/a__static"])
+        self.assertEqual(stale, [])
+
+    def test_a_recorded_verdict_is_accepted(self):
+        result = self._result("common/a__static")
+        path = ia.ledger_path(self.dir)
+        ia.update_ledger(result, path)
+        unrecorded, stale = ia.check_ledger(result, ia.load_ledger(path))
+        self.assertEqual(unrecorded, [])
+        self.assertEqual(stale, [])
+
+    def test_an_entry_the_measurement_dropped_is_stale(self):
+        recorded = self._result("common/a__static")
+        path = ia.ledger_path(self.dir)
+        ia.update_ledger(recorded, path)
+        # The attribute got fixed: the fixture now differs from its control.
+        fixed = self._result("common/a__static", verdict="active")
+        unrecorded, stale = ia.check_ledger(fixed, ia.load_ledger(path))
+        self.assertEqual(unrecorded, [])
+        self.assertEqual(stale, ["common/a__static"])
+
+    def test_a_changed_platform_set_is_not_silently_accepted(self):
+        manifest = _manifest(_fixture("common/a__static"))
+        both = _audit(
+            manifest, _verdicts(**{p: {"common/a__static": "inert"} for p in ALL})
+        )
+        path = ia.ledger_path(self.dir)
+        ia.update_ledger(both, path)
+        # Fixed on web only — the adjudication on file was about all three.
+        partial = _audit(
+            manifest,
+            _verdicts(
+                ios={"common/a__static": "inert"},
+                android={"common/a__static": "inert"},
+                web={"common/a__static": "active"},
+            ),
+        )
+        unrecorded, _stale = ia.check_ledger(partial, ia.load_ledger(path))
+        self.assertEqual([i.fixture for i in unrecorded], ["common/a__static"])
+
+    def test_an_adjudicated_reason_survives_a_re_record(self):
+        result = self._result("common/a__static")
+        path = ia.ledger_path(self.dir)
+        ia.update_ledger(result, path)
+        doc = json.loads(path.read_text())
+        doc["entries"][0]["reason"] = "adjudicated: the value equals the default"
+        path.write_text(json.dumps(doc))
+        ia.update_ledger(result, path)
+        self.assertEqual(
+            ia.load_ledger(path)["common/a__static"]["reason"],
+            "adjudicated: the value equals the default",
+        )
+
+    def test_a_reason_does_NOT_survive_a_changed_fact(self):
+        manifest = _manifest(_fixture("common/a__static"))
+        path = ia.ledger_path(self.dir)
+        ia.update_ledger(
+            _audit(manifest, _verdicts(**{p: {"common/a__static": "inert"} for p in ALL})),
+            path,
+        )
+        doc = json.loads(path.read_text())
+        doc["entries"][0]["reason"] = "adjudicated: inert on all three by design"
+        path.write_text(json.dumps(doc))
+        ia.update_ledger(
+            _audit(
+                manifest,
+                _verdicts(
+                    ios={"common/a__static": "inert"},
+                    android={"common/a__static": "inert"},
+                    web={"common/a__static": "active"},
+                ),
+            ),
+            path,
+        )
+        self.assertEqual(
+            ia.load_ledger(path)["common/a__static"]["reason"], ia.UNREVIEWED
+        )
+
+    def test_a_missing_ledger_file_reads_as_empty_not_as_a_pass(self):
+        self.assertEqual(ia.load_ledger(self.dir / "nope.json"), {})
+        result = self._result("common/a__static")
+        unrecorded, _ = ia.check_ledger(result, ia.load_ledger(self.dir / "nope.json"))
+        self.assertEqual(len(unrecorded), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

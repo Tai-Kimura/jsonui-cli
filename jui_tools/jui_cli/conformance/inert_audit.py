@@ -558,3 +558,117 @@ def render_queue(result: InertAudit) -> str:
         "entries": [item.as_dict() for item in result.items],
     }
     return json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
+
+
+# --------------------------------------------------------------------------- #
+# Completeness ratchet (Phase 3)
+# --------------------------------------------------------------------------- #
+
+#: Reason stamped on an entry nobody has adjudicated yet. Same convention as
+#: cross_effect.json — the ledger records the FACT immediately so the gate is
+#: deterministic, and the backlog is consumed by replacing the reason.
+UNREVIEWED = "unreviewed-initial-measurement"
+
+LEDGER_FILENAME = "inert_audit.json"
+
+
+def ledger_path(conformance_dir) -> Path:
+    return Path(conformance_dir) / LEDGER_FILENAME
+
+
+def _fact(item: InertItem) -> list[str]:
+    """The claim an entry makes: WHICH platforms measured an unattributed inert.
+
+    Not the whole verdict map — a fixture going active on a platform that was
+    already active is not news, but a platform entering or leaving the
+    unattributed-inert set is exactly what must return to the backlog.
+    """
+    return sorted(item.inert_on)
+
+
+def load_ledger(path) -> dict:
+    """``{fixture: entry}`` from the ledger file (empty when absent)."""
+    path = Path(path)
+    if not path.is_file():
+        return {}
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {
+        entry["fixture"]: entry
+        for entry in doc.get("entries", [])
+        if isinstance(entry, dict) and entry.get("fixture")
+    }
+
+
+def check_ledger(result: InertAudit, ledger: dict) -> tuple[list, list]:
+    """``(unrecorded, stale)`` — the two directions of the ratchet.
+
+    *unrecorded*: an unattributed inert verdict with no ledger entry, or one
+    whose recorded platform set no longer matches. Left alone, a fixture can
+    quietly stop rendering its attribute and nothing says so.
+
+    *stale*: a ledger entry the measurement no longer supports — the fixture
+    became active, or another ledger took responsibility for it. Keeping it
+    would let a fixed attribute keep an excuse on file.
+    """
+    unrecorded = []
+    for item in result.items:
+        prior = ledger.get(item.fixture)
+        if prior is None or sorted(prior.get("inertOn", [])) != _fact(item):
+            unrecorded.append(item)
+    live = {item.fixture: item for item in result.items}
+    stale = [fixture for fixture in sorted(ledger) if fixture not in live]
+    return unrecorded, stale
+
+
+def update_ledger(result: InertAudit, path) -> dict:
+    """Write the ledger, preserving the reason of every entry still measured.
+
+    An entry whose platform set changed returns to :data:`UNREVIEWED`: the
+    adjudication was written about a different fact.
+    """
+    prior = load_ledger(path)
+    entries = []
+    for item in sorted(result.items, key=lambda i: i.fixture):
+        before = prior.get(item.fixture, {})
+        holds = sorted(before.get("inertOn", [])) == _fact(item)
+        entries.append(
+            {
+                "fixture": item.fixture,
+                "component": item.component,
+                "attribute": item.attribute,
+                "inertOn": _fact(item),
+                "kind": item.kind,
+                "family": item.family,
+                "reason": before.get("reason", UNREVIEWED) if holds else UNREVIEWED,
+                "note": before.get("note", "") if holds else "",
+            }
+        )
+    doc = {
+        "schemaVersion": SCHEMA_VERSION,
+        "_comment": (
+            "Accepted UNATTRIBUTED inert verdicts — fixtures whose attribute "
+            "changed no pixels on the listed platforms and which no other "
+            "ledger has an opinion about. This is the completeness ratchet "
+            "behind `jui conformance gate --inert-complete`: an unattributed "
+            "inert verdict that is NOT here fails the gate (an attribute can "
+            "otherwise stop rendering and nothing says so), and an entry the "
+            "measurement no longer supports fails too (a fixed attribute must "
+            "not keep an excuse on file). Reason "
+            f"'{UNREVIEWED}' marks the backlog — consume it by replacing the "
+            "reason with the adjudication, or by fixing the platform and "
+            "letting the entry go stale. An entry whose platform set changes "
+            "returns to the backlog, because the adjudication was written "
+            "about a different fact."
+        ),
+        "platforms": list(result.platforms),
+        "counts": {
+            "entries": len(entries),
+            "unreviewed": sum(1 for e in entries if e["reason"] == UNREVIEWED),
+        },
+        "entries": entries,
+    }
+    Path(path).write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return doc

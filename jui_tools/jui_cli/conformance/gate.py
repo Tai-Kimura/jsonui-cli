@@ -134,6 +134,9 @@ def evaluate(
     env: str = DEFAULT_ENV,
     parity: bool = False,
     cross_effect: bool = False,
+    inert_complete: bool = False,
+    definitions_path: Path | None = None,
+    semantics_path: Path | None = None,
 ) -> GateOutcome:
     """Render REPORT.md and judge *platforms*. Raises ReportError on bad inputs."""
     conformance_dir = Path(conformance_dir)
@@ -159,6 +162,24 @@ def evaluate(
             )
             problems, notices = judge_cross_effect(
                 summary, platforms, ledger, contract=contract, env=env
+            )
+            outcome.problems.extend(problems)
+            outcome.notices.extend(notices)
+
+    if inert_complete:
+        if not visual:
+            outcome.problems.append(
+                "--inert-complete needs the visual checks: an inert verdict IS "
+                "the fixture-vs-control comparison, which --no-visual skips"
+            )
+        else:
+            problems, notices = judge_inert_complete(
+                conformance_dir,
+                platforms,
+                results_dir=results_dir,
+                definitions_path=definitions_path,
+                semantics_path=semantics_path,
+                env=env,
             )
             outcome.problems.extend(problems)
             outcome.notices.extend(notices)
@@ -311,6 +332,132 @@ def judge(
                     )
 
     return outcome
+
+
+def judge_inert_complete(
+    conformance_dir: Path,
+    platforms: Sequence[str],
+    *,
+    results_dir: Path | None = None,
+    definitions_path: Path | None = None,
+    semantics_path: Path | None = None,
+    env: str = DEFAULT_ENV,
+) -> tuple[list[str], list[str]]:
+    """Judge inert COMPLETENESS: every unattributed inert verdict is on file.
+
+    The other lanes each answer "is this specific thing still true". This one
+    answers the question none of them can: is there an inert verdict nobody
+    has an opinion about? An attribute that silently stops rendering produces
+    exactly that — a fixture identical to its control, no ledger entry, no
+    contract line, and no failure anywhere.
+
+    Both directions, like every other ratchet here: an unattributed inert
+    verdict missing from inert_audit.json fails, and an entry the measurement
+    no longer supports fails too (a fixed attribute must not keep an excuse
+    on file). Asserted under env `local` — activeness verdicts come from
+    local renders, same reasoning as cross-effect.
+    """
+    import hashlib
+    import json as _json
+
+    from . import control_diff as control_diff_mod
+    from . import cross_effect as ce_mod
+    from . import inert_audit as ia
+    from . import rules as rules_mod
+    from .report import load_platform_results
+
+    problems: list[str] = []
+    notices: list[str] = []
+    conformance_dir = Path(conformance_dir)
+    selected = list(dict.fromkeys(platforms))
+
+    manifest_path = conformance_dir / "manifest.json"
+    if not manifest_path.is_file():
+        problems.append(f"--inert-complete: manifest not found: {manifest_path}")
+        return problems, notices
+    manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+
+    results_dir = Path(results_dir) if results_dir else conformance_dir / "results"
+    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash)}
+    diffs = {}
+    for platform in selected:
+        pr = loaded.get(platform)
+        if pr is None:
+            continue
+        diffs[platform] = control_diff_mod.compare(
+            conformance_dir, platform, manifest, pr.results
+        )
+
+    definitions: dict = {}
+    if definitions_path and Path(definitions_path).is_file():
+        definitions = _json.loads(Path(definitions_path).read_text(encoding="utf-8"))
+
+    coverage_path = conformance_dir / "coverage.json"
+    coverage_doc = (
+        _json.loads(coverage_path.read_text(encoding="utf-8"))
+        if coverage_path.is_file()
+        else {}
+    )
+
+    verdicts = ce_mod.verdicts_from_diffs(diffs)
+    result = ia.audit(
+        manifest,
+        verdicts,
+        selected,
+        control_diff_ledger=control_diff_mod.load_ledger_all(
+            control_diff_mod.ledger_path(conformance_dir)
+        ),
+        cross_effect_ledger=ce_mod.load_ledger(ce_mod.ledger_path(conformance_dir)),
+        contract=ce_mod.load_contract(semantics_path) if semantics_path else {},
+        coverage=ia.coverage_gaps(coverage_doc),
+        enum_values=ce_mod.enum_fixture_values(manifest, definitions),
+    )
+    ia.triage(
+        result,
+        defaults=ia.attribute_defaults(definitions),
+        control_identical=ia.control_identical_fixtures(conformance_dir, manifest),
+        manifest=manifest,
+        fallback_values=(rules_mod.DEFAULT_STRING, rules_mod.DEFAULT_NUMBER),
+        sibling_active=ia.sibling_value_evidence(manifest, verdicts, result),
+    )
+
+    ledger_file = ia.ledger_path(conformance_dir)
+    unrecorded, stale = ia.check_ledger(result, ia.load_ledger(ledger_file))
+
+    def _report(message: str) -> None:
+        if env == DEFAULT_ENV:
+            problems.append(message)
+        else:
+            notices.append(
+                message
+                + f" — inert verdicts are asserted local-env; informational under env '{env}'"
+            )
+
+    if unrecorded:
+        shown = ", ".join(item.fixture for item in unrecorded[:5]) + (
+            " …" if len(unrecorded) > 5 else ""
+        )
+        _report(
+            f"{len(unrecorded)} inert verdict(s) no ledger accounts for "
+            f"({ia.LEDGER_FILENAME}) — an attribute that stops rendering looks "
+            f"exactly like this; adjudicate or record with `jui conformance "
+            f"inert-audit --update`: {shown}"
+        )
+    if stale:
+        shown = ", ".join(stale[:5]) + (" …" if len(stale) > 5 else "")
+        _report(
+            f"{len(stale)} stale {ia.LEDGER_FILENAME} entr(y/ies) — the fixture is "
+            f"no longer an unattributed inert; prune with `jui conformance "
+            f"inert-audit --update`: {shown}"
+        )
+    if not unrecorded and not stale:
+        notices.append(
+            f"inert completeness OK ({', '.join(selected)}): "
+            f"{sum(result.unattributed.values())} unattributed inert verdict(s), "
+            "all on the ledger"
+        )
+    return problems, notices
 
 
 def judge_cross_effect(

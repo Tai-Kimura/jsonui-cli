@@ -147,8 +147,13 @@ module RjuiTools
             classes << 'overflow-y-auto' if is_lazy && attributes['scrollEnabled'] != false
             # lineSpacing = gap between wrapped lines, itemSpacing = gap
             # within a line (the grid branch's row/column mapping).
+            # `columnSpacing` is the SSoT's own name for the column gap and
+            # was read only in the horizontal branch — a flow or grid
+            # Collection ignored it, which is every Collection that declares
+            # `columns` (plan 34: pixel-identical to its control on web while
+            # both mobile platforms honoured it).
             row_gap = attributes['lineSpacing']
-            col_gap = attributes['itemSpacing'] || attributes['spacing']
+            col_gap = attributes['columnSpacing'] || attributes['itemSpacing'] || attributes['spacing']
             if row_gap && col_gap
               classes << "gap-x-[#{col_gap}px] gap-y-[#{row_gap}px]"
             elsif row_gap
@@ -187,9 +192,9 @@ module RjuiTools
             else
               classes << "grid-cols-#{columns}"
             end
-            # lineSpacing for row gap, itemSpacing for column gap
+            # lineSpacing for row gap, columnSpacing/itemSpacing for column gap
             row_gap = attributes['lineSpacing']
-            col_gap = attributes['itemSpacing'] || attributes['spacing']
+            col_gap = attributes['columnSpacing'] || attributes['itemSpacing'] || attributes['spacing']
             if row_gap && col_gap
               classes << "gap-x-[#{col_gap}px] gap-y-[#{row_gap}px]"
             elsif row_gap

@@ -30,16 +30,6 @@
       "note": ""
     },
     {
-      "fixture": "Collection/columnSpacing__static",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
       "fixture": "Collection/defaultScrollAnchor__bottom",
       "platforms": {
         "android": "inert",
@@ -142,7 +132,7 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "codegen-innocent, library/dynamic gap (ios, android): the emitted output CHANGES when the attribute is written (plan 41 codegen lane) and the render does not move, so everything upstream of the runtime did its job. The selected-state font colour is not applied by the SwiftUI/Compose dynamic components. Family: selected-state-dynamic-gap.",
       "note": ""
     },
     {
@@ -152,7 +142,7 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "codegen-innocent, library/dynamic gap (ios): same root as IconLabel/selectedFontColor — codegen emits the selected state, the SwiftUI dynamic component does not render it. Android and web do. Family: selected-state-dynamic-gap.",
       "note": ""
     },
     {
@@ -258,16 +248,6 @@
       "note": ""
     },
     {
-      "fixture": "Label/lines__static",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
       "fixture": "Label/linkable__true",
       "platforms": {
         "android": "active",
@@ -324,7 +304,7 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "measured drift, NOT accepted (ios, android): 0 px against the control on both — pixel-exact, so this is not the dHash blindness the CI baseline lane hit on the same fixture. The Compose dynamic component derives its selection from `bind` only (literal `selectedValue` is never read), and the codegen lane agrees the spelling is unread on both platforms. Web renders it (133 px). Family: selected-state-dynamic-gap.",
       "note": ""
     },
     {
@@ -686,7 +666,7 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "codegen-innocent, library gap (ios): the placeholder font size reaches the generated Swift and SwiftUI still draws the placeholder in the field's own font — the same surface as TextField/hintFont. Family: hint-metrics.",
       "note": ""
     },
     {
@@ -706,7 +686,7 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "codegen-innocent, library gap (ios): the alias resolves and the emitted code carries the colour; SwiftUI's plain placeholder takes no colour without an attributed string. android/web apply it. Family: hint-metrics.",
       "note": ""
     },
     {
@@ -770,7 +750,7 @@
         "ios": "active",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "codegen-innocent, library/dynamic gap (android): the content inset reaches the emitted Compose and the render does not move. iOS applies it (plan 34 routed edgeInset into containerInset on the sjui side this round). Family: container-behavior.",
       "note": ""
     },
     {
@@ -933,7 +913,7 @@
         "ios": "active",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "measured drift, NOT accepted (web): the emitted markup for the target is BYTE-IDENTICAL to the control's — no `absolute bottom-0`, no positioning class at all. rjui only emits parent-relative position classes when the PARENT is in overlay mode, and a plain View parent stays a flex column, so a child's parent-relative constraint is dropped before anything can render it. Structural container-mode change, not a one-line fix; same shape as the iOS matchParent-parent defect this plan fixed in SwiftJsonUI. Family: relative-position-container-mode.",
       "note": ""
     },
     {
@@ -943,7 +923,7 @@
         "ios": "active",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "codegen-innocent, library gap (android): the sibling constraint reaches the emitted Compose and the render does not move. ios and web place it. Family: relative-position-container-mode.",
       "note": ""
     },
     {
@@ -963,7 +943,7 @@
         "ios": "active",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "measured drift, NOT accepted (web): same root as common/alignBottom__true — the parent never enters overlay mode, so the emitted target markup is byte-identical to the control's. Family: relative-position-container-mode.",
       "note": ""
     },
     {
@@ -1102,7 +1082,7 @@
         "ios": "active",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "codegen-innocent, library/dynamic gap (android): with a horizontal orientation base giving the child something to overflow, ios and web clip and Compose does not. Family: container-behavior.",
       "note": ""
     },
     {
@@ -1112,7 +1092,7 @@
         "ios": "active",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated host-shim limitation (web), NOT a converter defect: the emitted class is `disabled:bg-<name>`, and the conformance host resolves palette names through a GENERATED plain-CSS shim (`.bg-dark_red { … }`) that carries no variants — so the base utility renders and the `disabled:` variant has nothing to resolve to. A consumer whose globals.css registers the colours in `@theme` gets the variant from Tailwind itself. Re-measure if the host stops needing the shim. Family: host-shim-variant-gap.",
       "note": ""
     },
     {

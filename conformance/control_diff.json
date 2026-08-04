@@ -191,7 +191,8 @@
       "fixture": "Collection/columnSpacing__static",
       "platforms": [
         "android",
-        "ios"
+        "ios",
+        "web"
       ]
     },
     {
@@ -717,7 +718,8 @@
       "fixture": "Label/lines__static",
       "platforms": [
         "android",
-        "ios"
+        "ios",
+        "web"
       ]
     },
     {

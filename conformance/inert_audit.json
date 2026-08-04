@@ -1,0 +1,1102 @@
+{
+  "schemaVersion": 1,
+  "_comment": "Accepted UNATTRIBUTED inert verdicts — fixtures whose attribute changed no pixels on the listed platforms and which no other ledger has an opinion about. This is the completeness ratchet behind `jui conformance gate --inert-complete`: an unattributed inert verdict that is NOT here fails the gate (an attribute can otherwise stop rendering and nothing says so), and an entry the measurement no longer supports fails too (a fixed attribute must not keep an excuse on file). Reason 'unreviewed-initial-measurement' marks the backlog — consume it by replacing the reason with the adjudication, or by fixing the platform and letting the entry go stale. An entry whose platform set changes returns to the backlog, because the adjudication was written about a different fact.",
+  "platforms": [
+    "ios",
+    "android",
+    "web"
+  ],
+  "counts": {
+    "entries": 84,
+    "unreviewed": 84
+  },
+  "entries": [
+    {
+      "fixture": "Blur/blurRadius__static",
+      "component": "Blur",
+      "attribute": "blurRadius",
+      "inertOn": [
+        "android",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "type-fallback-value",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Button/buttonType__button",
+      "component": "Button",
+      "attribute": "buttonType",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Button/buttonType__reset",
+      "component": "Button",
+      "attribute": "buttonType",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Button/buttonType__submit",
+      "component": "Button",
+      "attribute": "buttonType",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Button/highlightBackground__static",
+      "component": "Button",
+      "attribute": "highlightBackground",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Button/highlightColor__alias_hilightColor",
+      "component": "Button",
+      "attribute": "highlightColor",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "alias-of-queued-canonical",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Button/highlightColor__static",
+      "component": "Button",
+      "attribute": "highlightColor",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Button/hilightColor__static",
+      "component": "Button",
+      "attribute": "hilightColor",
+      "inertOn": [
+        "android",
+        "ios"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Button/tapBackground__static",
+      "component": "Button",
+      "attribute": "tapBackground",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "CheckBox/iconColor__static",
+      "component": "CheckBox",
+      "attribute": "iconColor",
+      "inertOn": [
+        "android",
+        "ios"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "CheckBox/spacing__static",
+      "component": "CheckBox",
+      "attribute": "spacing",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "type-fallback-value",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "CheckBox/value__static",
+      "component": "CheckBox",
+      "attribute": "value",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/itemWeight__static",
+      "component": "Collection",
+      "attribute": "itemWeight",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/showsHorizontalScrollIndicator__true",
+      "component": "Collection",
+      "attribute": "showsHorizontalScrollIndicator",
+      "inertOn": [
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/showsVerticalScrollIndicator__true",
+      "component": "Collection",
+      "attribute": "showsVerticalScrollIndicator",
+      "inertOn": [
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "GradientView/locations__static",
+      "component": "GradientView",
+      "attribute": "locations",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Image/alt__static",
+      "component": "Image",
+      "attribute": "alt",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Image/errorImage__static",
+      "component": "Image",
+      "attribute": "errorImage",
+      "inertOn": [
+        "android",
+        "ios"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Image/highlightSrc__static",
+      "component": "Image",
+      "attribute": "highlightSrc",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Image/loadingImage__static",
+      "component": "Image",
+      "attribute": "loadingImage",
+      "inertOn": [
+        "android",
+        "ios"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Image/loading__eager",
+      "component": "Image",
+      "attribute": "loading",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Image/loading__lazy",
+      "component": "Image",
+      "attribute": "loading",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Label/hintColor__static",
+      "component": "Label",
+      "attribute": "hintColor",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Label/hint__static",
+      "component": "Label",
+      "attribute": "hint",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Label/placeholder__static",
+      "component": "Label",
+      "attribute": "placeholder",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Label/textTransform__capitalize",
+      "component": "Label",
+      "attribute": "textTransform",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Label/textTransform__none",
+      "component": "Label",
+      "attribute": "textTransform",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "NetworkImage/alt__static",
+      "component": "NetworkImage",
+      "attribute": "alt",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "NetworkImage/loading__eager",
+      "component": "NetworkImage",
+      "attribute": "loading",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "NetworkImage/loading__lazy",
+      "component": "NetworkImage",
+      "attribute": "loading",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Progress/hidesWhenStopped__true",
+      "component": "Progress",
+      "attribute": "hidesWhenStopped",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/group__static",
+      "component": "Radio",
+      "attribute": "group",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "type-fallback-value",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/spacing__static",
+      "component": "Radio",
+      "attribute": "spacing",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "type-fallback-value",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/value__static",
+      "component": "Radio",
+      "attribute": "value",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "ScrollView/scrollBehavior__auto",
+      "component": "ScrollView",
+      "attribute": "scrollBehavior",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "ScrollView/scrollBehavior__smooth",
+      "component": "ScrollView",
+      "attribute": "scrollBehavior",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "ScrollView/scrollMode__inner",
+      "component": "ScrollView",
+      "attribute": "scrollMode",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "ScrollView/showsHorizontalScrollIndicator__true",
+      "component": "ScrollView",
+      "attribute": "showsHorizontalScrollIndicator",
+      "inertOn": [
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "ScrollView/showsVerticalScrollIndicator__true",
+      "component": "ScrollView",
+      "attribute": "showsVerticalScrollIndicator",
+      "inertOn": [
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/colorScheme__dark",
+      "component": "SelectBox",
+      "attribute": "colorScheme",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/colorScheme__light",
+      "component": "SelectBox",
+      "attribute": "colorScheme",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/dateStringFormat__static",
+      "component": "SelectBox",
+      "attribute": "dateStringFormat",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/hintColor__static",
+      "component": "SelectBox",
+      "attribute": "hintColor",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/maximumDate__static",
+      "component": "SelectBox",
+      "attribute": "maximumDate",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minimumDate__static",
+      "component": "SelectBox",
+      "attribute": "minimumDate",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/text__static",
+      "component": "SelectBox",
+      "attribute": "text",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Slider/minValue__static",
+      "component": "Slider",
+      "attribute": "minValue",
+      "inertOn": [
+        "android",
+        "ios"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Slider/minimum__alias_minValue",
+      "component": "Slider",
+      "attribute": "minimum",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "alias-of-queued-canonical",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Slider/minimum__alias_minimumValue",
+      "component": "Slider",
+      "attribute": "minimum",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "alias-of-queued-canonical",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Slider/minimum__static",
+      "component": "Slider",
+      "attribute": "minimum",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Slider/step__static",
+      "component": "Slider",
+      "attribute": "step",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Switch/labelPosition__leading",
+      "component": "Switch",
+      "attribute": "labelPosition",
+      "inertOn": [
+        "android"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Switch/labelPosition__trailing",
+      "component": "Switch",
+      "attribute": "labelPosition",
+      "inertOn": [
+        "android"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/contentType__static",
+      "component": "TextField",
+      "attribute": "contentType",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "type-fallback-value",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/keyboardAppearance__static",
+      "component": "TextField",
+      "attribute": "keyboardAppearance",
+      "inertOn": [
+        "android"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "type-fallback-value",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/maxLength__static",
+      "component": "TextField",
+      "attribute": "maxLength",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/pattern__static",
+      "component": "TextField",
+      "attribute": "pattern",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/required__true",
+      "component": "TextField",
+      "attribute": "required",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/spellCheckingType__static",
+      "component": "TextField",
+      "attribute": "spellCheckingType",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/tintColor__static",
+      "component": "TextField",
+      "attribute": "tintColor",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/cols__static",
+      "component": "TextView",
+      "attribute": "cols",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/editable__true",
+      "component": "TextView",
+      "attribute": "editable",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/lineBreakMode__static",
+      "component": "TextView",
+      "attribute": "lineBreakMode",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "type-fallback-value",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/maxLength__static",
+      "component": "TextView",
+      "attribute": "maxLength",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/pattern__static",
+      "component": "TextView",
+      "attribute": "pattern",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/required__true",
+      "component": "TextView",
+      "attribute": "required",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/rows__static",
+      "component": "TextView",
+      "attribute": "rows",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/selectable__true",
+      "component": "TextView",
+      "attribute": "selectable",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "View/draggable__true",
+      "component": "View",
+      "attribute": "draggable",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "View/flexWrap__nowrap",
+      "component": "View",
+      "attribute": "flexWrap",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "View/highlighted__true",
+      "component": "View",
+      "attribute": "highlighted",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "View/safeAreaInsetPositions__static",
+      "component": "View",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Web/allow__static",
+      "component": "Web",
+      "attribute": "allow",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Web/sandbox__static",
+      "component": "Web",
+      "attribute": "sandbox",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/highlightBackground__static",
+      "component": "common",
+      "attribute": "highlightBackground",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/idealHeight__static",
+      "component": "common",
+      "attribute": "idealHeight",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/idealWidth__static",
+      "component": "common",
+      "attribute": "idealWidth",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/indexAbove__static",
+      "component": "common",
+      "attribute": "indexAbove",
+      "inertOn": [
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/maxHeight__static",
+      "component": "common",
+      "attribute": "maxHeight",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/maxWidth__static",
+      "component": "common",
+      "attribute": "maxWidth",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/minHeight__static",
+      "component": "common",
+      "attribute": "minHeight",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/minWidth__static",
+      "component": "common",
+      "attribute": "minWidth",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/tapBackground__static",
+      "component": "common",
+      "attribute": "tapBackground",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/tintColor__static",
+      "component": "common",
+      "attribute": "tintColor",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    }
+  ]
+}

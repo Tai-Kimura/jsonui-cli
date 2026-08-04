@@ -340,5 +340,33 @@ class EvaluateEndToEndTest(unittest.TestCase):
         self.assertTrue(outcome.ok)
 
 
+class JudgeInertCompleteTest(unittest.TestCase):
+    """Gate wiring for the completeness ratchet (plan 34 Phase 3).
+
+    The decision logic lives in inert_audit.check_ledger and is covered
+    there; what matters here is that a lane which cannot measure says so
+    instead of passing.
+    """
+
+    def test_a_missing_manifest_is_a_problem_not_a_pass(self):
+        from jui_cli.conformance.gate import judge_inert_complete
+
+        with tempfile.TemporaryDirectory() as tmp:
+            problems, notices = judge_inert_complete(Path(tmp), ["ios", "web"])
+        self.assertEqual(len(problems), 1)
+        self.assertIn("manifest not found", problems[0])
+        self.assertEqual(notices, [])
+
+    def test_no_results_reports_completeness_rather_than_silence(self):
+        from jui_cli.conformance.gate import judge_inert_complete
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "manifest.json").write_text(json.dumps({"fixtures": []}))
+            problems, notices = judge_inert_complete(root, ["ios", "web"])
+        self.assertEqual(problems, [])
+        self.assertTrue(any("inert completeness OK" in n for n in notices))
+
+
 if __name__ == "__main__":
     unittest.main()

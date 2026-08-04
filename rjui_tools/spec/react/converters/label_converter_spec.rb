@@ -58,6 +58,36 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         expect(classes).to include('line-clamp-3')
       end
 
+      # `line-clamp-N` IS a display utility (`display: -webkit-box`), and so is
+      # `flex`. Same specificity, so the winner is decided by their order in
+      # the generated stylesheet — measured `.line-clamp-2` at offset 7010 and
+      # `.flex` at 7130, so flex won and the cap did nothing. The conformance
+      # fixture rendered all five lines with `line-clamp-2` in its class list.
+      it 'does not emit a competing display utility beside the clamp' do
+        converter = create_converter({
+          'type' => 'Label',
+          'text' => 'Test',
+          'lines' => 3
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('line-clamp-3')
+        expect(classes.split).not_to include('flex')
+        expect(classes.split).not_to include('block')
+      end
+
+      it 'keeps the flex box for an unclamped label' do
+        converter = create_converter({ 'type' => 'Label', 'text' => 'Test' })
+        expect(converter.send(:build_class_name).split).to include('flex')
+      end
+
+      it 'keeps the flex box for a single-line truncate' do
+        # `truncate` sets no display of its own, so it does not collide.
+        converter = create_converter({ 'type' => 'Label', 'text' => 'Test', 'lines' => 1 })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('truncate')
+        expect(classes.split).to include('flex')
+      end
+
       it 'does not add line clamp for zero lines' do
         converter = create_converter({
           'type' => 'Label',

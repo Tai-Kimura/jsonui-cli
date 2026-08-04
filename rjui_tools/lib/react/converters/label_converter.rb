@@ -124,6 +124,17 @@ module RjuiTools
           !partial_attributes_list.nil? || !!attributes['linkable']
         end
 
+        # A static multi-line cap, which `line-clamp-N` renders through
+        # `display: -webkit-box`. `lines: 1` is `truncate` instead — that one
+        # sets no display and still wants a block box. A BOUND cap goes to the
+        # inline style, which carries its own display.
+        def line_clamped?
+          lines = attributes['lines']
+          return true if has_binding?(lines)
+
+          lines.is_a?(Numeric) && lines > 1
+        end
+
         # The className attribute, which is an EXPRESSION when the label has a
         # highlight state driven by a binding.
         #
@@ -255,7 +266,19 @@ module RjuiTools
         def build_class_name
           classes = [super]
 
-          if multi_run_text?
+          if line_clamped?
+            # `line-clamp-N` IS a display utility (`display: -webkit-box`), and
+            # the `flex` below is another one at the same specificity. Which
+            # wins is decided by their order in the generated stylesheet, not
+            # by the order they appear in the class attribute — measured:
+            # `.line-clamp-2` at offset 7010, `.flex` at 7130, so flex won and
+            # the cap did nothing. The fixture rendered all five lines with
+            # `line-clamp-2` sitting right there in the class list.
+            #
+            # So a clamped label emits NO display utility of its own and lets
+            # the clamp keep the box it needs. Same reasoning as the multi-run
+            # branch below: vertical centering means nothing once text wraps.
+          elsif multi_run_text?
             # partialText / linkable emit one node per run (text, span, text…).
             # As flex items every run becomes its own line box, so the whole
             # paragraph lays out as a single row and stops wrapping — the text

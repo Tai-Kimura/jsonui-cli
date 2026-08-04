@@ -428,7 +428,14 @@ jobs:
         # contract expectations (plan 33). Enforced under env local; under
         # this lane's env=ci findings are NOTICES by design — same
         # env-scoping as the attribute-effect ledger above.
-        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web','--env','ci','--parity','--cross-effect']))"
+        # --inert-complete: every fixture that renders identically to its
+        # control is accounted for — by a ledger, by the contract, or by an
+        # entry in inert_audit.json (plan 34 Phase 3). This is the check that
+        # sees an attribute SILENTLY dropping out: the other lanes all ask
+        # "is this specific recorded thing still true", and a newly-inert
+        # fixture nobody has an opinion about answers none of them. Same
+        # env-scoping again — asserted local, notice here.
+        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web','--env','ci','--parity','--cross-effect','--inert-complete']))"
       - name: Upload combined report
         if: always()
         uses: actions/upload-artifact@v4

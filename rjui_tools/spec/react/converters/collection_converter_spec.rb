@@ -85,6 +85,33 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
       end
     end
 
+    # `columnSpacing` is the SSoT's name for the column gap, and it was read
+    # only in the horizontal branch — so every Collection that declares
+    # `columns` (the grid branch) ignored it. Plan 34 measured the fixture
+    # pixel-identical to its control on web while both mobile platforms
+    # honoured it.
+    context 'with columnSpacing' do
+      it 'applies it as the column gap of a grid' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'],
+                                       'columns' => 2, 'columnSpacing' => 8 })
+        expect(converter.convert).to include('gap-[8px]')
+      end
+
+      it 'applies it as the in-line gap of a flow layout' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'],
+                                       'layout' => 'flow', 'columnSpacing' => 8, 'lineSpacing' => 4 })
+        expect(converter.convert).to include('gap-x-[8px] gap-y-[4px]')
+      end
+
+      it 'is read ahead of the legacy itemSpacing spelling' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'],
+                                       'columns' => 2, 'columnSpacing' => 8, 'itemSpacing' => 16 })
+        result = converter.convert
+        expect(result).to include('gap-[8px]')
+        expect(result).not_to include('gap-[16px]')
+      end
+    end
+
     context 'with items binding' do
       it 'generates map rendering with TypeScript index type' do
         converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'items' => '@{listItems}' })

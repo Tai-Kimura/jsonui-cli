@@ -141,6 +141,20 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         ),
     )
     gate.add_argument(
+        "--inert-complete",
+        action="store_true",
+        dest="inert_complete",
+        help=(
+            "Also judge inert COMPLETENESS: every fixture that renders "
+            "identically to its control must be accounted for by some ledger "
+            "or contract, or be recorded in inert_audit.json. An attribute "
+            "that silently stops rendering looks exactly like an unrecorded "
+            "inert verdict, and no other check can see it. Unrecorded "
+            "verdicts and stale entries fail (env 'local'; a notice "
+            "elsewhere). Needs the visual checks."
+        ),
+    )
+    gate.add_argument(
         "--cross-effect",
         action="store_true",
         dest="cross_effect",
@@ -431,6 +445,16 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         "--untriaged-only",
         action="store_true",
         help="List only the items no mechanical triage family closes",
+    )
+    inert.add_argument(
+        "--update",
+        action="store_true",
+        help=(
+            "Record the unattributed inert verdicts into inert_audit.json — "
+            "the ledger `gate --inert-complete` reads. Reasons already "
+            "written are kept as long as the platform set still holds; "
+            "entries the measurement no longer supports are dropped."
+        ),
     )
 
     eff = sub.add_parser(
@@ -891,8 +915,26 @@ def _cmd_inert_audit(args: argparse.Namespace) -> int:
         print()
         print(f"  queue written to {out}")
 
-    # Reporting only: the completeness ratchet is plan 34 Phase 3 and cannot
-    # be armed before the queue is empty.
+    ledger_file = ia.ledger_path(conformance_dir)
+    if getattr(args, "update", False):
+        doc = ia.update_ledger(result, ledger_file)
+        print()
+        print(
+            f"  ledger written to {ledger_file} "
+            f"({doc['counts']['entries']} entr(y/ies), "
+            f"{doc['counts']['unreviewed']} unreviewed)"
+        )
+        return 0
+
+    unrecorded, stale = ia.check_ledger(result, ia.load_ledger(ledger_file))
+    if unrecorded or stale:
+        print()
+        print(
+            f"  not on the ledger: {len(unrecorded)}, "
+            f"no longer supported: {len(stale)} — "
+            "`jui conformance inert-audit --update` records them; "
+            "`gate --inert-complete` fails on them"
+        )
     return 0
 
 
@@ -1478,6 +1520,9 @@ def _cmd_gate(args: argparse.Namespace) -> int:
             env=env,
             parity=bool(getattr(args, "parity", False)),
             cross_effect=bool(getattr(args, "cross_effect", False)),
+            inert_complete=bool(getattr(args, "inert_complete", False)),
+            definitions_path=_DEFAULT_DEFINITIONS,
+            semantics_path=_REPO_ROOT / "shared" / "core" / "attribute_semantics.json",
         )
     except ReportError as e:
         print(f"ERROR: {e}")
