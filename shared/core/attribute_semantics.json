@@ -6,13 +6,16 @@
     "border": {
       "widthAlone": "no-draw",
       "styleAlone": "no-draw",
-      "ruling": "A border is drawn only when BOTH borderWidth and borderColor are declared; borderWidth alone renders nothing on every platform — there is no default border color (2026-08-03 user ruling; supersedes the transient gray-default direction of d2c8628, unified across toolchains in 3e87b96). borderColor alone renders nothing for the same reason — the pair is what requests a border, and neither half requests one on its own (measured 2026-08-04, plan 34 re-measure: 0 px against the control on all three platforms; the android codegen does emit on the attribute's PRESENCE, which is a codegen-stage fact plan 41 tracks, not a rendered difference). borderStyle alone likewise renders nothing: it styles a border the width+color pair requests, it never summons one (2026-08-03 user ruling #2). NOTE: TextField.borderStyle is a DIFFERENT attribute (UIKit text-field chrome: roundedRect/line/bezel/none) and is outside this entry.",
+      "ruling": "A border is drawn only when BOTH borderWidth and borderColor are declared; borderWidth alone renders nothing on every platform — there is no default border color (2026-08-03 user ruling; supersedes the transient gray-default direction of d2c8628, unified across toolchains in 3e87b96). borderColor alone renders nothing for the same reason — the pair is what requests a border, and neither half requests one on its own (measured 2026-08-04, plan 34 re-measure: 0 px against the control on all three platforms; the android codegen does emit on the attribute's PRESENCE, which is a codegen-stage fact plan 41 tracks, not a rendered difference). borderStyle alone likewise renders nothing: it styles a border the width+color pair requests, it never summons one (2026-08-03 user ruling #2). NOTE: TextField.borderStyle is a DIFFERENT attribute (UIKit text-field chrome: roundedRect/line/bezel/none) and is outside this entry. The `__*_with_border` fixtures are the paired variants (borderStyle declared ALONGSIDE borderWidth + borderColor) that plan 49 added once three lanes had implemented the attribute with nothing measuring it — the lone-style fixtures above stay inert and keep testing the AND rule. `solid_with_border` is inert for a different reason from the lone ones: solid is the declared default of borderStyle, so stating it explicitly draws the same picture as omitting it (codegen_effect calls this class `value-is-default`). dashed/dotted are the two that must differ from the control. If the 3PF measurement comes back split rather than uniform, the honest record is a per-platform map like skinIdioms uses, not a forced uniform verdict: plan 34 caught ios emitting identical text for solid and dashed (C2/presence-only), and B/C/A implemented the three platforms separately in this wave.",
       "observable": {
         "common/borderWidth__static": "uniformly-inert",
         "common/borderColor__static": "uniformly-inert",
         "common/borderStyle__solid": "uniformly-inert",
         "common/borderStyle__dashed": "uniformly-inert",
-        "common/borderStyle__dotted": "uniformly-inert"
+        "common/borderStyle__dotted": "uniformly-inert",
+        "common/borderStyle__solid_with_border": "uniformly-inert",
+        "common/borderStyle__dashed_with_border": "uniformly-active",
+        "common/borderStyle__dotted_with_border": "uniformly-active"
       }
     },
     "highlight": {
