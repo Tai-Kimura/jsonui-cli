@@ -464,6 +464,36 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
         .to include('fontWeight: "bold"')
     end
 
+    # Following the union thread: `common.weight` and `Label.fontWeight` carry
+    # the same `["number", "string"]` declaration `Button.fontWeight` does.
+    it 'Label resolves a numeric weight instead of crashing or freezing' do
+      # `label_converter` kept a PRIVATE copy of the weight table that called
+      # `.downcase` on the value — a declared `fontWeight: 600` raised
+      # NoMethodError and took `sjui build` with it — and its other branch
+      # quoted the number for an initializer that knows names only.
+      expect(convert(:LabelConverter, 'type' => 'Label', 'text' => 'a', 'fontWeight' => 600))
+        .to include('fontWeight: .semibold')
+      expect {
+        convert(:LabelConverter, 'type' => 'Label', 'text' => 'a', 'fontWeight' => 600,
+                                 'partialAttributes' => [{ 'range' => [0, 1] }])
+      }.not_to raise_error
+      expect(convert(:LabelConverter, 'type' => 'Label', 'text' => 'a', 'fontWeight' => 'bold'))
+        .to include('fontWeight: "bold"')
+    end
+
+    it 'a numeric slot parses a String-declared property instead of casting it' do
+      SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+        'p' => { 'class' => 'String', 'defaultValue' => '8' }
+      }
+      # `CGFloat(data.p)` does not compile for a String, and neither does the
+      # `?? 0` the numeric emitter would append.
+      expect(convert_tree('type' => 'View', 'paddingTop' => '@{p}',
+                          'child' => [{ 'type' => 'Label', 'text' => 'a' }]))
+        .to include('.padding(.top, CGFloat(Double(data.p) ?? 0))')
+    ensure
+      SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {}
+    end
+
     it 'a bound clipToBounds resolves at render time' do
       expect(convert_tree('type' => 'View', 'clipToBounds' => true,
                           'child' => [{ 'type' => 'Label', 'text' => 'a' }]))

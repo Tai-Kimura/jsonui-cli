@@ -147,8 +147,17 @@ module SjuiTools
                             'bold'
                           end
             if weight_name
-              if has_partials
-                add_line "fontWeight: #{font_weight_to_swiftui(weight_name)},"
+              # `fontWeight` is declared `["string", "number"]`, and `600` is
+              # an example the declaration itself gives. The String
+              # initializer resolves through `Font.Weight.from(string:)`,
+              # which knows names only, so a numeric weight arrived as
+              # .regular — the same defect Button had. Resolving it here also
+              # picks the Font.Weight initializer, which is the one the
+              # partialAttributes overload needs anyway.
+              numeric_weight = weight_name.to_s.match?(/\A\d+\z/) &&
+                               numeric_weight_table[weight_name.to_i]
+              if has_partials || numeric_weight
+                add_line "fontWeight: #{numeric_weight || font_weight_to_swiftui(weight_name)},"
               else
                 add_line "fontWeight: \"#{weight_name}\","
               end
@@ -428,32 +437,6 @@ module SjuiTools
           multiple_expr = bound_multiple || multiple.to_f
           size_expr = bound_size || (@component['fontSize'] || 17).to_i
           "((#{multiple_expr} - 1) * #{size_expr})"
-        end
-
-        def font_weight_to_swiftui(weight)
-          return '.regular' unless weight
-          case weight.downcase
-          when 'ultralight'
-            '.ultraLight'
-          when 'thin'
-            '.thin'
-          when 'light'
-            '.light'
-          when 'regular'
-            '.regular'
-          when 'medium'
-            '.medium'
-          when 'semibold'
-            '.semibold'
-          when 'bold'
-            '.bold'
-          when 'heavy'
-            '.heavy'
-          when 'black'
-            '.black'
-          else
-            '.regular'
-          end
         end
 
         # Get fontColor with binding support

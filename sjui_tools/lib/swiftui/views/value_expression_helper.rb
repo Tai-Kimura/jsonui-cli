@@ -65,8 +65,31 @@ module SjuiTools
         def bound_number(value, cast: 'CGFloat')
           return nil unless bound_value?(value)
 
-          expr = Binding::BindingExpression.swift_number_expr(binding_inner(value))
+          # A dimension may be declared `["number", "string", "binding"]` —
+          # `weight`, `fontWeight` and friends — and when the data section
+          # takes the `string` half the property really is a String at run
+          # time. `CGFloat(data.w)` does not compile then, and neither does
+          # the `?? 0` the numeric emitter would append. Parse it instead.
+          #
+          # This is the same union-with-no-arbiter that split `fontWeight`
+          # between the Data generator and the View generator; the data
+          # section is the arbiter in both.
+          expr = if string_property?(value)
+                   text = Binding::BindingExpression.swift_text_expr(binding_inner(value))
+                   "Double(#{text}) ?? 0"
+                 else
+                   Binding::BindingExpression.swift_number_expr(binding_inner(value))
+                 end
           cast ? "#{cast}(#{expr})" : "(#{expr})"
+        end
+
+        # Whether the data section declares this bound property a String.
+        # Reads the same thread-local store `BindingExpression.non_optional?`
+        # and `ColorHelper` do.
+        def string_property?(value)
+          path = Binding::BindingExpression.parse(binding_inner(value)).path
+          definition = (Thread.current[:sjui_data_definitions] || {})[path]
+          !!(definition && definition['class'].to_s == 'String')
         end
 
         # A String slot: `data.title ?? ""`, bracketed.
