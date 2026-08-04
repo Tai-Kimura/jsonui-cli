@@ -54,12 +54,17 @@ module RjuiTools
           # Flexible height
           classes << 'resize-y' if attributes['flexible']
 
-          # Placeholder color using Tailwind
+          # Placeholder color. Through map_color, like every other colour:
+          # interpolating the raw value emits `placeholder-#FF0000`, which is
+          # not a Tailwind class at all (rjui-offpalette-hex-dead-tailwind-class
+          # — the policy existed, this caller predated it).
           if attributes['hintColor'] || attributes['placeholderColor']
             color = attributes['hintColor'] || attributes['placeholderColor']
-            classes << "placeholder-#{color}"
+            classes << TailwindMapper.map_color(color, 'placeholder')
           elsif attributes['hintAttributes'] && attributes['hintAttributes']['fontColor']
-            classes << "placeholder-#{attributes['hintAttributes']['fontColor']}"
+            classes << TailwindMapper.map_color(
+              attributes['hintAttributes']['fontColor'], 'placeholder'
+            )
           end
 
           # Placeholder typography, through the `placeholder:` variant so it

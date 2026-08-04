@@ -59,10 +59,15 @@ module RjuiTools
             end
           end
 
-          # Placeholder color using Tailwind
+          # Placeholder color. Through map_color, like every other colour:
+          # interpolating the raw value emits `placeholder-#FF0000`, which is
+          # not a Tailwind class at all (rjui-offpalette-hex-dead-tailwind-class
+          # — the policy existed, this caller predated it). The conformance
+          # host hid it: its generated shim defines `.placeholder-dark_red`,
+          # so the palette-named spelling rendered while the hex died.
           if attributes['hintColor'] || attributes['placeholderColor']
             color = attributes['hintColor'] || attributes['placeholderColor']
-            classes << "placeholder-#{color}"
+            classes << TailwindMapper.map_color(color, 'placeholder')
           end
 
           # Placeholder FONT. `::placeholder` is a pseudo-element, so it is

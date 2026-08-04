@@ -68,9 +68,18 @@ module RjuiTools
                           attributes['minimumTrackTintColor']
           @dynamic_styles['accentColor'] = color_style_expr(progress_tint) if progress_tint
 
-          # More specific than a plain `background`, so it wins the key.
+          # The UNFILLED track is drawn by ::-webkit-slider-runnable-track, and
+          # the native control paints straight over the element's own
+          # background — measured: a `backgroundColor` style on the input is
+          # pixel-identical to no colour at all, while the pseudo-element
+          # accepts one (and does NOT need `appearance: none`, which would
+          # take the thumb with it).
           track_tint = attributes['trackTintColor'] || attributes['maximumTrackTintColor']
-          @dynamic_styles['backgroundColor'] = color_style_expr(track_tint) if track_tint
+          if track_tint
+            classes << TailwindMapper.map_color(
+              track_tint, '[&::-webkit-slider-runnable-track]:bg'
+            )
+          end
 
           finalize_classes(classes)
         end

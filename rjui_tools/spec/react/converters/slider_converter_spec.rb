@@ -125,7 +125,7 @@ RSpec.describe RjuiTools::React::Converters::SliderConverter do
         })
         result = converter.convert
         expect(result).to include("accentColor: '#111111'")
-        expect(result).to include("backgroundColor: '#222222'")
+        expect(result).to include('[&::-webkit-slider-runnable-track]:bg-[#222222]')
       end
 
       it 'falls back to the legacy spellings when the declared ones are absent' do
@@ -133,7 +133,18 @@ RSpec.describe RjuiTools::React::Converters::SliderConverter do
           'class' => 'Slider',
           'maximumTrackTintColor' => '#555555'
         })
-        expect(converter.convert).to include("backgroundColor: '#555555'")
+        expect(converter.convert).to include('[&::-webkit-slider-runnable-track]:bg-[#555555]')
+      end
+
+      # Measured in Chromium: a background-color on the <input type="range">
+      # itself is pixel-identical to no colour at all — the native control
+      # paints the track over it. The pseudo-element accepts one, and does
+      # not need `appearance: none` (which would take the thumb with it).
+      it 'colours the track pseudo-element, not the input background' do
+        converter = create_converter({ 'class' => 'Slider', 'trackTintColor' => '#222222' })
+        result = converter.convert
+        expect(result).to include('[&::-webkit-slider-runnable-track]:bg-[#222222]')
+        expect(result).not_to include("backgroundColor: '#222222'")
       end
     end
 

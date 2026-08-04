@@ -136,13 +136,17 @@ RSpec.describe RjuiTools::React::Converters::TextViewConverter do
     end
 
     context 'with hintColor' do
-      it 'adds placeholder color via Tailwind class' do
+      # `placeholder-#999999` is not a Tailwind class — it resolves to
+      # nothing, and the conformance fixture measured pixel-identical to its
+      # control. These examples used to pin that spelling.
+      it 'adds placeholder color as an arbitrary Tailwind value' do
         converter = create_converter({
           'type' => 'TextView',
           'hintColor' => '#999999'
         })
         result = converter.send(:build_class_name)
-        expect(result).to include('placeholder-#999999')
+        expect(result).to include('placeholder-[#999999]')
+        expect(result).not_to include('placeholder-#999999')
       end
     end
 
@@ -153,7 +157,7 @@ RSpec.describe RjuiTools::React::Converters::TextViewConverter do
           'hintAttributes' => { 'fontColor' => '#888888' }
         })
         result = converter.send(:build_class_name)
-        expect(result).to include('placeholder-#888888')
+        expect(result).to include('placeholder-[#888888]')
       end
     end
 

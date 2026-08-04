@@ -223,13 +223,26 @@ RSpec.describe RjuiTools::React::Converters::TextFieldConverter do
     end
 
     context 'with hintColor' do
-      it 'adds placeholder color via Tailwind class' do
+      # `placeholder-#999999` is not a Tailwind class. The conformance host
+      # generates a `.placeholder-dark_red::placeholder` shim, so the
+      # palette-named spelling rendered and hid this — the hex spelling every
+      # consumer writes resolved to nothing.
+      it 'adds placeholder color as an arbitrary Tailwind value' do
         converter = create_converter({
           'type' => 'TextField',
           'hintColor' => '#999999'
         })
         result = converter.send(:build_class_name)
-        expect(result).to include('placeholder-#999999')
+        expect(result).to include('placeholder-[#999999]')
+        expect(result).not_to include('placeholder-#999999')
+      end
+
+      it 'reads placeholderColor as the alias of hintColor' do
+        converter = create_converter({
+          'type' => 'TextField',
+          'placeholderColor' => '#999999'
+        })
+        expect(converter.send(:build_class_name)).to include('placeholder-[#999999]')
       end
     end
 
