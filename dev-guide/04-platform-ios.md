@@ -66,8 +66,9 @@ sjui_tools/
 3. **codegen 側**: `sjui_tools/lib/swiftui/views/button_converter.rb`
    （binding 駆動なら `binding/handlers/button_binding_handler.rb` も）
 4. **Dynamic 側（#3 と厳密ミラー）**: `Classes/SwiftUI/Dynamic/Converters/ButtonConverter.swift`。
-   `component.typedAttributes(ButtonAttributes.self)` で読む。`rawData[` は
-   `scripts/check_converter_raw_reads.sh` に弾かれる
+   `component.typedAttributes(ButtonAttributes.self)` で読む。`rawData[` と、
+   binding 宣言のある属性の手書き decode スロットは
+   `scripts/check_converter_raw_reads.sh` に弾かれる（`Dynamic/` 配下全体が対象）
 5. **プリミティブ**（描画挙動が新規なら）: `Components/StateAwareButtonView.swift`
 6. **UIKit**（必要な場合のみ）: `SJUIViewCreator.swift` + `SJUIButton.swift` +
    `sjui_tools/lib/uikit/handlers/button_binding_handler.rb`

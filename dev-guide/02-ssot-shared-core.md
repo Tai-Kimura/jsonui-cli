@@ -66,9 +66,13 @@
 ### 消費側の読み方（Swift の例）
 
 Dynamic converters は `component.typedAttributes(ButtonAttributes.self)` で読む。
-生の辞書読み（`rawData[`）は `SwiftJsonUI/scripts/check_converter_raw_reads.sh` が禁止しており、
-`component.rawAttribute("key")` はレガシー許可リスト（`parent_orientation`, `action`, `colors`,
-`gradient` 等）のみ。**宣言済み属性は必ず typed で読む**。
+生の辞書読み（`rawData[`）と、宣言済み属性の `component.rawAttribute("key")` は
+`SwiftJsonUI/scripts/check_converter_raw_reads.sh` が禁止する。同じゲートが
+**binding 宣言のある属性を `DynamicComponent` の手書き decode スロットから読むこと**も禁止する
+（正準の読み手は生成された `AttrValue<T>`。手前に手書きがあるとバインド形が落ちる）。
+既存の違反は `scripts/attr_read_allowlist.json` に **`owner` / `plan` / `reason` つきで凍結宣言**
+されており、この台帳は**集合として照合される** — 行に無い違反も、直したのに残っている行も落ちる。
+**宣言済み属性は必ず typed で読む**。
 
 ## 4. SSoT を変更したときの派生物更新チェックリスト
 
