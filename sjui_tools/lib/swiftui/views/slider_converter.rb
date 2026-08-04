@@ -44,10 +44,24 @@ module SjuiTools
             add_line "Slider(value: $#{state_var}, in: #{min_expr}...#{max_expr})"
           end
           
-          # Tint color
-          if @component['tintColor']
-            color = get_swiftui_color(@component['tintColor'])
+          # Tint. `progressTintColor` is the specific spelling for the FILLED
+          # portion and wins over the generic `tintColor`, the same precedence
+          # the Progress converter takes for the same pair. Both were declared
+          # `deprecated: swiftui` on the grounds that "SwiftUI Slider uses a
+          # unified tint only"; the SSoT withdrew that on 2026-08-05 because
+          # Progress — also SwiftUI — maps the identical pair to `.tint()` and
+          # `.background()`. Unimplemented, not impossible.
+          slider_tint = @component['progressTintColor'] || @component['tintColor']
+          if slider_tint
+            color = get_swiftui_color(slider_tint)
             add_modifier_line ".accentColor(#{color})"
+          end
+
+          # trackTintColor — the unfilled track, behind the control
+          # (ProgressConverter.swift takes the same route for the same word).
+          if @component['trackTintColor']
+            color = get_swiftui_color(@component['trackTintColor'])
+            add_modifier_line ".background(#{color})"
           end
           
           # Disabled state

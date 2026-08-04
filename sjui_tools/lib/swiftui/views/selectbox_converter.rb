@@ -44,6 +44,17 @@ module SjuiTools
               add_line "fontColor: #{color},"
             end
 
+            # font — the label's family, or "bold" for the weight. Nothing
+            # read the spelling here at all, and an outer `.font()` could not
+            # have fixed it: SelectBoxView sets its own font internally, so it
+            # would win. SwiftJsonUI grew `fontName:` for this (10.14.x); the
+            # resolution rule inside it is the one TextViewWithPlaceholder and
+            # IconLabelView already use.
+            label_font = label_attrs['font'] || @component['font']
+            if label_font
+              add_line "fontName: #{bound_string(label_font) || "\"#{label_font}\""},"
+            end
+
             # hintColor — the placeholder colour (SelectBoxView >= 10.10.1;
             # .gray remains the default when unset).
             if @component['hintColor']

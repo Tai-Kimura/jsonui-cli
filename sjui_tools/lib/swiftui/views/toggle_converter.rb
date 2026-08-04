@@ -110,6 +110,15 @@ module SjuiTools
             add_modifier_line ".tint(#{color})"
           end
 
+          # trackTintColor — the track itself, distinct from the ON colour
+          # `.tint()` paints. Declared `deprecated: swiftui` ("unified tint
+          # only") until 2026-08-05; a Toggle is no more limited than a
+          # Progress, which reaches the same result through `.background()`.
+          if @component['trackTintColor']
+            color = get_swiftui_color(@component['trackTintColor'])
+            add_modifier_line ".background(#{color})"
+          end
+
           apply_thumb_tint_color
 
           # onValueChange handler - called when toggle state changes

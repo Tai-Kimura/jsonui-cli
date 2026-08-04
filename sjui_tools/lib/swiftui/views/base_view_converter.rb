@@ -484,13 +484,12 @@ module SjuiTools
           end
 
           # クリップ
-          # A binding is truthy in Ruby, so this clipped every declaration
-          # that used one regardless of the property's value. There is no
-          # conditional `.clipped()` in public SwiftUI and SwiftJsonUI's
-          # `View.if` helper is internal to the module, so the bound form is
-          # left to the runtime — which ignores it too
-          # (DynamicModifierHelper guards on `== true`). Reported to the
-          # SwiftJsonUI lane: one public `clipToBounds(_:)` closes both sides.
+          # A binding is truthy in Ruby, so this used to clip every
+          # declaration that used one regardless of the property's value. The
+          # bound form is ViewBindingHandler's now — SwiftJsonUI's
+          # `clipToBounds(_:)` takes the flag as a PARAMETER, so it resolves
+          # at render time instead of freezing at whatever the generator saw.
+          # A literal keeps emitting `.clipped()`: same view, same bytes.
           if @component['clipToBounds'] == true || @component['clipToBounds'] == 'true'
             @modifier_bag.register(:clip_to_bounds, ".clipped()")
           end
@@ -940,7 +939,7 @@ module SjuiTools
             :disabled
           when /^\.frame\(/
             :frame_size
-          when /^\.clipped\(/
+          when /^\.clipped\(/, /^\.clipToBounds\(/
             :clip_to_bounds
           when /^\.allowsHitTesting\(/
             :allows_hit_testing
@@ -969,50 +968,46 @@ module SjuiTools
         # The border overlay this component declares, or nil when it declares
         # no border.
         #
-        # **`borderWidth` is what summons a border.** A width of nothing is not
-        # a border, so `borderColor` and `borderStyle` are modifiers of
-        # something that has to already exist — writing either alone is like
-        # writing `fontColor` on a component with no text. `borderStyle`
-        # carries a `default` in the SSoT ("solid"), and a default STYLE
-        # presupposes a subject; it does not put a solid border on every view.
+        # **The rule lives in `shared/core/attribute_semantics.json`
+        # (`semantics.border`), not here, and not in the type/enum/default of
+        # `attribute_definitions.json`.** A border is drawn only when BOTH
+        # `borderWidth` and `borderColor` are declared. There is no default
+        # border colour: `borderWidth` alone draws nothing, `borderColor`
+        # alone draws nothing, and `borderStyle` alone draws nothing — style
+        # decorates a border the pair requests, it never summons one.
+        # (2026-08-03 user rulings, measured 0 px on all three platforms in
+        # plan 34's 2026-08-04 re-measure. A gray-default direction was tried
+        # in d2c8628 and withdrawn; the ruling has since reversed direction
+        # more than once whenever someone re-derived it from the declaration
+        # instead of reading the contract.)
         #
-        # This replaced an AND gate (`borderWidth && borderColor`) that
-        # dropped a declared width whenever no colour came with it. The colour
-        # then has to have a fallback: `Color.black`, matching UIKit's
-        # `CALayer.borderColor` default and the Compose lane's `Color.Black`.
-        # The three platforms taking the SAME fallback is what matters — the
-        # SSoT owes `borderColor` a `default` declaration, and when it lands
-        # this follows it.
-        #
-        # *style_source* is nil for TextField, whose `borderStyle` is a
-        # DIFFERENT attribute (UIKit chrome: roundedRect/line/bezel/none) and
-        # has its own handler.
+        # `TextField.borderStyle` is a DIFFERENT attribute (UIKit text-field
+        # chrome: roundedRect / line / bezel / none) and is outside this rule
+        # — its converter passes `style_source: nil`.
         def border_overlay(corner_default = 0, style_source: @component['borderStyle'])
           width = @component['borderWidth']
-          return nil if width.nil?
+          color = @component['borderColor']
+          return nil if width.nil? || color.nil?
 
           corner = (@component['cornerRadius'] || corner_default).to_i
-          build_border_overlay(border_color_expr, corner, border_width_operand(width), style_source)
+          build_border_overlay(border_color_expr(color), corner,
+                               border_width_operand(width), style_source)
         end
 
         # The stroke width. A bound one is an expression — `.to_i` on a
-        # binding is 0, i.e. no border at all.
+        # binding is 0, which drew a zero-width border for every bound pair.
         def border_width_operand(width)
           bound_number(width) || width.to_i
         end
 
-        # The stroke colour. Absent means the fallback above; a binding
-        # resolves through the same colour registry a literal does.
-        def border_color_expr
-          value = @component['borderColor']
-          return 'Color.black' if value.nil?
+        # The stroke colour. A binding resolves through the same colour
+        # registry a literal does; it used to be skipped here and re-emitted
+        # by the binding handler as a SECOND overlay.
+        def border_color_expr(value)
+          return get_swiftui_color(value) unless bound_value?(value)
 
-          if bound_value?(value)
-            expr = SjuiTools::SwiftUI::Binding::BindingExpression.swift_value_expr(value[2..-2])
-            "SwiftJsonUIConfiguration.shared.getColor(for: #{expr}) ?? Color.black"
-          else
-            get_swiftui_color(value)
-          end
+          expr = SjuiTools::SwiftUI::Binding::BindingExpression.swift_value_expr(value[2..-2])
+          "SwiftJsonUIConfiguration.shared.getColor(for: #{expr}) ?? Color.black"
         end
 
         def build_border_overlay(color, corner_radius, border_width, style = nil)

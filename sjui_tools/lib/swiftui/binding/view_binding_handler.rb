@@ -112,18 +112,15 @@ module SjuiTools
             # This branch only ever runs for a BINDING (the guard at the top
             # of the method returns for anything else), and it emitted an
             # unconditional `.clipped()` — every bound clipToBounds clipped,
-            # whatever the property said. `.clipped()` has no conditional
-            # form and SwiftJsonUI's `View.if` helper is internal to the
-            # module, so generated app code cannot express "clip when true"
-            # with today's public API.
+            # whatever the property said. `.clipped()` has no conditional form
+            # of its own, so this had nowhere to put the condition.
             #
-            # Emitting nothing is the same answer the dynamic runtime gives
-            # (DynamicModifierHelper: `guard component.clipToBounds == true`,
-            # and a `@{...}` decodes to nil there), so the two paths agree
-            # rather than disagreeing in opposite directions. Reported to the
-            # SwiftJsonUI lane: a public `func clipToBounds(_ enabled: Bool)`
-            # closes it on both sides at once.
-            nil
+            # SwiftJsonUI grew `View.clipToBounds(_ enabled: Bool)` for it.
+            # The flag is a PARAMETER rather than a call-site branch on
+            # purpose: a branch here would freeze at whatever the generator
+            # saw, while an argument is resolved at render time and tracks the
+            # property.
+            ".clipToBounds(#{BindingExpression.swift_bool_expr(value[2..-2])})"
           # User interaction
           when 'userInteractionEnabled', 'canTap'
             ".allowsHitTesting(#{binding})"

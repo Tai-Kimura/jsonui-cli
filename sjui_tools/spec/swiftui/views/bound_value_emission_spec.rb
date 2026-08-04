@@ -343,20 +343,20 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       expect(convert_tree(base.merge('borderStyle' => 'dotted'))).to include('lineCap: .round, dash: [2, 2 * 2]')
     end
 
-    # `borderWidth` is what summons a border; colour and style modify one that
-    # already exists. The AND gate this replaced dropped a declared width
-    # whenever no colour came with it.
-    it 'borderWidth alone draws, with the shared fallback colour' do
-      code = convert_tree('type' => 'View', 'borderWidth' => 2,
+    # The rule lives in shared/core/attribute_semantics.json (semantics.border)
+    # and nowhere else: the PAIR requests a border, neither half does on its
+    # own, and there is no default border colour. It has been re-derived from
+    # the declaration — and reversed — more than once; these examples pin it
+    # so the next derivation goes red instead of shipping.
+    it 'a border needs both borderWidth and borderColor' do
+      pair = convert_tree('type' => 'View', 'borderWidth' => 2, 'borderColor' => '#FF0000',
                           'child' => [{ 'type' => 'Label', 'text' => 'a' }])
-      expect(code).to include('.stroke(Color.black, lineWidth: 2)')
-    end
+      expect(pair).to include('.stroke(')
 
-    it 'borderColor alone and borderStyle alone summon nothing' do
-      %w[borderColor borderStyle].zip(['#FF0000', 'dashed']).each do |key, value|
-        code = convert_tree('type' => 'View', key => value,
-                            'child' => [{ 'type' => 'Label', 'text' => 'a' }])
-        expect(code).not_to include('.stroke(')
+      { 'borderWidth' => 2, 'borderColor' => '#FF0000', 'borderStyle' => 'dashed' }.each do |key, value|
+        alone = convert_tree('type' => 'View', key => value,
+                             'child' => [{ 'type' => 'Label', 'text' => 'a' }])
+        expect(alone).not_to include('.stroke('), "#{key} alone must not summon a border"
       end
     end
 
@@ -368,6 +368,40 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       # One overlay, not two: the binding handler used to register a second
       # one over the top of this, and `:border` is a multi-value bag key.
       expect(code.scan('.stroke(').length).to eq(1)
+    end
+
+    it 'a bound clipToBounds resolves at render time' do
+      expect(convert_tree('type' => 'View', 'clipToBounds' => true,
+                          'child' => [{ 'type' => 'Label', 'text' => 'a' }]))
+        .to include('.clipped()')
+
+      bound = convert_tree('type' => 'View', 'clipToBounds' => '@{shouldClip}',
+                           'child' => [{ 'type' => 'Label', 'text' => 'a' }])
+      expect_no_leak(bound)
+      # The flag is a PARAMETER, not a call-site branch: a branch would freeze
+      # at whatever the generator saw.
+      expect(bound).to include('.clipToBounds((data.shouldClip ?? false))')
+      expect(bound).not_to include('.clipped()')
+    end
+
+    it 'SelectBox font reaches the label, nested spelling first' do
+      expect(convert(:SelectBoxConverter, 'type' => 'SelectBox', 'items' => %w[A], 'font' => 'Inter'))
+        .to include('fontName: "Inter"')
+      expect(convert(:SelectBoxConverter, 'type' => 'SelectBox', 'items' => %w[A],
+                                          'font' => 'Inter', 'labelAttributes' => { 'font' => 'bold' }))
+        .to include('fontName: "bold"')
+    end
+
+    it 'hintAttributes wins over the flat placeholder spelling' do
+      code = convert(:TextFieldConverter,
+                     'type' => 'TextField', 'hint' => 'E',
+                     'hintColor' => '#111111', 'hintFontSize' => 20,
+                     'hintAttributes' => { 'fontColor' => '#999999', 'fontSize' => 12 })
+      # A bag scoped to the hint is the more specific statement — the ordinary
+      # cascade rule, and the one every other reader in the ecosystem takes.
+      expect(code).to include('"#999999"')
+      expect(code).not_to include('"#111111"')
+      expect(code).to include('hintFontSize: 12')
     end
 
     it 'a bound colour resolves through the same colour registry' do

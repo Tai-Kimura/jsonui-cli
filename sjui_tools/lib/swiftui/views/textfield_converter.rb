@@ -28,17 +28,23 @@ module SjuiTools
             # Use localized strings for snake_case hint text
             hint = get_text_with_string_manager("\"#{hint_raw}\"")
           end
-          # `hintAttributes` carries the same three placeholder spellings in a
-          # nested object; the TextView converter has read it that way since it
-          # was written. Merged onto the component so one code path below reads
-          # both forms, with the specific (nested) keys winning.
+          # `hintAttributes` carries the same placeholder spellings in a nested
+          # object. Merged onto the component so one code path below reads both
+          # forms, and **the nested keys win**: a bag scoped to the hint is a
+          # more specific statement than the flat spelling, which is the
+          # ordinary cascade rule and the one every other reader takes
+          # (rjui `label_converter`, kjui `text_component`, this tool's own
+          # Label and SelectBox converters). `||=` had it backwards — the flat
+          # spelling won whenever it was present, and the comment right above
+          # it said the opposite.
           if @component['hintAttributes'].is_a?(Hash)
             attrs = @component['hintAttributes']
             @component = @component.dup
-            @component['hintColor'] ||= attrs['fontColor'] || attrs['color']
-            @component['hintFont'] ||= attrs['font']
-            @component['hintFontSize'] ||= attrs['fontSize']
-            @component['hintLineHeightMultiple'] ||= attrs['lineHeightMultiple']
+            @component['hintColor'] = attrs['fontColor'] || attrs['color'] || @component['hintColor']
+            @component['hintFont'] = attrs['font'] || @component['hintFont']
+            @component['hintFontSize'] = attrs['fontSize'] || @component['hintFontSize']
+            @component['hintLineHeightMultiple'] =
+              attrs['lineHeightMultiple'] || @component['hintLineHeightMultiple']
           end
 
           # The styled overlay draws the placeholder itself, so the native
@@ -349,13 +355,12 @@ module SjuiTools
           end
 
           # Apply clipping
-          # A binding is truthy in Ruby, so this clipped every declaration
-          # that used one regardless of the property's value. There is no
-          # conditional `.clipped()` in public SwiftUI and SwiftJsonUI's
-          # `View.if` helper is internal to the module, so the bound form is
-          # left to the runtime — which ignores it too
-          # (DynamicModifierHelper guards on `== true`). Reported to the
-          # SwiftJsonUI lane: one public `clipToBounds(_:)` closes both sides.
+          # A binding is truthy in Ruby, so this used to clip every
+          # declaration that used one regardless of the property's value. The
+          # bound form is ViewBindingHandler's now — SwiftJsonUI's
+          # `clipToBounds(_:)` takes the flag as a PARAMETER, so it resolves
+          # at render time instead of freezing at whatever the generator saw.
+          # A literal keeps emitting `.clipped()`: same view, same bytes.
           if @component['clipToBounds'] == true || @component['clipToBounds'] == 'true'
             @modifier_bag.register(:clip_to_bounds, ".clipped()")
           end
