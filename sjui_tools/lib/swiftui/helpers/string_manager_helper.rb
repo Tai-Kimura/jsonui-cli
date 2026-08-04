@@ -164,7 +164,15 @@ module SjuiTools
           own = StringManagerHelper.current_namespaces || []
           return strings_data if own.empty?
 
-          owned = own.filter_map { |namespace| [namespace, strings_data[namespace]] if strings_data.key?(namespace) }
+          # `map` + `compact`, not `filter_map`: the latter is Ruby 2.7+ and
+          # this tool can reach a consumer's system Ruby, which is 2.6 on
+          # macOS. `sjui_tools/.ruby-version` pins 3.2.2 and `jui sync_tool`
+          # propagates that pin to the platform root, so the pin normally
+          # binds — but it binds only where rbenv is installed, and the cost
+          # of not depending on it is one method call. kjui found this the
+          # expensive way: it ships no `.ruby-version` at all, and 252 layouts
+          # failed silently under 2.6 (plan 49 lane C).
+          owned = own.map { |namespace| [namespace, strings_data[namespace]] if strings_data.key?(namespace) }.compact
           return strings_data if owned.empty?
 
           rest = strings_data.reject { |namespace, _| own.include?(namespace) }
