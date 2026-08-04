@@ -287,7 +287,7 @@ module RjuiTools
         def convert_children(indent)
           if overlay_layout? || relative_positioned_children?
             items = child_array.is_a?(Array) ? child_array : [child_array]
-            items.filter_map do |child|
+            items.map do |child|
               next nil if data_only_element?(child)
 
               # Absolute positioning. In a plain overlay every child is
@@ -301,7 +301,7 @@ module RjuiTools
               child = child.merge('_overlay' => true) if absolute
               converter = create_converter_for_child(child)
               converter.convert_node(indent + 2)
-            end.join("\n")
+            end.compact.join("\n")
           else
             super
           end

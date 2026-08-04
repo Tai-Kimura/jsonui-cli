@@ -364,10 +364,10 @@ module RjuiTools
             # switch only needs to rebind the CSS variable under a selector.
             (@modes - [base_mode]).each do |mode|
               palette = @palettes[mode] || {}
-              overrides = keys.sort.filter_map do |key|
+              overrides = keys.sort.map do |key|
                 css = css_color_value(palette[key])
                 "  --color-#{key}: #{css};" if css
-              end
+              end.compact
               next if overrides.empty?
 
               lines << ''

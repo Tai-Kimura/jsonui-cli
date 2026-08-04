@@ -1086,14 +1086,14 @@ module RjuiTools
           # ViewConverter.
           parent_orientation = attributes['orientation']
 
-          child_array.filter_map do |child|
+          child_array.map do |child|
             # Skip data-only elements (they define props, not rendered content)
             next nil if data_only_element?(child)
 
             annotated = parent_orientation ? child.merge('_parent_orientation' => parent_orientation) : child
             converter = create_converter_for_child(annotated)
             converter.convert_node(indent + 2)
-          end.join("\n")
+          end.compact.join("\n")
         end
 
         # Check if a child element is a data-only element (should not be rendered)

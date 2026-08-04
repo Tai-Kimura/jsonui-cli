@@ -645,7 +645,7 @@ module RjuiTools
           child = json['child'] || json['children']
           children = child.is_a?(Array) ? child : [child].compact
           if %w[View SafeAreaView].include?(json['type'].to_s) || json['type'].nil?
-            specs = children.filter_map { |c| relative_constraint_for(c) }
+            specs = children.map { |c| relative_constraint_for(c) }.compact
             found << { ref: relative_position_ref_name(specs.first['id']), specs: specs } if specs.any?
           end
           children.each { |c| extract_relative_containers(c, found) }
@@ -1154,14 +1154,14 @@ module RjuiTools
       def extract_data_props(data)
         return [] unless data.is_a?(Array)
 
-        data.filter_map do |item|
+        data.map do |item|
           if item.is_a?(Hash) && item['name']
             {
               name: item['name'],
               ts_type: item['tsType'] || Core::TypeConverter.to_typescript_type(item['class'])
             }
           end
-        end
+        end.compact
       end
 
     end
