@@ -1082,9 +1082,15 @@ def _cmd_codegen_effect(args: argparse.Namespace) -> int:
     for name, count in sorted(classes.items()):
         print(f"    {name}: {count}")
     print(f"  probe errors: {len(result.errors)}")
+    print("  advisories (not defects, never ledgered):")
     print(
-        f"  representative-value candidates: {len(result.advisories)} "
-        f"(not defects — the fixture discriminates nothing; never ledgered)"
+        f"    representative-value candidates: "
+        f"{len(result.advised('value-is-default'))} — the fixture discriminates nothing"
+    )
+    print(
+        f"    numeric-string divergences: "
+        f"{len(result.advised('numeric-string-divergence'))} — every validator "
+        f"warns on the input; `jui build` at zero warnings keeps it out"
     )
     print(f"  out of scope: {len(result.out_of_scope)} (recorded with a reason)")
 
@@ -1098,19 +1104,20 @@ def _cmd_codegen_effect(args: argparse.Namespace) -> int:
         if len(findings) > args.limit:
             print(f"  … {len(findings) - args.limit} more (use --json for the full queue)")
 
-    if advisories:
+    candidates = [f for f in advisories if f.finding_class == "value-is-default"]
+    if candidates:
         print()
         print(
-            f"{len(advisories)} fixture(s) whose representative value emits what "
+            f"{len(candidates)} fixture(s) whose representative value emits what "
             f"the control emits — give `rules.representative_value()` a "
             f"different one and the fixture discriminates again:"
         )
         for finding in sorted(
-            advisories, key=lambda f: (f.component, f.attribute, f.platform)
+            candidates, key=lambda f: (f.component, f.attribute, f.platform)
         )[: max(0, args.limit)]:
             print(f"  {finding.key} [{finding.platform}] = {finding.primary!r}")
-        if len(advisories) > args.limit:
-            print(f"  … {len(advisories) - args.limit} more")
+        if len(candidates) > args.limit:
+            print(f"  … {len(candidates) - args.limit} more")
 
     if result.errors:
         print()

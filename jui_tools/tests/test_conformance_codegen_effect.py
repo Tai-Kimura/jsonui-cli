@@ -319,6 +319,43 @@ class EvaluateTest(unittest.TestCase):
         c3 = [f for f in result.findings if f.check == "C3"]
         self.assertEqual([f.finding_class for f in c3], ["numeric-string-divergence"])
 
+    def test_a_numeric_string_divergence_is_advice_not_a_defect(self):
+        # 2026-08-04 ruling: a numeric string is not a number, every
+        # platform's validator warns on it, and `jui build` at zero warnings
+        # keeps it out of a build. The CRASH side still gates — see below.
+        table = _table_with(_defn(type="number"), attribute="fontSize")
+        probe = table.probes[0]
+        outputs = {
+            "web": {
+                f"__control|{probe.control_id}": _emit("a"),
+                "View|fontSize|primary": _emit("text-xl"),
+                "View|fontSize|secondary": _emit("text-3xl"),
+                "View|fontSize|numeric_string": _emit(""),
+            }
+        }
+        result = ce.evaluate(table, outputs)
+        self.assertEqual(result.defects, [])
+        self.assertEqual(len(result.advised("numeric-string-divergence")), 1)
+        self.assertTrue(result.ok)
+
+    def test_a_converter_that_raises_on_a_numeric_string_still_fails(self):
+        # The warning that makes divergence tolerable is printed by
+        # `jui build` — and a converter that raises aborts before it prints.
+        # That is the escape hatch plan 43 closed, so it stays hard.
+        table = _table_with(_defn(type="number"), attribute="fontSize")
+        probe = table.probes[0]
+        outputs = {
+            "web": {
+                f"__control|{probe.control_id}": _emit("a"),
+                "View|fontSize|primary": _emit("text-xl"),
+                "View|fontSize|secondary": _emit("text-3xl"),
+                "View|fontSize|numeric_string": {"ok": False, "error": "TypeError"},
+            }
+        }
+        result = ce.evaluate(table, outputs)
+        self.assertEqual(len(result.errors), 1)
+        self.assertFalse(result.ok)
+
     def test_matching_spellings_pass(self):
         table = _table_with(_defn(type="number"), attribute="fontSize")
         probe = table.probes[0]

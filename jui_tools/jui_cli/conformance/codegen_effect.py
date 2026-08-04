@@ -582,9 +582,15 @@ FINDING_CLASSES = {
     "presence-only",
     # C1: the bound form is dropped, or reaches the output without the value.
     "bound-dropped",
-    # C3: `10` and `"10"` emit different text. One of the two spellings is
-    # taking a path the other does not — plan 43's `"10" - 0` crash is the
-    # sharp end of it, a silent difference the quiet one.
+    # C3: `10` and `"10"` emit different text. Advisory, not a defect
+    # (2026-08-04 user ruling): a numeric string is not a number, every
+    # platform's validator says so on that exact attribute, and `jui build` at
+    # zero warnings is the project rule — so the input cannot reach a build.
+    # Measured all 68 against each platform's own validator before the ruling;
+    # every one is warned. What the lane still buys is the CRASH: a converter
+    # that raises aborts the build BEFORE the warning is printed, which is the
+    # one way invalid input escapes the rule, and is what plan 43 fixed. That
+    # side stays a hard failure through `errors`.
     "numeric-string-divergence",
     # C0 or C2 fails, but the SSoT declares a bare `string` with no enum, so
     # the probe values are the generic fallback and nothing says what the
@@ -623,10 +629,11 @@ class Finding:
         return f"{label} {self.key} [{self.platform}] — {self.detail}"
 
 
-#: Finding classes that are NOT defects and never gate. They are re-derived
+#: Finding classes that are NOT defects and never gate. Both are re-derived
 #: from the checks on every run, so they belong in the report and nowhere
-#: else — see the `value-is-default` note in FINDING_CLASSES.
-ADVISORY_CLASSES = frozenset({"value-is-default"})
+#: else — a stored entry would go stale the moment a representative value
+#: changed. See the notes on each in FINDING_CLASSES.
+ADVISORY_CLASSES = frozenset({"value-is-default", "numeric-string-divergence"})
 
 
 @dataclass
@@ -655,6 +662,10 @@ class EffectResult:
         power. Reported every run, never ledgered.
         """
         return [f for f in self.findings if f.finding_class in ADVISORY_CLASSES]
+
+    def advised(self, finding_class: str) -> list:
+        """Advisories of one class. Each has its own reason for not gating."""
+        return [f for f in self.findings if f.finding_class == finding_class]
 
     @property
     def ok(self) -> bool:
@@ -997,7 +1008,10 @@ def render_report(result: EffectResult, table: JobTable, platforms=PLATFORMS) ->
             "perCheck": per_check,
             "perClass": per_class,
             "perPlatform": per_platform,
-            "representativeValueCandidates": len(result.advisories),
+            "representativeValueCandidates": len(result.advised("value-is-default")),
+            "numericStringDivergences": len(
+                result.advised("numeric-string-divergence")
+            ),
             "probeErrors": len(result.errors),
             "outOfScope": len(result.out_of_scope),
         },
@@ -1010,7 +1024,17 @@ def render_report(result: EffectResult, table: JobTable, platforms=PLATFORMS) ->
         # a stored entry would go stale the moment the value changed and a
         # two-way ratchet would misfire on it.
         "representativeValueCandidates": [
-            entry(f, with_evidence=False) for f in ordered(result.advisories)
+            entry(f, with_evidence=False)
+            for f in ordered(result.advised("value-is-default"))
+        ],
+        # Also advisory, for a different reason: a numeric string is not a
+        # number, every platform's validator warns on it, and `jui build` at
+        # zero warnings keeps it out of a build (2026-08-04 ruling). Kept in
+        # the report because the lane's crash side is a real gate — a
+        # converter that RAISES aborts before the warning prints.
+        "numericStringDivergences": [
+            entry(f, with_evidence=False)
+            for f in ordered(result.advised("numeric-string-divergence"))
         ],
         "probeErrors": [
             {
