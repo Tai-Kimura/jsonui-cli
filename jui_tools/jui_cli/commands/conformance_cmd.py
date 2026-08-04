@@ -1064,7 +1064,8 @@ def _cmd_codegen_effect(args: argparse.Namespace) -> int:
             return 1
 
     result = ce.evaluate(table, outputs)
-    findings = [f for f in result.findings if f.check in wanted]
+    findings = [f for f in result.defects if f.check in wanted]
+    advisories = [f for f in result.advisories if f.check in wanted]
 
     print()
     print(
@@ -1073,14 +1074,18 @@ def _cmd_codegen_effect(args: argparse.Namespace) -> int:
     )
     for check in ce.CHECKS:
         ran = result.per_check.get(check, 0)
-        failed = sum(1 for f in result.findings if f.check == check)
+        failed = sum(1 for f in result.defects if f.check == check)
         print(f"  {check}: {ran} run, {failed} failing")
     classes: dict = {}
-    for finding in result.findings:
+    for finding in result.defects:
         classes[finding.finding_class] = classes.get(finding.finding_class, 0) + 1
     for name, count in sorted(classes.items()):
         print(f"    {name}: {count}")
     print(f"  probe errors: {len(result.errors)}")
+    print(
+        f"  representative-value candidates: {len(result.advisories)} "
+        f"(not defects — the fixture discriminates nothing; never ledgered)"
+    )
     print(f"  out of scope: {len(result.out_of_scope)} (recorded with a reason)")
 
     if findings:
@@ -1092,6 +1097,20 @@ def _cmd_codegen_effect(args: argparse.Namespace) -> int:
             print(f"  {finding}")
         if len(findings) > args.limit:
             print(f"  … {len(findings) - args.limit} more (use --json for the full queue)")
+
+    if advisories:
+        print()
+        print(
+            f"{len(advisories)} fixture(s) whose representative value emits what "
+            f"the control emits — give `rules.representative_value()` a "
+            f"different one and the fixture discriminates again:"
+        )
+        for finding in sorted(
+            advisories, key=lambda f: (f.component, f.attribute, f.platform)
+        )[: max(0, args.limit)]:
+            print(f"  {finding.key} [{finding.platform}] = {finding.primary!r}")
+        if len(advisories) > args.limit:
+            print(f"  … {len(advisories) - args.limit} more")
 
     if result.errors:
         print()

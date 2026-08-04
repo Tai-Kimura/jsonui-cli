@@ -188,6 +188,27 @@ class EvaluateTest(unittest.TestCase):
         )
         self.assertEqual([f.finding_class for f in result.findings], ["value-is-default"])
 
+    def test_a_value_is_default_finding_is_advice_not_a_defect(self):
+        # It says the FIXTURE discriminates nothing, so it must not gate and
+        # must never be ledgered (2026-08-04 adjudication) — a recorded entry
+        # would go stale the moment the representative value changed.
+        result = self._run(
+            _defn(type="color"),
+            {"control": "a", "primary": "a", "secondary": "b"},
+        )
+        self.assertEqual(result.defects, [])
+        self.assertEqual(len(result.advisories), 1)
+        self.assertTrue(result.ok)
+
+    def test_a_real_defect_still_fails(self):
+        result = self._run(
+            _defn(type="color"),
+            {"control": "a", "primary": "a", "secondary": "a"},
+        )
+        self.assertEqual(len(result.defects), 1)
+        self.assertEqual(result.advisories, [])
+        self.assertFalse(result.ok)
+
     def test_reacting_to_presence_but_not_to_value_is_reported_once(self):
         result = self._run(
             _defn(type="color"),
@@ -297,6 +318,22 @@ class ReportTest(unittest.TestCase):
         # the frozen kjui XML mode are not probed and never will be here.
         self.assertEqual(doc["probeModes"]["ios"], "swiftui")
         self.assertEqual(doc["probeModes"]["android"], "compose")
+
+    def test_advisories_ride_in_their_own_section(self):
+        table = ce.build_jobs({"View": {"tintColor": _defn(type="color")}})
+        result = ce.EffectResult(
+            findings=[
+                ce.Finding("View", "a", "web", "C0", "View", "x", "unread-spelling"),
+                ce.Finding("View", "b", "web", "C0", "View", "x", "value-is-default"),
+            ]
+        )
+        doc = ce.render_report(result, table)
+        self.assertEqual([f["attribute"] for f in doc["findings"]], ["a"])
+        self.assertEqual(
+            [f["attribute"] for f in doc["representativeValueCandidates"]], ["b"]
+        )
+        self.assertEqual(doc["counts"]["findings"], 1)
+        self.assertEqual(doc["counts"]["representativeValueCandidates"], 1)
 
 
 if __name__ == "__main__":

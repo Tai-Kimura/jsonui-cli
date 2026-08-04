@@ -524,7 +524,12 @@ FINDING_CLASSES = {
     "unread-spelling-unconfirmed",
     # C0 fails but C2 passes: the converter DOES read it; the representative
     # value simply emits what the control already emits. A fixture-value
-    # finding, not an implementation one.
+    # finding, not an implementation one — it says the FIXTURE discriminates
+    # nothing, and giving `representative_value()` a different value restores
+    # it. Reported separately from the defect queue and deliberately kept OUT
+    # of any ledger (2026-08-04 adjudication): it is re-derived from C2 on
+    # every run, so recording it would make every entry go stale the moment a
+    # representative value changed, and a two-way ratchet would misfire.
     "value-is-default",
     # C0 passes, C2 fails: the converter reacts to the attribute being present
     # but emits the same text for every value.
@@ -568,6 +573,12 @@ class Finding:
         return f"{label} {self.key} [{self.platform}] — {self.detail}"
 
 
+#: Finding classes that are NOT defects and never gate. They are re-derived
+#: from the checks on every run, so they belong in the report and nowhere
+#: else — see the `value-is-default` note in FINDING_CLASSES.
+ADVISORY_CLASSES = frozenset({"value-is-default"})
+
+
 @dataclass
 class EffectResult:
     probes: int = 0
@@ -581,8 +592,23 @@ class EffectResult:
     out_of_scope: list = field(default_factory=list)
 
     @property
+    def defects(self) -> list:
+        """Findings that name something to fix. What a gate would look at."""
+        return [f for f in self.findings if f.finding_class not in ADVISORY_CLASSES]
+
+    @property
+    def advisories(self) -> list:
+        """Findings that say the FIXTURE discriminates nothing, not the code.
+
+        `representative_value()` picked a value that emits what the control
+        already emits; a different value restores the fixture's discriminating
+        power. Reported every run, never ledgered.
+        """
+        return [f for f in self.findings if f.finding_class in ADVISORY_CLASSES]
+
+    @property
     def ok(self) -> bool:
-        return not self.findings and not self.errors
+        return not self.defects and not self.errors
 
 
 #: How much emitted text a finding carries. Long enough for a container's
@@ -820,10 +846,29 @@ def render_report(result: EffectResult, table: JobTable, platforms=PLATFORMS) ->
     per_platform: dict = {}
     per_check: dict = {}
     per_class: dict = {}
-    for finding in result.findings:
+    for finding in result.defects:
         per_platform[finding.platform] = per_platform.get(finding.platform, 0) + 1
         per_check[finding.check] = per_check.get(finding.check, 0) + 1
         per_class[finding.finding_class] = per_class.get(finding.finding_class, 0) + 1
+
+    def entry(f, with_evidence=True):
+        return {
+            "check": f.check,
+            "class": f.finding_class,
+            "component": f.component,
+            "attribute": f.attribute,
+            "platform": f.platform,
+            "host": f.host,
+            "detail": f.detail,
+            **({"primary": f.primary} if f.primary is not None else {}),
+            **({"secondary": f.secondary} if f.secondary is not None else {}),
+            **({"evidence": f.evidence} if with_evidence else {}),
+        }
+
+    def ordered(findings):
+        return sorted(
+            findings, key=lambda f: (f.check, f.component, f.attribute, f.platform)
+        )
 
     return {
         "schemaVersion": SCHEMA_VERSION,
@@ -845,30 +890,24 @@ def render_report(result: EffectResult, table: JobTable, platforms=PLATFORMS) ->
             "probes": result.probes,
             "checksRun": result.checks_run,
             "perCheckRun": result.per_check,
-            "findings": len(result.findings),
+            "findings": len(result.defects),
             "perCheck": per_check,
             "perClass": per_class,
             "perPlatform": per_platform,
+            "representativeValueCandidates": len(result.advisories),
             "probeErrors": len(result.errors),
             "outOfScope": len(result.out_of_scope),
         },
-        "findings": [
-            {
-                "check": f.check,
-                "class": f.finding_class,
-                "component": f.component,
-                "attribute": f.attribute,
-                "platform": f.platform,
-                "host": f.host,
-                "detail": f.detail,
-                **({"primary": f.primary} if f.primary is not None else {}),
-                **({"secondary": f.secondary} if f.secondary is not None else {}),
-                "evidence": f.evidence,
-            }
-            for f in sorted(
-                result.findings,
-                key=lambda f: (f.check, f.component, f.attribute, f.platform),
-            )
+        "findings": [entry(f) for f in ordered(result.defects)],
+        # Not defects and never ledgered: the converter reads the attribute
+        # (C2 proves it) and the representative value happens to emit what the
+        # control emits, so the FIXTURE discriminates nothing. Give
+        # `rules.representative_value()` a different value and it does again.
+        # Re-derived every run, which is exactly why it must not be recorded:
+        # a stored entry would go stale the moment the value changed and a
+        # two-way ratchet would misfire on it.
+        "representativeValueCandidates": [
+            entry(f, with_evidence=False) for f in ordered(result.advisories)
         ],
         "probeErrors": [
             {
