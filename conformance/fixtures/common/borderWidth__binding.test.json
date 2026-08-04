@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/borderWidth__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.borderWidth (binding)",
+    "description": "Conformance fixture for 'borderWidth' on View (section: common, class: visual). Value under test: \"@{boundBorderWidth}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "borderWidth__binding",
+      "description": "Conformance fixture for 'borderWidth' on View (section: common, class: visual). Value under test: \"@{boundBorderWidth}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_borderWidth__binding"
+        }
+      ]
+    }
+  ]
+}

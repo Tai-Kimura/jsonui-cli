@@ -174,11 +174,20 @@ def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> d
         **rules.split_root_attrs(extra),
         "child": root_children,
     }
-    _attach_data(layout, plan.host, base)
+    _attach_data(
+        layout,
+        plan.host,
+        base,
+        bound=rules.bound_data_entry(
+            plan.section, plan.attribute, plan.cases[0].value if plan.cases else None
+        )
+        if case.name == rules.BOUND_CASE_SUFFIX
+        else None,
+    )
     return layout
 
 
-def _attach_data(layout: dict, host: str, base: dict) -> None:
+def _attach_data(layout: dict, host: str, base: dict, bound: dict | None = None) -> None:
     """Write the layout's ``data`` section: host defaults + binding companions.
 
     Both are load-bearing for the codegen paths, which derive the generated
@@ -188,6 +197,12 @@ def _attach_data(layout: dict, host: str, base: dict) -> None:
     entries.extend(
         rules.binding_data_entries(base, {e["name"] for e in entries})
     )
+    # The bound case's own property. Only the declared bound case gets one:
+    # the value under test is otherwise always a literal, and declaring a
+    # property for the codegen differential's throwaway `@{...}` probe would
+    # move emissions this module is not supposed to move.
+    if bound is not None and bound["name"] not in {e["name"] for e in entries}:
+        entries.append(dict(bound))
     if entries:
         layout["data"] = entries
 

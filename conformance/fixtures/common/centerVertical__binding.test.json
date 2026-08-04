@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/centerVertical__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.centerVertical (binding)",
+    "description": "Conformance fixture for 'centerVertical' on View (section: common, class: visual). Value under test: \"@{boundCenterVertical}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "centerVertical__binding",
+      "description": "Conformance fixture for 'centerVertical' on View (section: common, class: visual). Value under test: \"@{boundCenterVertical}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_centerVertical__binding"
+        }
+      ]
+    }
+  ]
+}

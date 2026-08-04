@@ -590,7 +590,215 @@ EXTRA_CASES: dict[tuple[str, str], list[Any]] = {
     # `icon: square`, which this fixture does not carry).
     ("Radio", "selectedIcon"): ["checkmark.square.fill"],
     ("Radio", "selected_icon"): ["checkmark.square.fill"],
+    # A second LITERAL, so the codegen differential's "second value" is not the
+    # bound case. Both of these plan exactly one literal, and with a bound case
+    # appended the probe compared `"Beta"` against `@{boundSelectedValue}` —
+    # which kjui DOES read (it reads only bindings), so the pair looked
+    # different and the real android finding disappeared. Masking a defect is
+    # the worse direction of the same artifact that filed nine false ones.
+    # Values are drawn from each fixture's own `items`.
+    ("Radio", "selectedValue"): ["Gamma"],
+    ("SelectBox", "selectedValue"): ["One"],
 }
+
+#: Attributes that get a BOUND case: the value under test written as
+#: ``@{...}`` instead of a literal, with the data property declared.
+#:
+#: The suite had 30 bound fixtures and all of them were on attributes where
+#: binding is the FIRST-CLASS spelling — `text`, the callbacks, `visibility`.
+#: Coverage of the `bound-*` defect family (168 findings across the eight
+#: lane queues) was zero: dimensions, colours, enums and numbers, where
+#: binding is the exception, had not one bound fixture between them. So the
+#: 176 fixes A/B/C are landing in this wave were unprotected the moment they
+#: landed, and the render stage could not have caught a regression.
+#:
+#: The value is the DATA CLASS of the property, and it is load-bearing: the
+#: three codegen hosts compile these layouts, and kjui passes an unknown
+#: class straight through into Kotlin. Only `String` / `Int` / `Double` /
+#: `Boolean` (and `CollectionDataSource`) survive all three.
+#:
+#: Derived from the eight `bound-*` queues, not hand-listed. Three of the 84
+#: pairs are absent because E removed or alias-folded them (`SelectBox.text`,
+#: `Slider.minValue`, `Slider.maxValue`).
+BOUND_CASE_CLASSES: dict[tuple[str, str], str] = {
+    # --- String (36) ---
+    ('Button', 'disabledFontColor'): 'String',
+    ('Button', 'highlightColor'): 'String',
+    ('CheckBox', 'font'): 'String',
+    ('Collection', 'lazy'): 'String',
+    ('Image', 'contentMode'): 'String',
+    ('Label', 'font'): 'String',
+    ('Label', 'fontFamily'): 'String',
+    ('Label', 'highlightColor'): 'String',
+    ('Label', 'textAlign'): 'String',
+    ('NetworkImage', 'contentMode'): 'String',
+    ('Radio', 'font'): 'String',
+    ('SelectBox', 'hintColor'): 'String',
+    ('Switch', 'thumbTintColor'): 'String',
+    ('Switch', 'tint'): 'String',
+    ('TabView', 'tabBarBackground'): 'String',
+    ('TextField', 'contentType'): 'String',
+    ('TextField', 'font'): 'String',
+    ('TextField', 'fontFamily'): 'String',
+    ('TextField', 'hintColor'): 'String',
+    ('TextView', 'font'): 'String',
+    ('TextView', 'fontFamily'): 'String',
+    ('TextView', 'hintColor'): 'String',
+    ('common', 'disabledBackground'): 'String',
+    ('common', 'highlightBackground'): 'String',
+    ('common', 'tapBackground'): 'String',
+    ('IconLabel', 'text'): 'String',
+    ('Radio', 'label'): 'String',
+    ('Radio', 'text'): 'String',
+    ('CheckBox', 'label'): 'String',
+    ('CheckBox', 'text'): 'String',
+    ('common', 'tintColor'): 'String',
+    ('Label', 'hintColor'): 'String',
+    ('Radio', 'selectedValue'): 'String',
+    ('SelectBox', 'maximumDate'): 'String',
+    ('SelectBox', 'minimumDate'): 'String',
+    ('SelectBox', 'selectedValue'): 'String',
+    # --- Int (30) ---
+    ('CheckBox', 'fontSize'): 'Int',
+    ('CheckBox', 'spacing'): 'Int',
+    ('Label', 'fontSize'): 'Int',
+    ('Label', 'lineSpacing'): 'Int',
+    ('Radio', 'fontSize'): 'Int',
+    ('Radio', 'spacing'): 'Int',
+    ('Slider', 'maximum'): 'Int',
+    ('TextField', 'fontSize'): 'Int',
+    ('TextView', 'fontSize'): 'Int',
+    ('View', 'spacing'): 'Int',
+    ('common', 'cornerRadius'): 'Int',
+    ('common', 'padding'): 'Int',
+    ('common', 'weight'): 'Int',
+    ('Button', 'fontWeight'): 'Int',
+    ('Label', 'lines'): 'Int',
+    ('common', 'bottomPadding'): 'Int',
+    ('common', 'leftPadding'): 'Int',
+    ('common', 'rightPadding'): 'Int',
+    ('common', 'topPadding'): 'Int',
+    ('common', 'borderWidth'): 'Int',
+    ('common', 'maxHeight'): 'Int',
+    ('common', 'maxWidth'): 'Int',
+    ('common', 'minHeight'): 'Int',
+    ('common', 'minWidth'): 'Int',
+    ('common', 'paddingBottom'): 'Int',
+    ('common', 'paddingEnd'): 'Int',
+    ('common', 'paddingLeft'): 'Int',
+    ('common', 'paddingRight'): 'Int',
+    ('common', 'paddingStart'): 'Int',
+    ('common', 'paddingTop'): 'Int',
+    # --- Double (3) ---
+    ('Label', 'lineHeightMultiple'): 'Double',
+    ('Slider', 'minimum'): 'Double',
+    ('Label', 'minimumScaleFactor'): 'Double',
+    # --- Boolean (12) ---
+    ('Label', 'linkable'): 'Boolean',
+    ('common', 'alignBottom'): 'Boolean',
+    ('common', 'alignLeft'): 'Boolean',
+    ('common', 'alignRight'): 'Boolean',
+    ('common', 'alignTop'): 'Boolean',
+    ('common', 'centerHorizontal'): 'Boolean',
+    ('common', 'centerInParent'): 'Boolean',
+    ('common', 'centerVertical'): 'Boolean',
+    ('common', 'clipToBounds'): 'Boolean',
+    ('Radio', 'checked'): 'Boolean',
+    ('TextField', 'secure'): 'Boolean',
+    ('CheckBox', 'enabled'): 'Boolean',
+}
+
+
+#: Bound cases held back because the fixture would break the codegen HOST.
+#:
+#: A fixture that does not compile does not measure its own attribute badly —
+#: it stops that platform's ENTIRE run, because the host is one build. So the
+#: `bound-uncompilable` family (the raw `Modifier.width(@{v}.dp)` interpolation
+#: the wave opened on) and the six the web host's `tsc` rejects are declared
+#: here rather than emitted.
+#:
+#: This is a HOLD, not a decision: each entry names the defect that blocks it,
+#: and the entry comes out the moment the owning lane lands its fix — the
+#: fixture is already written. Removing one is a one-line change plus a
+#: regenerate, and `jui conformance codegen-effect` says when it is safe
+#: (nothing in `bound-uncompilable`, and the web host typechecks).
+#:
+#: Deliberately NOT solved by weakening the fixture: writing a literal where a
+#: binding belongs would make the suite green and leave the defect unmeasured,
+#: which is the failure mode this whole wave exists to remove.
+BOUND_CASES_BLOCKED: dict[tuple[str, str], str] = {
+    # --- the codegen emits source that does not compile (26) --------------- #
+    ('CheckBox', 'fontSize'): "bound-uncompilable",
+    ('CheckBox', 'spacing'): "bound-uncompilable",
+    ('Label', 'fontSize'): "bound-uncompilable",
+    ('Label', 'lines'): "bound-uncompilable",
+    ('Radio', 'fontSize'): "bound-uncompilable",
+    ('Slider', 'maximum'): "bound-uncompilable",
+    ('Slider', 'minimum'): "bound-uncompilable",
+    ('TextField', 'fontSize'): "bound-uncompilable",
+    ('TextView', 'fontSize'): "bound-uncompilable",
+    ('View', 'spacing'): "bound-uncompilable",
+    ('common', 'bottomPadding'): "bound-uncompilable",
+    ('common', 'cornerRadius'): "bound-uncompilable",
+    ('common', 'leftPadding'): "bound-uncompilable",
+    ('common', 'maxHeight'): "bound-uncompilable",
+    ('common', 'maxWidth'): "bound-uncompilable",
+    ('common', 'minHeight'): "bound-uncompilable",
+    ('common', 'minWidth'): "bound-uncompilable",
+    ('common', 'padding'): "bound-uncompilable",
+    ('common', 'paddingBottom'): "bound-uncompilable",
+    ('common', 'paddingEnd'): "bound-uncompilable",
+    ('common', 'paddingLeft'): "bound-uncompilable",
+    ('common', 'paddingRight'): "bound-uncompilable",
+    ('common', 'paddingStart'): "bound-uncompilable",
+    ('common', 'paddingTop'): "bound-uncompilable",
+    ('common', 'rightPadding'): "bound-uncompilable",
+    ('common', 'topPadding'): "bound-uncompilable",
+    # --- the web host's tsc rejects the emitted type (6) ------------------- #
+    ('Label', 'textAlign'): "web-typecheck",
+    ('Label', 'highlightColor'): "web-typecheck",
+    ('TextField', 'hintColor'): "web-typecheck",
+    ('TextView', 'hintColor'): "web-typecheck",
+    ('Image', 'contentMode'): "web-typecheck",
+    ('NetworkImage', 'contentMode'): "web-typecheck",
+}
+
+
+#: Name of the data property a bound case binds to, per attribute.
+BOUND_PROP_PREFIX = "bound"
+
+
+def bound_prop_name(attribute: str) -> str:
+    """`fontSize` -> `boundFontSize`. Prefixed so it cannot collide with a
+    companion binding (`inputText`, `pickedDate`) or a host data property."""
+    return f"{BOUND_PROP_PREFIX}{attribute[:1].upper()}{attribute[1:]}"
+
+
+#: Suffix marking the bound case in a fixture id.
+BOUND_CASE_SUFFIX = "binding"
+
+
+def bound_case_for(
+    section: str, attribute: str, assertions: tuple[dict, ...] = ()
+) -> CasePlan | None:
+    """The bound case for this attribute, or None if it does not get one.
+
+    *assertions* is carried over from the literal case on assertable
+    attributes: the bound property is seeded with the same value, so the
+    fixture must satisfy the same assertion — and it only can if the binding
+    actually resolved. Without them the test is a `waitFor` and nothing else.
+    """
+    cls = BOUND_CASE_CLASSES.get((section, attribute))
+    if cls is None or (section, attribute) in BOUND_CASES_BLOCKED:
+        return None
+    prop = bound_prop_name(attribute)
+    return CasePlan(
+        name=BOUND_CASE_SUFFIX,
+        value=f"@{{{prop}}}",
+        written_key=attribute,
+        assertions=assertions,
+    )
+
 
 #: Enum value promoted to the FRONT of an attribute's case list.
 #:
@@ -1133,6 +1341,36 @@ def split_root_attrs(extra: dict[str, Any] | None) -> dict[str, Any]:
 #: which passes unknown classes through verbatim into Kotlin source.
 BINDING_DATA_CLASSES: dict[str, str] = {}
 
+
+def _fits(value: Any, cls: str) -> bool:
+    if cls == "Boolean":
+        return isinstance(value, bool)
+    if cls == "Int":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if cls == "Double":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    return isinstance(value, str)
+
+
+def bound_data_entry(
+    section: str, attribute: str, default: Any = None
+) -> dict[str, Any] | None:
+    """The ``data`` declaration a bound case needs, or None.
+
+    Without it the generated view reads `data.<prop>` off a Data type that has
+    no such member and the codegen host does not compile — kjui and sjui derive
+    the type from this section alone.
+    """
+    cls = BOUND_CASE_CLASSES.get((section, attribute))
+    if cls is None or (section, attribute) in BOUND_CASES_BLOCKED:
+        return None
+    # Seed the property with the LITERAL case's value, so the bound fixture is
+    # asking for exactly what its literal twin asks for. A zero seed would make
+    # every bound fixture render the platform default, i.e. its control — the
+    # binding would resolve perfectly and still measure nothing.
+    seed = default if _fits(default, cls) else _BINDING_DATA_DEFAULTS.get(cls, "")
+    return {"name": bound_prop_name(attribute), "class": cls, "defaultValue": seed}
+
 #: Binding companions that feed a TWO-WAY control, mapped to the class of the
 #: change handler the generated code calls back into.
 #:
@@ -1162,7 +1400,12 @@ _BINDING_RE = re.compile(r"^@\{([A-Za-z_][A-Za-z0-9_]*)\}$")
 BINDING_DATA_DEFAULT_CLASS = "String"
 
 #: Default value per declared class, so the generated Data type compiles.
-_BINDING_DATA_DEFAULTS: dict[str, Any] = {"String": "", "Int": 0, "Boolean": False}
+_BINDING_DATA_DEFAULTS: dict[str, Any] = {
+    "String": "",
+    "Int": 0,
+    "Double": 0.0,
+    "Boolean": False,
+}
 
 
 def binding_data_entries(
@@ -1634,6 +1877,31 @@ def plan_attribute(
         cls = CLASS_VISUAL
 
     cases = _with_alias_cases(section, attribute, defn, cases)
+
+    # The bound case goes last: it must never be the representative (`primary`
+    # is the literal form, which is what the C0/C2 checks compare), and the
+    # alias probes mirror the first case, not this one.
+    bound = bound_case_for(
+        section, attribute, cases[0].assertions if cls == CLASS_ASSERTABLE else ()
+    )
+    if bound is not None:
+        # A boolean attribute plans exactly one literal case (`true`), so the
+        # codegen differential's "second value" search would have landed on the
+        # bound case and compared a literal against a `@{...}` expression. That
+        # is the C1 question, not C2, and it filed nine attributes as
+        # "emits a constant" when nothing was wrong with them. Giving the
+        # opposite literal keeps C2 comparing two literals — and a boolean
+        # fixture set that covers only one of its two values was thin anyway.
+        literals = [c for c in cases if c.alias_of is None]
+        if len(literals) == 1 and isinstance(literals[0].value, bool):
+            cases.append(
+                CasePlan(
+                    name=str(not literals[0].value).lower(),
+                    value=not literals[0].value,
+                    written_key=attribute,
+                )
+            )
+        cases.append(bound)
 
     return AttributePlan(
         section=section,

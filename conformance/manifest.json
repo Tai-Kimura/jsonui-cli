@@ -10,9 +10,9 @@
   "schemaVersion": 2,
   "generatedFrom": "ed696903716308210a918a2bfaa36f0c12f20272efd2b3691635ca54fe0e1b62",
   "counts": {
-    "fixtures": 746,
-    "assertable": 29,
-    "visual": 610,
+    "fixtures": 808,
+    "assertable": 33,
+    "visual": 668,
     "interactive": 35,
     "control": 72,
     "skipped": 151,
@@ -443,6 +443,29 @@
       "control": "__control/View__root.orientation-horizontal"
     },
     {
+      "id": "common/weight__binding",
+      "component": "common",
+      "attribute": "weight",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "weight",
+      "aliasOf": null,
+      "value": "@{boundWeight}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/weight__binding.layout.json",
+      "test": "fixtures/common/weight__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__root.orientation-horizontal"
+    },
+    {
       "id": "common/background__static",
       "component": "common",
       "attribute": "background",
@@ -489,6 +512,29 @@
       "control": "__control/Button"
     },
     {
+      "id": "common/tapBackground__binding",
+      "component": "common",
+      "attribute": "tapBackground",
+      "case": "binding",
+      "class": "visual",
+      "host": "Button",
+      "writtenKey": "tapBackground",
+      "aliasOf": null,
+      "value": "@{boundTapBackground}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/tapBackground__binding.layout.json",
+      "test": "fixtures/common/tapBackground__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Button"
+    },
+    {
       "id": "common/highlightBackground__static",
       "component": "common",
       "attribute": "highlightBackground",
@@ -512,6 +558,29 @@
       "control": "__control/Button"
     },
     {
+      "id": "common/highlightBackground__binding",
+      "component": "common",
+      "attribute": "highlightBackground",
+      "case": "binding",
+      "class": "visual",
+      "host": "Button",
+      "writtenKey": "highlightBackground",
+      "aliasOf": null,
+      "value": "@{boundHighlightBackground}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/highlightBackground__binding.layout.json",
+      "test": "fixtures/common/highlightBackground__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Button"
+    },
+    {
       "id": "common/disabledBackground__static",
       "component": "common",
       "attribute": "disabledBackground",
@@ -530,6 +599,29 @@
       "deprecated": null,
       "layout": "fixtures/common/disabledBackground__static.layout.json",
       "test": "fixtures/common/disabledBackground__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Button__enabled-False"
+    },
+    {
+      "id": "common/disabledBackground__binding",
+      "component": "common",
+      "attribute": "disabledBackground",
+      "case": "binding",
+      "class": "visual",
+      "host": "Button",
+      "writtenKey": "disabledBackground",
+      "aliasOf": null,
+      "value": "@{boundDisabledBackground}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/disabledBackground__binding.layout.json",
+      "test": "fixtures/common/disabledBackground__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Button__enabled-False"
@@ -597,6 +689,29 @@
       "deprecated": null,
       "layout": "fixtures/common/borderWidth__static.layout.json",
       "test": "fixtures/common/borderWidth__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
+      "id": "common/borderWidth__binding",
+      "component": "common",
+      "attribute": "borderWidth",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "borderWidth",
+      "aliasOf": null,
+      "value": "@{boundBorderWidth}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/borderWidth__binding.layout.json",
+      "test": "fixtures/common/borderWidth__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/View"
@@ -1848,6 +1963,52 @@
       "control": "__control/View"
     },
     {
+      "id": "common/centerInParent__false",
+      "component": "common",
+      "attribute": "centerInParent",
+      "case": "false",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "centerInParent",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/centerInParent__false.layout.json",
+      "test": "fixtures/common/centerInParent__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
+      "id": "common/centerInParent__binding",
+      "component": "common",
+      "attribute": "centerInParent",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "centerInParent",
+      "aliasOf": null,
+      "value": "@{boundCenterInParent}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/centerInParent__binding.layout.json",
+      "test": "fixtures/common/centerInParent__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
       "id": "common/centerVertical__true",
       "component": "common",
       "attribute": "centerVertical",
@@ -1866,6 +2027,52 @@
       "deprecated": null,
       "layout": "fixtures/common/centerVertical__true.layout.json",
       "test": "fixtures/common/centerVertical__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
+      "id": "common/centerVertical__false",
+      "component": "common",
+      "attribute": "centerVertical",
+      "case": "false",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "centerVertical",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/centerVertical__false.layout.json",
+      "test": "fixtures/common/centerVertical__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
+      "id": "common/centerVertical__binding",
+      "component": "common",
+      "attribute": "centerVertical",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "centerVertical",
+      "aliasOf": null,
+      "value": "@{boundCenterVertical}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/centerVertical__binding.layout.json",
+      "test": "fixtures/common/centerVertical__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/View"
@@ -1894,6 +2101,52 @@
       "control": "__control/View"
     },
     {
+      "id": "common/centerHorizontal__false",
+      "component": "common",
+      "attribute": "centerHorizontal",
+      "case": "false",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "centerHorizontal",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/centerHorizontal__false.layout.json",
+      "test": "fixtures/common/centerHorizontal__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
+      "id": "common/centerHorizontal__binding",
+      "component": "common",
+      "attribute": "centerHorizontal",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "centerHorizontal",
+      "aliasOf": null,
+      "value": "@{boundCenterHorizontal}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/centerHorizontal__binding.layout.json",
+      "test": "fixtures/common/centerHorizontal__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
       "id": "common/alignTop__true",
       "component": "common",
       "attribute": "alignTop",
@@ -1912,6 +2165,52 @@
       "deprecated": null,
       "layout": "fixtures/common/alignTop__true.layout.json",
       "test": "fixtures/common/alignTop__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__root.gravity-bottom"
+    },
+    {
+      "id": "common/alignTop__false",
+      "component": "common",
+      "attribute": "alignTop",
+      "case": "false",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "alignTop",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/alignTop__false.layout.json",
+      "test": "fixtures/common/alignTop__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__root.gravity-bottom"
+    },
+    {
+      "id": "common/alignTop__binding",
+      "component": "common",
+      "attribute": "alignTop",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "alignTop",
+      "aliasOf": null,
+      "value": "@{boundAlignTop}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/alignTop__binding.layout.json",
+      "test": "fixtures/common/alignTop__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/View__root.gravity-bottom"
@@ -1940,6 +2239,52 @@
       "control": "__control/View"
     },
     {
+      "id": "common/alignBottom__false",
+      "component": "common",
+      "attribute": "alignBottom",
+      "case": "false",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "alignBottom",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/alignBottom__false.layout.json",
+      "test": "fixtures/common/alignBottom__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
+      "id": "common/alignBottom__binding",
+      "component": "common",
+      "attribute": "alignBottom",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "alignBottom",
+      "aliasOf": null,
+      "value": "@{boundAlignBottom}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/alignBottom__binding.layout.json",
+      "test": "fixtures/common/alignBottom__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
       "id": "common/alignLeft__true",
       "component": "common",
       "attribute": "alignLeft",
@@ -1963,6 +2308,52 @@
       "control": "__control/View__root.gravity-right"
     },
     {
+      "id": "common/alignLeft__false",
+      "component": "common",
+      "attribute": "alignLeft",
+      "case": "false",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "alignLeft",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/alignLeft__false.layout.json",
+      "test": "fixtures/common/alignLeft__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__root.gravity-right"
+    },
+    {
+      "id": "common/alignLeft__binding",
+      "component": "common",
+      "attribute": "alignLeft",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "alignLeft",
+      "aliasOf": null,
+      "value": "@{boundAlignLeft}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/alignLeft__binding.layout.json",
+      "test": "fixtures/common/alignLeft__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__root.gravity-right"
+    },
+    {
       "id": "common/alignRight__true",
       "component": "common",
       "attribute": "alignRight",
@@ -1981,6 +2372,52 @@
       "deprecated": null,
       "layout": "fixtures/common/alignRight__true.layout.json",
       "test": "fixtures/common/alignRight__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
+      "id": "common/alignRight__false",
+      "component": "common",
+      "attribute": "alignRight",
+      "case": "false",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "alignRight",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/alignRight__false.layout.json",
+      "test": "fixtures/common/alignRight__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
+      "id": "common/alignRight__binding",
+      "component": "common",
+      "attribute": "alignRight",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "alignRight",
+      "aliasOf": null,
+      "value": "@{boundAlignRight}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/alignRight__binding.layout.json",
+      "test": "fixtures/common/alignRight__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/View"
@@ -2283,6 +2720,52 @@
       "control": "__control/View__orientation-horizontal"
     },
     {
+      "id": "common/clipToBounds__false",
+      "component": "common",
+      "attribute": "clipToBounds",
+      "case": "false",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "clipToBounds",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/clipToBounds__false.layout.json",
+      "test": "fixtures/common/clipToBounds__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__orientation-horizontal"
+    },
+    {
+      "id": "common/clipToBounds__binding",
+      "component": "common",
+      "attribute": "clipToBounds",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "clipToBounds",
+      "aliasOf": null,
+      "value": "@{boundClipToBounds}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/clipToBounds__binding.layout.json",
+      "test": "fixtures/common/clipToBounds__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__orientation-horizontal"
+    },
+    {
       "id": "common/onclick__callback_fire",
       "component": "common",
       "attribute": "onclick",
@@ -2456,6 +2939,29 @@
       "deprecated": null,
       "layout": "fixtures/common/tintColor__static.layout.json",
       "test": "fixtures/common/tintColor__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View"
+    },
+    {
+      "id": "common/tintColor__binding",
+      "component": "common",
+      "attribute": "tintColor",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "tintColor",
+      "aliasOf": null,
+      "value": "@{boundTintColor}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/tintColor__binding.layout.json",
+      "test": "fixtures/common/tintColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/View"
@@ -3772,6 +4278,29 @@
       "control": "__control/Label"
     },
     {
+      "id": "Label/font__binding",
+      "component": "Label",
+      "attribute": "font",
+      "case": "binding",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "font",
+      "aliasOf": null,
+      "value": "@{boundFont}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/font__binding.layout.json",
+      "test": "fixtures/Label/font__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Label"
+    },
+    {
       "id": "Label/fontSize__static",
       "component": "Label",
       "attribute": "fontSize",
@@ -3836,6 +4365,29 @@
       "deprecated": null,
       "layout": "fixtures/Label/fontFamily__static.layout.json",
       "test": "fixtures/Label/fontFamily__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Label"
+    },
+    {
+      "id": "Label/fontFamily__binding",
+      "component": "Label",
+      "attribute": "fontFamily",
+      "case": "binding",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "fontFamily",
+      "aliasOf": null,
+      "value": "@{boundFontFamily}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/fontFamily__binding.layout.json",
+      "test": "fixtures/Label/fontFamily__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Label"
@@ -4291,6 +4843,29 @@
       "control": "__control/Label"
     },
     {
+      "id": "Label/lineHeightMultiple__binding",
+      "component": "Label",
+      "attribute": "lineHeightMultiple",
+      "case": "binding",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "lineHeightMultiple",
+      "aliasOf": null,
+      "value": "@{boundLineHeightMultiple}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/lineHeightMultiple__binding.layout.json",
+      "test": "fixtures/Label/lineHeightMultiple__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Label"
+    },
+    {
       "id": "Label/lineSpacing__static",
       "component": "Label",
       "attribute": "lineSpacing",
@@ -4309,6 +4884,29 @@
       "deprecated": null,
       "layout": "fixtures/Label/lineSpacing__static.layout.json",
       "test": "fixtures/Label/lineSpacing__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Label"
+    },
+    {
+      "id": "Label/lineSpacing__binding",
+      "component": "Label",
+      "attribute": "lineSpacing",
+      "case": "binding",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "lineSpacing",
+      "aliasOf": null,
+      "value": "@{boundLineSpacing}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/lineSpacing__binding.layout.json",
+      "test": "fixtures/Label/lineSpacing__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Label"
@@ -4434,6 +5032,29 @@
       "control": "__control/Label__autoShrink-True"
     },
     {
+      "id": "Label/minimumScaleFactor__binding",
+      "component": "Label",
+      "attribute": "minimumScaleFactor",
+      "case": "binding",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "minimumScaleFactor",
+      "aliasOf": null,
+      "value": "@{boundMinimumScaleFactor}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/minimumScaleFactor__binding.layout.json",
+      "test": "fixtures/Label/minimumScaleFactor__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Label__autoShrink-True"
+    },
+    {
       "id": "Label/linkable__true",
       "component": "Label",
       "attribute": "linkable",
@@ -4452,6 +5073,52 @@
       "deprecated": null,
       "layout": "fixtures/Label/linkable__true.layout.json",
       "test": "fixtures/Label/linkable__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Label"
+    },
+    {
+      "id": "Label/linkable__false",
+      "component": "Label",
+      "attribute": "linkable",
+      "case": "false",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "linkable",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/linkable__false.layout.json",
+      "test": "fixtures/Label/linkable__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Label"
+    },
+    {
+      "id": "Label/linkable__binding",
+      "component": "Label",
+      "attribute": "linkable",
+      "case": "binding",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "linkable",
+      "aliasOf": null,
+      "value": "@{boundLinkable}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/linkable__binding.layout.json",
+      "test": "fixtures/Label/linkable__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Label"
@@ -4505,6 +5172,29 @@
       "deprecated": null,
       "layout": "fixtures/Label/hintColor__static.layout.json",
       "test": "fixtures/Label/hintColor__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Label__hint-Conformance-Hint_hintAttributes--fontSize-12_no-text"
+    },
+    {
+      "id": "Label/hintColor__binding",
+      "component": "Label",
+      "attribute": "hintColor",
+      "case": "binding",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "hintColor",
+      "aliasOf": null,
+      "value": "@{boundHintColor}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/hintColor__binding.layout.json",
+      "test": "fixtures/Label/hintColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Label__hint-Conformance-Hint_hintAttributes--fontSize-12_no-text"
@@ -4795,6 +5485,29 @@
       "deprecated": null,
       "layout": "fixtures/TextField/font__static.layout.json",
       "test": "fixtures/TextField/font__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/TextField__text-Sample"
+    },
+    {
+      "id": "TextField/font__binding",
+      "component": "TextField",
+      "attribute": "font",
+      "case": "binding",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "font",
+      "aliasOf": null,
+      "value": "@{boundFont}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/font__binding.layout.json",
+      "test": "fixtures/TextField/font__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/TextField__text-Sample"
@@ -6074,6 +6787,29 @@
       "control": null
     },
     {
+      "id": "TextField/contentType__binding",
+      "component": "TextField",
+      "attribute": "contentType",
+      "case": "binding",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "contentType",
+      "aliasOf": null,
+      "value": "@{boundContentType}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/contentType__binding.layout.json",
+      "test": "fixtures/TextField/contentType__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null
+    },
+    {
       "id": "TextField/secure__true",
       "component": "TextField",
       "attribute": "secure",
@@ -6090,6 +6826,48 @@
       "deprecated": null,
       "layout": "fixtures/TextField/secure__true.layout.json",
       "test": "fixtures/TextField/secure__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/TextField__text-Sample"
+    },
+    {
+      "id": "TextField/secure__false",
+      "component": "TextField",
+      "attribute": "secure",
+      "case": "false",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "secure",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios"
+      ],
+      "mode": "swiftui",
+      "deprecated": null,
+      "layout": "fixtures/TextField/secure__false.layout.json",
+      "test": "fixtures/TextField/secure__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/TextField__text-Sample"
+    },
+    {
+      "id": "TextField/secure__binding",
+      "component": "TextField",
+      "attribute": "secure",
+      "case": "binding",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "secure",
+      "aliasOf": null,
+      "value": "@{boundSecure}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "swiftui",
+      "deprecated": null,
+      "layout": "fixtures/TextField/secure__binding.layout.json",
+      "test": "fixtures/TextField/secure__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/TextField__text-Sample"
@@ -6702,6 +7480,29 @@
       "control": "__control/TextField__text-Sample"
     },
     {
+      "id": "TextField/fontFamily__binding",
+      "component": "TextField",
+      "attribute": "fontFamily",
+      "case": "binding",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "fontFamily",
+      "aliasOf": null,
+      "value": "@{boundFontFamily}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/fontFamily__binding.layout.json",
+      "test": "fixtures/TextField/fontFamily__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/TextField__text-Sample"
+    },
+    {
       "id": "TextField/disabledBackground__static",
       "component": "TextField",
       "attribute": "disabledBackground",
@@ -6933,6 +7734,29 @@
       "deprecated": null,
       "layout": "fixtures/TextView/font__static.layout.json",
       "test": "fixtures/TextView/font__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/TextView__text-Sample"
+    },
+    {
+      "id": "TextView/font__binding",
+      "component": "TextView",
+      "attribute": "font",
+      "case": "binding",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "font",
+      "aliasOf": null,
+      "value": "@{boundFont}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/font__binding.layout.json",
+      "test": "fixtures/TextView/font__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/TextView__text-Sample"
@@ -8291,6 +9115,29 @@
       "control": "__control/TextView__text-Sample"
     },
     {
+      "id": "TextView/fontFamily__binding",
+      "component": "TextView",
+      "attribute": "fontFamily",
+      "case": "binding",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "fontFamily",
+      "aliasOf": null,
+      "value": "@{boundFontFamily}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/fontFamily__binding.layout.json",
+      "test": "fixtures/TextView/fontFamily__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/TextView__text-Sample"
+    },
+    {
       "id": "TextView/disabledBackground__static",
       "component": "TextView",
       "attribute": "disabledBackground",
@@ -8486,6 +9333,29 @@
       "control": "__control/Button__enabled-False"
     },
     {
+      "id": "Button/disabledFontColor__binding",
+      "component": "Button",
+      "attribute": "disabledFontColor",
+      "case": "binding",
+      "class": "visual",
+      "host": "Button",
+      "writtenKey": "disabledFontColor",
+      "aliasOf": null,
+      "value": "@{boundDisabledFontColor}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Button/disabledFontColor__binding.layout.json",
+      "test": "fixtures/Button/disabledFontColor__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Button__enabled-False"
+    },
+    {
       "id": "Button/highlightColor__static",
       "component": "Button",
       "attribute": "highlightColor",
@@ -8527,6 +9397,29 @@
       "deprecated": null,
       "layout": "fixtures/Button/highlightColor__alias_hilightColor.layout.json",
       "test": "fixtures/Button/highlightColor__alias_hilightColor.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Button"
+    },
+    {
+      "id": "Button/highlightColor__binding",
+      "component": "Button",
+      "attribute": "highlightColor",
+      "case": "binding",
+      "class": "visual",
+      "host": "Button",
+      "writtenKey": "highlightColor",
+      "aliasOf": null,
+      "value": "@{boundHighlightColor}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Button/highlightColor__binding.layout.json",
+      "test": "fixtures/Button/highlightColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Button"
@@ -8751,6 +9644,29 @@
       "deprecated": null,
       "layout": "fixtures/Button/fontWeight__static.layout.json",
       "test": "fixtures/Button/fontWeight__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Button"
+    },
+    {
+      "id": "Button/fontWeight__binding",
+      "component": "Button",
+      "attribute": "fontWeight",
+      "case": "binding",
+      "class": "visual",
+      "host": "Button",
+      "writtenKey": "fontWeight",
+      "aliasOf": null,
+      "value": "@{boundFontWeight}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Button/fontWeight__binding.layout.json",
+      "test": "fixtures/Button/fontWeight__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Button"
@@ -9859,6 +10775,29 @@
       "control": "__control/SelectBox"
     },
     {
+      "id": "SelectBox/hintColor__binding",
+      "component": "SelectBox",
+      "attribute": "hintColor",
+      "case": "binding",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": "hintColor",
+      "aliasOf": null,
+      "value": "@{boundHintColor}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SelectBox/hintColor__binding.layout.json",
+      "test": "fixtures/SelectBox/hintColor__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/SelectBox"
+    },
+    {
       "id": "SelectBox/items__static",
       "component": "SelectBox",
       "attribute": "items",
@@ -10275,6 +11214,29 @@
       "control": "__control/SelectBox__datePickerMode-date_selectItemType-Date"
     },
     {
+      "id": "SelectBox/minimumDate__binding",
+      "component": "SelectBox",
+      "attribute": "minimumDate",
+      "case": "binding",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": "minimumDate",
+      "aliasOf": null,
+      "value": "@{boundMinimumDate}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SelectBox/minimumDate__binding.layout.json",
+      "test": "fixtures/SelectBox/minimumDate__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/SelectBox__datePickerMode-date_selectItemType-Date"
+    },
+    {
       "id": "SelectBox/maximumDate__static",
       "component": "SelectBox",
       "attribute": "maximumDate",
@@ -10293,6 +11255,29 @@
       "deprecated": null,
       "layout": "fixtures/SelectBox/maximumDate__static.layout.json",
       "test": "fixtures/SelectBox/maximumDate__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/SelectBox__datePickerMode-date_selectItemType-Date"
+    },
+    {
+      "id": "SelectBox/maximumDate__binding",
+      "component": "SelectBox",
+      "attribute": "maximumDate",
+      "case": "binding",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": "maximumDate",
+      "aliasOf": null,
+      "value": "@{boundMaximumDate}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SelectBox/maximumDate__binding.layout.json",
+      "test": "fixtures/SelectBox/maximumDate__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/SelectBox__datePickerMode-date_selectItemType-Date"
@@ -10898,6 +11883,52 @@
       "control": "__control/SelectBox"
     },
     {
+      "id": "SelectBox/selectedValue__one",
+      "component": "SelectBox",
+      "attribute": "selectedValue",
+      "case": "one",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": "selectedValue",
+      "aliasOf": null,
+      "value": "One",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SelectBox/selectedValue__one.layout.json",
+      "test": "fixtures/SelectBox/selectedValue__one.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/SelectBox"
+    },
+    {
+      "id": "SelectBox/selectedValue__binding",
+      "component": "SelectBox",
+      "attribute": "selectedValue",
+      "case": "binding",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": "selectedValue",
+      "aliasOf": null,
+      "value": "@{boundSelectedValue}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SelectBox/selectedValue__binding.layout.json",
+      "test": "fixtures/SelectBox/selectedValue__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/SelectBox"
+    },
+    {
       "id": "Switch/isOn__true",
       "component": "Switch",
       "attribute": "isOn",
@@ -11036,6 +12067,29 @@
       "control": "__control/Switch__isOn-True"
     },
     {
+      "id": "Switch/tint__binding",
+      "component": "Switch",
+      "attribute": "tint",
+      "case": "binding",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "tint",
+      "aliasOf": null,
+      "value": "@{boundTint}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Switch/tint__binding.layout.json",
+      "test": "fixtures/Switch/tint__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Switch__isOn-True"
+    },
+    {
       "id": "Switch/tintColor__static",
       "component": "Switch",
       "attribute": "tintColor",
@@ -11100,6 +12154,29 @@
       "deprecated": null,
       "layout": "fixtures/Switch/thumbTintColor__static.layout.json",
       "test": "fixtures/Switch/thumbTintColor__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Switch"
+    },
+    {
+      "id": "Switch/thumbTintColor__binding",
+      "component": "Switch",
+      "attribute": "thumbTintColor",
+      "case": "binding",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "thumbTintColor",
+      "aliasOf": null,
+      "value": "@{boundThumbTintColor}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Switch/thumbTintColor__binding.layout.json",
+      "test": "fixtures/Switch/thumbTintColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Switch"
@@ -12767,6 +13844,32 @@
       ]
     },
     {
+      "id": "Collection/lazy__binding",
+      "component": "Collection",
+      "attribute": "lazy",
+      "case": "binding",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "lazy",
+      "aliasOf": null,
+      "value": "@{boundLazy}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/lazy__binding.layout.json",
+      "test": "fixtures/Collection/lazy__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
       "id": "Collection/columns__static",
       "component": "Collection",
       "attribute": "columns",
@@ -13469,6 +14572,29 @@
       "control": "__control/Radio__no-text"
     },
     {
+      "id": "Radio/label__binding",
+      "component": "Radio",
+      "attribute": "label",
+      "case": "binding",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": "label",
+      "aliasOf": null,
+      "value": "@{boundLabel}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Radio/label__binding.layout.json",
+      "test": "fixtures/Radio/label__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Radio__no-text"
+    },
+    {
       "id": "Radio/text__static",
       "component": "Radio",
       "attribute": "text",
@@ -13487,6 +14613,29 @@
       "deprecated": null,
       "layout": "fixtures/Radio/text__static.layout.json",
       "test": "fixtures/Radio/text__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null
+    },
+    {
+      "id": "Radio/text__binding",
+      "component": "Radio",
+      "attribute": "text",
+      "case": "binding",
+      "class": "assertable",
+      "host": "Radio",
+      "writtenKey": "text",
+      "aliasOf": null,
+      "value": "@{boundText}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Radio/text__binding.layout.json",
+      "test": "fixtures/Radio/text__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null
@@ -13648,6 +14797,52 @@
       "control": "__control/Radio"
     },
     {
+      "id": "Radio/checked__false",
+      "component": "Radio",
+      "attribute": "checked",
+      "case": "false",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": "checked",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Radio/checked__false.layout.json",
+      "test": "fixtures/Radio/checked__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Radio"
+    },
+    {
+      "id": "Radio/checked__binding",
+      "component": "Radio",
+      "attribute": "checked",
+      "case": "binding",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": "checked",
+      "aliasOf": null,
+      "value": "@{boundChecked}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Radio/checked__binding.layout.json",
+      "test": "fixtures/Radio/checked__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Radio"
+    },
+    {
       "id": "Radio/value__static",
       "component": "Radio",
       "attribute": "value",
@@ -13689,6 +14884,29 @@
       "deprecated": null,
       "layout": "fixtures/Radio/font__static.layout.json",
       "test": "fixtures/Radio/font__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Radio"
+    },
+    {
+      "id": "Radio/font__binding",
+      "component": "Radio",
+      "attribute": "font",
+      "case": "binding",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": "font",
+      "aliasOf": null,
+      "value": "@{boundFont}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Radio/font__binding.layout.json",
+      "test": "fixtures/Radio/font__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Radio"
@@ -13758,6 +14976,29 @@
       "deprecated": null,
       "layout": "fixtures/Radio/spacing__static.layout.json",
       "test": "fixtures/Radio/spacing__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Radio__orientation-horizontal"
+    },
+    {
+      "id": "Radio/spacing__binding",
+      "component": "Radio",
+      "attribute": "spacing",
+      "case": "binding",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": "spacing",
+      "aliasOf": null,
+      "value": "@{boundSpacing}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Radio/spacing__binding.layout.json",
+      "test": "fixtures/Radio/spacing__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Radio__orientation-horizontal"
@@ -13874,6 +15115,52 @@
       "control": "__control/Radio__items--Alpha-Beta-Gamma"
     },
     {
+      "id": "Radio/selectedValue__gamma",
+      "component": "Radio",
+      "attribute": "selectedValue",
+      "case": "gamma",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": "selectedValue",
+      "aliasOf": null,
+      "value": "Gamma",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Radio/selectedValue__gamma.layout.json",
+      "test": "fixtures/Radio/selectedValue__gamma.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Radio__items--Alpha-Beta-Gamma"
+    },
+    {
+      "id": "Radio/selectedValue__binding",
+      "component": "Radio",
+      "attribute": "selectedValue",
+      "case": "binding",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": "selectedValue",
+      "aliasOf": null,
+      "value": "@{boundSelectedValue}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Radio/selectedValue__binding.layout.json",
+      "test": "fixtures/Radio/selectedValue__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Radio__items--Alpha-Beta-Gamma"
+    },
+    {
       "id": "CheckBox/label__static",
       "component": "CheckBox",
       "attribute": "label",
@@ -13897,6 +15184,29 @@
       "control": "__control/CheckBox"
     },
     {
+      "id": "CheckBox/label__binding",
+      "component": "CheckBox",
+      "attribute": "label",
+      "case": "binding",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": "label",
+      "aliasOf": null,
+      "value": "@{boundLabel}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/label__binding.layout.json",
+      "test": "fixtures/CheckBox/label__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/CheckBox"
+    },
+    {
       "id": "CheckBox/text__static",
       "component": "CheckBox",
       "attribute": "text",
@@ -13915,6 +15225,29 @@
       "deprecated": null,
       "layout": "fixtures/CheckBox/text__static.layout.json",
       "test": "fixtures/CheckBox/text__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null
+    },
+    {
+      "id": "CheckBox/text__binding",
+      "component": "CheckBox",
+      "attribute": "text",
+      "case": "binding",
+      "class": "assertable",
+      "host": "CheckBox",
+      "writtenKey": "text",
+      "aliasOf": null,
+      "value": "@{boundText}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/text__binding.layout.json",
+      "test": "fixtures/CheckBox/text__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null
@@ -14124,6 +15457,29 @@
       "control": null
     },
     {
+      "id": "CheckBox/enabled__binding",
+      "component": "CheckBox",
+      "attribute": "enabled",
+      "case": "binding",
+      "class": "assertable",
+      "host": "CheckBox",
+      "writtenKey": "enabled",
+      "aliasOf": null,
+      "value": "@{boundEnabled}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/enabled__binding.layout.json",
+      "test": "fixtures/CheckBox/enabled__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null
+    },
+    {
       "id": "CheckBox/font__static",
       "component": "CheckBox",
       "attribute": "font",
@@ -14142,6 +15498,29 @@
       "deprecated": null,
       "layout": "fixtures/CheckBox/font__static.layout.json",
       "test": "fixtures/CheckBox/font__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/CheckBox"
+    },
+    {
+      "id": "CheckBox/font__binding",
+      "component": "CheckBox",
+      "attribute": "font",
+      "case": "binding",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": "font",
+      "aliasOf": null,
+      "value": "@{boundFont}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/font__binding.layout.json",
+      "test": "fixtures/CheckBox/font__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/CheckBox"
@@ -14679,6 +16058,29 @@
       "deprecated": null,
       "layout": "fixtures/IconLabel/text__static.layout.json",
       "test": "fixtures/IconLabel/text__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null
+    },
+    {
+      "id": "IconLabel/text__binding",
+      "component": "IconLabel",
+      "attribute": "text",
+      "case": "binding",
+      "class": "assertable",
+      "host": "IconLabel",
+      "writtenKey": "text",
+      "aliasOf": null,
+      "value": "@{boundText}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/IconLabel/text__binding.layout.json",
+      "test": "fixtures/IconLabel/text__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null
@@ -15296,6 +16698,29 @@
       "deprecated": null,
       "layout": "fixtures/TabView/tabBarBackground__static.layout.json",
       "test": "fixtures/TabView/tabBarBackground__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/TabView"
+    },
+    {
+      "id": "TabView/tabBarBackground__binding",
+      "component": "TabView",
+      "attribute": "tabBarBackground",
+      "case": "binding",
+      "class": "visual",
+      "host": "TabView",
+      "writtenKey": "tabBarBackground",
+      "aliasOf": null,
+      "value": "@{boundTabBarBackground}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TabView/tabBarBackground__binding.layout.json",
+      "test": "fixtures/TabView/tabBarBackground__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/TabView"

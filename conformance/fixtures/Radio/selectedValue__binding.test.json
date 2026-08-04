@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/selectedValue__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.selectedValue (binding)",
+    "description": "Conformance fixture for 'selectedValue' on Radio (section: Radio, class: visual). Value under test: \"@{boundSelectedValue}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "selectedValue__binding",
+      "description": "Conformance fixture for 'selectedValue' on Radio (section: Radio, class: visual). Value under test: \"@{boundSelectedValue}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_selectedValue__binding"
+        }
+      ]
+    }
+  ]
+}

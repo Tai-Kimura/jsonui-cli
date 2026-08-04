@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/alignBottom__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.alignBottom (false)",
+    "description": "Conformance fixture for 'alignBottom' on View (section: common, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "alignBottom__false",
+      "description": "Conformance fixture for 'alignBottom' on View (section: common, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_alignBottom__false"
+        }
+      ]
+    }
+  ]
+}

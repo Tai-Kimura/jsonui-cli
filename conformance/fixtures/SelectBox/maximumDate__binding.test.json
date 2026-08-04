@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/maximumDate__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.maximumDate (binding)",
+    "description": "Conformance fixture for 'maximumDate' on SelectBox (section: SelectBox, class: visual). Value under test: \"@{boundMaximumDate}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "maximumDate__binding",
+      "description": "Conformance fixture for 'maximumDate' on SelectBox (section: SelectBox, class: visual). Value under test: \"@{boundMaximumDate}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_maximumDate__binding"
+        }
+      ]
+    }
+  ]
+}

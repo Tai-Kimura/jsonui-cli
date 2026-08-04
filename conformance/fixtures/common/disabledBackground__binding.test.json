@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/disabledBackground__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.disabledBackground (binding)",
+    "description": "Conformance fixture for 'disabledBackground' on Button (section: common, class: visual). Value under test: \"@{boundDisabledBackground}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "disabledBackground__binding",
+      "description": "Conformance fixture for 'disabledBackground' on Button (section: common, class: visual). Value under test: \"@{boundDisabledBackground}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_disabledBackground__binding"
+        }
+      ]
+    }
+  ]
+}

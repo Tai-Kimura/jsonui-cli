@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/highlightColor__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.highlightColor (binding)",
+    "description": "Conformance fixture for 'highlightColor' on Button (section: Button, class: visual). Value under test: \"@{boundHighlightColor}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "highlightColor__binding",
+      "description": "Conformance fixture for 'highlightColor' on Button (section: Button, class: visual). Value under test: \"@{boundHighlightColor}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_highlightColor__binding"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/tapBackground__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.tapBackground (binding)",
+    "description": "Conformance fixture for 'tapBackground' on Button (section: common, class: visual). Value under test: \"@{boundTapBackground}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "tapBackground__binding",
+      "description": "Conformance fixture for 'tapBackground' on Button (section: common, class: visual). Value under test: \"@{boundTapBackground}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_tapBackground__binding"
+        }
+      ]
+    }
+  ]
+}

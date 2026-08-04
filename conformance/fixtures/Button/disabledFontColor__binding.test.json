@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/disabledFontColor__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.disabledFontColor (binding)",
+    "description": "Conformance fixture for 'disabledFontColor' on Button (section: Button, class: visual). Value under test: \"@{boundDisabledFontColor}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "disabledFontColor__binding",
+      "description": "Conformance fixture for 'disabledFontColor' on Button (section: Button, class: visual). Value under test: \"@{boundDisabledFontColor}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_disabledFontColor__binding"
+        }
+      ]
+    }
+  ]
+}

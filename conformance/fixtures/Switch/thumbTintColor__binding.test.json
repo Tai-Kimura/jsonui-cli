@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Switch/thumbTintColor__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Switch.thumbTintColor (binding)",
+    "description": "Conformance fixture for 'thumbTintColor' on Switch (section: Switch, class: visual). Value under test: \"@{boundThumbTintColor}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Switch"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "thumbTintColor__binding",
+      "description": "Conformance fixture for 'thumbTintColor' on Switch (section: Switch, class: visual). Value under test: \"@{boundThumbTintColor}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Switch_thumbTintColor__binding"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "root",
+  "width": "matchParent",
+  "height": "matchParent",
+  "child": [
+    {
+      "type": "SelectBox",
+      "id": "target",
+      "width": 200,
+      "height": "wrapContent",
+      "items": [
+        "One",
+        "Two"
+      ],
+      "selectItemType": "Date",
+      "datePickerMode": "date",
+      "minimumDate": "@{boundMinimumDate}"
+    }
+  ],
+  "data": [
+    {
+      "name": "boundMinimumDate",
+      "class": "String",
+      "defaultValue": "2020-01-01"
+    }
+  ]
+}

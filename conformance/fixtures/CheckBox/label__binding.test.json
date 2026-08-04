@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/CheckBox/label__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance CheckBox.label (binding)",
+    "description": "Conformance fixture for 'label' on CheckBox (section: CheckBox, class: visual). Value under test: \"@{boundLabel}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "CheckBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "label__binding",
+      "description": "Conformance fixture for 'label' on CheckBox (section: CheckBox, class: visual). Value under test: \"@{boundLabel}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "CheckBox_label__binding"
+        }
+      ]
+    }
+  ]
+}

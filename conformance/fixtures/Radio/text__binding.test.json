@@ -1,0 +1,37 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/text__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.text (binding)",
+    "description": "Conformance fixture for 'text' on Radio (section: Radio, class: assertable). Value under test: \"@{boundText}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "text__binding",
+      "description": "Conformance fixture for 'text' on Radio (section: Radio, class: assertable). Value under test: \"@{boundText}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        },
+        {
+          "assert": "text",
+          "id": "target",
+          "equals": "Conformance Text"
+        }
+      ]
+    }
+  ]
+}
