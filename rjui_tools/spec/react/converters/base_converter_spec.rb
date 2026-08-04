@@ -441,6 +441,51 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
     end
   end
 
+  describe 'bound dimensions' do
+    it 'routes a bound height into the inline style as px' do
+      converter = create_converter({ 'type' => 'View', 'height' => '@{barHeight}' })
+      classes = converter.send(:build_class_name)
+      expect(classes).not_to include('h-[')
+      expect(converter.send(:build_style_attr)).to include('height: `${data.barHeight}px`')
+    end
+
+    it 'routes a bound width into the inline style as px' do
+      converter = create_converter({ 'type' => 'View', 'width' => '@{barWidth}' })
+      classes = converter.send(:build_class_name)
+      expect(classes).not_to include('w-[')
+      expect(converter.send(:build_style_attr)).to include('width: `${data.barWidth}px`')
+    end
+
+    it 'treats a bound size as explicit, so it does not shrink' do
+      converter = create_converter({ 'type' => 'View', 'height' => '@{barHeight}' })
+      expect(converter.send(:build_class_name)).to include('shrink-0')
+    end
+
+    it 'routes bound min/max bounds into the inline style' do
+      converter = create_converter({
+        'type' => 'View',
+        'minHeight' => '@{minH}', 'maxHeight' => '@{maxH}',
+        'minWidth' => '@{minW}', 'maxWidth' => '@{maxW}'
+      })
+      classes = converter.send(:build_class_name)
+      style = converter.send(:build_style_attr)
+      expect(classes).not_to include('min-h-[')
+      expect(classes).not_to include('max-w-[')
+      expect(style).to include('minHeight: `${data.minH}px`')
+      expect(style).to include('maxHeight: `${data.maxH}px`')
+      expect(style).to include('minWidth: `${data.minW}px`')
+      expect(style).to include('maxWidth: `${data.maxW}px`')
+    end
+
+    it 'leaves literal dimensions on the Tailwind class path' do
+      converter = create_converter({ 'type' => 'View', 'height' => 140, 'width' => 'matchParent' })
+      classes = converter.send(:build_class_name)
+      expect(classes).to include('h-[140px]')
+      expect(classes).to include('w-full')
+      expect(converter.send(:build_style_attr)).to eq('')
+    end
+  end
+
   describe '#build_style_attr with CSS custom properties' do
     it 'asserts React.CSSProperties when a custom property is present' do
       converter = create_converter({ 'type' => 'View' })

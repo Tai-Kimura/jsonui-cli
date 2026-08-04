@@ -74,7 +74,9 @@ module RjuiTools
           has_horizontal_margin = left_margin.is_a?(Numeric) && left_margin > 0 ||
                                   right_margin.is_a?(Numeric) && right_margin > 0
 
-          if attributes['width'] == 'matchParent' && has_horizontal_margin
+          if apply_bound_dimension('width')
+            # The bound value owns the width; no Tailwind class can carry it.
+          elsif attributes['width'] == 'matchParent' && has_horizontal_margin
             # Use calc to account for margins
             total_margin = (left_margin.is_a?(Numeric) ? left_margin : 0) +
                           (right_margin.is_a?(Numeric) ? right_margin : 0)
@@ -89,7 +91,9 @@ module RjuiTools
           #   from fixed-size siblings like a 3px accent bar
           # - flex-col parent or unknown (height is MAIN axis): use flex-1 —
           #   h-full overflows when siblings exist, flex-1 fills the gap
-          if attributes['height'] == 'matchParent' && !attributes['weight']
+          if apply_bound_dimension('height')
+            # The bound value owns the height; no Tailwind class can carry it.
+          elsif attributes['height'] == 'matchParent' && !attributes['weight']
             if json['_overlay']
               classes << 'h-full'
             elsif json['_parent_orientation'] == 'horizontal'
@@ -108,7 +112,7 @@ module RjuiTools
 
           # Prevent flex shrinking when fixed dimensions are specified
           # This ensures elements maintain their specified size in flex containers
-          if attributes['width'].is_a?(Numeric) || attributes['height'].is_a?(Numeric)
+          if explicit_size?('width') || explicit_size?('height')
             classes << 'shrink-0'
           end
 
@@ -121,12 +125,12 @@ module RjuiTools
           # size.maxBoundsClampFill corollary — kjui/ios pin the declared
           # dimension and leave the bound inert; CSS max-* would clamp it,
           # which the 33 geometry diagnosis measured as a web-only shrink).
-          explicit_w = attributes['width'].is_a?(Numeric)
-          explicit_h = attributes['height'].is_a?(Numeric)
-          classes << TailwindMapper.map_min_width(attributes['minWidth'])   if attributes['minWidth']   && decoration_allowed?('minWidth')
-          classes << TailwindMapper.map_max_width(attributes['maxWidth'])   if attributes['maxWidth']   && !explicit_w && decoration_allowed?('maxWidth')
-          classes << TailwindMapper.map_min_height(attributes['minHeight']) if attributes['minHeight'] && decoration_allowed?('minHeight')
-          classes << TailwindMapper.map_max_height(attributes['maxHeight']) if attributes['maxHeight'] && !explicit_h && decoration_allowed?('maxHeight')
+          explicit_w = explicit_size?('width')
+          explicit_h = explicit_size?('height')
+          classes << TailwindMapper.map_min_width(attributes['minWidth'])   if attributes['minWidth']   && decoration_allowed?('minWidth')   && !apply_bound_dimension('minWidth')
+          classes << TailwindMapper.map_max_width(attributes['maxWidth'])   if attributes['maxWidth']   && !explicit_w && decoration_allowed?('maxWidth')  && !apply_bound_dimension('maxWidth')
+          classes << TailwindMapper.map_min_height(attributes['minHeight']) if attributes['minHeight'] && decoration_allowed?('minHeight')  && !apply_bound_dimension('minHeight')
+          classes << TailwindMapper.map_max_height(attributes['maxHeight']) if attributes['maxHeight'] && !explicit_h && decoration_allowed?('maxHeight') && !apply_bound_dimension('maxHeight')
 
           # Padding (array format)
           classes << TailwindMapper.map_padding(attributes['padding'] || attributes['paddings'])
@@ -614,6 +618,27 @@ module RjuiTools
 
         def custom_property_styles?
           @dynamic_styles.keys.any? { |key| key.to_s.start_with?('--') }
+        end
+
+        # A bound dimension only resolves at runtime, so no Tailwind class can
+        # carry it — it goes to the inline style as a px template literal. The
+        # SSoT declares `binding` for all six size attributes and the other two
+        # platforms already read it (kjui `.height(data.v.dp)`, sjui
+        # `.frame(height: data.v)`), where a bound value means dp/points; px is
+        # the web spelling of the same contract.
+        def apply_bound_dimension(attr)
+          value = attributes[attr]
+          return false unless has_binding?(value)
+
+          @dynamic_styles[attr] = "`${#{extract_binding_property(value)}}px`"
+          true
+        end
+
+        # A bound size pins the element exactly like a numeric one: it must not
+        # shrink inside a flex container, and it wins over its own max bound.
+        def explicit_size?(attr)
+          value = attributes[attr]
+          value.is_a?(Numeric) || has_binding?(value)
         end
 
         # Render a single (key, value) entry from `@dynamic_styles` as a JSX

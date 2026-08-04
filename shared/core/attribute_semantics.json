@@ -132,6 +132,11 @@
       "observable": {
         "Progress/progress__static": "uniformly-active"
       }
+    },
+    "boundSize": {
+      "unitModel": "a bound size attribute carries a runtime number in layout units: dp on android, points on ios, px on web",
+      "ruling": "2026-08-04 orchestrator adjudication (36, consumer field report): all six size attributes (width, height, minWidth, maxWidth, minHeight, maxHeight) declare \"binding\" in attribute_definitions, so a bound value MUST be honoured on every platform. kjui resolves it to `.height(data.v.dp)` (process_dimension) and sjui to `.frame(height: data.v)` (frame_helper is_binding?); rjui dropped it silently because the value reached the Tailwind arbitrary-value mapper, which returns '' for any string that is not a CSS unit — the declaration produced no class and no inline style, and jui build stayed warning-free. rjui now routes a bound dimension to the inline style as a px template literal, and treats it as an EXPLICIT size for the shrink and explicit-over-bounds rules above. No activeness observable: a bound fixture renders whatever the host viewmodel supplies, so fixture-vs-control cannot separate honouring from ignoring.",
+      "observable": {}
     }
   }
 }
