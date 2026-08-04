@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance TextView.fontFamily (static)",
-    "description": "Conformance fixture for 'fontFamily' on TextView (section: TextView, class: visual). Value under test: \"sans-serif\".",
+    "description": "Conformance fixture for 'fontFamily' on TextView (section: TextView, class: visual). Value under test: \"serif\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "fontFamily__static",
-      "description": "Conformance fixture for 'fontFamily' on TextView (section: TextView, class: visual). Value under test: \"sans-serif\".",
+      "description": "Conformance fixture for 'fontFamily' on TextView (section: TextView, class: visual). Value under test: \"serif\".",
       "steps": [
         {
           "action": "waitFor",

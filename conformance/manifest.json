@@ -4769,7 +4769,7 @@
       "host": "Label",
       "writtenKey": "fontFamily",
       "aliasOf": null,
-      "value": "sans-serif",
+      "value": "serif",
       "platforms": [
         "ios",
         "android",
@@ -7994,7 +7994,7 @@
       "host": "TextField",
       "writtenKey": "fontFamily",
       "aliasOf": null,
-      "value": "sans-serif",
+      "value": "serif",
       "platforms": [
         "ios",
         "android",
@@ -9675,7 +9675,7 @@
       "host": "TextView",
       "writtenKey": "fontFamily",
       "aliasOf": null,
-      "value": "sans-serif",
+      "value": "serif",
       "platforms": [
         "ios",
         "android",

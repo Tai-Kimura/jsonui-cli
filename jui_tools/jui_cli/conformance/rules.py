@@ -452,7 +452,18 @@ VALUE_OVERRIDES: dict[str, Any] = {
     # vocabulary (`json_data['hintFont'] == 'bold'`), and a value outside the
     # vocabulary can only ever render nothing. Same value as its siblings.
     "hintFont": "bold",
-    "fontFamily": "sans-serif",
+    # `sans-serif` is Android's DEFAULT family, so the fixture asked for the
+    # face the platform already draws — and it is not a real font name on iOS
+    # either, where it has always fallen back to the system font. `serif` is a
+    # genuine CSS generic on web, and Compose resolves it once G's
+    # `resolveFontFamily` mapping lands. Strictly better than the old value on
+    # every platform, and the same "representative == platform default" shape
+    # as GradientView.locations. (Lane G.)
+    #
+    # NOTE for whoever reads the 3PF result: android stays inert until G's
+    # mapping is in, and iOS depends on SwiftJsonUI resolving generic family
+    # names at all — which is an open question, raised with F/B.
+    "fontFamily": "serif",
     "text": CONFORMANCE_TEXT,
     "html": "<p>Conformance Sample</p>",
     "gradient": ["#FF0000", "#0000FF"],
@@ -1402,11 +1413,17 @@ VARIANT_CASES: dict[tuple[str, str], dict[str, dict[str, Any]]] = {
         "with_border": {"borderWidth": 2, "borderColor": "#FF0000"},
     },
     # A LONE radio behaves the same however `checked` is prioritised against
-    # the group's selection state, which is why C's fix (133ff58) changed no
-    # picture and nothing would have noticed it being reverted. The behaviour
-    # only differs once the radio belongs to a group — and the failure it
-    # guards is loud: `checked: true` with a group produced a radio that never
-    # switched again. The lone fixture keeps its name and its verdict.
+    # the group's selection state, so the existing fixture sees nothing; the
+    # behaviours only diverge once the radio belongs to a group. The failure is
+    # loud — `checked: true` with a group produced a radio that never switched
+    # again.
+    #
+    # What this fixture guards is the RENDER stage, not the codegen priority:
+    # C pinned all five orderings in `radio_component_spec.rb` (133ff58), so a
+    # reverted priority fails a unit spec immediately. What a unit pin cannot
+    # see is whether the LIBRARY honours the expression the codegen emitted —
+    # the dynamic side of the same question G fixed with `value ?? id`. That is
+    # the parity this pair measures.
     ("Radio", "checked"): {
         "with_group": {"group": "conformance_group"},
     },

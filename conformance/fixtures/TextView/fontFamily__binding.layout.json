@@ -26,7 +26,7 @@
     {
       "name": "boundFontFamily",
       "class": "String",
-      "defaultValue": "sans-serif"
+      "defaultValue": "serif"
     }
   ]
 }
