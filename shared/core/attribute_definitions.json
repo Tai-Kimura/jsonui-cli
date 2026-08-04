@@ -3610,7 +3610,7 @@
     },
     "scrollTo": {
       "type": "binding",
-      "description": "PassthroughSubject<Int, Never> for programmatic scrolling to cell index"
+      "description": "Binding that requests a programmatic scroll. The declared DATA CLASS is a plain value — `String` when cellIdProperty is set (scroll to that cell id), `Int` otherwise (scroll to that index). It is deliberately NOT `PassthroughSubject<Int, Never>`, which this description used to prescribe: PassthroughSubject is a Combine type, and naming a Swift transport in the cross-platform SSoT is what made consumers write it into their data section, where kjui's map_to_kotlin_type passes unknown classes through verbatim and the Kotlin build dies on it. How the request is delivered is each platform's own business — iOS wraps the value in a publisher so a repeated send re-scrolls, Compose reads the String directly, web keys a useEffect on it. KNOWN GAP (2026-08-05, plan 49-E): sjui still emits `data.<prop>.throttle(...)`, so it requires the publisher spelling and does not yet derive it from this canonical class; until sjui and the SwiftJsonUI dynamic path derive the transport, a fixture cannot declare one class that survives all three platforms, and Collection.scrollAnchor stays unmeasurable. The class vocabulary that does pass all three today is String / Int / Boolean / CollectionDataSource."
     },
     "scrollAnchor": {
       "type": "string",
