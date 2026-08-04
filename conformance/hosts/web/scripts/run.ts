@@ -149,6 +149,15 @@ function classifyThrow(message: string): 'fail' | 'error' {
 const singleLine = (s: string): string => s.replace(/\s+/g, ' ').trim().slice(0, 500);
 
 // ------------------------------------------------------------------ fixture execution
+//: The one capture size for the web lane. Baselines are hashed from frames
+//: this size; a capture at any other size cannot match one.
+const VIEWPORT = { width: 1024, height: 768 } as const;
+
+/** Width/height straight out of the PNG IHDR chunk (bytes 16..24, big-endian). */
+function pngSize(png: Buffer): { width: number; height: number } {
+  return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
+}
+
 async function runFixture(page: Page, fixture: ManifestFixture): Promise<ResultEntry> {
   const testPath = path.join(conformanceDir, fixture.test);
   const test: ScreenTest = JSON.parse(fs.readFileSync(testPath, 'utf8'));
@@ -194,6 +203,14 @@ async function runFixture(page: Page, fixture: ManifestFixture): Promise<ResultE
           // double-rAF was measured insufficient). Settle, then capture
           // until two consecutive frames are byte-identical.
           await page.evaluate(() => (document as any).fonts?.ready);
+          // Re-assert the viewport before every capture. Twice in four CI runs
+          // (30870693593 common/maxHeight__fill_clamp, 30876855224
+          // common/View__fill-h) a single fixture came back at 1280x800
+          // instead of the context's 1024x768 — different fixture each time,
+          // so nothing about the fixture causes it, and a frame captured at
+          // another size is a guaranteed baseline miss. setViewportSize is a
+          // no-op when the size already matches, so this costs nothing.
+          await page.setViewportSize(VIEWPORT);
           const shotOpts = { animations: 'disabled', caret: 'hide' } as const;
           let image = await page.screenshot(shotOpts);
           for (let attempt = 0; attempt < 5; attempt++) {
@@ -205,6 +222,23 @@ async function runFixture(page: Page, fixture: ManifestFixture): Promise<ResultE
             if (attempt === 4) {
               console.warn(`[run] screenshot never stabilized: ${fixture.id}`);
             }
+          }
+          // Belt to the viewport braces: read the size back out of the PNG
+          // header and re-capture once if it is wrong. Whatever lets a frame
+          // out at the wrong size, a wrong-sized frame must never reach the
+          // baseline comparison silently.
+          for (let attempt = 0; attempt < 2; attempt += 1) {
+            const size = pngSize(image);
+            if (size.width === VIEWPORT.width && size.height === VIEWPORT.height) break;
+            console.warn(
+              `[run] capture at ${size.width}x${size.height}, expected ` +
+              `${VIEWPORT.width}x${VIEWPORT.height}: ${fixture.id}` +
+              (attempt === 1 ? ' — kept, will fail the visual gate' : ' — recapturing')
+            );
+            if (attempt === 1) break;
+            await page.setViewportSize(VIEWPORT);
+            await page.waitForTimeout(100);
+            image = await page.screenshot(shotOpts);
           }
           fs.writeFileSync(file, image);
           screenshot = `artifacts/web/${name}.png`;
@@ -277,7 +311,7 @@ async function main(): Promise<void> {
   let cursor = 0;
 
   async function worker(): Promise<void> {
-    const context = await browser.newContext({ viewport: { width: 1024, height: 768 } });
+    const context = await browser.newContext({ viewport: VIEWPORT });
     const page = await context.newPage();
     for (;;) {
       const index = cursor++;
