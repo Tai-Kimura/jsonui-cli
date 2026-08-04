@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/borderStyle__solid_with_border.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.borderStyle (solid_with_border)",
+    "description": "Conformance fixture for 'borderStyle' on View (section: common, class: visual). Value under test: \"solid\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "borderStyle__solid_with_border",
+      "description": "Conformance fixture for 'borderStyle' on View (section: common, class: visual). Value under test: \"solid\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_borderStyle__solid_with_border"
+        }
+      ]
+    }
+  ]
+}

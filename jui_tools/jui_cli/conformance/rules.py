@@ -1016,7 +1016,39 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
 }
 
 
-def base_attrs_for(host: str, attribute: str) -> dict[str, Any]:
+#: Extra cases that carry their OWN base attributes, keyed by
+#: ``(section, attribute)`` -> ``{case_suffix: extra_base}``.
+#:
+#: A plain :data:`EXTRA_CASES` value shares the attribute's base, which is the
+#: right default. This is for the case where the SAME attribute has to be
+#: measured under two different declarations at once — and the existing fixture
+#: must keep its name, because `attribute_semantics.json#observable` records a
+#: verdict PER FIXTURE NAME. Rewriting a fixture in place would leave the
+#: ledger quietly asserting the old verdict about the new layout.
+VARIANT_CASES: dict[tuple[str, str], dict[str, dict[str, Any]]] = {
+    # `borderStyle` alone draws nothing — a border is summoned by the
+    # borderWidth+borderColor pair — so the lone fixtures are correctly inert
+    # and `observable` records them as `uniformly-inert`. That left the three
+    # implementations landed in this wave (B: iOS dashed/dotted, C: android,
+    # A: web TailwindMapper#map_border_style) with NO fixture that could show
+    # them working: the suite would report "inert on all three", the ledger
+    # would agree, and nothing would ever contradict it.
+    #
+    # The `_with_border` variant declares the pair, so the style has a border
+    # to modify. Both live side by side under different names, so both verdicts
+    # stay true. E owns the `observable` entry for the active side.
+    ("common", "borderStyle"): {
+        "with_border": {"borderWidth": 2, "borderColor": "#FF0000"},
+    },
+}
+
+
+def variant_bases_for(section: str, attribute: str) -> dict[str, dict[str, Any]]:
+    """``{case_suffix: extra_base}`` declared for this attribute."""
+    return VARIANT_CASES.get((section, attribute), {})
+
+
+def base_attrs_for(host: str, attribute: str, case_name: str = "") -> dict[str, Any]:
     """Extra base attributes that make `attribute` observable on `host`.
 
     Keys are either scoped to a component (`Label.highlightColor`) or apply to
@@ -1027,11 +1059,22 @@ def base_attrs_for(host: str, attribute: str) -> dict[str, Any]:
 
     A value of ``None`` REMOVES the base key instead of adding one — see
     :func:`apply_base_overrides`.
+
+    *case_name* selects a :data:`VARIANT_CASES` overlay when the case is one of
+    the attribute's variant cases; the overlay is merged ON TOP of the shared
+    extras, so a variant inherits whatever the attribute already needed.
     """
     scoped = BASE_ATTRS_BY_ATTRIBUTE.get(f"{host}.{attribute}")
-    if scoped is not None:
-        return scoped
-    return BASE_ATTRS_BY_ATTRIBUTE.get(attribute, {})
+    shared = scoped if scoped is not None else BASE_ATTRS_BY_ATTRIBUTE.get(attribute, {})
+
+    if not case_name:
+        return shared
+    # `View` hosts both its own section and `common`, so both keys are checked.
+    for section in (host, "common" if host == DEFAULT_COMMON_HOST else host):
+        for suffix, overlay in VARIANT_CASES.get((section, attribute), {}).items():
+            if case_name == suffix or case_name.endswith(f"_{suffix}"):
+                return {**shared, **overlay}
+    return shared
 
 
 #: Prefix marking a companion that belongs on the ROOT node, not the target.
@@ -1650,7 +1693,9 @@ def _visual_cases(section: str, attribute: str, defn: dict) -> list[CasePlan]:
 
     if enum_values and not ({"number", "boolean"} & base_types):
         # Enum fully covers string-typed attributes.
-        return _prefer_primary(section, attribute, cases)
+        return _with_variant_cases(
+            section, attribute, _prefer_primary(section, attribute, cases)
+        )
 
     found, value = representative_value(section, attribute, defn)
     if found:
@@ -1671,7 +1716,33 @@ def _visual_cases(section: str, attribute: str, defn: dict) -> list[CasePlan]:
     for name, extra in dedupe_case_names(EXTRA_CASES.get((section, attribute), [])):
         cases.append(CasePlan(name=name, value=extra, written_key=attribute))
 
-    return _prefer_primary(section, attribute, cases)
+    return _with_variant_cases(
+        section, attribute, _prefer_primary(section, attribute, cases)
+    )
+
+
+def _with_variant_cases(
+    section: str, attribute: str, cases: list[CasePlan]
+) -> list[CasePlan]:
+    """Repeat every case under each VARIANT_CASES suffix.
+
+    Appended last so a variant never becomes the representative — `primary`
+    still means the plain declaration.
+    """
+    out = list(cases)
+    for suffix in variant_bases_for(section, attribute):
+        for case in cases:
+            if case.alias_of is not None:
+                continue
+            out.append(
+                CasePlan(
+                    name=f"{case.name}_{suffix}",
+                    value=case.value,
+                    written_key=case.written_key,
+                    assertions=case.assertions,
+                )
+            )
+    return out
 
 
 def _with_alias_cases(

@@ -141,7 +141,7 @@ def plan_definitions(
 
 def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> dict:
     """One minimal layout: root View + (anchor?) + target component."""
-    extra = rules.base_attrs_for(plan.host, plan.attribute)
+    extra = rules.base_attrs_for(plan.host, plan.attribute, case.name)
     base = dict(rules.BASE_ATTRS.get(plan.host, {}))
     rules.apply_base_overrides(base, extra)
 
@@ -378,7 +378,8 @@ def build_manifest_entry(
         # off-screen effect (soft-keyboard configuration) cannot be compared.
         "control": (
             control_id(
-                plan.host, plan.needs_anchor, control_shape(plan.host, plan.attribute)
+                plan.host, plan.needs_anchor,
+                control_shape(plan.host, plan.attribute, case.name),
             )
             if plan.cls == rules.CLASS_VISUAL
             and plan.attribute not in rules.NON_OBSERVABLE_ATTRS
@@ -456,9 +457,14 @@ def shape_name(extra: dict | None) -> str:
     return "_".join(_shape_part(k, v) for k, v in sorted(extra.items()))
 
 
-def control_shape(host: str, attribute: str) -> str:
-    """Stable name for the extra-base variant an attribute's fixture uses."""
-    return shape_name(rules.base_attrs_for(host, attribute))
+def control_shape(host: str, attribute: str, case_name: str = "") -> str:
+    """Stable name for the extra-base variant an attribute's fixture uses.
+
+    `case_name` is only needed for attributes with VARIANT_CASES, where two
+    cases of the same attribute stand on different bases and therefore must be
+    compared against different controls.
+    """
+    return shape_name(rules.base_attrs_for(host, attribute, case_name))
 
 
 def build_control_layout(
@@ -644,6 +650,10 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     # a platform-restricted fixture must not run anywhere else (an ios-only
     # SF-Symbol src broke the android codegen host as R.drawable.star).
     needed_controls: dict[tuple, set] = {}
+    # shape -> the exact extras that produced it, recorded as the sweep runs.
+    # Reconstructing them afterwards from BASE_ATTRS_BY_ATTRIBUTE could not
+    # see a VARIANT_CASES overlay, which exists only as a merge.
+    shape_extras: dict[str, dict] = {}
     # macOS filesystems are case-insensitive; attribute names differing only
     # by case (onclick / onClick) must not share a fixture file path. The
     # suffix assignment follows definition order — fully deterministic.
@@ -698,17 +708,15 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
             else:
                 summary.visual_count += 1
                 if plan.attribute not in rules.NON_OBSERVABLE_ATTRS:
-                    control_key = (plan.host, plan.needs_anchor, control_shape(plan.host, plan.attribute))
+                    case_extra = rules.base_attrs_for(plan.host, plan.attribute, case.name)
+                    shape = shape_name(case_extra)
+                    control_key = (plan.host, plan.needs_anchor, shape)
                     needed_controls.setdefault(control_key, set()).update(plan.platforms)
+                    shape_extras[shape] = case_extra
 
     # One control per shape the visual fixtures actually used. Generated after
     # the sweep so an unused host does not get a control nobody compares to.
     control_dir = fixtures_dir / "__control"
-    # Keyed by shape, not by attribute: a shape is defined by its extras, and
-    # the same extras may be reached from a scoped or an unscoped key.
-    shape_extras = {
-        shape_name(e): e for e in rules.BASE_ATTRS_BY_ATTRIBUTE.values()
-    }
     for host, needs_anchor, shape in sorted(needed_controls.keys()):
         control_platforms = needed_controls[(host, needs_anchor, shape)]
         control_dir.mkdir(exist_ok=True)

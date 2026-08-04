@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "ed696903716308210a918a2bfaa36f0c12f20272efd2b3691635ca54fe0e1b62",
   "counts": {
-    "fixtures": 742,
+    "fixtures": 746,
     "assertable": 29,
-    "visual": 607,
+    "visual": 610,
     "interactive": 35,
-    "control": 71,
+    "control": 72,
     "skipped": 151,
     "promoted": {
       "callback": 11
@@ -692,6 +692,75 @@
       "state": null,
       "promotedFrom": null,
       "control": "__control/View"
+    },
+    {
+      "id": "common/borderStyle__solid_with_border",
+      "component": "common",
+      "attribute": "borderStyle",
+      "case": "solid_with_border",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "borderStyle",
+      "aliasOf": null,
+      "value": "solid",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/borderStyle__solid_with_border.layout.json",
+      "test": "fixtures/common/borderStyle__solid_with_border.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__borderColor--FF0000_borderWidth-2"
+    },
+    {
+      "id": "common/borderStyle__dashed_with_border",
+      "component": "common",
+      "attribute": "borderStyle",
+      "case": "dashed_with_border",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "borderStyle",
+      "aliasOf": null,
+      "value": "dashed",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/borderStyle__dashed_with_border.layout.json",
+      "test": "fixtures/common/borderStyle__dashed_with_border.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__borderColor--FF0000_borderWidth-2"
+    },
+    {
+      "id": "common/borderStyle__dotted_with_border",
+      "component": "common",
+      "attribute": "borderStyle",
+      "case": "dotted_with_border",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "borderStyle",
+      "aliasOf": null,
+      "value": "dotted",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/borderStyle__dotted_with_border.layout.json",
+      "test": "fixtures/common/borderStyle__dotted_with_border.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__borderColor--FF0000_borderWidth-2"
     },
     {
       "id": "common/opacity__static",
@@ -16701,6 +16770,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/View.layout.json",
       "test": "fixtures/__control/View.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/View__borderColor--FF0000_borderWidth-2",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__borderColor--FF0000_borderWidth-2.layout.json",
+      "test": "fixtures/__control/View__borderColor--FF0000_borderWidth-2.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
