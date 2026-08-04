@@ -394,12 +394,20 @@ module KjuiTools
             color_value = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
             style_parts << "color = #{color_value}" if color_value
           else
+            # The import goes WITH the emission. The placeholder branch above
+            # registers it too, which is why this was invisible: every
+            # TextField fixture that declared a hint got the import from
+            # there, and only a field with no hint AND no fontColor reached
+            # this line alone — `Unresolved reference 'Configuration'`, and
+            # the whole codegen host stopped compiling.
+            required_imports&.add(:configuration)
             style_parts << "color = Configuration.TextField.defaultTextColor"
           end
 
           # Undeclared font size follows the same Configuration default the
           # dynamic component applies (LocalTextStyle's 16sp is not it).
           unless tf_resolved_var
+            required_imports&.add(:configuration)
             style_parts << "fontSize = Configuration.TextField.defaultFontSize.sp"
           end
 

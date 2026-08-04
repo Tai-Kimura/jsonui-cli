@@ -111,6 +111,25 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       expect(result).to include('color')
     end
 
+    # A field with no hint AND no fontColor is the only shape that reaches the
+    # Configuration fallback alone: the placeholder branch registers the same
+    # import, so every fixture that declared a hint hid this. The generated
+    # view then failed to compile — `Unresolved reference 'Configuration'` —
+    # and took the whole android-codegen conformance host down with it.
+    it 'imports Configuration when the text colour falls back to it' do
+      json_data = { 'type' => 'TextField' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('Configuration.TextField.defaultTextColor')
+      expect(required_imports).to include(:configuration)
+    end
+
+    it 'imports Configuration when the font size falls back to it' do
+      json_data = { 'type' => 'TextField', 'fontColor' => '#333333' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('Configuration.TextField.defaultFontSize.sp')
+      expect(required_imports).to include(:configuration)
+    end
+
     it 'generates TextField with textAlign center' do
       json_data = { 'type' => 'TextField', 'textAlign' => 'center' }
       result = described_class.generate(json_data, 0, required_imports)

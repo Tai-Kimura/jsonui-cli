@@ -1,6 +1,6 @@
 {
   "platform": "android",
-  "manifestHash": "1d62ad8bd8b20b6129f005e865e481e2c17b01495f4b6d258baf88c7dee63e19",
+  "manifestHash": "55a48fa7e476b0a0a12843acd9ef8045e25510d9b1b4c5d21277184d4caa27d4",
   "runner": {
     "name": "uiautomator",
     "version": "2.3.0"
@@ -2573,14 +2573,28 @@
       "screenshot": "artifacts/android/Segment_tintColor__static.png"
     },
     {
-      "id": "Segment/normalColor__static",
-      "status": "skipped",
-      "detail": "not applicable to android"
+      "id": "Segment/fontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Segment_fontColor__static.png"
     },
     {
-      "id": "Segment/selectedColor__static",
-      "status": "skipped",
-      "detail": "not applicable to android"
+      "id": "Segment/fontColor__alias_normalColor",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Segment_fontColor__alias_normalColor.png"
+    },
+    {
+      "id": "Segment/selectedFontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Segment_selectedFontColor__static.png"
+    },
+    {
+      "id": "Segment/selectedFontColor__alias_selectedColor",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Segment_selectedFontColor__alias_selectedColor.png"
     },
     {
       "id": "Segment/apportionsSegmentWidthsByContent__true",
@@ -3564,6 +3578,12 @@
       "screenshot": "artifacts/android/control_Button.png"
     },
     {
+      "id": "__control/Button__enabled-False",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Button__enabled-False.png"
+    },
+    {
       "id": "__control/CheckBox",
       "status": "pass",
       "detail": "",
@@ -3594,6 +3614,12 @@
       "screenshot": "artifacts/android/control_Collection.png"
     },
     {
+      "id": "__control/Collection__columns-2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Collection__columns-2.png"
+    },
+    {
       "id": "__control/GradientView",
       "status": "pass",
       "detail": "",
@@ -3610,6 +3636,18 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/control_IconLabel__icon-off-conformance-sample.png"
+    },
+    {
+      "id": "__control/IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000.png"
+    },
+    {
+      "id": "__control/IconLabel__selected-True",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_IconLabel__selected-True.png"
     },
     {
       "id": "__control/Image",
@@ -3634,10 +3672,34 @@
       "screenshot": "artifacts/android/control_Label.png"
     },
     {
+      "id": "__control/Label__highlightAttributes-cb049517",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Label__highlightAttributes-cb049517.png"
+    },
+    {
+      "id": "__control/Label__hint-Conformance-Hint_no-text",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Label__hint-Conformance-Hint_no-text.png"
+    },
+    {
+      "id": "__control/Label__no-text",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Label__no-text.png"
+    },
+    {
       "id": "__control/Label__selected-True",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/control_Label__selected-True.png"
+    },
+    {
+      "id": "__control/Label__text-1d8efd05",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Label__text-1d8efd05.png"
     },
     {
       "id": "__control/NetworkImage",
@@ -3670,10 +3732,22 @@
       "screenshot": "artifacts/android/control_Radio__checked-True.png"
     },
     {
+      "id": "__control/Radio__no-text",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Radio__no-text.png"
+    },
+    {
       "id": "__control/Radio__orientation-horizontal",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/control_Radio__orientation-horizontal.png"
+    },
+    {
+      "id": "__control/Radio__value-sample",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Radio__value-sample.png"
     },
     {
       "id": "__control/SafeAreaView",
@@ -3753,6 +3827,23 @@
       "screenshot": "artifacts/android/control_TextField.png"
     },
     {
+      "id": "__control/TextField__enabled-False",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "__control/TextField__no-hint",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_TextField__no-hint.png"
+    },
+    {
+      "id": "__control/TextField__no-hint_placeholder-Conformance-Hint",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_TextField__no-hint_placeholder-Conformance-Hint.png"
+    },
+    {
       "id": "__control/TextField__text-Clear-me",
       "status": "skipped",
       "detail": "not applicable to android"
@@ -3768,6 +3859,17 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/control_TextView.png"
+    },
+    {
+      "id": "__control/TextView__enabled-False",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "__control/TextView__no-hint",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_TextView__no-hint.png"
     },
     {
       "id": "__control/TextView__text-Sample",

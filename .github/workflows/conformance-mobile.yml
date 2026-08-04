@@ -44,6 +44,16 @@ jobs:
       - uses: ruby/setup-ruby@v1 # rjui_tools codegen inside generate.sh
         with:
           ruby-version: "3.3"
+      - name: Drop the checked-out results file
+        # Every results file in this repo is TRACKED, so a checkout puts a
+        # PREVIOUS campaign's results on disk before this job measures
+        # anything. When a run dies before its collect step, the upload below
+        # still finds that file, `if-no-files-found: error` is satisfied, and
+        # the artifact reads as a successful suite — mobile run 30912810635
+        # shipped plan 32's "pass: 478" as though android-codegen had run,
+        # while the lane had produced zero screenshots. Delete it first so the
+        # artifact can only ever contain THIS run's product.
+        run: rm -f conformance/results/web.results.json
       - name: npm ci
         working-directory: conformance/hosts/web
         run: npm ci
@@ -102,6 +112,11 @@ jobs:
         run: SwiftJsonUI/ConformanceHost/scripts/sync_fixtures.sh
       - name: Generate ConformanceHost.xcodeproj
         run: ruby SwiftJsonUI/ConformanceHost/scripts/generate_project.rb
+      - name: Drop the checked-out results file
+        # See the web job: the results files are tracked, so a run that dies
+        # before its collect step would otherwise upload a PREVIOUS
+        # campaign's file and read as a successful suite.
+        run: rm -f conformance/results/ios.results.json
       - name: Run iOS conformance suite (headless simulator)
         env:
           SIMULATOR_NAME: iPhone 16 Pro
@@ -151,6 +166,11 @@ jobs:
         run: gem install xcodeproj --no-document
       - name: Sync fixtures + vendor the iOS test-runner driver
         run: SwiftJsonUI/ConformanceHost/scripts/sync_fixtures.sh
+      - name: Drop the checked-out results file
+        # See the web job: the results files are tracked, so a run that dies
+        # before its collect step would otherwise upload a PREVIOUS
+        # campaign's file and read as a successful suite.
+        run: rm -f conformance/codegen/ios.results.json
       - name: Generate the codegen fixture registry (sjui build)
         run: ruby SwiftJsonUI/ConformanceHost/scripts/generate_codegen_host.rb
       - name: Generate ConformanceHost.xcodeproj (codegen sources)
@@ -244,6 +264,11 @@ jobs:
       # ~2 min via the liveness gate, not a full-step hang) doesn't fail the job —
       # the retry below runs on a FRESH emulator, which is the only way to
       # recover a frozen one. 70-min step timeout is a backstop.
+      - name: Drop the checked-out results file
+        # See the web job: the results files are tracked, so a run that dies
+        # before its collect step would otherwise upload a PREVIOUS
+        # campaign's file and read as a successful suite.
+        run: rm -f conformance/results/android.results.json conformance/results/android.logcat*.txt
       - name: Run Android conformance suite (emulator)
         id: android_emu
         continue-on-error: true
@@ -324,6 +349,11 @@ jobs:
       - uses: ruby/setup-ruby@v1 # kjui build inside generate_codegen_host.rb
         with:
           ruby-version: "3.3"
+      - name: Drop the checked-out results file
+        # See the web job: the results files are tracked, so a run that dies
+        # before its collect step would otherwise upload a PREVIOUS
+        # campaign's file and read as a successful suite.
+        run: rm -f conformance/codegen/android.results.json
       - name: Generate the codegen fixture registry (kjui build)
         run: ruby KotlinJsonUI/conformance-host/scripts/generate_codegen_host.rb
       - name: Enable KVM
