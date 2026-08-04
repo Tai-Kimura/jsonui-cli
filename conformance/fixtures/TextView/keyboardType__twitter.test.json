@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/keyboardType__twitter.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.keyboardType (twitter)",
+    "description": "Conformance fixture for 'keyboardType' on TextView (section: TextView, class: visual). Value under test: \"twitter\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "keyboardType__twitter",
+      "description": "Conformance fixture for 'keyboardType' on TextView (section: TextView, class: visual). Value under test: \"twitter\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_keyboardType__twitter"
+        }
+      ]
+    }
+  ]
+}

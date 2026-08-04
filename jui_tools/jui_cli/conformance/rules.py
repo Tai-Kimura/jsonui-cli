@@ -796,6 +796,33 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     "paddingRight": {"orientation": "horizontal"},
     "paddingStart": {"orientation": "horizontal"},
     "paddingEnd": {"orientation": "horizontal"},
+    # `borderStyle` is a modifier on a border that `borderWidth` has to summon
+    # first — the 2026-08-05 border ruling: `borderWidth` alone draws,
+    # `borderColor` alone and `borderStyle` alone do not, and the SSoT backs it
+    # by declaring `"default": "solid"` on borderStyle only (a style default
+    # presupposes the thing it styles). So a lone borderStyle fixture is
+    # CORRECTLY inert, and measuring B's new ios dashed/dotted needs the pair.
+    #
+    # `borderColor` is deliberately absent: E is declaring a default for it and
+    # this fixture is what verifies "no colour declared" behaviour.
+    #
+    # Scoped to the View host, not written bare: `common.borderStyle`
+    # (solid/dashed/dotted) and `TextField.borderStyle` (none/line/bezel/
+    # roundedRect) are DIFFERENT vocabularies that happen to share a name.
+    "View.borderStyle": {"borderWidth": 1},
+    # The "top-left family". `alignTop` / `alignLeft` pin the target to the
+    # parent edge it is ALREADY at — the root stacks its children at the
+    # top-start corner — so the attribute asked for the position the target
+    # already had and nothing moved. G proved it from the distribution rather
+    # than from the code: `alignBottom` / `alignRight` / `alignBottomView` /
+    # `alignRightView` are absent from the android queue, i.e. their pixels DO
+    # move, and an implementation defect has no reason to pick a direction.
+    #
+    # Pushing the root's content to the far edge gives the attribute somewhere
+    # to travel from. The `root.` companion widens the control identically, so
+    # the comparison still measures only the attribute.
+    "alignTop": {"root.gravity": "bottom"},
+    "alignLeft": {"root.gravity": "right"},
     # `highlighted` is the other half of a pair, like border/borderColor:
     # `return if highlight_bg.nil?` (sjui base_view_converter.rb:730), which
     # faithfully mirrors UIKit's SJUIView:187 — a highlighted state with no
@@ -980,6 +1007,29 @@ def split_root_attrs(extra: dict[str, Any] | None) -> dict[str, Any]:
 #: which passes unknown classes through verbatim into Kotlin source.
 BINDING_DATA_CLASSES: dict[str, str] = {}
 
+#: Binding companions that feed a TWO-WAY control, mapped to the class of the
+#: change handler the generated code calls back into.
+#:
+#: Declaring a property in the layout's `data` section makes rjui use the
+#: declaration verbatim and SKIP its own inference — so a companion that drives
+#: a controlled input has to name both halves of the two-way pair or the
+#: generated component calls `data.on<Prop>Change?.(...)` against a Data type
+#: that has no such member (`tsc --noEmit`, 49-D round 3: Fx0326 / Fx0536).
+#:
+#: rjui infers the handler for TextField's text binding but not for SelectBox's
+#: date binding — that asymmetry is reported to lane A. This table is the
+#: fixture side of it, and stays correct either way: the handler belongs in the
+#: declaration of a two-way binding.
+BINDING_CHANGE_HANDLERS: dict[str, str] = {
+    # SelectBox.selectedDate — `onChange` writes the reformatted string back.
+    "pickedDate": "(String) -> Void",
+}
+
+
+def _change_handler_name(prop: str) -> str:
+    """rjui's two-way partner for *prop*: ``pickedDate`` -> ``onPickedDateChange``."""
+    return f"on{prop[:1].upper()}{prop[1:]}Change"
+
 _BINDING_RE = re.compile(r"^@\{([A-Za-z_][A-Za-z0-9_]*)\}$")
 
 #: Default class for an auto-declared binding companion.
@@ -1020,6 +1070,14 @@ def binding_data_entries(
         entries.append(
             {"name": name, "class": cls, "defaultValue": _BINDING_DATA_DEFAULTS.get(cls, "")}
         )
+        handler_cls = BINDING_CHANGE_HANDLERS.get(name)
+        if handler_cls is not None:
+            handler = _change_handler_name(name)
+            if handler not in seen:
+                seen.add(handler)
+                # No defaultValue: a handler is supplied at runtime, and the
+                # codegens emit it as an optional callback member.
+                entries.append({"name": handler, "class": handler_cls})
     return entries
 
 

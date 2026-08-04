@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/keyboardType__websearch.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.keyboardType (websearch)",
+    "description": "Conformance fixture for 'keyboardType' on TextView (section: TextView, class: visual). Value under test: \"webSearch\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "keyboardType__websearch",
+      "description": "Conformance fixture for 'keyboardType' on TextView (section: TextView, class: visual). Value under test: \"webSearch\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_keyboardType__websearch"
+        }
+      ]
+    }
+  ]
+}

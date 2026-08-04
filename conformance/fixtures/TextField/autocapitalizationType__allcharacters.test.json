@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/autocapitalizationType__allcharacters.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.autocapitalizationType (allcharacters)",
+    "description": "Conformance fixture for 'autocapitalizationType' on TextField (section: TextField, class: visual). Value under test: \"allCharacters\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "autocapitalizationType__allcharacters",
+      "description": "Conformance fixture for 'autocapitalizationType' on TextField (section: TextField, class: visual). Value under test: \"allCharacters\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_autocapitalizationType__allcharacters"
+        }
+      ]
+    }
+  ]
+}

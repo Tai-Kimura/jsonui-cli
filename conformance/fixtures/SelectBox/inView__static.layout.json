@@ -17,7 +17,9 @@
       "id": "anchor",
       "width": 50,
       "height": 50,
-      "background": "#CCCCCC"
+      "background": "#CCCCCC",
+      "topMargin": 60,
+      "leftMargin": 60
     },
     {
       "type": "SelectBox",

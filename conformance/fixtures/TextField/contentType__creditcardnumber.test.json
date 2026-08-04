@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/contentType__creditcardnumber.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.contentType (creditcardnumber)",
+    "description": "Conformance fixture for 'contentType' on TextField (section: TextField, class: visual). Value under test: \"creditCardNumber\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "contentType__creditcardnumber",
+      "description": "Conformance fixture for 'contentType' on TextField (section: TextField, class: visual). Value under test: \"creditCardNumber\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_contentType__creditcardnumber"
+        }
+      ]
+    }
+  ]
+}

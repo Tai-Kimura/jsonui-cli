@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/lineBreakMode__head.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.lineBreakMode (head)",
+    "description": "Conformance fixture for 'lineBreakMode' on TextView (section: TextView, class: visual). Value under test: \"Head\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "lineBreakMode__head",
+      "description": "Conformance fixture for 'lineBreakMode' on TextView (section: TextView, class: visual). Value under test: \"Head\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_lineBreakMode__head"
+        }
+      ]
+    }
+  ]
+}

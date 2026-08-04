@@ -43,12 +43,22 @@ TEST_GENERATED_BY = "@generated jui conformance generate — DO NOT EDIT"
 MANIFEST_SCHEMA_VERSION = 2
 
 #: Anchor sibling emitted for view-reference attributes.
+#:
+#: The margins are load-bearing. With the anchor at the origin, `alignTopView`
+#: and `alignLeftView` asked the target to move to the corner it was already
+#: in — the root stacks its children at top-start — so the two fixtures were
+#: permanently inert and indistinguishable from a dropped attribute. Offsetting
+#: the anchor gives every edge, not just bottom and right, somewhere to travel
+#: from. The control carries the same anchor, so the comparison is unaffected
+#: for the view-ref attributes that already worked.
 ANCHOR_NODE: dict[str, Any] = {
     "type": "View",
     "id": rules.ANCHOR_ID,
     "width": 50,
     "height": 50,
     "background": "#CCCCCC",
+    "topMargin": 60,
+    "leftMargin": 60,
 }
 
 

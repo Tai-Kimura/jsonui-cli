@@ -30,6 +30,10 @@
       "name": "pickedDate",
       "class": "String",
       "defaultValue": ""
+    },
+    {
+      "name": "onPickedDateChange",
+      "class": "(String) -> Void"
     }
   ]
 }
