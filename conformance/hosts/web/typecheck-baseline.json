@@ -1,0 +1,32 @@
+{
+  "_comment": [
+    "Known type errors in the generated web host, pinned so new ones fail CI (scripts/typecheck_ratchet.mjs).",
+    "The host is built by the production rjui codegen, so an error here is an error in every consumer's",
+    "@generated tree — and an @generated file cannot be patched downstream. The remaining errors have three",
+    "owners and are cleared independently; when the count reaches 0 the ratchet is replaced by a plain",
+    "`npm run typecheck` gate and this file is deleted.",
+    "Owners: (1) fixture layouts binding data they never declare (conformanceFire / conformanceMissing, 10) —",
+    "fixture authoring; (2) fixtureRegistry.tsx Record<string, unknown> conversions (26) — scripts/generate.mjs,",
+    "host scaffolding only, no consumer counterpart; (3) two strays: a fixture comparing distinct literal types",
+    "and an unused @ts-expect-error in src/main.tsx.",
+    "History: 89 before plan 37 (2026-08-04). TabView referencing an undeclared selectedTabIndex (48) and the",
+    "TextView onInput reading .value off an EventTarget (2) were codegen defects and are fixed; the Slider",
+    "double style attribute (1) went out with the plan 34 tint work."
+  ],
+  "maxErrors": 38,
+  "knownFiles": [
+    "src/generated/components/Fx0073.tsx",
+    "src/generated/components/Fx0074.tsx",
+    "src/generated/components/Fx0094.tsx",
+    "src/generated/components/Fx0095.tsx",
+    "src/generated/components/Fx0096.tsx",
+    "src/generated/components/Fx0098.tsx",
+    "src/generated/components/Fx0099.tsx",
+    "src/generated/components/Fx0186.tsx",
+    "src/generated/components/Fx0345.tsx",
+    "src/generated/components/Fx0447.tsx",
+    "src/generated/components/Fx0460.tsx",
+    "src/generated/fixtureRegistry.tsx",
+    "src/main.tsx"
+  ]
+}

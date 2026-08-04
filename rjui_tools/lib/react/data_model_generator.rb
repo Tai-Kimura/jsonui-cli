@@ -455,7 +455,16 @@ module RjuiTools
 
           # Check for TabView tabs - generate data properties for each tab's view
           if json_data['type'] == 'TabView' && json_data['tabs'].is_a?(Array)
-            # Add setSelectedTabIndex function for tab switching
+            # The tab state and its setter. The converter reads the state back
+            # (`data.selectedTabIndex ?? 0`) when selectedIndex is not bound, so
+            # declaring only the setter left the generated JSX referencing a
+            # property the interface does not have.
+            properties << {
+              'name' => 'selectedTabIndex',
+              'class' => 'Int',
+              'tsType' => 'number',
+              'defaultValue' => nil
+            }
             properties << {
               'name' => 'setSelectedTabIndex',
               'class' => 'Function',

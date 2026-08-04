@@ -226,12 +226,12 @@ module RjuiTools
           elsif selected.is_a?(Numeric)
             # A literal seeds the initial selection (sjui parity 0068644 did
             # the same on ios); runtime state still overrides.
-            "(data.selectedTab ?? #{selected.to_i})"
+            "(data.selectedTabIndex ?? #{selected.to_i})"
           else
             # Default to tab 0 — `undefined === index` selected NO tab, which
             # left tintColor with nothing to color (33 cross-effect: TabView
             # tintColor/selectedIndex web-inert family).
-            '(data.selectedTab ?? 0)'
+            '(data.selectedTabIndex ?? 0)'
           end
         end
 
@@ -243,12 +243,15 @@ module RjuiTools
           if handler && has_binding?(handler)
             extract_binding_property(handler)
           else
-            # Generate setter from the binding
+            # Generate setter from the binding. Unbound, the tab state is the
+            # implicit `selectedTabIndex` the data model declares — spelling it
+            # anything else left the JSX referencing a property no generated
+            # Data interface has, which is a type error the consumer cannot fix.
             selected = attributes['selectedIndex']
             raw_binding = if selected && has_binding?(selected)
                             extract_raw_binding_property(selected)
                           else
-                            'selectedTab'
+                            'selectedTabIndex'
                           end
             setter_name = "set#{raw_binding[0].upcase}#{raw_binding[1..]}"
             add_viewmodel_data_prefix(setter_name)

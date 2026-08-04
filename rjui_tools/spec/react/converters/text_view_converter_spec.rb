@@ -386,8 +386,18 @@ RSpec.describe RjuiTools::React::Converters::TextViewConverter do
       result = create_converter({ 'type' => 'TextView', 'pattern' => '[a-z]+' }).convert
 
       expect(result).not_to include('pattern="')
-      expect(result).to include("new RegExp('^(?:[a-z]+)$').test(e.target.value)")
+      expect(result).to include("new RegExp('^(?:[a-z]+)$').test(e.currentTarget.value)")
       expect(result).to include('setCustomValidity(')
+    end
+
+    # onInput carries a FormEvent, whose `target` is a bare EventTarget: reading
+    # `.value` off it fails a strict consumer's tsc, and @generated is unfixable
+    # downstream.
+    it 'reads the validated value off currentTarget so the emit typechecks' do
+      result = create_converter({ 'type' => 'TextView', 'pattern' => '[a-z]+' }).convert
+
+      expect(result).to include('e.currentTarget.setCustomValidity(')
+      expect(result).not_to include('e.target.')
     end
 
     it 'escapes backslashes and quotes so the emitted JS literal stays valid' do

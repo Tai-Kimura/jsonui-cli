@@ -245,8 +245,11 @@ module RjuiTools
           attrs << ' required' if attributes['required'] == true || attributes['required'] == 'true'
           if attributes['pattern']
             escaped = attributes['pattern'].to_s.gsub('\\', '\\\\\\\\').gsub("'", "\\\\'")
-            attrs << " onInput={(e) => e.target.setCustomValidity(" \
-                     "new RegExp('^(?:#{escaped})$').test(e.target.value) ? '' : 'Invalid format')}"
+            # `currentTarget`, not `target`: React types onInput as a FormEvent,
+            # whose `target` is a bare EventTarget — reading `.value` off it is
+            # a type error in a strict consumer, and the file is @generated.
+            attrs << " onInput={(e) => e.currentTarget.setCustomValidity(" \
+                     "new RegExp('^(?:#{escaped})$').test(e.currentTarget.value) ? '' : 'Invalid format')}"
           end
 
           # Soft keyboard. `input` is the TextField spelling of the same idea and
