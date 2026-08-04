@@ -21,6 +21,7 @@
         "One",
         "Two"
       ],
+      "prompt": "Choose",
       "hintColor": "#FF0000"
     }
   ]

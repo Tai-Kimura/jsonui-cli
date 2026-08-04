@@ -885,6 +885,11 @@ HINT_TEXT = "Conformance Hint"
 #: attributes that only act once there is MORE content than fits (line caps,
 #: break modes). The one-word base text made every such value render the same
 #: pixels as its control.
+#: Text with a URL in it, for `linkable`: the attribute turns URLs in the body
+#: into links, and the plain sample text contains none, so it had nothing to
+#: turn (lane F family-B, group A3).
+LINK_TEXT = "See https://example.com/conformance for details"
+
 LONG_TEXT = (
     "Sample text long enough to wrap onto several lines inside the "
     "two hundred point wide conformance hosts"
@@ -1034,7 +1039,7 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # minimumScaleFactor is the FLOOR of the auto-shrink, read only inside
     # `if attributes['autoShrink']` (rjui label_converter.rb:450). Without the
     # switch there is no shrinking for a floor to bound.
-    "Label.minimumScaleFactor": {"autoShrink": True},
+    "Label.minimumScaleFactor": {"autoShrink": True, "text": LONG_TEXT},
     "TextField.placeholder": {"hint": None},
     "TextView.placeholder": {"hint": None},
     # placeholderColor styles the PLACEHOLDER, so the placeholder spelling has
@@ -1082,6 +1087,33 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # on a single line, so any maximum renders the same pixels.
     "Label.lines": {"text": LONG_TEXT},
     "IconLabel.lines": {"text": LONG_TEXT},
+    # --- lane F family-B, group A3 (2026-08-05) ---------------------------- #
+    # "the fixture is too thin for the attribute to act on". Every Label
+    # fixture was `text: "Sample"` in a 200pt box — one short line that fits —
+    # and each of these attributes only exists once there is MORE than that.
+    #
+    # Line metrics need a second line to sit between.
+    "Label.lineSpacing": {"text": LONG_TEXT},
+    "Label.lineHeightMultiple": {"text": LONG_TEXT},
+    # Truncation modes only choose WHERE to cut once something is being cut.
+    "Label.lineBreakMode": {"text": LONG_TEXT},
+    # Shrink-to-fit needs an overflow to shrink out of; the floor needs the
+    # shrinking to be happening before it can bound it.
+    "Label.autoShrink": {"text": LONG_TEXT},
+    # A hint's line height needs a hint of more than one line.
+    "TextView.hintLineHeightMultiple": {"hint": LONG_TEXT},
+    # `linkable` turns URLs in the body into links. "Sample" has none.
+    "Label.linkable": {"text": LINK_TEXT},
+    # The no-source state shows `defaultImage` FIRST, so the state images
+    # behind it were never displayed — same shape as Image.errorImage above.
+    "NetworkImage.errorImage": {"defaultImage": None},
+    "NetworkImage.loadingImage": {"defaultImage": None},
+    "NetworkImage.placeholder": {"defaultImage": None},
+    # A closed SelectBox draws `prompt` when there is one and the (initially
+    # empty) selected text when there is not — so with no prompt declared
+    # there were no glyphs for a colour to land on.
+    "SelectBox.fontColor": {"prompt": "Choose"},
+    "SelectBox.hintColor": {"prompt": "Choose"},
     # Track/progress tints need a nonzero value or there is nothing to
     # paint (a zero-length active track is invisible on every platform).
     # Slider's canonical value attribute is `value`; Progress's is `progress`

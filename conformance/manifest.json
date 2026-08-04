@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "ed696903716308210a918a2bfaa36f0c12f20272efd2b3691635ca54fe0e1b62",
   "counts": {
-    "fixtures": 838,
+    "fixtures": 842,
     "assertable": 33,
     "visual": 700,
     "interactive": 35,
-    "control": 70,
+    "control": 74,
     "skipped": 151,
     "promoted": {
       "callback": 11
@@ -5139,7 +5139,7 @@
       "test": "fixtures/Label/lineBreakMode__clip.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__text-1d8efd05"
     },
     {
       "id": "Label/lineBreakMode__char",
@@ -5162,7 +5162,7 @@
       "test": "fixtures/Label/lineBreakMode__char.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__text-1d8efd05"
     },
     {
       "id": "Label/lineBreakMode__word",
@@ -5185,7 +5185,7 @@
       "test": "fixtures/Label/lineBreakMode__word.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__text-1d8efd05"
     },
     {
       "id": "Label/lineBreakMode__head",
@@ -5208,7 +5208,7 @@
       "test": "fixtures/Label/lineBreakMode__head.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__text-1d8efd05"
     },
     {
       "id": "Label/lineBreakMode__middle",
@@ -5231,7 +5231,7 @@
       "test": "fixtures/Label/lineBreakMode__middle.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__text-1d8efd05"
     },
     {
       "id": "Label/lineBreakMode__tail",
@@ -5254,7 +5254,7 @@
       "test": "fixtures/Label/lineBreakMode__tail.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__text-1d8efd05"
     },
     {
       "id": "Label/lineHeightMultiple__static",
@@ -5277,7 +5277,7 @@
       "test": "fixtures/Label/lineHeightMultiple__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__text-1d8efd05"
     },
     {
       "id": "Label/lineHeightMultiple__binding",
@@ -5300,7 +5300,7 @@
       "test": "fixtures/Label/lineHeightMultiple__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__text-1d8efd05"
     },
     {
       "id": "Label/lineSpacing__static",
@@ -5323,7 +5323,7 @@
       "test": "fixtures/Label/lineSpacing__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__text-1d8efd05"
     },
     {
       "id": "Label/lineSpacing__binding",
@@ -5346,7 +5346,7 @@
       "test": "fixtures/Label/lineSpacing__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__text-1d8efd05"
     },
     {
       "id": "Label/edgeInset__static",
@@ -5443,7 +5443,7 @@
       "test": "fixtures/Label/autoShrink__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__text-1d8efd05"
     },
     {
       "id": "Label/minimumScaleFactor__static",
@@ -5466,7 +5466,7 @@
       "test": "fixtures/Label/minimumScaleFactor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label__autoShrink-True"
+      "control": "__control/Label__autoShrink-True_text-1d8efd05"
     },
     {
       "id": "Label/minimumScaleFactor__binding",
@@ -5489,7 +5489,7 @@
       "test": "fixtures/Label/minimumScaleFactor__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label__autoShrink-True"
+      "control": "__control/Label__autoShrink-True_text-1d8efd05"
     },
     {
       "id": "Label/linkable__true",
@@ -5512,7 +5512,7 @@
       "test": "fixtures/Label/linkable__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__text-5ed92def"
     },
     {
       "id": "Label/linkable__false",
@@ -5535,7 +5535,7 @@
       "test": "fixtures/Label/linkable__false.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__text-5ed92def"
     },
     {
       "id": "Label/linkable__binding",
@@ -5558,7 +5558,7 @@
       "test": "fixtures/Label/linkable__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Label"
+      "control": "__control/Label__text-5ed92def"
     },
     {
       "id": "Label/textShadow__static",
@@ -8242,7 +8242,7 @@
       "test": "fixtures/TextView/hintLineHeightMultiple__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": "__control/TextView__hint-507236bd"
     },
     {
       "id": "TextView/font__static",
@@ -10895,7 +10895,7 @@
       "test": "fixtures/NetworkImage/placeholder__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/NetworkImage"
+      "control": "__control/NetworkImage__no-defaultImage"
     },
     {
       "id": "NetworkImage/defaultImage__static",
@@ -10940,7 +10940,7 @@
       "test": "fixtures/NetworkImage/errorImage__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/NetworkImage"
+      "control": "__control/NetworkImage__no-defaultImage"
     },
     {
       "id": "NetworkImage/loadingImage__static",
@@ -10962,7 +10962,7 @@
       "test": "fixtures/NetworkImage/loadingImage__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/NetworkImage"
+      "control": "__control/NetworkImage__no-defaultImage"
     },
     {
       "id": "NetworkImage/contentMode__fit",
@@ -11370,7 +11370,7 @@
       "test": "fixtures/SelectBox/hintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox"
+      "control": "__control/SelectBox__prompt-Choose"
     },
     {
       "id": "SelectBox/hintColor__binding",
@@ -11393,7 +11393,7 @@
       "test": "fixtures/SelectBox/hintColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox"
+      "control": "__control/SelectBox__prompt-Choose"
     },
     {
       "id": "SelectBox/items__static",
@@ -12223,7 +12223,7 @@
       "test": "fixtures/SelectBox/fontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox"
+      "control": "__control/SelectBox__prompt-Choose"
     },
     {
       "id": "SelectBox/labelAttributes__static",
@@ -17993,7 +17993,7 @@
       "isControl": true
     },
     {
-      "id": "__control/Label__autoShrink-True",
+      "id": "__control/Label__autoShrink-True_text-1d8efd05",
       "component": "__control",
       "attribute": null,
       "case": "Label",
@@ -18009,8 +18009,8 @@
       ],
       "mode": null,
       "deprecated": null,
-      "layout": "fixtures/__control/Label__autoShrink-True.layout.json",
-      "test": "fixtures/__control/Label__autoShrink-True.test.json",
+      "layout": "fixtures/__control/Label__autoShrink-True_text-1d8efd05.layout.json",
+      "test": "fixtures/__control/Label__autoShrink-True_text-1d8efd05.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -18137,6 +18137,30 @@
       "isControl": true
     },
     {
+      "id": "__control/Label__text-5ed92def",
+      "component": "__control",
+      "attribute": null,
+      "case": "Label",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Label__text-5ed92def.layout.json",
+      "test": "fixtures/__control/Label__text-5ed92def.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/NetworkImage",
       "component": "__control",
       "attribute": null,
@@ -18155,6 +18179,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/NetworkImage.layout.json",
       "test": "fixtures/__control/NetworkImage.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/NetworkImage__no-defaultImage",
+      "component": "__control",
+      "attribute": null,
+      "case": "NetworkImage",
+      "class": "visual",
+      "host": "NetworkImage",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/NetworkImage__no-defaultImage.layout.json",
+      "test": "fixtures/__control/NetworkImage__no-defaultImage.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -18465,6 +18513,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/SelectBox__datePickerMode-date_selectItemType-Date.layout.json",
       "test": "fixtures/__control/SelectBox__datePickerMode-date_selectItemType-Date.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/SelectBox__prompt-Choose",
+      "component": "__control",
+      "attribute": null,
+      "case": "SelectBox",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/SelectBox__prompt-Choose.layout.json",
+      "test": "fixtures/__control/SelectBox__prompt-Choose.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -18815,6 +18887,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/TextView__enabled-False.layout.json",
       "test": "fixtures/__control/TextView__enabled-False.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/TextView__hint-507236bd",
+      "component": "__control",
+      "attribute": null,
+      "case": "TextView",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/TextView__hint-507236bd.layout.json",
+      "test": "fixtures/__control/TextView__hint-507236bd.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

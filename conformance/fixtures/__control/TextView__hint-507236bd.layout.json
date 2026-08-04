@@ -13,12 +13,11 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "Label",
+      "type": "TextView",
       "id": "target",
       "width": 200,
-      "height": "wrapContent",
-      "text": "Sample",
-      "autoShrink": true
+      "height": 100,
+      "hint": "Sample text long enough to wrap onto several lines inside the two hundred point wide conformance hosts"
     }
   ]
 }

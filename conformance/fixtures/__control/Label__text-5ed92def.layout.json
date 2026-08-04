@@ -13,23 +13,11 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "SelectBox",
+      "type": "Label",
       "id": "target",
       "width": 200,
       "height": "wrapContent",
-      "items": [
-        "One",
-        "Two"
-      ],
-      "prompt": "Choose",
-      "hintColor": "@{boundHintColor}"
-    }
-  ],
-  "data": [
-    {
-      "name": "boundHintColor",
-      "class": "String",
-      "defaultValue": "#FF0000"
+      "text": "See https://example.com/conformance for details"
     }
   ]
 }

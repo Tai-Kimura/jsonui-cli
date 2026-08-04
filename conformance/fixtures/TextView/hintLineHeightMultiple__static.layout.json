@@ -17,7 +17,7 @@
       "id": "target",
       "width": 200,
       "height": 100,
-      "hint": "Sample",
+      "hint": "Sample text long enough to wrap onto several lines inside the two hundred point wide conformance hosts",
       "hintLineHeightMultiple": 8
     }
   ]

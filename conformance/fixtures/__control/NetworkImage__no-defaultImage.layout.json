@@ -13,23 +13,10 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "SelectBox",
+      "type": "NetworkImage",
       "id": "target",
-      "width": 200,
-      "height": "wrapContent",
-      "items": [
-        "One",
-        "Two"
-      ],
-      "prompt": "Choose",
-      "hintColor": "@{boundHintColor}"
-    }
-  ],
-  "data": [
-    {
-      "name": "boundHintColor",
-      "class": "String",
-      "defaultValue": "#FF0000"
+      "width": 140,
+      "height": 80
     }
   ]
 }
