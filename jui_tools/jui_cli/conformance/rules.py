@@ -837,6 +837,58 @@ BOUND_CASES_BLOCKED: dict[tuple[str, str], dict[str, str]] = {
     # },
 }
 
+#: Attributes whose fixture cannot be SHAPED to observe them yet, with what is
+#: missing. Same three fields as the bound-hold table: who owns it, what the
+#: obstacle is, and what would settle it.
+#:
+#: Deliberately NOT wired into `is_non_observable`. That table says "no still
+#: capture can ever show this", which is a permanent claim; these are the
+#: opposite — the attribute is observable in principle and the generator simply
+#: cannot build the fixture that would show it today. Declaring them
+#: unobservable would be the mistake A caught over `disabledBackground`:
+#: pronouncing something unmeasurable when a fix would reveal it.
+#:
+#: So the fixtures stay, keep their controls, and go on reporting inert. This
+#: table is what stops that inert from being read as a defect — and what tells
+#: the next person which single mechanism unlocks it.
+UNSHAPEABLE_FIXTURES: dict[tuple[str, str], dict[str, str]] = {
+    ("Blur", "blurRadius"): {
+        "owner": "next wave",
+        "reason": "backdrop-filter blurs what is BEHIND the element, and the "
+                  "root's children are [anchor?, target] — there is no way to "
+                  "put a textured sibling behind the target, so the blur has "
+                  "a flat colour to blur and renders it unchanged",
+        "verify": "mechanism:root-children",
+    },
+    ("common", "indexAbove"): {
+        "owner": "next wave",
+        "reason": "the anchor is always emitted BEFORE the target, so the "
+                  "target already paints on top and raising it changes "
+                  "nothing. `indexBelow` works for the same reason reversed",
+        "verify": "mechanism:root-children",
+    },
+    ("Collection", "scrollAnchor"): {
+        "owner": "E",
+        "reason": "only read inside the scrollTo path, and scrollTo's data "
+                  "property has no class that compiles on more than one host "
+                  "(iOS wants PassthroughSubject, Compose reads it as String, "
+                  "and kjui passes an unknown class through verbatim)",
+        "verify": "ssot:collection-scrollTo-class",
+    },
+}
+
+
+def _check_unshapeable() -> None:
+    for pair, entry in UNSHAPEABLE_FIXTURES.items():
+        missing = [f for f in BOUND_HOLD_FIELDS if not entry.get(f)]
+        if missing:
+            raise ValueError(
+                f"UNSHAPEABLE_FIXTURES[{pair!r}] is missing {missing!r} — an "
+                "unmeasurable fixture without an owner is just an unexplained "
+                "inert result"
+            )
+
+
 #: `verify` values the gate knows how to act on. A hold naming anything else is
 #: still legal — it just cannot be checked automatically, so it surfaces in the
 #: report as an unverified hold instead of being silently trusted.
@@ -859,6 +911,7 @@ def _check_bound_holds() -> None:
 
 
 _check_bound_holds()
+_check_unshapeable()
 
 
 #: Name of the data property a bound case binds to, per attribute.
