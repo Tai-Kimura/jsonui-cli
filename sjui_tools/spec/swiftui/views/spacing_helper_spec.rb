@@ -224,6 +224,89 @@ RSpec.describe SjuiTools::SwiftUI::Views::SpacingHelper do
       end
     end
 
+    context 'in a ZStack, where the parent offset owns the margin difference' do
+      it 'keeps the shared part of a symmetric vertical margin as padding' do
+        helper.component = { 'topMargin' => 10, 'bottomMargin' => 10, '_zstack_margin_offset' => true }
+        helper.apply_margins
+
+        expect(helper.generated_code).to include('.padding(.top, 10)')
+        expect(helper.generated_code).to include('.padding(.bottom, 10)')
+      end
+
+      it 'keeps the shared part of a symmetric horizontal margin as padding' do
+        helper.component = { 'leftMargin' => 24, 'rightMargin' => 24, '_zstack_margin_offset' => true }
+        helper.apply_margins
+
+        expect(helper.generated_code).to include('.padding(.leading, 24)')
+        expect(helper.generated_code).to include('.padding(.trailing, 24)')
+      end
+
+      it 'pads by the smaller margin and leaves the difference to the offset' do
+        helper.component = { 'topMargin' => 12, 'bottomMargin' => 4, '_zstack_margin_offset' => true }
+        helper.apply_margins
+
+        expect(helper.generated_code).to include('.padding(.top, 4)')
+        expect(helper.generated_code).to include('.padding(.bottom, 4)')
+      end
+
+      it 'emits no padding when only one edge is declared' do
+        helper.component = { 'topMargin' => 8, 'leftMargin' => 8, '_zstack_margin_offset' => true }
+        helper.apply_margins
+
+        expect(helper.generated_code).to be_empty
+      end
+
+      it 'leaves a bound margin to the offset' do
+        helper.component = { 'topMargin' => '@{gap}', 'bottomMargin' => '@{gap}', '_zstack_margin_offset' => true }
+        helper.apply_margins
+
+        expect(helper.generated_code).to be_empty
+      end
+
+      it 'lifts nothing on an axis the child centres' do
+        helper.component = {
+          'leftMargin' => 24, 'rightMargin' => 24, 'centerHorizontal' => true,
+          '_zstack_margin_offset' => true
+        }
+        helper.apply_margins
+
+        expect(helper.generated_code).to be_empty
+      end
+
+      it 'lifts nothing on either axis under centerInParent' do
+        helper.component = {
+          'topMargin' => 10, 'bottomMargin' => 10, 'leftMargin' => 24, 'rightMargin' => 24,
+          'centerInParent' => true, '_zstack_margin_offset' => true
+        }
+        helper.apply_margins
+
+        expect(helper.generated_code).to be_empty
+      end
+
+      it 'still lifts the axis the child does not centre' do
+        helper.component = {
+          'topMargin' => 10, 'bottomMargin' => 10, 'leftMargin' => 24, 'rightMargin' => 24,
+          'centerVertical' => true, '_zstack_margin_offset' => true
+        }
+        helper.apply_margins
+
+        expect(helper.generated_code).to include('.padding(.leading, 24)')
+        expect(helper.generated_code).to include('.padding(.trailing, 24)')
+        expect(helper.generated_code).not_to include('.padding(.top, 10)')
+      end
+
+      it 'keeps start/endMargin padding, which the offset never owned' do
+        helper.component = {
+          'startMargin' => 12, 'endMargin' => 6, 'leftMargin' => 24, 'rightMargin' => 24,
+          '_zstack_margin_offset' => true
+        }
+        helper.apply_margins
+
+        expect(helper.generated_code).to include('.padding(.leading, 12)')
+        expect(helper.generated_code).to include('.padding(.trailing, 6)')
+      end
+    end
+
     context 'with individual margin properties' do
       it 'applies topMargin' do
         helper.component = { 'topMargin' => 16 }

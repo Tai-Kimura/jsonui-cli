@@ -101,24 +101,29 @@ module SjuiTools
             # centered conformance frame). start/endMargin are not part of
             # the offset computation and keep their padding.
             offset_owns = @component['_zstack_margin_offset']
-            if top_margin && !offset_owns
-              @modifier_bag.append(:margin, ".padding(.top, #{margin_value(top_margin)})")
+            top_pad = margin_padding(top_margin, bottom_margin, offset_owns, :vertical)
+            bottom_pad = margin_padding(bottom_margin, top_margin, offset_owns, :vertical)
+            left_pad = margin_padding(left_margin, right_margin, offset_owns, :horizontal)
+            right_pad = margin_padding(right_margin, left_margin, offset_owns, :horizontal)
+
+            if top_pad
+              @modifier_bag.append(:margin, ".padding(.top, #{margin_value(top_pad)})")
             end
-            if bottom_margin && !offset_owns
-              @modifier_bag.append(:margin, ".padding(.bottom, #{margin_value(bottom_margin)})")
+            if bottom_pad
+              @modifier_bag.append(:margin, ".padding(.bottom, #{margin_value(bottom_pad)})")
             end
 
             # RTL aware margins take precedence over left/right
             if start_margin
               @modifier_bag.append(:margin, ".padding(.leading, #{margin_value(start_margin)})")
-            elsif left_margin && !offset_owns
-              @modifier_bag.append(:margin, ".padding(.leading, #{margin_value(left_margin)})")
+            elsif left_pad
+              @modifier_bag.append(:margin, ".padding(.leading, #{margin_value(left_pad)})")
             end
 
             if end_margin
               @modifier_bag.append(:margin, ".padding(.trailing, #{margin_value(end_margin)})")
-            elsif right_margin && !offset_owns
-              @modifier_bag.append(:margin, ".padding(.trailing, #{margin_value(right_margin)})")
+            elsif right_pad
+              @modifier_bag.append(:margin, ".padding(.trailing, #{margin_value(right_pad)})")
             end
           end
 
@@ -126,6 +131,40 @@ module SjuiTools
         end
 
         private
+
+        # How much of one edge's margin this pass still owns.
+        #
+        # Outside a ZStack, all of it. Inside one, the parent emits the child's
+        # individual margins as an .offset, so padding them here again
+        # double-applied them (measured +12pt for a declared 8). But the offset
+        # carries the DIFFERENCE of the two opposing margins and nothing more,
+        # so suppressing padding outright annihilated a symmetric pair: 10/10
+        # cancels to an offset of zero and the declaration rendered as no
+        # margin at all. Split the declaration the way it decomposes — the
+        # shared inset min(a, b) belongs to padding, the difference to the
+        # offset.
+        #
+        # Two cases keep the pre-existing "offset owns everything" behaviour:
+        # an axis the child centres, which semantics.margins disables outright
+        # (apply_zstack_positioning zeroes that component too), and a pair with
+        # no comparable common inset — a bound margin has no value at
+        # generation time, and mixed signs share no inset to lift.
+        def margin_padding(value, opposite, offset_owns, axis)
+          return value unless offset_owns
+          return nil if centered_axis?(axis)
+          return nil unless value.is_a?(Numeric) && opposite.is_a?(Numeric)
+
+          shared = [value, opposite].min
+          shared.positive? ? shared : nil
+        end
+
+        # centerInParent disables both axes, centerHorizontal/centerVertical
+        # one each — the same reading as the library's zstackMarginOffset.
+        def centered_axis?(axis)
+          return true if @component['centerInParent']
+
+          axis == :horizontal ? !!@component['centerHorizontal'] : !!@component['centerVertical']
+        end
 
         # min/max{Start,End}Margin — a margin declared as a range instead of a
         # fixed inset. SwiftUI has no flexible padding, so the library turns the

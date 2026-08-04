@@ -63,12 +63,15 @@ RSpec.describe SjuiTools::SwiftUI::Views::PositioningHelper do
         }
       end
 
-      it 'calculates offset from margins' do
+      # semantics.margins: a centred axis has its margin disabled, and this
+      # centres both. Emitting the margin as an offset moved the child back
+      # off the centre the ZStack alignment had just placed it on.
+      it 'resets both offsets' do
         helper = helper_class.new
         helper.apply_zstack_positioning(child, 0)
 
-        offset_code = helper.generated_code.find { |c| c.include?('.offset') }
-        expect(offset_code).to include('x: 5')
+        offset_codes = helper.generated_code.select { |c| c.include?('.offset') }
+        expect(offset_codes).to be_empty
       end
     end
 

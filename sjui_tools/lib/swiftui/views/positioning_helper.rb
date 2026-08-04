@@ -39,7 +39,14 @@ module SjuiTools
             # SwiftJsonUIの位置属性を処理
             # centerInParent
             if child['centerInParent']
-              # ZStackのalignmentで処理されるため、追加のoffsetは不要
+              # ZStackのalignmentで処理されるため、追加のoffsetは不要。
+              # The comment said so; the code did not do it, and kept emitting
+              # the margin difference on both axes — moving the child back off
+              # the centre it had just been aligned to. semantics.margins
+              # disables the margin on a centred axis, and this centres both
+              # (the library agrees: zstackMarginOffset returns .zero here).
+              offset_x = 0
+              offset_y = 0
             end
             
             # centerVertical / centerHorizontal
