@@ -242,6 +242,14 @@ module JsonUIShared
       false
     end
 
+    # Off by default: the check is new and lands on its own distribution, so a
+    # consumer never has to guess whether a fresh warning came from it or from
+    # the fixes shipping alongside. Platform profiles (or a future
+    # `lint: { selectors: true }`) flip it on.
+    def report_undeclared_selectors?
+      false
+    end
+
     def skip_undefined_without_data_section?
       false
     end
@@ -479,6 +487,7 @@ module JsonUIShared
         next if incompatible_attr?(component_type, key)
 
         check_value_for_bindings(value, key, component_type)
+        check_selector_declared(value, key, component_type)
 
         # UIKit-era advisory: bindings need an id to reference the view.
         next if key == 'id'
@@ -676,6 +685,38 @@ module JsonUIShared
     end
 
     # Check if variables in binding expression are defined in data
+    # A handler attribute may name a data property WITHOUT the binding
+    # braces (`"onclick": "handleTap"`). That is the same reference as
+    # `@{handleTap}` — the generated code calls `data.handleTap` — but it
+    # never reached check_undefined_variables, so a typo survived every gate
+    # and surfaced as a type error in the consumer's tsc, the latest possible
+    # place. Advisory only, and only when the file declares data at all: a
+    # layout with no data section is validated elsewhere.
+    SELECTOR_ATTRS = %w[
+      onclick onClick onLongPress onPan onPinch
+      onDragStart onDrop onDragEnter onDragLeave onDragOver
+      valueChange onTextChange onChange onItemAppear
+    ].freeze
+
+    def check_selector_declared(value, attribute_name, component_type)
+      return unless report_undeclared_selectors?
+      return unless SELECTOR_ATTRS.include?(attribute_name)
+      return unless value.is_a?(String)
+
+      name = value.strip
+      return if name.empty?
+      return if name.include?('@{') || name.include?('.') || name.include?('(')
+      return unless @has_data_definitions
+      return if @cell_depth > 0
+      if @data_properties.include?(name)
+        @used_properties << name
+        return
+      end
+
+      @warnings << "#{build_context_prefix}Handler '#{name}' in '#{component_type}.#{attribute_name}' is not defined in data. " \
+                   "Add: { \"class\": \"Function\", \"name\": \"#{name}\" }"
+    end
+
     def check_undefined_variables(binding_expr, attribute_name, component_type)
       # Skip data. prefix bindings (Collection cell bindings)
       return if binding_expr.start_with?('data.')
