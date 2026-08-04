@@ -225,11 +225,16 @@ RSpec.describe SjuiTools::SwiftUI::Views::ViewConverter do
         }
       end
 
-      it 'adds ignoresSafeArea modifier' do
+      # The attribute names the edges that RESERVE the safe area — the SSoT's
+      # own wording, and what rjui, kjui and this library's UIKit runtime all
+      # do. `.ignoresSafeArea` is the opposite modifier and is what the
+      # SwiftUI codegen used to emit; these examples pinned the defect.
+      it 'reserves the safe area on the named edges' do
         converter = described_class.new(component)
         code = converter.convert
 
-        expect(code).to include('.ignoresSafeArea(')
+        expect(code).to include('.safeAreaPadding([.top, .bottom])')
+        expect(code).not_to include('.ignoresSafeArea')
       end
     end
 
@@ -241,11 +246,31 @@ RSpec.describe SjuiTools::SwiftUI::Views::ViewConverter do
         }
       end
 
-      it 'adds ignoresSafeArea modifier' do
+      it 'reserves the safe area on every edge' do
         converter = described_class.new(component)
         code = converter.convert
 
-        expect(code).to include('.ignoresSafeArea()')
+        expect(code).to include('.safeAreaPadding(.all)')
+        expect(code).not_to include('.ignoresSafeArea')
+      end
+    end
+
+    context 'with safeAreaInsetPositions on a SafeAreaView' do
+      let(:component) do
+        {
+          'type' => 'SafeAreaView',
+          'safeAreaInsetPositions' => ['top']
+        }
+      end
+
+      # `apply_modifiers` already runs the safe-area step for every component,
+      # and ViewConverter used to run it a SECOND time for SafeAreaView. Two
+      # `.ignoresSafeArea` calls ignore an edge once; two `.safeAreaPadding`
+      # calls inset twice.
+      it 'reserves it once' do
+        code = described_class.new(component).convert
+
+        expect(code.scan('.safeAreaPadding').length).to eq(1)
       end
     end
 

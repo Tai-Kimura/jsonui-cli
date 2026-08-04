@@ -416,10 +416,13 @@ module SjuiTools
             apply_gradient
           end
 
-          # SafeAreaViewの場合
-          if @component['type'] == 'SafeAreaView' && @component['safeAreaInsetPositions']
-            apply_safe_area_insets_to_bag
-          end
+          # SafeAreaView needs nothing extra here: `apply_modifiers` runs
+          # `apply_safe_area_insets_to_bag` for EVERY component, SafeAreaView
+          # included, which is the routing the SSoT describes. This second
+          # call appended the modifier twice. It was invisible while the emit
+          # was `.ignoresSafeArea(...)` — ignoring an edge twice ignores it
+          # once — and stops being invisible the moment the emit reserves
+          # space instead: two `.safeAreaPadding` calls inset twice.
 
           # Apply binding modifiers (borderColor, background, etc. with @{...})
           apply_binding_modifiers

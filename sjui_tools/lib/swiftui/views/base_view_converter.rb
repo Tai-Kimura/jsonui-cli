@@ -1101,28 +1101,66 @@ module SjuiTools
           ["#{modifier_name} {\n#{indent_str}#{body}\n#{indent_str[0...-4]}}"]
         end
 
-        # Apply safe area insets into the bag
+        # `safeAreaInsetPositions` — the edges that RESERVE the safe area.
+        #
+        # This emitted `.ignoresSafeArea(.all, edges: …)`, which is the exact
+        # opposite: it lets the view draw THROUGH the safe area on those
+        # edges. The declaration means the other thing everywhere else —
+        #
+        #   SSoT   "Which edges reserve the safe area"
+        #   rjui   `padding<Side>: env(safe-area-inset-*)`  (view_converter)
+        #   kjui   windowInsetsPadding via SafeAreaConfig   (compose_builder)
+        #   UIKit  `SJUIView#applySafeAreaInsets` ADDS the inset to the
+        #          constraint — this library's own original implementation,
+        #          on this same platform
+        #
+        # so the SwiftUI codegen was the single outlier, and it contradicted
+        # the UIKit runtime shipped beside it. `.safeAreaPadding(_:)` is the
+        # SwiftUI spelling of "reserve" and lines up one-for-one with rjui's
+        # `env(safe-area-inset-*)` padding. It is iOS 17+, which is the
+        # package's floor already.
+        #
+        # (The SSoT description cites `apply_safe_area_insets_to_bag` running
+        # for every component as evidence that every platform honours the
+        # attribute on a plain view. The routing claim was right; what the
+        # method did was not.)
         def apply_safe_area_insets_to_bag
           positions = @component['safeAreaInsetPositions']
           return unless positions
 
-          if positions.is_a?(Array)
-            edges = []
-            edges << '.top' if positions.include?('top')
-            edges << '.bottom' if positions.include?('bottom')
-            edges << '.leading' if positions.include?('leading') || positions.include?('left')
-            edges << '.trailing' if positions.include?('trailing') || positions.include?('right')
+          edges = safe_area_edge_set(positions)
+          return if edges.nil?
 
-            if edges.any?
-              @modifier_bag.append(:safe_area_insets, ".ignoresSafeArea(.all, edges: [#{edges.join(', ')}])")
-            end
-          elsif positions == 'all'
-            @modifier_bag.append(:safe_area_insets, ".ignoresSafeArea()")
-          elsif positions == 'none'
-            # デフォルトでセーフエリアを尊重
-          else
-            add_line "// safeAreaInsetPositions: #{positions}"
-          end
+          @modifier_bag.append(:safe_area_insets, ".safeAreaPadding(#{edges})")
+        end
+
+        #: Declared spelling -> `SwiftUI.Edge.Set` member. `left` / `right` /
+        #: `horizontal` are not in the declared enum but were accepted here
+        #: before, so they keep working rather than starting to warn.
+        SAFE_AREA_EDGES = {
+          'top' => '.top',
+          'bottom' => '.bottom',
+          'leading' => '.leading',
+          'left' => '.leading',
+          'trailing' => '.trailing',
+          'right' => '.trailing',
+          'vertical' => '.vertical',
+          'horizontal' => '.horizontal'
+        }.freeze
+
+        # The `Edge.Set` argument for a declared position list, or nil when
+        # the declaration selects no edge. `Edge.Set` is an OptionSet, so an
+        # array literal is a legal set literal.
+        def safe_area_edge_set(positions)
+          list = positions.is_a?(Array) ? positions : [positions]
+          list = list.map(&:to_s)
+          return '.all' if list.include?('all')
+          return nil if list.include?('none') && list.length == 1
+
+          members = list.map { |edge| SAFE_AREA_EDGES[edge] }.compact.uniq
+          return nil if members.empty?
+
+          "[#{members.join(', ')}]"
         end
 
         # Legacy method kept for backward compatibility
