@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance TextField.hintFont (static)",
-    "description": "Conformance fixture for 'hintFont' on TextField (section: TextField, class: visual). Value under test: \"sample\".",
+    "description": "Conformance fixture for 'hintFont' on TextField (section: TextField, class: visual). Value under test: \"bold\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "hintFont__static",
-      "description": "Conformance fixture for 'hintFont' on TextField (section: TextField, class: visual). Value under test: \"sample\".",
+      "description": "Conformance fixture for 'hintFont' on TextField (section: TextField, class: visual). Value under test: \"bold\".",
       "steps": [
         {
           "action": "waitFor",

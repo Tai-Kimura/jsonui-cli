@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance SelectBox.items (static)",
-    "description": "Conformance fixture for 'items' on SelectBox (section: SelectBox, class: visual). Value under test: [\"One\", \"Two\"].",
+    "description": "Conformance fixture for 'items' on SelectBox (section: SelectBox, class: visual). Value under test: [\"Alpha\", \"Beta\", \"Gamma\"].",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "items__static",
-      "description": "Conformance fixture for 'items' on SelectBox (section: SelectBox, class: visual). Value under test: [\"One\", \"Two\"].",
+      "description": "Conformance fixture for 'items' on SelectBox (section: SelectBox, class: visual). Value under test: [\"Alpha\", \"Beta\", \"Gamma\"].",
       "steps": [
         {
           "action": "waitFor",

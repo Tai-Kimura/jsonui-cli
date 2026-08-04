@@ -18,8 +18,9 @@
       "width": 200,
       "height": "wrapContent",
       "items": [
-        "One",
-        "Two"
+        "Alpha",
+        "Beta",
+        "Gamma"
       ]
     }
   ]

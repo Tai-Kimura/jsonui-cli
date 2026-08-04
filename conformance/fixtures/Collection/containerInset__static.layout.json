@@ -24,7 +24,12 @@
         }
       ],
       "items": "@{items}",
-      "containerInset": 8
+      "containerInset": [
+        8,
+        8,
+        8,
+        8
+      ]
     }
   ],
   "data": [

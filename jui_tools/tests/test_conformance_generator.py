@@ -669,5 +669,38 @@ class ConformanceCommandTest(unittest.TestCase):
         self.assertEqual(cmd_conformance(argparse.Namespace(conformance_target=None)), 1)
 
 
+class RulesTableHygieneTest(unittest.TestCase):
+    """The value tables are long dict literals — a repeated key is silent."""
+
+    def test_no_duplicate_keys_in_the_value_tables(self):
+        # A second `("TabView", "tabs")` shadowed the first with no error and
+        # no diff in the generated fixture: the edit looked applied and was
+        # not. Python cannot catch this, so the source is parsed for it.
+        import ast
+        from pathlib import Path as _Path
+
+        from jui_cli.conformance import rules as rules_mod
+
+        source = _Path(rules_mod.__file__).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            if not isinstance(node.value, ast.Dict) or not names:
+                continue
+            seen: dict[str, int] = {}
+            for key in node.value.keys:
+                if key is None:  # ``**spread``
+                    continue
+                try:
+                    literal = repr(ast.literal_eval(key))
+                except ValueError:
+                    continue
+                seen[literal] = seen.get(literal, 0) + 1
+            dupes = sorted(k for k, n in seen.items() if n > 1)
+            self.assertEqual(dupes, [], f"{names[0]} has duplicate key(s): {dupes}")
+
+
 if __name__ == "__main__":
     unittest.main()

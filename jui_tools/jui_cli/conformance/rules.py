@@ -360,6 +360,11 @@ VALUE_OVERRIDES: dict[str, Any] = {
     "lineHeightMultiple": 1.5,
     "font": "bold",
     "fontWeight": "bold",
+    # The SSoT types hintFont as a bare string, so the generic fallback
+    # ("sample") applied — but the converters match it against the WEIGHT
+    # vocabulary (`json_data['hintFont'] == 'bold'`), and a value outside the
+    # vocabulary can only ever render nothing. Same value as its siblings.
+    "hintFont": "bold",
     "fontFamily": "sans-serif",
     "text": CONFORMANCE_TEXT,
     "html": "<p>Conformance Sample</p>",
@@ -403,8 +408,17 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     # the fixture could never differ from its control.
     ("Label", "textShadow"): {"color": "#000000", "blur": 4, "offset": [2, 2]},
     ("IconLabel", "textShadow"): {"color": "#000000", "blur": 4, "offset": [2, 2]},
-    ("Segment", "items"): ["One", "Two"],
-    ("SelectBox", "items"): ["One", "Two"],
+    # A fixture that writes the value its own base already supplies is not a
+    # fixture: layout and control come out byte-identical, so "inert" says
+    # nothing about the attribute (plan 41 measured six of these at the
+    # codegen stage — all six turned out to be read correctly everywhere the
+    # moment the values differed). Same rule as the state images below: the
+    # value under test must differ from the base's.
+    ("Segment", "items"): ["Alpha", "Beta", "Gamma"],
+    ("SelectBox", "items"): ["Alpha", "Beta", "Gamma"],
+    ("GradientView", "gradient"): ["#00AA00", "#FFAA00"],
+    ("Image", "src"): IMAGE_ALT_ASSET_NAME,
+    ("NetworkImage", "defaultImage"): IMAGE_ALT_ASSET_NAME,
     # NetworkImage's hint is its PLACEHOLDER IMAGE NAME (SSoT: "Placeholder
     # image name (primary)"), not user-facing text — the generic hint text
     # produced painterResource(R.drawable.conformance_hint) on Compose, a
@@ -428,6 +442,11 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     # 8 equals the cross-platform default gap — indistinguishable from the
     # control on any platform that implements it.
     ("IconLabel", "iconMargin"): 16,
+    # Collection's containerInset is declared `array`; the name-keyed value is
+    # the scalar TextView.containerInset (a number) and writing it here made
+    # the fixture fail the sjui validator on every build. Same shape as the
+    # Collection insets/contentInsets overrides.
+    ("Collection", "containerInset"): [8, 8, 8, 8],
     # `value` is Slider/Progress vocabulary in the name-keyed fallback table
     # (0.5), but Switch declares it as its boolean state alias — 0.5 is not a
     # boolean, the Compose codegen host cannot even compile it
@@ -436,7 +455,10 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     ("Switch", "value"): True,
     ("SelectBox", "selectedItem"): "Two",
     ("SelectBox", "selectedValue"): "Two",
-    ("TabView", "tabs"): [{"title": "One"}, {"title": "Two"}],
+    # Three tabs, none of them the base's two — see the base-supplies-the-value
+    # note above (the base already writes One/Two, so the old override made the
+    # fixture and its control byte-identical).
+    ("TabView", "tabs"): [{"title": "Alpha"}, {"title": "Beta"}, {"title": "Gamma"}],
     ("Collection", "insets"): [8, 8, 8, 8],
     ("Collection", "contentInsets"): [8, 8, 8, 8],
     ("common", "padding"): 8,
@@ -596,6 +618,13 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # onTintColor colors the ON track — the switch must be on to show it.
     "Switch.onTintColor": {"isOn": True},
     # --- plan 34 fixture-observability round (2026-08-04) ------------------ #
+    # Every converter reads `text || label`, and the Radio base supplies
+    # `text` — so `label` lost the coin toss on all three platforms and the
+    # fixture measured inert everywhere. Dropping the mask does NOT make the
+    # fixture pass: sjui's radio_converter never reads `label` at all (grep:
+    # zero hits), so iOS stays inert. That is the point — the mask was hiding
+    # a real single-platform gap behind a uniform one.
+    "Radio.label": {"text": None},
     # `placeholder` is declared as an ALIAS of `hint`, and the base injects
     # `hint` — so the fixture carried both spellings, the primary won, and the
     # alias could never move a pixel however correctly it resolved. Same for

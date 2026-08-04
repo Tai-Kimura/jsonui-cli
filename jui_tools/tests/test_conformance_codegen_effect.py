@@ -21,6 +21,7 @@ passes to every pixel-based lane. What is pinned here:
 """
 from __future__ import annotations
 
+import contextlib
 import unittest
 
 from jui_cli.conformance import codegen_effect as ce
@@ -33,6 +34,21 @@ def _defn(**kw):
 
 def _emit(text, ok=True, error=None):
     return {"ok": ok, "output": text, **({"error": error} if error else {})}
+
+
+@contextlib.contextmanager
+def _base_attrs(overrides):
+    """Temporarily set ``rules.BASE_ATTRS`` entries (restored on exit)."""
+    saved = {k: rules.BASE_ATTRS.get(k) for k in overrides}
+    rules.BASE_ATTRS.update(overrides)
+    try:
+        yield
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                rules.BASE_ATTRS.pop(key, None)
+            else:
+                rules.BASE_ATTRS[key] = value
 
 
 class SecondaryValueTest(unittest.TestCase):
@@ -130,11 +146,19 @@ class JobTableTest(unittest.TestCase):
         self.assertEqual(len(controls), 1)
 
     def test_a_base_supplied_value_is_flagged_rather_than_probed_blind(self):
-        # `Image`'s base needs a `src` to render, and the representative value
-        # for `src` IS that bundled asset — fixture and control coincide.
-        definitions = {"Image": {"src": _defn(type="string")}}
-        table = ce.build_jobs(definitions)
-        self.assertTrue(all(p.control_carries_primary for p in table.probes))
+        # A base that supplies the very value under test makes fixture and
+        # control coincide. `Image.src` used to be the live example; plan 34
+        # gave it a distinct representative value (the alt asset), so the
+        # condition is set up here instead of borrowed from the real table —
+        # the mechanism is what this test is about, not that one fixture.
+        with _base_attrs({"Image": {"src": "conformance_sample_alt"}}):
+            table = ce.build_jobs({"Image": {"src": _defn(type="string")}})
+            self.assertTrue(all(p.control_carries_primary for p in table.probes))
+
+    def test_a_base_with_a_different_value_is_probed_normally(self):
+        """The other side of the same switch — this is the fixed state."""
+        table = ce.build_jobs({"Image": {"src": _defn(type="string")}})
+        self.assertFalse(any(p.control_carries_primary for p in table.probes))
 
 
 def _table_with(check_defn, host="View", attribute="x"):
@@ -267,16 +291,20 @@ class EvaluateTest(unittest.TestCase):
         self.assertFalse(result.ok)
 
     def test_an_inapplicable_check_is_recorded_with_a_reason(self):
-        table = _table_with(_defn(type="string"), host="Image", attribute="src")
-        probe = table.probes[0]
-        outputs = {
-            "web": {
-                f"__control|{probe.control_id}": _emit("a"),
-                "Image|src|primary": _emit("a"),
-                "Image|src|secondary": _emit("b"),
+        # Same setup as the job-table case: the base has to carry the value
+        # under test for C0 to be inapplicable, and plan 34 removed the one
+        # real fixture that did (`Image.src`), so it is arranged here.
+        with _base_attrs({"Image": {"src": "conformance_sample_alt"}}):
+            table = _table_with(_defn(type="string"), host="Image", attribute="src")
+            probe = table.probes[0]
+            outputs = {
+                "web": {
+                    f"__control|{probe.control_id}": _emit("a"),
+                    "Image|src|primary": _emit("a"),
+                    "Image|src|secondary": _emit("b"),
+                }
             }
-        }
-        result = ce.evaluate(table, outputs)
+            result = ce.evaluate(table, outputs)
         self.assertEqual(result.findings, [])
         self.assertIn("C0", result.not_applicable)
 

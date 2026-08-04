@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance Image.src (static)",
-    "description": "Conformance fixture for 'src' on Image (section: Image, class: visual). Value under test: \"conformance_sample\".",
+    "description": "Conformance fixture for 'src' on Image (section: Image, class: visual). Value under test: \"conformance_sample_alt\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "src__static",
-      "description": "Conformance fixture for 'src' on Image (section: Image, class: visual). Value under test: \"conformance_sample\".",
+      "description": "Conformance fixture for 'src' on Image (section: Image, class: visual). Value under test: \"conformance_sample_alt\".",
       "steps": [
         {
           "action": "waitFor",

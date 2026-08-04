@@ -1,5 +1,5 @@
 {
-  "manifestHash" : "1d62ad8bd8b20b6129f005e865e481e2c17b01495f4b6d258baf88c7dee63e19",
+  "manifestHash" : "55a48fa7e476b0a0a12843acd9ef8045e25510d9b1b4c5d21277184d4caa27d4",
   "platform" : "ios",
   "results" : [
     {
@@ -2585,14 +2585,26 @@
     },
     {
       "detail" : "",
-      "id" : "Segment/normalColor__static",
-      "screenshot" : "artifacts/ios/Segment_normalColor__static.png",
+      "id" : "Segment/fontColor__static",
+      "screenshot" : "artifacts/ios/Segment_fontColor__static.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "Segment/selectedColor__static",
-      "screenshot" : "artifacts/ios/Segment_selectedColor__static.png",
+      "id" : "Segment/fontColor__alias_normalColor",
+      "screenshot" : "artifacts/ios/Segment_fontColor__alias_normalColor.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Segment/selectedFontColor__static",
+      "screenshot" : "artifacts/ios/Segment_selectedFontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Segment/selectedFontColor__alias_selectedColor",
+      "screenshot" : "artifacts/ios/Segment_selectedFontColor__alias_selectedColor.png",
       "status" : "pass"
     },
     {
@@ -3591,6 +3603,12 @@
     },
     {
       "detail" : "",
+      "id" : "__control/Button__enabled-False",
+      "screenshot" : "artifacts/ios/control_Button__enabled-False.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/CheckBox",
       "screenshot" : "artifacts/ios/control_CheckBox.png",
       "status" : "pass"
@@ -3621,6 +3639,12 @@
     },
     {
       "detail" : "",
+      "id" : "__control/Collection__columns-2",
+      "screenshot" : "artifacts/ios/control_Collection__columns-2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/GradientView",
       "screenshot" : "artifacts/ios/control_GradientView.png",
       "status" : "pass"
@@ -3635,6 +3659,18 @@
       "detail" : "",
       "id" : "__control/IconLabel__icon-off-conformance-sample",
       "screenshot" : "artifacts/ios/control_IconLabel__icon-off-conformance-sample.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000",
+      "screenshot" : "artifacts/ios/control_IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/IconLabel__selected-True",
+      "screenshot" : "artifacts/ios/control_IconLabel__selected-True.png",
       "status" : "pass"
     },
     {
@@ -3663,8 +3699,32 @@
     },
     {
       "detail" : "",
+      "id" : "__control/Label__highlightAttributes-cb049517",
+      "screenshot" : "artifacts/ios/control_Label__highlightAttributes-cb049517.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Label__hint-Conformance-Hint_no-text",
+      "screenshot" : "artifacts/ios/control_Label__hint-Conformance-Hint_no-text.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Label__no-text",
+      "screenshot" : "artifacts/ios/control_Label__no-text.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/Label__selected-True",
       "screenshot" : "artifacts/ios/control_Label__selected-True.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Label__text-1d8efd05",
+      "screenshot" : "artifacts/ios/control_Label__text-1d8efd05.png",
       "status" : "pass"
     },
     {
@@ -3699,8 +3759,20 @@
     },
     {
       "detail" : "",
+      "id" : "__control/Radio__no-text",
+      "screenshot" : "artifacts/ios/control_Radio__no-text.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/Radio__orientation-horizontal",
       "screenshot" : "artifacts/ios/control_Radio__orientation-horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Radio__value-sample",
+      "screenshot" : "artifacts/ios/control_Radio__value-sample.png",
       "status" : "pass"
     },
     {
@@ -3782,6 +3854,23 @@
       "status" : "pass"
     },
     {
+      "detail" : "not applicable to ios",
+      "id" : "__control/TextField__enabled-False",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/TextField__no-hint",
+      "screenshot" : "artifacts/ios/control_TextField__no-hint.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/TextField__no-hint_placeholder-Conformance-Hint",
+      "screenshot" : "artifacts/ios/control_TextField__no-hint_placeholder-Conformance-Hint.png",
+      "status" : "pass"
+    },
+    {
       "detail" : "",
       "id" : "__control/TextField__text-Clear-me",
       "screenshot" : "artifacts/ios/control_TextField__text-Clear-me.png",
@@ -3797,6 +3886,17 @@
       "detail" : "",
       "id" : "__control/TextView",
       "screenshot" : "artifacts/ios/control_TextView.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "__control/TextView__enabled-False",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/TextView__no-hint",
+      "screenshot" : "artifacts/ios/control_TextView__no-hint.png",
       "status" : "pass"
     },
     {

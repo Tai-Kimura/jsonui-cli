@@ -2,9 +2,9 @@
 
 # JsonUI Conformance Report
 
-- Manifest: `1d62ad8bd8b20b6129f005e865e481e2c17b01495f4b6d258baf88c7dee63e19` (sha256)
-- Definitions: `c869b6c324857239017d1a82a305bcac03daf330665ed8b03c5a36b6e7b02cc0` (sha256)
-- Fixtures: 683 (assertable: 29, visual: 574, interactive: 35) / skipped attributes: 154
+- Manifest: `55a48fa7e476b0a0a12843acd9ef8045e25510d9b1b4c5d21277184d4caa27d4` (sha256)
+- Definitions: `df3c1cf50003de7c0fa572a8ea66ce0e10aee2eaf56e75441fb27ea3ab3eafd1` (sha256)
+- Fixtures: 700 (assertable: 29, visual: 576, interactive: 35) / skipped attributes: 154
 
 Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
 
@@ -60,9 +60,9 @@ Screenshots are compared against `baselines/local/<platform>.hashes.json` (rende
 
 | Platform | Baseline | Compared | Regressions | No baseline | Missing artifact |
 |---|---|---|---|---|---|
-| android | threshold 8 | 478 | 0 | 0 | 0 |
-| ios | threshold 8 | 512 | 0 | 0 | 0 |
-| web | threshold 8 | 489 | 0 | 0 | 0 |
+| android | threshold 8 | 495 | 0 | 0 | 0 |
+| ios | threshold 8 | 527 | 0 | 0 | 0 |
+| web | threshold 8 | 508 | 0 | 0 | 0 |
 
 ## Attribute effect (fixture vs control)
 
@@ -70,15 +70,15 @@ Each visual fixture is compared against its **control** — the same layout with
 
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
-| android | 393 | 204 | 189 | 0 | 0 |
-| ios | 424 | 219 | 205 | 0 | 0 |
-| web | 407 | 204 | 203 | 0 | 0 |
+| android | 397 | 230 | 167 | 0 | 0 |
+| ios | 426 | 248 | 178 | 0 | 0 |
+| web | 411 | 236 | 175 | 0 | 0 |
 
 ## Cross-platform attribute effect
 
 Pixel comparison across platforms is out of scope by design, but each platform's control-diff verdict — *did the attribute change the render?* — is platform-independent. A fixture whose activeness disagrees across the platforms its attribute is declared for is a semantic-drift suspect, and an SSoT-enumerated value that is inert on **every** platform is flagged uniformly-inert (default rendering, or dead everywhere). Only fixtures compared on **all** their in-scope platforms are judged; findings are accepted (with a reason) in `cross_effect.json` and enforced by `jui conformance gate --cross-effect`.
 
-- Compared on all in-scope platforms: 396 (consistent: 313, **diverging: 83**, **uniformly-inert declared values: 65**) · not compared everywhere: 0 · in scope on <2 platforms: 134
+- Compared on all in-scope platforms: 400 (consistent: 301, **diverging: 99**, **uniformly-inert declared values: 65**) · not compared everywhere: 0 · in scope on <2 platforms: 132
 
 | Fixture | android | ios | web |
 |---|---|---|---|
@@ -86,20 +86,26 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `Blur/effectStyle__light` | active | inert | inert |
 | `Button/textAlign__left` | inert | inert | active |
 | `Button/textAlign__right` | active | inert | active |
+| `Collection/columnSpacing__static` | active | active | inert |
 | `Collection/defaultScrollAnchor__bottom` | inert | active | inert |
 | `Collection/defaultScrollAnchor__center` | inert | active | inert |
 | `Collection/lazy__eager` | inert | active | inert |
 | `Collection/lazy__none` | inert | active | inert |
+| `IconLabel/selectedFontColor__static` | inert | inert | active |
+| `IconLabel/selected__true` | active | inert | active |
 | `Label/autoShrink__true` | active | inert | active |
 | `Label/edgeInset__static` | active | inert | active |
 | `Label/fontFamily__static` | inert | active | active |
 | `Label/lineBreakMode__head` | inert | inert | active |
 | `Label/lineHeightMultiple__static` | active | inert | inert |
 | `Label/lineSpacing__static` | active | inert | inert |
+| `Label/lines__static` | active | active | inert |
 | `Label/linkable__true` | active | inert | inert |
 | `Label/minimumScaleFactor__static` | active | inert | inert |
 | `Label/textAlign__left` | inert | active | inert |
 | `Label/textAlign__left_2` | inert | active | inert |
+| `Radio/label__static` | inert | inert | active |
+| `Radio/selectedValue__static` | inert | inert | active |
 | `SafeAreaView/orientation__horizontal` | inert | active | inert |
 | `SafeAreaView/orientation__vertical` | inert | active | inert |
 | `SafeAreaView/safeAreaInsetPositions__static` | inert | active | inert |
@@ -107,9 +113,13 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `SelectBox/fontColor__static` | active | inert | active |
 | `SelectBox/fontSize__static` | inert | inert | active |
 | `SelectBox/font__static` | inert | inert | active |
+| `SelectBox/items__static` | inert | inert | active |
 | `SelectBox/labelAttributes__static` | inert | inert | active |
 | `SelectBox/selectItemType__date` | active | inert | active |
 | `SelectBox/selectedIndex__static` | inert | active | active |
+| `Slider/progressTintColor__static` | active | inert | active |
+| `Slider/trackTintColor__static` | active | inert | active |
+| `Switch/trackTintColor__static` | active | inert | active |
 | `TabView/showLabels__true` | inert | active | inert |
 | `TextField/borderStyle__bezel` | active | inert | inert |
 | `TextField/borderStyle__bezel_2` | active | inert | inert |
@@ -120,23 +130,29 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `TextField/fontFamily__static` | inert | active | active |
 | `TextField/font__static` | inert | active | active |
 | `TextField/hintColor__static` | active | inert | active |
-| `TextField/hintFontSize__static` | active | inert | inert |
+| `TextField/hintFontSize__static` | active | inert | active |
+| `TextField/hintFont__static` | active | inert | active |
+| `TextField/placeholderColor__static` | active | inert | active |
 | `TextField/textAlign__center` | inert | active | active |
 | `TextField/textAlign__center_2` | inert | active | active |
 | `TextField/textAlign__right` | inert | active | active |
 | `TextField/textAlign__right_2` | inert | active | active |
+| `TextView/edgeInset__static` | inert | active | inert |
 | `TextView/flexible__true` | inert | active | active |
 | `TextView/fontFamily__static` | inert | inert | active |
 | `TextView/font__static` | inert | active | active |
-| `TextView/hintFont__static` | inert | active | inert |
+| `TextView/hintFont__static` | inert | active | active |
 | `TextView/hintLineHeightMultiple__static` | active | inert | active |
 | `TextView/textAlign__center` | inert | inert | active |
 | `TextView/textAlign__center_2` | inert | inert | active |
 | `TextView/textAlign__right` | inert | inert | active |
 | `TextView/textAlign__right_2` | inert | inert | active |
-| `common/alignBottom__true` | active | inert | inert |
-| `common/alignLeftView__static` | inert | inert | active |
-| `common/alignRight__true` | active | inert | inert |
+| `common/alignBottom__true` | active | active | inert |
+| `common/alignLeftView__static` | inert | active | active |
+| `common/alignLeft__true` | inert | active | inert |
+| `common/alignRight__true` | active | active | inert |
+| `common/alignTopView__static` | inert | active | inert |
+| `common/alignTop__true` | inert | active | inert |
 | `common/alignment__bottom` | active | inert | — |
 | `common/alignment__bottomleading` | active | inert | — |
 | `common/alignment__bottomtrailing` | active | inert | — |
@@ -147,9 +163,9 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `common/alignment__trailing` | active | inert | — |
 | `common/bottomMargin__static` | inert | active | inert |
 | `common/bottomPadding__static` | inert | active | inert |
-| `common/centerHorizontal__true` | active | inert | active |
 | `common/centerInParent__true` | active | inert | active |
-| `common/centerVertical__true` | active | inert | active |
+| `common/clipToBounds__true` | inert | active | active |
+| `common/disabledBackground__static` | active | active | inert |
 | `common/endMargin__static` | inert | active | inert |
 | `common/gravity__center` | active | inert | active |
 | `common/gravity__centerhorizontal` | inert | active | active |
@@ -238,9 +254,9 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 
 | Platform | Runner | Results | pass | fail | error | skipped | Manifest |
 |---|---|---|---|---|---|---|---|
-| android | uiautomator 2.3.0 | 683 | 537 | 0 | 0 | 146 | current |
-| ios | xcuitest ios-18.6 | 683 | 571 | 0 | 0 | 112 | current |
-| web | playwright 1.61.1 | 683 | 548 | 0 | 0 | 135 | current |
+| android | uiautomator 2.3.0 | 700 | 554 | 0 | 0 | 146 | current |
+| ios | xcuitest ios-18.6 | 700 | 586 | 0 | 0 | 114 | current |
+| web | playwright 1.61.1 | 700 | 567 | 0 | 0 | 133 | current |
 
 ## Matrix
 
@@ -744,8 +760,10 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `items` | `static` | visual | ✅ | ✅ | ✅ |
 | `selectedIndex` | `static` | visual | ✅ | ✅ | ✅ |
 | `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
-| `normalColor` | `static` | visual | – | ✅ | – |
-| `selectedColor` | `static` | visual | – | ✅ | – |
+| `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` (alias) | `alias_normalColor` | visual | ✅ | ✅ | ✅ |
+| `selectedFontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `selectedFontColor` (alias) | `alias_selectedColor` | visual | ✅ | ✅ | ✅ |
 | `apportionsSegmentWidthsByContent` | `true` | visual | – | – | – |
 
 ### Slider
@@ -992,12 +1010,16 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 |---|---|---|---|---|---|
 | `None` | `Blur` | visual | ✅ | ✅ | ✅ |
 | `None` | `Button` | visual | ✅ | ✅ | ✅ |
+| `None` | `Button` | visual | ✅ | ✅ | ✅ |
 | `None` | `CheckBox` | visual | ✅ | ✅ | ✅ |
 | `None` | `CheckBox` | visual | ✅ | ✅ | – |
 | `None` | `CheckBox` | visual | ✅ | ✅ | – |
 | `None` | `CheckBox` | visual | ✅ | ✅ | ✅ |
 | `None` | `Collection` | visual | ✅ | ✅ | ✅ |
+| `None` | `Collection` | visual | ✅ | ✅ | ✅ |
 | `None` | `GradientView` | visual | ✅ | ✅ | ✅ |
+| `None` | `IconLabel` | visual | ✅ | ✅ | ✅ |
+| `None` | `IconLabel` | visual | ✅ | ✅ | ✅ |
 | `None` | `IconLabel` | visual | ✅ | ✅ | ✅ |
 | `None` | `IconLabel` | visual | ✅ | ✅ | ✅ |
 | `None` | `Image` | visual | ✅ | ✅ | ✅ |
@@ -1005,9 +1027,15 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `None` | `Indicator` | visual | – | ✅ | – |
 | `None` | `Label` | visual | ✅ | ✅ | ✅ |
 | `None` | `Label` | visual | ✅ | ✅ | ✅ |
+| `None` | `Label` | visual | ✅ | ✅ | ✅ |
+| `None` | `Label` | visual | ✅ | ✅ | ✅ |
+| `None` | `Label` | visual | ✅ | ✅ | ✅ |
+| `None` | `Label` | visual | ✅ | ✅ | ✅ |
 | `None` | `NetworkImage` | visual | ✅ | ✅ | ✅ |
 | `None` | `Progress` | visual | ✅ | ✅ | ✅ |
 | `None` | `Progress` | visual | ✅ | ✅ | ✅ |
+| `None` | `Radio` | visual | ✅ | ✅ | ✅ |
+| `None` | `Radio` | visual | ✅ | ✅ | ✅ |
 | `None` | `Radio` | visual | ✅ | ✅ | ✅ |
 | `None` | `Radio` | visual | ✅ | ✅ | ✅ |
 | `None` | `Radio` | visual | ✅ | ✅ | ✅ |
@@ -1024,8 +1052,13 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `None` | `Switch` | visual | ✅ | ✅ | ✅ |
 | `None` | `TabView` | visual | ✅ | ✅ | ✅ |
 | `None` | `TextField` | visual | ✅ | ✅ | ✅ |
+| `None` | `TextField` | visual | – | – | ✅ |
+| `None` | `TextField` | visual | ✅ | ✅ | ✅ |
+| `None` | `TextField` | visual | ✅ | ✅ | ✅ |
 | `None` | `TextField` | visual | – | ✅ | – |
 | `None` | `TextField` | visual | ✅ | ✅ | ✅ |
+| `None` | `TextView` | visual | ✅ | ✅ | ✅ |
+| `None` | `TextView` | visual | – | – | ✅ |
 | `None` | `TextView` | visual | ✅ | ✅ | ✅ |
 | `None` | `TextView` | visual | ✅ | ✅ | ✅ |
 | `None` | `View` | visual | ✅ | ✅ | ✅ |

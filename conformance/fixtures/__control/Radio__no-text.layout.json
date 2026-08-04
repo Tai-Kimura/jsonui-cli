@@ -16,8 +16,7 @@
       "type": "Radio",
       "id": "target",
       "width": 200,
-      "height": "wrapContent",
-      "label": "sample"
+      "height": "wrapContent"
     }
   ]
 }

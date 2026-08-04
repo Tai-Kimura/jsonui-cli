@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "df3c1cf50003de7c0fa572a8ea66ce0e10aee2eaf56e75441fb27ea3ab3eafd1",
   "counts": {
-    "fixtures": 699,
+    "fixtures": 700,
     "assertable": 29,
     "visual": 576,
     "interactive": 35,
-    "control": 59,
+    "control": 60,
     "skipped": 154,
     "promoted": {
       "callback": 11
@@ -4670,7 +4670,7 @@
       "host": "TextField",
       "writtenKey": "hintFont",
       "aliasOf": null,
-      "value": "sample",
+      "value": "bold",
       "platforms": [
         "ios",
         "android",
@@ -6312,7 +6312,7 @@
       "host": "TextView",
       "writtenKey": "hintFont",
       "aliasOf": null,
-      "value": "sample",
+      "value": "bold",
       "platforms": [
         "ios",
         "android",
@@ -7923,7 +7923,7 @@
       "host": "Image",
       "writtenKey": "src",
       "aliasOf": null,
-      "value": "conformance_sample",
+      "value": "conformance_sample_alt",
       "platforms": [
         "ios",
         "android",
@@ -8574,7 +8574,7 @@
       "host": "NetworkImage",
       "writtenKey": "defaultImage",
       "aliasOf": null,
-      "value": "conformance_sample",
+      "value": "conformance_sample_alt",
       "platforms": [
         "ios",
         "android",
@@ -9048,8 +9048,9 @@
       "writtenKey": "items",
       "aliasOf": null,
       "value": [
-        "One",
-        "Two"
+        "Alpha",
+        "Beta",
+        "Gamma"
       ],
       "platforms": [
         "ios",
@@ -10418,8 +10419,9 @@
       "writtenKey": "items",
       "aliasOf": null,
       "value": [
-        "One",
-        "Two"
+        "Alpha",
+        "Beta",
+        "Gamma"
       ],
       "platforms": [
         "ios",
@@ -12727,7 +12729,12 @@
       "host": "Collection",
       "writtenKey": "containerInset",
       "aliasOf": null,
-      "value": 8,
+      "value": [
+        8,
+        8,
+        8,
+        8
+      ],
       "platforms": [
         "ios"
       ],
@@ -12763,7 +12770,7 @@
       "test": "fixtures/Radio/label__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Radio"
+      "control": "__control/Radio__no-text"
     },
     {
       "id": "Radio/text__static",
@@ -13712,8 +13719,8 @@
       "writtenKey": "gradient",
       "aliasOf": null,
       "value": [
-        "#FF0000",
-        "#0000FF"
+        "#00AA00",
+        "#FFAA00"
       ],
       "platforms": [
         "ios",
@@ -14437,10 +14444,13 @@
       "aliasOf": null,
       "value": [
         {
-          "title": "One"
+          "title": "Alpha"
         },
         {
-          "title": "Two"
+          "title": "Beta"
+        },
+        {
+          "title": "Gamma"
         }
       ],
       "platforms": [
@@ -15215,6 +15225,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/Radio__checked-True.layout.json",
       "test": "fixtures/__control/Radio__checked-True.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Radio__no-text",
+      "component": "__control",
+      "attribute": null,
+      "case": "Radio",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Radio__no-text.layout.json",
+      "test": "fixtures/__control/Radio__no-text.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

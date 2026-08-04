@@ -19,10 +19,13 @@
       "height": "matchParent",
       "tabs": [
         {
-          "title": "One"
+          "title": "Alpha"
         },
         {
-          "title": "Two"
+          "title": "Beta"
+        },
+        {
+          "title": "Gamma"
         }
       ]
     }
