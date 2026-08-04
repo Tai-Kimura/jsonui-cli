@@ -26,6 +26,8 @@ module KjuiTools
           @resources_dir = resources_dir
           @strings_file = File.join(@resources_dir, 'strings.json')
           @extracted_strings = {}  # Structure: { "filename": { "key": "value" } }
+          # { extraction prefix => the layout's other section spellings }
+          @namespace_aliases = {}
           @strings_data = load_strings_json
         end
 
@@ -113,7 +115,9 @@ module KjuiTools
         # shared core: existing keys are never overwritten, so hand-edited
         # values and multi-language Hashes survive re-extraction.
         def save_strings_json
-          added = merge_extracted_strings(@strings_data, @extracted_strings)
+          added = merge_extracted_strings(
+            @strings_data, @extracted_strings, @namespace_aliases, Core::Logger
+          )
 
           # Ensure Resources directory exists
           FileUtils.mkdir_p(@resources_dir)
@@ -124,6 +128,7 @@ module KjuiTools
 
           # Clear extracted strings after saving
           @extracted_strings.clear
+          @namespace_aliases.clear
         end
 
         # Extract string values from processed JSON files
@@ -142,6 +147,12 @@ module KjuiTools
               # Get file prefix from relative path
               relative_path = Pathname.new(json_file).relative_path_from(Pathname.new(layouts_dir)).to_s
               file_prefix = generate_file_prefix(relative_path)
+              # The other spelling of this layout's section (sjui names it
+              # after the basename). Recorded so the merge does not mint a
+              # second section for strings the SSoT already declares.
+              @namespace_aliases[file_prefix] = JsonUIShared::StringManagerCore.namespace_candidates(
+                relative_path, preferred: :relative
+              )
 
               # Extract strings recursively from JSON structure (without modifying)
               file_strings = extract_strings_from_json(data)

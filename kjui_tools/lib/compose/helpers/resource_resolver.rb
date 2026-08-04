@@ -4,6 +4,8 @@ require 'rexml/document'
 require 'json'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
+require_relative '../../core/logger'
+require_relative '../../core/string_manager_core'
 require_relative 'binding_expression'
 
 module KjuiTools
@@ -30,6 +32,30 @@ module KjuiTools
 
           def data_definitions=(definitions)
             Thread.current[:kjui_data_definitions] = definitions
+          end
+
+          # The strings.json sections the layout being generated owns
+          # (StringManagerCore#namespace_candidates), kjui's relative-path
+          # spelling first. Thread-local per-build state, the same channel
+          # data_definitions uses. Empty means "no layout context" and
+          # resolution falls back to strings.json order, which is what
+          # every caller got before.
+          def current_namespaces
+            Thread.current[:kjui_string_namespaces] || []
+          end
+
+          def current_namespaces=(namespaces)
+            Thread.current[:kjui_string_namespaces] = namespaces
+          end
+
+          # Announce the layout about to be generated, as a path relative
+          # to the layouts directory.
+          def begin_layout(relative_path)
+            self.current_namespaces = JsonUIShared::StringManagerCore.namespace_candidates(
+              relative_path, preferred: :relative
+            )
+          rescue StandardError
+            self.current_namespaces = []
           end
 
           # Check if a property has a default value (non-optional)
@@ -205,7 +231,13 @@ module KjuiTools
           end
           
           def find_string_key(text, config, source_path)
-            strings_data = cached_strings_data
+            # Sections the layout owns are consulted first. Scanning
+            # strings.json in file order meant a text declared under two
+            # sections — which is exactly what a cell under a screen
+            # directory ends up with, since sjui and kjui spell its
+            # section differently — resolved by however the SSoT happened
+            # to be sorted.
+            strings_data = order_sections_by_ownership(cached_strings_data)
 
             # 1. Check if text matches a key in strings.json (e.g., "welcome_back" matches login.welcome_back)
             # This handles snake_case, single words, ALL_CAPS, etc.
@@ -231,14 +263,12 @@ module KjuiTools
             end
 
             # 3. Search by value match (e.g., "Email address" matches the value in strings.json)
-            strings_data.each do |file_prefix, file_strings|
-              next unless file_strings.is_a?(Hash)
-
-              file_strings.each do |key, value|
-                if value == text
-                  return "#{file_prefix}_#{key}"
-                end
-              end
+            resolved = JsonUIShared::StringManagerCore.resolve_string_reference(
+              strings_data, text, current_namespaces
+            )
+            if resolved
+              report_string_namespace(text, resolved)
+              return "#{resolved['namespace']}_#{resolved['key']}"
             end
 
             # 4. Fallback: check strings.xml directly for snake_case/single-word text
@@ -265,6 +295,42 @@ module KjuiTools
             nil
           end
           
+          # strings.json with the layout's own sections moved to the
+          # front; everything else keeps its file order.
+          def order_sections_by_ownership(strings_data)
+            own = current_namespaces
+            return strings_data if own.empty? || !strings_data.is_a?(Hash)
+
+            owned = own.filter_map { |ns| [ns, strings_data[ns]] if strings_data.key?(ns) }
+            return strings_data if owned.empty?
+
+            owned.to_h.merge(strings_data.reject { |ns, _| own.include?(ns) })
+          end
+
+          # Both conditions are SSoT damage rather than build errors, so
+          # they warn — `jui build`'s zero-warning invariant makes them
+          # gate, and `jui lint-strings` reports the same pair statically.
+          def report_string_namespace(text, resolved)
+            candidates = resolved['candidates'] || []
+            if candidates.length > 1
+              Core::Logger.warn(
+                "String #{text.inspect} is declared in #{candidates.length} strings.json " \
+                "sections (#{candidates.join(', ')}) — resolved to #{resolved['namespace']}. " \
+                'Two sections holding one string is a forked SSoT: delete the duplicate so ' \
+                'every platform reads the same key.'
+              )
+            end
+
+            return unless resolved['foreign'] && current_namespaces.any?
+
+            Core::Logger.warn(
+              "String #{text.inspect} resolved to section #{resolved['namespace']}, which this " \
+              "layout does not own (#{current_namespaces.join(' / ')}) — the SSoT never " \
+              "declared it here. Register the string under the layout's own section " \
+              '(jsonui-localize).'
+            )
+          end
+
           def find_color_key(color, config, source_path)
             colors_data = cached_colors_data
             

@@ -9,6 +9,7 @@ require_relative 'views/responsive_helper'
 require_relative 'action_manager'
 require_relative 'binding/binding_handler_registry'
 require_relative 'style_loader'
+require_relative 'helpers/string_manager_helper'
 require_relative 'include_expander'
 require_relative '../core/attribute_validator'
 require_relative '../core/layout_validator'
@@ -46,6 +47,10 @@ module SjuiTools
         # alias-tolerant L0 path. Class-level per-file state, same
         # pattern as validation_enabled.
         Views::BaseViewConverter.layout_normalized = Core::Normalization.canonicalized?(json_data)
+
+        # Which strings.json sections this layout owns — string resolution
+        # prefers them over a section that merely holds the same text.
+        Helpers::StringManagerHelper.begin_layout(json_file_path)
 
         # Styleファイルを適用
         json_data = StyleLoader.load_and_merge(json_data)
@@ -118,6 +123,7 @@ module SjuiTools
 
         # Per-file normalization state (see convert_file)
         Views::BaseViewConverter.layout_normalized = Core::Normalization.canonicalized?(json_data)
+        Helpers::StringManagerHelper.begin_layout(json_file_path)
 
         # Apply styles
         json_data = StyleLoader.load_and_merge(json_data)

@@ -46,6 +46,71 @@ module JsonUIShared
     # (e.g. Segment items).
     STRING_ITEM_ARRAYS = %w[items segments].freeze
 
+    # The strings.json section spellings that belong to one layout.
+    #
+    # sjui prefixes a section with the file's basename, kjui with the
+    # layouts-dir-relative path — a divergence W3-2 kept deliberately
+    # (unifying renames every existing key). A layout in a subdirectory
+    # therefore has TWO legitimate spellings, and BOTH are its own:
+    # `item_detail/hero_section_cell.json` owns `hero_section_cell` and
+    # `item_detail_hero_section_cell`. Anything else is a foreign
+    # section that happens to hold the same text.
+    #
+    # Returned in preference order, caller's convention first. Variant
+    # files (home@regular.json) fold into the base screen — same screen,
+    # same strings.
+    def self.namespace_candidates(relative_path, preferred: :basename)
+      cleaned = relative_path.to_s.tr('\\', '/').sub(/\.json\z/, '').sub(%r{@[^/]*\z}, '')
+      segments = cleaned.split('/').reject(&:empty?)
+      return [] if segments.empty?
+
+      spellings = [segments.last, segments.join('_')]
+      spellings.reverse! if preferred == :relative
+      spellings.uniq
+    end
+
+    # Resolve a layout literal to the strings.json entry the generated
+    # code should reference, or nil if no section declares it.
+    #
+    # Both builders used to walk the sections in file order and take the
+    # first value match, so which key a layout compiled against depended
+    # on THE ORDER OF SECTIONS IN strings.json — reordering the file
+    # silently repointed generated code, and a screen-scoped cell whose
+    # text exists under both of its spellings resolved differently on
+    # each platform. Preference is explicit here instead: the sections
+    # this layout owns, in the caller's order, then the rest in file
+    # order.
+    #
+    # nil rather than a minted section: a literal no section declares is
+    # a finding for the localize gate (`jui lint-strings`), never
+    # something to register behind the SSoT's back.
+    #
+    # Returns { 'namespace', 'key', 'foreign', 'candidates' } — `foreign`
+    # marks a resolution outside the layout's own spellings, `candidates`
+    # lists every section that declared the same text so the caller can
+    # report the collision.
+    def self.resolve_string_reference(strings_data, text, own_namespaces = [])
+      return nil unless strings_data.is_a?(Hash)
+
+      matches = []
+      strings_data.each do |namespace, entries|
+        next unless entries.is_a?(Hash)
+
+        key = entries.key(text)
+        matches << [namespace, key] unless key.nil?
+      end
+      return nil if matches.empty?
+
+      owned = own_namespaces.filter_map { |namespace| matches.assoc(namespace) }
+      namespace, key = owned.first || matches.first
+      {
+        'namespace' => namespace,
+        'key' => key,
+        'foreign' => !own_namespaces.include?(namespace),
+        'candidates' => matches.map(&:first)
+      }
+    end
+
     private
 
     # Extract localizable strings from one parsed layout JSON.
@@ -147,12 +212,40 @@ module JsonUIShared
     # existing strings.json data. Existing keys are NEVER overwritten —
     # hand-edited values and multi-language Hashes survive re-extraction.
     # Returns the number of newly added keys.
-    def merge_extracted_strings(existing, extracted)
+    #
+    # `aliases` maps an extraction prefix to the layout's OTHER section
+    # spellings (namespace_candidates). A string the SSoT already
+    # declares under one of those is not registered a second time: sjui
+    # names a section after the basename and kjui after the relative
+    # path, so extracting a screen-scoped cell on the other toolchain
+    # minted a SECOND section holding the same strings — the fork the two
+    # platforms then resolved differently, each reading a key the other
+    # never wrote. The declared section stays authoritative; the skip is
+    # reported rather than silent, because the layout is now relying on a
+    # section it does not name.
+    def merge_extracted_strings(existing, extracted, aliases = {}, logger = nil)
       added = 0
       extracted.each do |file_prefix, file_strings|
         existing[file_prefix] ||= {}
+        siblings = Array(aliases[file_prefix]).reject { |namespace| namespace == file_prefix }
+
         file_strings.each do |key, value|
           next if existing[file_prefix].key?(key)
+
+          declared_in = siblings.find do |namespace|
+            section = existing[namespace]
+            section.is_a?(Hash) && section.value?(value)
+          end
+
+          if declared_in
+            logger&.warn(
+              "String #{value.inspect} is already declared in strings.json section " \
+              "#{declared_in} — not registering it again under #{file_prefix}. " \
+              'One layout, one section: a second section holding the same string ' \
+              'forks the SSoT and each platform resolves a different key.'
+            )
+            next
+          end
 
           existing[file_prefix][key] = value
           added += 1

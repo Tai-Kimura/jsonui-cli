@@ -67,6 +67,16 @@ module SjuiTools
               extracted_data['strings'][file_name] ||= {}
               extracted_data['strings'][file_name].merge!(file_strings)
 
+              # The other spelling of this layout's section (kjui names it
+              # after the relative path). Recorded so the merge does not
+              # mint a second section for strings the SSoT already
+              # declares under it.
+              extracted_data['namespaces'] ||= {}
+              extracted_data['namespaces'][file_name] =
+                JsonUIShared::StringManagerCore.namespace_candidates(
+                  layout_relative_path(json_file), preferred: :basename
+                )
+
               # Save to tmp file after each file processing
               save_extracted_strings(extracted_data)
             rescue JSON::ParserError => e
@@ -138,7 +148,10 @@ module SjuiTools
           # Merge extracted strings into the existing data. The policy lives
           # in the shared core: existing keys are never overwritten, so
           # hand-edited values and multi-language Hashes survive.
-          total_new_strings = merge_extracted_strings(existing_strings, extracted_data['strings'])
+          total_new_strings = merge_extracted_strings(
+            existing_strings, extracted_data['strings'],
+            extracted_data['namespaces'] || {}, Core::Logger
+          )
 
           # Ensure Resources directory exists
           FileUtils.mkdir_p(@resources_dir) unless Dir.exist?(@resources_dir)
@@ -281,6 +294,17 @@ module SjuiTools
         end
 
         private
+
+        # A layout path as it names a strings.json section: relative to
+        # the layouts directory, falling back to the bare filename for a
+        # path outside it (custom source trees, absolute inputs).
+        def layout_relative_path(json_file)
+          relative = Pathname.new(File.expand_path(json_file))
+                             .relative_path_from(Pathname.new(File.expand_path(@layouts_dir))).to_s
+          relative.start_with?('..') ? File.basename(json_file) : relative
+        rescue StandardError
+          File.basename(json_file)
+        end
 
         def ensure_tmp_directory
           FileUtils.mkdir_p(@tmp_dir) unless Dir.exist?(@tmp_dir)

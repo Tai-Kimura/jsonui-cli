@@ -44,13 +44,20 @@ a finding, and a stale entry whose literal no longer exists is a finding
 too — the ledger stays a reviewed statement of fact, not a suppression
 dump.
 
+A second class of finding is about ``strings.json`` itself: one text
+declared under two sections. The builders take the first section that
+matches and do not agree on how sections are named (sjui basename, kjui
+relative path), so a duplicate compiles to a different key per platform
+and section order decides the winner. That is a forked SSoT by
+construction, so it is not allowlistable.
+
 Exit codes:
 
     0  clean
     1  the command could not run (no jui.config.json, SSoT assets not
        found, unreadable allowlist)
-    2  findings — raw literal, stale allowlist entry, or allowlist entry
-       with no reason
+    2  findings — raw literal, forked declaration, stale allowlist entry,
+       or allowlist entry with no reason
 
 ``jui build`` runs the same scan when opted in (``--lint-strings`` or
 ``"lint": {"strings": true}`` in jui.config.json) and reports findings
@@ -202,6 +209,32 @@ class StringsTable:
     def resolves(self, text: str) -> bool:
         return text in self._keys or text in self._full_keys or text in self._values
 
+    def duplicate_declarations(self) -> list["Duplicate"]:
+        """Texts declared by more than one section.
+
+        The builders resolve a literal by walking the sections and taking
+        the first match, and they do not agree on how a section is named
+        — sjui uses the layout's basename, kjui its relative path — so a
+        text declared twice compiles to a DIFFERENT key on each platform,
+        and reordering strings.json silently repoints the generated code.
+        A duplicate is a forked SSoT by construction, which is why this
+        needs no allowlist: there is no legitimate reason to declare one
+        string under two sections.
+
+        Reported per (text, sections) rather than per referencing layout —
+        the defect is in strings.json, and one entry is one fix.
+        """
+        by_value: dict[str, list[tuple[str, str]]] = {}
+        for group, entries in self._groups.items():
+            for key, value in entries.items():
+                if isinstance(value, str):
+                    by_value.setdefault(value, []).append((group, key))
+        return [
+            Duplicate(value=value, sites=tuple(sorted(sites)))
+            for value, sites in sorted(by_value.items())
+            if len({group for group, _ in sites}) > 1
+        ]
+
 
 def default_strings_path(config_mgr: ConfigManager) -> Path | None:
     explicit = config_mgr.strings_file
@@ -212,6 +245,17 @@ def default_strings_path(config_mgr: ConfigManager) -> Path | None:
 
 # ----------------------------------------------------------------------
 # Scanning
+
+
+@dataclass(frozen=True)
+class Duplicate:
+    """One text declared by several strings.json sections."""
+
+    value: str
+    sites: tuple[tuple[str, str], ...]  # (section, key) pairs
+
+    def sections(self) -> list[str]:
+        return sorted({group for group, _ in self.sites})
 
 
 @dataclass(frozen=True)
@@ -373,11 +417,17 @@ class LintReport:
     allowed: list[Finding] = field(default_factory=list)  # covered by ledger
     stale_entries: list[dict[str, Any]] = field(default_factory=list)
     missing_reason: list[dict[str, Any]] = field(default_factory=list)
+    duplicates: list[Duplicate] = field(default_factory=list)
     scanned_layouts: int = 0
 
     @property
     def clean(self) -> bool:
-        return not (self.findings or self.stale_entries or self.missing_reason)
+        return not (
+            self.findings
+            or self.stale_entries
+            or self.missing_reason
+            or self.duplicates
+        )
 
     def warning_lines(self) -> list[str]:
         """Findings rendered for the `jui build` warning stream."""
@@ -399,6 +449,14 @@ class LintReport:
                 f"allowlist entry has no reason: {entry.get('layout')} "
                 f"{entry.get('path')} value {entry.get('value')!r} — the "
                 f"ledger records WHY a literal stays unlocalized"
+            )
+        for dup in self.duplicates:
+            sites = ", ".join(f"{group}.{key}" for group, key in dup.sites)
+            lines.append(
+                f"strings.json declares {dup.value!r} in "
+                f"{len(dup.sections())} sections ({sites}) — each platform "
+                f"resolves it to a different key and section order decides "
+                f"the winner; keep one declaration"
             )
         return lines
 
@@ -459,6 +517,9 @@ def collect_findings(
         skip_prefixes.add(styles_dir.relative_to(layouts_dir).parts[0])
 
     report = LintReport()
+    # A forked declaration is a property of strings.json, so it is judged
+    # once here rather than per referencing layout.
+    report.duplicates = strings.duplicate_declarations()
     all_findings: list[Finding] = []
     if layouts_dir.exists():
         for src_file in sorted(layouts_dir.rglob("*.json")):
@@ -574,6 +635,15 @@ def cmd_lint_strings(args: argparse.Namespace) -> int:
                     "allowed": len(report.allowed),
                     "staleEntries": report.stale_entries,
                     "missingReason": report.missing_reason,
+                    "duplicateDeclarations": [
+                        {
+                            "value": d.value,
+                            "sites": [
+                                {"section": group, "key": key} for group, key in d.sites
+                            ],
+                        }
+                        for d in report.duplicates
+                    ],
                     "clean": report.clean,
                 },
                 indent=2,
@@ -593,6 +663,7 @@ def cmd_lint_strings(args: argparse.Namespace) -> int:
         print(f"  WARNING [lint-strings]: {line}")
     print(
         f"\nlint-strings: {len(report.findings)} raw literal(s), "
+        f"{len(report.duplicates)} forked declaration(s), "
         f"{len(report.stale_entries)} stale allowlist entr(ies), "
         f"{len(report.missing_reason)} without a reason"
     )

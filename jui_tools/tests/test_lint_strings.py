@@ -163,6 +163,43 @@ class StringsTableTest(unittest.TestCase):
         self.assertFalse(StringsTable(None).resolves("title"))
 
 
+class DuplicateDeclarationTest(unittest.TestCase):
+    """One text under two sections: the builders take the first section
+    that matches and name sections differently per platform, so the
+    generated key forks and section order picks the winner."""
+
+    def test_same_text_in_two_sections_is_reported(self):
+        table = StringsTable(
+            {
+                "hero_section_cell": {"rating": "RATING"},
+                "item_detail_hero_section_cell": {"rating": "RATING"},
+            }
+        )
+        dups = table.duplicate_declarations()
+        self.assertEqual(len(dups), 1)
+        self.assertEqual(dups[0].value, "RATING")
+        self.assertEqual(
+            dups[0].sections(),
+            ["hero_section_cell", "item_detail_hero_section_cell"],
+        )
+        self.assertEqual(
+            dups[0].sites,
+            (("hero_section_cell", "rating"), ("item_detail_hero_section_cell", "rating")),
+        )
+
+    def test_two_keys_in_one_section_are_not_a_fork(self):
+        # Same text twice inside ONE section still resolves to one
+        # section on every platform — no cross-platform divergence.
+        table = StringsTable({"login": {"submit": "OK", "confirm": "OK"}})
+        self.assertEqual(table.duplicate_declarations(), [])
+
+    def test_distinct_texts_are_clean(self):
+        table = StringsTable(
+            {"a": {"k": "One"}, "b": {"k": "Two"}}
+        )
+        self.assertEqual(table.duplicate_declarations(), [])
+
+
 class ScannerTest(unittest.TestCase):
     def test_raw_literal_is_a_finding_with_path(self):
         tree = {
@@ -283,6 +320,38 @@ class CollectFindingsTest(unittest.TestCase):
 
     def tearDown(self):
         self._tmp.cleanup()
+
+    def test_forked_declaration_fails_the_run_and_is_not_allowlistable(self):
+        self.fx.write_strings(
+            {
+                "hero_section_cell": {"rating": "RATING"},
+                "item_detail_hero_section_cell": {"rating": "RATING"},
+            }
+        )
+        self.fx.write_layout("home.json", {"type": "Label", "text": "RATING"})
+        report = self.fx.collect()
+
+        # The literal itself resolves, so it is not a raw-literal finding
+        self.assertEqual(report.findings, [])
+        self.assertEqual(len(report.duplicates), 1)
+        self.assertFalse(report.clean)
+        self.assertTrue(
+            any("declares 'RATING' in 2 sections" in line for line in report.warning_lines())
+        )
+
+        # The allowlist ledger covers raw literals; it cannot silence a fork
+        self.fx.write_allowlist(
+            [{"layout": "home.json", "path": "text", "value": "RATING", "reason": "no"}]
+        )
+        report = self.fx.collect()
+        self.assertFalse(report.clean)
+        self.assertEqual(len(report.duplicates), 1)
+
+    def test_single_declaration_stays_clean(self):
+        self.fx.write_strings({"home": {"rating": "RATING"}})
+        self.fx.write_layout("home.json", {"type": "Label", "text": "RATING"})
+        report = self.fx.collect()
+        self.assertTrue(report.clean)
 
     def test_style_merged_value_is_judged(self):
         self.fx.write_style("warn", {"text": "Raw from style"})

@@ -183,6 +183,11 @@ module KjuiTools
 
           # Find the GeneratedView file - preserve subdirectory structure from layouts
           relative_path = json_file.sub(@layouts_dir + '/', '')
+
+          # Which strings.json sections this layout owns — string
+          # resolution prefers them over a section that merely holds the
+          # same text (same per-layout channel as data_definitions).
+          Helpers::ResourceResolver.begin_layout(relative_path)
           relative_dir = File.dirname(relative_path)
           if relative_dir == '.'
             view_subdir = snake_case_name
@@ -1181,6 +1186,9 @@ module KjuiTools
         ensure_variant_scaffold(variant_view_file, base_view_file, variant_struct, base_pascal)
 
         relative_path = variant_file.sub(@layouts_dir + '/', '')
+        # A variant folds into the base screen's sections (see
+        # namespace_candidates) — same screen, same strings.
+        Helpers::ResourceResolver.begin_layout(relative_path)
         dynamic_layout_name = relative_path.sub(/\.json$/, '')
         fun_stem = variant_struct.sub(/GeneratedView\z/, '')
         update_generated_file(variant_view_file, json_data, dynamic_layout_name,

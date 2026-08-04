@@ -91,6 +91,41 @@ RSpec.describe KjuiTools::Compose::Helpers::ResourceResolver do
         expect(required_imports).to include(:string_resource)
       end
     end
+
+    # sjui names a strings.json section after the layout's basename and
+    # kjui after its relative path, so a cell under a screen directory
+    # ends up declared under both — and scanning the file in order made
+    # the winner depend on how the SSoT happened to be sorted.
+    context 'when two sections declare the same text' do
+      before do
+        resources_dir = File.join(temp_dir, 'src/main/assets/Layouts/Resources')
+        FileUtils.mkdir_p(resources_dir)
+        File.write(File.join(resources_dir, 'strings.json'), JSON.generate({
+          'hero_section_cell' => { 'rating' => 'RATING' },
+          'item_detail_hero_section_cell' => { 'rating' => 'RATING' }
+        }))
+      end
+
+      after { described_class.current_namespaces = [] }
+
+      it 'reads the section the layout owns, not the first in the file' do
+        described_class.begin_layout('item_detail/hero_section_cell.json')
+        expect(described_class.process_text('RATING', required_imports))
+          .to include('R.string.item_detail_hero_section_cell_rating')
+      end
+
+      it 'keeps file order when the layout owns no declared section' do
+        described_class.begin_layout('login.json')
+        expect(described_class.process_text('RATING', required_imports))
+          .to include('R.string.hero_section_cell_rating')
+      end
+
+      it 'folds a variant into the base screen sections' do
+        described_class.begin_layout('item_detail/hero_section_cell@regular.json')
+        expect(described_class.process_text('RATING', required_imports))
+          .to include('R.string.item_detail_hero_section_cell_rating')
+      end
+    end
   end
 
   describe '.process_color' do
