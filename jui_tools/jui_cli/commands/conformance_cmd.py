@@ -19,6 +19,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_DEFINITIONS = _REPO_ROOT / "shared" / "core" / "attribute_definitions.json"
 _DEFAULT_OUT = _REPO_ROOT / "conformance"
 _PLATFORMS = ("ios", "android", "web")
+#: Judgements `jui conformance codegen-effect` can be narrowed to. Spelled out
+#: here so registering the parser stays free of a conformance import.
+_CODEGEN_CHECKS = ("C0", "C1", "C2")
 
 
 def register_conformance_command(subparsers: argparse._SubParsersAction) -> None:
@@ -462,6 +465,68 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         ),
     )
 
+    codegen = sub.add_parser(
+        "codegen-effect",
+        help=(
+            "Codegen-stage differential: call each platform's production "
+            "converter and compare the emitted TEXT (no device, no fixture)"
+        ),
+        description=(
+            "For every declared (component, attribute, platform), run the "
+            "production converter four times over a layout hash and compare "
+            "the emitted source text: C0 attribute-vs-control (is the spelling "
+            "read at all), C1 bound-vs-control (does the `@{...}` form "
+            "survive), C2 value1-vs-value2 (is the value read, or is a "
+            "constant emitted). "
+            "This is the CODEGEN stage and only that: it proves the converter "
+            "puts the attribute in its output, never that the library then "
+            "honours it. An attribute the codegen emits correctly and the "
+            "renderer ignores (plan 34 matchParent, plan 39 symmetric margin) "
+            "passes here by design — that residue belongs to the render-stage "
+            "conformance suite. UIKit and the dynamic renderers have no "
+            "codegen output to compare and are scoped out with a reason."
+        ),
+    )
+    codegen.add_argument(
+        "--platform",
+        action="append",
+        choices=list(_PLATFORMS),
+        help="Limit to a platform (repeatable; default: all three)",
+    )
+    codegen.add_argument(
+        "--definitions",
+        default=None,
+        help=f"Path to attribute_definitions.json (default: {_DEFAULT_DEFINITIONS})",
+    )
+    codegen.add_argument(
+        "--repo-root",
+        default=None,
+        help=f"Repo root holding the three tool trees (default: {_REPO_ROOT})",
+    )
+    codegen.add_argument(
+        "--ruby",
+        default="ruby",
+        help="Ruby interpreter used to run the probe scripts (default: ruby)",
+    )
+    codegen.add_argument(
+        "--check",
+        action="append",
+        choices=list(_CODEGEN_CHECKS),
+        help="Report only these judgements (repeatable; default: all)",
+    )
+    codegen.add_argument(
+        "--json",
+        dest="json_out",
+        default=None,
+        help="Write the full queue (findings + evidence + scope ledger) here",
+    )
+    codegen.add_argument(
+        "--limit",
+        type=int,
+        default=40,
+        help="How many findings to print (default: 40; the JSON holds them all)",
+    )
+
 
 def cmd_conformance(args: argparse.Namespace) -> int:
     """Dispatch to the right ``conformance`` subcommand."""
@@ -486,9 +551,11 @@ def cmd_conformance(args: argparse.Namespace) -> int:
         return _cmd_cross_effect(args)
     if target == "inert-audit":
         return _cmd_inert_audit(args)
+    if target == "codegen-effect":
+        return _cmd_codegen_effect(args)
     print(
         "Usage: jui conformance <generate|report|gate|baseline|coverage|effect|"
-        "parity|cross-effect|inert-audit> [options]"
+        "parity|cross-effect|inert-audit|codegen-effect> [options]"
     )
     return 1
 
@@ -966,6 +1033,85 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
         f"  platform: {summary.platform}, env: {summary.env}, "
         f"screenshots hashed: {summary.hashed}"
     )
+    return 0
+
+
+def _cmd_codegen_effect(args: argparse.Namespace) -> int:
+    """Run the codegen-stage differential (C0/C1/C2) over the three trees."""
+    import json as _json
+
+    from ..conformance import codegen_effect as ce
+
+    definitions_path = Path(args.definitions) if args.definitions else _DEFAULT_DEFINITIONS
+    repo_root = Path(args.repo_root) if args.repo_root else _REPO_ROOT
+    platforms = tuple(args.platform) if args.platform else ce.PLATFORMS
+    wanted = tuple(args.check) if args.check else ce.CHECKS
+
+    if not definitions_path.is_file():
+        print(f"ERROR: attribute definitions not found: {definitions_path}")
+        return 1
+    definitions = _json.loads(definitions_path.read_text(encoding="utf-8"))
+
+    table = ce.build_jobs(definitions, platforms=platforms)
+    outputs = {}
+    for platform in platforms:
+        jobs = table.jobs[platform]
+        print(f"  {platform}: {len(jobs)} emit(s) via {ce.PROBES[platform][0]} …")
+        try:
+            outputs[platform] = ce.run_probe(repo_root, platform, jobs, ruby=args.ruby)
+        except ce.ProbeError as e:
+            print(f"ERROR: {e}")
+            return 1
+
+    result = ce.evaluate(table, outputs)
+    findings = [f for f in result.findings if f.check in wanted]
+
+    print()
+    print(
+        f"codegen differential: {result.probes} (component, attribute, platform) "
+        f"probe(s), {result.checks_run} judgement(s)"
+    )
+    for check in ce.CHECKS:
+        ran = result.per_check.get(check, 0)
+        failed = sum(1 for f in result.findings if f.check == check)
+        print(f"  {check}: {ran} run, {failed} failing")
+    classes: dict = {}
+    for finding in result.findings:
+        classes[finding.finding_class] = classes.get(finding.finding_class, 0) + 1
+    for name, count in sorted(classes.items()):
+        print(f"    {name}: {count}")
+    print(f"  probe errors: {len(result.errors)}")
+    print(f"  out of scope: {len(result.out_of_scope)} (recorded with a reason)")
+
+    if findings:
+        print()
+        print(f"{len(findings)} failing judgement(s):")
+        for finding in sorted(
+            findings, key=lambda f: (f.check, f.component, f.attribute, f.platform)
+        )[: max(0, args.limit)]:
+            print(f"  {finding}")
+        if len(findings) > args.limit:
+            print(f"  … {len(findings) - args.limit} more (use --json for the full queue)")
+
+    if result.errors:
+        print()
+        print(f"{len(result.errors)} probe error(s) — the converter raised:")
+        for finding in result.errors[: max(0, args.limit)]:
+            print(f"  {finding}")
+        if len(result.errors) > args.limit:
+            print(f"  … {len(result.errors) - args.limit} more")
+
+    if args.json_out:
+        out = Path(args.json_out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        doc = ce.render_report(result, table, platforms=platforms)
+        out.write_text(_json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print()
+        print(f"  queue written to {out}")
+
+    # Reporting only until the queue is consumed (plan 41 Phase 2 puts these
+    # three judgements on the gate; a gate that is red on arrival teaches
+    # people to ignore it).
     return 0
 
 
