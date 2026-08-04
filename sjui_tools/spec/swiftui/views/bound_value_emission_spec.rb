@@ -430,6 +430,40 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       expect(code).to include('.font(.system(size: CGFloat(data.size ?? 0)))')
     end
 
+    # `fontWeight` is declared `["string", "number", "binding"]`, and the two
+    # halves of the codegen were reading the union differently: the Data model
+    # generator declared `var w: Int`, this side sent it through the NAME
+    # table, and the emit was `[…][data.w.lowercased()]` — `value of type
+    # 'Int' has no member 'lowercased'`. Both halves were internally
+    # consistent, so only a compiler could see it. The data section decides.
+    it 'a bound weight follows the type the data section declared' do
+      SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+        'w' => { 'class' => 'Int', 'defaultValue' => 600 }
+      }
+      numeric = convert(:ButtonConverter, 'type' => 'Button', 'text' => 'a', 'fontWeight' => '@{w}')
+      expect(numeric).to include('600: .semibold')
+      expect(numeric).to include('[Int(data.w)]')
+      expect(numeric).not_to include('lowercased')
+
+      SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+        'w' => { 'class' => 'String', 'defaultValue' => 'bold' }
+      }
+      named = convert(:ButtonConverter, 'type' => 'Button', 'text' => 'a', 'fontWeight' => '@{w}')
+      expect(named).to include('"bold": .bold')
+      expect(named).to include('(data.w).lowercased()')
+    ensure
+      SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {}
+    end
+
+    it 'a written-out numeric weight resolves too' do
+      # `Font.Weight.from(string:)` knows names only, so `600` arrived as
+      # .regular through the String initializer.
+      expect(convert(:ButtonConverter, 'type' => 'Button', 'text' => 'a', 'fontWeight' => 600))
+        .to include('fontWeight: .semibold')
+      expect(convert(:ButtonConverter, 'type' => 'Button', 'text' => 'a', 'fontWeight' => 'bold'))
+        .to include('fontWeight: "bold"')
+    end
+
     it 'a bound clipToBounds resolves at render time' do
       expect(convert_tree('type' => 'View', 'clipToBounds' => true,
                           'child' => [{ 'type' => 'Label', 'text' => 'a' }]))

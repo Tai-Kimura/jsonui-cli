@@ -157,6 +157,14 @@ module SjuiTools
             if (bound_weight = swift_weight_expr(@component['fontWeight']) ||
                                swift_weight_expr(@component['font']))
               add_line "fontWeight: #{bound_weight},"
+            elsif (numeric_weight = numeric_weight_table[@component['fontWeight'].to_i]) &&
+                  @component['fontWeight'].to_s.match?(/\A\d+\z/)
+              # A NUMERIC weight is a declared spelling — "e.g. 'bold',
+              # 'semibold', '500', 600". The String initializer resolves it
+              # through `Font.Weight.from(string:)`, which knows names only,
+              # so `600` arrived as `.regular`. Resolve it here instead, which
+              # also picks the Font.Weight initializer.
+              add_line "fontWeight: #{numeric_weight},"
             elsif @component['fontWeight']
               add_line "fontWeight: \"#{@component['fontWeight']}\","
             elsif @component['font']

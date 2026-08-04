@@ -202,6 +202,23 @@ module SjuiTools
         def swift_weight_expr(value, default: :fallback)
           return nil unless bound_value?(value)
 
+          # `fontWeight` is declared `["string", "number", "binding"]`, and
+          # the two halves of the codegen were reading the union differently:
+          # the Data model generator saw `number` and declared
+          # `var boundFontWeight: Int`, while this emitter saw `string` and
+          # sent it through the NAME table — `[…][data.boundFontWeight
+          # .lowercased()]`, i.e. `value of type 'Int' has no member
+          # 'lowercased'`. Nothing before the compiler could see it: the
+          # binding survived, no `@{` is left, and the dictionary key really
+          # is a String, so the type sweep agreed with itself.
+          #
+          # The data section is the only place that knows which half was
+          # taken, so it decides. kjui reached the same answer independently
+          # for the same attribute (`font_spec_helper.rb#weight_expression`).
+          if numeric_property?(value)
+            return bound_numeric_weight(value, default: default)
+          end
+
           mapping = FontHelper.weight_mapping
           weights = mapping['weights'] || {}
           table = {}
@@ -214,6 +231,52 @@ module SjuiTools
           fallback = default == :fallback ? (table[fallback_key] || '.regular') : default
 
           bound_enum(value, table, default: fallback, type: 'Font.Weight')
+        end
+
+        #: Data-section classes that make a weight a NUMBER rather than a name.
+        NUMERIC_PROPERTY_CLASSES = %w[Int Int32 Int64 Double Float CGFloat NSNumber].freeze
+
+        # Whether the bound property is declared numeric in the data section.
+        def numeric_property?(value)
+          path = Binding::BindingExpression.parse(binding_inner(value)).path
+          definition = (Thread.current[:sjui_data_definitions] || {})[path]
+          return false unless definition
+
+          NUMERIC_PROPERTY_CLASSES.include?(definition['class'].to_s)
+        end
+
+        #: CSS weight number -> SwiftUI literal, derived from the shared
+        #: mapping's own `css` column rather than a second scale invented
+        #: here. `normal` and `bold` are the two word spellings CSS defines as
+        #: 400 and 700; everything else in the table is already a number.
+        #: First spelling wins a collision — `heavy` and `black` both declare
+        #: 900, and `heavy` is the one the table lists first.
+        def numeric_weight_table
+          weights = (FontHelper.weight_mapping['weights'] || {})
+          words = { 'normal' => 400, 'bold' => 700 }
+          table = {}
+          weights.each do |name, entry|
+            swift = entry['swift']
+            css = entry['css'].to_s
+            number = css.match?(/\A\d+\z/) ? css.to_i : words[css]
+            next if swift.nil? || number.nil?
+
+            table[number] = swift unless table.key?(number)
+          end
+          table
+        end
+
+        # A numeric weight resolved at run time: `[700: Font.Weight.bold, …]`.
+        def bound_numeric_weight(value, default: :fallback)
+          table = numeric_weight_table
+          return nil if table.empty?
+
+          fallback = default == :fallback ? '.regular' : default
+          pairs = table.sort.each_with_index.map do |(number, swift), index|
+            "#{number}: #{index.zero? ? "Font.Weight#{swift}" : swift}"
+          end
+          lookup = "[#{pairs.join(', ')}][#{bound_number(value, cast: 'Int')}]"
+          fallback.nil? ? "(#{lookup})" : "(#{lookup} ?? #{fallback})"
         end
 
         # The two FontSpec arguments a bound `font` decomposes into, or nil
@@ -261,6 +324,15 @@ module SjuiTools
           key = weight.to_s.downcase
           return nil if key.empty?
 
+          # A numeric weight is a declared spelling — "e.g. 'bold',
+          # 'semibold', '500', 600" — and the name table has no entry for it,
+          # so `600` warned and froze to `.regular`. Same table the bound
+          # numeric path uses, so the two spellings of one weight agree.
+          if key.match?(/\A\d+\z/)
+            numeric = numeric_weight_table[key.to_i]
+            return numeric if numeric
+          end
+
           # Aliases not present in the shared mapping but historically accepted.
           aliases = {
             'normal' => 'regular',
@@ -284,6 +356,9 @@ module SjuiTools
                         :build_font_spec_args,
                         :swift_weight_expr,
                         :bound_font_args,
+                        :numeric_property?,
+                        :numeric_weight_table,
+                        :bound_numeric_weight,
                         :weight_vocabulary,
                         :font_weight_to_swiftui
       end
