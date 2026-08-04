@@ -16,7 +16,7 @@
       "type": "View",
       "id": "target",
       "width": 200,
-      "height": 200,
+      "height": "wrapContent",
       "background": "#DDDDDD",
       "orientation": "horizontal",
       "child": [

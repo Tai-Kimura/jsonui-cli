@@ -15,7 +15,7 @@
     {
       "type": "TextView",
       "id": "target",
-      "width": 200,
+      "width": "wrapContent",
       "height": 100,
       "hint": "Sample",
       "cols": 20

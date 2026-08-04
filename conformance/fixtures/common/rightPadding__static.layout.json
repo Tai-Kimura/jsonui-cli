@@ -15,9 +15,10 @@
     {
       "type": "View",
       "id": "target",
-      "width": 200,
+      "width": "wrapContent",
       "height": 200,
       "background": "#DDDDDD",
+      "orientation": "horizontal",
       "child": [
         {
           "type": "View",

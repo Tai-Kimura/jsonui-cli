@@ -11,6 +11,7 @@
   "id": "root",
   "width": "matchParent",
   "height": "matchParent",
+  "gravity": "right",
   "child": [
     {
       "type": "View",

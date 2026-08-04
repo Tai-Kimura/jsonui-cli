@@ -340,6 +340,28 @@ NON_OBSERVABLE_BY_SECTION: set[tuple[str, str]] = {
     ("Button", "highlightColor"),
     # tint IS the caret, and an unfocused field has no caret.
     ("TextField", "tintColor"),
+    # --- lane A §5(3), the six `is_non_observable()` did not already cover -- #
+    # A ran the predicate over all 22 rather than reading the tables, and 15
+    # were already registered.
+    #
+    # `highlightBackground` is SECTION-scoped on purpose, and this is the whole
+    # reason the scoped table exists: paired with `highlighted: true` it paints
+    # in the resting state and photographs perfectly well — A fixed exactly
+    # that emit in §5(1). A bare name here would switch off `View.highlighted`,
+    # which is a fixture that works.
+    #
+    # `tapBackground` stays bare by contrast: nothing declares a `tapped`
+    # state, so it only ever reaches the `active:` path and is unreachable in a
+    # still capture on every host.
+    ("Button", "highlightBackground"),
+    ("common", "highlightBackground"),
+    # The old spelling of Button.highlightColor, same press state.
+    ("Button", "hilightColor"),
+    # A fetch hint the browser acts on; no pixels either way.
+    ("Image", "loading"),
+    ("NetworkImage", "loading"),
+    # The iframe permission policy.
+    ("Web", "allow"),
     # A radio's group is the mutual-exclusion key and its value is what gets
     # submitted. Neither draws. (`CheckBox.value` / `Switch.value` DO — they
     # are the checked state — which is why this is scoped.)
@@ -1114,6 +1136,11 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # columnSpacing is the gap BETWEEN columns — the default single-column
     # collection has no gap to size.
     "Collection.columnSpacing": {"columns": 2},
+    # `cols` and `rows` size a textarea in characters and lines, and an
+    # explicit width/height overrides them everywhere. Dropping the base size
+    # is what lets the attribute decide the box (lane A §5(4)).
+    "TextView.cols": {"width": None},
+    "TextView.rows": {"height": None},
     # A FLOOR only lifts a box that would otherwise be smaller than it, and the
     # View base is a fixed 200pt square — so `minWidth: 50` lost to the 200 and
     # the fixture measured the fixed width, not the floor. Freeing the axis lets
@@ -1175,17 +1202,34 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # makes wrapping visible with the standard 6-box child set (240px of boxes
     # in a 200px host).
     "flexWrap": {"orientation": "horizontal"},
-    "distribution": {"orientation": "horizontal"},
+    # Distribution shares out FREE space, and six 40pt boxes in a 200pt row
+    # leave none — they overflow it. A 300pt row leaves 60pt to share.
+    "distribution": {"orientation": "horizontal", "width": 300},
     "gravity": {"orientation": "horizontal"},
     "spacing": {"orientation": "horizontal"},
     "padding": {"orientation": "horizontal"},
     "paddings": {"orientation": "horizontal"},
     "paddingTop": {"orientation": "horizontal"},
-    "paddingBottom": {"orientation": "horizontal"},
     "paddingLeft": {"orientation": "horizontal"},
-    "paddingRight": {"orientation": "horizontal"},
     "paddingStart": {"orientation": "horizontal"},
-    "paddingEnd": {"orientation": "horizontal"},
+    # The TRAILING edges need the box to be free, not merely flowing. In a
+    # fixed 200x200 square the content sits in the top-left corner, so padding
+    # added at the bottom or the right pushes against nothing and the picture
+    # is unchanged. On a wrapContent box the padding grows the box itself,
+    # which is visible on any edge. (Lane A §5(4). The leading edges above
+    # already move the content and need no change.)
+    "paddingBottom": {"orientation": "horizontal", "height": "wrapContent"},
+    "bottomPadding": {"orientation": "horizontal", "height": "wrapContent"},
+    "paddingRight": {"orientation": "horizontal", "width": "wrapContent"},
+    "rightPadding": {"orientation": "horizontal", "width": "wrapContent"},
+    "paddingEnd": {"orientation": "horizontal", "width": "wrapContent"},
+    # A trailing MARGIN on the only child of a fixed parent has nothing behind
+    # it to push away from. Parking the root's content against that same edge
+    # gives it something to push off — the lever the top-left family uses,
+    # pointed the other way.
+    "bottomMargin": {"root.gravity": "bottom"},
+    "rightMargin": {"root.gravity": "right"},
+    "endMargin": {"root.gravity": "right"},
     # NO `borderStyle` companion here, deliberately. A border is drawn only
     # when `borderWidth` AND `borderColor` are both declared — there is no
     # default border colour — so `borderStyle` alone is CORRECTLY inert and its
@@ -1573,11 +1617,19 @@ BASE_CHILDREN: dict[str, list[dict[str, Any]]] = {
         {"type": "View", "id": "box_e", "width": 40, "height": 40, "background": "#AA00AA"},
         {"type": "View", "id": "box_f", "width": 40, "height": 40, "background": "#00AAAA"},
     ],
+    # Three boxes, not one: `orientation` chooses between a row and a column,
+    # and one child renders the same picture either way (lane A §5(4)).
     "SafeAreaView": [
         {"type": "View", "id": "box_a", "width": 40, "height": 40, "background": "#FF0000"},
+        {"type": "View", "id": "box_b", "width": 40, "height": 40, "background": "#0000FF"},
+        {"type": "View", "id": "box_c", "width": 40, "height": 40, "background": "#00AA00"},
     ],
+    # The tall block is what makes the scroller scroll; the two beside it are
+    # what makes its orientation visible.
     "ScrollView": [
         {"type": "View", "id": "content", "width": 150, "height": 600, "background": "#FF0000"},
+        {"type": "View", "id": "content_b", "width": 150, "height": 80, "background": "#0000FF"},
+        {"type": "View", "id": "content_c", "width": 150, "height": 80, "background": "#00AA00"},
     ],
     "CircleView": [],
     "Collection": [],

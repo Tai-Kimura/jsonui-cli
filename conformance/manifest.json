@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "ed696903716308210a918a2bfaa36f0c12f20272efd2b3691635ca54fe0e1b62",
   "counts": {
-    "fixtures": 844,
+    "fixtures": 849,
     "assertable": 33,
     "visual": 700,
     "interactive": 35,
-    "control": 76,
+    "control": 81,
     "skipped": 151,
     "promoted": {
       "callback": 11
@@ -647,7 +647,7 @@
       "test": "fixtures/common/highlightBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Button"
+      "control": null
     },
     {
       "id": "common/highlightBackground__binding",
@@ -670,7 +670,7 @@
       "test": "fixtures/common/highlightBackground__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Button"
+      "control": null
     },
     {
       "id": "common/disabledBackground__static",
@@ -1412,7 +1412,7 @@
       "test": "fixtures/common/paddingBottom__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__orientation-horizontal"
+      "control": "__control/View__height-wrapContent_orientation-horizontal"
     },
     {
       "id": "common/paddingBottom__binding",
@@ -1435,7 +1435,7 @@
       "test": "fixtures/common/paddingBottom__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__orientation-horizontal"
+      "control": "__control/View__height-wrapContent_orientation-horizontal"
     },
     {
       "id": "common/paddingLeft__static",
@@ -1504,7 +1504,7 @@
       "test": "fixtures/common/paddingRight__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__orientation-horizontal"
+      "control": "__control/View__orientation-horizontal_width-wrapContent"
     },
     {
       "id": "common/paddingRight__binding",
@@ -1527,7 +1527,7 @@
       "test": "fixtures/common/paddingRight__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__orientation-horizontal"
+      "control": "__control/View__orientation-horizontal_width-wrapContent"
     },
     {
       "id": "common/paddingStart__static",
@@ -1596,7 +1596,7 @@
       "test": "fixtures/common/paddingEnd__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__orientation-horizontal"
+      "control": "__control/View__orientation-horizontal_width-wrapContent"
     },
     {
       "id": "common/paddingEnd__binding",
@@ -1619,7 +1619,7 @@
       "test": "fixtures/common/paddingEnd__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__orientation-horizontal"
+      "control": "__control/View__orientation-horizontal_width-wrapContent"
     },
     {
       "id": "common/rightPadding__static",
@@ -1642,7 +1642,7 @@
       "test": "fixtures/common/rightPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal_width-wrapContent"
     },
     {
       "id": "common/rightPadding__binding",
@@ -1665,7 +1665,7 @@
       "test": "fixtures/common/rightPadding__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__orientation-horizontal_width-wrapContent"
     },
     {
       "id": "common/leftPadding__static",
@@ -1780,7 +1780,7 @@
       "test": "fixtures/common/bottomPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__height-wrapContent_orientation-horizontal"
     },
     {
       "id": "common/bottomPadding__binding",
@@ -1803,7 +1803,7 @@
       "test": "fixtures/common/bottomPadding__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__height-wrapContent_orientation-horizontal"
     },
     {
       "id": "common/minTopPadding__static",
@@ -2045,7 +2045,7 @@
       "test": "fixtures/common/bottomMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__root.gravity-bottom"
     },
     {
       "id": "common/leftMargin__static",
@@ -2091,7 +2091,7 @@
       "test": "fixtures/common/rightMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__root.gravity-right"
     },
     {
       "id": "common/startMargin__static",
@@ -2137,7 +2137,7 @@
       "test": "fixtures/common/endMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": "__control/View__root.gravity-right"
     },
     {
       "id": "common/minTopMargin__static",
@@ -3991,7 +3991,7 @@
       "test": "fixtures/common/distribution__fillequally.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__orientation-horizontal"
+      "control": "__control/View__orientation-horizontal_width-300"
     },
     {
       "id": "common/distribution__fill",
@@ -4013,7 +4013,7 @@
       "test": "fixtures/common/distribution__fill.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__orientation-horizontal"
+      "control": "__control/View__orientation-horizontal_width-300"
     },
     {
       "id": "common/distribution__equalspacing",
@@ -4035,7 +4035,7 @@
       "test": "fixtures/common/distribution__equalspacing.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__orientation-horizontal"
+      "control": "__control/View__orientation-horizontal_width-300"
     },
     {
       "id": "common/distribution__equalcentering",
@@ -4057,7 +4057,7 @@
       "test": "fixtures/common/distribution__equalcentering.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__orientation-horizontal"
+      "control": "__control/View__orientation-horizontal_width-300"
     },
     {
       "id": "common/minStartMargin__static",
@@ -9536,7 +9536,7 @@
       "test": "fixtures/TextView/rows__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": "__control/TextView__no-height"
     },
     {
       "id": "TextView/cols__static",
@@ -9557,7 +9557,7 @@
       "test": "fixtures/TextView/cols__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextView"
+      "control": "__control/TextView__no-width"
     },
     {
       "id": "TextView/resize__both",
@@ -10020,7 +10020,7 @@
       "test": "fixtures/Button/highlightBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Button"
+      "control": null
     },
     {
       "id": "Button/image__static",
@@ -10763,7 +10763,7 @@
       "test": "fixtures/Image/loading__lazy.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Image"
+      "control": null
     },
     {
       "id": "Image/loading__eager",
@@ -10784,7 +10784,7 @@
       "test": "fixtures/Image/loading__eager.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Image"
+      "control": null
     },
     {
       "id": "Image/loadingImage__static",
@@ -11257,7 +11257,7 @@
       "test": "fixtures/NetworkImage/loading__lazy.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/NetworkImage"
+      "control": null
     },
     {
       "id": "NetworkImage/loading__eager",
@@ -11278,7 +11278,7 @@
       "test": "fixtures/NetworkImage/loading__eager.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/NetworkImage"
+      "control": null
     },
     {
       "id": "SelectBox/prompt__static",
@@ -13854,7 +13854,7 @@
       "test": "fixtures/View/distribution__fillequally.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__orientation-horizontal"
+      "control": "__control/View__orientation-horizontal_width-300"
     },
     {
       "id": "View/distribution__fill",
@@ -13881,7 +13881,7 @@
       "test": "fixtures/View/distribution__fill.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__orientation-horizontal"
+      "control": "__control/View__orientation-horizontal_width-300"
     },
     {
       "id": "View/distribution__equalspacing",
@@ -13908,7 +13908,7 @@
       "test": "fixtures/View/distribution__equalspacing.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__orientation-horizontal"
+      "control": "__control/View__orientation-horizontal_width-300"
     },
     {
       "id": "View/distribution__equalcentering",
@@ -13935,7 +13935,7 @@
       "test": "fixtures/View/distribution__equalcentering.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__orientation-horizontal"
+      "control": "__control/View__orientation-horizontal_width-300"
     },
     {
       "id": "View/spacing__static",
@@ -17194,7 +17194,7 @@
       "test": "fixtures/Web/allow__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Web"
+      "control": null
     },
     {
       "id": "SafeAreaView/orientation__horizontal",
@@ -18917,6 +18917,28 @@
       "isControl": true
     },
     {
+      "id": "__control/TextView__no-height",
+      "component": "__control",
+      "attribute": null,
+      "case": "TextView",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/TextView__no-height.layout.json",
+      "test": "fixtures/__control/TextView__no-height.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/TextView__no-hint",
       "component": "__control",
       "attribute": null,
@@ -18935,6 +18957,28 @@
       "deprecated": null,
       "layout": "fixtures/__control/TextView__no-hint.layout.json",
       "test": "fixtures/__control/TextView__no-hint.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/TextView__no-width",
+      "component": "__control",
+      "attribute": null,
+      "case": "TextView",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/TextView__no-width.layout.json",
+      "test": "fixtures/__control/TextView__no-width.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -19037,6 +19081,30 @@
       "isControl": true
     },
     {
+      "id": "__control/View__height-wrapContent_orientation-horizontal",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__height-wrapContent_orientation-horizontal.layout.json",
+      "test": "fixtures/__control/View__height-wrapContent_orientation-horizontal.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/View__highlightBackground--FF0000",
       "component": "__control",
       "attribute": null,
@@ -19079,6 +19147,54 @@
       "deprecated": null,
       "layout": "fixtures/__control/View__orientation-horizontal.layout.json",
       "test": "fixtures/__control/View__orientation-horizontal.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/View__orientation-horizontal_width-300",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__orientation-horizontal_width-300.layout.json",
+      "test": "fixtures/__control/View__orientation-horizontal_width-300.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/View__orientation-horizontal_width-wrapContent",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__orientation-horizontal_width-wrapContent.layout.json",
+      "test": "fixtures/__control/View__orientation-horizontal_width-wrapContent.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
