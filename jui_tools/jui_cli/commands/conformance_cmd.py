@@ -354,6 +354,66 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         ),
     )
 
+    inert = sub.add_parser(
+        "inert-audit",
+        help=(
+            "Inventory the inert control-diff verdicts no ledger accounts for "
+            "— the completeness audit behind the adjudication queue"
+        ),
+    )
+    inert.add_argument(
+        "--platform",
+        action="append",
+        choices=list(_PLATFORMS),
+        help=(
+            "Platform to audit (repeatable; default: all three). Attribution "
+            "is per platform, but the queue reports every item's full "
+            "cross-platform picture."
+        ),
+    )
+    inert.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory (default: {_DEFAULT_OUT})",
+    )
+    inert.add_argument(
+        "--results",
+        default=None,
+        help="Results directory (default: <dir>/results)",
+    )
+    inert.add_argument(
+        "--definitions",
+        default=None,
+        help=(
+            "Path to attribute_definitions.json, for the declared-value and "
+            f"value-is-default triage (default: {_DEFAULT_DEFINITIONS})"
+        ),
+    )
+    inert.add_argument(
+        "--semantics",
+        default=None,
+        help=(
+            "Path to the attribute-semantics contract; fixtures it declares an "
+            "observable for are attributed to the contract "
+            f"(default: {_REPO_ROOT / 'shared' / 'core' / 'attribute_semantics.json'})"
+        ),
+    )
+    inert.add_argument(
+        "--json",
+        dest="json_out",
+        default=None,
+        help=(
+            "Write the adjudication queue to this path as JSON. The file is a "
+            "report, not a ledger — nothing reads it back."
+        ),
+    )
+    inert.add_argument(
+        "--untriaged-only",
+        action="store_true",
+        help="List only the items no mechanical triage family closes",
+    )
+
     eff = sub.add_parser(
         "effect",
         help="Record/check which fixtures render differently from their control",
@@ -408,8 +468,11 @@ def cmd_conformance(args: argparse.Namespace) -> int:
         return _cmd_parity(args)
     if target == "cross-effect":
         return _cmd_cross_effect(args)
+    if target == "inert-audit":
+        return _cmd_inert_audit(args)
     print(
-        "Usage: jui conformance <generate|report|gate|baseline|coverage|effect|parity|cross-effect> [options]"
+        "Usage: jui conformance <generate|report|gate|baseline|coverage|effect|"
+        "parity|cross-effect|inert-audit> [options]"
     )
     return 1
 
@@ -583,6 +646,155 @@ def _cmd_cross_effect(args: argparse.Namespace) -> int:
         )
         return 0
     return 1
+
+
+def _cmd_inert_audit(args: argparse.Namespace) -> int:
+    import hashlib
+    import json
+
+    from ..conformance import control_diff as control_diff_mod
+    from ..conformance import cross_effect as ce
+    from ..conformance import inert_audit as ia
+    from ..conformance.report import load_platform_results
+
+    conformance_dir = (
+        Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    )
+    results_dir = Path(args.results) if args.results else conformance_dir / "results"
+    platforms = (
+        list(dict.fromkeys(args.platform)) if args.platform else list(_PLATFORMS)
+    )
+
+    manifest_path = conformance_dir / "manifest.json"
+    if not manifest_path.is_file():
+        print(f"ERROR: manifest not found: {manifest_path}")
+        return 1
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+
+    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash)}
+    diffs = {}
+    for platform in platforms:
+        pr = loaded.get(platform)
+        if pr is None:
+            print(
+                f"note: no results for {platform} — its fixtures have no verdict "
+                "to attribute"
+            )
+            continue
+        if pr.stale:
+            print(
+                f"note: {platform} results are stale vs the current manifest — "
+                "re-run the suite before trusting fixture-level conclusions"
+            )
+        diffs[platform] = control_diff_mod.compare(
+            conformance_dir, platform, manifest, pr.results
+        )
+        if diffs[platform].error:
+            print(f"note: {platform} comparison errored — {diffs[platform].error}")
+
+    definitions_path = (
+        Path(args.definitions) if args.definitions else _DEFAULT_DEFINITIONS
+    )
+    definitions = {}
+    if definitions_path.is_file():
+        definitions = json.loads(definitions_path.read_text(encoding="utf-8"))
+    else:
+        print(
+            f"note: {definitions_path} not found — declared-value classification "
+            "and the value-is-default triage did not participate"
+        )
+
+    semantics_path = (
+        Path(args.semantics)
+        if getattr(args, "semantics", None)
+        else _REPO_ROOT / "shared" / "core" / ce.CONTRACT_NAME
+    )
+    coverage_path = conformance_dir / "coverage.json"
+    coverage_doc = (
+        json.loads(coverage_path.read_text(encoding="utf-8"))
+        if coverage_path.is_file()
+        else {}
+    )
+
+    result = ia.audit(
+        manifest,
+        ce.verdicts_from_diffs(diffs),
+        platforms,
+        control_diff_ledger=control_diff_mod.load_ledger_all(
+            control_diff_mod.ledger_path(conformance_dir)
+        ),
+        cross_effect_ledger=ce.load_ledger(ce.ledger_path(conformance_dir)),
+        contract=ce.load_contract(semantics_path),
+        coverage=ia.coverage_gaps(coverage_doc),
+        enum_values=ce.enum_fixture_values(manifest, definitions),
+    )
+    from ..conformance import rules as rules_mod
+
+    ia.triage(
+        result,
+        defaults=ia.attribute_defaults(definitions),
+        control_identical=ia.control_identical_fixtures(conformance_dir, manifest),
+        manifest=manifest,
+        fallback_value=rules_mod.DEFAULT_STRING,
+    )
+
+    print(f"inert-audit ({', '.join(platforms)}):")
+    for platform in platforms:
+        attributed = result.attributed.get(platform, {})
+        claimed = ", ".join(
+            f"{channel} {attributed[channel]}"
+            for channel in ia.CHANNELS
+            if attributed.get(channel)
+        )
+        print(
+            f"  {platform:<8} inert {result.measured.get(platform, 0):>4}  "
+            f"attributed {sum(attributed.values()):>4}"
+            + (f" ({claimed})" if claimed else "")
+            + f"  unadjudicated {result.unattributed.get(platform, 0):>4}"
+        )
+    print()
+    print(
+        f"  queue: {len(result.items)} fixture(s), "
+        f"{len(result.untriaged)} untriaged after mechanical triage"
+    )
+
+    by_kind: dict = {}
+    by_family: dict = {}
+    for item in result.items:
+        by_kind[item.kind] = by_kind.get(item.kind, 0) + 1
+        by_family[item.family] = by_family.get(item.family, 0) + 1
+    for label, counts in (("kind", by_kind), ("family", by_family)):
+        if not counts:
+            continue
+        print(f"  by {label}:")
+        for key in sorted(counts, key=lambda k: (-counts[k], k)):
+            print(f"    {key:<32} {counts[key]}")
+
+    listed = result.untriaged if args.untriaged_only else result.items
+    if listed:
+        print()
+        print("adjudication queue:")
+        for item in listed[:200]:
+            verdicts = ", ".join(
+                f"{p}: {item.verdicts.get(p) or '—'}" for p in item.scope
+            )
+            print(f"  {item.fixture} [{item.kind}] {verdicts}")
+            if item.family != ia.FAMILY_UNTRIAGED:
+                print(f"      triage: {item.family} — {item.evidence}")
+        if len(listed) > 200:
+            print(f"  … {len(listed) - 200} more")
+
+    if args.json_out:
+        out = Path(args.json_out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(ia.render_queue(result), encoding="utf-8")
+        print()
+        print(f"  queue written to {out}")
+
+    # Reporting only: the completeness ratchet is plan 34 Phase 3 and cannot
+    # be armed before the queue is empty.
+    return 0
 
 
 def _cmd_parity(args: argparse.Namespace) -> int:
