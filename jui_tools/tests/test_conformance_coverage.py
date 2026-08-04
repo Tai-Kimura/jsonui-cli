@@ -218,6 +218,106 @@ class FindGapsTests(unittest.TestCase):
         self.assertEqual([], coverage.find_gaps(defs, reads))
 
 
+class BindingLaneTests(unittest.TestCase):
+    """The bound form of a declared attribute has to be MEASURED somewhere.
+
+    Reading an attribute and handling its `@{...}` form are different facts:
+    rjui read `height` and dropped a bound one on the floor (plan 36). The
+    read scan cannot see that, so this lane asks whether any fixture writes
+    the bound form at all — without one, no platform's behaviour on it is
+    known and a silent drop has nowhere to surface.
+    """
+
+    def _manifest(self, *entries):
+        return {"fixtures": list(entries)}
+
+    def _fixture(self, component, attribute, case, value=None, platforms=None):
+        return {
+            "id": f"{component}/{attribute}__{case}",
+            "component": component,
+            "attribute": attribute,
+            "case": case,
+            "value": value,
+            "platforms": list(platforms or coverage.PLATFORMS),
+        }
+
+    def test_declares_binding_reads_both_type_spellings(self):
+        self.assertTrue(coverage.declares_binding({"type": "binding"}))
+        self.assertTrue(coverage.declares_binding({"type": ["number", "binding"]}))
+        self.assertTrue(
+            coverage.declares_binding({"type": ["string", {"enum": ["a"]}, "binding"]})
+        )
+        self.assertFalse(coverage.declares_binding({"type": "string"}))
+        self.assertFalse(coverage.declares_binding({"type": ["number", "string"]}))
+        self.assertFalse(coverage.declares_binding("not a definition"))
+
+    def test_a_binding_case_counts_as_coverage(self):
+        manifest = self._manifest(
+            self._fixture("Label", "text", "binding_initial", "@{v}"),
+        )
+        self.assertEqual(
+            coverage.binding_fixture_coverage(manifest),
+            {("Label", "text"): set(coverage.PLATFORMS)},
+        )
+
+    def test_a_bound_value_counts_even_without_a_binding_case_name(self):
+        manifest = self._manifest(
+            self._fixture("View", "height", "static", "@{barHeight}", ["web"]),
+        )
+        self.assertEqual(
+            coverage.binding_fixture_coverage(manifest), {("View", "height"): {"web"}}
+        )
+
+    def test_a_literal_fixture_is_not_binding_coverage(self):
+        manifest = self._manifest(self._fixture("View", "height", "static", 140))
+        self.assertEqual(coverage.binding_fixture_coverage(manifest), {})
+
+    def test_unmeasured_bound_form_is_a_gap_per_platform(self):
+        defs = _defs(common={"height": {"type": ["number", "binding"]}})
+        gaps = coverage.find_binding_gaps(defs, {("common", "height"): {"web"}})
+        self.assertEqual(
+            ["common.height [ios]", "common.height [android]"],
+            [str(g) for g in gaps],
+        )
+
+    def test_a_non_binding_attribute_is_not_in_this_lane(self):
+        defs = _defs(common={"width": {"type": "number"}})
+        self.assertEqual(coverage.find_binding_gaps(defs, {}), [])
+
+    def test_platform_scope_and_deprecation_still_apply(self):
+        defs = _defs(
+            Button={
+                "buttonType": {"type": ["string", "binding"], "platform": "react"},
+                "hilight": {"type": ["string", "binding"], "deprecated": "swift"},
+            }
+        )
+        self.assertEqual(
+            ["Button.buttonType [web]"],
+            [str(g) for g in coverage.find_binding_gaps(defs, {})
+             if g.attribute == "buttonType"],
+        )
+        self.assertEqual(
+            ["Button.hilight [android]", "Button.hilight [web]"],
+            [str(g) for g in coverage.find_binding_gaps(defs, {})
+             if g.attribute == "hilight"],
+        )
+
+    def test_the_plan_36_specimen_is_caught_by_construction(self):
+        # rjui returned '' for `"height": "@{barHeight}"` while `jui build`
+        # stayed at zero warnings. No fixture writes a bound dimension, which
+        # is exactly why nothing noticed.
+        defs = _defs(
+            common={
+                "height": {"type": ["number", {"enum": ["matchParent"]}, "binding"]},
+                "maxHeight": {"type": ["number", "binding"]},
+            }
+        )
+        gaps = coverage.find_binding_gaps(defs, {}, platforms=("web",))
+        self.assertEqual(
+            ["common.height [web]", "common.maxHeight [web]"], [str(g) for g in gaps]
+        )
+
+
 class LedgerTests(unittest.TestCase):
     def setUp(self):
         self.defs = _defs(

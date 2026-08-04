@@ -97,6 +97,46 @@ RSpec.describe RjuiTools::React::Converters::SliderConverter do
       end
     end
 
+    context 'track colours' do
+      it 'emits exactly one style attribute' do
+        # Two `style={...}` on one element is a duplicate JSX attribute
+        # (TS17001) and the generated file cannot be hand-patched.
+        converter = create_converter({ 'class' => 'Slider', 'tintColor' => '#FF0000' })
+        expect(converter.convert.scan('style={').length).to eq(1)
+      end
+
+      it 'resolves a palette name instead of emitting it as a colour' do
+        # 'dark_red' is not CSS. The raw spelling used to reach the style
+        # object through the Slider's own emitter.
+        converter = create_converter({ 'class' => 'Slider', 'tintColor' => 'dark_red' })
+        result = converter.convert
+        expect(result).to include("accentColor: ColorManager.resolveColor('dark_red')")
+        expect(result).not_to include("accentColor: 'dark_red'")
+      end
+
+      it 'reads the declared spellings ahead of the UIKit legacy ones' do
+        converter = create_converter({
+          'class' => 'Slider',
+          'progressTintColor' => '#111111',
+          'trackTintColor' => '#222222',
+          'tintColor' => '#333333',
+          'minimumTrackTintColor' => '#444444',
+          'maximumTrackTintColor' => '#555555'
+        })
+        result = converter.convert
+        expect(result).to include("accentColor: '#111111'")
+        expect(result).to include("backgroundColor: '#222222'")
+      end
+
+      it 'falls back to the legacy spellings when the declared ones are absent' do
+        converter = create_converter({
+          'class' => 'Slider',
+          'maximumTrackTintColor' => '#555555'
+        })
+        expect(converter.convert).to include("backgroundColor: '#555555'")
+      end
+    end
+
     context 'with enabled=false' do
       it 'adds disabled attribute and styling' do
         converter = create_converter({ 'class' => 'Slider', 'enabled' => false })

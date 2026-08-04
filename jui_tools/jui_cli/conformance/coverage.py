@@ -172,6 +172,78 @@ def coverage_path(conformance_dir) -> Path:
 
 
 # --------------------------------------------------------------------------- #
+# Binding lane — is the BOUND form of a declared attribute ever measured?
+# --------------------------------------------------------------------------- #
+#
+# The scan above answers "does a converter read this attribute", and a
+# converter that reads it can still drop it the moment the value arrives as
+# `@{something}`: rjui read `height` and handed it to a CSS formatter whose
+# else-branch returned the empty string, so a bound height produced no output
+# at all while `jui build` stayed at zero warnings (plan 36).
+#
+# Detecting that statically was tried and rejected. Attribute-level pattern
+# matching reported 320 suspects, most of them wrong; widening to method level
+# cut it to 153 but then MISSED the plan-36 specimen outright, because the
+# method that read the dimensions was a large one that branched on bindings
+# for other attributes. A checker that cannot see the defect it was
+# commissioned for is not worth the reasons it would force people to write.
+#
+# So this lane asks the question the rest of the campaign asks: is it
+# MEASURED? A binding-declared attribute needs a fixture that actually writes
+# the bound form; without one, no platform's behaviour on that form is known,
+# and a silent drop has nowhere to show up. That is checkable from the
+# manifest, needs no source heuristics, and catches the plan-36 dimensions by
+# construction.
+
+
+def declares_binding(defn) -> bool:
+    """Whether the SSoT type admits a `@{...}` value for this attribute."""
+    if not isinstance(defn, dict):
+        return False
+    declared = defn.get("type")
+    if declared == "binding":
+        return True
+    return isinstance(declared, list) and any(t == "binding" for t in declared)
+
+
+def binding_fixture_coverage(manifest: dict) -> dict:
+    """``{(component, attribute): {platform}}`` for bound-form fixtures.
+
+    A fixture qualifies when the generator marked its case as a binding probe
+    or when the tested value is written as `@{...}` — the two spellings the
+    binding fixtures use today.
+    """
+    out: dict = {}
+    for entry in (manifest or {}).get("fixtures", []):
+        case = str(entry.get("case") or "")
+        value = entry.get("value")
+        bound = case.startswith("binding") or (
+            isinstance(value, str) and value.startswith("@{")
+        )
+        if not bound:
+            continue
+        key = (entry.get("component"), entry.get("attribute"))
+        out.setdefault(key, set()).update(entry.get("platforms") or [])
+    return out
+
+
+def find_binding_gaps(definitions: dict, covered: dict, platforms=PLATFORMS) -> list:
+    """Binding-declared (component, attribute, platform) with no bound fixture."""
+    gaps = []
+    for component, attrs in sorted((definitions or {}).items()):
+        if component.startswith("_") or not isinstance(attrs, dict):
+            continue
+        for attribute, defn in sorted(attrs.items()):
+            if not declares_binding(defn) or not in_scope(component, attribute, defn):
+                continue
+            measured = covered.get((component, attribute), set())
+            for platform in applicable_platforms(defn):
+                if platform in platforms and platform not in measured:
+                    gaps.append(Gap(component, attribute, platform))
+    return gaps
+
+
+# --------------------------------------------------------------------------- #
 # Scanning
 # --------------------------------------------------------------------------- #
 

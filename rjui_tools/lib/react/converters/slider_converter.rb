@@ -30,11 +30,8 @@ module RjuiTools
           disabled_attr = build_disabled_attr
           step_attr = step_value ? " step={#{step_value}}" : ''
 
-          # Accent color via style
-          slider_style_attr = build_slider_style_attr
-
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<input#{id_attr} type="range" className="#{class_name}" min={#{min_value}} max={#{max_value}}#{step_attr}#{value_attr}#{on_change}#{disabled_attr}#{slider_style_attr}#{base_style_attr}#{testid_attr}#{tag_attr} />
+            #{indent_str(indent)}<input#{id_attr} type="range" className="#{class_name}" min={#{min_value}} max={#{max_value}}#{step_attr}#{value_attr}#{on_change}#{disabled_attr}#{base_style_attr}#{testid_attr}#{tag_attr} />
           JSX
 
           wrap_with_visibility(jsx, indent)
@@ -55,6 +52,25 @@ module RjuiTools
             binding_expr = extract_binding_property(attributes['enabled'])
             classes << "${!#{binding_expr} ? 'opacity-50 cursor-not-allowed' : ''}"
           end
+
+          # Track colours go into @dynamic_styles, which `build_class_name`
+          # owns, so the ONE style attribute BaseConverter renders carries
+          # them. A second `style={...}` of our own is how Fx0375 ended up
+          # with a duplicate JSX attribute (TS17001) — and the losing copy
+          # held the raw palette name, which is not a colour at all.
+          #
+          # `progressTintColor` / `trackTintColor` are the spellings
+          # attribute_definitions declares: the filled track and the unfilled
+          # one. `tintColor` is the generic accent behind the first, and
+          # minimum/maximumTrackTintColor are the undeclared UIKit legacy
+          # behind both (slider.trackColors in attribute_semantics.json).
+          progress_tint = attributes['progressTintColor'] || attributes['tintColor'] ||
+                          attributes['minimumTrackTintColor']
+          @dynamic_styles['accentColor'] = color_style_expr(progress_tint) if progress_tint
+
+          # More specific than a plain `background`, so it wins the key.
+          track_tint = attributes['trackTintColor'] || attributes['maximumTrackTintColor']
+          @dynamic_styles['backgroundColor'] = color_style_expr(track_tint) if track_tint
 
           finalize_classes(classes)
         end
@@ -112,24 +128,6 @@ module RjuiTools
           end
         end
 
-        def build_slider_style_attr
-          style_parts = []
-
-          # `progressTintColor` / `trackTintColor` are the spellings
-          # attribute_definitions declares; minimum/maximumTrackTintColor are
-          # the undeclared UIKit legacy and read behind them, canonical-first
-          # (slider.trackColors in shared/core/attribute_semantics.json).
-          tint_color = attributes['progressTintColor'] || attributes['tintColor'] ||
-                       attributes['minimumTrackTintColor']
-          style_parts << "accentColor: '#{tint_color}'" if tint_color
-
-          max_track_color = attributes['trackTintColor'] || attributes['maximumTrackTintColor']
-          style_parts << "backgroundColor: '#{max_track_color}'" if max_track_color
-
-          return '' if style_parts.empty?
-
-          " style={{ #{style_parts.join(', ')} }}"
-        end
 
         def build_base_style_attr
           build_style_attr
