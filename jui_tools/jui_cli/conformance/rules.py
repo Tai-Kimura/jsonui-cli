@@ -762,36 +762,64 @@ BOUND_CASE_CLASSES: dict[tuple[str, str], str] = {
 #: Bound cases held back because the fixture would break the codegen HOST.
 #:
 #: A fixture that does not compile does not measure its own attribute badly —
-#: it stops that platform's ENTIRE run, because the host is one build. So the
-#: `bound-uncompilable` family (the raw `Modifier.width(@{v}.dp)` interpolation
-#: the wave opened on) and the six the web host's `tsc` rejects are declared
-#: here rather than emitted.
+#: it stops that platform's ENTIRE run, because the host is one build. So a
+#: bound case whose emitted source does not build is declared here instead of
+#: shipped.
 #:
-#: This is a HOLD, not a decision: each entry names the defect that blocks it,
-#: and the entry comes out the moment the owning lane lands its fix — the
-#: fixture is already written. Removing one is a one-line change plus a
-#: regenerate, and `jui conformance codegen-effect` says when it is safe
-#: (nothing in `bound-uncompilable`, and the web host typechecks).
+#: This is a HOLD, not a decision. Each entry names who owns the defect, what
+#: the defect is, and — the load-bearing part — WHAT TO RUN to find out whether
+#: it is still true. The gate checks the `verify` axes it can execute itself
+#: and reports the rest as unverified holds rather than failing on them: a
+#: non-empty table is normal operation, because it means somebody found a
+#: defect and wrote it down. What the gate fails on is an entry with no owner,
+#: or one whose `verify` says it is already clear.
 #:
-#: Deliberately NOT solved by weakening the fixture: writing a literal where a
-#: binding belongs would make the suite green and leave the defect unmeasured,
-#: which is the failure mode this whole wave exists to remove.
-BOUND_CASES_BLOCKED: dict[tuple[str, str], str] = {
-    # Empty, and that is the point: every hold this table ever carried came
-    # out because the lane that owned the defect fixed it.
-    #
-    # 26 were `bound-uncompilable` — the raw `Modifier.width(@{v}.dp)`
-    # interpolation the wave opened on — cleared by A/B/C. The last six were
-    # rejected by the web host's `tsc`: `React.CSSProperties` is mostly unions
-    # of string literals, so a value only known to be `string` fails to assign,
-    # and four of the six converters had additionally dropped the
-    # `as React.CSSProperties` cast while hand-copying the same style loop
-    # (A, 5f22168).
-    #
-    # Keep the table. A bound fixture that stops a host from building takes
-    # that whole platform's run with it, so the next one needs somewhere to be
-    # declared with its reason rather than quietly deleted.
+#: Known `verify` axes, both of them established by having actually happened:
+#:
+#:   codegen-effect:bound-uncompilable
+#:       `jui conformance codegen-effect` reports the pair in that class.
+#:       Cleared 26 entries when A/B/C fixed the raw `Modifier.width(@{v}.dp)`
+#:       interpolation family.
+#:   web-host-typecheck
+#:       regenerate `conformance/hosts/web` and run `tsc --noEmit`.
+#:       Cleared the last 6 — and the differential said nothing about them,
+#:       because it only asks whether `@{` survived into the output, never
+#:       whether the output typechecks. One axis would have missed them.
+#:
+#: Empty today. It stays in the file precisely because it is empty: the next
+#: bound fixture that stops a host from building needs somewhere to be declared
+#: with its reason, rather than quietly deleted.
+BOUND_CASES_BLOCKED: dict[tuple[str, str], dict[str, str]] = {
+    # ("Label", "textAlign"): {
+    #     "owner": "A",
+    #     "reason": "React.CSSProperties['textAlign'] is a literal union; a "
+    #               "plain string does not assign",
+    #     "verify": "web-host-typecheck",
+    # },
 }
+
+#: `verify` values the gate knows how to act on. A hold naming anything else is
+#: still legal — it just cannot be checked automatically, so it surfaces in the
+#: report as an unverified hold instead of being silently trusted.
+BOUND_HOLD_VERIFY_AXES = frozenset(
+    {"codegen-effect:bound-uncompilable", "web-host-typecheck"}
+)
+
+#: Fields every hold must carry. Enforced at import: a hold that loses its
+#: owner stops being a hold and becomes an unexplained gap in the suite.
+BOUND_HOLD_FIELDS = ("owner", "reason", "verify")
+
+def _check_bound_holds() -> None:
+    for pair, hold in BOUND_CASES_BLOCKED.items():
+        missing = [f for f in BOUND_HOLD_FIELDS if not hold.get(f)]
+        if missing:
+            raise ValueError(
+                f"BOUND_CASES_BLOCKED[{pair!r}] is missing {missing!r} — a hold "
+                "without an owner and a way to verify it is an unexplained gap"
+            )
+
+
+_check_bound_holds()
 
 
 #: Name of the data property a bound case binds to, per attribute.
