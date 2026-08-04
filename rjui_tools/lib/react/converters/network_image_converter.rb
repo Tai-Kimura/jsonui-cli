@@ -44,10 +44,15 @@ module RjuiTools
           # shared/core/attribute_semantics.json — fill = stretch
           # (scaleToFill synonym), AspectFill is the crop.
           content_mode = attributes['contentMode'] || attributes['scaleType']
-          if apply_bound_content_mode(content_mode)
+          if has_binding?(content_mode)
             # A bound value matched no key and fell to the `||` fallback,
-            # which built the dead class `object-@{v}`. object-fit /
-            # object-position are owned by the inline style instead.
+            # which built the dead class `object-@{v}`.
+            #
+            # Unlike Image, this does NOT route to an inline style: the
+            # NetworkImage component takes `contentMode` as a PROP and derives
+            # its own object-fit class from it, and NetworkImageProps has no
+            # `style` at all — writing one is TS2322 on the element. The prop
+            # emitted by build_content_mode_attr already carries the binding.
           elsif content_mode
             mode_map = {
               'fit' => 'object-contain',
@@ -132,7 +137,12 @@ module RjuiTools
           # normalisation moves into the emitted expression.
           if (expr = bound_value_expr(content_mode))
             lookup = js_object_literal(mode_map.transform_keys(&:downcase))
-            return " contentMode={(#{lookup})[String(#{expr}).toLowerCase()] ?? 'contain'}"
+            # The prop is a UNION of the five NetworkImageProps spellings, so a
+            # value only known to be `string` is TS2322 there. Asserted through
+            # the component's own prop type rather than by restating the union,
+            # which would be a second copy of it.
+            cast = "React.ComponentProps<typeof NetworkImage>['contentMode']"
+            return " contentMode={((#{lookup})[String(#{expr}).toLowerCase()] ?? 'contain') as #{cast}}"
           end
 
           mapped_mode = mode_map[content_mode] || content_mode

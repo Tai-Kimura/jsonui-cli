@@ -527,16 +527,13 @@ module RjuiTools
             end
           end
 
-          return '' if @dynamic_styles.nil? || @dynamic_styles.empty?
-
-          # Delegate per-entry rendering to BaseConverter so the SPREAD
-          # sentinel (Configuration.Font.resolve(...) emission) is handled
-          # consistently across every converter.
-          style_pairs = @dynamic_styles.map do |key, value|
-            format_dynamic_style_pair(key, value)
-          end
-
-          " style={{ #{style_pairs.join(', ')} }}"
+          # One renderer for every converter (BaseConverter#style_attr_for):
+          # the SPREAD sentinel and the `React.CSSProperties` assertion a
+          # custom-property key needs are handled in ONE place. Six converters
+          # had hand-copied this loop, and four of the copies had lost the
+          # assertion — which only surfaced when a bound colour started
+          # writing `--jui-*` keys and the host's tsc rejected them.
+          style_attr_for(@dynamic_styles)
         end
 
         private

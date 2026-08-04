@@ -860,8 +860,25 @@ module RjuiTools
           return value unless expr
 
           dynamic_styles[css_property] =
-            map ? "(#{js_object_literal(map)})[#{expr}]" : expr
+            css_assert(map ? "(#{js_object_literal(map)})[#{expr}]" : expr, css_property)
           nil
+        end
+
+        # Assert a runtime string INTO the property's own type.
+        #
+        # Most CSS properties in `React.CSSProperties` are unions of string
+        # literals — `textAlign` is `TextAlign`, `objectFit` is `ObjectFit` —
+        # so a value that is only known to be `string` is TS2322 there. The
+        # binding genuinely is a string at compile time, and the vocabulary it
+        # must belong to is the declared enum, so the assertion is the honest
+        # spelling: it says "this is the property's own type", not `any`, and
+        # it is written in terms of `React.CSSProperties[…]` so it tracks the
+        # React types rather than restating a union that would drift.
+        #
+        # Only reachable from the bound paths — a static value is matched
+        # against a literal vocabulary at codegen time and needs no assertion.
+        def css_assert(expression, css_property)
+          "(#{expression}) as React.CSSProperties['#{css_property}']"
         end
 
         # A STATE color — `hover:` / `active:` / `disabled:`. This is the one
@@ -930,10 +947,12 @@ module RjuiTools
           return false unless expr
 
           key = "String(#{expr}).toLowerCase()"
-          dynamic_styles['objectFit'] =
-            "(#{js_object_literal(CONTENT_MODE_OBJECT_FIT)})[#{key}] ?? 'contain'"
-          dynamic_styles['objectPosition'] =
-            "(#{js_object_literal(CONTENT_MODE_OBJECT_POSITION)})[#{key}]"
+          dynamic_styles['objectFit'] = css_assert(
+            "(#{js_object_literal(CONTENT_MODE_OBJECT_FIT)})[#{key}] ?? 'contain'", 'objectFit'
+          )
+          dynamic_styles['objectPosition'] = css_assert(
+            "(#{js_object_literal(CONTENT_MODE_OBJECT_POSITION)})[#{key}]", 'objectPosition'
+          )
           true
         end
 

@@ -121,21 +121,10 @@ module RjuiTools
             @dynamic_styles['borderRadius'] = "'#{corner_radius}px'"
           end
 
-          return '' if @dynamic_styles.nil? || @dynamic_styles.empty?
-
-          # Delegate per-entry rendering to BaseConverter so the SPREAD
-          # sentinel (Configuration.Font.resolve(...) emission) is handled
-          # consistently across every converter.
-          style_pairs = @dynamic_styles.map do |key, value|
-            format_dynamic_style_pair(key, value)
-          end
-
-          # `React.CSSProperties` admits only known properties, so the
-          # `--jui-*` keys a bound state colour writes need the same assertion
-          # BaseConverter#build_style_attr applies — an @generated file that
-          # fails the consumer's tsc cannot be patched downstream.
-          cast = custom_property_styles? ? ' as React.CSSProperties' : ''
-          " style={{ #{style_pairs.join(', ')} }#{cast}}"
+          # One renderer for every converter (BaseConverter#style_attr_for):
+          # the SPREAD sentinel and the `React.CSSProperties` assertion a
+          # custom-property key needs are handled in ONE place.
+          style_attr_for(@dynamic_styles)
         end
 
         def build_on_click

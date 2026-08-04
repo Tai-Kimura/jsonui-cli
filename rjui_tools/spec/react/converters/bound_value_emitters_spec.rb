@@ -142,13 +142,47 @@ RSpec.describe 'bound value emitters' do
       out = convert({ 'type' => 'Image', 'src' => 'a.png', 'contentMode' => '@{m}' },
                     RjuiTools::React::Converters::ImageConverter)
       expect(out).not_to include('@{')
-      expect(out).to include("objectFit: ({ 'fit': 'contain'")
+      expect(out).to include("objectFit: (({ 'fit': 'contain'")
       expect(out).to include('String(data.m).toLowerCase()')
     end
 
-    it 'passes a bound textAlign straight through — the declared vocabulary IS the CSS one' do
+    # Most CSS properties are unions of string literals in React.CSSProperties,
+    # so a runtime string is TS2322 there. The assertion is written in terms of
+    # the property's own type so it tracks the React types instead of restating
+    # a union that would drift. Found by lane D running the bound fixtures
+    # through the host's tsc — codegen-effect cannot see it, because the probe
+    # only asks whether `@{` survived, never whether the emit typechecks.
+    it 'asserts a bound textAlign into the property type' do
       out = label('textAlign' => '@{a}')
-      expect(out).to include('textAlign: data.a')
+      expect(out).to include("textAlign: (data.a) as React.CSSProperties['textAlign']")
+    end
+
+    it 'asserts a bound objectFit into the property type' do
+      out = convert({ 'type' => 'Image', 'src' => 'a.png', 'contentMode' => '@{m}' },
+                    RjuiTools::React::Converters::ImageConverter)
+      expect(out).to include("as React.CSSProperties['objectFit']")
+    end
+
+    # NetworkImage takes contentMode as a PROP and derives its own object-fit
+    # from it; NetworkImageProps has no `style` at all, so writing one there is
+    # TS2322 on the element.
+    it 'leaves a bound NetworkImage contentMode to the prop, not an inline style' do
+      out = convert({ 'type' => 'NetworkImage', 'src' => 'a.png', 'contentMode' => '@{m}' },
+                    RjuiTools::React::Converters::NetworkImageConverter)
+      expect(out).not_to include('objectFit')
+      expect(out).to include("as React.ComponentProps<typeof NetworkImage>['contentMode']")
+    end
+
+    # A bound colour writes a `--jui-*` key, which React.CSSProperties does not
+    # admit — every converter's style renderer has to assert. Six of them had
+    # hand-copied the render loop and four copies had lost the assertion.
+    it 'asserts React.CSSProperties wherever a custom property is written' do
+      [[{ 'type' => 'TextField', 'hintColor' => '@{c}' }, RjuiTools::React::Converters::TextFieldConverter],
+       [{ 'type' => 'TextView', 'hintColor' => '@{c}' }, RjuiTools::React::Converters::TextViewConverter],
+       [{ 'type' => 'Label', 'text' => 'x', 'highlightColor' => '@{c}', 'selected' => '@{s}' },
+        RjuiTools::React::Converters::LabelConverter]].each do |node, klass|
+        expect(convert(node, klass)).to include('as React.CSSProperties'), "#{node['type']} lost the assertion"
+      end
     end
   end
 
