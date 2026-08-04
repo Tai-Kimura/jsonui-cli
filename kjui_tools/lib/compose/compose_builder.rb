@@ -897,7 +897,7 @@ module KjuiTools
           modifiers << ".constrainAs(#{ref_name}) {\n" + indent(constraint_block, depth + 2) + "\n" + indent("}", depth + 1)
         end
 
-        modifiers.concat(Helpers::ModifierBuilder.build_size(child_data))
+        modifiers.concat(Helpers::ModifierBuilder.build_size(child_data, nil, @required_imports))
 
         # Check if keyboard padding should be applied
         ignore_keyboard = child_data['ignoreKeyboard'] == true
@@ -940,7 +940,7 @@ module KjuiTools
           modifiers << ".constrainAs(#{ref_name}) {\n" + indent(constraint_block, depth + 2) + "\n" + indent("}", depth + 1)
         end
 
-        modifiers.concat(Helpers::ModifierBuilder.build_size(child_data))
+        modifiers.concat(Helpers::ModifierBuilder.build_size(child_data, nil, @required_imports))
         modifiers.concat(Helpers::ModifierBuilder.build_margins(child_data))
         modifiers.concat(Helpers::ModifierBuilder.build_background(child_data, @required_imports))
         modifiers.concat(Helpers::ModifierBuilder.build_padding(child_data))

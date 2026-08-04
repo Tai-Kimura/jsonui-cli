@@ -583,14 +583,36 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
       expect(result).to eq('8.5.dp')
     end
 
+    # These two used to pin `data.paddingValue.dp`. A property with no
+    # data-section defaultValue is generated `var x: T? = null`, so that emit
+    # dereferences a nullable and the build dies on it (plan 49 lane C). The
+    # canonical emit coalesces; `?.dp ?: N.dp` rather than `(x ?: N).dp`
+    # because `Double? ?: Int` widens to a type `.dp` does not resolve on.
     it 'handles data binding syntax' do
       result = described_class.send(:process_dimension, '@{paddingValue}')
-      expect(result).to eq('data.paddingValue.dp')
+      expect(result).to eq('(data.paddingValue?.dp ?: 0.dp)')
     end
 
     it 'handles data binding with complex variable name' do
       result = described_class.send(:process_dimension, '@{item.padding}')
-      expect(result).to eq('data.item.padding.dp')
+      expect(result).to eq('(data.item.padding?.dp ?: 0.dp)')
+    end
+
+    it 'evaluates an authored ?? default instead of passing it through' do
+      # The old hand-rolled branch took `$1` verbatim, so this emitted
+      # `data.gap ?? 10.dp` — `??` is not Kotlin.
+      result = described_class.send(:process_dimension, '@{gap ?? 10}')
+      expect(result).to eq('(data.gap?.dp ?: 10.dp)')
+    end
+
+    it 'dereferences directly when the data section gives the property a default' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'gap' => { 'name' => 'gap', 'class' => 'Int', 'defaultValue' => '0' }
+      }
+      result = described_class.send(:process_dimension, '@{gap}')
+      expect(result).to eq('data.gap.dp')
+    ensure
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
     end
 
     it 'returns dp for regular string value' do
@@ -1169,6 +1191,132 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder, 'touch gating' do
     # It blocks the subtree; it is not a click gate, so it leaves the click alone.
     it 'leaves the clickable ungated' do
       expect(clickable('userInteractionEnabled' => '@{isInteractive}')).to include('.clickable {')
+    end
+  end
+end
+
+# Plan 49 lane C — the bound forms 41 confirmed as defects on android. Every
+# one of these used to emit either a non-program or a frozen constant.
+RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
+  around do |example|
+    KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+    example.run
+    KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+  end
+
+  describe 'bound dimensions (was: bound-uncompilable)' do
+    it 'emits a Dp expression for a bound padding instead of `@{v}.dp`' do
+      result = described_class.build_padding('paddingTop' => '@{gap}')
+      expect(result).to eq(['.padding(top = (data.gap?.dp ?: 0.dp))'])
+    end
+
+    it 'leaves a numeric padding byte-identical' do
+      expect(described_class.build_padding('paddingTop' => 12)).to eq(['.padding(top = 12.dp)'])
+    end
+
+    # The unresolved value of a bound MAXIMUM is unbounded, not zero — a
+    # `widthIn(max = 0.dp)` annihilates the view. A bound MINIMUM is the
+    # opposite: 0 is a no-op, which is exactly the right unresolved
+    # behaviour. Plan 49 lane C, from B's lane ("does the fallback collide
+    # with the attribute's own unset value?").
+    it 'emits Dp expressions for bound min/max, with an unbounded max fallback' do
+      result = described_class.build_size('minWidth' => '@{lo}', 'maxWidth' => '@{hi}')
+      expect(result).to eq(['.widthIn(min = (data.lo?.dp ?: 0.dp), max = (data.hi?.dp ?: Dp.Infinity))'])
+    end
+
+    it 'registers the Dp import only when an unbounded max is actually emitted' do
+      imports = Set.new
+      described_class.build_size({ 'maxWidth' => '@{hi}' }, nil, imports)
+      expect(imports).to include(:dp_infinity)
+
+      static = Set.new
+      described_class.build_size({ 'maxWidth' => 320 }, nil, static)
+      expect(static).not_to include(:dp_infinity)
+    end
+
+  end
+
+  describe 'bound alignment flags (was: bound-frozen)' do
+    it 'no longer freezes a bound alignTop permanently ON' do
+      result = described_class.build_alignment({ 'alignTop' => '@{pinned}' }, nil, 'Row')
+      expect(result).to eq(['.then(when { (data.pinned ?: false) -> Modifier.align(Alignment.Top); else -> Modifier })'])
+    end
+
+    it 'keeps a statically-true alignTop byte-identical' do
+      expect(described_class.build_alignment({ 'alignTop' => true }, nil, 'Row')).to eq(['.align(Alignment.Top)'])
+    end
+
+    it 'preserves the Box priority order when a guard is bound' do
+      # `alignLeft && alignRight` centres horizontally, and that pair still has
+      # to beat the single-flag arms below it.
+      result = described_class.build_alignment(
+        { 'alignLeft' => true, 'alignRight' => '@{wide}' }, nil, 'Box'
+      ).join
+      expect(result.index('BiasAlignment(0f, 0f)')).to be < result.index('BiasAlignment(-1f, -1f)')
+    end
+
+    it 'registers the BiasAlignment import when any runtime arm uses it' do
+      imports = Set.new
+      described_class.build_alignment({ 'centerHorizontal' => '@{c}' }, imports, 'Box')
+      expect(imports).to include(:bias_alignment)
+    end
+  end
+
+  describe 'bound weight (was: dropped by `.to_f > 0`)' do
+    it 'lifts the positive-weight guard to runtime instead of dropping the binding' do
+      result = described_class.build_weight({ 'weight' => '@{w}' }, 'Row')
+      expect(result.join).to include('if ((data.w?.toFloat() ?: 0.0f) > 0f)')
+    end
+
+    it 'keeps a numeric weight byte-identical' do
+      expect(described_class.build_weight({ 'weight' => 1 }, 'Row')).to eq(['.weight(1f)'])
+    end
+  end
+
+  describe 'clipToBounds (was: bound-frozen)' do
+    it 'guards a bound clipToBounds at runtime' do
+      expect(described_class.build_background('clipToBounds' => '@{clip}'))
+        .to eq(['.then(if ((data.clip ?: false)) Modifier.clipToBounds() else Modifier)'])
+    end
+  end
+
+  # The recorded ruling, not an inference: `shared/core/attribute_semantics.json`
+  # #semantics.border says the width+color PAIR requests a border and neither
+  # half summons one alone, with no default border colour (2026-08-03 user
+  # ruling; the gray-default direction of d2c8628 was tried and retracted).
+  # Its five `observable` entries are a machine gate, so making any single
+  # declaration active turns `gate --cross-effect` red.
+  describe 'half-declared borders stay inert (recorded ruling)' do
+    it 'draws nothing when only the width is declared' do
+      expect(described_class.build_background('borderWidth' => 2).join).not_to include('.border(')
+    end
+
+    it 'draws nothing when only the colour is declared' do
+      expect(described_class.build_background('borderColor' => '#FF0000').join).not_to include('.border(')
+    end
+
+    it 'draws nothing when only the style is declared' do
+      expect(described_class.build_background('borderStyle' => 'dashed').join).not_to include('Border(')
+    end
+
+    it 'still draws — and still compiles — when the pair is declared with a bound width' do
+      mods = described_class.build_background('borderColor' => '#FF0000', 'borderWidth' => '@{w}').join
+      expect(mods).to include('.border((data.w?.dp ?: 0.dp)')
+      expect(mods).not_to include('@{')
+    end
+  end
+
+  describe 'common.tapBackground / tintColor (was: unread on the shared path)' do
+    it 'accepts tapBackground as the pressed-background spelling' do
+      mods = described_class.build_background('background' => '#FFFFFF',
+                                              'highlighted' => true,
+                                              'tapBackground' => '#FF0000')
+      expect(mods.join).to include('parseColor("#FF0000")')
+    end
+
+    it 'tints a plain node that declares tintColor' do
+      expect(described_class.build_background('background' => '#FFFFFF', 'tintColor' => '#FF0000').join)
+        .to include('BlendMode.SrcIn')
     end
   end
 end

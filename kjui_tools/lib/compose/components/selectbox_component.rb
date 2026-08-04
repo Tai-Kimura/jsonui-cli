@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../helpers/bound_value'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 
@@ -48,6 +49,13 @@ module KjuiTools
             # caught by the codegen parity host on SelectBox/selectedIndex.)
             item = json_data['items'][json_data['selectedIndex']]
             item.nil? ? '""' : "\"#{item}\""
+          elsif json_data['selectedItem'] || json_data['selectedValue'] || json_data['selectedDate']
+            # STATIC selections were dropped: every branch above tests for a
+            # `@{...}`, so a plain `selectedValue: "Two"` fell through to the
+            # empty string (plan 49 lane C, handed over from D). Same priority
+            # as the bound branches.
+            static_selected = json_data['selectedDate'] || json_data['selectedItem'] || json_data['selectedValue']
+            Helpers::BoundValue.text(static_selected)
           else
             '""'
           end
@@ -142,12 +150,15 @@ module KjuiTools
             
             # Minimum date
             if json_data['minimumDate']
-              code += "\n" + indent("minimumDate = \"#{json_data['minimumDate']}\",", depth + 1)
+              # A bound date used to be interpolated into the string literal,
+              # putting the characters `@{...}` into the picker bound (plan 49
+              # lane C, handed over from D).
+              code += "\n" + indent("minimumDate = #{Helpers::BoundValue.text(json_data['minimumDate'])},", depth + 1)
             end
             
             # Maximum date
             if json_data['maximumDate']
-              code += "\n" + indent("maximumDate = \"#{json_data['maximumDate']}\",", depth + 1)
+              code += "\n" + indent("maximumDate = #{Helpers::BoundValue.text(json_data['maximumDate'])},", depth + 1)
             end
           else
             # Options (use 'items' or 'options') - only for non-date SelectBox
@@ -270,7 +281,7 @@ module KjuiTools
           end
 
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           # padding is passed as contentPadding parameter, not modifier

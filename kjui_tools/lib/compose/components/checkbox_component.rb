@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/modifier_builder'
+require_relative '../helpers/bound_value'
+require_relative '../helpers/font_spec_helper'
 require_relative '../helpers/resource_resolver'
 require_relative '../../core/normalization'
 
@@ -14,7 +16,10 @@ module KjuiTools
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           # CheckBox uses 'isOn', 'checked', or 'bind' for binding
           # Priority: isOn > checked > bind
-          state_attr = json_data['isOn'] || json_data['checked']
+          # `value` is declared as a state alias of isOn/checked and was read
+          # by nobody on Compose (plan 49 lane C, handed over from D). It sits
+          # last so the more specific spellings keep winning.
+          state_attr = json_data['isOn'] || json_data['checked'] || json_data['value']
           checked = if state_attr
             if state_attr.is_a?(String) && state_attr.match(/@\{([^}]+)\}/)
               variable = $1
@@ -90,21 +95,33 @@ module KjuiTools
             # the dynamic labeled path does the same (it was only emitted on
             # the unlabeled branch; 32 parity re-measure).
             if json_data['iconSize']
-              code += ",\n" + indent("modifier = Modifier.size(#{json_data['iconSize'].to_i}.dp)", depth + 2)
+              code += ",\n" + indent("modifier = Modifier.size(#{icon_size_dp(json_data['iconSize'])})", depth + 2)
             end
+
+            # The colour and `enabled` arguments used to exist ONLY on the
+            # unlabeled branch, and the fixture base carries `text`, so they
+            # were unreachable for every measurement (plan 49 lane C: 4 of the
+            # CheckBox entries; 32 closed `iconSize` the same way and left
+            # these four behind — see the comment above).
+            code += checkbox_colors_arg(json_data, required_imports, depth + 1)
+            code += checkbox_enabled_arg(json_data, depth + 1)
 
             code += "\n" + indent(")", depth + 1)
 
             # Spacer with configurable spacing
             spacing = json_data['spacing'] || 8
-            code += "\n" + indent("Spacer(modifier = Modifier.width(#{spacing}.dp))", depth + 1)
+            code += "\n" + indent("Spacer(modifier = Modifier.width(#{Helpers::BoundValue.dp(spacing)}))", depth + 1)
 
             # Label text with font attributes
             label_text = json_data['label'] || json_data['text']
-            text_params = ["text = \"#{label_text}\""]
+            # A bound label used to be interpolated into the string literal, so
+            # the characters `@{...}` reached the screen.
+            label_expr = Helpers::BoundValue.text(label_text)
+            text_params = ["text = #{label_expr}"]
 
             if json_data['fontSize']
-              text_params << "fontSize = #{json_data['fontSize']}.sp"
+              required_imports&.add(:text_unit) if Helpers::BoundValue.bound?(json_data['fontSize'])
+              text_params << "fontSize = #{Helpers::BoundValue.sp(json_data['fontSize'], null_expr: 'TextUnit.Unspecified')}"
             end
 
             if json_data['fontColor']
@@ -113,12 +130,11 @@ module KjuiTools
             end
 
             if json_data['font']
-              font_weight = json_data['font'].downcase == 'bold' ? 'FontWeight.Bold' : 'FontWeight.Normal'
-              text_params << "fontWeight = #{font_weight}"
+              text_params << "fontWeight = #{Helpers::FontSpecHelper.weight_expression(json_data['font'])}"
             end
 
             if text_params.size == 1
-              code += "\n" + indent("Text(\"#{label_text}\")", depth + 1)
+              code += "\n" + indent("Text(#{label_expr})", depth + 1)
             else
               code += "\n" + indent("Text(", depth + 1)
               code += "\n" + text_params.map { |param| indent(param, depth + 2) }.join(",\n")
@@ -174,54 +190,74 @@ module KjuiTools
 
           # iconSize with no custom icon: there is no separate glyph to size, so
           # it sizes the Checkbox itself.
-          modifiers << ".size(#{json_data['iconSize'].to_i}.dp)" if json_data['iconSize']
+          modifiers << ".size(#{icon_size_dp(json_data['iconSize'])})" if json_data['iconSize']
 
             code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
 
-            # Checkbox colors
-            checked_color_value = json_data['checkColor'] || json_data['checkedColor'] || json_data['tintColor'] || json_data['onTintColor']
-            if checked_color_value || json_data['uncheckedColor'] || json_data['iconColor']
-              required_imports&.add(:checkbox_colors)
-              colors_params = []
-
-              if checked_color_value
-                checked_color = Helpers::ResourceResolver.process_color(checked_color_value, required_imports)
-                colors_params << "checkedColor = #{checked_color}"
-              end
-
-              if json_data['uncheckedColor']
-                unchecked_color = Helpers::ResourceResolver.process_color(json_data['uncheckedColor'], required_imports)
-                colors_params << "uncheckedColor = #{unchecked_color}"
-              end
-
-              # For a Material Checkbox the "icon" is the tick, so iconColor maps
-              # to checkmarkColor rather than to the box.
-              if json_data['iconColor']
-                icon_color = Helpers::ResourceResolver.process_color(json_data['iconColor'], required_imports)
-                colors_params << "checkmarkColor = #{icon_color}"
-              end
-
-              if colors_params.any?
-                code += ",\n" + indent("colors = CheckboxDefaults.colors(", depth + 1)
-                code += "\n" + colors_params.map { |param| indent(param, depth + 2) }.join(",\n")
-                code += "\n" + indent(")", depth + 1)
-              end
-            end
-
-            # Handle enabled attribute
-            if json_data.key?('enabled')
-              if json_data['enabled'].is_a?(String) && json_data['enabled'].start_with?('@{')
-                inner_expr = json_data['enabled'].match(/@\{([^}]+)\}/)[1]
-                code += ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 1)
-              else
-                code += ",\n" + indent("enabled = #{json_data['enabled']}", depth + 1)
-              end
-            end
+            code += checkbox_colors_arg(json_data, required_imports, depth)
+            code += checkbox_enabled_arg(json_data, depth)
 
             code += "\n" + indent(")", depth)
           end
 
           code
+        end
+
+        # `colors = CheckboxDefaults.colors(...)`. Extracted so the LABELLED
+        # branch can emit it too — it never did, and the conformance fixture
+        # base carries `text`, so `checkedColor` / `uncheckedColor` /
+        # `iconColor` measured as unread on android (plan 49 lane C).
+        def self.checkbox_colors_arg(json_data, required_imports, depth)
+          checked_color_value = json_data['checkColor'] || json_data['checkedColor'] || json_data['tintColor'] || json_data['onTintColor']
+          return '' unless checked_color_value || json_data['uncheckedColor'] || json_data['iconColor']
+
+          required_imports&.add(:checkbox_colors)
+          colors_params = []
+
+          if checked_color_value
+            checked_color = Helpers::ResourceResolver.process_color(checked_color_value, required_imports)
+            colors_params << "checkedColor = #{checked_color}"
+          end
+
+          if json_data['uncheckedColor']
+            unchecked_color = Helpers::ResourceResolver.process_color(json_data['uncheckedColor'], required_imports)
+            colors_params << "uncheckedColor = #{unchecked_color}"
+          end
+
+          # For a Material Checkbox the "icon" is the tick, so iconColor maps
+          # to checkmarkColor rather than to the box.
+          if json_data['iconColor']
+            icon_color = Helpers::ResourceResolver.process_color(json_data['iconColor'], required_imports)
+            colors_params << "checkmarkColor = #{icon_color}"
+          end
+
+          return '' if colors_params.empty?
+
+          code = ",\n" + indent("colors = CheckboxDefaults.colors(", depth + 1)
+          code += "\n" + colors_params.map { |param| indent(param, depth + 2) }.join(",\n")
+          code + "\n" + indent(")", depth + 1)
+        end
+
+        # `iconSize` is `["number", "binding"]`. The static path keeps its
+        # `.to_i` truncation so existing output is unchanged; a binding takes
+        # the canonical Dp emitter instead of truncating to 0.
+        def self.icon_size_dp(value)
+          return Helpers::BoundValue.dp(value) if Helpers::BoundValue.bound?(value)
+
+          "#{value.to_i}.dp"
+        end
+
+        # `enabled = ...`. Same story as the colours: unlabelled branch only.
+        def self.checkbox_enabled_arg(json_data, depth)
+          return '' unless json_data.key?('enabled')
+
+          state = Helpers::BoundValue.bool(json_data['enabled'])
+          expr = case state
+                 when :on then 'true'
+                 when :off then 'false'
+                 else state
+                 end
+          ",\n" + indent("enabled = #{expr}", depth + 1)
         end
 
         private
@@ -284,7 +320,7 @@ module KjuiTools
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))

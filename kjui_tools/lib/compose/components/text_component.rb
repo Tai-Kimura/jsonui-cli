@@ -201,7 +201,7 @@ module KjuiTools
 
           if json_data['textShadow']
             required_imports&.add(:shadow_style)
-            style_parts << "shadow = Shadow(color = Color.Black, offset = Offset(2f, 2f), blurRadius = 4f)"
+            style_parts << text_shadow_expression(json_data['textShadow'], required_imports)
           end
 
           # A highlight lineHeightMultiple resolves against the highlight's own
@@ -233,20 +233,20 @@ module KjuiTools
                            end
           elsif json_data['lineHeightMultiple']
             required_imports&.add(:text_style)
-            # Line height multiplier - apply to font size
-            line_height = json_data['fontSize'] ? json_data['fontSize'].to_f * json_data['lineHeightMultiple'].to_f : 14.0 * json_data['lineHeightMultiple'].to_f
-            style_parts << "lineHeight = #{line_height}.sp"
+            # Line height multiplier - apply to font size.
+            # Both factors are `["number", "binding"]`, and `"@{v}".to_f` is
+            # 0.0 — a bound multiple or a bound size used to freeze the line
+            # height to 0.sp or to the other factor alone (plan 49 lane C).
+            # When either side is bound the multiplication moves into the emit.
+            style_parts << "lineHeight = #{scaled_sp(json_data['fontSize'], json_data['lineHeightMultiple'])}"
           elsif json_data['lineSpacing']
             required_imports&.add(:text_style)
             # Line spacing - add to base font size
-            base_size = json_data['fontSize'] ? json_data['fontSize'].to_f : 14.0
-            line_height = base_size + json_data['lineSpacing'].to_f
-            style_parts << "lineHeight = #{line_height}.sp"
+            style_parts << "lineHeight = #{summed_sp(json_data['fontSize'], json_data['lineSpacing'])}"
           elsif json_data['fontSize']
             # Default lineHeight to match iOS compact line spacing (fontSize * 1.3)
             required_imports&.add(:text_style)
-            line_height = (json_data['fontSize'].to_f * 1.3).round(1)
-            style_parts << "lineHeight = #{line_height}.sp"
+            style_parts << "lineHeight = #{scaled_sp(json_data['fontSize'], 1.3, round: true)}"
           end
 
           if style_parts.any?
@@ -276,7 +276,7 @@ module KjuiTools
 
           # 2. Size (parent_type lets a vertical-container weight pair with
           #    wrapContentHeight for `gravity: center` vertical centering)
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
 
           # 3. Shadow before background
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
@@ -324,13 +324,8 @@ module KjuiTools
             )
           elsif json_data['textAlign']
             required_imports&.add(:text_align)
-            case json_data['textAlign'].downcase
-            when 'center'
-              component_code += ",\n" + indent("textAlign = TextAlign.Center", depth + 1)
-            when 'right'
-              component_code += ",\n" + indent("textAlign = TextAlign.End", depth + 1)
-            when 'left'
-              component_code += ",\n" + indent("textAlign = TextAlign.Start", depth + 1)
+            if (align = compose_text_align(json_data['textAlign']))
+              component_code += ",\n" + indent("textAlign = #{align}", depth + 1)
             end
           elsif json_data['centerHorizontal']
             required_imports&.add(:text_align)
@@ -352,6 +347,13 @@ module KjuiTools
           if json_data['lines']
             if json_data['lines'] == 0
               max_lines_value = 'Int.MAX_VALUE'
+            elsif Helpers::BoundValue.bound?(json_data['lines'])
+              # `to_s` on a binding put the characters `@{v}` where an Int
+              # belongs. `lines: 0` means unlimited, so the runtime form has to
+              # carry that branch too (plan 49 lane C: Label.lines).
+              lines_expr = Helpers::BoundValue.int(json_data['lines'], fallback: 0)
+              max_lines_value = "(#{lines_expr}).let { if (it <= 0) Int.MAX_VALUE else it }"
+              overflow_value = 'TextOverflow.Ellipsis'
             else
               max_lines_value = json_data['lines'].to_s
               overflow_value = 'TextOverflow.Ellipsis'
@@ -371,10 +373,11 @@ module KjuiTools
 
           # Minimum scale factor (auto-shrink text) using TextAutoSize
           if json_data['minimumScaleFactor']
-            font_size = json_data['fontSize'] || 14
-            min_font_size = (font_size.to_f * json_data['minimumScaleFactor'].to_f).round(1)
+            # Same `.to_f` freeze as lineHeightMultiple: a bound factor made
+            # minFontSize 0.sp (plan 49 lane C: Label.minimumScaleFactor).
             required_imports&.add(:text_auto_size)
-            component_code += ",\n" + indent("autoSize = TextAutoSize.StepBased(minFontSize = #{min_font_size}.sp)", depth + 1)
+            min_font_size = scaled_sp(json_data['fontSize'] || 14, json_data['minimumScaleFactor'], round: true)
+            component_code += ",\n" + indent("autoSize = TextAutoSize.StepBased(minFontSize = #{min_font_size})", depth + 1)
             max_lines_value ||= '1'
             overflow_value ||= 'TextOverflow.Ellipsis'
           end
@@ -442,13 +445,72 @@ module KjuiTools
         end
 
         # The declared textAlign spellings (Left/Right/Center) as Compose values.
+        # `textAlign` is `["string", "binding"]`, and the `case` below could
+        # never match a `"@{...}"`, so a bound alignment froze to the component
+        # default (plan 49 lane C: Label.textAlign, and the shared vocabulary
+        # TextView/Button now reuse).
+        TEXT_ALIGN_MAPPING = {
+          'center' => 'TextAlign.Center',
+          'right' => 'TextAlign.End',
+          'left' => 'TextAlign.Start'
+        }.freeze
+
         def self.compose_text_align(value)
           return nil unless value.is_a?(String)
 
-          case value.downcase
-          when 'center' then 'TextAlign.Center'
-          when 'right' then 'TextAlign.End'
-          when 'left' then 'TextAlign.Start'
+          # A static value outside the vocabulary still emits nothing; a bound
+          # one needs an exhaustive `else` for the `when` to compile, and
+          # `Unspecified` is Compose's own "no opinion" value.
+          Helpers::BoundValue.enum(value, TEXT_ALIGN_MAPPING,
+                                   bound_default: 'TextAlign.Unspecified', lowercase: true)
+        end
+
+        # `textShadow` is `{ color:, blur:, offset: [x, y] }` (a bare string is
+        # a colour with UIKit's default 1pt blur) — the same contract sjui and
+        # rjui read. kjui emitted a HARD-CODED black/2,2/4 Shadow, so the
+        # declared colour, blur and offset were discarded by construction
+        # (plan 49 lane C: Label.textShadow presence-only, IconLabel.textShadow
+        # unread).
+        def self.text_shadow_expression(shadow, required_imports = nil)
+          # `:shadow_style` (added by the caller) already pulls in Shadow and
+          # Offset alongside TextStyle.
+          if shadow.is_a?(Hash)
+            color = shadow['color'] ? Helpers::ResourceResolver.process_color(shadow['color'], required_imports) : 'Color.Black'
+            blur = shadow['blur'] || 1
+            offset = shadow['offset']
+            x, y = offset.is_a?(Array) && offset.length >= 2 ? [offset[0], offset[1]] : [0, 1]
+            return "shadow = Shadow(color = #{color}, offset = Offset(#{Helpers::BoundValue.float(x)}, " \
+                   "#{Helpers::BoundValue.float(y)}), blurRadius = #{Helpers::BoundValue.float(blur)})"
+          end
+
+          color = Helpers::ResourceResolver.process_color(shadow, required_imports)
+          "shadow = Shadow(color = #{color}, offset = Offset(0f, 1f), blurRadius = 1f)"
+        end
+
+        # `<size> * <factor>` as an `.sp` expression. Folded in Ruby when both
+        # sides are static (byte-identical to the old emit), lifted into the
+        # generated source when either is bound.
+        # `round:` mirrors the call site's original arithmetic — the lineHeight
+        # multiplier never rounded, the auto-size floors always did. Getting
+        # this wrong would move static output, which is the one thing this
+        # refactor must not do.
+        def self.scaled_sp(size, factor, round: false)
+          size = 14 if size.nil?
+          if Helpers::BoundValue.bound?(size) || Helpers::BoundValue.bound?(factor)
+            "(#{Helpers::BoundValue.float(size, fallback: 14)} * #{Helpers::BoundValue.float(factor, fallback: 1)}).sp"
+          else
+            product = size.to_f * factor.to_f
+            "#{round ? product.round(1) : product}.sp"
+          end
+        end
+
+        # `<size> + <delta>` as an `.sp` expression. Same two modes.
+        def self.summed_sp(size, delta)
+          size = 14 if size.nil?
+          if Helpers::BoundValue.bound?(size) || Helpers::BoundValue.bound?(delta)
+            "(#{Helpers::BoundValue.float(size, fallback: 14)} + #{Helpers::BoundValue.float(delta, fallback: 0)}).sp"
+          else
+            "#{size.to_f + delta.to_f}.sp"
           end
         end
 
@@ -458,7 +520,9 @@ module KjuiTools
         # nil unless both are present — that is UIKit's own condition.
         def self.hint_overrides(json_data)
           attrs = json_data['hintAttributes']
-          hint = json_data['hint']
+          # `placeholder` is the declared alias of `hint` and only sjui/rjui
+          # resolved both (plan 49 lane C, handed over from D).
+          hint = json_data['hint'] || json_data['placeholder']
           return nil unless attrs.is_a?(Hash) && hint.is_a?(String) && !hint.empty?
 
           {
@@ -493,7 +557,13 @@ module KjuiTools
 
           code += indent("PartialAttributesText(", depth)
           code += "\n" + indent("text = \"#{escape_string(text)}\",", depth + 1)
-          code += "\n" + indent("linkable = true,", depth + 1)
+          # `linkable` is `["boolean", "binding"]`. The literal `true` froze a
+          # bound declaration permanently ON (plan 49 lane C: Label.linkable) —
+          # the routing test above still has to be a presence test, because the
+          # COMPOSABLE differs, but the flag it passes is the real value.
+          linkable_state = Helpers::BoundValue.bool(json_data['linkable'])
+          linkable_expr = linkable_state == :on ? 'true' : (linkable_state == :off ? 'false' : linkable_state)
+          code += "\n" + indent("linkable = #{linkable_expr},", depth + 1)
 
           # Build style
           style_parts = []
@@ -510,14 +580,8 @@ module KjuiTools
 
           if json_data['textAlign']
             required_imports&.add(:text_align)
-            case json_data['textAlign'].downcase
-            when 'center'
-              style_parts << "textAlign = TextAlign.Center"
-            when 'right'
-              style_parts << "textAlign = TextAlign.End"
-            when 'left'
-              style_parts << "textAlign = TextAlign.Start"
-            end
+            align = compose_text_align(json_data['textAlign'])
+            style_parts << "textAlign = #{align}" if align
           end
 
           if style_parts.any?
@@ -533,7 +597,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
 
           # Handle edgeInset for text-specific padding
@@ -656,7 +720,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
 
@@ -680,14 +744,8 @@ module KjuiTools
 
           if json_data['textAlign']
             required_imports&.add(:text_align)
-            case json_data['textAlign'].downcase
-            when 'center'
-              style_parts << "textAlign = TextAlign.Center"
-            when 'right'
-              style_parts << "textAlign = TextAlign.End"
-            when 'left'
-              style_parts << "textAlign = TextAlign.Start"
-            end
+            align = compose_text_align(json_data['textAlign'])
+            style_parts << "textAlign = #{align}" if align
           end
 
           if style_parts.any?
@@ -807,7 +865,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
 
           code += ","
@@ -861,14 +919,8 @@ module KjuiTools
 
           if json_data['textAlign']
             required_imports&.add(:text_align)
-            case json_data['textAlign'].downcase
-            when 'center'
-              style_parts << "textAlign = TextAlign.Center"
-            when 'right'
-              style_parts << "textAlign = TextAlign.End"
-            when 'left'
-              style_parts << "textAlign = TextAlign.Start"
-            end
+            align = compose_text_align(json_data['textAlign'])
+            style_parts << "textAlign = #{align}" if align
           end
 
           if style_parts.any?

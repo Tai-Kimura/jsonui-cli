@@ -9,6 +9,48 @@ module KjuiTools
   module Compose
     module Components
       class TextFieldComponent
+        # The declared `contentType` vocabulary as Compose keyboard types.
+        # `url` is present on both tables: `input: "url"` used to fall through
+        # to KeyboardType.Text, which made every non-email/password/number
+        # input emit the SAME keyboard and measure as presence-only (plan 49
+        # lane C: TextField.input / TextView.input C2).
+        CONTENT_TYPE_KEYBOARD = {
+          'emailaddress' => 'KeyboardType.Email',
+          'email' => 'KeyboardType.Email',
+          'password' => 'KeyboardType.Password',
+          'newpassword' => 'KeyboardType.Password',
+          'telephonenumber' => 'KeyboardType.Phone',
+          'phone' => 'KeyboardType.Phone',
+          'tel' => 'KeyboardType.Phone',
+          'url' => 'KeyboardType.Uri',
+          'creditcardnumber' => 'KeyboardType.Number',
+          'postalcode' => 'KeyboardType.Number'
+        }.freeze
+
+        # `default` is deliberately absent from both tables. It means "the
+        # platform's own keyboard", i.e. no opinion — and emitting
+        # `KeyboardType.Text` for it made `input: "default"` and
+        # `input: "alphabet"` produce identical output, which is what
+        # measured as presence-only (plan 49 lane C: TextField.input /
+        # TextView.input / TextView.keyboardType C2).
+        #
+        # `alphabet` maps to Text on purpose: sjui reaches for
+        # `.asciiCapable`, and Compose's peer `KeyboardType.Ascii` was
+        # deprecated in favour of `Text` — so Text IS the honest answer here,
+        # and the discrimination comes from `default` emitting nothing.
+        INPUT_KEYBOARD = {
+          'alphabet' => 'KeyboardType.Text',
+          'allphabet' => 'KeyboardType.Text',
+          'asciicapable' => 'KeyboardType.Text',
+          'text' => 'KeyboardType.Text',
+          'email' => 'KeyboardType.Email',
+          'password' => 'KeyboardType.Password',
+          'number' => 'KeyboardType.Number',
+          'decimal' => 'KeyboardType.Decimal',
+          'phone' => 'KeyboardType.Phone',
+          'url' => 'KeyboardType.Uri'
+        }.freeze
+
         @counter ||= 0
 
         # Per-file determinism: compose_builder calls this before each layout
@@ -72,6 +114,21 @@ module KjuiTools
             "textFieldState_#{next_resolved_var.sub('resolved_textfield', 'field')}"
           end
           code += indent("val #{state_var} = rememberTextFieldState(initialText = #{value})", depth) + "\n"
+
+          # `maxLength` was read by nobody on Compose — only
+          # `lib/xml/helpers/mappers/input_mapper.rb`, and XML mode is frozen
+          # (plan 49 lane C: TextField.maxLength; sjui and rjui both honour
+          # it). `CustomTextField` belongs to the KotlinJsonUI repo, which this
+          # lane must not touch, so the clamp is expressed entirely in
+          # generated code against the public TextFieldState API — which is
+          # also where the binding write-back below already lives, so the
+          # truncation lands BEFORE the value propagates outward.
+          if json_data['maxLength']
+            max_len = Helpers::BoundValue.int(json_data['maxLength'])
+            code += indent("LaunchedEffect(#{state_var}.text) { val limit = #{max_len}; " \
+                           "if (limit > 0 && #{state_var}.text.length > limit) " \
+                           "#{state_var}.edit { delete(limit, length) } }", depth) + "\n"
+          end
 
           if has_data_binding
             variable = extract_variable_name(json_data['text'])
@@ -188,7 +245,7 @@ module KjuiTools
 
             # TextField modifier (size, padding goes to contentPadding)
             textfield_modifiers = []
-            textfield_modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+            textfield_modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
             # When the outer Box uses `Modifier.weight(N)` to claim a Row /
             # Column slot, the slot's measured size is bounded only on the
             # *outer* (Box) modifier. The inner BasicTextField inside the
@@ -227,7 +284,7 @@ module KjuiTools
             modifiers = []
             modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
             if is_hidden
               required_imports&.add(:alpha)
@@ -497,41 +554,25 @@ module KjuiTools
           # Keyboard options (input, returnKeyType, contentType, autocapitalizationType, autocorrectionType)
           keyboard_options = []
 
+
           # Input type / contentType - contentType takes priority
           if json_data['contentType']
             required_imports&.add(:keyboard_type)
-            keyboard_type = case json_data['contentType'].downcase
-            when 'emailaddress', 'email'
-              'KeyboardType.Email'
-            when 'password', 'newpassword'
-              'KeyboardType.Password'
-            when 'telephonenumber', 'phone'
-              'KeyboardType.Phone'
-            when 'url'
-              'KeyboardType.Uri'
-            when 'creditcardnumber'
-              'KeyboardType.Number'
-            else
-              'KeyboardType.Text'
-            end
-            keyboard_options << "keyboardType = #{keyboard_type}"
+            # `contentType` is `["string", "binding"]` and the `case` below
+            # could never match a `"@{...}"`, so a bound contentType froze to
+            # KeyboardType.Text (plan 49 lane C: TextField.contentType).
+            keyboard_type = Helpers::BoundValue.enum(
+              json_data['contentType'], CONTENT_TYPE_KEYBOARD,
+              bound_default: 'KeyboardType.Text', lowercase: true
+            )
+            keyboard_options << "keyboardType = #{keyboard_type}" if keyboard_type
           elsif json_data['input']
             required_imports&.add(:keyboard_type)
-            keyboard_type = case json_data['input']
-            when 'email'
-              'KeyboardType.Email'
-            when 'password'
-              'KeyboardType.Password'
-            when 'number'
-              'KeyboardType.Number'
-            when 'decimal'
-              'KeyboardType.Decimal'
-            when 'phone'
-              'KeyboardType.Phone'
-            else
-              'KeyboardType.Text'
-            end
-            keyboard_options << "keyboardType = #{keyboard_type}"
+            keyboard_type = Helpers::BoundValue.enum(
+              json_data['input'], INPUT_KEYBOARD,
+              bound_default: 'KeyboardType.Text', lowercase: true
+            )
+            keyboard_options << "keyboardType = #{keyboard_type}" if keyboard_type
           elsif json_data['inputType']
             # inputType is the Android-XML spelling, and XML mode is the only
             # place it was ever read (xml/helpers/mappers/input_mapper.rb) — so a
@@ -600,15 +641,17 @@ module KjuiTools
 
           # Auto-correction type
           if json_data['autocorrectionType']
+            # `default` means "leave it to the platform", so it emits nothing.
+            # Folding it in with `yes` made those two spellings produce
+            # identical output — measured as presence-only (plan 49 lane C:
+            # TextField.autocorrectionType C2).
             auto_correct = case json_data['autocorrectionType'].downcase
             when 'no', 'false', 'off'
               'false'
-            when 'yes', 'true', 'on', 'default'
-              'true'
-            else
+            when 'yes', 'true', 'on'
               'true'
             end
-            keyboard_options << "autoCorrectEnabled = #{auto_correct}"
+            keyboard_options << "autoCorrectEnabled = #{auto_correct}" if auto_correct
           end
 
           if keyboard_options.any?

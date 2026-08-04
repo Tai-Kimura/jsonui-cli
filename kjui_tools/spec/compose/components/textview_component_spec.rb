@@ -190,7 +190,10 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent do
     it 'generates TextField with enabled data binding' do
       json_data = { 'type' => 'TextView', 'enabled' => '@{isEditable}' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('enabled = data.isEditable')
+      # `enabled` is `Boolean?` unless the data section gives it a
+        # defaultValue, and `enabled = data.x` does not compile on a nullable.
+        # The canonical emit coalesces (plan 49 lane C).
+        expect(result).to include('enabled = (data.isEditable ?: false)')
     end
 
     context 'with margins' do
@@ -579,7 +582,7 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent, 'hintAttribute
   describe 'argument separators' do
     it 'emits the enabled param without doubling the comma when textStyle is absent' do
       result = field('enabled' => '@{isInputEnabled}')
-      expect(result).to include('enabled = data.isInputEnabled')
+      expect(result).to include('enabled = (data.isInputEnabled ?: false)')
       expect(result).not_to include(',,')
     end
 
@@ -591,7 +594,7 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent, 'hintAttribute
 
     it 'keeps valid separators when fontColor routes through textStyle' do
       result = field('fontColor' => '#FFFFFF', 'enabled' => '@{isInputEnabled}')
-      expect(result).to include('enabled = data.isInputEnabled')
+      expect(result).to include('enabled = (data.isInputEnabled ?: false)')
       expect(result).not_to include(',,')
     end
   end

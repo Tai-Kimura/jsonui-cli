@@ -59,6 +59,17 @@ module KjuiTools
             button_padding: "import androidx.compose.foundation.layout.PaddingValues",
             padding_values: "import androidx.compose.foundation.layout.PaddingValues",
             text_decoration: "import androidx.compose.ui.text.style.TextDecoration",
+            # `Dp.Infinity` — the unresolved value of a bound maxWidth/maxHeight
+            # (a 0.dp cap would annihilate the view). Plan 49 lane C.
+            dp_infinity: "import androidx.compose.ui.unit.Dp",
+            # `safeAreaInsetPositions` on a plain node (plan 49 lane C).
+            safe_area_padding: ["import androidx.compose.foundation.layout.systemBarsPadding",
+                                "import androidx.compose.foundation.layout.statusBarsPadding",
+                                "import androidx.compose.foundation.layout.navigationBarsPadding"],
+            # `common.tintColor` on a plain node: draw the node, then paint
+            # its own pixels in the tint (plan 49 lane C).
+            color_filter_tint: ["import androidx.compose.ui.draw.drawWithContent",
+                                "import androidx.compose.ui.graphics.BlendMode"],
             shadow_style: ["import androidx.compose.ui.text.TextStyle",
                            "import androidx.compose.ui.graphics.Shadow",
                            "import androidx.compose.ui.geometry.Offset"],

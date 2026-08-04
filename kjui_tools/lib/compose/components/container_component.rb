@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../helpers/bound_value'
 require_relative '../helpers/modifier_builder'
 require_relative 'constraintlayout_component'
 
@@ -43,7 +44,7 @@ module KjuiTools
           end
 
           # 3. Size (total element size)
-          size_modifiers = Helpers::ModifierBuilder.build_size(json_data)
+          size_modifiers = Helpers::ModifierBuilder.build_size(json_data, nil, required_imports)
           Helpers::ModifierBuilder.adjust_for_intrinsic_size!(size_modifiers, json_data, children, layout, required_imports, parent_type)
           modifiers.concat(size_modifiers)
 
@@ -114,8 +115,11 @@ module KjuiTools
           # Add spacing for Column/Row
           if json_data['spacing'] && (layout == 'Column' || layout == 'Row')
             required_imports&.add(:arrangement)
-            code += ",\n" + indent("verticalArrangement = Arrangement.spacedBy(#{json_data['spacing']}.dp)", depth + 1) if layout == 'Column'
-            code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{json_data['spacing']}.dp)", depth + 1) if layout == 'Row'
+            # `spacing` is `["number", "binding"]` — the raw interpolation put
+            # `@{v}.dp` in code position (plan 49 lane C: View.spacing).
+            spacing_dp = Helpers::BoundValue.dp(json_data['spacing'])
+            code += ",\n" + indent("verticalArrangement = Arrangement.spacedBy(#{spacing_dp})", depth + 1) if layout == 'Column'
+            code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{spacing_dp})", depth + 1) if layout == 'Row'
           end
           
           # Add distribution for Column/Row

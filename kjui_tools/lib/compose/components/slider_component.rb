@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../helpers/bound_value'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../../core/normalization'
@@ -69,7 +70,14 @@ module KjuiTools
           end
           
           # Value range
-          code += "\n" + indent("valueRange = #{min_value}f..#{max_value}f,", depth + 1)
+          # `min|maxValue` (and their `minimum`/`maximum` aliases) are
+          # `["number", "binding"]`; the raw `#{...}f` interpolation put
+          # `@{v}f` in code position (plan 49 lane C, 4 entries).
+          # The fallbacks mirror the STATIC defaults just above (0 / 100). A
+          # bound maximum falling back to 0 would collapse the range onto the
+          # minimum and leave the slider unusable — the same fallback-collides-
+          # with-the-attribute's-unset-value hazard B found on Label.lines.
+          code += "\n" + indent("valueRange = #{Helpers::BoundValue.float(min_value, fallback: 0)}..#{Helpers::BoundValue.float(max_value, fallback: 100)},", depth + 1)
           
           # Steps
           if json_data['step'] && json_data['step'] > 0
@@ -81,7 +89,7 @@ module KjuiTools
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))

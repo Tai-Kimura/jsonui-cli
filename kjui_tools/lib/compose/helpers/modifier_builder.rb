@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'binding_expression'
+require_relative 'bound_value'
 require_relative 'resource_resolver'
 require_relative '../../core/normalization'
 
@@ -9,68 +10,68 @@ module KjuiTools
     module Helpers
       # Helper class to build Compose modifiers from JSON attributes
       class ModifierBuilder
+        # Every `.dp` below comes out of BoundValue so a `@{...}` padding emits
+        # a real Dp expression instead of interpolating the binding text into
+        # code position (`.padding(top = @{v}.dp)` — plan 49 lane C, 29
+        # `bound-uncompilable`). Numeric declarations are untouched: BoundValue
+        # only leaves the literal path when the value actually carries a
+        # binding.
         def self.build_padding(json_data)
           modifiers = []
-          
+
           # Handle padding attribute (can be array [top, right, bottom, left] or single value)
-          if json_data['padding']
-            if json_data['padding'].is_a?(Array)
-              pad_values = json_data['padding']
-              if pad_values.length == 4
-                modifiers << ".padding(top = #{pad_values[0]}.dp, end = #{pad_values[1]}.dp, bottom = #{pad_values[2]}.dp, start = #{pad_values[3]}.dp)"
-              elsif pad_values.length == 2
-                modifiers << ".padding(vertical = #{pad_values[0]}.dp, horizontal = #{pad_values[1]}.dp)"
-              elsif pad_values.length == 1
-                modifiers << ".padding(#{pad_values[0]}.dp)"
-              end
-            else
-              modifiers << ".padding(#{json_data['padding']}.dp)"
-            end
-          end
-          
+          modifiers.concat(padding_group(json_data['padding'])) if json_data['padding']
+
           # Handle paddings attribute (same as padding)
-          if json_data['paddings']
-            if json_data['paddings'].is_a?(Array)
-              pad_values = json_data['paddings']
-              if pad_values.length == 4
-                modifiers << ".padding(top = #{pad_values[0]}.dp, end = #{pad_values[1]}.dp, bottom = #{pad_values[2]}.dp, start = #{pad_values[3]}.dp)"
-              elsif pad_values.length == 2
-                modifiers << ".padding(vertical = #{pad_values[0]}.dp, horizontal = #{pad_values[1]}.dp)"
-              elsif pad_values.length == 1
-                modifiers << ".padding(#{pad_values[0]}.dp)"
-              end
-            else
-              modifiers << ".padding(#{json_data['paddings']}.dp)"
-            end
-          end
-          
+          modifiers.concat(padding_group(json_data['paddings'])) if json_data['paddings']
+
           # Individual padding attributes (prefix form: paddingTop, and suffix form: topPadding/leftPadding)
-          modifiers << ".padding(top = #{json_data['paddingTop'] || json_data['topPadding']}.dp)" if json_data['paddingTop'] || json_data['topPadding']
-          modifiers << ".padding(bottom = #{json_data['paddingBottom'] || json_data['bottomPadding']}.dp)" if json_data['paddingBottom'] || json_data['bottomPadding']
-          modifiers << ".padding(start = #{json_data['paddingLeft'] || json_data['leftPadding']}.dp)" if json_data['paddingLeft'] || json_data['leftPadding']
-          modifiers << ".padding(end = #{json_data['paddingRight'] || json_data['rightPadding']}.dp)" if json_data['paddingRight'] || json_data['rightPadding']
+          modifiers << ".padding(top = #{BoundValue.dp(json_data['paddingTop'] || json_data['topPadding'])})" if json_data['paddingTop'] || json_data['topPadding']
+          modifiers << ".padding(bottom = #{BoundValue.dp(json_data['paddingBottom'] || json_data['bottomPadding'])})" if json_data['paddingBottom'] || json_data['bottomPadding']
+          modifiers << ".padding(start = #{BoundValue.dp(json_data['paddingLeft'] || json_data['leftPadding'])})" if json_data['paddingLeft'] || json_data['leftPadding']
+          modifiers << ".padding(end = #{BoundValue.dp(json_data['paddingRight'] || json_data['rightPadding'])})" if json_data['paddingRight'] || json_data['rightPadding']
           # RTL-aware padding (canonical paddingStart/paddingEnd; suffix
           # spellings accepted like the dynamic reader)
-          modifiers << ".padding(start = #{json_data['paddingStart'] || json_data['startPadding']}.dp)" if json_data['paddingStart'] || json_data['startPadding']
-          modifiers << ".padding(end = #{json_data['paddingEnd'] || json_data['endPadding']}.dp)" if json_data['paddingEnd'] || json_data['endPadding']
-          
+          modifiers << ".padding(start = #{BoundValue.dp(json_data['paddingStart'] || json_data['startPadding'])})" if json_data['paddingStart'] || json_data['startPadding']
+          modifiers << ".padding(end = #{BoundValue.dp(json_data['paddingEnd'] || json_data['endPadding'])})" if json_data['paddingEnd'] || json_data['endPadding']
+
           modifiers
         end
-        
+
+        # The shared array/scalar shape behind `padding` and `paddings`.
+        def self.padding_group(value)
+          unless value.is_a?(Array)
+            return [".padding(#{BoundValue.dp(value)})"]
+          end
+
+          case value.length
+          when 4
+            [".padding(top = #{BoundValue.dp(value[0])}, end = #{BoundValue.dp(value[1])}, " \
+             "bottom = #{BoundValue.dp(value[2])}, start = #{BoundValue.dp(value[3])})"]
+          when 2
+            [".padding(vertical = #{BoundValue.dp(value[0])}, horizontal = #{BoundValue.dp(value[1])})"]
+          when 1
+            [".padding(#{BoundValue.dp(value[0])})"]
+          else
+            []
+          end
+        end
+
         def self.build_margins(json_data)
           modifiers = []
 
           # Handle margins attribute (can be array [top, right, bottom, left] or single value)
           if json_data['margins']
-            if json_data['margins'].is_a?(Array)
-              margin_values = json_data['margins']
+            margin_values = json_data['margins']
+            if margin_values.is_a?(Array)
               if margin_values.length == 4
-                modifiers << ".padding(top = #{margin_values[0]}.dp, end = #{margin_values[1]}.dp, bottom = #{margin_values[2]}.dp, start = #{margin_values[3]}.dp)"
+                modifiers << ".padding(top = #{BoundValue.dp(margin_values[0])}, end = #{BoundValue.dp(margin_values[1])}, " \
+                             "bottom = #{BoundValue.dp(margin_values[2])}, start = #{BoundValue.dp(margin_values[3])})"
               elsif margin_values.length == 1
-                modifiers << ".padding(#{margin_values[0]}.dp)"
+                modifiers << ".padding(#{BoundValue.dp(margin_values[0])})"
               end
             else
-              modifiers << ".padding(#{json_data['margins']}.dp)"
+              modifiers << ".padding(#{BoundValue.dp(margin_values)})"
             end
           end
 
@@ -86,26 +87,32 @@ module KjuiTools
           modifiers
         end
 
-        # Convert margin value to Kotlin/Compose format with binding support
+        # Convert margin value to Kotlin/Compose format with binding support.
+        # The old hand-rolled form (`data.#{property}.dp`) passed `??` through
+        # verbatim and ignored nullability, so `@{gap ?? 8}` emitted
+        # `data.gap ?? 8.dp`. BoundValue is the canonical emitter now.
         def self.margin_value(value)
-          if is_binding?(value)
-            # Data binding: @{propertyName} -> data.propertyName.dp
-            property = extract_binding_property(value)
-            "data.#{property}.dp"
-          else
-            "#{value}.dp"
-          end
+          BoundValue.dp(value)
         end
-        
+
         def self.build_weight(json_data, parent_orientation = nil)
           modifiers = []
-          
+
           # Weight only works in Row/Column contexts
           # Weight must be greater than 0 in Compose
-          if json_data['weight'] && parent_orientation && json_data['weight'].to_f > 0
-            modifiers << ".weight(#{json_data['weight']}f)"
+          weight = json_data['weight']
+          return modifiers unless weight && parent_orientation
+
+          if BoundValue.bound?(weight)
+            # `"@{w}".to_f == 0.0`, so the static guard below dropped every
+            # bound weight. Lift the SAME guard to runtime instead: Compose
+            # throws on `weight <= 0`, so the zero case must stay unweighted.
+            expr = BoundValue.float(weight, fallback: 0)
+            modifiers << ".then(if (#{expr} > 0f) Modifier.weight(#{expr}) else Modifier)"
+          elsif weight.to_f > 0
+            modifiers << ".weight(#{weight}f)"
           end
-          
+
           modifiers
         end
         
@@ -273,7 +280,7 @@ module KjuiTools
           modifiers.insert(wrap_idx, fill)
         end
 
-        def self.build_size(json_data, parent_type = nil)
+        def self.build_size(json_data, parent_type = nil, required_imports = nil)
           modifiers = []
 
           # Handle 'frame' attribute - object with width/height
@@ -318,11 +325,11 @@ module KjuiTools
           # widthIn first would clamp the declared width instead.
           width_constraint =
             if json_data['minWidth'] && json_data['maxWidth']
-              ".widthIn(min = #{json_data['minWidth']}.dp, max = #{json_data['maxWidth']}.dp)"
+              ".widthIn(min = #{BoundValue.dp(json_data['minWidth'])}, max = #{BoundValue.dp(json_data['maxWidth'], null_expr: 'Dp.Infinity')})"
             elsif json_data['minWidth']
-              ".widthIn(min = #{json_data['minWidth']}.dp)"
+              ".widthIn(min = #{BoundValue.dp(json_data['minWidth'])})"
             elsif json_data['maxWidth']
-              ".widthIn(max = #{json_data['maxWidth']}.dp)"
+              ".widthIn(max = #{BoundValue.dp(json_data['maxWidth'], null_expr: 'Dp.Infinity')})"
             end
           explicit_width = json_data['width'] &&
                            json_data['width'] != 'matchParent' &&
@@ -373,12 +380,12 @@ module KjuiTools
           valign_emitted = false
           if label_valign && json_data['minHeight']
             # minHeight + vertical gravity: defaultMinSize floor + wrapContentHeight.
-            modifiers << ".defaultMinSize(minHeight = #{json_data['minHeight']}.dp)"
+            modifiers << ".defaultMinSize(minHeight = #{BoundValue.dp(json_data['minHeight'])})"
             modifiers << ".wrapContentHeight(align = #{label_valign})"
             valign_emitted = true
             # `maxHeight` (if any) is still applied below as a normal heightIn.
             if json_data['maxHeight']
-              modifiers << ".heightIn(max = #{json_data['maxHeight']}.dp)"
+              modifiers << ".heightIn(max = #{BoundValue.dp(json_data['maxHeight'], null_expr: 'Dp.Infinity')})"
             end
           end
 
@@ -389,11 +396,11 @@ module KjuiTools
             if valign_emitted
               nil # handled above (defaultMinSize + optional heightIn(max))
             elsif json_data['minHeight'] && json_data['maxHeight']
-              ".heightIn(min = #{json_data['minHeight']}.dp, max = #{json_data['maxHeight']}.dp)"
+              ".heightIn(min = #{BoundValue.dp(json_data['minHeight'])}, max = #{BoundValue.dp(json_data['maxHeight'], null_expr: 'Dp.Infinity')})"
             elsif json_data['minHeight']
-              ".heightIn(min = #{json_data['minHeight']}.dp)"
+              ".heightIn(min = #{BoundValue.dp(json_data['minHeight'])})"
             elsif json_data['maxHeight']
-              ".heightIn(max = #{json_data['maxHeight']}.dp)"
+              ".heightIn(max = #{BoundValue.dp(json_data['maxHeight'], null_expr: 'Dp.Infinity')})"
             end
           explicit_height = json_data['height'] &&
                             json_data['height'] != 'matchParent' &&
@@ -424,12 +431,25 @@ module KjuiTools
             modifiers << ".wrapContentHeight(align = #{label_valign})"
           end
           
-          # Aspect ratio
+          # Aspect ratio. A bound side cannot be divided in Ruby (`"@{w}".to_f`
+          # is 0.0, and 0/0 is NaN), so the division moves into the emit.
           if json_data['aspectWidth'] && json_data['aspectHeight']
-            ratio = json_data['aspectWidth'].to_f / json_data['aspectHeight'].to_f
-            modifiers << ".aspectRatio(#{ratio}f)"
+            if BoundValue.bound?(json_data['aspectWidth']) || BoundValue.bound?(json_data['aspectHeight'])
+              w = BoundValue.float(json_data['aspectWidth'], fallback: 1)
+              h = BoundValue.float(json_data['aspectHeight'], fallback: 1)
+              modifiers << ".aspectRatio(#{w} / #{h})"
+            else
+              ratio = json_data['aspectWidth'].to_f / json_data['aspectHeight'].to_f
+              modifiers << ".aspectRatio(#{ratio}f)"
+            end
           end
           
+          # `Dp.Infinity` is the unresolved value of a BOUND max, so the
+          # import follows the emitted text rather than the declaration.
+          if required_imports && modifiers.any? { |m| m.include?('Dp.Infinity') }
+            required_imports.add(:dp_infinity)
+          end
+
           modifiers
         end
         
@@ -438,7 +458,7 @@ module KjuiTools
           
           if json_data['shadow']
             if json_data['cornerRadius']
-              shape = "RoundedCornerShape(#{json_data['cornerRadius']}.dp)"
+              shape = "RoundedCornerShape(#{BoundValue.dp(json_data['cornerRadius'])})"
             else
               shape = "RectangleShape"
             end
@@ -486,7 +506,12 @@ module KjuiTools
           # highlighted — UIKit's pressed/selected appearance flag: when set
           # (literal true, or a bool binding) the background swaps to
           # highlightBackground, matching sjui's apply_highlighted_to_bag.
-          highlight_bg = json_data['highlightBackground']
+          #
+          # `tapBackground` is the declared cross-platform spelling of the same
+          # colour and no Compose path read it (plan 49 lane C:
+          # common.tapBackground, C0 unread + C1 dropped). sjui and rjui both
+          # accept `tapBackground || highlightBackground`; so does this now.
+          highlight_bg = json_data['tapBackground'] || json_data['highlightBackground']
           highlight_cond = case json_data['highlighted']
                            when true, 'true' then 'true'
                            when String
@@ -515,7 +540,7 @@ module KjuiTools
               end
 
               if json_data['cornerRadius']
-                modifiers << ".clip(RoundedCornerShape(#{json_data['cornerRadius']}.dp))"
+                modifiers << ".clip(RoundedCornerShape(#{BoundValue.dp(json_data['cornerRadius'])}))"
               end
 
               modifiers << ".background(#{background_color})"
@@ -540,14 +565,50 @@ module KjuiTools
             end
 
             if json_data['cornerRadius']
-              modifiers << ".clip(RoundedCornerShape(#{json_data['cornerRadius']}.dp))"
+              modifiers << ".clip(RoundedCornerShape(#{BoundValue.dp(json_data['cornerRadius'])}))"
             end
           end
 
-          # clipToBounds
-          if json_data['clipToBounds']
+          # `safeAreaInsetPositions` on a PLAIN node. The SSoT declares it on
+          # View as well as SafeAreaView on purpose — sjui runs
+          # `apply_safe_area_insets_to_bag` for every component and rjui emits
+          # `env(safe-area-inset-*)` padding from `safe_area_edges`, while
+          # kjui read the spelling only inside the SafeAreaView builder
+          # (compose_builder.rb:722). Same edge vocabulary and the same
+          # Compose primitives that builder uses, so the two agree.
+          edges = json_data['safeAreaInsetPositions']
+          if edges && json_data['type'] != 'SafeAreaView'
+            edges = [edges] unless edges.is_a?(Array)
+            edges = edges.map(&:to_s)
+            required_imports&.add(:safe_area_padding)
+            if edges.include?('all')
+              modifiers << '.systemBarsPadding()'
+            else
+              modifiers << '.statusBarsPadding()' if edges.include?('top') || edges.include?('vertical')
+              modifiers << '.navigationBarsPadding()' if edges.include?('bottom') || edges.include?('vertical')
+            end
+          end
+
+          # `tintColor` is declared on `common`, and Compose read it only
+          # per-component (switch / image / segment) — a tintColor on a plain
+          # View was dropped (plan 49 lane C: common.tintColor, C0 unread +
+          # C1 dropped). On a container the UIKit meaning of tint is "the
+          # colour my content is drawn in", which is what a Compose
+          # `LocalContentColor` would carry; the modifier-level equivalent
+          # available on any node is a source-in tint over the node's own
+          # drawing, so that is what the shared path emits.
+          if json_data['tintColor']
+            required_imports&.add(:color_filter_tint)
+            tint = ResourceResolver.process_color(json_data['tintColor'], required_imports)
+            modifiers << ".drawWithContent { drawContent(); drawRect(color = #{tint}, blendMode = BlendMode.SrcIn) }"
+          end
+
+          # clipToBounds — declared boolean|binding. A plain truthiness test
+          # froze `"@{flag}"` permanently ON (plan 49 lane C, bound-frozen).
+          clip_state = BoundValue.bool(json_data['clipToBounds'])
+          if (clip = BoundValue.conditional_modifier(clip_state, '.clipToBounds()'))
             required_imports&.add(:shape)
-            modifiers << ".clipToBounds()"
+            modifiers << clip
           end
 
           modifiers
@@ -609,11 +670,9 @@ module KjuiTools
           alpha_value = Core::Normalization.attr_lookup(json_data, 'opacity', 'alpha')
           if alpha_value
             required_imports&.add(:alpha)
-            if alpha_value.is_a?(String) && (inner = BindingExpression.extract_inner(alpha_value))
-              modifiers << ".alpha(#{BindingExpression.value_access(inner)}.toFloat())"
-            else
-              modifiers << ".alpha(#{alpha_value}f)"
-            end
+            # A nullable bound opacity used to emit `data.x.toFloat()`, which
+            # does not compile on a `Double?`. BoundValue coalesces it.
+            modifiers << ".alpha(#{BoundValue.float(alpha_value, fallback: 1)})"
           end
 
           # Return both visibility info and modifiers
@@ -626,11 +685,9 @@ module KjuiTools
           alpha_value = Core::Normalization.attr_lookup(json_data, 'opacity', 'alpha')
           if alpha_value
             required_imports&.add(:alpha)
-            if alpha_value.is_a?(String) && (inner = BindingExpression.extract_inner(alpha_value))
-              modifiers << ".alpha(#{BindingExpression.value_access(inner)}.toFloat())"
-            else
-              modifiers << ".alpha(#{alpha_value}f)"
-            end
+            # A nullable bound opacity used to emit `data.x.toFloat()`, which
+            # does not compile on a `Double?`. BoundValue coalesces it.
+            modifiers << ".alpha(#{BoundValue.float(alpha_value, fallback: 1)})"
           end
           modifiers
         end
@@ -869,153 +926,136 @@ module KjuiTools
           [gesture]
         end
 
+        # The seven alignment flags are declared `["boolean", "binding"]` in the
+        # SSoT, and this method used to read them with plain Ruby truthiness —
+        # so `alignTop: "@{flag}"` was a non-empty String, i.e. permanently ON
+        # (plan 49 lane C, 7 of the 18 `bound-frozen`).
+        #
+        # The decision tree is a pure function of those seven booleans, so it
+        # is expressed once, as a priority-ordered list, and evaluated in one
+        # of two modes (BoundValue#priority_modifier):
+        #
+        #   * every flag static  -> folded in Ruby, first match wins. This is
+        #     the same answer the old if/elsif chain gave, character for
+        #     character.
+        #   * any flag bound     -> the SAME list becomes a Kotlin `when`,
+        #     spliced in with `.then(...)`. `Modifier.align` stays resolvable
+        #     because the expression is evaluated at the call site, inside the
+        #     surrounding Row/Column/BoxScope content lambda.
         def self.build_alignment(json_data, required_imports = nil, parent_type = nil)
-          modifiers = []
+          top = BoundValue.bool(json_data['alignTop'])
+          bottom = BoundValue.bool(json_data['alignBottom'])
+          left = BoundValue.bool(json_data['alignLeft'])
+          right = BoundValue.bool(json_data['alignRight'])
+          center_h = BoundValue.bool(json_data['centerHorizontal'])
+          center_v = BoundValue.bool(json_data['centerVertical'])
+          center_both = BoundValue.bool(json_data['centerInParent'])
 
-          # Scope-free emit context (no surrounding RowScope/ColumnScope/BoxScope).
-          # Used by the file-scope responsive helper composables (see
-          # compose_builder#generate_responsive_container) — Modifier.align(...)
-          # is a *Scope-receiver-bound* extension, so it doesn't resolve here.
-          # Translate centering to scope-independent equivalents.
-          if parent_type == 'ScopeFree'
-            if json_data['centerInParent']
-              modifiers << ".wrapContentWidth(Alignment.CenterHorizontally)"
-              modifiers << ".wrapContentHeight(Alignment.CenterVertically)"
+          modifiers =
+            case parent_type
+            when 'ScopeFree'
+              build_scope_free_alignment(top, bottom, left, right, center_h, center_v, center_both)
+            when 'Row'
+              # For Row, only vertical alignment is allowed
+              [BoundValue.priority_modifier([
+                [top, '.align(Alignment.Top)'],
+                [bottom, '.align(Alignment.Bottom)'],
+                [center_v, '.align(Alignment.CenterVertically)']
+              ])]
+            when 'Column'
+              # For Column, only horizontal alignment is allowed
+              [BoundValue.priority_modifier([
+                [left, '.align(Alignment.Start)'],
+                [right, '.align(Alignment.End)'],
+                [center_h, '.align(Alignment.CenterHorizontally)']
+              ])]
+            when 'Box'
+              # For Box and other containers, full alignment options
+              [BoundValue.priority_modifier(
+                box_alignment_pairs(top, bottom, left, right, center_h, center_v, center_both)
+              )]
+              # No default TopStart - let parent's contentAlignment handle it
             else
-              # Horizontal axis. centerHorizontal beats align-left/right; the
-              # align-both case (left AND right) collapses to center to match
-              # the SwiftUI side and the original Android XML semantics.
-              if json_data['centerHorizontal']
-                modifiers << ".wrapContentWidth(Alignment.CenterHorizontally)"
-              elsif json_data['alignLeft'] && json_data['alignRight']
-                modifiers << ".wrapContentWidth(Alignment.CenterHorizontally)"
-              elsif json_data['alignLeft']
-                modifiers << ".wrapContentWidth(Alignment.Start)"
-              elsif json_data['alignRight']
-                modifiers << ".wrapContentWidth(Alignment.End)"
-              end
-              # Vertical axis. Same precedence.
-              if json_data['centerVertical']
-                modifiers << ".wrapContentHeight(Alignment.CenterVertically)"
-              elsif json_data['alignTop'] && json_data['alignBottom']
-                modifiers << ".wrapContentHeight(Alignment.CenterVertically)"
-              elsif json_data['alignTop']
-                modifiers << ".wrapContentHeight(Alignment.Top)"
-              elsif json_data['alignBottom']
-                modifiers << ".wrapContentHeight(Alignment.Bottom)"
-              end
-            end
-            return modifiers
+              []
+            end.compact
+
+          # A runtime `when` can carry BiasAlignment in ANY of its arms, so the
+          # import follows the emitted text rather than the branch taken.
+          if required_imports && modifiers.any? { |m| m.include?('BiasAlignment') }
+            required_imports.add(:bias_alignment)
           end
 
-          # For Row, only vertical alignment is allowed
-          if parent_type == 'Row'
-            if json_data['alignTop']
-              modifiers << ".align(Alignment.Top)"
-            elsif json_data['alignBottom']
-              modifiers << ".align(Alignment.Bottom)"
-            elsif json_data['centerVertical']
-              modifiers << ".align(Alignment.CenterVertically)"
-            end
-          # For Column, only horizontal alignment is allowed
-          elsif parent_type == 'Column'
-            if json_data['alignLeft']
-              modifiers << ".align(Alignment.Start)"
-            elsif json_data['alignRight']
-              modifiers << ".align(Alignment.End)"
-            elsif json_data['centerHorizontal']
-              modifiers << ".align(Alignment.CenterHorizontally)"
-            end
-          # For Box and other containers, full alignment options
-          elsif parent_type == 'Box'
-            # Check if any alignment is specified
-            has_alignment = json_data['alignTop'] || json_data['alignBottom'] || 
-                          json_data['alignLeft'] || json_data['alignRight'] || 
-                          json_data['centerHorizontal'] || json_data['centerVertical'] || 
-                          json_data['centerInParent']
-            
-            # First check for both-direction constraints (centering behavior)
-            has_horizontal_both = json_data['alignLeft'] && json_data['alignRight']
-            has_vertical_both = json_data['alignTop'] && json_data['alignBottom']
-            
-            # Handle combined alignments
-            if has_horizontal_both && has_vertical_both
-              # Both horizontal and vertical constraints - center completely
-              modifiers << ".align(Alignment.Center)"
-            elsif has_horizontal_both && json_data['alignTop']
-              # Center horizontally, align top
-              required_imports&.add(:bias_alignment)
-              modifiers << ".align(BiasAlignment(0f, -1f))"
-            elsif has_horizontal_both && json_data['alignBottom']
-              # Center horizontally, align bottom
-              required_imports&.add(:bias_alignment)
-              modifiers << ".align(BiasAlignment(0f, 1f))"
-            elsif has_horizontal_both
-              # Just center horizontally
-              required_imports&.add(:bias_alignment)
-              modifiers << ".align(BiasAlignment(0f, 0f))"
-            elsif has_vertical_both && json_data['alignLeft']
-              # Center vertically, align left
-              modifiers << ".align(Alignment.CenterStart)"
-            elsif has_vertical_both && json_data['alignRight']
-              # Center vertically, align right
-              modifiers << ".align(Alignment.CenterEnd)"
-            elsif has_vertical_both
-              # Just center vertically
-              required_imports&.add(:bias_alignment)
-              modifiers << ".align(BiasAlignment(0f, 0f))"
-            elsif json_data['alignTop'] && json_data['alignLeft']
-              modifiers << ".align(Alignment.TopStart)"
-            elsif json_data['alignTop'] && json_data['alignRight']
-              modifiers << ".align(Alignment.TopEnd)"
-            elsif json_data['alignBottom'] && json_data['alignLeft']
-              modifiers << ".align(Alignment.BottomStart)"
-            elsif json_data['alignBottom'] && json_data['alignRight']
-              modifiers << ".align(Alignment.BottomEnd)"
-            elsif json_data['alignTop'] && json_data['centerHorizontal']
-              # TopCenter doesn't exist in BoxScope, use BiasAlignment
-              required_imports&.add(:bias_alignment)
-              modifiers << ".align(BiasAlignment(0f, -1f))"
-            elsif json_data['alignBottom'] && json_data['centerHorizontal']
-              # BottomCenter doesn't exist in BoxScope, use BiasAlignment
-              required_imports&.add(:bias_alignment)
-              modifiers << ".align(BiasAlignment(0f, 1f))"
-            elsif json_data['alignLeft'] && json_data['centerVertical']
-              modifiers << ".align(Alignment.CenterStart)"
-            elsif json_data['alignRight'] && json_data['centerVertical']
-              modifiers << ".align(Alignment.CenterEnd)"
-            elsif json_data['centerInParent']
-              modifiers << ".align(Alignment.Center)"
-            # Handle single alignments for Box
-            elsif json_data['alignTop']
-              # Just top alignment - align to top-left
-              required_imports&.add(:bias_alignment)
-              modifiers << ".align(BiasAlignment(-1f, -1f))"
-            elsif json_data['alignBottom']
-              # Just bottom alignment - align to bottom-left
-              required_imports&.add(:bias_alignment)
-              modifiers << ".align(BiasAlignment(-1f, 1f))"
-            elsif json_data['alignLeft']
-              # Just left alignment - align to top-left
-              required_imports&.add(:bias_alignment)
-              modifiers << ".align(BiasAlignment(-1f, -1f))"
-            elsif json_data['alignRight']
-              # Just right alignment - align to top-right
-              required_imports&.add(:bias_alignment)
-              modifiers << ".align(BiasAlignment(1f, -1f))"
-            elsif json_data['centerHorizontal']
-              # Center horizontally only - align to top-center
-              required_imports&.add(:bias_alignment)
-              modifiers << ".align(BiasAlignment(0f, -1f))"
-            elsif json_data['centerVertical']
-              # Center vertically only - align to center-left
-              required_imports&.add(:bias_alignment)
-              modifiers << ".align(BiasAlignment(-1f, 0f))"
-            end
-            # No default TopStart - let parent's contentAlignment handle it
-          end
-          
           modifiers
+        end
+
+        # Scope-free emit context (no surrounding RowScope/ColumnScope/BoxScope).
+        # Used by the file-scope responsive helper composables (see
+        # compose_builder#generate_responsive_container) — Modifier.align(...)
+        # is a *Scope-receiver-bound* extension, so it doesn't resolve here.
+        # Translate centering to scope-independent equivalents.
+        #
+        # `centerInParent` short-circuited both axes in the original; folding it
+        # in as the top branch of each axis says the same thing without needing
+        # the outer branch.
+        def self.build_scope_free_alignment(top, bottom, left, right, center_h, center_v, center_both)
+          # Horizontal axis. centerHorizontal beats align-left/right; the
+          # align-both case (left AND right) collapses to center to match
+          # the SwiftUI side and the original Android XML semantics.
+          horizontal = BoundValue.priority_modifier([
+            [center_both, '.wrapContentWidth(Alignment.CenterHorizontally)'],
+            [center_h, '.wrapContentWidth(Alignment.CenterHorizontally)'],
+            [BoundValue.all_of(left, right), '.wrapContentWidth(Alignment.CenterHorizontally)'],
+            [left, '.wrapContentWidth(Alignment.Start)'],
+            [right, '.wrapContentWidth(Alignment.End)']
+          ])
+          # Vertical axis. Same precedence.
+          vertical = BoundValue.priority_modifier([
+            [center_both, '.wrapContentHeight(Alignment.CenterVertically)'],
+            [center_v, '.wrapContentHeight(Alignment.CenterVertically)'],
+            [BoundValue.all_of(top, bottom), '.wrapContentHeight(Alignment.CenterVertically)'],
+            [top, '.wrapContentHeight(Alignment.Top)'],
+            [bottom, '.wrapContentHeight(Alignment.Bottom)']
+          ])
+          [horizontal, vertical]
+        end
+
+        # The BoxScope decision tree, in the original priority order. `hb`/`vb`
+        # are the both-direction constraints that mean "centre on that axis".
+        def self.box_alignment_pairs(top, bottom, left, right, center_h, center_v, center_both)
+          hb = BoundValue.all_of(left, right)
+          vb = BoundValue.all_of(top, bottom)
+
+          [
+            # Both horizontal and vertical constraints - center completely
+            [BoundValue.all_of(hb, vb), '.align(Alignment.Center)'],
+            # Center horizontally, align top / bottom
+            [BoundValue.all_of(hb, top), '.align(BiasAlignment(0f, -1f))'],
+            [BoundValue.all_of(hb, bottom), '.align(BiasAlignment(0f, 1f))'],
+            # Just center horizontally
+            [hb, '.align(BiasAlignment(0f, 0f))'],
+            # Center vertically, align left / right
+            [BoundValue.all_of(vb, left), '.align(Alignment.CenterStart)'],
+            [BoundValue.all_of(vb, right), '.align(Alignment.CenterEnd)'],
+            # Just center vertically
+            [vb, '.align(BiasAlignment(0f, 0f))'],
+            [BoundValue.all_of(top, left), '.align(Alignment.TopStart)'],
+            [BoundValue.all_of(top, right), '.align(Alignment.TopEnd)'],
+            [BoundValue.all_of(bottom, left), '.align(Alignment.BottomStart)'],
+            [BoundValue.all_of(bottom, right), '.align(Alignment.BottomEnd)'],
+            # TopCenter / BottomCenter don't exist in BoxScope, use BiasAlignment
+            [BoundValue.all_of(top, center_h), '.align(BiasAlignment(0f, -1f))'],
+            [BoundValue.all_of(bottom, center_h), '.align(BiasAlignment(0f, 1f))'],
+            [BoundValue.all_of(left, center_v), '.align(Alignment.CenterStart)'],
+            [BoundValue.all_of(right, center_v), '.align(Alignment.CenterEnd)'],
+            [center_both, '.align(Alignment.Center)'],
+            # Handle single alignments for Box
+            [top, '.align(BiasAlignment(-1f, -1f))'],
+            [bottom, '.align(BiasAlignment(-1f, 1f))'],
+            [left, '.align(BiasAlignment(-1f, -1f))'],
+            [right, '.align(BiasAlignment(1f, -1f))'],
+            [center_h, '.align(BiasAlignment(0f, -1f))'],
+            [center_v, '.align(BiasAlignment(-1f, 0f))']
+          ]
         end
         
         def self.build_relative_positioning(json_data)
@@ -1315,9 +1355,9 @@ module KjuiTools
           return nil if value.nil?
 
           if is_binding?(value)
-            # Data binding: @{propertyName} -> data.propertyName.dp
-            property = extract_binding_property(value)
-            "data.#{property}.dp"
+            # Same bypass process_dimension had: the hand-rolled emit ignored
+            # `??` and nullability. BoundValue is the canonical Dp emitter.
+            BoundValue.dp(value)
           elsif value.is_a?(Numeric) && value > 0
             "#{value}.dp"
           elsif value.is_a?(String)
@@ -1340,11 +1380,28 @@ module KjuiTools
 
         # Build border modifier with support for solid/dashed/dotted styles
         def self.build_border_modifier(json_data, required_imports = nil)
+          # The width+color PAIR is what requests a border; neither half
+          # summons one on its own, and there is no default border colour.
+          # That is a recorded ruling, not an inference —
+          # `shared/core/attribute_semantics.json#semantics.border` carries it
+          # (2026-08-03 user ruling, superseding the transient gray-default of
+          # d2c8628, unified across toolchains in 3e87b96; re-measured
+          # 2026-08-04 at 0px on all three platforms). `borderStyle` alone
+          # likewise renders nothing: it styles a border the pair requested.
+          # The five `observable` entries are a machine gate — making any
+          # single declaration active turns `gate --cross-effect` red.
+          #
+          # NOTE: `TextField.borderStyle` is a DIFFERENT attribute (UIKit
+          # text-field chrome) and is outside this rule.
           border_color = ResourceResolver.process_color(json_data['borderColor'], required_imports)
-          border_width = json_data['borderWidth']
+          # The width used to be interpolated raw and suffixed with `.dp` at
+          # each use site — the canonical example of an emit that stops being
+          # a program once the width is bound. BoundValue returns the whole Dp
+          # expression, so the `.dp` moved inside it.
+          border_width = BoundValue.dp(json_data['borderWidth'])
           border_style = json_data['borderStyle'] || 'solid'
           if json_data['cornerRadius']
-            border_shape = "RoundedCornerShape(#{json_data['cornerRadius']}.dp)"
+            border_shape = "RoundedCornerShape(#{BoundValue.dp(json_data['cornerRadius'])})"
           else
             # `RectangleShape` is in `androidx.compose.ui.graphics`, NOT the
             # `androidx.compose.foundation.shape` namespace covered by
@@ -1357,34 +1414,29 @@ module KjuiTools
           case border_style
           when 'dashed'
             required_imports&.add(:dashed_border)
-            ".dashedBorder(#{border_width}.dp, #{border_color}, #{border_shape})"
+            ".dashedBorder(#{border_width}, #{border_color}, #{border_shape})"
           when 'dotted'
             required_imports&.add(:dashed_border)
-            ".dottedBorder(#{border_width}.dp, #{border_color}, #{border_shape})"
+            ".dottedBorder(#{border_width}, #{border_color}, #{border_shape})"
           else # 'solid' or default
-            ".border(#{border_width}.dp, #{border_color}, #{border_shape})"
+            ".border(#{border_width}, #{border_color}, #{border_shape})"
           end
         end
 
-        # Process dimension value - handles data bindings and numeric values
+        # Process dimension value - handles data bindings and numeric values.
+        #
+        # This used to own its own binding branch (`data.#{$1}.dp`), which
+        # passed a `??` default through verbatim (`@{w ?? 10}` →
+        # `data.w ?? 10.dp`) and dereferenced nullable properties. It is a thin
+        # wrapper over BoundValue now — the only remaining job is the
+        # matchParent/wrapContent guard and the "absent means 0.dp" contract
+        # its callers rely on.
         def self.process_dimension(value)
-          return "#{value}.dp" if value.is_a?(Numeric)
-
-          if value.is_a?(String)
-            # Guard: matchParent/wrapContent should not reach here, but handle gracefully
-            return nil if value == 'matchParent' || value == 'wrapContent'
-
-            # Check for data binding syntax @{variableName}
-            if value.match(/@\{([^}]+)\}/)
-              variable = $1
-              # Data binding returns Int/Float from ViewModel, append .dp
-              return "data.#{variable}.dp"
-            end
-            # Regular string value (might be percentage or other)
-            return "#{value}.dp"
+          if value.is_a?(String) && (value == 'matchParent' || value == 'wrapContent')
+            return nil
           end
 
-          "0.dp"
+          BoundValue.dp(value) || '0.dp'
         end
 
         def self.indent(text, level)

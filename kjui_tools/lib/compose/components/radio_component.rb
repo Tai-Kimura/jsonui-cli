@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/modifier_builder'
+require_relative '../helpers/bound_value'
+require_relative '../helpers/font_spec_helper'
 require_relative '../helpers/resource_resolver'
 
 module KjuiTools
@@ -179,7 +181,13 @@ module KjuiTools
         def self.generate_radio_item(json_data, depth, required_imports, parent_type)
           group = json_data['group'] || 'default'
           id = json_data['id'] || "radio_#{rand(1000)}"
+          # `text`/`label` are `["string", "binding"]`. They used to be
+          # interpolated straight into the Kotlin literal, so a bound label put
+          # the characters `@{...}` on screen (plan 49 lane C: Radio.text,
+          # Radio.label). `text_expr` is the emit; `text` stays the raw value so
+          # the "is there a label at all" tests below are unchanged.
           text = json_data['text'] || json_data['label'] || ''
+          text_expr = Helpers::BoundValue.text(text)
           
           # Get the selected state from binding
           selected_var = "selectedRadiogroup"  # Default variable name
@@ -187,6 +195,12 @@ module KjuiTools
             # Use group name as part of the variable
             selected_var = "selected#{group.capitalize}"
           end
+          # `checked` is declared `["boolean", "binding"]` — "initial checked
+          # state" — and no converter read the spelling at all (plan 49 lane C:
+          # Radio.checked, C0 unread + C1 dropped). When it IS declared it is
+          # the authority on this item's selected state; the group variable is
+          # the fallback for the (usual) case where it is not.
+          selected_expr = radio_selected_expr(json_data, selected_var, id)
           
           code = indent("Row(", depth)
           code += "\n" + indent("    verticalAlignment = Alignment.CenterVertically,", depth)
@@ -210,7 +224,7 @@ module KjuiTools
              (json_data['selectedIcon'] == 'checkmark.circle.fill' || !json_data['selectedIcon'])
             # Use default RadioButton for standard radio appearance
             code += "\n" + indent("    RadioButton(", depth)
-            code += "\n" + indent("        selected = data.#{selected_var} == \"#{id}\",", depth)
+            code += "\n" + indent("        selected = #{selected_expr},", depth)
             code += "\n" + indent("        onClick = { viewModel.updateData(mapOf(\"#{selected_var}\" to \"#{id}\")) }", depth)
             icon_appearance_args(json_data, required_imports, :radio).each do |arg|
               code += ",\n" + indent("        #{arg}", depth)
@@ -221,7 +235,7 @@ module KjuiTools
             # Use default Checkbox for square appearance
             required_imports&.add(:checkbox)
             code += "\n" + indent("    Checkbox(", depth)
-            code += "\n" + indent("        checked = data.#{selected_var} == \"#{id}\",", depth)
+            code += "\n" + indent("        checked = #{selected_expr},", depth)
             code += "\n" + indent("        onCheckedChange = { viewModel.updateData(mapOf(\"#{selected_var}\" to \"#{id}\")) }", depth)
             icon_appearance_args(json_data, required_imports, :checkbox).each do |arg|
               code += ",\n" + indent("        #{arg}", depth)
@@ -235,13 +249,13 @@ module KjuiTools
             icon = map_icon_name(json_data['icon'] || 'star')
             selected_icon = map_icon_name(json_data['selectedIcon'] || 'star.fill')
             
-            code += "\n" + indent("    val isSelected = data.#{selected_var} == \"#{id}\"", depth)
+            code += "\n" + indent("    val isSelected = #{selected_expr}", depth)
             code += "\n" + indent("    IconButton(", depth)
             code += "\n" + indent("        onClick = { viewModel.updateData(mapOf(\"#{selected_var}\" to \"#{id}\")) }", depth)
             code += "\n" + indent("    ) {", depth)
             code += "\n" + indent("        Icon(", depth)
             code += "\n" + indent("            imageVector = if (isSelected) #{selected_icon} else #{icon},", depth)
-            code += "\n" + indent("            contentDescription = \"#{text}\",", depth)
+            code += "\n" + indent("            contentDescription = #{text_expr},", depth)
             
             if json_data['iconSize']
               code += "\n" + indent("            modifier = Modifier.size(#{json_data['iconSize'].to_i}.dp),", depth)
@@ -264,7 +278,7 @@ module KjuiTools
           else
             # Default RadioButton
             code += "\n" + indent("    RadioButton(", depth)
-            code += "\n" + indent("        selected = data.#{selected_var} == \"#{id}\",", depth)
+            code += "\n" + indent("        selected = #{selected_expr},", depth)
             code += "\n" + indent("        onClick = { viewModel.updateData(mapOf(\"#{selected_var}\" to \"#{id}\")) }", depth)
             icon_appearance_args(json_data, required_imports, :radio).each do |arg|
               code += ",\n" + indent("        #{arg}", depth)
@@ -274,15 +288,18 @@ module KjuiTools
           
           # Add text label
           if text && !text.empty?
-            code += "\n" + indent("    Spacer(modifier = Modifier.width(8.dp))", depth)
+            # `spacing` is the declared icon/label gap and was hard-coded at
+            # 8.dp, so no value of it could reach the output (plan 49 lane C:
+            # Radio.spacing, C0 unread + C1 dropped).
+            code += "\n" + indent("    Spacer(modifier = Modifier.width(#{radio_spacing_dp(json_data)}))", depth)
             # Add text with color
             if json_data['fontColor'] || json_data['textColor']
               text_color = json_data['fontColor'] || json_data['textColor']
               color_resolved = Helpers::ResourceResolver.process_color(text_color, required_imports)
-              code += "\n" + indent("    Text(\"#{text}\", color = #{color_resolved}#{label_font_args(json_data, required_imports)})", depth)
+              code += "\n" + indent("    Text(#{text_expr}, color = #{color_resolved}#{label_font_args(json_data, required_imports)})", depth)
             else
               # Default to black color
-              code += "\n" + indent("    Text(\"#{text}\", color = Color.Black#{label_font_args(json_data, required_imports)})", depth)
+              code += "\n" + indent("    Text(#{text_expr}, color = Color.Black#{label_font_args(json_data, required_imports)})", depth)
             end
           end
           
@@ -297,9 +314,14 @@ module KjuiTools
           # Add required import for clickable
           required_imports&.add(:clickable)
           
-          # Extract binding variable
+          # Extract binding variable. A STATIC `selectedValue` used to fall
+          # through to the empty string, so no value of it could reach the
+          # output — web settled this as `selectedValue === (value || id)`
+          # (plan 44 Phase 0) and reads both forms (plan 49 lane C, from D/G).
           selected_var = if selected_value && selected_value.match(/@\{([^}]+)\}/)
             "data.#{$1}"
+          elsif selected_value
+            Helpers::BoundValue.text(selected_value)
           else
             '""'
           end
@@ -358,7 +380,7 @@ module KjuiTools
             
             code += "\n" + indent("            }", depth)
             code += "\n" + indent("        )", depth)
-            code += "\n" + indent("        Spacer(modifier = Modifier.width(8.dp))", depth)
+            code += "\n" + indent("        Spacer(modifier = Modifier.width(#{radio_spacing_dp(json_data)}))", depth)
             # Add text with black color
             if json_data['fontColor'] || json_data['textColor']
               text_color = json_data['fontColor'] || json_data['textColor']
@@ -398,8 +420,13 @@ module KjuiTools
                        Helpers::ResourceResolver.process_color(json_data['iconColor'], required_imports)
           case control
           when :radio
-            selected = json_data['selectedColor'] &&
-                       Helpers::ResourceResolver.process_color(json_data['selectedColor'], required_imports)
+            # `checkedColor` is the cross-platform spelling of selectedColor
+            # and was honoured at the group level but not here, while its pair
+            # `uncheckedColor` WAS honoured just below — an asymmetric alias
+            # (plan 49 lane C: Radio.checkedColor).
+            selected_decl = json_data['selectedColor'] || json_data['checkedColor']
+            selected = selected_decl &&
+                       Helpers::ResourceResolver.process_color(selected_decl, required_imports)
             unselected = (json_data['unselectedColor'] || json_data['uncheckedColor']) &&
                          Helpers::ResourceResolver.process_color(json_data['unselectedColor'] || json_data['uncheckedColor'], required_imports)
             selected ||= icon_color
@@ -442,19 +469,57 @@ module KjuiTools
         # dynamic reads them since the parse-but-never-read wave).
         def self.label_font_args(json_data, required_imports)
           args = ''
-          weight = case json_data['font'].to_s.downcase
-                   when 'bold' then 'FontWeight.Bold'
-                   when 'semibold' then 'FontWeight.SemiBold'
-                   when 'medium' then 'FontWeight.Medium'
-                   end
+          # The local three-way `case` both duplicated the shared weight
+          # vocabulary (40: duplicated vocabulary drifts) and could not match a
+          # `"@{...}"`, so a bound font emitted no weight at all.
+          weight = json_data['font'] && Helpers::FontSpecHelper.weight_expression(json_data['font'])
           if weight
             required_imports&.add(:font_weight)
             args += ", fontWeight = #{weight}"
           end
           if json_data['fontSize']
-            args += ", fontSize = #{json_data['fontSize']}.sp"
+            # `#{...}.sp` raw put `@{v}.sp` in code position.
+            required_imports&.add(:text_unit) if Helpers::BoundValue.bound?(json_data['fontSize'])
+            args += ", fontSize = #{Helpers::BoundValue.sp(json_data['fontSize'], null_expr: 'TextUnit.Unspecified')}"
           end
           args
+        end
+
+        # This item's selected state. A declared `checked` wins; otherwise the
+        # group's selection variable decides, which is what every branch used
+        # to hard-code.
+        def self.radio_selected_expr(json_data, selected_var, id)
+          # `value` is this item's identity — the token the group's selection
+          # is compared against — and it defaulted to the view id because no
+          # converter read the spelling (plan 49 lane C, handed over from D).
+          # `selectedValue` is the group's current selection, declared on the
+          # item; web is canonical here and settled on
+          # `checked = selectedValue === (value || id)` (plan 44 Phase 0), so
+          # a STATIC selectedValue decides without any binding at all. G is
+          # implementing the same rule in DynamicRadioComponent, so codegen and
+          # dynamic stay in step.
+          token = json_data['value'] || id
+          selected_value = json_data['selectedValue']
+          group_test =
+            if selected_value && !Helpers::ModifierBuilder.is_binding?(selected_value)
+              "#{Helpers::BoundValue.text(selected_value)} == #{Helpers::BoundValue.text(token)}"
+            elsif selected_value
+              "data.#{Helpers::ModifierBuilder.extract_binding_property(selected_value)} == #{Helpers::BoundValue.text(token)}"
+            else
+              "data.#{selected_var} == #{Helpers::BoundValue.text(token)}"
+            end
+          return group_test unless json_data.key?('checked')
+
+          case Helpers::BoundValue.bool(json_data['checked'])
+          when :on then 'true'
+          when :off then 'false'
+          else Helpers::BoundValue.bool(json_data['checked'])
+          end
+        end
+
+        # The declared icon/label gap, `["number", "binding"]`, default 8.
+        def self.radio_spacing_dp(json_data)
+          Helpers::BoundValue.dp(json_data['spacing'] || 8)
         end
 
         def self.indent(text, level)

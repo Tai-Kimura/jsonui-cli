@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../helpers/content_scale_helper'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 
@@ -9,10 +10,14 @@ module KjuiTools
       class ImageComponent
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           # Image source priority: srcName > src > defaultImage >
-          # loadingImage > 'placeholder'. A STATIC Image has no in-flight
-          # state, so `loadingImage` can only mean fallback imagery here
-          # (the sjui converter makes the same call).
-          raw_src = json_data['srcName'] || json_data['src'] || json_data['defaultImage'] || json_data['loadingImage'] || 'placeholder'
+          # errorImage > loadingImage > 'placeholder'. A STATIC Image has no
+          # in-flight state, so `loadingImage` can only mean fallback imagery
+          # here (the sjui converter makes the same call) — and for the same
+          # reason `errorImage` belongs in the chain too. It was the only link
+          # missing on this platform; sjui has it (image_converter.rb:42).
+          # Plan 49 lane C, handed over from D.
+          raw_src = json_data['srcName'] || json_data['src'] || json_data['defaultImage'] ||
+                    json_data['errorImage'] || json_data['loadingImage'] || 'placeholder'
 
           # Add required imports
           required_imports&.add(:image)
@@ -68,12 +73,12 @@ module KjuiTools
             elsif w.is_a?(Numeric) && h.is_a?(Numeric)
               modifiers << ".size(#{w}.dp, #{h}.dp)"
             else
-              modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+              modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
             end
           elsif json_data['size']
             modifiers << ".size(#{json_data['size']}.dp)"
           else
-            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           end
 
           # Padding (inner spacing) - applied after size
@@ -85,26 +90,16 @@ module KjuiTools
 
           code += Helpers::ModifierBuilder.format(modifiers, depth)
           
-          # Content mode (case-insensitive)
+          # Content mode (case-insensitive). The vocabulary lives in
+          # ContentScaleHelper so Image and NetworkImage cannot drift apart
+          # again, and so a `@{...}` mode resolves at runtime instead of
+          # freezing to the default (plan 49 lane C: Image.contentMode).
           if json_data['contentMode']
             required_imports&.add(:content_scale)
-            mode = json_data['contentMode'].to_s.downcase
-            case mode
-            when 'aspectfill'
-              code += ",\n" + indent("contentScale = ContentScale.Crop", depth + 1)
-            when 'aspectfit'
-              code += ",\n" + indent("contentScale = ContentScale.Fit", depth + 1)
-            when 'fill', 'scaletofill'
-              code += ",\n" + indent("contentScale = ContentScale.FillBounds", depth + 1)
-            when 'center', 'top', 'bottom', 'left', 'right'
-              # Positional modes draw unscaled and aligned (UIKit contentMode
-              # positions — mirrors the dynamic component).
-              code += ",\n" + indent("contentScale = ContentScale.None", depth + 1)
-              alignment = {
-                'top' => 'Alignment.TopCenter', 'bottom' => 'Alignment.BottomCenter',
-                'left' => 'Alignment.CenterStart', 'right' => 'Alignment.CenterEnd',
-                'center' => 'Alignment.Center'
-              }[mode]
+            if (scale = Helpers::ContentScaleHelper.scale_expression(json_data['contentMode']))
+              code += ",\n" + indent("contentScale = #{scale}", depth + 1)
+            end
+            if (alignment = Helpers::ContentScaleHelper.alignment_expression(json_data['contentMode']))
               required_imports&.add(:alignment)
               code += ",\n" + indent("alignment = #{alignment}", depth + 1)
             end

@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative 'text_component'
+require_relative '../helpers/bound_value'
+require_relative 'textfield_component'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/binding_expression'
 require_relative '../helpers/resource_resolver'
@@ -205,7 +208,7 @@ module KjuiTools
             if json_data['width'] == 'matchParent' || !json_data['width']
               textfield_modifiers << ".fillMaxWidth()"
             else
-              textfield_modifiers.concat(Helpers::ModifierBuilder.build_size(size_source))
+              textfield_modifiers.concat(Helpers::ModifierBuilder.build_size(size_source, nil, required_imports))
             end
 
             # Height for multi-line
@@ -257,7 +260,7 @@ module KjuiTools
             if json_data['width'] == 'matchParent' || !json_data['width']
               modifiers << ".fillMaxWidth()"
             else
-              modifiers.concat(Helpers::ModifierBuilder.build_size(size_source))
+              modifiers.concat(Helpers::ModifierBuilder.build_size(size_source, nil, required_imports))
             end
 
             # Height for multi-line
@@ -309,15 +312,26 @@ module KjuiTools
             code += build_placeholder(json_data, placeholder, depth, required_imports)
           end
 
-          # Container inset - internal padding
-          if json_data['containerInset']
-            inset = json_data['containerInset']
+          # Container inset - internal padding.
+          #
+          # `edgeInset` is the UIKit spelling of the same content inset and the
+          # Compose TextView path read only `containerInset`, so the alias
+          # reached nothing (plan 49 lane C; E retracted the "Compose Text has
+          # no edgeInset" deprecation on 2026-08-05 — Label already maps it to
+          # `.padding()` in both codegen and the dynamic renderer, so it was
+          # unimplemented here, not impossible). sjui reads the same pair
+          # (`textview_converter.rb:166`). Array shapes of 1/2/4 are all
+          # accepted, matching the declaration.
+          inset = json_data['containerInset'] || json_data['edgeInset']
+          if inset
             if inset.is_a?(Array) && inset.length == 4
-              code += "\n" + indent("contentPadding = PaddingValues(top = #{inset[0]}.dp, end = #{inset[1]}.dp, bottom = #{inset[2]}.dp, start = #{inset[3]}.dp),", depth + 1)
+              code += "\n" + indent("contentPadding = PaddingValues(top = #{Helpers::BoundValue.dp(inset[0])}, end = #{Helpers::BoundValue.dp(inset[1])}, bottom = #{Helpers::BoundValue.dp(inset[2])}, start = #{Helpers::BoundValue.dp(inset[3])}),", depth + 1)
             elsif inset.is_a?(Array) && inset.length == 2
-              code += "\n" + indent("contentPadding = PaddingValues(vertical = #{inset[0]}.dp, horizontal = #{inset[1]}.dp),", depth + 1)
+              code += "\n" + indent("contentPadding = PaddingValues(vertical = #{Helpers::BoundValue.dp(inset[0])}, horizontal = #{Helpers::BoundValue.dp(inset[1])}),", depth + 1)
+            elsif inset.is_a?(Array) && inset.length == 1
+              code += "\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(inset[0])}),", depth + 1)
             elsif inset.is_a?(Numeric)
-              code += "\n" + indent("contentPadding = PaddingValues(#{inset}.dp),", depth + 1)
+              code += "\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(inset)}),", depth + 1)
             end
           end
 
@@ -380,7 +394,13 @@ module KjuiTools
 
           # Text styling — font attrs flow through Configuration.Font.resolve(FontSpec(...)).
           # fontColor stays inline as it's not part of the FontSpec contract.
-          if tv_resolved_var || json_data['fontColor']
+          # `textAlign` is declared on TextView and read by nobody on Compose
+          # (plan 49 lane C: TextView.textAlign). It belongs in the same
+          # TextStyle the font attrs already build, and reuses Label's
+          # vocabulary rather than growing a fourth copy of it.
+          tv_align = json_data['textAlign'] &&
+                     TextComponent.compose_text_align(json_data['textAlign'])
+          if tv_resolved_var || json_data['fontColor'] || tv_align
             required_imports&.add(:text_style)
             style_parts = []
             if tv_resolved_var
@@ -389,6 +409,10 @@ module KjuiTools
             if json_data['fontColor']
               font_color = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
               style_parts << "color = #{font_color}"
+            end
+            if tv_align
+              required_imports&.add(:text_align)
+              style_parts << "textAlign = #{tv_align}"
             end
             if style_parts.any?
               code += "\n" + indent("textStyle = TextStyle(#{style_parts.join(', ')}),", depth + 1)
@@ -402,21 +426,11 @@ module KjuiTools
           if json_data['keyboardType'] || json_data['input']
             required_imports&.add(:keyboard_type)
             input_type = json_data['keyboardType'] || json_data['input']
-            keyboard_type = case input_type.to_s.downcase
-            when 'email'
-              'KeyboardType.Email'
-            when 'number'
-              'KeyboardType.Number'
-            when 'decimal'
-              'KeyboardType.Decimal'
-            when 'phone'
-              'KeyboardType.Phone'
-            when 'url'
-              'KeyboardType.Uri'
-            else
-              'KeyboardType.Text'
-            end
-            keyboard_options << "keyboardType = #{keyboard_type}"
+            keyboard_type = Helpers::BoundValue.enum(
+              input_type, TextFieldComponent::INPUT_KEYBOARD,
+              bound_default: 'KeyboardType.Text', lowercase: true
+            )
+            keyboard_options << "keyboardType = #{keyboard_type}" if keyboard_type
           end
 
           if json_data['returnKeyType']
@@ -462,14 +476,25 @@ module KjuiTools
           end
 
           # Enabled state (boolean value context: supports `??` default and
-          # `@{!flag}` negation via the canonical binding parser)
-          if json_data.key?('enabled')
-            if json_data['enabled'].is_a?(String) && json_data['enabled'].start_with?('@{')
-              inner_expr = json_data['enabled'][2..-2]
-              code += "\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)},", depth + 1)
-            else
-              code += "\n" + indent("enabled = #{json_data['enabled']},", depth + 1)
-            end
+          # `@{!flag}` negation via the canonical binding parser).
+          #
+          # `editable` rides the same argument. It was declared on TextView and
+          # read by nobody on Compose — only `lib/xml`, which is frozen (plan
+          # 49 lane C: TextView.editable). Compose's own `readOnly` would be
+          # the closer word, but `CustomTextField` (KotlinJsonUI, another
+          # lane's file) does not expose it, and sjui already settled the
+          # semantic by mapping `editable: false` onto `.disabled`. So the two
+          # flags AND together into the one argument the library does expose.
+          if json_data.key?('enabled') || json_data.key?('editable')
+            enabled_state = json_data.key?('enabled') ? Helpers::BoundValue.bool(json_data['enabled']) : :on
+            editable_state = json_data.key?('editable') ? Helpers::BoundValue.bool(json_data['editable']) : :on
+            combined = Helpers::BoundValue.all_of(enabled_state, editable_state)
+            expr = case combined
+                   when :on then 'true'
+                   when :off then 'false'
+                   else combined
+                   end
+            code += "\n" + indent("enabled = #{expr},", depth + 1)
           end
 
           # Remove trailing comma and close

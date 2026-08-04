@@ -40,6 +40,52 @@ module KjuiTools
           code
         end
 
+        # `scrollAnchor` decides WHERE the scrollTo target lands in the
+        # viewport. kjui read the attribute into a local (line ~289) and then
+        # used it nowhere — neither the grid path nor the stack path (plan 49
+        # lane C, handed over from D). sjui expresses it as
+        # `scrollProxy.scrollTo(i, anchor: .center)`; Compose's equivalent is
+        # the second parameter of `animateScrollToItem`, which positions the
+        # item relative to the viewport start (a NEGATIVE offset pushes it
+        # down, so `center` is half a viewport and `bottom` a full one).
+        #
+        # Emitted only when the attribute is EXPLICITLY declared. The SSoT
+        # says the default is `bottom`, but every existing Compose layout has
+        # been scrolling to the top since this path was written, so applying
+        # the documented default here would silently move real screens. That
+        # discrepancy is a finding for the SSoT lane, not something to close
+        # by changing behaviour under existing consumers.
+        # The declared default, in ONE place. It used to be written only in the
+        # grid path — a dead local `json_data['scrollAnchor'] || 'bottom'` that
+        # nothing read — while the stack/list path had no default at all, so
+        # the same component carried two different answers for the same
+        # question (plan 49 lane C; E measured ios / web / Compose grid at
+        # `bottom` and Compose list at `top`, making list the lone outlier).
+        # Measured 2026-08-05 (both paths, this checkout): with no
+        # `scrollAnchor` declared BOTH emit a bare `animateScrollToItem(index)`
+        # — i.e. both land at the TOP. There is no code-level "grid is already
+        # bottom"; the only place the word `bottom` was ever written was the
+        # dead grid-path local, which is what made the two paths look like they
+        # disagreed. Applying this default for real would move BOTH paths, not
+        # just the list one, so it stays declared-but-unapplied: flipping it on
+        # is a one-line change once the SSoT lane rules on it.
+        DEFAULT_SCROLL_ANCHOR = 'bottom'
+
+        def self.scroll_anchor_offset_code(json_data, state_var, depth)
+          # Applied only when EXPLICITLY declared. Honouring the default here
+          # would retroactively move every existing Collection that scrolls
+          # programmatically, and this path has been landing at the top since
+          # it was written. Both paths now share this one gate, so neither can
+          # drift from the other; whether the declared default should also be
+          # applied is a behaviour change that belongs to the SSoT lane.
+          anchor = json_data['scrollAnchor'].to_s
+          return ['', ''] unless %w[center bottom].include?(anchor)
+
+          viewport = "(#{state_var}.layoutInfo.viewportEndOffset - #{state_var}.layoutInfo.viewportStartOffset)"
+          offset = anchor == 'center' ? "-(#{viewport} / 2)" : "-#{viewport}"
+          [indent("val scrollAnchorOffset = #{offset}", depth + 1) + "\n", ', scrollAnchorOffset']
+        end
+
         def self.default_scroll_anchor?(json_data)
           return false unless %w[center bottom].include?(json_data['defaultScrollAnchor'].to_s)
 
@@ -263,12 +309,12 @@ module KjuiTools
 
           if !is_horizontal && width_value == 'wrapContent'
             modified_json = json_data.merge('width' => 'matchParent')
-            modifiers.concat(Helpers::ModifierBuilder.build_size(modified_json))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(modified_json, nil, required_imports))
           elsif is_horizontal && height_value == 'wrapContent'
             modified_json = json_data.merge('height' => 'matchParent')
-            modifiers.concat(Helpers::ModifierBuilder.build_size(modified_json))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(modified_json, nil, required_imports))
           else
-            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           end
 
           # 3. Alpha + Background (clip + background)
@@ -286,7 +332,6 @@ module KjuiTools
 
           # scrollTo support - add LazyGridState
           scroll_to = json_data['scrollTo']
-          scroll_anchor = json_data['scrollAnchor'] || 'bottom'
           cell_id_property = json_data['cellIdProperty']
           has_scroll_to = scroll_to && scroll_to.match(/@\{([^}]+)\}/)
 
@@ -310,16 +355,18 @@ module KjuiTools
                           indent("if (raw.isEmpty()) return@LaunchedEffect", depth + 1) + "\n" +
                           indent("val index = raw.substringBefore(\"#\").toIntOrNull() ?: return@LaunchedEffect", depth + 1) + "\n"
 
+            anchor_decl, anchor_arg = scroll_anchor_offset_code(json_data, 'gridState', depth)
+            scroll_code += anchor_decl
             if animated_prop
               scroll_code += indent("if (index >= 0) {", depth + 1) + "\n" +
                              indent("if (data.#{animated_prop}) {", depth + 2) + "\n" +
-                             indent("gridState.animateScrollToItem(index)", depth + 3) + "\n" +
+                             indent("gridState.animateScrollToItem(index#{anchor_arg})", depth + 3) + "\n" +
                              indent("} else {", depth + 2) + "\n" +
-                             indent("gridState.scrollToItem(index)", depth + 3) + "\n" +
+                             indent("gridState.scrollToItem(index#{anchor_arg})", depth + 3) + "\n" +
                              indent("}", depth + 2) + "\n" +
                              indent("}", depth + 1) + "\n"
             else
-              scroll_code += indent("if (index >= 0) gridState.animateScrollToItem(index)", depth + 1) + "\n"
+              scroll_code += indent("if (index >= 0) gridState.animateScrollToItem(index#{anchor_arg})", depth + 1) + "\n"
             end
 
             scroll_code += indent("}", depth) + "\n"
@@ -672,7 +719,7 @@ module KjuiTools
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
@@ -807,7 +854,7 @@ module KjuiTools
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
@@ -905,7 +952,7 @@ module KjuiTools
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
@@ -1026,7 +1073,7 @@ module KjuiTools
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
@@ -1186,12 +1233,12 @@ module KjuiTools
           # bounded cross-axis size. Promote wrapContent → matchParent for safety.
           if !is_horizontal && width_value == 'wrapContent'
             modified = json_data.merge('width' => 'matchParent')
-            modifiers.concat(Helpers::ModifierBuilder.build_size(modified))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(modified, nil, required_imports))
           elsif is_horizontal && height_value == 'wrapContent'
             modified = json_data.merge('height' => 'matchParent')
-            modifiers.concat(Helpers::ModifierBuilder.build_size(modified))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(modified, nil, required_imports))
           else
-            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           end
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
@@ -1227,12 +1274,14 @@ module KjuiTools
             code += indent("val raw = data.#{scroll_prop}", depth + 1) + "\n"
             code += indent("if (raw.isEmpty()) return@LaunchedEffect", depth + 1) + "\n"
             code += indent("val index = raw.substringBefore(\"#\").toIntOrNull() ?: return@LaunchedEffect", depth + 1) + "\n"
+            stack_anchor_decl, stack_anchor_arg = scroll_anchor_offset_code(json_data, 'collectionStackState', depth)
+            code += stack_anchor_decl
             if animated_prop
               code += indent("if (index >= 0) {", depth + 1) + "\n"
-              code += indent("if (data.#{animated_prop}) collectionStackState.animateScrollToItem(index) else collectionStackState.scrollToItem(index)", depth + 2) + "\n"
+              code += indent("if (data.#{animated_prop}) collectionStackState.animateScrollToItem(index#{stack_anchor_arg}) else collectionStackState.scrollToItem(index#{stack_anchor_arg})", depth + 2) + "\n"
               code += indent("}", depth + 1) + "\n"
             else
-              code += indent("if (index >= 0) collectionStackState.animateScrollToItem(index)", depth + 1) + "\n"
+              code += indent("if (index >= 0) collectionStackState.animateScrollToItem(index#{stack_anchor_arg})", depth + 1) + "\n"
             end
             code += indent("}", depth) + "\n"
             code += default_scroll_anchor_code(json_data, 'collectionStackState', depth, required_imports)

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require_relative 'bound_value'
 
 module KjuiTools
   module Compose
@@ -63,6 +64,9 @@ module KjuiTools
         def self.emit_resolve_block(var_name, font_spec_args, depth, required_imports = nil)
           required_imports&.add(:configuration)
           required_imports&.add(:font_spec)
+          # A BOUND fontSize resolves to `TextUnit.Unspecified` when the
+          # property is null — 0.sp would render the text invisible.
+          required_imports&.add(:text_unit) if font_spec_args[:size].to_s.include?('TextUnit')
 
           indent("val #{var_name} = Configuration.Font.resolve(FontSpec(", depth) +
             "\n" + indent("family = #{font_spec_args[:family]},", depth + 1) +
@@ -124,6 +128,40 @@ module KjuiTools
           'FontWeight.Normal'
         end
 
+        # Kotlin `FontWeight` expression for a `font` / `fontWeight` value that
+        # MAY be bound. `weight_literal_for` deliberately returns nil for a
+        # binding, and every caller then fell through to a `== 'bold'` test
+        # that a `"@{...}"` string can never satisfy — so a bound weight froze
+        # to `FontWeight.Normal` (plan 49 lane C: CheckBox.font, Radio.font,
+        # Button.fontWeight). A binding now emits the whole mapping as a
+        # runtime `when`, so the declared weight is honoured.
+        #
+        # Returns nil for an absent value, so callers keep their "emit nothing"
+        # branch.
+        def self.weight_expression(value, default: 'FontWeight.Normal')
+          return nil if value.nil? || value == ''
+
+          unless BoundValue.bound?(value)
+            return weight_literal_for(value)
+          end
+
+          # The static path downcases before the lookup, so the runtime one has
+          # to as well or `"Bold"` would miss every arm.
+          BoundValue.enum(value, bound_weight_mapping, default: default, lowercase: true)
+        end
+
+        # The weight vocabulary as one flat `spelling => FontWeight.X` table:
+        # the shared mapping plus every alias that resolves into it. Only used
+        # for the bound case, where the whole table has to be emitted.
+        def self.bound_weight_mapping
+          mapping = weight_mapping
+          table = mapping.dup
+          WEIGHT_ALIASES.each do |alias_key, target|
+            table[alias_key] = mapping[target] if mapping.key?(target)
+          end
+          table
+        end
+
         # Determine whether a `font` JSON value is a weight name (vs a custom
         # family name like "Roboto-Regular").
         def self.weight_name?(value)
@@ -166,11 +204,13 @@ module KjuiTools
         def self.build_weight_literal(json_data, required_imports)
           if json_data['font']
             value = json_data['font'].to_s
-            if value.match?(/^@\{.*\}$/)
-              variable = value.match(/@\{([^}]+)\}/)[1]
+            if BoundValue.bound?(value)
               required_imports&.add(:font_weight)
-              # Bound binding returns a String at runtime; convert to FontWeight inline.
-              return "if (data.#{variable} == \"bold\") FontWeight.Bold else FontWeight.Normal"
+              # The bound branch used to be `if (data.x == "bold") Bold else
+              # Normal` — every other weight in the vocabulary collapsed to
+              # Normal, and the comparison could not see a `?? default`.
+              # weight_expression emits the whole mapping.
+              return weight_expression(value)
             end
             if weight_name?(value)
               required_imports&.add(:font_weight)
@@ -181,7 +221,10 @@ module KjuiTools
           if json_data['fontWeight']
             value = json_data['fontWeight'].to_s
             required_imports&.add(:font_weight)
-            return weight_literal_for(value)
+            # `weight_literal_for` returns nil for a binding, so a bound
+            # fontWeight used to vanish from FontSpec entirely (plan 49 lane C,
+            # Button.fontWeight).
+            return weight_expression(value)
           end
 
           nil
@@ -189,7 +232,8 @@ module KjuiTools
 
         def self.build_size_literal(json_data)
           return nil unless json_data['fontSize']
-          "#{json_data['fontSize']}.sp"
+          # `#{...}.sp` raw interpolation put `@{v}.sp` in code position.
+          BoundValue.sp(json_data['fontSize'], null_expr: 'TextUnit.Unspecified')
         end
 
         # Candidate paths for the shared weight mapping, tried in order.

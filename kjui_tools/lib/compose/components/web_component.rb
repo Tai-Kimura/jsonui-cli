@@ -93,7 +93,7 @@ module KjuiTools
           if !json_data['width'] && !json_data['height']
             modifiers << ".fillMaxSize()"
           else
-            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           end
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))

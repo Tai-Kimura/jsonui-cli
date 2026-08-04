@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'text_component'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/font_spec_helper'
@@ -38,7 +39,12 @@ module KjuiTools
           # Pressed-state colours need an owned InteractionSource: Material3
           # ButtonDefaults has no pressed slot, so the container/content
           # colours become conditional on collectIsPressedAsState.
-          highlight_bg = json_data['highlightBackground']
+          # `tapBackground` is the declared cross-platform spelling of "the
+          # background while pressed"; the whole pressed-state machinery below
+          # already exists and simply was not reading it, so a declaration went
+          # nowhere on Compose (plan 49 lane C: Button.tapBackground,
+          # common.tapBackground — sjui and rjui both read both spellings).
+          highlight_bg = json_data['tapBackground'] || json_data['highlightBackground']
           highlight_font = Core::Normalization.attr_lookup(json_data, 'highlightColor', 'hilightColor')
           pressed_var = nil
           code = ''
@@ -80,7 +86,7 @@ module KjuiTools
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           # onLongPress: Button's own inner .clickable consumes the down event
@@ -189,10 +195,30 @@ module KjuiTools
             color_params << "containerColor = #{base_bg}"
           end
 
-          if json_data['disabledBackground']
-            disabled_bg_color = Helpers::ResourceResolver.process_color(json_data['disabledBackground'], required_imports)
-            color_params << "disabledContainerColor = #{disabled_bg_color}"
-          end
+          # The disabled slots are UNCONDITIONAL, matching the comment three
+          # lines up ("Always set to match dynamic defaults") — which this
+          # method honoured for every slot except these two.
+          #
+          # Leaving them out does not mean "no opinion": Compose fills in
+          # ButtonDefaults' own M3 values (container `onSurface@12%`, content
+          # `onSurface@38%`), which are a different colour from the declared
+          # one at half alpha. The dynamic renderer falls back to
+          # `backgroundColor.copy(alpha = 0.5f)` / `textColor.copy(alpha =
+          # 0.5f)` (DynamicButtonComponent.kt:125-131) and web says the same
+          # thing with `disabled:opacity-50` (rjui button_converter.rb:94-99),
+          # so the codegen was the lone outlier.
+          #
+          # G reduced two CI parity deviations to this single root:
+          # `control_Button__enabled-False` (d=27, BOTH slots wrong) and
+          # `common_disabledBackground__static` (d=9, only the content slot —
+          # its container is declared and therefore already matched). The
+          # distance difference is itself the corroboration.
+          disabled_bg = if json_data['disabledBackground']
+                          Helpers::ResourceResolver.process_color(json_data['disabledBackground'], required_imports)
+                        else
+                          "#{base_bg}.copy(alpha = 0.5f)"
+                        end
+          color_params << "disabledContainerColor = #{disabled_bg}"
 
           base_font = if json_data['fontColor']
                         Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
@@ -206,10 +232,12 @@ module KjuiTools
             color_params << "contentColor = #{base_font}"
           end
 
-          if json_data['disabledFontColor']
-            disabled_font_color = Helpers::ResourceResolver.process_color(json_data['disabledFontColor'], required_imports)
-            color_params << "disabledContentColor = #{disabled_font_color}"
-          end
+          disabled_font = if json_data['disabledFontColor']
+                            Helpers::ResourceResolver.process_color(json_data['disabledFontColor'], required_imports)
+                          else
+                            "#{base_font}.copy(alpha = 0.5f)"
+                          end
+          color_params << "disabledContentColor = #{disabled_font}"
 
           colors_code += "\n" + color_params.map { |param| indent(param, depth + 2) }.join(",\n")
           colors_code += "\n" + indent(")", depth + 1)
@@ -329,7 +357,22 @@ module KjuiTools
         # the full context.
         def self.build_text_code(json_data, text, depth, required_imports)
           font_args = Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports)
-          return indent("Text(#{text})", depth) unless font_args[:has_any]
+          # `textAlign` is declared on Button and no converter read the
+          # spelling on either mobile platform (plan 49 lane C:
+          # Button.textAlign). The vocabulary is the shared one Label uses.
+          align = json_data['textAlign'] &&
+                  TextComponent.compose_text_align(json_data['textAlign'])
+          required_imports&.add(:text_align) if align
+          align_arg = align ? "\n" + indent("textAlign = #{align},", depth + 1) : ''
+
+          unless font_args[:has_any]
+            return indent("Text(#{text})", depth) if align_arg.empty?
+
+            return indent("Text(", depth) +
+                   "\n" + indent("text = #{text},", depth + 1) +
+                   align_arg.chomp(',') +
+                   "\n" + indent(")", depth)
+          end
 
           var_name = next_resolved_var
           resolve_block = Helpers::FontSpecHelper.emit_resolve_block(var_name, font_args, depth, required_imports)
@@ -337,6 +380,7 @@ module KjuiTools
 
           resolve_block + "\n" + indent("Text(", depth) +
             "\n" + indent("text = #{text},", depth + 1) +
+            align_arg +
             "\n" + text_arg_lines +
             "\n" + indent(")", depth)
         end

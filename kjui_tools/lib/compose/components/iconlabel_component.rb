@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'text_component'
+require_relative '../helpers/bound_value'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/font_spec_helper'
@@ -44,7 +46,7 @@ module KjuiTools
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
@@ -166,11 +168,22 @@ module KjuiTools
             code += "\n" + indent("color = #{color},", depth + 1)
           end
           if (size = json_data['fontSize'])
-            code += "\n" + indent("fontSize = #{size}.sp,", depth + 1)
+            required_imports&.add(:text_unit) if Helpers::BoundValue.bound?(size)
+            code += "\n" + indent("fontSize = #{Helpers::BoundValue.sp(size, null_expr: 'TextUnit.Unspecified')},", depth + 1)
           end
           if (weight = font_weight(json_data))
             required_imports&.add(:font_weight)
             code += "\n" + indent("fontWeight = #{weight},", depth + 1)
+          end
+          # `textShadow` — same `{color, blur, offset: [x, y]}` contract as
+          # Label (the UIKit runtime passes the identical JSON to both), and
+          # this component never reached ANY shadow path (plan 49 lane C:
+          # IconLabel.textShadow). The emitter is Label's, so the two cannot
+          # drift.
+          if json_data['textShadow']
+            required_imports&.add(:shadow_style)
+            shadow = TextComponent.text_shadow_expression(json_data['textShadow'], required_imports)
+            code += "\n" + indent("style = TextStyle(#{shadow}),", depth + 1)
           end
           code = code.chomp(',')
           code += "\n" + indent(")", depth)

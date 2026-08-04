@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../helpers/content_scale_helper'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 
@@ -44,29 +45,17 @@ module KjuiTools
           code += "\n" + indent("model = #{image_model(json_data, url, required_imports)},", depth + 1)
           code += "\n" + indent("contentDescription = \"#{content_description}\",", depth + 1)
 
-          # Content scale (case-insensitive check)
+          # Content scale (case-insensitive check). Shared vocabulary — see
+          # ContentScaleHelper. This caller keeps its own two quirks: an
+          # unknown mode falls back to Fit (Image emits nothing), and its
+          # alignment table has no `center` entry.
           if json_data['contentMode']
             required_imports&.add(:content_scale)
-            mode = json_data['contentMode'].to_s.downcase
-            scale = case mode
-            when 'aspectfit'
-              'ContentScale.Fit'
-            when 'aspectfill'
-              'ContentScale.Crop'
-            when 'fill', 'scaletofill'
-              'ContentScale.FillBounds'
-            when 'center', 'top', 'bottom', 'left', 'right'
-              # Positional modes draw unscaled and aligned (UIKit contentMode
-              # positions — mirrors the dynamic component).
-              'ContentScale.None'
-            else
-              'ContentScale.Fit'
-            end
+            scale = Helpers::ContentScaleHelper.scale_expression(json_data['contentMode'], default: 'ContentScale.Fit')
             code += "\n" + indent("contentScale = #{scale},", depth + 1)
-            alignment = {
-              'top' => 'Alignment.TopCenter', 'bottom' => 'Alignment.BottomCenter',
-              'left' => 'Alignment.CenterStart', 'right' => 'Alignment.CenterEnd'
-            }[mode]
+            alignment = Helpers::ContentScaleHelper.alignment_expression(
+              json_data['contentMode'], keys: %w[top bottom left right]
+            )
             if alignment
               required_imports&.add(:alignment)
               code += "\n" + indent("alignment = #{alignment},", depth + 1)
@@ -98,7 +87,7 @@ module KjuiTools
           if json_data['size']
             modifiers << ".size(#{json_data['size']}.dp)"
           else
-            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           end
 
           # clip/background (after size, before padding)
