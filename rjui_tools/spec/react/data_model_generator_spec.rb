@@ -351,6 +351,54 @@ RSpec.describe RjuiTools::React::DataModelGenerator do
     end
   end
 end
+# The CANONICAL selection spellings. Each of these converters reads its own
+# spelling and emits both a `data.<prop>` reference and a report-back handler
+# call derived from it, so a binding the data model does not declare becomes
+# TS2339 inside an @generated file the consumer cannot patch — the same shape
+# as the Radio TS2367 that blocked plan 49's push, reported by lane D.
+#
+# The conformance fixture corpus does NOT exercise these spellings (adding them
+# moved zero generated files), so these pins are the only thing guarding them.
+RSpec.describe RjuiTools::React::DataModelGenerator, 'canonical selection bindings' do
+  let(:generator) { described_class.new }
+
+  def bindings_for(node)
+    generator.send(:extract_value_bindings, node)
+  end
+
+  it 'declares a SelectBox selectedDate as a string' do
+    b = bindings_for({ 'type' => 'SelectBox', 'id' => 's', 'selectItemType' => 'Date',
+                       'selectedDate' => '@{pickedDate}' })
+    expect(b['pickedDate']).to include(type: 'string')
+  end
+
+  it 'declares a SelectBox selectedValue as a string' do
+    b = bindings_for({ 'type' => 'SelectBox', 'id' => 's', 'selectedValue' => '@{choice}' })
+    expect(b['choice']).to include(type: 'string')
+  end
+
+  it 'declares a Radio selectedValue, reported back through set<Prop>' do
+    b = bindings_for({ 'type' => 'Radio', 'id' => 'r', 'selectedValue' => '@{picked}' })
+    expect(b['picked']).to include(type: 'string', handler: :setter)
+    expect(generator.send(:value_binding_handler_name, 'picked', b['picked'])).to eq('setPicked')
+  end
+
+  it 'declares a Segment selectedIndex as a NUMBER, reported back through set<Prop>' do
+    b = bindings_for({ 'type' => 'Segment', 'id' => 'g', 'selectedIndex' => '@{tab}' })
+    expect(b['tab']).to include(type: 'number', handler: :setter)
+    expect(generator.send(:value_binding_handler_name, 'tab', b['tab'])).to eq('setTab')
+  end
+
+  it 'keeps the on<Prop>Change convention for everything else' do
+    b = bindings_for({ 'type' => 'SelectBox', 'id' => 's', 'selectedValue' => '@{choice}' })
+    expect(generator.send(:value_binding_handler_name, 'choice', b['choice'])).to eq('onChoiceChange')
+  end
+
+  it 'leaves a static selection alone — only bindings become data properties' do
+    expect(bindings_for({ 'type' => 'Radio', 'id' => 'r', 'selectedValue' => 'alpha' })).to be_empty
+  end
+end
+
 RSpec.describe RjuiTools::React::DataModelGenerator, 'focus-state value bindings' do
   let(:generator) { described_class.new }
 
