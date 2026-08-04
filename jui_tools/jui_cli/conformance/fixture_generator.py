@@ -178,11 +178,15 @@ def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> d
         layout,
         plan.host,
         base,
-        bound=rules.bound_data_entry(
-            plan.section, plan.attribute, plan.cases[0].value if plan.cases else None
-        )
-        if case.name == rules.BOUND_CASE_SUFFIX
-        else None,
+        bound=(
+            rules.bound_data_entry(
+                plan.section, plan.attribute, plan.cases[0].value if plan.cases else None
+            )
+            if case.name == rules.BOUND_CASE_SUFFIX
+            else rules.bound_union_data_entry(plan.section, plan.attribute)
+            if case.name == rules.BOUND_UNION_CASE_SUFFIX
+            else None
+        ),
     )
     return layout
 

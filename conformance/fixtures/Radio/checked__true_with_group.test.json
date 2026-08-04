@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/checked__true_with_group.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.checked (true_with_group)",
+    "description": "Conformance fixture for 'checked' on Radio (section: Radio, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "checked__true_with_group",
+      "description": "Conformance fixture for 'checked' on Radio (section: Radio, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_checked__true_with_group"
+        }
+      ]
+    }
+  ]
+}

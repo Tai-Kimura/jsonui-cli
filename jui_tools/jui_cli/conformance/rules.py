@@ -1401,7 +1401,63 @@ VARIANT_CASES: dict[tuple[str, str], dict[str, dict[str, Any]]] = {
     ("common", "borderStyle"): {
         "with_border": {"borderWidth": 2, "borderColor": "#FF0000"},
     },
+    # A LONE radio behaves the same however `checked` is prioritised against
+    # the group's selection state, which is why C's fix (133ff58) changed no
+    # picture and nothing would have noticed it being reverted. The behaviour
+    # only differs once the radio belongs to a group — and the failure it
+    # guards is loud: `checked: true` with a group produced a radio that never
+    # switched again. The lone fixture keeps its name and its verdict.
+    ("Radio", "checked"): {
+        "with_group": {"group": "conformance_group"},
+    },
 }
+
+#: A SECOND bound case for an attribute, declared under a different data class.
+#:
+#: Union-typed attributes are read one way by the generated Data type and
+#: another by the view — B found `Button.fontWeight` holding an Int while the
+#: view matched a string vocabulary, and two more like it, one of which failed
+#: the build. B then put the adjudication in a single place, and reported that
+#: the generalisation changed not one byte of output, "because no fixture
+#: declares a numeric property as String". This is that fixture.
+#:
+#: One representative is the point, not coverage: crossing "attribute" with
+#: "declared class" multiplies the suite, and the defect only needs a fixture
+#: that would notice it coming back.
+BOUND_UNION_CASES: dict[tuple[str, str], str] = {
+    # `weight` is declared `["number", "string", "binding"]`, so a String-typed
+    # property holding "1" is a legal spelling — and the exact shape that had
+    # the Data type and the view disagreeing.
+    ("common", "weight"): "String",
+}
+
+#: Case name and seed for the union probe above.
+BOUND_UNION_CASE_SUFFIX = "binding_as_string"
+BOUND_UNION_SEED = "1"
+
+
+def bound_union_case_for(section: str, attribute: str) -> CasePlan | None:
+    """The union-typed bound case, or None."""
+    if (section, attribute) not in BOUND_UNION_CASES:
+        return None
+    prop = f"{bound_prop_name(attribute)}Str"
+    return CasePlan(
+        name=BOUND_UNION_CASE_SUFFIX,
+        value=f"@{{{prop}}}",
+        written_key=attribute,
+    )
+
+
+def bound_union_data_entry(section: str, attribute: str) -> dict[str, Any] | None:
+    """The ``data`` declaration the union probe needs."""
+    cls = BOUND_UNION_CASES.get((section, attribute))
+    if cls is None:
+        return None
+    return {
+        "name": f"{bound_prop_name(attribute)}Str",
+        "class": cls,
+        "defaultValue": BOUND_UNION_SEED,
+    }
 
 
 def variant_bases_for(section: str, attribute: str) -> dict[str, dict[str, Any]]:
@@ -2045,6 +2101,7 @@ def plan_attribute(
     bound = bound_case_for(
         section, attribute, cases[0].assertions if cls == CLASS_ASSERTABLE else ()
     )
+    union = bound_union_case_for(section, attribute)
     if bound is not None:
         # A boolean attribute plans exactly one literal case (`true`), so the
         # codegen differential's "second value" search would have landed on the
@@ -2063,6 +2120,8 @@ def plan_attribute(
                 )
             )
         cases.append(bound)
+    if union is not None:
+        cases.append(union)
 
     return AttributePlan(
         section=section,

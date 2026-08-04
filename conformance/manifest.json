@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "ed696903716308210a918a2bfaa36f0c12f20272efd2b3691635ca54fe0e1b62",
   "counts": {
-    "fixtures": 849,
+    "fixtures": 851,
     "assertable": 33,
-    "visual": 700,
+    "visual": 701,
     "interactive": 35,
-    "control": 81,
+    "control": 82,
     "skipped": 151,
     "promoted": {
       "callback": 11
@@ -553,6 +553,29 @@
       "deprecated": null,
       "layout": "fixtures/common/weight__binding.layout.json",
       "test": "fixtures/common/weight__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/View__root.orientation-horizontal"
+    },
+    {
+      "id": "common/weight__binding_as_string",
+      "component": "common",
+      "attribute": "weight",
+      "case": "binding_as_string",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "weight",
+      "aliasOf": null,
+      "value": "@{boundWeightStr}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/weight__binding_as_string.layout.json",
+      "test": "fixtures/common/weight__binding_as_string.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/View__root.orientation-horizontal"
@@ -15468,15 +15491,15 @@
       "control": "__control/Radio"
     },
     {
-      "id": "Radio/checked__false",
+      "id": "Radio/checked__true_with_group",
       "component": "Radio",
       "attribute": "checked",
-      "case": "false",
+      "case": "true_with_group",
       "class": "visual",
       "host": "Radio",
       "writtenKey": "checked",
       "aliasOf": null,
-      "value": false,
+      "value": true,
       "platforms": [
         "ios",
         "android",
@@ -15484,11 +15507,11 @@
       ],
       "mode": null,
       "deprecated": null,
-      "layout": "fixtures/Radio/checked__false.layout.json",
-      "test": "fixtures/Radio/checked__false.test.json",
+      "layout": "fixtures/Radio/checked__true_with_group.layout.json",
+      "test": "fixtures/Radio/checked__true_with_group.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Radio"
+      "control": "__control/Radio__group-conformance-group"
     },
     {
       "id": "Radio/checked__binding",
@@ -18298,6 +18321,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/Radio__checked-True.layout.json",
       "test": "fixtures/__control/Radio__checked-True.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Radio__group-conformance-group",
+      "component": "__control",
+      "attribute": null,
+      "case": "Radio",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Radio__group-conformance-group.layout.json",
+      "test": "fixtures/__control/Radio__group-conformance-group.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
