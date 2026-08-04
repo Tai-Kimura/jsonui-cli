@@ -712,3 +712,35 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
     end
   end
 end
+
+# Plan 49 lane C — `scrollAnchor` decides where a programmatic scroll lands.
+# kjui read the attribute into a dead local and used it nowhere, on BOTH the
+# grid and the stack path, so every Compose collection landed at the top while
+# ios (sjui collection_converter.rb:1138) and web (rjui react_generator.rb:768)
+# both defaulted to `bottom` — as does the SSoT. Three against one, so the
+# outlier moved: this is a deliberate behaviour change for existing screens.
+RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
+  let(:scrolling) do
+    { 'type' => 'Collection', 'items' => '@{items}', 'scrollTo' => '@{target}' }
+  end
+
+  def anchor_lines(json)
+    described_class.generate(json, 0, Set.new, nil)
+                   .lines.select { |l| l =~ /animateScrollToItem|scrollAnchorOffset/ }
+                   .map(&:strip).join(' ')
+  end
+
+  it 'anchors an undeclared scroll at the bottom, matching ios and web' do
+    expect(anchor_lines(scrolling)).to include('animateScrollToItem(index, scrollAnchorOffset)')
+    expect(anchor_lines(scrolling)).to include('viewportEndOffset')
+  end
+
+  it 'lets an explicit top opt out of the offset entirely' do
+    expect(anchor_lines(scrolling.merge('scrollAnchor' => 'top')))
+      .to eq('if (index >= 0) gridState.animateScrollToItem(index)')
+  end
+
+  it 'halves the viewport for center' do
+    expect(anchor_lines(scrolling.merge('scrollAnchor' => 'center'))).to include('/ 2)')
+  end
+end

@@ -61,24 +61,35 @@ module KjuiTools
         # the same component carried two different answers for the same
         # question (plan 49 lane C; E measured ios / web / Compose grid at
         # `bottom` and Compose list at `top`, making list the lone outlier).
-        # Measured 2026-08-05 (both paths, this checkout): with no
-        # `scrollAnchor` declared BOTH emit a bare `animateScrollToItem(index)`
-        # — i.e. both land at the TOP. There is no code-level "grid is already
-        # bottom"; the only place the word `bottom` was ever written was the
-        # dead grid-path local, which is what made the two paths look like they
-        # disagreed. Applying this default for real would move BOTH paths, not
-        # just the list one, so it stays declared-but-unapplied: flipping it on
-        # is a one-line change once the SSoT lane rules on it.
+        # The declared default, in ONE place, and actually applied.
+        #
+        # It used to be written only in the grid path — a dead local
+        # `json_data['scrollAnchor'] || 'bottom'` that nothing read — while the
+        # stack/list path had no default at all. Measured on both paths: with
+        # no `scrollAnchor` declared, BOTH emitted a bare
+        # `animateScrollToItem(index)`, i.e. both landed at the TOP. So the two
+        # paths did not disagree with each other; together they disagreed with
+        # everyone else:
+        #
+        #   ios   bottom   sjui collection_converter.rb:1138
+        #   web   bottom   rjui react_generator.rb:768
+        #   SSoT  bottom   Collection.scrollAnchor "default"
+        #   kjui  top      <- the outlier, on both paths
+        #
+        # Three against one, so the outlier moves. This IS a behaviour change
+        # for existing Compose screens that scroll programmatically — they have
+        # been landing at the top — and it is the correct one: those screens
+        # have been drawing a different picture from their iOS and web
+        # counterparts the whole time (plan 49 lane C, orchestrator ruling
+        # 2026-08-05; goes in the v1.4.1 release notes).
         DEFAULT_SCROLL_ANCHOR = 'bottom'
 
         def self.scroll_anchor_offset_code(json_data, state_var, depth)
-          # Applied only when EXPLICITLY declared. Honouring the default here
-          # would retroactively move every existing Collection that scrolls
-          # programmatically, and this path has been landing at the top since
-          # it was written. Both paths now share this one gate, so neither can
-          # drift from the other; whether the declared default should also be
-          # applied is a behaviour change that belongs to the SSoT lane.
-          anchor = json_data['scrollAnchor'].to_s
+          # Both paths come through this one gate, so neither can drift from
+          # the other, and the declared default applies when the attribute is
+          # absent — see DEFAULT_SCROLL_ANCHOR for why that is a deliberate
+          # behaviour change rather than an oversight.
+          anchor = (json_data['scrollAnchor'] || DEFAULT_SCROLL_ANCHOR).to_s
           return ['', ''] unless %w[center bottom].include?(anchor)
 
           viewport = "(#{state_var}.layoutInfo.viewportEndOffset - #{state_var}.layoutInfo.viewportStartOffset)"
