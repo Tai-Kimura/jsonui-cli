@@ -301,7 +301,13 @@ module KjuiTools
             own = current_namespaces
             return strings_data if own.empty? || !strings_data.is_a?(Hash)
 
-            owned = own.filter_map { |ns| [ns, strings_data[ns]] if strings_data.key?(ns) }
+            # map+compact, not filter_map: kjui runs under the host's system
+            # Ruby in consumer projects, which on macOS is 2.6, and
+            # Enumerable#filter_map is 2.7+. The NoMethodError is caught by the
+            # per-file rescue, so the layout silently keeps its PREVIOUS
+            # generated file — the failure mode section_extractor.rb:625
+            # already documented. Plan 49 lane C.
+            owned = own.map { |ns| [ns, strings_data[ns]] if strings_data.key?(ns) }.compact
             return strings_data if owned.empty?
 
             owned.to_h.merge(strings_data.reject { |ns, _| own.include?(ns) })

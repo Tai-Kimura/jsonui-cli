@@ -65,7 +65,17 @@ module KjuiTools
       # either way, which is exactly why the version is named here.
       SCREEN_MARKER_MIN_LIBRARY_VERSION = '2.15.1'
 
+      # Layouts whose build raised. The exception is caught per file so one
+      # bad layout does not abandon the sweep, but a caught exception still
+      # means this layout HAS NO FRESH OUTPUT — `update_generated_file` never
+      # ran, so the previous generation stays on disk and looks current. The
+      # caller has to be able to see that (plan 49 lane C; the section
+      # extractor's own note at section_extractor.rb:625 warned about exactly
+      # this, for exactly this reason).
+      attr_reader :failed_files
+
       def initialize
+        @failed_files = []
         @config = Core::ConfigManager.load_config
         @source_path = Core::ProjectFinder.get_full_source_path || Dir.pwd
         source_directory = @config['source_directory'] || 'src/main'
@@ -247,8 +257,10 @@ module KjuiTools
 
         rescue JSON::ParserError => e
           Core::Logger.error "Failed to parse #{json_file}: #{e.message}"
+          @failed_files << json_file
         rescue => e
           Core::Logger.error "Failed to process #{json_file}: #{e.message}"
+          @failed_files << json_file
         end
       end
 

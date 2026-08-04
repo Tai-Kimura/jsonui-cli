@@ -351,6 +351,11 @@ module KjuiTools
           # last thing that noticed, which is exactly how a partial build
           # turned into a silent one. The build has to say so itself.
           # Plan 49 lane C, G's finding.
+          # ComposeBuilder catches per-file exceptions itself, so most
+          # failures never reach the rescue above — they arrive here.
+          failed_files.concat(builder.failed_files.map { |f| f.sub("#{layouts_dir}/", '') })
+          failed_files.uniq!
+
           unless failed_files.empty?
             Core::Logger.error "#{failed_files.length} layout(s) failed to build:"
             failed_files.each { |f| Core::Logger.error "  #{f}" }
