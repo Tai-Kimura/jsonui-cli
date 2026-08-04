@@ -361,3 +361,37 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
     end
   end
 end
+
+# Plan 49 lane C, G's pushback. `checked` is the "Initial checked state" — a
+# SEED, not an override. Letting it win pinned `selected = true` on a radio a
+# group was driving, and the radio never switched again. rjui is canonical
+# (`state_attrs = checked_attr if state_attrs.empty?`, radio_converter.rb:104):
+# selectedValue > group > checked.
+RSpec.describe KjuiTools::Compose::Components::RadioComponent do
+  def selected_for(json)
+    described_class.send(:radio_selected_expr, json, 'selectedRadiogroup', 'target')
+  end
+
+  it 'lets a declared group drive the selection even when checked is set' do
+    expect(selected_for('group' => 'g', 'checked' => true))
+      .to eq('data.selectedRadiogroup == "target"')
+  end
+
+  it 'lets selectedValue win over checked' do
+    expect(selected_for('selectedValue' => 'Beta', 'checked' => true)).to eq('"Beta" == "target"')
+  end
+
+  it 'compares against the bound selectedValue when it is a binding' do
+    expect(selected_for('selectedValue' => '@{sel}')).to eq('data.sel == "target"')
+  end
+
+  it 'honours checked on a lone radio with no group and no selectedValue' do
+    expect(selected_for('checked' => true)).to eq('true')
+    expect(selected_for('checked' => '@{on}')).to eq('(data.on ?: false)')
+  end
+
+  it 'compares against value when declared, falling back to the id' do
+    expect(selected_for('value' => 'optionB')).to eq('data.selectedRadiogroup == "optionB"')
+    expect(selected_for({})).to eq('data.selectedRadiogroup == "target"')
+  end
+end

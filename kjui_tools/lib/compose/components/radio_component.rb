@@ -489,27 +489,39 @@ module KjuiTools
         # group's selection variable decides, which is what every branch used
         # to hard-code.
         def self.radio_selected_expr(json_data, selected_var, id)
-          # `value` is this item's identity — the token the group's selection
-          # is compared against — and it defaulted to the view id because no
-          # converter read the spelling (plan 49 lane C, handed over from D).
-          # `selectedValue` is the group's current selection, declared on the
-          # item; web is canonical here and settled on
-          # `checked = selectedValue === (value || id)` (plan 44 Phase 0), so
-          # a STATIC selectedValue decides without any binding at all. G is
-          # implementing the same rule in DynamicRadioComponent, so codegen and
-          # dynamic stay in step.
-          token = json_data['value'] || id
+          # Precedence: `selectedValue` > group > `checked`.
+          #
+          # `value` is this item's identity — the token the selection is
+          # compared against — and it defaulted to the view id because no
+          # converter read the spelling. `selectedValue` is the group's current
+          # selection, declared on the item; web is canonical and settled on
+          # `checked = selectedValue === (value || id)` (plan 44 Phase 0), so a
+          # STATIC selectedValue decides with no binding at all.
+          #
+          # `checked` is a SEED, not an override. The SSoT calls it the
+          # "Initial checked state", and rjui reaches for it only when the
+          # selection attributes came back empty (`state_attrs = checked_attr
+          # if state_attrs.empty?`, radio_converter.rb:104, with :153 spelling
+          # out "a single radio with no group selection still honours
+          # `checked`"). This method used to let `checked` win outright, which
+          # pinned `selected = true` on a radio that a group was driving — the
+          # radio then never switched again. Plan 49 lane C, G's pushback:
+          # three sources against one, and this was the one.
+          token = Helpers::BoundValue.text(json_data['value'] || id)
           selected_value = json_data['selectedValue']
-          group_test =
-            if selected_value && !Helpers::ModifierBuilder.is_binding?(selected_value)
-              "#{Helpers::BoundValue.text(selected_value)} == #{Helpers::BoundValue.text(token)}"
-            elsif selected_value
-              "data.#{Helpers::ModifierBuilder.extract_binding_property(selected_value)} == #{Helpers::BoundValue.text(token)}"
-            else
-              "data.#{selected_var} == #{Helpers::BoundValue.text(token)}"
-            end
+
+          if selected_value
+            return "#{Helpers::BoundValue.text(selected_value)} == #{token}" unless Helpers::ModifierBuilder.is_binding?(selected_value)
+
+            return "data.#{Helpers::ModifierBuilder.extract_binding_property(selected_value)} == #{token}"
+          end
+
+          group_test = "data.#{selected_var} == #{token}"
+          # A declared group drives the selection, so the seed stays out of it.
+          return group_test if json_data['group']
           return group_test unless json_data.key?('checked')
 
+          # Lone radio, no group and no selectedValue: the seed is all there is.
           case Helpers::BoundValue.bool(json_data['checked'])
           when :on then 'true'
           when :off then 'false'
