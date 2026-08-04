@@ -65,6 +65,7 @@ Two structural blind spots, both inherited from what a Ruby codegen *is*:
 from __future__ import annotations
 
 import json
+import re
 import shlex
 import subprocess
 import tempfile
@@ -284,6 +285,10 @@ class JobTable:
     out_of_scope: list = field(default_factory=list)
     #: platform -> [{"id":…, "layout":…}] fed to that platform's probe script
     jobs: dict = field(default_factory=dict)
+    #: (component, attribute) -> CompanionSpec actually applied. Empty on a
+    #: plain run; the report prints it so a paired verdict always carries the
+    #: ledger statement its companions were derived from.
+    paired: dict = field(default_factory=dict)
 
 
 #: Label written into the `_generated` marker of every probe layout. The
@@ -311,6 +316,68 @@ def _target_node(layout: dict) -> dict:
     """The component under test inside a probe layout (always the last child)."""
     children = layout.get("child") or []
     return children[-1] if children else {}
+
+
+#: `@{` cannot legally appear in emitted Swift, Kotlin or TSX — every binding
+#: is supposed to have been resolved into a property access by the converter.
+#: Finding it in the output is proof the expression leaked into the source.
+_RAW_BINDING = re.compile(r"@\{")
+
+
+def _leak_line(text: str):
+    """`(line, match)` for the first `@{...}` leak in an emit, or `(None, None)`."""
+    for line in text.splitlines():
+        match = _RAW_BINDING.search(line)
+        if match:
+            return line, match
+    return None, None
+
+
+def _leak_context(text: str, width: int = 90) -> str:
+    """The emitted line the `@{...}` leak sits on, for the report."""
+    line, _ = _leak_line(text)
+    if line is None:
+        return ""
+    stripped = line.strip()
+    return stripped[:width] + (" …" if len(stripped) > width else "")
+
+
+def _leak_is_literal(text: str) -> bool:
+    """Whether the leak sits INSIDE a string literal rather than in code.
+
+    The distinction is the whole severity split, so it is measured rather than
+    assumed. `Text("@{v}")` compiles — and then shows the user the characters
+    `@{v}`. `fontSize = @{v}.sp` does not compile at all. Both are defects;
+    only the second stops the build, so they are reported as different classes
+    and must not be merged into one scary number.
+
+    Counting unescaped quotes before the match is enough for generated code:
+    the emitters produce one statement per line and never leave a string open
+    across lines.
+    """
+    line, match = _leak_line(text)
+    if line is None:
+        return False
+    prefix = line[: match.start()]
+    for quote in ('"', "'", "`"):
+        if (prefix.count(quote) - prefix.count("\\" + quote)) % 2 == 1:
+            return True
+    return False
+
+
+def _apply_companions(node: tuple, companions: dict) -> tuple:
+    """Write the companion attributes onto a probe layout's target node.
+
+    Applied to the control AND to every case alike, so the companions cancel
+    in the comparison and the only difference left is the attribute under
+    test. This is what makes a pair-required attribute judgeable at all —
+    see `companions` for where the pairs come from.
+    """
+    layout, data = node
+    target = _target_node(layout)
+    for key, value in companions.items():
+        target[key] = value
+    return layout, data
 
 
 # The probe converts the WHOLE fixture layout — root wrapper, anchor sibling
@@ -346,12 +413,18 @@ def _case_node(plan: rules.AttributePlan, value: Any) -> tuple[dict, list]:
     return layout, layout.get("data") or []
 
 
-def build_jobs(definitions: dict, platforms=PLATFORMS) -> JobTable:
+def build_jobs(definitions: dict, platforms=PLATFORMS, companion_specs: dict | None = None) -> JobTable:
     """Plan every probe and the per-platform emit jobs they need.
 
     The plan (host, base attributes, representative value, platform scope) is
     imported from `rules` / `fixture_generator` wholesale — this module adds
     only the second value and the bound form.
+
+    *companion_specs* (``{(component, attribute): CompanionSpec}``) turns the
+    run into the PAIRED probe: the companions are written on the control and
+    on every case, so they cancel and the attribute under test is again the
+    only difference. Attributes with no spec are probed exactly as before, so
+    the paired run is a superset rather than a separate lane.
     """
     table = JobTable(jobs={p: [] for p in platforms})
     seen_jobs: dict[str, set] = {p: set() for p in platforms}
@@ -445,6 +518,20 @@ def build_jobs(definitions: dict, platforms=PLATFORMS) -> JobTable:
                 if numeric != primary:
                     probe_nodes["numeric"] = _case_node(plan, numeric)
                 probe_nodes["numeric_string"] = _case_node(plan, _as_numeric_string(numeric))
+
+            # Paired probe. Applied last so it covers every node built above,
+            # control included — the companions have to cancel, or the probe
+            # would be measuring the companion instead of the attribute.
+            spec = (companion_specs or {}).get((section, attribute))
+            if spec is not None:
+                probe_nodes = {
+                    name: _apply_companions(node, spec.companions)
+                    for name, node in probe_nodes.items()
+                }
+                table.paired[(section, attribute)] = spec
+                control_carries_primary = (
+                    _target_node(probe_nodes["control"][0]).get(attribute, _MISSING) == primary
+                )
 
             probe = Probe(
                 component=section,
@@ -580,8 +667,33 @@ FINDING_CLASSES = {
     # C0 passes, C2 fails: the converter reacts to the attribute being present
     # but emits the same text for every value.
     "presence-only",
-    # C1: the bound form is dropped, or reaches the output without the value.
+    # C1: the bound form emits EXACTLY the control. The attribute vanishes;
+    # the layout renders as if it had never been written (plan 36's shape).
     "bound-dropped",
+    # C1: the bound form emits something, but the value did not travel — the
+    # converter evaluated the `@{...}` STRING as a boolean / number / enum and
+    # baked the result in as a constant. Ruby's type looseness is the whole
+    # mechanism: `"@{x}"` is truthy, `"@{x}".to_i` is 0, and `"@{x}" != 'none'`
+    # is true. This is WORSE than dropped and is why it is counted separately
+    # (2026-08-04 orchestrator adjudication, third new class after 34's
+    # `instrument-limited` and 43's `numeric-string`): dropping leaves the
+    # layout bare, freezing produces code that compiles, runs, and renders a
+    # wrong constant — and the SSoT says the value is legal, so no validator
+    # warns.
+    "bound-frozen",
+    # C1: the `@{...}` text reached the generated source VERBATIM, in CODE
+    # position. Not a wrong constant — not a program. `.border(@{v}.dp, …)` is
+    # not Kotlin and the build dies on it, which puts this at plan 43's
+    # severity rather than `bound-frozen`'s. Detected structurally: `@{` can
+    # never legally appear in emitted Swift/Kotlin/TSX.
+    "bound-uncompilable",
+    # C1: the same leak, but INSIDE a string literal — `Text("@{v}")`,
+    # `className="text-[@{v}px]"`. It compiles, so the build stays green, and
+    # then the characters `@{v}` are what the user sees (or a Tailwind class
+    # that matches nothing). Split from `bound-uncompilable` because "the
+    # build dies" and "the build passes and the screen is wrong" are different
+    # failures and merging them would inflate one scary number.
+    "bound-literal-leak",
     # C3: `10` and `"10"` emit different text. Advisory, not a defect
     # (2026-08-04 user ruling): a numeric string is not a number, every
     # platform's validator says so on that exact attribute, and `jui build` at
@@ -921,6 +1033,37 @@ def evaluate(table: JobTable, outputs: dict) -> EffectResult:
                     evidence={"control": _clip(control), "bound": _clip(bound)},
                 )
             )
+        elif _RAW_BINDING.search(bound):
+            # The `@{...}` text is sitting in the generated source. Checked
+            # BEFORE the name test because the probe variable IS named inside
+            # the leaked expression: `.border(@{juiProbeValue}.dp, …)` contains
+            # `juiProbeValue` and would otherwise read as a PASS. That is what
+            # it did read as until 2026-08-04 — 85 C1 judgements were passing
+            # on a leak.
+            literal = _leak_is_literal(bound)
+            result.findings.append(
+                Finding(
+                    probe.component, probe.attribute, probe.platform, "C1", probe.host,
+                    (
+                        "the `@{...}` expression reached the generated source "
+                        "inside a STRING literal — this compiles, and then puts "
+                        "the characters `@{...}` on screen (or into a dead "
+                        "class name) instead of the bound value"
+                        if literal else
+                        "the `@{...}` expression reached the generated source "
+                        "in CODE position — the emit is not a wrong program, it "
+                        "is not a program, and the build dies on it"
+                    ),
+                    finding_class=(
+                        "bound-literal-leak" if literal else "bound-uncompilable"
+                    ),
+                    evidence={
+                        "control": _clip(control),
+                        "bound": _clip(bound),
+                        "leak": _leak_context(bound),
+                    },
+                )
+            )
         elif BINDING_VAR not in bound:
             # The static and bound spellings are SUPPOSED to differ at this
             # stage (`h-[100px]` vs a style expression), so "differs from the
@@ -932,8 +1075,9 @@ def evaluate(table: JobTable, outputs: dict) -> EffectResult:
                 Finding(
                     probe.component, probe.attribute, probe.platform, "C1", probe.host,
                     f"the bound emit differs from the control but never names "
-                    f"`{BINDING_VAR}` — the value does not reach the output",
-                    finding_class="bound-dropped",
+                    f"`{BINDING_VAR}` — the binding was evaluated as a value "
+                    f"and frozen into the output as a constant",
+                    finding_class="bound-frozen",
                     evidence={"control": _clip(control), "bound": _clip(bound)},
                 )
             )
@@ -941,9 +1085,15 @@ def evaluate(table: JobTable, outputs: dict) -> EffectResult:
     return result
 
 
-def check(definitions: dict, repo_root, platforms=PLATFORMS, ruby: str = "ruby") -> EffectResult:
+def check(
+    definitions: dict,
+    repo_root,
+    platforms=PLATFORMS,
+    ruby: str = "ruby",
+    companion_specs: dict | None = None,
+) -> EffectResult:
     """Build the job table, run the three probes, and judge the outputs."""
-    table = build_jobs(definitions, platforms=platforms)
+    table = build_jobs(definitions, platforms=platforms, companion_specs=companion_specs)
     outputs = {}
     for platform in platforms:
         outputs[platform] = run_probe(repo_root, platform, table.jobs[platform], ruby=ruby)
@@ -1000,6 +1150,20 @@ def render_report(result: EffectResult, table: JobTable, platforms=PLATFORMS) ->
         ),
         "platforms": list(platforms),
         "probeModes": {p: PROBE_MODES[p] for p in platforms},
+        # Which attributes were probed WITH companions, and the ledger
+        # statement each companion set was derived from. A paired verdict is
+        # only as trustworthy as its pairing, so the derivation ships with it.
+        "paired": [
+            {
+                "component": spec.component,
+                "attribute": spec.attribute,
+                "companions": spec.companions,
+                "kind": spec.kind,
+                "source": spec.source,
+                **({"provisional": True, "reason": spec.reason} if spec.provisional else {}),
+            }
+            for spec in sorted(table.paired.values(), key=lambda s: s.key)
+        ],
         "counts": {
             "probes": result.probes,
             "checksRun": result.checks_run,

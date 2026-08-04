@@ -515,6 +515,19 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         help="Report only these judgements (repeatable; default: all)",
     )
     codegen.add_argument(
+        "--paired",
+        action="store_true",
+        help=(
+            "Paired probe: write the COMPANION attributes the adjudication "
+            "ledger says an attribute needs on the control and on every case "
+            "alike, so they cancel and the attribute under test is again the "
+            "only difference. Without it, an attribute the ledger rules inert "
+            "on its own (`borderWidth` needs `borderColor`) can only ever "
+            "measure the ruling. The companion sets are DERIVED from "
+            "attribute_semantics.json, never listed by hand"
+        ),
+    )
+    codegen.add_argument(
         "--json",
         dest="json_out",
         default=None,
@@ -1052,7 +1065,35 @@ def _cmd_codegen_effect(args: argparse.Namespace) -> int:
         return 1
     definitions = _json.loads(definitions_path.read_text(encoding="utf-8"))
 
-    table = ce.build_jobs(definitions, platforms=platforms)
+    companion_specs = None
+    if args.paired:
+        from ..conformance import companions as comp
+
+        semantics_path = definitions_path.parent / "attribute_semantics.json"
+        if not semantics_path.is_file():
+            print(f"ERROR: adjudication ledger not found: {semantics_path}")
+            return 1
+        semantics = _json.loads(semantics_path.read_text(encoding="utf-8")).get(
+            "semantics", {}
+        )
+        companion_specs = comp.derive(semantics, definitions)
+        print(
+            f"paired probe: {len(companion_specs)} attribute(s) carry companions "
+            f"derived from the adjudication ledger"
+        )
+        for spec in sorted(companion_specs.values(), key=lambda s: s.key):
+            flag = "  [PROVISIONAL — no ruling]" if spec.provisional else ""
+            print(f"  {spec.component}.{spec.attribute}: {spec.companions}{flag}")
+            print(f"      from {spec.source or '(nothing — see reason)'}")
+        for row in comp.unmeasurable_report():
+            print(
+                f"  not pairable: {', '.join(row['attributes'])} — {row['reason']}"
+            )
+        print()
+
+    table = ce.build_jobs(
+        definitions, platforms=platforms, companion_specs=companion_specs
+    )
     outputs = {}
     for platform in platforms:
         jobs = table.jobs[platform]
