@@ -325,9 +325,11 @@ module SjuiTools
           end
 
           # Apply border (after cornerRadius, before margins)
-          if @component['borderWidth'] && @component['borderColor']
-            color = get_swiftui_color(@component['borderColor'])
-            border_code = build_border_overlay(color, (@component['cornerRadius'] || 0).to_i, @component['borderWidth'].to_i)
+          # `style_source: nil` — TextField.borderStyle is the UIKit chrome
+          # vocabulary (roundedRect / line / bezel / none), a different
+          # attribute from common.borderStyle, and `text_field_style` above
+          # already handles it.
+          if (border_code = border_overlay(style_source: nil))
             @modifier_bag.register(:border, border_code)
           end
 

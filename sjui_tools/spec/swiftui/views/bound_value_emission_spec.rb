@@ -343,6 +343,41 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       expect(convert_tree(base.merge('borderStyle' => 'dotted'))).to include('lineCap: .round, dash: [2, 2 * 2]')
     end
 
+    # `borderWidth` is what summons a border; colour and style modify one that
+    # already exists. The AND gate this replaced dropped a declared width
+    # whenever no colour came with it.
+    it 'borderWidth alone draws, with the shared fallback colour' do
+      code = convert_tree('type' => 'View', 'borderWidth' => 2,
+                          'child' => [{ 'type' => 'Label', 'text' => 'a' }])
+      expect(code).to include('.stroke(Color.black, lineWidth: 2)')
+    end
+
+    it 'borderColor alone and borderStyle alone summon nothing' do
+      %w[borderColor borderStyle].zip(['#FF0000', 'dashed']).each do |key, value|
+        code = convert_tree('type' => 'View', key => value,
+                            'child' => [{ 'type' => 'Label', 'text' => 'a' }])
+        expect(code).not_to include('.stroke(')
+      end
+    end
+
+    it 'a bound width is a stroke width, not a zero one' do
+      code = convert_tree('type' => 'View', 'borderWidth' => '@{w}', 'borderColor' => '#FF0000',
+                          'child' => [{ 'type' => 'Label', 'text' => 'a' }])
+      expect_no_leak(code)
+      expect(code).to include('lineWidth: CGFloat(data.w ?? 0)')
+      # One overlay, not two: the binding handler used to register a second
+      # one over the top of this, and `:border` is a multi-value bag key.
+      expect(code.scan('.stroke(').length).to eq(1)
+    end
+
+    it 'a bound colour resolves through the same colour registry' do
+      code = convert_tree('type' => 'View', 'borderWidth' => 2, 'borderColor' => '@{c}',
+                          'child' => [{ 'type' => 'Label', 'text' => 'a' }])
+      expect_no_leak(code)
+      expect(code).to include('.stroke(SwiftJsonUIConfiguration.shared.getColor(for: data.c) ?? Color.black, lineWidth: 2)')
+      expect(code.scan('.stroke(').length).to eq(1)
+    end
+
     it 'a bound weight makes the parent a weighted stack' do
       static = convert_tree('type' => 'View', 'orientation' => 'horizontal',
                             'child' => [{ 'type' => 'Label', 'text' => 'a', 'weight' => 1 },

@@ -360,13 +360,8 @@ module SjuiTools
           end
 
           # ボーダー（cornerRadiusの直後、marginsの前に適用）
-          if @component['borderWidth'] && @component['borderColor']
-            border_color_value = @component['borderColor']
-            unless border_color_value.is_a?(String) && border_color_value.start_with?('@{')
-              color = get_swiftui_color(border_color_value)
-              border_code = build_border_overlay(color, (@component['cornerRadius'] || 0).to_i, @component['borderWidth'].to_i, @component['borderStyle'])
-              @modifier_bag.register(:border, border_code)
-            end
+          if (border_code = border_overlay)
+            @modifier_bag.register(:border, border_code)
           end
 
           # Apply binding-specific modifiers (borderColor, fontColor, etc.)

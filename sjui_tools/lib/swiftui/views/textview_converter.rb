@@ -296,9 +296,7 @@ module SjuiTools
           # so we skip them here
 
           # Apply border (after component's internal cornerRadius)
-          if @component['borderWidth'] && @component['borderColor']
-            color = get_swiftui_color(@component['borderColor'])
-            border_code = build_border_overlay(color, (@component['cornerRadius'] || 0).to_i, @component['borderWidth'].to_i, @component['borderStyle'])
+          if (border_code = border_overlay)
             @modifier_bag.register(:border, border_code)
           end
 

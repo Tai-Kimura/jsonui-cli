@@ -95,21 +95,19 @@ module SjuiTools
             ".tint(#{binding})"
           when 'tapBackground', 'highlightBackground'
             ".background(#{binding})"
-          # Border attributes
-          when 'borderWidth'
-            # Note: SwiftUI border requires overlay with stroke
-            corner = component['cornerRadius'] || 0
-            ".overlay(RoundedRectangle(cornerRadius: #{corner.to_i}).stroke(lineWidth: #{binding}))"
-          when 'borderColor'
-            # Note: SwiftUI border requires overlay with stroke
-            corner = component['cornerRadius'] || 0
-            border_width = component['borderWidth'] || 1
-            color_expr = resolve_color_binding_expr(binding)
-            ".overlay(RoundedRectangle(cornerRadius: #{corner.to_i}).stroke(#{color_expr}, lineWidth: #{border_width.to_i}))"
-          when 'borderStyle'
-            # Note: borderStyle (solid/dashed/dotted) requires StrokeStyle for dashed/dotted
-            # Dynamic binding of borderStyle is complex in SwiftUI - recommend static usage
-            nil
+          # Border attributes are NOT handled here, for the reasons padding
+          # is not (above): `BaseViewConverter#border_overlay` owns the whole
+          # rule — what summons a border, what colour it falls back to, and
+          # which stroke style it takes — and it reads the bound spelling
+          # through the canonical emitters.
+          #
+          # Both branches here were wrong in the same two ways. `borderWidth`
+          # emitted a stroke with NO colour, so a bound width drew in the
+          # foreground colour rather than the declared one. `borderColor`
+          # read the width with `.to_i`, which is 0 for a binding, so a bound
+          # pair drew a zero-width border. And `:border` is a multi-value bag
+          # key, so `register` replaced whatever the converter had already
+          # put there.
           when 'clipToBounds'
             # This branch only ever runs for a BINDING (the guard at the top
             # of the method returns for anything else), and it emitted an

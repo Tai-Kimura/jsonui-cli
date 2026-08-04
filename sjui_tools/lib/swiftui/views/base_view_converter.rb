@@ -457,17 +457,8 @@ module SjuiTools
 
           # ボーダー（cornerRadiusの直後、marginsの前に適用）
           # Dynamic mode: CommonModifiers.swift line 59
-          # Both-attributes guard — the canonical ruling lives in
-          # shared/core/attribute_semantics.json (border.widthAlone), verified
-          # by `jui conformance gate --cross-effect`.
-          if @component['borderWidth'] && @component['borderColor']
-            border_color_value = @component['borderColor']
-            # Skip if borderColor is a binding - handled by view_binding_handler
-            unless border_color_value.is_a?(String) && border_color_value.start_with?('@{')
-              color = get_swiftui_color(border_color_value)
-              border_code = build_border_overlay(color, (@component['cornerRadius'] || 0).to_i, @component['borderWidth'].to_i, @component['borderStyle'])
-              @modifier_bag.register(:border, border_code)
-            end
+          if (border_code = border_overlay)
+            @modifier_bag.register(:border, border_code)
           end
 
           # マージン（外側のスペース - SwiftUIではpaddingで実装）
@@ -975,6 +966,55 @@ module SjuiTools
         end
 
         # Build border overlay code as a single multi-line string
+        # The border overlay this component declares, or nil when it declares
+        # no border.
+        #
+        # **`borderWidth` is what summons a border.** A width of nothing is not
+        # a border, so `borderColor` and `borderStyle` are modifiers of
+        # something that has to already exist — writing either alone is like
+        # writing `fontColor` on a component with no text. `borderStyle`
+        # carries a `default` in the SSoT ("solid"), and a default STYLE
+        # presupposes a subject; it does not put a solid border on every view.
+        #
+        # This replaced an AND gate (`borderWidth && borderColor`) that
+        # dropped a declared width whenever no colour came with it. The colour
+        # then has to have a fallback: `Color.black`, matching UIKit's
+        # `CALayer.borderColor` default and the Compose lane's `Color.Black`.
+        # The three platforms taking the SAME fallback is what matters — the
+        # SSoT owes `borderColor` a `default` declaration, and when it lands
+        # this follows it.
+        #
+        # *style_source* is nil for TextField, whose `borderStyle` is a
+        # DIFFERENT attribute (UIKit chrome: roundedRect/line/bezel/none) and
+        # has its own handler.
+        def border_overlay(corner_default = 0, style_source: @component['borderStyle'])
+          width = @component['borderWidth']
+          return nil if width.nil?
+
+          corner = (@component['cornerRadius'] || corner_default).to_i
+          build_border_overlay(border_color_expr, corner, border_width_operand(width), style_source)
+        end
+
+        # The stroke width. A bound one is an expression — `.to_i` on a
+        # binding is 0, i.e. no border at all.
+        def border_width_operand(width)
+          bound_number(width) || width.to_i
+        end
+
+        # The stroke colour. Absent means the fallback above; a binding
+        # resolves through the same colour registry a literal does.
+        def border_color_expr
+          value = @component['borderColor']
+          return 'Color.black' if value.nil?
+
+          if bound_value?(value)
+            expr = SjuiTools::SwiftUI::Binding::BindingExpression.swift_value_expr(value[2..-2])
+            "SwiftJsonUIConfiguration.shared.getColor(for: #{expr}) ?? Color.black"
+          else
+            get_swiftui_color(value)
+          end
+        end
+
         def build_border_overlay(color, corner_radius, border_width, style = nil)
           indent_str = "    " * (@indent_level + 1)
           sub_indent = "    " * (@indent_level + 2)

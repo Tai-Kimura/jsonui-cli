@@ -256,9 +256,7 @@ module SjuiTools
           # Note: padding, background and cornerRadius are handled internally by SelectBoxView
 
           # Apply border (after component's internal cornerRadius)
-          if @component['borderWidth'] && @component['borderColor']
-            color = get_swiftui_color(@component['borderColor'])
-            border_code = build_border_overlay(color, (@component['cornerRadius'] || 8).to_i, @component['borderWidth'].to_i, @component['borderStyle'])
+          if (border_code = border_overlay(8))
             @modifier_bag.register(:border, border_code)
           end
 
