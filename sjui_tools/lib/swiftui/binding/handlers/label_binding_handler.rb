@@ -24,8 +24,10 @@ module SjuiTools
               # `.system(size:)` takes a CGFloat, and `parse_binding` hands
               # back the read-only VALUE expression — an Optional for any
               # property without a data-section default, which does not
-              # compile. The numeric context has its own canonical emitter.
-              ".font(.system(size: #{BindingExpression.swift_number_expr(value[2..-2])}))"
+              # compile. `swift_number_expr` fixes the optionality and not the
+              # TYPE: a `fontSize` declared `Int` still is not a CGFloat.
+              # `bound_number` does both.
+              ".font(.system(size: #{bound_number(value)}))"
             end
           when 'font'
             if is_binding?(value)

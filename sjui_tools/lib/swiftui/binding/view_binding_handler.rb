@@ -2,6 +2,7 @@
 
 require_relative 'binding_expression'
 require_relative '../views/color_helper'
+require_relative '../views/value_expression_helper'
 
 module SjuiTools
   module SwiftUI
@@ -13,6 +14,11 @@ module SjuiTools
         # `getColor(for:)` and to pass a `Color`-typed property straight
         # through, which is a distinction this class had no way to make.
         include SjuiTools::SwiftUI::Views::ColorHelper
+        # …and the same for the numeric slots. `parse_binding` answers "what
+        # does this expression read", which is not the same question as "what
+        # does this SLOT need": a `cornerRadius` declared `Int` in the data
+        # section is a perfectly good read and still not a CGFloat.
+        include SjuiTools::SwiftUI::Views::ValueExpressionHelper
 
         def initialize
           @binding_code = []
@@ -55,25 +61,34 @@ module SjuiTools
             nil
           when 'background'
             ".background(#{get_swiftui_color(value)})"
+          # Numeric slots. These handed the property over bare, so a
+          # `cornerRadius` declared `Int` — the ordinary way to declare one —
+          # emitted `.cornerRadius(data.r)` and the build died on
+          # `cannot convert value of type 'Int'`. `bound_number` casts as well
+          # as unwrapping; the canonical expression emitters answer
+          # optionality alone, which is only half of what a CGFloat slot
+          # needs. Found by diffing declared data types against use sites
+          # across the whole generated tree (plan 49; the ios host build only
+          # ever showed the first of them).
           when 'cornerRadius'
-            ".cornerRadius(#{binding})"
+            ".cornerRadius(#{bound_number(value)})"
           when 'opacity', 'alpha'
-            ".opacity(#{binding})"
+            ".opacity(#{bound_number(value, cast: 'Double')})"
           when 'disabled'
-            ".disabled(#{binding})"
+            ".disabled(#{BindingExpression.swift_bool_expr(value[2..-2])})"
           # Size constraints
           when 'width'
-            ".frame(width: #{binding})"
+            ".frame(width: #{bound_number(value)})"
           when 'height'
-            ".frame(height: #{binding})"
+            ".frame(height: #{bound_number(value)})"
           when 'minWidth'
-            ".frame(minWidth: #{binding})"
+            ".frame(minWidth: #{bound_number(value)})"
           when 'maxWidth'
-            ".frame(maxWidth: #{binding})"
+            ".frame(maxWidth: #{bound_number(value)})"
           when 'minHeight'
-            ".frame(minHeight: #{binding})"
+            ".frame(minHeight: #{bound_number(value)})"
           when 'maxHeight'
-            ".frame(maxHeight: #{binding})"
+            ".frame(maxHeight: #{bound_number(value)})"
           # Padding and margin are NOT handled here.
           #
           # `SpacingHelper#apply_padding` / `#apply_margins` read every
@@ -142,7 +157,7 @@ module SjuiTools
             ".clipToBounds(#{BindingExpression.swift_bool_expr(value[2..-2])})"
           # User interaction
           when 'userInteractionEnabled', 'canTap'
-            ".allowsHitTesting(#{binding})"
+            ".allowsHitTesting(#{BindingExpression.swift_bool_expr(value[2..-2])})"
           else
             nil
           end

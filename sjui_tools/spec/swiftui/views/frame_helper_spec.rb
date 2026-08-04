@@ -138,7 +138,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::FrameHelper do
       helper = helper_class.new({ 'type' => 'View', 'idealHeight' => '@{rowHeight}' })
       helper.apply_frame_constraints
 
-      expect(helper.generated_code.join("\n")).to include('idealHeight: data.rowHeight')
+      expect(helper.generated_code.join("\n")).to include('idealHeight: CGFloat(data.rowHeight ?? 0)')
     end
 
     it 'emits nothing when absent' do

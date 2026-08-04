@@ -403,6 +403,33 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {}
     end
 
+    # `swift_number_expr` answers optionality; it does not answer TYPE. A
+    # `cornerRadius` declared `Int` in the data section — the ordinary way to
+    # declare one — is a perfectly good read and still not a CGFloat. Only the
+    # first of these stopped the ios host build; the rest came out of diffing
+    # declared data types against use sites across the generated tree.
+    it 'every dimension slot casts as well as unwraps' do
+      cases = {
+        'cornerRadius' => '.cornerRadius(CGFloat(data.n ?? 0))',
+        'minWidth' => 'minWidth: CGFloat(data.n ?? 0)',
+        'maxWidth' => 'maxWidth: CGFloat(data.n ?? 0)',
+        'minHeight' => 'minHeight: CGFloat(data.n ?? 0)',
+        'maxHeight' => 'maxHeight: CGFloat(data.n ?? 0)',
+        'idealWidth' => 'idealWidth: CGFloat(data.n ?? 0)'
+      }
+      cases.each do |attribute, expected|
+        code = convert_tree('type' => 'View', attribute => '@{n}',
+                            'child' => [{ 'type' => 'Label', 'text' => 'a' }])
+        expect_no_leak(code)
+        expect(code).to include(expected), "#{attribute} must cast, not just unwrap"
+      end
+    end
+
+    it 'a bound Label fontSize reaches the font modifier as a CGFloat' do
+      code = convert(:LabelConverter, 'type' => 'Label', 'text' => 'a', 'fontSize' => '@{size}')
+      expect(code).to include('.font(.system(size: CGFloat(data.size ?? 0)))')
+    end
+
     it 'a bound clipToBounds resolves at render time' do
       expect(convert_tree('type' => 'View', 'clipToBounds' => true,
                           'child' => [{ 'type' => 'Label', 'text' => 'a' }]))

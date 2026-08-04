@@ -1,9 +1,12 @@
+require_relative 'value_expression_helper'
 require_relative 'responsive_helper'
 
 module SjuiTools
   module SwiftUI
     module Views
       module FrameHelper
+        include ValueExpressionHelper
+
         # idealWidth / idealHeight — the SwiftUI layout system's preferred size.
         #
         # Emitted as SEPARATE `.frame()` calls, deliberately, because that is
@@ -355,13 +358,25 @@ module SjuiTools
         end
 
         # バインディング式からSwiftUIの値を抽出（frame値はread-only）
+        # A bound dimension as the Swift operand a frame slot needs.
+        #
+        # Every caller is a length — `idealWidth`, `minWidth`/`maxWidth`,
+        # `minHeight`/`maxHeight`, `width`, `height` — and every one of those
+        # slots is a CGFloat. This built `data.<everything between the
+        # braces>` with its own regexp instead: the FIFTH copy of the bypass
+        # plan 43 replaced for margins and this lane replaced for
+        # `extract_binding_property`, `extract_margin_binding_value` and the
+        # button text interpolation (kjui's `process_dimension` is the same
+        # shape). It carried an inline `?? default` out unbracketed, never
+        # unwrapped an Optional, and — the part that stopped the build — never
+        # cast, so a `minWidth` declared `Int` emitted
+        # `.frame(minWidth: data.w)`.
+        #
+        # `bound_number` is the canonical answer to all three.
         def extract_binding_value(value)
           return value unless value.is_a?(String)
-          if value =~ /^@\{(.+)\}$/
-            "data.#{$1}"
-          else
-            value
-          end
+
+          bound_number(value) || value
         end
       end
     end

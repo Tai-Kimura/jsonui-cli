@@ -104,7 +104,7 @@ RSpec.describe SjuiTools::SwiftUI::Binding::ViewBindingHandler do
       # cornerRadius takes CGFloat (read-only), so uses data. not $data.
       it 'returns cornerRadius modifier' do
         result = handler.handle_common_binding(component, 'cornerRadius', '@{radius}')
-        expect(result).to eq('.cornerRadius(data.radius)')
+        expect(result).to eq('.cornerRadius(CGFloat(data.radius ?? 0))')
       end
     end
 
@@ -112,14 +112,14 @@ RSpec.describe SjuiTools::SwiftUI::Binding::ViewBindingHandler do
       # opacity takes Double (read-only), so uses data. not $data.
       it 'returns opacity modifier' do
         result = handler.handle_common_binding(component, 'opacity', '@{alpha}')
-        expect(result).to eq('.opacity(data.alpha)')
+        expect(result).to eq('.opacity(Double(data.alpha ?? 0))')
       end
     end
 
     context 'with alpha binding (alias)' do
       it 'returns opacity modifier' do
         result = handler.handle_common_binding(component, 'alpha', '@{alphaValue}')
-        expect(result).to eq('.opacity(data.alphaValue)')
+        expect(result).to eq('.opacity(Double(data.alphaValue ?? 0))')
       end
     end
 
@@ -127,7 +127,7 @@ RSpec.describe SjuiTools::SwiftUI::Binding::ViewBindingHandler do
       # disabled takes Bool (read-only), so uses data. not $data.
       it 'returns disabled modifier' do
         result = handler.handle_common_binding(component, 'disabled', '@{isDisabled}')
-        expect(result).to eq('.disabled(data.isDisabled)')
+        expect(result).to eq('.disabled((data.isDisabled ?? false))')
       end
     end
 
@@ -158,7 +158,7 @@ RSpec.describe SjuiTools::SwiftUI::Binding::ViewBindingHandler do
       it 'returns array of modifiers' do
         result = handler.process_bindings(component)
 
-        expect(result).to include('.opacity(data.alpha)')
+        expect(result).to include('.opacity(Double(data.alpha ?? 0))')
         expect(result.any? { |m| m.include?('.background(') && m.include?('data.bgColor') }).to be true
       end
 

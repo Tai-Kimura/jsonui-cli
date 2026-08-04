@@ -921,9 +921,9 @@ RSpec.describe SjuiTools::SwiftUI::Views::ViewConverter, 'touch gating' do
 
   # Same modifier as the binding form takes, so the two forms agree.
   it 'blocks it for the binding forms' do
-    expect(view('canTap' => '@{isTappable}')).to include('.allowsHitTesting(data.isTappable)')
+    expect(view('canTap' => '@{isTappable}')).to include('.allowsHitTesting((data.isTappable ?? false))')
     expect(view('userInteractionEnabled' => '@{isInteractive}'))
-      .to include('.allowsHitTesting(data.isInteractive)')
+      .to include('.allowsHitTesting((data.isInteractive ?? false))')
   end
 
   it 'emits nothing for true or absent' do
