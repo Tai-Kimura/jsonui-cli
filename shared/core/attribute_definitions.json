@@ -1492,21 +1492,18 @@
         "string",
         "binding"
       ],
-      "description": "Placeholder color - hex string or color name from colors.json (binding supported)",
-      "deprecated": "swiftui",
-      "deprecation_note": "SwiftUI TextField placeholder cannot be color-styled."
+      "description": "Placeholder color - hex string or color name from colors.json (binding supported). `placeholderColor` is an accepted alias spelling.",
+      "aliases": [
+        "placeholderColor"
+      ]
     },
     "hintFont": {
       "type": "string",
-      "description": "Placeholder font",
-      "deprecated": "swiftui",
-      "deprecation_note": "SwiftUI TextField placeholder cannot be custom-font-styled."
+      "description": "Placeholder font"
     },
     "hintFontSize": {
       "type": "number",
-      "description": "Placeholder font size",
-      "deprecated": "swiftui",
-      "deprecation_note": "SwiftUI TextField placeholder cannot be custom-size-styled."
+      "description": "Placeholder font size"
     },
     "hintAttributes": {
       "type": "object",
@@ -1577,7 +1574,22 @@
     },
     "inputType": {
       "type": "string",
-      "description": "Input type for Android (Android-only; `input` is the cross-platform attribute)",
+      "enum": [
+        "text",
+        "number",
+        "numberDecimal",
+        "phone",
+        "email",
+        "password",
+        "multiline",
+        "textEmailAddress",
+        "textPassword"
+      ],
+      "valueAliases": {
+        "textEmailAddress": "email",
+        "textPassword": "password"
+      },
+      "description": "Input type for Android (Android-only; `input` is the cross-platform attribute). Both the JsonUI spellings and the raw android:inputType names the frozen XML mapper passed through are accepted; the latter normalize to the former.",
       "platform": "kotlin"
     },
     "returnKeyType": {
@@ -1602,7 +1614,31 @@
         "string",
         "binding"
       ],
-      "description": "Content type for autofill (binding supported)"
+      "enum": [
+        "username",
+        "password",
+        "newPassword",
+        "oneTimeCode",
+        "email",
+        "emailAddress",
+        "name",
+        "givenName",
+        "familyName",
+        "telephoneNumber",
+        "tel",
+        "phone",
+        "streetAddress",
+        "postalCode",
+        "country",
+        "creditCardNumber",
+        "URL"
+      ],
+      "valueAliases": {
+        "emailAddress": "email",
+        "tel": "telephoneNumber",
+        "phone": "telephoneNumber"
+      },
+      "description": "Content type for autofill (binding supported). The enum is the set of tokens at least one platform actually maps: iOS to .textContentType, web to the autoComplete attribute, Android to the keyboard type. `email` (not emailAddress) and `telephoneNumber` (not tel) are the canonical spellings — the web converter only matches those two, so the alternates are normalized before conversion. Tokens no platform maps are deliberately absent: declaring UIKit's full UITextContentType list would enumerate values that cannot reach any output."
     },
     "secure": {
       "type": [
@@ -1663,21 +1699,21 @@
     },
     "accessoryBackground": {
       "type": "string",
-      "description": "Input accessory background - hex string or color name from colors.json",
+      "description": "Input accessory toolbar background - hex string or color name from colors.json. UIKit only: read by SJUITextField's accessory toolbar; SwiftUI has no input-accessory surface.",
       "platform": "swift",
-      "mode": "swiftui"
+      "mode": "uikit"
     },
     "accessoryTextColor": {
       "type": "string",
-      "description": "Input accessory text color - hex string or color name from colors.json",
+      "description": "Input accessory toolbar text color - hex string or color name from colors.json. UIKit only (see accessoryBackground).",
       "platform": "swift",
-      "mode": "swiftui"
+      "mode": "uikit"
     },
     "doneText": {
       "type": "string",
-      "description": "Done button text",
+      "description": "Text of the input accessory toolbar's Done button. UIKit only (see accessoryBackground).",
       "platform": "swift",
-      "mode": "swiftui"
+      "mode": "uikit"
     },
     "tintColor": {
       "type": "string",
@@ -1701,11 +1737,36 @@
     },
     "autocapitalizationType": {
       "type": "string",
-      "description": "Auto-capitalization type"
+      "enum": [
+        "none",
+        "words",
+        "sentences",
+        "allCharacters",
+        "characters"
+      ],
+      "valueAliases": {
+        "characters": "allCharacters"
+      },
+      "description": "Auto-capitalization type. UIKit's vocabulary, honoured on every platform (.textInputAutocapitalization / KeyboardCapitalization / the HTML autocapitalize attribute). `characters` is an accepted alias spelling of allCharacters."
     },
     "autocorrectionType": {
       "type": "string",
-      "description": "Auto-correction type"
+      "enum": [
+        "default",
+        "yes",
+        "no",
+        "on",
+        "off",
+        "true",
+        "false"
+      ],
+      "valueAliases": {
+        "on": "yes",
+        "true": "yes",
+        "off": "no",
+        "false": "no"
+      },
+      "description": "Auto-correction type. UIKit's vocabulary; `on`/`true` and `off`/`false` are accepted alias spellings of yes/no. `default` means \"leave it to the platform\" — web deliberately emits nothing for it."
     },
     "spellCheckingType": {
       "type": "string",
@@ -1713,12 +1774,6 @@
       "platform": "swift",
       "deprecated": "swift",
       "deprecation_note": "Compose does not expose spell-checking control."
-    },
-    "keyboardAppearance": {
-      "type": "string",
-      "description": "Keyboard appearance: dark, light",
-      "deprecated": "kotlin",
-      "deprecation_note": "Compose keyboard appearance is system-controlled."
     },
     "clearButtonMode": {
       "type": "string",
@@ -1846,12 +1901,6 @@
       "description": "Hide other elements while the field is focused.",
       "platform": "swift",
       "mode": "swiftui"
-    },
-    "placeholderColor": {
-      "type": "string",
-      "description": "Deprecated on swift.",
-      "deprecated": "swift",
-      "deprecation_note": "SwiftUI TextField placeholder cannot be color-styled."
     }
   },
   "TextView": {
@@ -1985,7 +2034,15 @@
     },
     "lineBreakMode": {
       "type": "string",
-      "description": "Line break mode"
+      "enum": [
+        "Char",
+        "Clip",
+        "Word",
+        "Head",
+        "Middle",
+        "Tail"
+      ],
+      "description": "Truncation mode. Same vocabulary as Label.lineBreakMode — the two were the same concept declared twice, once enumerated and once as a bare string."
     },
     "dataDetectorTypes": {
       "type": "string",
@@ -2001,7 +2058,41 @@
     },
     "keyboardType": {
       "type": "string",
-      "description": "Keyboard type"
+      "enum": [
+        "default",
+        "asciiCapable",
+        "alphabet",
+        "number",
+        "numberPad",
+        "decimal",
+        "decimalPad",
+        "phone",
+        "phonePad",
+        "email",
+        "emailAddress",
+        "URL",
+        "webURL",
+        "webSearch",
+        "search",
+        "namePhonePad",
+        "twitter",
+        "text",
+        "numeric",
+        "numbersAndPunctuation"
+      ],
+      "valueAliases": {
+        "alphabet": "asciiCapable",
+        "numberPad": "number",
+        "decimalPad": "decimal",
+        "phonePad": "phone",
+        "numeric": "phone",
+        "numbersAndPunctuation": "number",
+        "emailAddress": "email",
+        "webURL": "URL",
+        "search": "webSearch",
+        "text": "default"
+      },
+      "description": "Soft-keyboard type. The canonical token of each pair is the one all three converters accept: `number` rather than UIKit's numberPad (Compose only matches `number` and would fall back to a plain text keyboard), likewise decimal/phone/email. `namePhonePad` and `twitter` reach iOS only; the other platforms fall back to their default keyboard."
     },
     "onTextChange": {
       "type": "string",
@@ -2097,8 +2188,11 @@
       "platform": "react"
     },
     "edgeInset": {
-      "type": "string",
-      "description": "Deprecated on kotlin.",
+      "type": [
+        "number",
+        "array"
+      ],
+      "description": "The UIKit spelling of containerInset (content inset). Same accepted shapes: a single number, or an array of 1/2/4 numbers. Deprecated on kotlin.",
       "deprecated": "kotlin",
       "deprecation_note": "Compose Text has no edgeInset; use padding* instead."
     }
@@ -2442,14 +2536,6 @@
         "binding"
       ],
       "description": "Hint text color - hex string or color name from colors.json (binding supported)"
-    },
-    "text": {
-      "type": [
-        "string",
-        "binding"
-      ],
-      "description": "Display text (binding supported)",
-      "platform": "swift"
     },
     "items": {
       "type": [
@@ -3150,7 +3236,7 @@
     },
     "safeAreaInsetPositions": {
       "type": "array",
-      "description": "Safe area inset positions (SafeAreaView only)",
+      "description": "Which edges reserve the safe area. Declared here as well as on SafeAreaView on purpose: SafeAreaView is its own definition section and does not inherit View's, and every platform honours the attribute on a PLAIN view too (sjui base_view_converter.rb#apply_safe_area_insets_to_bag runs for every component; rjui view_converter.rb#safe_area_edges emits env(safe-area-inset-*) padding). The two declarations are the same concept reaching two routing paths, not a duplicate.",
       "items": {
         "type": "string",
         "enum": [
@@ -3694,10 +3780,6 @@
         "selected_icon"
       ]
     },
-    "selected_icon": {
-      "type": "string",
-      "description": "Selected icon name (underscore alias)"
-    },
     "checked": {
       "type": [
         "boolean",
@@ -4066,8 +4148,8 @@
       "platform": "swift"
     },
     "sandbox": {
-      "type": "string",
-      "description": "Iframe sandbox attribute",
+      "type": "boolean",
+      "description": "Iframe sandboxing kill-switch. `false` emits no sandbox attribute at all; otherwise the permission list is built from the other Web attributes (javaScriptEnabled, javaScriptCanOpenWindowsAutomatically, allowPopupsToEscapeSandbox, allowModals, ...) rather than from a value written here.",
       "platform": "react"
     },
     "allow": {
@@ -4087,7 +4169,10 @@
     },
     "safeAreaInsetPositions": {
       "type": "array",
-      "description": "Safe area edges",
+      "description": "Safe area edges. `edges` is an accepted alias spelling: the Compose SafeAreaView builder reads it (kjui compose_builder.rb:722 `json_data['edges'] || json_data['safeAreaInsetPositions']`) while no declaration named it, so iOS and web silently ignored a layout that used it. Declaring the alias normalizes it to the canonical spelling and makes it reach all three platforms.",
+      "aliases": [
+        "edges"
+      ],
       "items": {
         "type": "string",
         "enum": [

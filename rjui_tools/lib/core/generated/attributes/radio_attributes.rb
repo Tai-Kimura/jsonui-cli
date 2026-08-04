@@ -40,8 +40,6 @@ module JsonUI
         { name: 'selectedIcon', kind: :string, aliases: ['selected_icon'].freeze }.freeze,
         # Selected value of the radio group (binding for two-way)
         { name: 'selectedValue', kind: :string, bindable: true }.freeze,
-        # Selected icon name (underscore alias)
-        { name: 'selected_icon', kind: :string }.freeze,
         # Space between icon and text (binding supported)
         { name: 'spacing', kind: :number, bindable: true }.freeze,
         # Radio label (alias, can be data binding)

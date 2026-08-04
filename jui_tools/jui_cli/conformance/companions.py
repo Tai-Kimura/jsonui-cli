@@ -208,25 +208,14 @@ _BOUNDS_CASE = "fill_clamp"
 #: Families with NO ledger entry, probed provisionally because the measurement
 #: is what a ruling would be written from. Kept tiny and loud on purpose: every
 #: entry here is a gap in `attribute_semantics.json`, not a feature.
-PROVISIONAL: tuple = (
-    CompanionSpec(
-        component="View",
-        attribute="highlighted",
-        companions={"highlightBackground": "#00FF00"},
-        source="",
-        kind="PROVISIONAL",
-        provisional=True,
-        reason=(
-            "the ledger has no `highlight` topic. Every codegen pairs the flag "
-            "with a highlight colour (kjui modifier_builder.rb:490 combines "
-            "highlight_cond with highlight_bg), which is the same "
-            "pair-required shape `border` is ruled on — so the pairing is "
-            "probed to produce the evidence a ruling needs. A finding here "
-            "says the ledger is missing an entry, NOT that a converter is "
-            "broken."
-        ),
-    ),
-)
+#:
+#: Empty is the healthy state, and it is where a provisional probe is supposed
+#: to end up: `View.highlighted` sat here until its measurement produced the
+#: `highlight` topic (plan 49-E, on plan 41's paired-probe evidence), and the
+#: pairing is now derived from the ledger like every other family. Anything
+#: added here is a debt to be discharged the same way, not a place to park a
+#: pairing that nobody wants to rule on.
+PROVISIONAL: tuple = ()
 
 
 def derive(semantics: dict, definitions: dict) -> dict:

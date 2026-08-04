@@ -21,15 +21,6 @@
       "note": "alias — normalized to its canonical spelling before conversion"
     },
     {
-      "component": "Radio",
-      "attribute": "selected_icon",
-      "platforms": [
-        "android"
-      ],
-      "reason": "legacy",
-      "note": "alias — normalized to its canonical spelling before conversion"
-    },
-    {
       "component": "ScrollView",
       "attribute": "minZoom",
       "platforms": [
@@ -64,43 +55,6 @@
       ],
       "reason": "legacy",
       "note": "alias — normalized to its canonical spelling before conversion"
-    },
-    {
-      "component": "TextField",
-      "attribute": "accessoryBackground",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "TextField",
-      "attribute": "accessoryTextColor",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "TextField",
-      "attribute": "doneText",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "unimplemented",
-      "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
-    },
-    {
-      "component": "TextField",
-      "attribute": "keyboardAppearance",
-      "platforms": [
-        "ios",
-        "web"
-      ],
-      "reason": "platform-na",
-      "note": "UIKeyboardAppearance is a UIKit-only API — SwiftUI exposes no modifier for it, and browsers expose no keyboard-appearance control at all. Deprecated on android; the remaining two platforms cannot implement it rather than have not."
     },
     {
       "component": "View",

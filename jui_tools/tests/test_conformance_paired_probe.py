@@ -168,12 +168,39 @@ class CompanionDerivationTest(unittest.TestCase):
         self.assertIn(("common", "borderWidth"), specs)
         self.assertIn("borderColor", specs[("common", "borderWidth")].companions)
 
-    def test_a_provisional_spec_says_so_and_says_why(self):
-        specs = comp.derive({}, {})
+    def test_the_real_ledger_pairs_the_highlight_family(self):
+        """The pairing `View.highlighted` used to get from PROVISIONAL.
+
+        It was the one unledgered family plan 41 probed on an informed guess;
+        49-E wrote the ruling from that measurement, so the pairing must now
+        come from the ledger — with a source naming it, and provisional off.
+        """
+        import json
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[2] / "shared" / "core"
+        ledger = json.loads((root / "attribute_semantics.json").read_text("utf-8"))
+        definitions = json.loads((root / "attribute_definitions.json").read_text("utf-8"))
+        specs = comp.derive(ledger["semantics"], definitions)
         highlighted = specs[("View", "highlighted")]
-        self.assertTrue(highlighted.provisional)
-        self.assertTrue(highlighted.reason)
-        self.assertEqual(highlighted.source, "")
+        self.assertIn("highlightBackground", highlighted.companions)
+        self.assertFalse(highlighted.provisional)
+        self.assertIn("semantics.highlight", highlighted.source)
+
+    def test_a_provisional_spec_says_so_and_says_why(self):
+        """Every PROVISIONAL entry must announce itself as an unruled gap.
+
+        Asserted over whatever the table holds rather than over one named
+        family: the table is empty in the healthy state (a provisional probe
+        exists to be retired into the ledger), and the contract still has to
+        hold for the next entry someone adds.
+        """
+        for spec in comp.PROVISIONAL:
+            with self.subTest(spec=spec.key):
+                self.assertTrue(spec.provisional)
+                self.assertTrue(spec.reason)
+                self.assertEqual(spec.source, "")
+                self.assertEqual(spec.kind, "PROVISIONAL")
 
     def test_state_gated_families_are_reported_not_probed(self):
         rows = comp.unmeasurable_report()

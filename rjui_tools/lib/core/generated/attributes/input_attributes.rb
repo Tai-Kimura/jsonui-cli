@@ -16,29 +16,29 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
-        # Input accessory background - hex string or color name from colors.json
+        # Input accessory toolbar background - hex string or color name from colors.json. UIKit only: read by SJUITextField's accessory toolbar; SwiftUI has no input-accessory surface.
         { name: 'accessoryBackground', kind: :string }.freeze,
         # Accessory corner radius
         { name: 'accessoryCornerRadius', kind: :number }.freeze,
-        # Input accessory text color - hex string or color name from colors.json
+        # Input accessory toolbar text color - hex string or color name from colors.json. UIKit only (see accessoryBackground).
         { name: 'accessoryTextColor', kind: :string }.freeze,
         # Apply liquid glass effect
         { name: 'applyLiquidGlass', kind: :boolean }.freeze,
-        # Auto-capitalization type
-        { name: 'autocapitalizationType', kind: :string }.freeze,
-        # Auto-correction type
-        { name: 'autocorrectionType', kind: :string }.freeze,
+        # Auto-capitalization type. UIKit's vocabulary, honoured on every platform (.textInputAutocapitalization / KeyboardCapitalization / the HTML autocapitalize attribute). `characters` is an accepted alias spelling of allCharacters.
+        { name: 'autocapitalizationType', kind: :enum, values: ['none', 'words', 'sentences', 'allCharacters', 'characters'].freeze }.freeze,
+        # Auto-correction type. UIKit's vocabulary; `on`/`true` and `off`/`false` are accepted alias spellings of yes/no. `default` means "leave it to the platform" — web deliberately emits nothing for it.
+        { name: 'autocorrectionType', kind: :enum, values: ['default', 'yes', 'no', 'on', 'off', 'true', 'false'].freeze }.freeze,
         # Border style
         { name: 'borderStyle', kind: :enum, values: ['none', 'line', 'bezel', 'roundedRect', 'RoundedRect', 'Line', 'Bezel'].freeze }.freeze,
         # Caret styling attributes (fontColor for cursor color) [DEPRECATED: SwiftUI cannot style the caret (iOS 17 has partial .tint API).]
         { name: 'caretAttributes', kind: :object }.freeze,
         # Clear button mode
         { name: 'clearButtonMode', kind: :string }.freeze,
-        # Content type for autofill (binding supported)
-        { name: 'contentType', kind: :string, bindable: true }.freeze,
+        # Content type for autofill (binding supported). The enum is the set of tokens at least one platform actually maps: iOS to .textContentType, web to the autoComplete attribute, Android to the keyboard type. `email` (not emailAddress) and `telephoneNumber` (not tel) are the canonical spellings — the web converter only matches those two, so the alternates are normalized before conversion. Tokens no platform maps are deliberately absent: declaring UIKit's full UITextContentType list would enumerate values that cannot reach any output.
+        { name: 'contentType', kind: :enum, bindable: true, values: ['username', 'password', 'newPassword', 'oneTimeCode', 'email', 'emailAddress', 'name', 'givenName', 'familyName', 'telephoneNumber', 'tel', 'phone', 'streetAddress', 'postalCode', 'country', 'creditCardNumber', 'URL'].freeze }.freeze,
         # Background color when disabled - hex string or color name from colors.json
         { name: 'disabledBackground', kind: :string }.freeze,
-        # Done button text
+        # Text of the input accessory toolbar's Done button. UIKit only (see accessoryBackground).
         { name: 'doneText', kind: :string }.freeze,
         # Field padding
         { name: 'fieldPadding', kind: :number }.freeze,
@@ -60,18 +60,16 @@ module JsonUI
         { name: 'hint', kind: :string }.freeze,
         # Hint text attributes (font, color, etc.)
         { name: 'hintAttributes', kind: :object }.freeze,
-        # Placeholder color - hex string or color name from colors.json (binding supported) [DEPRECATED: SwiftUI TextField placeholder cannot be color-styled.]
-        { name: 'hintColor', kind: :string, bindable: true }.freeze,
-        # Placeholder font [DEPRECATED: SwiftUI TextField placeholder cannot be custom-font-styled.]
+        # Placeholder color - hex string or color name from colors.json (binding supported). `placeholderColor` is an accepted alias spelling.
+        { name: 'hintColor', kind: :string, bindable: true, aliases: ['placeholderColor'].freeze }.freeze,
+        # Placeholder font
         { name: 'hintFont', kind: :string }.freeze,
-        # Placeholder font size [DEPRECATED: SwiftUI TextField placeholder cannot be custom-size-styled.]
+        # Placeholder font size
         { name: 'hintFontSize', kind: :number }.freeze,
         # Input type (includes 'allphabet' typo for backward compatibility)
         { name: 'input', kind: :enum, values: ['default', 'alphabet', 'allphabet', 'email', 'number', 'phone', 'url', 'password', 'decimal'].freeze }.freeze,
-        # Input type for Android (Android-only; `input` is the cross-platform attribute)
-        { name: 'inputType', kind: :string }.freeze,
-        # Keyboard appearance: dark, light [DEPRECATED: Compose keyboard appearance is system-controlled.]
-        { name: 'keyboardAppearance', kind: :string }.freeze,
+        # Input type for Android (Android-only; `input` is the cross-platform attribute). Both the JsonUI spellings and the raw android:inputType names the frozen XML mapper passed through are accepted; the latter normalize to the former.
+        { name: 'inputType', kind: :enum, values: ['text', 'number', 'numberDecimal', 'phone', 'email', 'password', 'multiline', 'textEmailAddress', 'textPassword'].freeze }.freeze,
         # Left view configuration
         { name: 'leftView', kind: :object }.freeze,
         # Left view display mode
@@ -110,8 +108,6 @@ module JsonUI
         { name: 'pattern', kind: :string }.freeze,
         # Placeholder text (alias for hint)
         { name: 'placeholder', kind: :string }.freeze,
-        # Deprecated on swift. [DEPRECATED: SwiftUI TextField placeholder cannot be color-styled.]
-        { name: 'placeholderColor', kind: :string }.freeze,
         # Required field validation
         { name: 'required', kind: :boolean }.freeze,
         # Return key type

@@ -76,8 +76,6 @@ module JsonUI
         { name: 'selectedValue', kind: :string, bindable: true }.freeze,
         # Number of visible options
         { name: 'size', kind: :number }.freeze,
-        # Display text (binding supported)
-        { name: 'text', kind: :string, bindable: true }.freeze,
       ].freeze
 
       # Returns a Hash keyed by canonical attribute name.

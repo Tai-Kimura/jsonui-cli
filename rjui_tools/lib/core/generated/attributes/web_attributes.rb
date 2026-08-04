@@ -22,8 +22,8 @@ module JsonUI
         { name: 'allowsLinkPreview', kind: :boolean }.freeze,
         # HTML content
         { name: 'html', kind: :string }.freeze,
-        # Iframe sandbox attribute
-        { name: 'sandbox', kind: :string }.freeze,
+        # Iframe sandboxing kill-switch. `false` emits no sandbox attribute at all; otherwise the permission list is built from the other Web attributes (javaScriptEnabled, javaScriptCanOpenWindowsAutomatically, allowPopupsToEscapeSandbox, allowModals, ...) rather than from a value written here.
+        { name: 'sandbox', kind: :boolean }.freeze,
         # Web page URL (can be data binding)
         { name: 'url', kind: :string, bindable: true }.freeze,
       ].freeze

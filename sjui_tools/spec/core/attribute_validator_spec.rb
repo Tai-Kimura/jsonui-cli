@@ -1150,14 +1150,20 @@ RSpec.describe SjuiTools::Core::AttributeValidator do
           'height' => 'wrapContent',
           'text' => '@{inputText}',
           'hint' => 'Enter text',
-          'hintColor' => '#999999'
+          'spellCheckingType' => 'no'
         }
       end
 
-      it 'warns that hintColor is deprecated on SwiftUI' do
+      # The subject is that a component ALIAS (EditText -> TextField) still
+      # resolves the canonical section's deprecations. Any deprecated
+      # TextField attribute serves; this one used to be `hintColor`, whose
+      # deprecation 49-E retracted (a SwiftUI TextField placeholder CAN be
+      # styled - TextView already does it - so the note was wrong, not the
+      # attribute).
+      it 'warns that a deprecated attribute is deprecated, through the alias' do
         validator.validate(component)
         expect(validator.warnings).to contain_exactly(
-          a_string_matching(/hintColor.*deprecated/)
+          a_string_matching(/spellCheckingType.*deprecated/)
         )
       end
     end

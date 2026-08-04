@@ -15,6 +15,15 @@
         "common/borderStyle__dotted": "uniformly-inert"
       }
     },
+    "highlight": {
+      "highlightedAlone": "no-draw",
+      "highlightBackgroundAlone": "no-draw",
+      "ruling": "The highlighted appearance is drawn only when BOTH `highlighted` and a highlight colour are declared — the same pair-required shape as `border`, and ruled the same way. `highlighted: true` alone swaps the background to a colour that was never given, so nothing changes; `highlightBackground` alone names a colour for a state the view is never in. Every codegen already treats them as a pair (kjui modifier_builder.rb:490 combines highlight_cond with highlight_bg; sjui apply_highlighted_to_bag does the same), so a single-attribute fixture measures the absence of the companion rather than the converter. Established by measurement, not assumption: plan 41's paired probe carried View.highlighted as its one PROVISIONAL entry, and giving it `highlightBackground` made the ios/C0 and android/C0 findings disappear — the converters were correct and the fixture was missing the other half. This entry retires that PROVISIONAL: the pairing is now derived from the ledger like every other family (2026-08-05, plan 49-E, on plan 41's evidence).",
+      "observable": {
+        "View/highlighted__true": "uniformly-inert",
+        "common/highlightBackground__static": "uniformly-inert"
+      }
+    },
     "image": {
       "defaultContentMode": "fit",
       "fill": "stretch",
