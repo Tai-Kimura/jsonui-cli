@@ -11,8 +11,12 @@ module SjuiTools
         def convert
           id = @component['id'] || 'radio'
           items = @component['items'] || []
-          text = @component['text'] || ""
-          
+          # `label` is the specific declared row and wins over the `text`
+          # alias — the same precedence CheckBox has taken since it was
+          # written. Nothing here read `label` at all, so the attribute was
+          # inert on this platform in both its literal and its bound form.
+          text = @component['label'] || @component['text'] || ""
+
           # Check if this is a radio group with items
           if items.any?
             # Get selection binding
@@ -20,7 +24,12 @@ module SjuiTools
               selection_binding = "data.#{extract_binding_property(@component['selectedValue'])}"
             else
               state_var = "selected#{id.split('_').map(&:capitalize).join}"
-              add_state_variable(state_var, "String", '""')
+              # A LITERAL selectedValue names the option that starts selected.
+              # Only the bound spelling was read here, so a written-out
+              # selection opened the group with nothing chosen — the web
+              # converter reads both, and it is the canonical reading
+              # (plan 34 / plan 44 Phase 0).
+              add_state_variable(state_var, "String", static_selection || '""')
               selection_binding = state_var
             end
             
@@ -28,15 +37,13 @@ module SjuiTools
             add_line "VStack(alignment: .leading, spacing: 8) {"
             indent do
               if text && !text.empty?
-                # Escape double quotes in text for Swift string literal
-                escaped_text = text.gsub('"', '\\"')
-                add_line "Text(\"#{escaped_text}\")"
+                add_line "Text(#{label_expression(text)})"
                 # Apply font modifiers using helper
                 apply_font_modifiers(@component, self)
               end
-              
+
               items.each_with_index do |item, index|
-                add_line "HStack {"
+                add_line "HStack#{icon_text_spacing} {"
                 indent do
                   add_radio_icon_lines("#{selection_binding} == \"#{item}\"")
                   add_modifier_line ".onTapGesture {"
@@ -79,12 +86,26 @@ module SjuiTools
             # empty seed left every literal-checked radio unselected
             # (32 parity: checked__true / checkedColor / the checked control).
             checked_literal = @component['checked'] == true || @component['isOn'] == true
-            add_state_variable(state_var, "String", checked_literal ? "\"#{radio_value}\"" : '""')
+            # A literal selectedValue names the selected option of the group
+            # and wins over this option's own `checked` — it is the group-level
+            # statement.
+            seed = static_selection || (checked_literal ? "\"#{radio_value}\"" : '""')
+            add_state_variable(state_var, "String", seed)
+
+            # A BOUND checked/isOn cannot seed the @State declaration — a
+            # property initializer cannot read `data` — so it seeds the glyph
+            # the same way the dynamic path does: selected when the group has
+            # made no choice yet and the binding says so
+            # (RadioConverter.swift `literalChecked && selection.isEmpty`).
+            # Ruby truthiness made `"@{x}" == true` false, so the bound form
+            # was dropped outright.
+            bound_checked = bound_bool(@component['checked']) || bound_bool(@component['isOn'])
+            seed = bound_checked ? " || (#{bound_checked} && #{state_var}.isEmpty)" : ''
             
             # カスタムRadioButton実装
-            add_line "HStack {"
+            add_line "HStack#{icon_text_spacing} {"
             indent do
-              add_radio_icon_lines("#{state_var} == \"#{radio_value}\"")
+              add_radio_icon_lines("#{state_var} == \"#{radio_value}\"#{seed}")
               add_modifier_line ".onTapGesture {"
               indent do
                 add_line "#{state_var} = \"#{radio_value}\""
@@ -98,10 +119,8 @@ module SjuiTools
               add_line "}"
               
               if text && !text.empty?
-                # Escape double quotes in text for Swift string literal
-                escaped_text = text.gsub('"', '\\"')
-                add_line "Text(\"#{escaped_text}\")"
-                
+                add_line "Text(#{label_expression(text)})"
+
                 # Apply font modifiers using helper
                 apply_font_modifiers(@component, self)
                 
@@ -127,6 +146,36 @@ module SjuiTools
         end
         
         private
+
+        # A written-out `selectedValue` as a Swift string literal, or nil when
+        # it is absent or bound (a binding is the selection itself, not a
+        # seed for one).
+        def static_selection
+          value = @component['selectedValue']
+          return nil if value.nil? || is_binding?(value)
+
+          "\"#{value.to_s.gsub('"', '\\"')}\""
+        end
+
+        # The `spacing:` argument of the row that holds the glyph and the
+        # label, or "" when none is declared (SwiftUI's default spacing is
+        # not a number the generator can spell, so an undeclared spacing has
+        # to stay an omitted argument rather than become a 0).
+        # `Radio.spacing` — "space between icon and text" — was read by
+        # nothing here: both rows opened a bare `HStack {`.
+        def icon_text_spacing
+          spacing = @component['spacing']
+          return '' if spacing.nil?
+
+          "(spacing: #{bound_number(spacing) || spacing})"
+        end
+
+        # The radio's own label as a Swift `Text` argument. A binding used to
+        # be pasted inside the quotes, so the row rendered the characters
+        # `@{label}`; a literal keeps the escaping it always had.
+        def label_expression(text)
+          bound_string(text) || "\"#{text.gsub('"', '\\"')}\""
+        end
 
         # The radio glyph.
         #

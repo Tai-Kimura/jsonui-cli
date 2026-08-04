@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../binding/binding_expression'
+require_relative 'value_expression_helper'
 
 module SjuiTools
   module SwiftUI
@@ -18,6 +19,8 @@ module SjuiTools
       # the generator's own convenience is not a reason to reject a
       # declaration the SSoT allows.
       module MarginExpressionHelper
+        include ValueExpressionHelper
+
         private
 
         # A margin that is already a number here — the numeric spelling
@@ -41,9 +44,8 @@ module SjuiTools
         def margin_operand(value)
           number = margin_number(value)
           return number.to_s if number
-          return '0' unless Binding::BindingExpression.binding?(value)
 
-          "CGFloat(#{Binding::BindingExpression.swift_number_expr(value[2..-2])})"
+          bound_number(value) || '0'
         end
       end
     end

@@ -95,14 +95,16 @@ module SjuiTools
                 add_line "dateStringFormat: \"#{@component['dateStringFormat']}\","
               end
 
-              # minimumDate
+              # minimumDate. A binding used to be pasted between the quotes,
+              # so the picker parsed the characters `@{...}` as a date, failed,
+              # and fell back to today — the bound bound was inert.
               if @component['minimumDate']
-                add_line "minimumDate: \"#{@component['minimumDate']}\".toDate(format: \"yyyy-MM-dd\") ?? Date(),"
+                add_line "minimumDate: #{date_operand(@component['minimumDate'])},"
               end
 
               # maximumDate
               if @component['maximumDate']
-                add_line "maximumDate: \"#{@component['maximumDate']}\".toDate(format: \"yyyy-MM-dd\") ?? Date(),"
+                add_line "maximumDate: #{date_operand(@component['maximumDate'])},"
               end
 
               # minuteInterval for DatePicker
@@ -152,8 +154,9 @@ module SjuiTools
             else
               add_line "selectItemType: .normal,"
 
-              # Note: SelectBoxView manages its own state internally
-              # selectedItem binding is not supported in the current implementation
+              # SelectBoxView manages its own selection state internally; the
+              # layout's opening selection reaches it through `selectedIndex`
+              # (literal or bound) or `selectedIndexBinding` (two-way) below.
 
               # items配列の処理
               if items.is_a?(String) && items.start_with?('@{') && items.end_with?('}')
@@ -181,6 +184,13 @@ module SjuiTools
                 # generation time — the dynamic path does the same lookup
                 # (32 parity: the declared selection rendered empty here).
                 add_line "selectedIndex: #{idx},"
+              elsif (selected_expr = bound_string(@component['selectedValue']))
+                # The same lookup, a step later. The note here used to say
+                # "selectedItem binding is not supported in the current
+                # implementation" — SelectBoxView takes `selectedIndex: Int?`,
+                # and the index of a bound value is an expression over the
+                # item list rather than a number the generator can compute.
+                add_line "selectedIndex: #{items_expression(items)}.firstIndex(of: #{selected_expr}),"
               end
             end
 
@@ -248,7 +258,7 @@ module SjuiTools
           # Apply border (after component's internal cornerRadius)
           if @component['borderWidth'] && @component['borderColor']
             color = get_swiftui_color(@component['borderColor'])
-            border_code = build_border_overlay(color, (@component['cornerRadius'] || 8).to_i, @component['borderWidth'].to_i)
+            border_code = build_border_overlay(color, (@component['cornerRadius'] || 8).to_i, @component['borderWidth'].to_i, @component['borderStyle'])
             @modifier_bag.register(:border, border_code)
           end
 
@@ -272,6 +282,28 @@ module SjuiTools
           end
 
           generated_code
+        end
+
+        private
+
+        # The item list as a Swift expression, for the lookups that have to
+        # index into it at run time.
+        def items_expression(items)
+          if items.is_a?(String) && bound_value?(items)
+            "Array(data.#{extract_binding_property(items)})"
+          elsif items.is_a?(Array)
+            "[#{items.map { |item| "\"#{item}\"" }.join(', ')}]"
+          else
+            '[String]()'
+          end
+        end
+
+        # One date bound, parsed with the format the picker uses. A binding
+        # supplies the string at run time; the parse and the fallback are
+        # identical either way.
+        def date_operand(value)
+          text = bound_string(value) || "\"#{value}\""
+          "#{text}.toDate(format: \"yyyy-MM-dd\") ?? Date()"
         end
       end
     end

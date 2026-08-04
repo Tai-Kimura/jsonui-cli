@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require_relative 'base_view_converter'
+require_relative 'text_style_helper'
 require_relative '../helpers/font_helper'
 require_relative '../helpers/string_manager_helper'
 
@@ -12,6 +13,7 @@ module SjuiTools
       class ButtonConverter < BaseViewConverter
         include SjuiTools::SwiftUI::Helpers::FontHelper
         include SjuiTools::SwiftUI::Helpers::StringManagerHelper
+        include SjuiTools::SwiftUI::Views::TextStyleHelper
         def convert
           # Always use StateAwareButtonView for dynamic state change support
           convert_state_aware_button
@@ -144,7 +146,18 @@ module SjuiTools
             if @component['fontSize']
               add_line "fontSize: #{@component['fontSize'].to_i},"
             end
-            if @component['fontWeight']
+            # StateAwareButtonView takes the weight either as a Font.Weight or
+            # as the String spelling (it has both initializers), and the
+            # String one is what the static path uses. A binding went into
+            # those quotes and the button asked for a weight literally named
+            # "@{weight}", which `Font.Weight.from(string:)` resolves to
+            # .regular — the declaration compiled and did nothing. The bound
+            # form resolves the same vocabulary itself and passes a
+            # Font.Weight, which picks the other initializer.
+            if (bound_weight = swift_weight_expr(@component['fontWeight']) ||
+                               swift_weight_expr(@component['font']))
+              add_line "fontWeight: #{bound_weight},"
+            elsif @component['fontWeight']
               add_line "fontWeight: \"#{@component['fontWeight']}\","
             elsif @component['font']
               add_line "fontWeight: \"#{@component['font']}\","
@@ -290,6 +303,17 @@ module SjuiTools
             end
           end
           add_line ")"
+
+          # textAlign. StateAwareButtonView has no alignment argument and
+          # nothing here read the attribute, so the declared alignment was
+          # inert on this platform. `multilineTextAlignment` is an
+          # environment modifier, so it reaches the Text inside the button
+          # without the library growing a parameter — the same treatment the
+          # TextField converter gives the same spelling.
+          if @component['textAlign']
+            @modifier_bag.append(:component_specific,
+                                 ".multilineTextAlignment(#{text_alignment_to_swiftui(@component['textAlign'])})")
+          end
 
           # Apply frame constraints and margins
           # Note: background, cornerRadius, border are all applied inside StateAwareButtonView

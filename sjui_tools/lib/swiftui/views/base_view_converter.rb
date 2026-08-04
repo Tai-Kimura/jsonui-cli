@@ -6,6 +6,7 @@ require_relative 'alignment_helper'
 require_relative 'frame_helper'
 require_relative 'color_helper'
 require_relative 'spacing_helper'
+require_relative 'value_expression_helper'
 require_relative 'modifier_helper'
 require_relative 'modifier_bag'
 require_relative '../binding/binding_handler_registry'
@@ -22,6 +23,7 @@ module SjuiTools
         include FrameHelper
         include ColorHelper
         include SpacingHelper
+        include ValueExpressionHelper
         include ModifierHelper
 
         # Class-level validator instance (shared across all converters)
@@ -157,16 +159,27 @@ module SjuiTools
           @binding_handler.is_binding?(value)
         end
 
-        # Extract property name from binding expression
-        # "@{propertyName}" -> "propertyName"
-        # "@{!propertyName}" -> "propertyName" (negation prefix stripped)
+        # The PATH a binding expression names.
+        # "@{propertyName}"        -> "propertyName"
+        # "@{!propertyName}"       -> "propertyName" (negation stripped)
+        # "@{propertyName ?? 12}"  -> "propertyName" (default stripped)
+        #
+        # Callers paste the result after `data.` / `$data.`, so what they need
+        # is the path and nothing else. The regexp this used to run captured
+        # everything between the braces, which carried the inline default out
+        # with it: `@{gap ?? 12}` produced `$data.gap ?? 12` in a two-way
+        # position and `data.gap ?? 12` unbracketed in a value one. Both are
+        # the canonical parser being bypassed rather than a spelling gap
+        # (plan 49; the same shape as kjui's `process_dimension`), so the
+        # answer comes from `BindingExpression.parse` instead.
+        #
+        # A value that is not a binding is returned unchanged — several
+        # callers pass a name that is already bare.
         def extract_binding_property(value)
           return nil unless value.is_a?(String)
-          if value =~ /^@\{!?(.+)\}$/
-            $1
-          else
-            value
-          end
+          return value unless SjuiTools::SwiftUI::Binding::BindingExpression.binding?(value)
+
+          SjuiTools::SwiftUI::Binding::BindingExpression.parse(value[2..-2]).path
         end
 
         # Check if a binding expression is negated
@@ -177,16 +190,19 @@ module SjuiTools
           value =~ /^@\{!.+\}$/
         end
 
-        # Build data access expression from binding value
-        # "@{propertyName}" -> "data.propertyName"
-        # "@{!propertyName}" -> "!data.propertyName"
+        # Read-only Swift value expression for a binding.
+        # "@{propertyName}"        -> "data.propertyName"
+        # "@{!propertyName}"       -> "!data.propertyName"
+        # "@{propertyName ?? 12}"  -> "data.propertyName ?? 12" (optional only)
+        #
+        # Routed through the canonical emitter rather than string-building the
+        # `data.` prefix here: negation of an Optional needs the unwrap that
+        # `swift_value_expr` writes, and an inline default on a NON-optional
+        # property is dead code the canonical precedence rule drops.
         def binding_data_expr(value)
-          prop = extract_binding_property(value)
-          if is_negated_binding?(value)
-            "!data.#{prop}"
-          else
-            "data.#{prop}"
-          end
+          return "data.#{value}" unless SjuiTools::SwiftUI::Binding::BindingExpression.binding?(value)
+
+          SjuiTools::SwiftUI::Binding::BindingExpression.swift_value_expr(value[2..-2])
         end
 
         # Apply binding modifiers into the modifier bag
@@ -449,7 +465,7 @@ module SjuiTools
             # Skip if borderColor is a binding - handled by view_binding_handler
             unless border_color_value.is_a?(String) && border_color_value.start_with?('@{')
               color = get_swiftui_color(border_color_value)
-              border_code = build_border_overlay(color, (@component['cornerRadius'] || 0).to_i, @component['borderWidth'].to_i)
+              border_code = build_border_overlay(color, (@component['cornerRadius'] || 0).to_i, @component['borderWidth'].to_i, @component['borderStyle'])
               @modifier_bag.register(:border, border_code)
             end
           end
@@ -477,7 +493,14 @@ module SjuiTools
           end
 
           # クリップ
-          if @component['clipToBounds']
+          # A binding is truthy in Ruby, so this clipped every declaration
+          # that used one regardless of the property's value. There is no
+          # conditional `.clipped()` in public SwiftUI and SwiftJsonUI's
+          # `View.if` helper is internal to the module, so the bound form is
+          # left to the runtime — which ignores it too
+          # (DynamicModifierHelper guards on `== true`). Reported to the
+          # SwiftJsonUI lane: one public `clipToBounds(_:)` closes both sides.
+          if @component['clipToBounds'] == true || @component['clipToBounds'] == 'true'
             @modifier_bag.register(:clip_to_bounds, ".clipped()")
           end
 
@@ -952,15 +975,42 @@ module SjuiTools
         end
 
         # Build border overlay code as a single multi-line string
-        def build_border_overlay(color, corner_radius, border_width)
+        def build_border_overlay(color, corner_radius, border_width, style = nil)
           indent_str = "    " * (@indent_level + 1)
           sub_indent = "    " * (@indent_level + 2)
           [
             ".overlay(",
             "#{indent_str}RoundedRectangle(cornerRadius: #{corner_radius})",
-            "#{sub_indent}.stroke(#{color}, lineWidth: #{border_width})",
+            "#{sub_indent}.stroke(#{color}, #{stroke_style_argument(border_width, style)})",
             "#{indent_str[0...-4]})"
           ].join("\n")
+        end
+
+        # `lineWidth:` for a solid border, a full `style: StrokeStyle(...)`
+        # for the dashed and dotted spellings.
+        #
+        # `common.borderStyle` (solid / dashed / dotted) is honoured by the
+        # web mapper and by Compose's dashedBorder/dottedBorder, and by
+        # nothing on ios — `view_binding_handler.rb` even carries a note
+        # saying dashed and dotted "require StrokeStyle", which SwiftUI has.
+        # The dash patterns are Compose's, so a layout that declares one
+        # border gets one border: [6, 3] for dashed and [width, width * 2]
+        # for dotted (DashedBorderModifier.kt).
+        #
+        # `TextField.borderStyle` is a DIFFERENT attribute with a different
+        # vocabulary (none / line / bezel / roundedRect) and its own handler;
+        # the two must not be merged, and are not — the TextField converter
+        # never reaches this overlay.
+        def stroke_style_argument(border_width, style)
+          case style.to_s.downcase
+          when 'dashed'
+            "style: StrokeStyle(lineWidth: #{border_width}, dash: [6, 3])"
+          when 'dotted'
+            "style: StrokeStyle(lineWidth: #{border_width}, lineCap: .round, " \
+              "dash: [#{border_width}, #{border_width} * 2])"
+          else
+            "lineWidth: #{border_width}"
+          end
         end
 
         # Build shadow modifier code

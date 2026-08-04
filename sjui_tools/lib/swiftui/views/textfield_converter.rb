@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require_relative 'base_view_converter'
+require_relative 'text_style_helper'
 require_relative '../helpers/font_helper'
 require_relative '../helpers/string_manager_helper'
 
@@ -10,6 +11,7 @@ module SjuiTools
       class TextFieldConverter < BaseViewConverter
         include SjuiTools::SwiftUI::Helpers::FontHelper
         include SjuiTools::SwiftUI::Helpers::StringManagerHelper
+        include SjuiTools::SwiftUI::Views::TextStyleHelper
         def convert
           # Get text field handler for this component
           textfield_handler = @binding_handler.is_a?(SjuiTools::SwiftUI::Binding::TextFieldBindingHandler) ?
@@ -26,13 +28,24 @@ module SjuiTools
             # Use localized strings for snake_case hint text
             hint = get_text_with_string_manager("\"#{hint_raw}\"")
           end
-          id = @component['id'] || "textField"
-
-          # hintAttributes の処理
-          if @component['hintAttributes']
-            # SwiftUIではplaceholderのスタイルをカスタマイズすることが難しいため、コメントとして記録
-            add_line "// hintAttributes: #{@component['hintAttributes'].to_json}"
+          # `hintAttributes` carries the same three placeholder spellings in a
+          # nested object; the TextView converter has read it that way since it
+          # was written. Merged onto the component so one code path below reads
+          # both forms, with the specific (nested) keys winning.
+          if @component['hintAttributes'].is_a?(Hash)
+            attrs = @component['hintAttributes']
+            @component = @component.dup
+            @component['hintColor'] ||= attrs['fontColor'] || attrs['color']
+            @component['hintFont'] ||= attrs['font']
+            @component['hintFontSize'] ||= attrs['fontSize']
+            @component['hintLineHeightMultiple'] ||= attrs['lineHeightMultiple']
           end
+
+          # The styled overlay draws the placeholder itself, so the native
+          # field gets an empty one — otherwise the two would both draw.
+          hint_literal = hint
+          hint = '""' if styled_placeholder?
+          id = @component['id'] || "textField"
 
           # Get text binding
           text_binding = if @component['text'] && is_binding?(@component['text'])
@@ -64,8 +77,26 @@ module SjuiTools
             hint = "data.#{focus_prop} ? \"\" : #{hint}"
           end
 
-          # TextField or SecureField
-          if is_secure
+          # TextField or SecureField.
+          #
+          # `secure` is declared boolean|binding, and a binding cannot pick
+          # the view at generation time — `is_secure_field?` compares against
+          # `true` and a `@{...}` is neither, so a bound declaration always
+          # rendered the plain field and the password was on screen. The two
+          # views are picked at run time instead. `Group` is what makes the
+          # branch a single view, so every modifier the rest of this converter
+          # appends still applies to both arms unchanged.
+          if (secure_condition = bound_bool(@component['secure']))
+            add_line "Group {"
+            indent do
+              add_line "if #{secure_condition} {"
+              indent { add_line "SecureField(#{hint}, text: #{text_binding})" }
+              add_line "} else {"
+              indent { add_line "TextField(#{hint}, text: #{text_binding})" }
+              add_line "}"
+            end
+            add_line "}"
+          elsif is_secure
             add_line "SecureField(#{hint}, text: #{text_binding})"
           else
             add_line "TextField(#{hint}, text: #{text_binding})"
@@ -86,21 +117,35 @@ module SjuiTools
             add_modifier_line ".foregroundColor(#{color})"
           end
 
-          # hintColor (placeholder color) - SwiftUIではプレースホルダーの色を直接変更できないためコメントとして記録
-          if @component['hintColor'] || @component['placeholderColor']
+          # Placeholder styling. This used to emit a COMMENT saying SwiftUI
+          # cannot style a placeholder — true of the bare `TextField(_:text:)`
+          # and false of the library, which grew `styledPlaceholder` for
+          # exactly this (TextFieldPlaceholderStyle.swift). TextView has
+          # honoured the same three spellings for longer; the resolution rule
+          # lives in the library so the two render paths cannot drift into two
+          # pictures for one layout.
+          #
+          # The native field must be handed an EMPTY placeholder when the
+          # overlay is used, or both would draw — that is done above, where
+          # `hint` is chosen.
+          if styled_placeholder?
             hint_color = @component['hintColor'] || @component['placeholderColor']
-            add_line "// hintColor/placeholderColor: #{hint_color} - Note: SwiftUI TextField doesn't directly support placeholder color customization"
+            style_args = []
+            style_args << "hintColor: #{get_swiftui_color(hint_color)}" if hint_color
+            style_args << "hintFont: \"#{@component['hintFont']}\"" if @component['hintFont']
+            style_args << "hintFontSize: #{@component['hintFontSize']}" if @component['hintFontSize']
+            style_args << "fontSize: #{@component['fontSize']}" if @component['fontSize']
+            alignment = text_alignment_to_swiftui(@component['textAlign'] || 'left')
+            add_modifier_line ".styledPlaceholder(#{hint_literal}, text: #{text_binding}, " \
+                              "style: TextFieldPlaceholderStyle(#{style_args.join(', ')}), " \
+                              "alignment: textFieldPlaceholderAlignment(for: #{alignment}))"
           end
 
-          # hintFont/hintFontSize/hintLineHeightMultiple - SwiftUI TextFieldではプレースホルダースタイルをカスタマイズできないためコメント
-          if @component['hintFont']
-            add_line "// hintFont: #{@component['hintFont']} - Note: SwiftUI TextField doesn't support placeholder font customization"
-          end
-          if @component['hintFontSize']
-            add_line "// hintFontSize: #{@component['hintFontSize']} - Note: SwiftUI TextField doesn't support placeholder font size customization"
-          end
+          # `hintLineHeightMultiple` has no placeholder equivalent: the
+          # overlay is one line and line height is a paragraph property.
+          # TextView takes it because its placeholder can wrap.
           if @component['hintLineHeightMultiple']
-            add_line "// hintLineHeightMultiple: #{@component['hintLineHeightMultiple']} - Note: SwiftUI TextField doesn't support placeholder line height customization"
+            add_line "// hintLineHeightMultiple: #{@component['hintLineHeightMultiple']} - the TextField placeholder is single-line"
           end
 
           # textFieldStyle
@@ -115,9 +160,13 @@ module SjuiTools
             add_modifier_line ".keyboardType(#{keyboard_type})"
           end
 
-          # contentType (for auto-fill)
+          # contentType (for auto-fill). A binding is not one of the tokens
+          # `map_content_type` knows, so it warned and froze the declaration
+          # to `.textContentType(.none)`; the bound form carries the same
+          # table into the Swift and resolves it there.
           if @component['contentType']
-            content_type = map_content_type(@component['contentType'])
+            content_type = bound_content_type(@component['contentType']) ||
+                           map_content_type(@component['contentType'])
             add_modifier_line ".textContentType(#{content_type})"
           end
 
@@ -298,7 +347,14 @@ module SjuiTools
           end
 
           # Apply clipping
-          if @component['clipToBounds']
+          # A binding is truthy in Ruby, so this clipped every declaration
+          # that used one regardless of the property's value. There is no
+          # conditional `.clipped()` in public SwiftUI and SwiftJsonUI's
+          # `View.if` helper is internal to the module, so the bound form is
+          # left to the runtime — which ignores it too
+          # (DynamicModifierHelper guards on `== true`). Reported to the
+          # SwiftJsonUI lane: one public `clipToBounds(_:)` closes both sides.
+          if @component['clipToBounds'] == true || @component['clipToBounds'] == 'true'
             @modifier_bag.register(:clip_to_bounds, ".clipped()")
           end
 
@@ -327,6 +383,14 @@ module SjuiTools
 
         private
 
+        # Whether the layout asked for a placeholder that does not look like
+        # the system one. Colour alone is enough — that is the spelling
+        # consumers reach for most.
+        def styled_placeholder?
+          !!(@component['hintColor'] || @component['placeholderColor'] ||
+             @component['hintFont'] || @component['hintFontSize'])
+        end
+
         def text_field_style(style)
           case style
           when 'RoundedRect', 'roundedRect'
@@ -335,69 +399,6 @@ module SjuiTools
             '.plain'
           else
             '.automatic'
-          end
-        end
-
-        def input_to_keyboard_type(input)
-          case input
-          when 'email'
-            '.emailAddress'
-          when 'password'
-            '.default'  # SwiftUIではセキュア入力は別途設定
-          when 'number'
-            '.numberPad'
-          when 'decimal'
-            '.decimalPad'
-          when 'URL'
-            '.URL'
-          when 'twitter'
-            '.twitter'
-          when 'webSearch'
-            '.webSearch'
-          when 'namePhonePad'
-            '.namePhonePad'
-          else
-            '.default'
-          end
-        end
-
-        # UITextContentType mapping — vocabulary kept in step with rjui's
-        # map_content_type (autocomplete) and kjui's keyboard handling.
-        # Unknown values warn instead of silently degrading to .none
-        # (sjui-textfield-contenttype-newpassword-not-mapped).
-        def map_content_type(type)
-          case type.to_s.downcase
-          when 'username'
-            '.username'
-          when 'password'
-            '.password'
-          when 'newpassword'
-            '.newPassword'
-          when 'onetimecode'
-            '.oneTimeCode'
-          when 'email', 'emailaddress'
-            '.emailAddress'
-          when 'name'
-            '.name'
-          when 'givenname'
-            '.givenName'
-          when 'familyname'
-            '.familyName'
-          when 'tel', 'telephonenumber'
-            '.telephoneNumber'
-          when 'streetaddress'
-            '.streetAddressLine1'
-          when 'postalcode'
-            '.postalCode'
-          when 'country'
-            '.countryName'
-          when 'creditcardnumber'
-            '.creditCardNumber'
-          when 'url'
-            '.URL'
-          else
-            puts "Warning: unknown contentType '#{type}' — emitting .textContentType(.none); add a mapping if this is a canonical value"
-            '.none'
           end
         end
 
@@ -423,15 +424,6 @@ module SjuiTools
             '.route'
           else
             '.done'
-          end
-        end
-
-        def text_alignment_to_swiftui(alignment)
-          case alignment.downcase
-          when 'left', 'leading' then '.leading'
-          when 'right', 'trailing' then '.trailing'
-          when 'center' then '.center'
-          else '.leading'
           end
         end
 

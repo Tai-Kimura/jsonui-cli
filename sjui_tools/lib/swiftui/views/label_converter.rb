@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_view_converter'
+require_relative 'text_style_helper'
 require_relative '../helpers/font_helper'
 require_relative '../helpers/string_manager_helper'
 require_relative 'frame_helper'
@@ -14,6 +15,7 @@ module SjuiTools
         include SjuiTools::SwiftUI::Helpers::FontHelper
         include SjuiTools::SwiftUI::Helpers::StringManagerHelper
         include SjuiTools::SwiftUI::Views::FrameHelper
+        include SjuiTools::SwiftUI::Views::TextStyleHelper
         def convert
           # Get text handler for this component
           label_handler = @binding_handler.is_a?(SjuiTools::SwiftUI::Binding::LabelBindingHandler) ?
@@ -126,7 +128,7 @@ module SjuiTools
             if hint_static && hint[:size]
               add_line "fontSize: #{hint[:size]},"
             elsif @component['fontSize']
-              add_line "fontSize: #{@component['fontSize']},"
+              add_line "fontSize: #{bound_number(@component['fontSize']) || @component['fontSize']},"
             end
 
             # Add fontWeight (handle both fontWeight and font:"bold")
@@ -189,34 +191,49 @@ module SjuiTools
               add_line "strikethrough: true,"
             end
 
-            # Add lineSpacing
+            # Add lineSpacing. `.to_f` on a binding is 0.0, which is how a
+            # bound lineSpacing froze to no spacing at all and a bound
+            # lineHeightMultiple froze to (0 - 1) * fontSize — a NEGATIVE
+            # constant that pulled the lines together.
             if @component['lineHeightMultiple']
-              line_spacing = (@component['lineHeightMultiple'].to_f - 1) * (@component['fontSize'] || 17).to_i
-              add_line "lineSpacing: #{line_spacing},"
+              add_line "lineSpacing: #{line_spacing_from_multiple(@component['lineHeightMultiple'])},"
             elsif @component['lineSpacing']
-              add_line "lineSpacing: #{@component['lineSpacing'].to_f},"
+              add_line "lineSpacing: #{bound_number(@component['lineSpacing']) || @component['lineSpacing'].to_f},"
             end
 
-            # Add lineLimit
+            # Add lineLimit. 0 means "unlimited" and has to stay a `nil` —
+            # `.to_i` made every bound declaration exactly that, so a bound
+            # `lines` silently unlimited the label. The bound form carries the
+            # same 0-means-nil rule into the Swift.
             if @component['lines']
-              lines_value = @component['lines'].to_i
-              if lines_value == 0
+              if (bound_lines = bound_number(@component['lines'], cast: 'Int'))
+                add_line "lineLimit: (#{bound_lines} == 0 ? nil : #{bound_lines}),"
+              elsif @component['lines'].to_i == 0
                 add_line "lineLimit: nil,"
               else
-                add_line "lineLimit: #{lines_value},"
+                add_line "lineLimit: #{@component['lines'].to_i},"
               end
             elsif @component['autoShrink']
               add_line "lineLimit: 1,"
             end
 
-            # Add textAlignment (default to .leading)
-            alignment = @component['textAlign'] ?
-                       text_alignment_to_swiftui(@component['textAlign']) :
-                       '.leading'
+            # Add textAlignment (default to .leading). A binding is not one of
+            # the spellings `text_alignment_to_swiftui` switches on, so it hit
+            # the else branch and froze every bound alignment to .leading.
+            alignment = if @component['textAlign']
+                          bound_text_alignment(@component['textAlign']) ||
+                            text_alignment_to_swiftui(@component['textAlign'])
+                        else
+                          '.leading'
+                        end
             add_line "textAlignment: #{alignment},"
 
-            # Add linkable if true
-            if @component['linkable'] == true || @component['linkable'] == 'true'
+            # Add linkable if true. Ruby truthiness never entered here for a
+            # binding (`"@{x}" == true` is false), so the declaration was
+            # dropped; the bound form passes the condition to Swift instead.
+            if (bound_linkable = bound_bool(@component['linkable']))
+              add_line "linkable: #{bound_linkable},"
+            elsif @component['linkable'] == true || @component['linkable'] == 'true'
               add_line "linkable: true,"
             end
 
@@ -251,10 +268,12 @@ module SjuiTools
 
           # autoShrink & minimumScaleFactor
           if @component['autoShrink']
-            scale_factor = @component['minimumScaleFactor'] || 0.5
+            scale_factor = bound_number(@component['minimumScaleFactor']) ||
+                           @component['minimumScaleFactor'] || 0.5
             @modifier_bag.append(:component_specific, ".minimumScaleFactor(#{scale_factor})")
           elsif @component['minimumScaleFactor']
-            @modifier_bag.append(:component_specific, ".minimumScaleFactor(#{@component['minimumScaleFactor']})")
+            factor = bound_number(@component['minimumScaleFactor']) || @component['minimumScaleFactor']
+            @modifier_bag.append(:component_specific, ".minimumScaleFactor(#{factor})")
           end
 
           # edgeInset (Label内部パディング - UIKitに合わせて配列形式対応)
@@ -345,7 +364,7 @@ module SjuiTools
             border_color_value = @component['borderColor']
             unless border_color_value.is_a?(String) && border_color_value.start_with?('@{')
               color = get_swiftui_color(border_color_value)
-              border_code = build_border_overlay(color, (@component['cornerRadius'] || 0).to_i, @component['borderWidth'].to_i)
+              border_code = build_border_overlay(color, (@component['cornerRadius'] || 0).to_i, @component['borderWidth'].to_i, @component['borderStyle'])
               @modifier_bag.register(:border, border_code)
             end
           end
@@ -403,17 +422,17 @@ module SjuiTools
 
         private
 
-        def text_alignment_to_swiftui(alignment)
-          case alignment.downcase
-          when 'left', 'leading'
-            '.leading'
-          when 'right', 'trailing'
-            '.trailing'
-          when 'center'
-            '.center'
-          else
-            '.leading'
-          end
+        # UIKit's formula, `(multiple - 1) * fontSize`, with either operand
+        # possibly bound. Both static operands keep the exact arithmetic the
+        # generator did before (a Ruby Float, printed the same way).
+        def line_spacing_from_multiple(multiple)
+          bound_multiple = bound_number(multiple)
+          bound_size = bound_number(@component['fontSize'])
+          return (multiple.to_f - 1) * (@component['fontSize'] || 17).to_i if bound_multiple.nil? && bound_size.nil?
+
+          multiple_expr = bound_multiple || multiple.to_f
+          size_expr = bound_size || (@component['fontSize'] || 17).to_i
+          "((#{multiple_expr} - 1) * #{size_expr})"
         end
 
         def font_weight_to_swiftui(weight)

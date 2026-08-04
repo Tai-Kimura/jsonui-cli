@@ -96,12 +96,23 @@ RSpec.describe 'pair-scan closure (swiftui)' do
     expect(code).to include('placeholder: "ph"')
   end
 
-  it 'Progress: indicatorStyle + the color/tintColor accent spellings' do
-    code = convert(:ProgressConverter,
-                   'type' => 'Progress', 'progress' => 0.4,
-                   'indicatorStyle' => 'linear', 'color' => '#FF0000')
-    expect(code).to include('.progressViewStyle(LinearProgressViewStyle())')
-    expect(code).to include('.tint(')
+  # `indicatorStyle` is declared `["medium", "large"]` — a SIZE, not a shape.
+  # This pinned `linear`, a value the SSoT does not declare and the validator
+  # warns on, and the converter read it as the shape: both declared values
+  # mapped to CircularProgressViewStyle(), so the attribute emitted one
+  # constant whatever you wrote.
+  it 'Progress: indicatorStyle sizes the indicator, and the color/tintColor accent spellings' do
+    large = convert(:ProgressConverter,
+                    'type' => 'Progress', 'progress' => 0.4,
+                    'indicatorStyle' => 'large', 'color' => '#FF0000')
+    expect(large).to include('.controlSize(.large)')
+    expect(large).to include('.tint(')
+
+    medium = convert(:ProgressConverter,
+                     'type' => 'Progress', 'progress' => 0.4,
+                     'indicatorStyle' => 'medium', 'color' => '#FF0000')
+    expect(medium).to include('.controlSize(.regular)')
+    expect(medium).not_to eq(large)
   end
 
   it 'Radio: per-state colours and the value identity' do

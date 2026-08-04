@@ -27,9 +27,23 @@ module SjuiTools
           # ProgressView
           add_line "ProgressView(value: #{progress_value})"
 
-          # indicatorStyle — same vocabulary as Indicator (linear/circular);
-          # a determinate bar defaults to linear, so only emit when declared.
-          style = @component['indicatorStyle'] || @component['style']
+          # indicatorStyle — the declared vocabulary is `medium` / `large`
+          # ("ActivityIndicator size style"), not linear/circular. Reading it
+          # as the shape mapped BOTH declared values to
+          # `CircularProgressViewStyle()`, so the attribute emitted one
+          # constant whatever you wrote (`jui conformance codegen-effect` C2).
+          # `controlSize` is the size knob a ProgressView actually has.
+          #
+          # `style` keeps the shape reading: it is the separate spelling that
+          # carries linear/circular and is not the same attribute.
+          case @component['indicatorStyle'].to_s.downcase
+          when 'large'
+            add_modifier_line ".controlSize(.large)"
+          when 'medium'
+            add_modifier_line ".controlSize(.regular)"
+          end
+
+          style = @component['style']
           if style
             swift_style = style.to_s.downcase == 'linear' ? 'LinearProgressViewStyle()' : 'CircularProgressViewStyle()'
             add_modifier_line ".progressViewStyle(#{swift_style})"

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require_relative '../views/value_expression_helper'
 
 module SjuiTools
   module SwiftUI
@@ -14,6 +15,13 @@ module SjuiTools
       # need one provider closure to control all weight × family × size
       # combinations.
       module FontHelper
+        # Both forms are needed: converters `include FontHelper` and call the
+        # methods on themselves, and the module is also driven directly as
+        # `FontHelper.apply_font_modifiers(component, converter)`. The
+        # bound-value emitters have to be reachable from either entry point.
+        include SjuiTools::SwiftUI::Views::ValueExpressionHelper
+        extend SjuiTools::SwiftUI::Views::ValueExpressionHelper
+
         # Candidate paths for the shared weight-name → platform-enum mapping,
         # tried in order. Resolution is unified with kjui/rjui:
         #   1. `<tool_dir>/shared/core/...` — the per-tool copy that
@@ -124,9 +132,24 @@ module SjuiTools
           # pick up the system default.
           return if family_literal.nil? && weight_literal.nil? && size_literal.nil?
 
-          family_arg = family_literal.nil? ? 'nil' : "\"#{family_literal}\""
+          # A bound family used to be quoted like a literal, which compiled
+          # and then asked the font provider for a family called
+          # "@{fontName}"; a bound size was interpolated bare into
+          # `CGFloat(...)`, which does not compile at all. Both go through the
+          # canonical emitters now. The static branches are untouched.
+          family_arg = bound_string(family_literal) ||
+                       (family_literal.nil? ? 'nil' : "\"#{family_literal}\"")
           weight_arg = weight_literal.nil? ? 'nil' : weight_literal
-          size_arg   = size_literal.nil? ? 'nil' : "CGFloat(#{size_literal})"
+          size_arg   = bound_number(size_literal) ||
+                       (size_literal.nil? ? 'nil' : "CGFloat(#{size_literal})")
+
+          # A bound `font` is the ambiguous spelling and owns both slots.
+          # `fontFamily` / `fontWeight` are unambiguous and keep theirs, so
+          # this only fires when `font` is what fed the family slot.
+          if family_literal.equal?(component['font']) && weight_literal.nil? &&
+             (pair = bound_font_args(component['font']))
+            family_arg, weight_arg = pair
+          end
 
           converter.add_modifier_line(
             ".font(SwiftJsonUIConfiguration.shared.resolveFont(" \
@@ -149,11 +172,80 @@ module SjuiTools
 
           weight_source = component['fontWeight']
           weight_source ||= font_attr if font_is_weight
-          weight_literal = weight_source ? font_weight_to_swiftui(weight_source) : nil
+          weight_literal = if weight_source.nil?
+                             nil
+                           else
+                             # `font_weight_to_swiftui` looks the string up in
+                             # the shared table at GENERATION time and warns on
+                             # anything it does not know, so a `@{...}` froze to
+                             # `.regular` with a spurious warning. A bound weight
+                             # carries the same table into the emitted Swift
+                             # instead — one vocabulary, resolved a step later.
+                             swift_weight_expr(weight_source) ||
+                               font_weight_to_swiftui(weight_source)
+                           end
 
           size_literal = component['fontSize']
 
           [family_literal, weight_literal, size_literal]
+        end
+
+        # A BOUND weight as a Swift expression, or nil when *value* is not a
+        # binding.
+        #
+        # `Font.Weight` is not RawRepresentable and SwiftJsonUI's own
+        # `Font.Weight.from(string:)` is internal to the module, so generated
+        # app code cannot ask the library to do this lookup. The shared table
+        # is written into the emission instead — which keeps the vocabulary in
+        # `shared/core/font_weight_mapping.json` alone, where kjui and rjui
+        # read it too, rather than forking a second copy into Swift.
+        def swift_weight_expr(value, default: :fallback)
+          return nil unless bound_value?(value)
+
+          mapping = FontHelper.weight_mapping
+          weights = mapping['weights'] || {}
+          table = {}
+          weights.each { |name, entry| table[name] = entry['swift'] if entry['swift'] }
+          # The generation-time aliases resolve at run time too, or a weight
+          # spelling that works statically would stop working when bound.
+          { 'normal' => 'regular', 'ultra-light' => 'ultralight', 'semi-bold' => 'semibold' }
+            .each { |from, to| table[from] = table[to] if table[to] }
+          fallback_key = (mapping['default_on_unknown'] || 'regular').to_s.downcase
+          fallback = default == :fallback ? (table[fallback_key] || '.regular') : default
+
+          bound_enum(value, table, default: fallback, type: 'Font.Weight')
+        end
+
+        # The two FontSpec arguments a bound `font` decomposes into, or nil
+        # when *value* is not a binding.
+        #
+        # `font` is ambiguous by declaration — "Font weight name … or font
+        # name" — and the static path resolves it by testing the string
+        # against WEIGHT_KEYWORDS. A binding is not a weight keyword, so it
+        # always fell through to the family branch and was emitted QUOTED:
+        # the provider was then asked for a family literally called
+        # "@{fontName}". The rule does not change here, only when it is
+        # applied: the same table decides at run time, so a bound `font`
+        # naming a weight IS the weight and anything else is the family,
+        # exactly as a written-out one would be.
+        def bound_font_args(value)
+          lookup = swift_weight_expr(value, default: nil)
+          return nil if lookup.nil?
+
+          text = bound_string(value)
+          # The family branch only has to know whether the string NAMES a
+          # weight, so it tests membership against the same keys rather than
+          # repeating the whole dictionary — a second 12-entry literal in the
+          # same expression is what makes Swift's type checker crawl.
+          names = weight_vocabulary.map { |name| name.to_s.inspect }.join(', ')
+          ["([#{names}].contains(#{text}.lowercased()) ? nil : #{text})", lookup]
+        end
+
+        # Every weight spelling the generator accepts, aliases included.
+        def weight_vocabulary
+          mapping = FontHelper.weight_mapping
+          names = (mapping['weights'] || {}).keys
+          names + %w[normal ultra-light semi-bold]
         end
 
         # Convert a JSON `font` weight string to the corresponding SwiftUI
@@ -190,6 +282,9 @@ module SjuiTools
 
         module_function :apply_font_modifiers,
                         :build_font_spec_args,
+                        :swift_weight_expr,
+                        :bound_font_args,
+                        :weight_vocabulary,
                         :font_weight_to_swiftui
       end
     end

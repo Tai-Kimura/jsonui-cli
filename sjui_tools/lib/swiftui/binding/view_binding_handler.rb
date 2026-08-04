@@ -67,24 +67,29 @@ module SjuiTools
             ".frame(minHeight: #{binding})"
           when 'maxHeight'
             ".frame(maxHeight: #{binding})"
-          # Padding bindings
-          when 'paddingTop'
-            ".padding(.top, #{binding})"
-          when 'paddingBottom'
-            ".padding(.bottom, #{binding})"
-          when 'paddingLeft', 'paddingStart'
-            ".padding(.leading, #{binding})"
-          when 'paddingRight', 'paddingEnd'
-            ".padding(.trailing, #{binding})"
-          # Margin bindings (SwiftUI uses padding for margins)
-          when 'topMargin'
-            ".padding(.top, #{binding})"
-          when 'bottomMargin'
-            ".padding(.bottom, #{binding})"
-          when 'leftMargin', 'startMargin'
-            ".padding(.leading, #{binding})"
-          when 'rightMargin', 'endMargin'
-            ".padding(.trailing, #{binding})"
+          # Padding and margin are NOT handled here.
+          #
+          # `SpacingHelper#apply_padding` / `#apply_margins` read every
+          # spelling of both — `paddingTop` and its `topPadding` alias, the
+          # `padding` / `paddings` shorthand, the RTL pair — and since plan 49
+          # they emit the bound form through the canonical numeric emitter.
+          # This branch read four of the eight padding spellings and none of
+          # the shorthands, which is why `topPadding` and friends froze to
+          # `.padding(.top, 0)` while `paddingTop` did not. Adding the missing
+          # spellings here would have been the second copy of a vocabulary
+          # (plan 40); deleting the branch leaves one.
+          #
+          # It was also actively destructive: `process_bindings` registers its
+          # result with `ModifierBag#register`, which REPLACES a multi-value
+          # key, so one bound padding edge dropped every static padding on the
+          # same view. And it emitted `data.x` bare into a CGFloat slot, which
+          # does not compile for an optional property.
+          #
+          # Every converter that runs this handler also runs SpacingHelper —
+          # the one exception is ViewConverter's `skip_padding:` under
+          # relative positioning, where the container's `parentPadding`
+          # already owns the inset and a modifier here would double it.
+
           # Color attributes
           when 'tintColor'
             ".tint(#{binding})"
@@ -106,7 +111,21 @@ module SjuiTools
             # Dynamic binding of borderStyle is complex in SwiftUI - recommend static usage
             nil
           when 'clipToBounds'
-            ".clipped()"
+            # This branch only ever runs for a BINDING (the guard at the top
+            # of the method returns for anything else), and it emitted an
+            # unconditional `.clipped()` — every bound clipToBounds clipped,
+            # whatever the property said. `.clipped()` has no conditional
+            # form and SwiftJsonUI's `View.if` helper is internal to the
+            # module, so generated app code cannot express "clip when true"
+            # with today's public API.
+            #
+            # Emitting nothing is the same answer the dynamic runtime gives
+            # (DynamicModifierHelper: `guard component.clipToBounds == true`,
+            # and a `@{...}` decodes to nil there), so the two paths agree
+            # rather than disagreeing in opposite directions. Reported to the
+            # SwiftJsonUI lane: a public `func clipToBounds(_ enabled: Bool)`
+            # closes it on both sides at once.
+            nil
           # User interaction
           when 'userInteractionEnabled', 'canTap'
             ".allowsHitTesting(#{binding})"

@@ -59,19 +59,29 @@ module SjuiTools
               add_line "iconColor: #{get_swiftui_color(@component['iconColor'])},"
             end
 
-            # Spacing
+            # Spacing. `spacing:` is a CGFloat, so a bound one has to arrive
+            # as an expression — interpolating the declaration produced
+            # `spacing: @{gap},`, which is not Swift and stopped the build.
             if @component['spacing']
-              add_line "spacing: #{@component['spacing']},"
+              add_line "spacing: #{bound_number(@component['spacing']) || @component['spacing']},"
             end
 
             # Font properties
             if @component['fontSize']
-              add_line "fontSize: #{@component['fontSize']},"
+              add_line "fontSize: #{bound_number(@component['fontSize']) || @component['fontSize']},"
             end
 
             if @component['fontStyle']
               weight = get_font_weight(@component['fontStyle'])
               add_line "fontWeight: .#{weight}," if weight
+            elsif (bound_weight = swift_weight_expr(@component['font'], default: nil))
+              # CheckBoxView carries a weight and no family, so `font` means
+              # the weight here — which is why the static branch below only
+              # tests weight spellings. A binding took neither branch and the
+              # declaration vanished; it resolves against the same vocabulary
+              # at run time instead. An unknown value stays nil, exactly the
+              # "not a weight spelling" outcome the static branch produces.
+              add_line "fontWeight: #{bound_weight},"
             elsif %w[bold semibold medium].include?(@component['font'].to_s.downcase)
               # `font: "bold"` doubles as the weight spelling (Button/Radio
               # dynamic precedent) — the label rendered regular here.

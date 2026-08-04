@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require_relative 'base_view_converter'
+require_relative 'text_style_helper'
 require_relative '../helpers/string_manager_helper'
 
 module SjuiTools
@@ -8,6 +9,7 @@ module SjuiTools
     module Views
       class TextViewConverter < BaseViewConverter
         include SjuiTools::SwiftUI::Helpers::StringManagerHelper
+        include SjuiTools::SwiftUI::Views::TextStyleHelper
         def convert
           id = @component['id'] || 'textEditor'
 
@@ -124,7 +126,7 @@ module SjuiTools
 
             # fontSize
             if @component['fontSize']
-              add_line "fontSize: #{@component['fontSize']},"
+              add_line "fontSize: #{bound_number(@component['fontSize']) || @component['fontSize']},"
             end
 
             # fontColor
@@ -133,9 +135,17 @@ module SjuiTools
               add_line "fontColor: #{color},"
             end
 
-            # font
-            if @component['font']
-              add_line "fontName: \"#{@component['font']}\","
+            # font / fontFamily. `fontName:` is what TextViewWithPlaceholder
+            # builds `.custom(name, size:)` from — the family — and it
+            # resolves the `"bold"` weight spelling itself at run time, so the
+            # ambiguity `font` carries is already handled on the other side.
+            # `fontFamily` was read by nothing here at all, which left the
+            # declared family inert on this platform; it is the specific
+            # spelling and wins. A binding used to be pasted between the
+            # quotes and asked for a family literally called "@{fontName}".
+            font_name = @component['fontFamily'] || @component['font']
+            if font_name
+              add_line "fontName: #{bound_string(font_name) || "\"#{font_name}\""},"
             end
 
             # background
@@ -244,6 +254,21 @@ module SjuiTools
             @modifier_bag.append(:on_text_change, ".onChange(of: #{binding_path}) { oldValue, newValue in\n#{indent_str}guard oldValue != newValue else { return }\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}")
           end
 
+          # textAlign / input. TextViewWithPlaceholder takes neither as an
+          # initializer argument, and nothing here read them — both spellings
+          # were inert on this platform. Neither needs one: SwiftUI resolves
+          # `multilineTextAlignment` and `keyboardType` through the
+          # environment, so a modifier on the wrapper reaches the TextEditor
+          # (and the placeholder Text) inside it.
+          if @component['textAlign']
+            @modifier_bag.append(:component_specific,
+                                 ".multilineTextAlignment(#{text_alignment_to_swiftui(@component['textAlign'])})")
+          end
+          if @component['input']
+            @modifier_bag.append(:component_specific,
+                                 ".keyboardType(#{input_to_keyboard_type(@component['input'])})")
+          end
+
           # TextViewWithPlaceholder handles background/cornerRadius internally
           # Only apply frame, border, and margins here
           # Corresponding to Dynamic mode: TextViewConverter.swift
@@ -273,7 +298,7 @@ module SjuiTools
           # Apply border (after component's internal cornerRadius)
           if @component['borderWidth'] && @component['borderColor']
             color = get_swiftui_color(@component['borderColor'])
-            border_code = build_border_overlay(color, (@component['cornerRadius'] || 0).to_i, @component['borderWidth'].to_i)
+            border_code = build_border_overlay(color, (@component['cornerRadius'] || 0).to_i, @component['borderWidth'].to_i, @component['borderStyle'])
             @modifier_bag.register(:border, border_code)
           end
 
@@ -333,10 +358,13 @@ module SjuiTools
 
         # editable / enabled / keyboardType.
         #
-        # `editable` and `keyboardType` are declared, honoured by Compose and by
-        # web (`editable` -> readOnly, `keyboardType` -> the input type), and
+        # `editable` and `keyboardType` are declared, honoured by web
+        # (`editable` -> readOnly, `keyboardType` -> the input type), and
         # neither was read here — so a read-only TextView was fully editable on
-        # iOS. `.disabled` rather than a readOnly flag because SwiftUI's
+        # iOS. (Compose does NOT honour `editable` today: the implementation is
+        # in `kjui_tools/lib/xml/` only, and the XML mode was frozen on
+        # 2026-07-03. Plan 49 lane C is closing the Compose side.)
+        # `.disabled` rather than a readOnly flag because SwiftUI's
         # TextEditor has no read-only mode; that also removes it from the focus
         # chain, which is what "not editable" means for a keyboard user.
         #

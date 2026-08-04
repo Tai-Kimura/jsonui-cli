@@ -1,7 +1,13 @@
+require_relative 'value_expression_helper'
 module SjuiTools
   module SwiftUI
     module Views
       module WeightedStackHelper
+        # `get_child_weight` renders a bound weight as a Swift expression, so
+        # it needs the shared emitters. The module is mixed into converters
+        # that already have them, and into bare test doubles that do not.
+        include ValueExpressionHelper
+
         # WeightedHStackを生成
         def generate_weighted_hstack(children, alignment)
           add_line "GeometryReader { geometry in"
@@ -70,22 +76,24 @@ module SjuiTools
         end
         
         # 子要素のweightを取得
+        #
+        # Numeric only, deliberately. This module divides the weight by the
+        # sibling total to compute a ratio at GENERATION time, and a bound
+        # weight has no value here to divide — the live path
+        # (`ViewConverter`, which builds `WeightedHStack(children:)`) hands
+        # the weight to the library as a `CGFloat` expression instead and
+        # lets the layout do the division at run time. Nothing includes this
+        # module today; if something does, the bound form has to go through
+        # `ValueExpressionHelper#weight_expression` there too.
         def get_child_weight(child, orientation)
           return 0 unless child.is_a?(Hash)
-          
-          # weightプロパティを確認
-          if child['weight']
-            return child['weight'].to_f
-          end
-          
-          # 方向別のweightプロパティを確認
-          if orientation == 'horizontal' && child['widthWeight']
-            return child['widthWeight'].to_f
-          elsif orientation == 'vertical' && child['heightWeight']
-            return child['heightWeight'].to_f
-          end
-          
-          0
+
+          declared = child['weight']
+          declared = child['widthWeight'] if declared.nil? && orientation == 'horizontal'
+          declared = child['heightWeight'] if declared.nil? && orientation == 'vertical'
+          return 0 if declared.nil? || bound_value?(declared)
+
+          declared.to_f
         end
         
         # 重みなしの子要素をレンダリング

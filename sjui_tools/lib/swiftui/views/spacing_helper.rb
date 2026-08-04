@@ -6,6 +6,15 @@ module SjuiTools
       module SpacingHelper
         include MarginExpressionHelper
 
+        # One padding edge as Swift. `.to_i` on a binding is 0, which is how
+        # every bound padding froze to `.padding(.top, 0)` — the declaration
+        # compiled, ran, and inset nothing (plan 49, 6 findings). Numbers keep
+        # `.to_i` exactly, so a numeric declaration emits the bytes it always
+        # did.
+        def padding_value(value)
+          bound_number(value) || value.to_i
+        end
+
         # パディングを適用（UIKitに合わせてpaddingsに統一）
         def apply_padding
           padding = @component['paddings'] || @component['padding']
@@ -15,20 +24,20 @@ module SjuiTools
             if padding.is_a?(Array)
               case padding.length
               when 1
-                @modifier_bag.append(:padding, ".padding(#{padding[0].to_i})")
+                @modifier_bag.append(:padding, ".padding(#{padding_value(padding[0])})")
               when 2
                 # 縦横のパディング
-                @modifier_bag.append(:padding, ".padding(.horizontal, #{padding[1].to_i})")
-                @modifier_bag.append(:padding, ".padding(.vertical, #{padding[0].to_i})")
+                @modifier_bag.append(:padding, ".padding(.horizontal, #{padding_value(padding[1])})")
+                @modifier_bag.append(:padding, ".padding(.vertical, #{padding_value(padding[0])})")
               when 4
                 # 上、左、下、右の順 (JsonUI format: [top, left, bottom, right])
-                @modifier_bag.append(:padding, ".padding(.top, #{padding[0].to_i})")
-                @modifier_bag.append(:padding, ".padding(.leading, #{padding[1].to_i})")
-                @modifier_bag.append(:padding, ".padding(.bottom, #{padding[2].to_i})")
-                @modifier_bag.append(:padding, ".padding(.trailing, #{padding[3].to_i})")
+                @modifier_bag.append(:padding, ".padding(.top, #{padding_value(padding[0])})")
+                @modifier_bag.append(:padding, ".padding(.leading, #{padding_value(padding[1])})")
+                @modifier_bag.append(:padding, ".padding(.bottom, #{padding_value(padding[2])})")
+                @modifier_bag.append(:padding, ".padding(.trailing, #{padding_value(padding[3])})")
               end
             else
-              @modifier_bag.append(:padding, ".padding(#{padding.to_i})")
+              @modifier_bag.append(:padding, ".padding(#{padding_value(padding)})")
             end
           end
 
@@ -44,22 +53,22 @@ module SjuiTools
 
           # RTL aware padding takes precedence over left/right
           if start_pad
-            @modifier_bag.append(:padding, ".padding(.leading, #{start_pad.to_i})")
+            @modifier_bag.append(:padding, ".padding(.leading, #{padding_value(start_pad)})")
           elsif left_pad
-            @modifier_bag.append(:padding, ".padding(.leading, #{left_pad.to_i})")
+            @modifier_bag.append(:padding, ".padding(.leading, #{padding_value(left_pad)})")
           end
 
           if end_pad
-            @modifier_bag.append(:padding, ".padding(.trailing, #{end_pad.to_i})")
+            @modifier_bag.append(:padding, ".padding(.trailing, #{padding_value(end_pad)})")
           elsif right_pad
-            @modifier_bag.append(:padding, ".padding(.trailing, #{right_pad.to_i})")
+            @modifier_bag.append(:padding, ".padding(.trailing, #{padding_value(right_pad)})")
           end
 
           if top_pad
-            @modifier_bag.append(:padding, ".padding(.top, #{top_pad.to_i})")
+            @modifier_bag.append(:padding, ".padding(.top, #{padding_value(top_pad)})")
           end
           if bottom_pad
-            @modifier_bag.append(:padding, ".padding(.bottom, #{bottom_pad.to_i})")
+            @modifier_bag.append(:padding, ".padding(.bottom, #{padding_value(bottom_pad)})")
           end
         end
 
@@ -237,27 +246,21 @@ module SjuiTools
         end
 
         # マージン値を取得（バインディング対応）
+        #
+        # The bound branch used to build `data.<everything between the
+        # braces>` with its own regexp — the second copy of the bypass plan 43
+        # replaced for the ZStack offset. It carried an inline default out
+        # unbracketed (`@{gap ?? 12}` -> `.padding(.top, data.gap ?? 12)`) and
+        # never unwrapped an Optional. `margin_operand` is the canonical form
+        # and the offset path already uses it, so the two spellings of one
+        # margin now go through one emitter.
         def margin_value(value)
-          if is_margin_binding?(value)
-            extract_margin_binding_value(value)
-          else
-            value.to_i
-          end
+          is_margin_binding?(value) ? margin_operand(value) : value.to_i
         end
 
         # バインディング式かどうかを判定
         def is_margin_binding?(value)
-          value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
-        end
-
-        # バインディング式からSwiftUIの値を抽出
-        def extract_margin_binding_value(value)
-          return value unless value.is_a?(String)
-          if value =~ /^@\{(.+)\}$/
-            "data.#{$1}"
-          else
-            value
-          end
+          bound_value?(value)
         end
 
         # insetsプロパティを適用（パディングの別形式）

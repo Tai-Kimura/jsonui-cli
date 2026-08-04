@@ -300,6 +300,8 @@ module SjuiTools
 
                     # Constraints
                     add_line "constraints: ["
+                    constraints_open_index = @generated_code.length - 1
+                    @bound_constraint_emitted = false
                     indent do
                       # 相対配置の制約を追加
                       constraint_added = false
@@ -358,38 +360,32 @@ module SjuiTools
                       
                       # アライメント制約（水平方向を先に）
                       if child['alignLeft']
-                        target = child['alignLeft'].is_a?(String) ? "\"#{child['alignLeft']}\"" : "\"\""
-                        add_line "RelativePositionConstraint(type: .#{child['alignLeft'].is_a?(String) ? 'left' : 'parentLeft'}, targetId: #{target}),"
+                        add_parent_constraint(child['alignLeft'], 'left', 'parentLeft')
                         constraint_added = true
                       end
                       
                       if child['alignRight']
-                        target = child['alignRight'].is_a?(String) ? "\"#{child['alignRight']}\"" : "\"\""
-                        add_line "RelativePositionConstraint(type: .#{child['alignRight'].is_a?(String) ? 'right' : 'parentRight'}, targetId: #{target}),"
+                        add_parent_constraint(child['alignRight'], 'right', 'parentRight')
                         constraint_added = true
                       end
                       
                       if child['alignTop']
-                        target = child['alignTop'].is_a?(String) ? "\"#{child['alignTop']}\"" : "\"\""
-                        add_line "RelativePositionConstraint(type: .#{child['alignTop'].is_a?(String) ? 'top' : 'parentTop'}, targetId: #{target}),"
+                        add_parent_constraint(child['alignTop'], 'top', 'parentTop')
                         constraint_added = true
                       end
                       
                       if child['alignBottom']
-                        target = child['alignBottom'].is_a?(String) ? "\"#{child['alignBottom']}\"" : "\"\""
-                        add_line "RelativePositionConstraint(type: .#{child['alignBottom'].is_a?(String) ? 'bottom' : 'parentBottom'}, targetId: #{target}),"
+                        add_parent_constraint(child['alignBottom'], 'bottom', 'parentBottom')
                         constraint_added = true
                       end
                       
                       if child['centerHorizontal']
-                        target = child['centerHorizontal'].is_a?(String) ? "\"#{child['centerHorizontal']}\"" : "\"\""
-                        add_line "RelativePositionConstraint(type: .#{child['centerHorizontal'].is_a?(String) ? 'centerHorizontal' : 'parentCenterHorizontal'}, targetId: #{target}),"
+                        add_parent_constraint(child['centerHorizontal'], 'centerHorizontal', 'parentCenterHorizontal')
                         constraint_added = true
                       end
                       
                       if child['centerVertical']
-                        target = child['centerVertical'].is_a?(String) ? "\"#{child['centerVertical']}\"" : "\"\""
-                        add_line "RelativePositionConstraint(type: .#{child['centerVertical'].is_a?(String) ? 'centerVertical' : 'parentCenterVertical'}, targetId: #{target}),"
+                        add_parent_constraint(child['centerVertical'], 'centerVertical', 'parentCenterVertical')
                         constraint_added = true
                       end
                       
@@ -405,7 +401,7 @@ module SjuiTools
                       end
                       
                       if child['centerInParent']
-                        add_line "RelativePositionConstraint(type: .parentCenter, targetId: \"\"),"
+                        add_parent_constraint(child['centerInParent'], nil, 'parentCenter')
                         constraint_added = true
                       end
 
@@ -422,8 +418,17 @@ module SjuiTools
                         @generated_code[-1] = @generated_code.last.chomp(',')
                       end
                     end
-                    add_line "],"
-                    
+                    if @bound_constraint_emitted
+                      # At least one constraint is conditional at run time, so
+                      # the literal holds Optionals and is compacted. The cast
+                      # is what lets the mixed literal type-check.
+                      @generated_code[constraints_open_index] =
+                        @generated_code[constraints_open_index].sub('constraints: [', 'constraints: ([')
+                      add_line "] as [RelativePositionConstraint?]).compactMap { $0 },"
+                    else
+                      add_line "],"
+                    end
+
                     # Margins
                     # Check for margins array first
                     if child['margins']
@@ -503,6 +508,34 @@ module SjuiTools
             add_line "containerHeightMode: #{get_size_mode(@component['height'])}"
           end
           add_line ")"
+        end
+
+        # One parent-relative constraint (`alignTop`, `centerVertical`,
+        # `centerInParent`, …).
+        #
+        # These are declared `["boolean", "binding"]`. A String is not a legal
+        # spelling and never was — but the emitter branched on `is_a?(String)`
+        # to mean "align to the view with this id", so a `@{...}` was read as
+        # a TARGET ID and the constraint pointed at a view called
+        # "@{juiProbeValue}". That is where six of plan 49's ios leaks came
+        # from, and it is the "settle the binding before you evaluate it"
+        # shape: the binding has to be recognised BEFORE the type test.
+        #
+        # A bound flag cannot be resolved at generation time, so the element
+        # becomes conditional and the array is compacted (see the caller).
+        # *target_type* is nil for a constraint with no view-relative form.
+        def add_parent_constraint(value, target_type, parent_type)
+          if (condition = bound_bool(value))
+            @bound_constraint_emitted = true
+            add_line "#{condition} ? RelativePositionConstraint(type: .#{parent_type}, targetId: \"\") : nil,"
+            return
+          end
+
+          if target_type && value.is_a?(String)
+            add_line "RelativePositionConstraint(type: .#{target_type}, targetId: \"#{value}\"),"
+          else
+            add_line "RelativePositionConstraint(type: .#{parent_type}, targetId: \"\"),"
+          end
         end
 
         # バインディング式をSwiftUI形式に変換

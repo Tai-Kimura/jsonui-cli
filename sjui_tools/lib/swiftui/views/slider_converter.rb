@@ -11,19 +11,27 @@ module SjuiTools
           min_value = attr_with_alias('minimum', 'minimumValue', 'minValue') || 0
           max_value = attr_with_alias('maximum', 'maximumValue', 'maxValue') || 1
           value_prop = @component['value'] || min_value
-          
+
           # range プロパティの処理（配列形式: [min, max]）
           if @component['range'].is_a?(Array) && @component['range'].length == 2
             min_value = @component['range'][0]
             max_value = @component['range'][1]
           end
-          
+
+          # The range is a `ClosedRange<Double>` in the emitted Swift, so a
+          # bound bound has to be an expression: interpolating the
+          # declaration produced `in: 0...@{max}`, which is not a program.
+          # `Double` rather than CGFloat because `Slider(value:in:)` infers
+          # the range from the Binding's Double.
+          min_expr = bound_number(min_value, cast: 'Double') || min_value
+          max_expr = bound_number(max_value, cast: 'Double') || max_value
+
           # Check if value is a binding
           if @component['value'] && @component['value'].to_s.start_with?('@{') && @component['value'].to_s.end_with?('}')
             # Use binding from data model (two-way position: parsed path only)
             property_name = SwiftUI::Binding::BindingExpression.parse(@component['value'][2..-2]).path
             binding_var = "$data.#{property_name}"
-            add_line "Slider(value: #{binding_var}, in: #{min_value}...#{max_value})"
+            add_line "Slider(value: #{binding_var}, in: #{min_expr}...#{max_expr})"
           else
             # Create @State variable name
             state_var = "sliderValue#{@component['id'] || ''}"
@@ -33,7 +41,7 @@ module SjuiTools
             add_state_variable(state_var, "Double", value_prop.to_s)
             
             # Slider
-            add_line "Slider(value: $#{state_var}, in: #{min_value}...#{max_value})"
+            add_line "Slider(value: $#{state_var}, in: #{min_expr}...#{max_expr})"
           end
           
           # Tint color

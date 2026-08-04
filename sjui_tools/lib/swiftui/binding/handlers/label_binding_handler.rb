@@ -21,8 +21,11 @@ module SjuiTools
             end
           when 'fontSize'
             if is_binding?(value)
-              binding = parse_binding(value, read_only: true)
-              ".font(.system(size: #{binding}))"
+              # `.system(size:)` takes a CGFloat, and `parse_binding` hands
+              # back the read-only VALUE expression — an Optional for any
+              # property without a data-section default, which does not
+              # compile. The numeric context has its own canonical emitter.
+              ".font(.system(size: #{BindingExpression.swift_number_expr(value[2..-2])}))"
             end
           when 'font'
             if is_binding?(value)

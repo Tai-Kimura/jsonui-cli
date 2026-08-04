@@ -130,6 +130,20 @@ module SjuiTools
           # orientationを先に取得
           orientation = @component['orientation']
 
+          # `direction` reverses the children along the orientation axis —
+          # UIKit resolves it exactly that way (SJUIView: a vertical stack
+          # honours `bottomToTop`, a horizontal one `rightToLeft`, everything
+          # else is the natural order), and the Compose converter reverses the
+          # child list for the same two values. Nothing here read the
+          # attribute, so it was inert on this platform: `jui conformance
+          # codegen-effect` measured the same emission for every value.
+          case @component['direction']
+          when 'bottomToTop'
+            children = children.reverse if orientation == 'vertical'
+          when 'rightToLeft'
+            children = children.reverse if orientation == 'horizontal'
+          end
+
           # 相対配置が必要かチェック
           # orientationが指定されている場合（HStack/VStackになる場合）、
           # centerHorizontal/centerVerticalなどは相対配置ではなく、子要素の配置制御として扱う
@@ -157,18 +171,21 @@ module SjuiTools
 
             # 子要素のweightをチェック
             has_weights = children.any? { |child|
-              (child['weight'] || child['widthWeight'] || child['heightWeight'] || 0).to_f > 0
+              weight_expression(child['weight'] || child['widthWeight'] || child['heightWeight']).first
             }
 
-            # Get spacing value (default 0)
-            spacing_value = @component['spacing'] || 0
+            # Get spacing value (default 0). A bound spacing lands in the
+            # stack's `spacing:` argument, which is a CGFloat — pasting the
+            # declaration there emitted `HStack(alignment: .top, spacing:
+            # @{gap})` and the build died on the first stack that used it.
+            spacing_value = bound_number(@component['spacing']) || @component['spacing'] || 0
 
             if has_weights && (orientation == 'horizontal' || orientation == 'vertical')
               # weightがある場合はWeightedStack用の子要素を構築
               @weighted_children_info = []  # Track child codes for body splitting
               weighted_children = []
               children.each do |child|
-                weight = (child['weight'] || child['widthWeight'] || child['heightWeight'] || 0).to_f
+                _applies, weight = weight_expression(child['weight'] || child['widthWeight'] || child['heightWeight'])
                 weighted_children << { child: child, weight: weight }
               end
 
@@ -233,7 +250,7 @@ module SjuiTools
                 # WeightedStackの場合は特別な処理
                 indent do
                   children.each_with_index do |child, index|
-                    weight = (child['weight'] || child['widthWeight'] || child['heightWeight'] || 0).to_f
+                    weighted, weight = weight_expression(child['weight'] || child['widthWeight'] || child['heightWeight'])
 
                     # 各子要素を(view: AnyView, weight: CGFloat)のタプルとして追加
                     add_line "("
@@ -245,7 +262,7 @@ module SjuiTools
 
                     # weight > 0: set matchParent on main axis so .frame(maxWidth/maxHeight: .infinity)
                     # is applied inside the converter BEFORE .background()
-                    if weight > 0
+                    if weighted
                       if orientation == 'horizontal'
                         unless child['width'] == 'matchParent' || child['width'] == -1
                           child['width'] = 'matchParent'
@@ -291,7 +308,7 @@ module SjuiTools
                     # info に持たせないと section 抽出時に call-site modifier が消える
                     # (drops-weighted-child-call-site-fixed-size bug)。
                     fixed_size_modifier = nil
-                    if weight == 0
+                    unless weighted
                       needs_fixed_size = if orientation == 'horizontal'
                         # 横方向: width が wrapContent または未指定の場合
                         child_width = child['width']
