@@ -3,7 +3,7 @@
   "generatedBy": "jui generate attr-bindings --lang all",
   "source": {
     "file": "shared/core/attribute_definitions.json",
-    "sha256": "a93ea1c3e36c0a608d61f25692bde61095d4e0d747fc1d7187f48340881d6b37"
+    "sha256": "4db3e271874b1eeb90615345b2c3d1d695dd748a46086e1c626e684f9d2455c9"
   },
   "files": {
     "kotlin/AttrCodegenSupport.kt": "98bee31ed2dcc5be8c4b44b7c0d5f5f27ae6fc1bce9c1040b0fb481fec8efff9",
@@ -13,7 +13,7 @@
     "kotlin/CheckBoxAttributes.kt": "ff90b1c0d1cc157d018d102de456079494f75d5970b127cb0036486e2e0961ad",
     "kotlin/CircleViewAttributes.kt": "d1a55a7802d8f97ec5ab1dd6e65834f13964abba9b10895231f11bd0a043935d",
     "kotlin/CollectionAttributes.kt": "044c59ff719464dabdd53404c4a942e314eaa1d543ce371e0ba865a04a6e7d49",
-    "kotlin/CommonAttributes.kt": "3b9d288d6003058491fac44eca99cb1d7c36cc9df053fc332fdd774cfc25ecfa",
+    "kotlin/CommonAttributes.kt": "5c4fc95b8c06b2c8216cfd7e531412837604b59bac83c8a0c542f4604181519b",
     "kotlin/EditTextAttributes.kt": "8b9e16402614d8e42a78474fc480aac8e3adb645e7decfac926a9fb6ad0bbf5a",
     "kotlin/EmbedAttributes.kt": "1430408ff28f779da4935ddb84da3385142f1674ccd4418c8ac27fab8030e11f",
     "kotlin/GradientViewAttributes.kt": "742c76e8dfd997f6cbe93020818fed1927ade89c549b41d375f61c0b4a5316c0",
@@ -45,7 +45,7 @@
     "ruby/check_box_attributes.rb": "450dc2167ca850d1ca2c1edd98455b89002c3c243c8cc0397596e8565b630d9b",
     "ruby/circle_view_attributes.rb": "b9d97589711091071c676e81add90b385ce0bc7c6e70ee65cee1c594ce9bbaf7",
     "ruby/collection_attributes.rb": "fa43d9fd2704e89d2bb9b9087ab2af8bf9e915c18941cee175b8dd8993b1c2d9",
-    "ruby/common_attributes.rb": "bc293b5c8d92dfb956606d6127962e5de6e80fb7385cb1dced3b65b1cdac471a",
+    "ruby/common_attributes.rb": "bc837a5afe767e7eda764d10c38243ee505380d4b3ba6e9d7ef0e084728c957b",
     "ruby/edit_text_attributes.rb": "c95c40959e1a5933892067dad44ad4c00b951cc3ab93f098ed01df955b2c1c44",
     "ruby/embed_attributes.rb": "39a9958d0d8a6e33a8d9a1d762322a9ec027e3d4934be85428b98bf79b477937",
     "ruby/gradient_view_attributes.rb": "6c10a67e3c69ac87613411c7eb1814790afd61437807e76b1c3cd2ef9edb2095",
@@ -77,7 +77,7 @@
     "swift/CheckBoxAttributes.swift": "a8f4a58df2a08778ddd29394b0f717cba5e4bc217e86a6a7021168b01c1ec733",
     "swift/CircleViewAttributes.swift": "f3223932ace924e1cbc575901552b7d181004e90e88eba5abb7c474959bf9062",
     "swift/CollectionAttributes.swift": "06b03e96d1dbaeed4f5036fd70cefa43c1478924359fee8ea667a465cf13a75a",
-    "swift/CommonAttributes.swift": "55bce5cc1539fe42a407963b3b1afb317ff53982f9c991128930a03eb471044e",
+    "swift/CommonAttributes.swift": "8704f1ce6fb9ee561c37a231085e23435c44b9f25bf4a71c82d5cabbd1f6cc22",
     "swift/EditTextAttributes.swift": "54d5f33b412f4927d664ebaafd57474fad675518c4d2edfe2f62054c7daa4d84",
     "swift/EmbedAttributes.swift": "c3c1fda005dc75c85699c824c1ccd0bc592a4a06d9b9555d70ae0c79f9d6b0ca",
     "swift/GradientViewAttributes.swift": "0acf656f7aade5d0e860d4cbe4eb006ef83a74eb7431092dc42020d4ea944170",

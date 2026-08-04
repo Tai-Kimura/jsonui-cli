@@ -59,7 +59,7 @@ module JsonUI
         { name: 'binding_group', kind: :raw }.freeze,
         # Binding ID
         { name: 'binding_id', kind: :string }.freeze,
-        # Border color - hex string or color name from colors.json (binding supported). Defaults to opaque black when borderWidth is declared without it. The default is a fixed literal rather than CSS's `currentColor` on purpose: currentColor inherits the TEXT colour, so the same View declaration would draw a different border depending on what it happens to contain, and Compose has no border colour default at all (Modifier.border requires one). A fixed value is also what the rest of this family already does - borderStyle declares "solid". NOTE: SJUITextField.defaultBorderColor is lightGray, a component-level UIKit chrome default that predates this and is deliberately not unified with it. [default: #000000]
+        # Border color - hex string or color name from colors.json (binding supported). There is deliberately NO default: a border is drawn only when borderWidth AND borderColor are both declared, and neither half summons one on its own (2026-08-03 user ruling, recorded in attribute_semantics.json#semantics.border and gated by `jui conformance gate --cross-effect` against the five `observable` entries there). Declaring a default here would make borderWidth alone draw, which is the direction d2c8628 took once and the ruling superseded.
         { name: 'borderColor', kind: :string, bindable: true }.freeze,
         # Border line style - solid (default), dashed, or dotted [default: solid]
         { name: 'borderStyle', kind: :enum, values: ['solid', 'dashed', 'dotted'].freeze }.freeze,
