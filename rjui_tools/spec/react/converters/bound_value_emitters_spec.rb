@@ -177,6 +177,37 @@ RSpec.describe 'bound value emitters' do
     end
   end
 
+  # `borderWidth` is what summons a border (plan 49 A, orchestrator pushback).
+  # Colour and style modify something that has to already exist, so neither
+  # draws alone — and a width-only border needs its colour emitted EXPLICITLY,
+  # because Tailwind preflight's border-color is `currentColor` and web would
+  # otherwise disagree with the black fallback iOS and Android take.
+  describe 'border — width summons it, colour and style only modify it' do
+    it 'draws on width alone, with the cross-platform black fallback' do
+      out = view('borderWidth' => 2)
+      expect(out).to include('border-2')
+      expect(out).to include('border-[#000000]')
+    end
+
+    it 'keeps a declared colour' do
+      expect(view('borderWidth' => 2, 'borderColor' => '#FF0000')).to include('border-[#FF0000]')
+    end
+
+    it 'draws nothing for a colour with no width' do
+      expect(view('borderColor' => '#FF0000')).not_to include('border')
+    end
+
+    it 'draws nothing for a style with no width' do
+      expect(view('borderStyle' => 'dashed')).not_to include('border')
+    end
+
+    it 'gives a bound width the same fallback colour' do
+      out = view('borderWidth' => '@{w}')
+      expect(out).to include('borderWidth: `${data.w}px`')
+      expect(out).to include("borderColor: '#000000'")
+    end
+  end
+
   # The other half of the contract, and the reason the change is safe: a value
   # with no binding in it takes the byte-identical path it always took.
   describe 'static values are untouched' do
