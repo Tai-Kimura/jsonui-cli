@@ -96,10 +96,52 @@ def _load_pillow():
 # --------------------------------------------------------------------------- #
 
 
-def dhash_file(path: Path) -> str:
-    """256-bit dHash of one image file, as a 64-char lowercase hex string."""
+#: Rows of the frame that belong to system chrome rather than to the fixture,
+#: keyed by ``(platform, env)`` as ``(top, bottom)`` pixel counts.
+#:
+#: The CI android emulator runs the pixel_tablet profile, whose launcher draws
+#: an opaque status bar across the top and an opaque taskbar across the bottom,
+#: over an app that is inset away from both (``systemBarsPadding``). Neither
+#: band can carry fixture pixels there — but both move on their own: the
+#: taskbar's predicted-apps row reorders between boots and promotes the host app
+#: into itself, and the status-bar clock ticks when SystemUI drops the demo-mode
+#: broadcast. Measured on run 30874627862, that noise put 478/478 fixtures over
+#: the threshold with a mean distance of 16.45; excluding the two bands brings
+#: the same comparison to 0/478 at mean 0.36.
+#:
+#: Local runs are NOT cropped and must not be: that AVD has no taskbar, so the
+#: same rows hold real content there (the TabView tab bar, alignBottom, fill
+#: clamps). This is exactly the asymmetry the env key exists to carry —
+#: baselines never cross environments, so the crop never has to either.
+#: Bounds come from the measured bands (status bar 11–36, taskbar 1495–1583)
+#: with margin, and stop short of the tab bar at 1300–1450.
+PLATFORM_ENV_CHROME_CROP: dict[tuple[str, str], tuple[int, int]] = {
+    ("android", "ci"): (48, 120),
+}
+
+
+def chrome_crop(platform: str | None, env: str | None) -> tuple[int, int]:
+    """``(top, bottom)`` rows to exclude from the hash for this lane."""
+    if platform is None or env is None:
+        return (0, 0)
+    return PLATFORM_ENV_CHROME_CROP.get((platform, env), (0, 0))
+
+
+def dhash_file(path: Path, crop: tuple[int, int] = (0, 0)) -> str:
+    """256-bit dHash of one image file, as a 64-char lowercase hex string.
+
+    ``crop`` excludes ``(top, bottom)`` rows before hashing — see
+    :data:`PLATFORM_ENV_CHROME_CROP`. A hash taken with a crop is only ever
+    comparable to another taken with the same crop, which the ``(platform,
+    env)`` keying guarantees.
+    """
     Image = _load_pillow()
     with Image.open(path) as img:
+        top, bottom = crop
+        if top or bottom:
+            width, height = img.size
+            if height > top + bottom:
+                img = img.crop((0, top, width, height - bottom))
         gray = img.convert("L").resize(
             (HASH_SIZE + 1, HASH_SIZE), Image.Resampling.LANCZOS
         )
@@ -177,7 +219,8 @@ def update_baseline(
     if not pngs:
         raise BaselineError(f"no screenshots under {artifacts_dir} — nothing to baseline")
 
-    hashes = {png.name: dhash_file(png) for png in pngs}
+    crop = chrome_crop(platform, env)
+    hashes = {png.name: dhash_file(png, crop) for png in pngs}
 
     out_path = baseline_path(conformance_dir, platform, env)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -266,6 +309,7 @@ def compare_platform(
         return comparison
 
     hashes: dict = baseline.get("hashes", {})
+    crop = chrome_crop(platform, env)
     seen = set()
     for name in screenshot_names:
         seen.add(name)
@@ -278,7 +322,7 @@ def compare_platform(
             comparison.missing_artifact.append(name)
             continue
         try:
-            distance = hamming(dhash_file(png), expected)
+            distance = hamming(dhash_file(png, crop), expected)
         except BaselineError as exc:
             comparison.error = str(exc)
             return comparison

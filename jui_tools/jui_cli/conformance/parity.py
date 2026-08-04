@@ -32,7 +32,14 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .baseline import DEFAULT_ENV, BaselineError, dhash_file, hamming, load_baseline
+from .baseline import (
+    DEFAULT_ENV,
+    BaselineError,
+    chrome_crop,
+    dhash_file,
+    hamming,
+    load_baseline,
+)
 
 #: Ledger schema version; bump when the entry shape changes.
 SCHEMA_VERSION = 1
@@ -114,6 +121,9 @@ def measure(
 
     result.threshold = int(baseline.get("threshold", 0))
     hashes: dict = baseline.get("hashes", {})
+    # The dynamic baseline was hashed with this lane's chrome crop; the codegen
+    # renders must be hashed the same way or every fixture reads as a deviation.
+    crop = chrome_crop(platform, env)
     seen = set()
     for name, expected in hashes.items():
         png = codegen_dir / name
@@ -122,7 +132,7 @@ def measure(
             continue
         seen.add(name)
         try:
-            distance = hamming(dhash_file(png), expected)
+            distance = hamming(dhash_file(png, crop), expected)
         except BaselineError as exc:
             result.error = str(exc)
             return result

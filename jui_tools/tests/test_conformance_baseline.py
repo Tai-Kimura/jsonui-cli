@@ -295,5 +295,65 @@ class BaselineCommandTest(unittest.TestCase):
         self.assertEqual(cmd_conformance(args), 1)
 
 
+@unittest.skipUnless(HAVE_PILLOW, "Pillow not installed")
+class ChromeCropTests(unittest.TestCase):
+    """System-chrome exclusion is per (platform, env) — see PLATFORM_ENV_CHROME_CROP.
+
+    The CI android lane draws an opaque status bar and launcher taskbar over an
+    inset app; both move on their own (clock ticks, predicted-apps row reorders)
+    and neither can carry fixture pixels there. Local has no taskbar, so the same
+    rows hold real content and must stay in the hash.
+    """
+
+    def test_local_lanes_are_never_cropped(self):
+        for platform in ("android", "ios", "web"):
+            self.assertEqual(baseline.chrome_crop(platform, "local"), (0, 0))
+        self.assertEqual(baseline.chrome_crop("ios", "ci"), (0, 0))
+        self.assertEqual(baseline.chrome_crop(None, None), (0, 0))
+
+    def test_ci_android_excludes_the_measured_chrome_bands(self):
+        self.assertEqual(baseline.chrome_crop("android", "ci"), (48, 120))
+
+    def test_crop_hides_change_confined_to_the_excluded_band(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            clean = _write_png(root / "clean.png", size=(512, 384))
+            # A change entirely inside the bottom band: same fixture, different
+            # taskbar. Uncropped it is a regression; cropped it is invisible.
+            # The icons must have horizontal structure — dHash compares
+            # left-to-right neighbours, so a full-width band of one colour is
+            # invisible to it either way and would prove nothing.
+            img = Image.open(clean).convert("RGB")
+            draw = ImageDraw.Draw(img)
+            for x in range(180, 340, 40):
+                draw.rectangle((x, 310, x + 20, 350), fill="black")
+            noisy = root / "noisy.png"
+            img.save(noisy)
+
+            crop = (48, 120)
+            self.assertNotEqual(
+                baseline.dhash_file(clean), baseline.dhash_file(noisy)
+            )
+            self.assertEqual(
+                baseline.dhash_file(clean, crop), baseline.dhash_file(noisy, crop)
+            )
+
+    def test_crop_still_sees_change_above_the_band(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            clean = _write_png(root / "clean.png", size=(512, 384))
+            img = Image.open(clean).convert("RGB")
+            draw = ImageDraw.Draw(img)
+            draw.rectangle((100, 150, 200, 250), fill="black")
+            changed = root / "changed.png"
+            img.save(changed)
+
+            crop = (48, 120)
+            distance = baseline.hamming(
+                baseline.dhash_file(clean, crop), baseline.dhash_file(changed, crop)
+            )
+            self.assertGreater(distance, baseline.DEFAULT_THRESHOLD)
+
+
 if __name__ == "__main__":
     unittest.main()
