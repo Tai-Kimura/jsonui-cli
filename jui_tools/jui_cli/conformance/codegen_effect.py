@@ -29,7 +29,17 @@ C0    ``emit(attr=v1) != emit(control)``   nothing reads the spelling
 C1    ``emit(attr="@{v}") != emit(control)``  the bound form is dropped
       and the output names the bound var
 C2    ``emit(attr=v1) != emit(attr=v2)``   a fixed value is emitted regardless
+C3    ``emit(attr=10) == emit(attr="10")`` a numeric STRING takes a different
+                                           path than the number
 ===== ==================================== ==================================
+
+C3 is the one that compares for EQUALITY, and it exists because plan 43 found
+that the defect it had just fixed for a bound margin fired on ``"10"`` too —
+`"10" - 0` raises exactly what `"@{v}" - 0` raises. A number attribute can be
+written three ways (number, numeric string, binding) and a lane split two ways
+misses the one in the middle. Two spellings of the same value have no reason
+to emit different text, so a difference — and certainly a crash on one side
+only — is a defect.
 
 Scope. This is the *codegen* stage and says so: it proves the converter reads
 the attribute and puts it in the output, never that the library then honours
@@ -94,7 +104,7 @@ PROBE_MODES: dict[str, str] = {
     "web": "react",
 }
 
-CHECKS = ("C0", "C1", "C2")
+CHECKS = ("C0", "C1", "C2", "C3")
 
 #: Why a (component, attribute, platform) is not probed at all. Recorded
 #: rather than dropped — the campaign's premise is that a silent omission is
@@ -228,6 +238,10 @@ class Probe:
     has_secondary: bool
     secondary_source: str  # "enum-case" | "derived" | "" when absent
     bindable: bool
+    #: The numeric value C3 writes both ways, or None when the attribute has
+    #: no numeric case at all. Taken from the case plan rather than re-derived,
+    #: so it is a value the fixture suite actually writes.
+    numeric: Any = None
     #: True when the representative value is the generic string fallback —
     #: the SSoT declared a bare `string` with no enum, no default, no override
     #: and no companion base attribute, so nothing says what values this
@@ -279,6 +293,18 @@ SOURCE_LABEL = "conformance codegen-effect probe"
 
 #: Sentinel for "the control layout does not write this key at all".
 _MISSING = object()
+
+
+def _as_numeric_string(value) -> str:
+    """`10` -> `"10"`, `1.5` -> `"1.5"` — the same number, hand-written.
+
+    A float that happens to be integral renders without its `.0`, because
+    that is how someone writing the layout by hand would type it and the
+    point of C3 is the spelling a human produces.
+    """
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
 
 
 def _target_node(layout: dict) -> dict:
@@ -402,6 +428,24 @@ def build_jobs(definitions: dict, platforms=PLATFORMS) -> JobTable:
             if bindable:
                 probe_nodes["bound"] = _case_node(plan, BOUND_VALUE)
 
+            # C3 needs a number the fixture suite actually writes. `width`
+            # leads with its enum cases (`matchParent`), so the numeric case
+            # is looked for across the whole plan rather than taken from the
+            # front — the numeric spelling of a dimension is exactly what
+            # plan 43 crashed on.
+            numeric = next(
+                (
+                    c.value
+                    for c in cases
+                    if isinstance(c.value, (int, float)) and not isinstance(c.value, bool)
+                ),
+                None,
+            )
+            if numeric is not None:
+                if numeric != primary:
+                    probe_nodes["numeric"] = _case_node(plan, numeric)
+                probe_nodes["numeric_string"] = _case_node(plan, _as_numeric_string(numeric))
+
             probe = Probe(
                 component=section,
                 attribute=attribute,
@@ -419,6 +463,7 @@ def build_jobs(definitions: dict, platforms=PLATFORMS) -> JobTable:
                     and primary == rules.DEFAULT_STRING
                     and not extra
                 ),
+                numeric=numeric,
             )
 
             for platform in applicable:
@@ -436,6 +481,7 @@ def build_jobs(definitions: dict, platforms=PLATFORMS) -> JobTable:
                         bindable=probe.bindable,
                         control_carries_primary=probe.control_carries_primary,
                         weak_value=probe.weak_value,
+                        numeric=probe.numeric,
                     )
                 )
                 for kind, (node, data) in probe_nodes.items():
@@ -536,6 +582,10 @@ FINDING_CLASSES = {
     "presence-only",
     # C1: the bound form is dropped, or reaches the output without the value.
     "bound-dropped",
+    # C3: `10` and `"10"` emit different text. One of the two spellings is
+    # taking a path the other does not — plan 43's `"10" - 0` crash is the
+    # sharp end of it, a silent difference the quiet one.
+    "numeric-string-divergence",
     # C0 or C2 fails, but the SSoT declares a bare `string` with no enum, so
     # the probe values are the generic fallback and nothing says what the
     # attribute accepts (`keyboardType`, `contentType`,
@@ -639,7 +689,10 @@ def evaluate(table: JobTable, outputs: dict) -> EffectResult:
             )
             return per_platform.get(job_id)
 
-        emits = {kind: fetch(kind) for kind in ("control", "primary", "secondary", "bound")}
+        emits = {
+            kind: fetch(kind)
+            for kind in ("control", "primary", "secondary", "bound", "numeric", "numeric_string")
+        }
 
         failed_emit = False
         for kind in ("control", "primary"):
@@ -775,6 +828,56 @@ def evaluate(table: JobTable, outputs: dict) -> EffectResult:
                         evidence={"primary": _clip(primary), "secondary": _clip(secondary)},
                     )
                 )
+
+        # --- C3: do `10` and `"10"` take the same path? ------------------- #
+        #
+        # Runs BEFORE C1 on purpose: the C1 block below short-circuits with
+        # `continue`, and C3 must not be skipped for the attributes that
+        # declare no binding — a number written as a string is legal input
+        # whether or not the attribute is bindable.
+        if probe.numeric is None:
+            result.not_applicable.setdefault("C3", {}).setdefault(
+                "no numeric value in the case plan — the attribute takes no number", []
+            ).append(f"{probe.key} [{probe.platform}]")
+        else:
+            number = emits["numeric"] or emits["primary"]
+            text = emits["numeric_string"]
+            broken = [
+                (kind, entry)
+                for kind, entry in (("number", number), ("numeric string", text))
+                if entry is None or not entry.get("ok")
+            ]
+            if broken:
+                for kind, entry in broken:
+                    result.errors.append(
+                        Finding(
+                            probe.component, probe.attribute, probe.platform, "probe",
+                            probe.host,
+                            f"converter raised on the {kind} emit "
+                            f"({probe.numeric!r}): {(entry or {}).get('error', 'missing')}",
+                        )
+                    )
+            else:
+                result.checks_run += 1
+                result.per_check["C3"] += 1
+                if number["output"] != text["output"]:
+                    result.findings.append(
+                        Finding(
+                            probe.component, probe.attribute, probe.platform, "C3",
+                            probe.host,
+                            f"{probe.numeric!r} and "
+                            f"{_as_numeric_string(probe.numeric)!r} emit different "
+                            f"text — the two spellings of one value take "
+                            f"different paths (plan 43)",
+                            finding_class="numeric-string-divergence",
+                            primary=probe.numeric,
+                            secondary=_as_numeric_string(probe.numeric),
+                            evidence={
+                                "number": _clip(number["output"]),
+                                "numericString": _clip(text["output"]),
+                            },
+                        )
+                    )
 
         # --- C1: does the BOUND form survive? ---------------------------- #
         if not probe.bindable:

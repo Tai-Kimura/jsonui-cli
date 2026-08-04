@@ -21,7 +21,7 @@ _DEFAULT_OUT = _REPO_ROOT / "conformance"
 _PLATFORMS = ("ios", "android", "web")
 #: Judgements `jui conformance codegen-effect` can be narrowed to. Spelled out
 #: here so registering the parser stays free of a conformance import.
-_CODEGEN_CHECKS = ("C0", "C1", "C2")
+_CODEGEN_CHECKS = ("C0", "C1", "C2", "C3")
 
 
 def register_conformance_command(subparsers: argparse._SubParsersAction) -> None:

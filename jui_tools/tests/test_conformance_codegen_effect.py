@@ -302,6 +302,72 @@ class EvaluateTest(unittest.TestCase):
         )
         self.assertEqual([f.finding_class for f in result.findings], ["unread-spelling"])
 
+    def test_the_two_spellings_of_a_number_must_agree(self):
+        # C3 is the judgement that compares for EQUALITY (plan 43): `10` and
+        # `"10"` are the same value and have no reason to emit differently.
+        table = _table_with(_defn(type="number"), attribute="fontSize")
+        probe = table.probes[0]
+        outputs = {
+            "web": {
+                f"__control|{probe.control_id}": _emit("a"),
+                "View|fontSize|primary": _emit("text-xl"),
+                "View|fontSize|secondary": _emit("text-3xl"),
+                "View|fontSize|numeric_string": _emit(""),
+            }
+        }
+        result = ce.evaluate(table, outputs)
+        c3 = [f for f in result.findings if f.check == "C3"]
+        self.assertEqual([f.finding_class for f in c3], ["numeric-string-divergence"])
+
+    def test_matching_spellings_pass(self):
+        table = _table_with(_defn(type="number"), attribute="fontSize")
+        probe = table.probes[0]
+        outputs = {
+            "web": {
+                f"__control|{probe.control_id}": _emit("a"),
+                "View|fontSize|primary": _emit("text-xl"),
+                "View|fontSize|secondary": _emit("text-3xl"),
+                "View|fontSize|numeric_string": _emit("text-xl"),
+            }
+        }
+        result = ce.evaluate(table, outputs)
+        self.assertEqual([f for f in result.findings if f.check == "C3"], [])
+        self.assertEqual(result.per_check["C3"], 1)
+
+    def test_c3_runs_on_an_attribute_that_declares_no_binding(self):
+        # C1 short-circuits for a non-bindable attribute; C3 must not be
+        # skipped with it — a number written as a string is legal input
+        # whether or not the attribute accepts `@{...}`.
+        table = _table_with(_defn(type="number"), attribute="fontSize")
+        self.assertFalse(table.probes[0].bindable)
+        outputs = {
+            "web": {
+                f"__control|{table.probes[0].control_id}": _emit("a"),
+                "View|fontSize|primary": _emit("b"),
+                "View|fontSize|secondary": _emit("c"),
+                "View|fontSize|numeric_string": _emit("d"),
+            }
+        }
+        result = ce.evaluate(table, outputs)
+        self.assertEqual(result.per_check["C3"], 1)
+
+    def test_c3_finds_the_number_behind_an_enum(self):
+        # `width` leads with `matchParent`; its numeric case is further down
+        # the plan, and that is the spelling plan 43 crashed on.
+        table = ce.build_jobs(
+            {"View": {"width": _defn(type=["number", {"enum": ["matchParent"]}])}},
+            platforms=("web",),
+        )
+        self.assertEqual(table.probes[0].primary, "matchParent")
+        self.assertIsInstance(table.probes[0].numeric, (int, float))
+
+    def test_a_non_numeric_attribute_records_why_c3_did_not_run(self):
+        result = self._run(
+            _defn(type="color"), {"control": "a", "primary": "b", "secondary": "c"}
+        )
+        self.assertIn("C3", result.not_applicable)
+        self.assertEqual(result.per_check["C3"], 0)
+
     def test_a_non_bindable_attribute_records_why_c1_did_not_run(self):
         result = self._run(
             _defn(type="color"), {"control": "a", "primary": "b", "secondary": "c"}
