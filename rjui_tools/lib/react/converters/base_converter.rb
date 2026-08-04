@@ -603,7 +603,17 @@ module RjuiTools
             format_dynamic_style_pair(key, value)
           end
 
-          " style={{ #{style_pairs.join(', ')} }}"
+          # `React.CSSProperties` admits only known properties, so a CSS custom
+          # property key fails a strict consumer's tsc with TS2353 — and the
+          # generated file cannot be hand-patched. Assert the type only when one
+          # is present; an unconditional cast would silence real style errors.
+          cast = custom_property_styles? ? ' as React.CSSProperties' : ''
+
+          " style={{ #{style_pairs.join(', ')} }#{cast}}"
+        end
+
+        def custom_property_styles?
+          @dynamic_styles.keys.any? { |key| key.to_s.start_with?('--') }
         end
 
         # Render a single (key, value) entry from `@dynamic_styles` as a JSX

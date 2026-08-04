@@ -440,4 +440,20 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
       end
     end
   end
+
+  describe '#build_style_attr with CSS custom properties' do
+    it 'asserts React.CSSProperties when a custom property is present' do
+      converter = create_converter({ 'type' => 'View' })
+      converter.instance_variable_set(:@dynamic_styles, { '--pv-color' => "'#FF0000'" })
+      expect(converter.send(:build_style_attr))
+        .to eq(" style={{ '--pv-color': '#FF0000' } as React.CSSProperties}")
+    end
+
+    it 'leaves a plain style object uncast' do
+      converter = create_converter({ 'type' => 'View' })
+      converter.instance_variable_set(:@dynamic_styles, { 'backgroundColor' => "'#FF0000'" })
+      expect(converter.send(:build_style_attr))
+        .to eq(" style={{ backgroundColor: '#FF0000' }}")
+    end
+  end
 end
