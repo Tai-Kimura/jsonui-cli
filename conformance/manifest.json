@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "df3c1cf50003de7c0fa572a8ea66ce0e10aee2eaf56e75441fb27ea3ab3eafd1",
   "counts": {
-    "fixtures": 698,
+    "fixtures": 699,
     "assertable": 29,
     "visual": 576,
     "interactive": 35,
-    "control": 58,
+    "control": 59,
     "skipped": 154,
     "promoted": {
       "callback": 11
@@ -13147,7 +13147,7 @@
       "test": "fixtures/Radio/selectedValue__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Radio"
+      "control": "__control/Radio__value-sample"
     },
     {
       "id": "CheckBox/label__static",
@@ -15239,6 +15239,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/Radio__orientation-horizontal.layout.json",
       "test": "fixtures/__control/Radio__orientation-horizontal.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Radio__value-sample",
+      "component": "__control",
+      "attribute": null,
+      "case": "Radio",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Radio__value-sample.layout.json",
+      "test": "fixtures/__control/Radio__value-sample.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

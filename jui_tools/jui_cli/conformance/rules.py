@@ -586,6 +586,11 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # state alone makes the swap observable (ALT image vs default glyph).
     "Radio.selectedIcon": {"checked": True},
     "Radio.selected_icon": {"checked": True},
+    # selectedValue names WHICH option is selected, so the probe needs the
+    # radio to own that identity — `value` is the option's identity and the
+    # node id is only its fallback. Without the companion the comparison comes
+    # out false for a reason that has nothing to do with the attribute.
+    "Radio.selectedValue": {"value": "sample"},
     "CheckBox.checkedColor": {"checked": True},
     "Radio.checkedColor": {"checked": True},
     # onTintColor colors the ON track — the switch must be on to show it.

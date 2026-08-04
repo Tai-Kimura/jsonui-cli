@@ -82,7 +82,13 @@ module RjuiTools
           selected_binding = build_selected_binding
           on_change = build_on_change
           disabled_attr = build_disabled_attr
-          radio_value = extract_id || 'option'
+          # `value` is the option's identity within the group and the node id is
+          # only the fallback (sjui radio_converter reads the same order). Taking
+          # the id unconditionally compared selectedValue against the node name,
+          # so a single Radio could never be checked no matter what was declared
+          # — the host's tsc caught it as a comparison of non-overlapping
+          # literals.
+          radio_value = attributes['value'] || extract_id || 'option'
           tint_color = attributes['tintColor']
           input_style = tint_color ? " style={{ accentColor: '#{tint_color}' }}" : ''
 

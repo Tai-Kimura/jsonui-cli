@@ -252,6 +252,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       spacing
       text
       tintColor
+      value
     ],
     'scroll_view_converter.rb' => %w[bounces contentInset contentInsetAdjustmentBehavior horizontalScroll maxZoom orientation paging scrollBehavior scrollEnabled scrollMode showsHorizontalScrollIndicator showsVerticalScrollIndicator],
     'segment_converter.rb' => %w[

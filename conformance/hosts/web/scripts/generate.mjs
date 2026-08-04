@@ -191,8 +191,13 @@ for (const entry of entries) {
   registryLines.push(`      const m = await import('./components/${entry.component}');`);
   if (entry.state) {
     // interactive: stateful conformanceState provider (generic, per contract)
+    // Spread instead of casting: an interface has no implicit index
+    // signature, so `create…Data as () => Record<string, unknown>` is a
+    // conversion TypeScript rejects. The spread produces an anonymous object
+    // type, which IS assignable to Record<string, unknown> — no assertion, no
+    // loss of checking.
     const createData = entry.hasData
-      ? `d.create${entry.component}Data as () => Record<string, unknown>`
+      ? `() => ({ ...d.create${entry.component}Data() })`
       : '() => ({})';
     if (entry.hasData) {
       registryLines.push(`      const d = await import('./data/${entry.component}Data');`);

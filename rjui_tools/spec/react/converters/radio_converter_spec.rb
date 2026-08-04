@@ -101,5 +101,34 @@ RSpec.describe RjuiTools::React::Converters::RadioConverter do
         expect(result).to include('{data.showOptions !== "gone" &&')
       end
     end
+
+    # `value` is the option's identity within the group; the node id is only the
+    # fallback. Taking the id unconditionally compared selectedValue against the
+    # node name, so the radio could never be checked.
+    context 'single radio identity' do
+      it 'uses the declared value as the input value' do
+        converter = create_converter({ 'class' => 'Radio', 'text' => 'Sample',
+                                       'id' => 'target', 'value' => 'sample' })
+        result = converter.convert
+
+        expect(result).to include('value="sample"')
+      end
+
+      it 'checks the radio when selectedValue matches its value' do
+        converter = create_converter({ 'class' => 'Radio', 'text' => 'Sample',
+                                       'id' => 'target', 'value' => 'sample',
+                                       'selectedValue' => 'sample' })
+        result = converter.convert
+
+        expect(result).to include('checked={"sample" === "sample"}')
+      end
+
+      it 'falls back to the node id when value is not declared' do
+        converter = create_converter({ 'class' => 'Radio', 'text' => 'Sample', 'id' => 'target' })
+        result = converter.convert
+
+        expect(result).to include('value="target"')
+      end
+    end
   end
 end
