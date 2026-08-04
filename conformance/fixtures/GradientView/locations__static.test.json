@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance GradientView.locations (static)",
-    "description": "Conformance fixture for 'locations' on GradientView (section: GradientView, class: visual). Value under test: [0.0, 1.0].",
+    "description": "Conformance fixture for 'locations' on GradientView (section: GradientView, class: visual). Value under test: [0.25, 0.75].",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "locations__static",
-      "description": "Conformance fixture for 'locations' on GradientView (section: GradientView, class: visual). Value under test: [0.0, 1.0].",
+      "description": "Conformance fixture for 'locations' on GradientView (section: GradientView, class: visual). Value under test: [0.25, 0.75].",
       "steps": [
         {
           "action": "waitFor",

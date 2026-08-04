@@ -482,6 +482,11 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     ("Segment", "items"): ["Alpha", "Beta", "Gamma"],
     ("SelectBox", "items"): ["Alpha", "Beta", "Gamma"],
     ("GradientView", "gradient"): ["#00AA00", "#FFAA00"],
+    # `[0.0, 1.0]` IS the default stop set of a two-colour linear gradient, so
+    # the fixture asked for the picture its control already draws. Lane F's
+    # family-B read, group A2. Off-centre stops squeeze the blend into the
+    # middle half, which no default produces.
+    ("GradientView", "locations"): [0.25, 0.75],
     ("Image", "src"): IMAGE_ALT_ASSET_NAME,
     ("NetworkImage", "defaultImage"): IMAGE_ALT_ASSET_NAME,
     # NetworkImage's hint is its PLACEHOLDER IMAGE NAME (SSoT: "Placeholder
