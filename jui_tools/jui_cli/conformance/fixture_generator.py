@@ -216,14 +216,24 @@ def build_test(plan: AttributePlan, case: CasePlan, layout_rel: str) -> dict:
 # --------------------------------------------------------------------------- #
 
 
+def _data_entry(name: str, cls: str, default: Any) -> dict:
+    """One ``data``-section entry; ``NO_DEFAULT`` omits ``defaultValue``."""
+    entry = {"name": name, "class": cls}
+    if default is not interactive_rules.NO_DEFAULT:
+        entry["defaultValue"] = default
+    return entry
+
+
 def build_interactive_layout(
     plan: InteractivePlan, spec: InteractiveSpec, *, source_label: str
 ) -> dict:
     """Root View + standard ``data`` section + target (+ mirror Label).
 
-    The ``data`` section is the cross-runtime initial-value mechanism;
-    handlers are *not* declared here — they are injected by the host per the
-    manifest ``state.handlers`` contract (INTERACTIVE_HOST_CONTRACT.md).
+    The ``data`` section is the cross-runtime initial-value mechanism. It
+    DECLARES the handlers too (name + closure type, no defaultValue) because
+    the codegens derive the Data type from it; the closure VALUES are still
+    injected by the host per the manifest ``state.handlers`` contract
+    (INTERACTIVE_HOST_CONTRACT.md).
     """
     base = rules.BASE_ATTRS.get(spec.host, {})
 
@@ -261,14 +271,17 @@ def build_interactive_layout(
         # manifest `state.vars`) first, then layout-only DataVar seeds
         # (native JSON defaults for binding-resolution fixtures; NOT part of
         # the manifest state contract — they ride each runtime's production
-        # data-section defaults path).
+        # data-section defaults path), then the handlers.
+        #
+        # A handler is a data property too: the layout writes `@{name}` (or a
+        # bare selector) and every codegen emits `data.<name>`, so the Data
+        # type needs the declaration. The host injects the closure at runtime
+        # through `state.handlers`; the declaration carries no defaultValue.
         "data": [
             {"name": v.name, "class": v.cls, "defaultValue": v.default} for v in spec.vars
         ]
-        + [
-            {"name": v.name, "class": v.cls, "defaultValue": v.default}
-            for v in spec.data_vars
-        ],
+        + [_data_entry(v.name, v.cls, v.default) for v in spec.data_vars]
+        + [{"name": h.name, "class": h.cls} for h in spec.handlers],
         "child": children,
     }
 

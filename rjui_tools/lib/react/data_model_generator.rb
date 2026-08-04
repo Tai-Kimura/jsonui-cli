@@ -596,14 +596,22 @@ module RjuiTools
             content += "  #{prop_name}: #{ts_type};\n"
           end
 
-          # Add onclick actions as function properties
+          # Add onclick actions as function properties. A layout MAY declare
+          # the handler in its data section (a selector names a data property
+          # exactly as `@{...}` does); the declaration wins, and emitting the
+          # synthesized twin beside it produced a duplicate identifier — the
+          # same guard every other synthesized group below already has.
           onclick_actions.each do |action|
+            next if existing_prop_names.include?(action)
+
             content += "  #{action}?: () => void;\n"
           end
 
           # Add onChange handlers for TextField bindings
           text_field_bindings.each do |binding|
             handler_name = "on#{capitalize_first(binding)}Change"
+            next if existing_prop_names.include?(handler_name)
+
             content += "  #{handler_name}?: (value: string) => void;\n"
           end
 
@@ -650,12 +658,16 @@ module RjuiTools
         end
 
         onclick_actions.each do |action|
+          next if existing_prop_names.include?(action)
+
           content += "  #{action}: undefined,\n"
         end
 
         # Add onChange handlers with undefined default
         text_field_bindings.each do |binding|
           handler_name = "on#{capitalize_first(binding)}Change"
+          next if existing_prop_names.include?(handler_name)
+
           content += "  #{handler_name}: undefined,\n"
         end
 
@@ -722,12 +734,16 @@ module RjuiTools
         end
 
         onclick_actions.each do |action|
+          next if existing_prop_names.include?(action)
+
           content += " * @property {(() => void) | undefined} [#{action}]\n"
         end
 
         # Add onChange handlers for TextField bindings
         text_field_bindings.each do |binding|
           handler_name = "on#{capitalize_first(binding)}Change"
+          next if existing_prop_names.include?(handler_name)
+
           content += " * @property {((value: string) => void) | undefined} [#{handler_name}]\n"
         end
 
@@ -771,12 +787,16 @@ module RjuiTools
         end
 
         onclick_actions.each do |action|
+          next if existing_prop_names.include?(action)
+
           content += "  #{action}: undefined,\n"
         end
 
         # Add onChange handlers with undefined default
         text_field_bindings.each do |binding|
           handler_name = "on#{capitalize_first(binding)}Change"
+          next if existing_prop_names.include?(handler_name)
+
           content += "  #{handler_name}: undefined,\n"
         end
 

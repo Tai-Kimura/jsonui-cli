@@ -45,6 +45,12 @@ module RjuiTools
         # Array types
         'Array' => 'any[]',
         'array' => 'any[]',
+        # The portable "no constraint" spelling. Swift and Kotlin both take
+        # `Any` verbatim, so a layout declaring it typechecked on two of the
+        # three platforms and emitted a bare `Any` — an undefined name — into
+        # TypeScript.
+        'Any' => 'any',
+        'any' => 'any',
         # Object types
         'Object' => 'Record<string, any>',
         'object' => 'Record<string, any>',

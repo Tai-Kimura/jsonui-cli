@@ -17,6 +17,10 @@
       "name": "conformanceResult",
       "class": "String",
       "defaultValue": "ready"
+    },
+    {
+      "name": "conformanceFire",
+      "class": "(Boolean) -> Void"
     }
   ],
   "child": [

@@ -12,7 +12,12 @@
   "width": "matchParent",
   "height": "matchParent",
   "orientation": "vertical",
-  "data": [],
+  "data": [
+    {
+      "name": "conformanceMissing",
+      "class": "String"
+    }
+  ],
   "child": [
     {
       "type": "Label",

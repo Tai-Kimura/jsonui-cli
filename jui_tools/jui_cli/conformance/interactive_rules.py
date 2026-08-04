@@ -94,11 +94,36 @@ class StateVar:
 
 @dataclass(frozen=True)
 class StateHandler:
-    """One host-injected closure: invoking it sets ``var`` to ``value``."""
+    """One host-injected closure: invoking it sets ``var`` to ``value``.
+
+    ``cls`` is the closure type the layout ``data`` section declares for the
+    handler. A handler name is a data property exactly as ``@{name}`` is —
+    the generated code reads ``data.<name>`` either way — so a layout that
+    never declares it hands the codegen a property its Data type has no room
+    for (plan 44: 10 of the web host's type errors were exactly this).
+
+    The signature is the value the RENDERER passes, not the platform event:
+    every converter unwraps the event and calls the handler with the changed
+    value (``e.target.value`` / ``e.target.checked``). ``(Event) -> Void``
+    would resolve through type_mapping.json to the event type instead and
+    contradict every call site.
+    """
 
     name: str
     var: str
     value: str
+    cls: str = "() -> Void"
+
+
+#: Sentinel ``DataVar.default`` meaning "declare the name, provision nothing".
+#: The declaration gives the codegens a typed property; the absent
+#: ``defaultValue`` key keeps the value unresolved at runtime — every
+#: dynamic path skips an entry that has no ``defaultValue``
+#: (SwiftJsonUI ``if let defaultValue = dict["defaultValue"]``, KotlinJsonUI
+#: ``obj.get("defaultValue") ?: return@forEach``), and rjui emits
+#: ``undefined``. That is what the ``??``-default and unresolved-binding
+#: fixtures measure, so declaring the key must NOT provision it.
+NO_DEFAULT: Any = object()
 
 
 @dataclass(frozen=True)
@@ -194,7 +219,12 @@ def _target_not_visible() -> dict:
 # --------------------------------------------------------------------------- #
 
 _RESULT_STATE = (StateVar(RESULT_VAR, "String", RESULT_BEFORE),)
-_FIRE_HANDLERS = (StateHandler(FIRE_HANDLER, RESULT_VAR, RESULT_AFTER),)
+
+# Declared closure types for `conformanceFire`, by what the converters hand it.
+HANDLER_VOID = "() -> Void"  # tap/lifecycle: the handler takes no payload
+HANDLER_TEXT = "(String) -> Void"  # text + option change: the new string
+HANDLER_BOOL = "(Boolean) -> Void"  # toggle change: the new checked state
+HANDLER_EVENT = "(Any) -> Void"  # gesture: the platform's own event object
 
 
 def _binding_initial(host: str) -> InteractiveSpec:
@@ -226,11 +256,21 @@ def _binding_twoway(host: str) -> InteractiveSpec:
     )
 
 
-def _callback_fire(host: str, attribute: str, value: str, trigger: dict | None) -> InteractiveSpec:
+def _callback_fire(
+    host: str,
+    attribute: str,
+    value: str,
+    trigger: dict | None,
+    handler_cls: str = HANDLER_VOID,
+) -> InteractiveSpec:
     """Trigger action fires the handler -> mirror Label text flips.
 
     ``trigger=None`` covers lifecycle callbacks that fire without runner
     interaction (``onAppear``): the fixture only asserts the post state.
+
+    ``handler_cls`` is the closure type declared for ``conformanceFire`` in
+    the layout ``data`` section — the arity/type the converters call it with
+    (see :class:`StateHandler`).
     """
     if trigger is None:
         steps: tuple[dict, ...] = (_text_equals(MIRROR_ID, RESULT_AFTER),)
@@ -245,7 +285,7 @@ def _callback_fire(host: str, attribute: str, value: str, trigger: dict | None) 
         host=host,
         target_attrs=((attribute, value),),
         vars=_RESULT_STATE,
-        handlers=_FIRE_HANDLERS,
+        handlers=(StateHandler(FIRE_HANDLER, RESULT_VAR, RESULT_AFTER, handler_cls),),
         steps=steps,
         mirror_var=RESULT_VAR,
     )
@@ -281,6 +321,13 @@ def _binding_text(
 #: context). Comments name the shared vector each case mirrors.
 _TEXT_STATE = (StateVar(TEXT_VAR, "String", BOUND_INITIAL),)
 _PROFILE_DATA = (DataVar(PROFILE_VAR, "Object", PROFILE_DEFAULT),)
+#: `conformanceMissing` is declared but never provisioned — see NO_DEFAULT.
+_MISSING_DATA = (DataVar(MISSING_KEY, "String", NO_DEFAULT),)
+#: Same key, declared as the node shape the dot-path expression traverses:
+#: `@{conformanceMissing.name}` reads a child off it, which a String has no
+#: room for. The declaration describes the shape the binding ASSUMES; the
+#: fixture measures what happens when nothing is there to traverse.
+_MISSING_NODE_DATA = (DataVar(MISSING_KEY, "Object", NO_DEFAULT),)
 
 _BINDING_SEMANTICS_TEXT: tuple[InteractiveSpec, ...] = (
     # text_flat_basic — mixed-text interpolation
@@ -323,18 +370,21 @@ _BINDING_SEMANTICS_TEXT: tuple[InteractiveSpec, ...] = (
         "binding_default_double",
         f'@{{{MISSING_KEY} ?? "{DEFAULT_LITERAL}"}}',
         DEFAULT_LITERAL,
+        data_vars=_MISSING_DATA,
     ),
     # text_default_single_quotes — `??` default, single-quoted (canonical-new)
     _binding_text(
         "binding_default_single",
         f"@{{{MISSING_KEY} ?? '{DEFAULT_LITERAL}'}}",
         DEFAULT_LITERAL,
+        data_vars=_MISSING_DATA,
     ),
     # text_default_number — `??` typed number default stringified
     _binding_text(
         "binding_default_number",
         f"@{{{MISSING_KEY} ?? 42}}",
         "42",
+        data_vars=_MISSING_DATA,
     ),
     # text_default_resolved_wins / fallbackPrecedence 1 over 2 — the
     # data-section defaultValue resolves, so the inline default never applies
@@ -350,12 +400,14 @@ _BINDING_SEMANTICS_TEXT: tuple[InteractiveSpec, ...] = (
         "binding_unresolved_flat",
         f"(@{{{MISSING_KEY}}})",
         "()",
+        data_vars=_MISSING_DATA,
     ),
     # text_unresolved_intermediate — missing intermediate node -> empty string
     _binding_text(
         "binding_unresolved_path",
         f"(@{{{MISSING_KEY}.name}})",
         "()",
+        data_vars=_MISSING_NODE_DATA,
     ),
     # text_number_integer — '5', never '5.0'
     _binding_text(
@@ -444,32 +496,41 @@ INTERACTIVE_SPECS: dict[tuple[str, str], tuple[InteractiveSpec, ...]] = {
         _callback_fire("Button", "onLongPress", _FIRE_BINDING, _long_press_target()),
     ),
     # View host on purpose: a pan surface is normally a container, and the
-    # 200x200 BASE_ATTRS View gives the swipe a real bounding box. Payload is
-    # ignored by the host contract, so the () -> Void conformanceFire closure
-    # is reached through each platform's call-ladder fallback.
+    # 200x200 BASE_ATTRS View gives the swipe a real bounding box. The payload
+    # is ignored by the host contract, but the web converter still HANDS one
+    # over (`data.conformanceFire?.(e)` with the pointer event), so the
+    # declared closure has to accept it.
     ("common", "onPan"): (
-        _callback_fire("View", "onPan", _FIRE_BINDING, _swipe_target()),
+        _callback_fire("View", "onPan", _FIRE_BINDING, _swipe_target(), HANDLER_EVENT),
     ),
     ("common", "onAppear"): (_callback_fire("View", "onAppear", FIRE_HANDLER, None),),
     ("TextField", "onTextChange"): (
-        _callback_fire("TextField", "onTextChange", _FIRE_BINDING, _input_target(TYPED_TEXT)),
+        _callback_fire(
+            "TextField", "onTextChange", _FIRE_BINDING, _input_target(TYPED_TEXT), HANDLER_TEXT
+        ),
     ),
     ("TextView", "onTextChange"): (
-        _callback_fire("TextView", "onTextChange", _FIRE_BINDING, _input_target(TYPED_TEXT)),
+        _callback_fire(
+            "TextView", "onTextChange", _FIRE_BINDING, _input_target(TYPED_TEXT), HANDLER_TEXT
+        ),
     ),
     # Toggle / Check are `_alias_of` pointer sections (B1) — their plans
     # never form, so only the canonical Switch / CheckBox rules exist.
     ("Switch", "onValueChange"): (
-        _callback_fire("Switch", "onValueChange", _FIRE_BINDING, _tap_target()),
+        _callback_fire("Switch", "onValueChange", _FIRE_BINDING, _tap_target(), HANDLER_BOOL),
     ),
     ("CheckBox", "onValueChange"): (
-        _callback_fire("CheckBox", "onValueChange", _FIRE_BINDING, _tap_target()),
+        _callback_fire("CheckBox", "onValueChange", _FIRE_BINDING, _tap_target(), HANDLER_BOOL),
     ),
     ("SelectBox", "onValueChange"): (
-        _callback_fire("SelectBox", "onValueChange", _FIRE_BINDING, _select_target("Two")),
+        _callback_fire(
+            "SelectBox", "onValueChange", _FIRE_BINDING, _select_target("Two"), HANDLER_TEXT
+        ),
     ),
     ("SelectBox", "onValueChanged"): (
-        _callback_fire("SelectBox", "onValueChanged", _FIRE_BINDING, _select_target("Two")),
+        _callback_fire(
+            "SelectBox", "onValueChanged", _FIRE_BINDING, _select_target("Two"), HANDLER_TEXT
+        ),
     ),
 }
 # Not promoted (kept as v1 skips, with the blocking gap):

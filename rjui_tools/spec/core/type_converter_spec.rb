@@ -64,6 +64,21 @@ RSpec.describe RjuiTools::Core::TypeConverter do
       end
     end
 
+    # `Any` is the portable "no constraint" spelling — Swift and Kotlin both
+    # take it verbatim, so a layout that declared it typechecked on two of
+    # three platforms and emitted a bare `Any`, an undefined name, into TS.
+    context 'with the unconstrained type' do
+      it 'converts Any to any' do
+        expect(described_class.to_typescript_type('Any')).to eq('any')
+        expect(described_class.to_typescript_type('any')).to eq('any')
+      end
+
+      it 'converts it inside a closure parameter list' do
+        expect(described_class.to_typescript_type('(Any) -> Void'))
+          .to eq('((arg0: any) => void) | undefined')
+      end
+    end
+
     context 'with unknown types' do
       it 'returns the type as-is' do
         expect(described_class.to_typescript_type('CollectionDataSource')).to eq('CollectionDataSource')

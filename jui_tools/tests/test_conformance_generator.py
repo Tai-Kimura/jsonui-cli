@@ -388,7 +388,15 @@ class ConformanceInteractiveTest(unittest.TestCase):
                     "name": interactive_rules.RESULT_VAR,
                     "class": "String",
                     "defaultValue": interactive_rules.RESULT_BEFORE,
-                }
+                },
+                # The handler is a data property too — the codegens read
+                # `data.conformanceFire` whether the layout writes a bare
+                # selector or `@{...}`. No defaultValue: the closure comes
+                # from the host through the manifest state contract.
+                {
+                    "name": interactive_rules.FIRE_HANDLER,
+                    "class": interactive_rules.HANDLER_VOID,
+                },
             ],
         )
         by_node_id = {c["id"]: c for c in layout["child"]}
@@ -427,6 +435,31 @@ class ConformanceInteractiveTest(unittest.TestCase):
         target = next(c for c in layout["child"] if c["id"] == "target")
         self.assertEqual(target["text"], f"@{{{interactive_rules.TEXT_VAR}}}")
 
+    def test_unprovisioned_key_is_declared_with_no_default_value(self):
+        """A declared name the runtime must NOT resolve.
+
+        The `??`-default fixtures measure what happens when the key is
+        missing. Declaring it gives the codegens a typed property (the web
+        host's Data class had no room for it and the generated tree failed
+        `tsc`); omitting `defaultValue` keeps it unprovisioned, because every
+        dynamic path skips an entry that has none.
+        """
+        for case in ("binding_default_double", "binding_unresolved_flat"):
+            layout = self._load(self.by_id[f"Label/text__{case}"], "layout")
+            self.assertEqual(
+                layout["data"],
+                [{"name": interactive_rules.MISSING_KEY, "class": "String"}],
+                case,
+            )
+
+    def test_dot_path_fixture_declares_the_shape_it_traverses(self):
+        """`@{missing.name}` reads a child — a String has no room for one."""
+        layout = self._load(self.by_id["Label/text__binding_unresolved_path"], "layout")
+        self.assertEqual(
+            layout["data"],
+            [{"name": interactive_rules.MISSING_KEY, "class": "Object"}],
+        )
+
     def test_visibility_binding_sweep_covers_all_enum_values(self):
         expectations = {
             "common/visibility__binding_visible": "visible",
@@ -444,6 +477,54 @@ class ConformanceInteractiveTest(unittest.TestCase):
             self.assertEqual(
                 layout["data"][0]["defaultValue"], fixture_id.rsplit("_", 1)[-1]
             )
+
+    # ---------------- handler declarations ---------------- #
+
+    def test_handler_class_matches_what_the_converters_hand_it(self):
+        """The declared closure is the VALUE type, not the platform event.
+
+        Every converter unwraps its event and calls the handler with the
+        changed value (`e.target.value` / `e.target.checked`), so a signature
+        taken from type_mapping.json's event types would contradict the call
+        site it is supposed to type.
+        """
+        expected = {
+            ("common", "onclick"): interactive_rules.HANDLER_VOID,
+            ("common", "onClick"): interactive_rules.HANDLER_VOID,
+            ("common", "onAppear"): interactive_rules.HANDLER_VOID,
+            ("common", "onPan"): interactive_rules.HANDLER_EVENT,
+            ("TextField", "onTextChange"): interactive_rules.HANDLER_TEXT,
+            ("TextView", "onTextChange"): interactive_rules.HANDLER_TEXT,
+            ("SelectBox", "onValueChange"): interactive_rules.HANDLER_TEXT,
+            ("Switch", "onValueChange"): interactive_rules.HANDLER_BOOL,
+            ("CheckBox", "onValueChange"): interactive_rules.HANDLER_BOOL,
+        }
+        for key, cls in expected.items():
+            specs = interactive_rules.INTERACTIVE_SPECS[key]
+            handlers = [h for spec in specs for h in spec.handlers]
+            self.assertEqual([h.cls for h in handlers], [cls], key)
+
+    def test_every_declared_handler_is_a_known_closure_type(self):
+        known = {
+            interactive_rules.HANDLER_VOID,
+            interactive_rules.HANDLER_TEXT,
+            interactive_rules.HANDLER_BOOL,
+            interactive_rules.HANDLER_EVENT,
+        }
+        for key, specs in interactive_rules.INTERACTIVE_SPECS.items():
+            for spec in specs:
+                for handler in spec.handlers:
+                    self.assertIn(handler.cls, known, key)
+
+    def test_handler_declaration_carries_no_default_value(self):
+        """The closure is injected by the host, never defaulted by the layout."""
+        for fixture in self.manifest["fixtures"]:
+            if fixture["class"] != "interactive":
+                continue
+            layout = self._load(fixture, "layout")
+            for entry in layout.get("data", []):
+                if entry["name"] == interactive_rules.FIRE_HANDLER:
+                    self.assertNotIn("defaultValue", entry, fixture["id"])
 
     # ---------------- case-insensitive path dedup ---------------- #
 

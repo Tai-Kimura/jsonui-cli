@@ -127,6 +127,24 @@ RSpec.describe RjuiTools::React::DataModelGenerator do
       expect(content).to include('handleTap?: () => void;')
       expect(content).to include('handleSubmit?: () => void;')
     end
+
+    # `"onclick": "handleTap"` names a data property exactly as `@{handleTap}`
+    # does, so a layout is entitled to declare it — and then the synthesized
+    # twin collided with the declaration: duplicate identifier in the
+    # interface, duplicate key in the factory literal. The declaration wins.
+    it 'does not re-emit an onclick action the data section already declares' do
+      data_properties = [
+        { 'name' => 'handleTap', 'class' => '(String) -> Void',
+          'tsType' => '((arg0: string) => void) | undefined' }
+      ]
+
+      content = generator.send(:generate_typescript_content, 'Home', data_properties, ['handleTap'])
+
+      expect(content.scan(/^\s*handleTap\??:.*;$/).size).to eq(1)   # interface
+      expect(content.scan(/^\s*handleTap: .*,$/).size).to eq(1)     # factory literal
+      expect(content).to include('handleTap?: ((arg0: string) => void) | undefined;')
+      expect(content).not_to include('handleTap?: () => void;')
+    end
   end
 
   # Regression: nested data-section defaults were emptied to {} / [] —
