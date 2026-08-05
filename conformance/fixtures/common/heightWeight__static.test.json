@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance common.heightWeight (static)",
-    "description": "Conformance fixture for 'heightWeight' on View (section: common, class: declaration-only). Value under test: 1.",
+    "description": "Conformance fixture for 'heightWeight' on View (section: common, class: visual). Value under test: 1.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -13,20 +13,21 @@
     ]
   },
   "platform": [
-    "ios"
+    "ios",
+    "android"
   ],
   "cases": [
     {
       "name": "heightWeight__static",
-      "description": "Conformance fixture for 'heightWeight' on View (section: common, class: declaration-only). Value under test: 1.",
+      "description": "Conformance fixture for 'heightWeight' on View (section: common, class: visual). Value under test: 1.",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "assert": "visible",
-          "id": "target"
+          "action": "screenshot",
+          "name": "common_heightWeight__static"
         }
       ]
     }

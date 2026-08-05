@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance SelectBox.selectedItem (static)",
-    "description": "Conformance fixture for 'selectedItem' on SelectBox (section: SelectBox, class: declaration-only). Value under test: \"Two\".",
+    "description": "Conformance fixture for 'selectedItem' on SelectBox (section: SelectBox, class: visual). Value under test: \"Two\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -13,20 +13,21 @@
     ]
   },
   "platform": [
-    "ios"
+    "ios",
+    "android"
   ],
   "cases": [
     {
       "name": "selectedItem__static",
-      "description": "Conformance fixture for 'selectedItem' on SelectBox (section: SelectBox, class: declaration-only). Value under test: \"Two\".",
+      "description": "Conformance fixture for 'selectedItem' on SelectBox (section: SelectBox, class: visual). Value under test: \"Two\".",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "assert": "visible",
-          "id": "target"
+          "action": "screenshot",
+          "name": "SelectBox_selectedItem__static"
         }
       ]
     }
