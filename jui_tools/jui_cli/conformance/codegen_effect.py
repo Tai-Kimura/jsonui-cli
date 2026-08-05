@@ -736,9 +736,23 @@ class Finding:
     def key(self) -> str:
         return f"{self.component}.{self.attribute}"
 
+    @property
+    def scope(self) -> str:
+        """`ios/sjui_tools` — the platform AND the tree that was measured.
+
+        The platform alone reads as "an iOS defect", and an iOS defect goes
+        to whoever owns SwiftJsonUI. This measures `sjui_tools`, the Ruby
+        codegen, and says nothing about the dynamic renderer — a routing
+        that was made and had to be corrected. The mapping was already in
+        `PROBES`; it just was not in the sentence, so the reader supplied a
+        guess and the guess was wrong.
+        """
+        tool = PROBES.get(self.platform, (None,))[0]
+        return f"{self.platform}/{tool}" if tool else self.platform
+
     def __str__(self) -> str:
         label = f"{self.check}/{self.finding_class}" if self.finding_class else self.check
-        return f"{label} {self.key} [{self.platform}] — {self.detail}"
+        return f"{label} {self.key} [{self.scope}] — {self.detail}"
 
 
 #: Finding classes that are NOT defects and never gate. Both are re-derived
@@ -1368,7 +1382,7 @@ def check_ledger(result: EffectResult, ledger: dict, platforms=PLATFORMS) -> Eff
         missing = [f for f in REQUIRED_FIELDS if not entry.get(f)]
         if missing:
             verdict.incomplete.append(
-                f"{finding.key} [{finding.platform}] {finding.check} — "
+                f"{finding.key} [{finding.scope}] {finding.check} — "
                 f"missing {', '.join(missing)}"
             )
         else:
@@ -1379,6 +1393,8 @@ def check_ledger(result: EffectResult, ledger: dict, platforms=PLATFORMS) -> Eff
             continue  # not measured this run; says nothing either way
         if key not in measured:
             component, attribute, platform, check = key
-            verdict.stale.append(f"{component}.{attribute} [{platform}] {check}")
+            tool = PROBES.get(platform, (None,))[0]
+            scope = f"{platform}/{tool}" if tool else platform
+            verdict.stale.append(f"{component}.{attribute} [{scope}] {check}")
 
     return verdict

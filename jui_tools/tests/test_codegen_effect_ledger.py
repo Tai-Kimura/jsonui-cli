@@ -77,7 +77,7 @@ class LedgerVerdictTest(unittest.TestCase):
         ledger = {ce.entry_key(f): _entry(f)}
         verdict = ce.check_ledger(_result(), ledger, platforms=("web",))
         self.assertFalse(verdict.ok)
-        self.assertEqual(verdict.stale, ["Label.text [web] C0"])
+        self.assertEqual(verdict.stale, ["Label.text [web/rjui_tools] C0"])
 
     def test_entry_without_owner_or_reason_fails(self):
         f = _finding()
