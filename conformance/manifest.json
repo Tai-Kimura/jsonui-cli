@@ -10,12 +10,12 @@
   "schemaVersion": 2,
   "generatedFrom": "e5d289945ed5c0f57c076b3a9970b42bd26d8e6147aebb78ae608a952db5bb39",
   "counts": {
-    "fixtures": 856,
+    "fixtures": 891,
     "assertable": 33,
-    "visual": 642,
+    "visual": 673,
     "interactive": 35,
     "control": 85,
-    "declarationOnly": 61,
+    "declarationOnly": 65,
     "skipped": 151,
     "promoted": {
       "callback": 11
@@ -43,6 +43,7 @@
       "test": "fixtures/common/width__matchparent.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/width",
       "control": "__control/View"
     },
     {
@@ -66,6 +67,7 @@
       "test": "fixtures/common/width__wrapcontent.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/width",
       "control": "__control/View"
     },
     {
@@ -89,6 +91,7 @@
       "test": "fixtures/common/width__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/width",
       "control": "__control/View"
     },
     {
@@ -112,6 +115,7 @@
       "test": "fixtures/common/height__matchparent.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/height",
       "control": "__control/View"
     },
     {
@@ -135,6 +139,7 @@
       "test": "fixtures/common/height__wrapcontent.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/height",
       "control": "__control/View"
     },
     {
@@ -158,6 +163,7 @@
       "test": "fixtures/common/height__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/height",
       "control": "__control/View"
     },
     {
@@ -181,6 +187,7 @@
       "test": "fixtures/common/minWidth__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/minWidth",
       "control": "__control/View__width-wrapContent"
     },
     {
@@ -204,6 +211,7 @@
       "test": "fixtures/common/minWidth__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/minWidth",
       "control": "__control/View__width-wrapContent"
     },
     {
@@ -227,6 +235,7 @@
       "test": "fixtures/common/maxWidth__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/maxWidth",
       "control": "__control/View"
     },
     {
@@ -250,6 +259,7 @@
       "test": "fixtures/common/maxWidth__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/maxWidth",
       "control": "__control/View"
     },
     {
@@ -273,6 +283,7 @@
       "test": "fixtures/common/minHeight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/minHeight",
       "control": "__control/View__height-wrapContent"
     },
     {
@@ -296,6 +307,7 @@
       "test": "fixtures/common/minHeight__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/minHeight",
       "control": "__control/View__height-wrapContent"
     },
     {
@@ -319,6 +331,7 @@
       "test": "fixtures/common/maxHeight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/maxHeight",
       "control": "__control/View"
     },
     {
@@ -342,6 +355,7 @@
       "test": "fixtures/common/maxHeight__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/maxHeight",
       "control": "__control/View"
     },
     {
@@ -363,6 +377,7 @@
       "test": "fixtures/common/widthWeight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -384,6 +399,7 @@
       "test": "fixtures/common/heightWeight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -405,6 +421,7 @@
       "test": "fixtures/common/maxWidthWeight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -426,6 +443,7 @@
       "test": "fixtures/common/maxHeightWeight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -447,6 +465,7 @@
       "test": "fixtures/common/minWidthWeight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -468,6 +487,7 @@
       "test": "fixtures/common/minHeightWeight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -489,6 +509,7 @@
       "test": "fixtures/common/aspectWidth__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -510,6 +531,7 @@
       "test": "fixtures/common/aspectHeight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -533,6 +555,7 @@
       "test": "fixtures/common/weight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/weight",
       "control": "__control/View__root.orientation-horizontal"
     },
     {
@@ -556,6 +579,7 @@
       "test": "fixtures/common/weight__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/weight",
       "control": "__control/View__root.orientation-horizontal"
     },
     {
@@ -579,6 +603,7 @@
       "test": "fixtures/common/weight__binding_as_string.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/weight",
       "control": "__control/View__root.orientation-horizontal"
     },
     {
@@ -602,6 +627,7 @@
       "test": "fixtures/common/background__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View"
     },
     {
@@ -625,6 +651,7 @@
       "test": "fixtures/common/tapBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -648,6 +675,7 @@
       "test": "fixtures/common/tapBackground__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -671,6 +699,7 @@
       "test": "fixtures/common/highlightBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -694,6 +723,7 @@
       "test": "fixtures/common/highlightBackground__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -717,6 +747,7 @@
       "test": "fixtures/common/disabledBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/disabledBackground",
       "control": "__control/Button__enabled-False"
     },
     {
@@ -740,6 +771,7 @@
       "test": "fixtures/common/disabledBackground__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/disabledBackground",
       "control": "__control/Button__enabled-False"
     },
     {
@@ -761,6 +793,7 @@
       "test": "fixtures/common/defaultBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -784,6 +817,7 @@
       "test": "fixtures/common/cornerRadius__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/cornerRadius",
       "control": "__control/View"
     },
     {
@@ -807,6 +841,7 @@
       "test": "fixtures/common/cornerRadius__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/cornerRadius",
       "control": "__control/View"
     },
     {
@@ -830,6 +865,7 @@
       "test": "fixtures/common/borderWidth__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/borderWidth",
       "control": "__control/View"
     },
     {
@@ -853,6 +889,7 @@
       "test": "fixtures/common/borderWidth__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/borderWidth",
       "control": "__control/View"
     },
     {
@@ -876,6 +913,7 @@
       "test": "fixtures/common/borderColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View"
     },
     {
@@ -899,6 +937,7 @@
       "test": "fixtures/common/borderStyle__solid.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/borderStyle",
       "control": "__control/View"
     },
     {
@@ -922,6 +961,7 @@
       "test": "fixtures/common/borderStyle__dashed.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/borderStyle",
       "control": "__control/View"
     },
     {
@@ -945,6 +985,7 @@
       "test": "fixtures/common/borderStyle__dotted.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/borderStyle",
       "control": "__control/View"
     },
     {
@@ -968,6 +1009,7 @@
       "test": "fixtures/common/borderStyle__solid_with_border.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/borderStyle#with_border",
       "control": "__control/View__borderColor--FF0000_borderWidth-2"
     },
     {
@@ -991,6 +1033,7 @@
       "test": "fixtures/common/borderStyle__dashed_with_border.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/borderStyle#with_border",
       "control": "__control/View__borderColor--FF0000_borderWidth-2"
     },
     {
@@ -1014,6 +1057,7 @@
       "test": "fixtures/common/borderStyle__dotted_with_border.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/borderStyle#with_border",
       "control": "__control/View__borderColor--FF0000_borderWidth-2"
     },
     {
@@ -1037,6 +1081,7 @@
       "test": "fixtures/common/opacity__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View"
     },
     {
@@ -1060,6 +1105,7 @@
       "test": "fixtures/common/opacity__alias_alpha.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View"
     },
     {
@@ -1083,6 +1129,7 @@
       "test": "fixtures/common/visibility__visible.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -1106,6 +1153,7 @@
       "test": "fixtures/common/visibility__invisible.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -1129,6 +1177,7 @@
       "test": "fixtures/common/visibility__gone.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -1245,6 +1294,7 @@
       "test": "fixtures/common/hidden__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -1268,6 +1318,7 @@
       "test": "fixtures/common/hidden__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -1316,6 +1367,7 @@
       "test": "fixtures/common/padding__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/padding",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -1339,6 +1391,7 @@
       "test": "fixtures/common/padding__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/padding",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -1367,6 +1420,7 @@
       "test": "fixtures/common/paddings__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -1390,6 +1444,7 @@
       "test": "fixtures/common/paddingTop__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/paddingTop",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -1413,6 +1468,7 @@
       "test": "fixtures/common/paddingTop__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/paddingTop",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -1436,6 +1492,7 @@
       "test": "fixtures/common/paddingBottom__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/paddingBottom",
       "control": "__control/View__height-wrapContent_orientation-horizontal"
     },
     {
@@ -1459,6 +1516,7 @@
       "test": "fixtures/common/paddingBottom__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/paddingBottom",
       "control": "__control/View__height-wrapContent_orientation-horizontal"
     },
     {
@@ -1482,6 +1540,7 @@
       "test": "fixtures/common/paddingLeft__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/paddingLeft",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -1505,6 +1564,7 @@
       "test": "fixtures/common/paddingLeft__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/paddingLeft",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -1528,6 +1588,7 @@
       "test": "fixtures/common/paddingRight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/paddingRight",
       "control": "__control/View__orientation-horizontal_width-wrapContent"
     },
     {
@@ -1551,6 +1612,7 @@
       "test": "fixtures/common/paddingRight__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/paddingRight",
       "control": "__control/View__orientation-horizontal_width-wrapContent"
     },
     {
@@ -1574,6 +1636,7 @@
       "test": "fixtures/common/paddingStart__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/paddingStart",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -1597,6 +1660,7 @@
       "test": "fixtures/common/paddingStart__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/paddingStart",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -1620,6 +1684,7 @@
       "test": "fixtures/common/paddingEnd__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/paddingEnd",
       "control": "__control/View__orientation-horizontal_width-wrapContent"
     },
     {
@@ -1643,6 +1708,7 @@
       "test": "fixtures/common/paddingEnd__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/paddingEnd",
       "control": "__control/View__orientation-horizontal_width-wrapContent"
     },
     {
@@ -1666,6 +1732,7 @@
       "test": "fixtures/common/rightPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/rightPadding",
       "control": "__control/View__orientation-horizontal_width-wrapContent"
     },
     {
@@ -1689,6 +1756,7 @@
       "test": "fixtures/common/rightPadding__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/rightPadding",
       "control": "__control/View__orientation-horizontal_width-wrapContent"
     },
     {
@@ -1712,6 +1780,7 @@
       "test": "fixtures/common/leftPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/leftPadding",
       "control": "__control/View"
     },
     {
@@ -1735,6 +1804,7 @@
       "test": "fixtures/common/leftPadding__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/leftPadding",
       "control": "__control/View"
     },
     {
@@ -1758,6 +1828,7 @@
       "test": "fixtures/common/topPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/topPadding",
       "control": "__control/View"
     },
     {
@@ -1781,6 +1852,7 @@
       "test": "fixtures/common/topPadding__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/topPadding",
       "control": "__control/View"
     },
     {
@@ -1804,6 +1876,7 @@
       "test": "fixtures/common/bottomPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/bottomPadding",
       "control": "__control/View__height-wrapContent_orientation-horizontal"
     },
     {
@@ -1827,6 +1900,7 @@
       "test": "fixtures/common/bottomPadding__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/bottomPadding",
       "control": "__control/View__height-wrapContent_orientation-horizontal"
     },
     {
@@ -1848,6 +1922,7 @@
       "test": "fixtures/common/minTopPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -1869,6 +1944,7 @@
       "test": "fixtures/common/minBottomPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -1890,6 +1966,7 @@
       "test": "fixtures/common/minLeftPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -1911,6 +1988,7 @@
       "test": "fixtures/common/minRightPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -1932,6 +2010,7 @@
       "test": "fixtures/common/maxTopPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -1953,6 +2032,7 @@
       "test": "fixtures/common/maxBottomPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -1974,6 +2054,7 @@
       "test": "fixtures/common/maxLeftPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -1995,6 +2076,7 @@
       "test": "fixtures/common/maxRightPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -2023,6 +2105,7 @@
       "test": "fixtures/common/margins__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View"
     },
     {
@@ -2046,6 +2129,7 @@
       "test": "fixtures/common/topMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View"
     },
     {
@@ -2069,6 +2153,7 @@
       "test": "fixtures/common/bottomMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View__root.gravity-bottom"
     },
     {
@@ -2092,6 +2177,7 @@
       "test": "fixtures/common/leftMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View"
     },
     {
@@ -2115,6 +2201,7 @@
       "test": "fixtures/common/rightMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View__root.gravity-right"
     },
     {
@@ -2138,6 +2225,7 @@
       "test": "fixtures/common/startMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View"
     },
     {
@@ -2161,6 +2249,7 @@
       "test": "fixtures/common/endMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View__root.gravity-right"
     },
     {
@@ -2182,6 +2271,7 @@
       "test": "fixtures/common/minTopMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -2203,6 +2293,7 @@
       "test": "fixtures/common/minBottomMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -2224,6 +2315,7 @@
       "test": "fixtures/common/minLeftMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -2245,6 +2337,7 @@
       "test": "fixtures/common/minRightMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -2266,6 +2359,7 @@
       "test": "fixtures/common/maxTopMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -2287,6 +2381,7 @@
       "test": "fixtures/common/maxBottomMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -2308,6 +2403,7 @@
       "test": "fixtures/common/maxLeftMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -2329,6 +2425,7 @@
       "test": "fixtures/common/maxRightMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -2352,6 +2449,7 @@
       "test": "fixtures/common/centerInParent__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/centerInParent",
       "control": "__control/View"
     },
     {
@@ -2375,6 +2473,7 @@
       "test": "fixtures/common/centerInParent__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/centerInParent",
       "control": "__control/View"
     },
     {
@@ -2398,6 +2497,7 @@
       "test": "fixtures/common/centerInParent__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/centerInParent",
       "control": "__control/View"
     },
     {
@@ -2421,6 +2521,7 @@
       "test": "fixtures/common/centerVertical__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/centerVertical",
       "control": "__control/View"
     },
     {
@@ -2444,6 +2545,7 @@
       "test": "fixtures/common/centerVertical__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/centerVertical",
       "control": "__control/View"
     },
     {
@@ -2467,6 +2569,7 @@
       "test": "fixtures/common/centerVertical__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/centerVertical",
       "control": "__control/View"
     },
     {
@@ -2490,6 +2593,7 @@
       "test": "fixtures/common/centerHorizontal__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/centerHorizontal",
       "control": "__control/View"
     },
     {
@@ -2513,6 +2617,7 @@
       "test": "fixtures/common/centerHorizontal__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/centerHorizontal",
       "control": "__control/View"
     },
     {
@@ -2536,6 +2641,7 @@
       "test": "fixtures/common/centerHorizontal__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/centerHorizontal",
       "control": "__control/View"
     },
     {
@@ -2559,6 +2665,7 @@
       "test": "fixtures/common/alignTop__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignTop",
       "control": "__control/View__root.gravity-bottom"
     },
     {
@@ -2582,6 +2689,7 @@
       "test": "fixtures/common/alignTop__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignTop",
       "control": "__control/View__root.gravity-bottom"
     },
     {
@@ -2605,6 +2713,7 @@
       "test": "fixtures/common/alignTop__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignTop",
       "control": "__control/View__root.gravity-bottom"
     },
     {
@@ -2628,6 +2737,7 @@
       "test": "fixtures/common/alignBottom__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignBottom",
       "control": "__control/View"
     },
     {
@@ -2651,6 +2761,7 @@
       "test": "fixtures/common/alignBottom__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignBottom",
       "control": "__control/View"
     },
     {
@@ -2674,6 +2785,7 @@
       "test": "fixtures/common/alignBottom__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignBottom",
       "control": "__control/View"
     },
     {
@@ -2697,6 +2809,7 @@
       "test": "fixtures/common/alignLeft__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignLeft",
       "control": "__control/View__root.gravity-right"
     },
     {
@@ -2720,6 +2833,7 @@
       "test": "fixtures/common/alignLeft__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignLeft",
       "control": "__control/View__root.gravity-right"
     },
     {
@@ -2743,6 +2857,7 @@
       "test": "fixtures/common/alignLeft__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignLeft",
       "control": "__control/View__root.gravity-right"
     },
     {
@@ -2766,6 +2881,7 @@
       "test": "fixtures/common/alignRight__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignRight",
       "control": "__control/View"
     },
     {
@@ -2789,6 +2905,7 @@
       "test": "fixtures/common/alignRight__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignRight",
       "control": "__control/View"
     },
     {
@@ -2812,6 +2929,7 @@
       "test": "fixtures/common/alignRight__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignRight",
       "control": "__control/View"
     },
     {
@@ -2835,6 +2953,7 @@
       "test": "fixtures/common/alignTopOfView__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View__anchored__height-50_width-50"
     },
     {
@@ -2858,6 +2977,7 @@
       "test": "fixtures/common/alignBottomOfView__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View__anchored__height-50_width-50"
     },
     {
@@ -2881,6 +3001,7 @@
       "test": "fixtures/common/alignLeftOfView__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View__anchored__height-50_width-50"
     },
     {
@@ -2904,6 +3025,7 @@
       "test": "fixtures/common/alignRightOfView__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View__anchored__height-50_width-50"
     },
     {
@@ -2927,6 +3049,7 @@
       "test": "fixtures/common/alignTopView__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View__anchored"
     },
     {
@@ -2950,6 +3073,7 @@
       "test": "fixtures/common/alignBottomView__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View__anchored"
     },
     {
@@ -2973,6 +3097,7 @@
       "test": "fixtures/common/alignLeftView__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View__anchored"
     },
     {
@@ -2996,6 +3121,7 @@
       "test": "fixtures/common/alignRightView__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View__anchored"
     },
     {
@@ -3019,6 +3145,7 @@
       "test": "fixtures/common/alignCenterVerticalView__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View__anchored"
     },
     {
@@ -3042,6 +3169,7 @@
       "test": "fixtures/common/alignCenterHorizontalView__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View__anchored"
     },
     {
@@ -3063,6 +3191,7 @@
       "test": "fixtures/common/toView__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -3086,6 +3215,7 @@
       "test": "fixtures/common/shadow__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View"
     },
     {
@@ -3109,6 +3239,7 @@
       "test": "fixtures/common/clipToBounds__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/clipToBounds",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -3132,6 +3263,7 @@
       "test": "fixtures/common/clipToBounds__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/clipToBounds",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -3155,6 +3287,7 @@
       "test": "fixtures/common/clipToBounds__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/clipToBounds",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -3333,6 +3466,7 @@
       "test": "fixtures/common/tintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/tintColor",
       "control": "__control/View"
     },
     {
@@ -3356,6 +3490,7 @@
       "test": "fixtures/common/tintColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/tintColor",
       "control": "__control/View"
     },
     {
@@ -3377,6 +3512,7 @@
       "test": "fixtures/common/compressHorizontal__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -3398,6 +3534,7 @@
       "test": "fixtures/common/compressVertical__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -3419,6 +3556,7 @@
       "test": "fixtures/common/hugHorizontal__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -3440,6 +3578,7 @@
       "test": "fixtures/common/hugVertical__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -3461,6 +3600,29 @@
       "test": "fixtures/common/wrapContent__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "common/wrapContent__false",
+      "component": "common",
+      "attribute": "wrapContent",
+      "case": "false",
+      "class": "declaration-only",
+      "host": "View",
+      "writtenKey": "wrapContent",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/wrapContent__false.layout.json",
+      "test": "fixtures/common/wrapContent__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -3482,6 +3644,7 @@
       "test": "fixtures/common/innerPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -3503,6 +3666,7 @@
       "test": "fixtures/common/effectStyle__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -3526,6 +3690,7 @@
       "test": "fixtures/common/enabled__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -3549,6 +3714,7 @@
       "test": "fixtures/common/enabled__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -3571,6 +3737,7 @@
       "test": "fixtures/common/indexBelow__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View__anchored"
     },
     {
@@ -3593,6 +3760,7 @@
       "test": "fixtures/common/indexAbove__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View__anchored__root.anchorLast-True"
     },
     {
@@ -3616,6 +3784,7 @@
       "test": "fixtures/common/gravity__top.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/gravity",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -3639,6 +3808,7 @@
       "test": "fixtures/common/gravity__bottom.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/gravity",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -3662,6 +3832,7 @@
       "test": "fixtures/common/gravity__centervertical.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/gravity",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -3685,6 +3856,7 @@
       "test": "fixtures/common/gravity__left.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/gravity",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -3708,6 +3880,7 @@
       "test": "fixtures/common/gravity__right.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/gravity",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -3731,6 +3904,7 @@
       "test": "fixtures/common/gravity__centerhorizontal.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/gravity",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -3754,6 +3928,7 @@
       "test": "fixtures/common/gravity__center.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/gravity",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -3817,6 +3992,7 @@
       "test": "fixtures/common/alignment__top.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignment",
       "control": "__control/View"
     },
     {
@@ -3839,6 +4015,7 @@
       "test": "fixtures/common/alignment__topleading.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignment",
       "control": "__control/View"
     },
     {
@@ -3861,6 +4038,7 @@
       "test": "fixtures/common/alignment__toptrailing.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignment",
       "control": "__control/View"
     },
     {
@@ -3883,6 +4061,7 @@
       "test": "fixtures/common/alignment__leading.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignment",
       "control": "__control/View"
     },
     {
@@ -3905,6 +4084,7 @@
       "test": "fixtures/common/alignment__center.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignment",
       "control": "__control/View"
     },
     {
@@ -3927,6 +4107,7 @@
       "test": "fixtures/common/alignment__trailing.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignment",
       "control": "__control/View"
     },
     {
@@ -3949,6 +4130,7 @@
       "test": "fixtures/common/alignment__bottomleading.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignment",
       "control": "__control/View"
     },
     {
@@ -3971,6 +4153,7 @@
       "test": "fixtures/common/alignment__bottom.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignment",
       "control": "__control/View"
     },
     {
@@ -3993,6 +4176,7 @@
       "test": "fixtures/common/alignment__bottomtrailing.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/alignment",
       "control": "__control/View"
     },
     {
@@ -4015,6 +4199,7 @@
       "test": "fixtures/common/distribution__fillequally.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/distribution",
       "control": "__control/View__orientation-horizontal_width-300"
     },
     {
@@ -4037,6 +4222,7 @@
       "test": "fixtures/common/distribution__fill.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/distribution",
       "control": "__control/View__orientation-horizontal_width-300"
     },
     {
@@ -4059,6 +4245,7 @@
       "test": "fixtures/common/distribution__equalspacing.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/distribution",
       "control": "__control/View__orientation-horizontal_width-300"
     },
     {
@@ -4081,6 +4268,7 @@
       "test": "fixtures/common/distribution__equalcentering.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "common/distribution",
       "control": "__control/View__orientation-horizontal_width-300"
     },
     {
@@ -4102,6 +4290,7 @@
       "test": "fixtures/common/minStartMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View"
     },
     {
@@ -4123,6 +4312,7 @@
       "test": "fixtures/common/maxStartMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View"
     },
     {
@@ -4144,6 +4334,7 @@
       "test": "fixtures/common/minEndMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View"
     },
     {
@@ -4165,6 +4356,7 @@
       "test": "fixtures/common/maxEndMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View"
     },
     {
@@ -4186,6 +4378,7 @@
       "test": "fixtures/common/idealWidth__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View"
     },
     {
@@ -4207,6 +4400,7 @@
       "test": "fixtures/common/idealHeight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View"
     },
     {
@@ -4230,6 +4424,7 @@
       "test": "fixtures/Label/text__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -4621,6 +4816,7 @@
       "test": "fixtures/Label/hint__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Label__hintAttributes--fontSize-12_no-text"
     },
     {
@@ -4644,6 +4840,7 @@
       "test": "fixtures/Label/placeholder__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Label__hintAttributes--fontSize-12_no-text"
     },
     {
@@ -4667,6 +4864,7 @@
       "test": "fixtures/Label/font__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/font",
       "control": "__control/Label"
     },
     {
@@ -4690,6 +4888,7 @@
       "test": "fixtures/Label/font__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/font",
       "control": "__control/Label"
     },
     {
@@ -4713,6 +4912,7 @@
       "test": "fixtures/Label/fontSize__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/fontSize",
       "control": "__control/Label"
     },
     {
@@ -4736,6 +4936,7 @@
       "test": "fixtures/Label/fontSize__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/fontSize",
       "control": "__control/Label"
     },
     {
@@ -4759,6 +4960,7 @@
       "test": "fixtures/Label/fontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Label"
     },
     {
@@ -4782,6 +4984,7 @@
       "test": "fixtures/Label/fontFamily__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/fontFamily",
       "control": "__control/Label"
     },
     {
@@ -4805,6 +5008,7 @@
       "test": "fixtures/Label/fontFamily__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/fontFamily",
       "control": "__control/Label"
     },
     {
@@ -4826,6 +5030,7 @@
       "test": "fixtures/Label/lineHeight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Label"
     },
     {
@@ -4847,6 +5052,7 @@
       "test": "fixtures/Label/textTransform__none.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/textTransform",
       "control": "__control/Label"
     },
     {
@@ -4868,6 +5074,7 @@
       "test": "fixtures/Label/textTransform__capitalize.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/textTransform",
       "control": "__control/Label"
     },
     {
@@ -4889,6 +5096,7 @@
       "test": "fixtures/Label/textTransform__uppercase.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/textTransform",
       "control": "__control/Label"
     },
     {
@@ -4910,6 +5118,7 @@
       "test": "fixtures/Label/textTransform__lowercase.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/textTransform",
       "control": "__control/Label"
     },
     {
@@ -4933,6 +5142,31 @@
       "test": "fixtures/Label/selected__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/selected",
+      "control": "__control/Label__highlightAttributes-cb049517"
+    },
+    {
+      "id": "Label/selected__false",
+      "component": "Label",
+      "attribute": "selected",
+      "case": "false",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "selected",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/selected__false.layout.json",
+      "test": "fixtures/Label/selected__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Label/selected",
       "control": "__control/Label__highlightAttributes-cb049517"
     },
     {
@@ -4956,6 +5190,7 @@
       "test": "fixtures/Label/textAlign__left.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/textAlign",
       "control": "__control/Label"
     },
     {
@@ -4979,6 +5214,7 @@
       "test": "fixtures/Label/textAlign__center.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/textAlign",
       "control": "__control/Label"
     },
     {
@@ -5002,6 +5238,7 @@
       "test": "fixtures/Label/textAlign__right.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/textAlign",
       "control": "__control/Label"
     },
     {
@@ -5025,6 +5262,7 @@
       "test": "fixtures/Label/textAlign__left_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/textAlign",
       "control": "__control/Label"
     },
     {
@@ -5048,6 +5286,7 @@
       "test": "fixtures/Label/textAlign__center_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/textAlign",
       "control": "__control/Label"
     },
     {
@@ -5071,6 +5310,7 @@
       "test": "fixtures/Label/textAlign__right_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/textAlign",
       "control": "__control/Label"
     },
     {
@@ -5094,6 +5334,7 @@
       "test": "fixtures/Label/textAlign__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/textAlign",
       "control": "__control/Label"
     },
     {
@@ -5117,6 +5358,7 @@
       "test": "fixtures/Label/lines__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/lines",
       "control": "__control/Label__text-1d8efd05"
     },
     {
@@ -5140,6 +5382,7 @@
       "test": "fixtures/Label/lines__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/lines",
       "control": "__control/Label__text-1d8efd05"
     },
     {
@@ -5163,6 +5406,7 @@
       "test": "fixtures/Label/lineBreakMode__clip.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/lineBreakMode",
       "control": "__control/Label__text-1d8efd05"
     },
     {
@@ -5186,6 +5430,7 @@
       "test": "fixtures/Label/lineBreakMode__char.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/lineBreakMode",
       "control": "__control/Label__text-1d8efd05"
     },
     {
@@ -5209,6 +5454,7 @@
       "test": "fixtures/Label/lineBreakMode__word.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/lineBreakMode",
       "control": "__control/Label__text-1d8efd05"
     },
     {
@@ -5232,6 +5478,7 @@
       "test": "fixtures/Label/lineBreakMode__head.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/lineBreakMode",
       "control": "__control/Label__text-1d8efd05"
     },
     {
@@ -5255,6 +5502,7 @@
       "test": "fixtures/Label/lineBreakMode__middle.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/lineBreakMode",
       "control": "__control/Label__text-1d8efd05"
     },
     {
@@ -5278,6 +5526,7 @@
       "test": "fixtures/Label/lineBreakMode__tail.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/lineBreakMode",
       "control": "__control/Label__text-1d8efd05"
     },
     {
@@ -5301,6 +5550,7 @@
       "test": "fixtures/Label/lineHeightMultiple__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/lineHeightMultiple",
       "control": "__control/Label__text-1d8efd05"
     },
     {
@@ -5324,6 +5574,7 @@
       "test": "fixtures/Label/lineHeightMultiple__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/lineHeightMultiple",
       "control": "__control/Label__text-1d8efd05"
     },
     {
@@ -5347,6 +5598,7 @@
       "test": "fixtures/Label/lineSpacing__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/lineSpacing",
       "control": "__control/Label__text-1d8efd05"
     },
     {
@@ -5370,6 +5622,7 @@
       "test": "fixtures/Label/lineSpacing__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/lineSpacing",
       "control": "__control/Label__text-1d8efd05"
     },
     {
@@ -5398,6 +5651,7 @@
       "test": "fixtures/Label/edgeInset__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Label"
     },
     {
@@ -5421,6 +5675,31 @@
       "test": "fixtures/Label/underline__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/underline",
+      "control": "__control/Label"
+    },
+    {
+      "id": "Label/underline__false",
+      "component": "Label",
+      "attribute": "underline",
+      "case": "false",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "underline",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/underline__false.layout.json",
+      "test": "fixtures/Label/underline__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Label/underline",
       "control": "__control/Label"
     },
     {
@@ -5444,6 +5723,31 @@
       "test": "fixtures/Label/strikethrough__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/strikethrough",
+      "control": "__control/Label"
+    },
+    {
+      "id": "Label/strikethrough__false",
+      "component": "Label",
+      "attribute": "strikethrough",
+      "case": "false",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "strikethrough",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/strikethrough__false.layout.json",
+      "test": "fixtures/Label/strikethrough__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Label/strikethrough",
       "control": "__control/Label"
     },
     {
@@ -5467,6 +5771,31 @@
       "test": "fixtures/Label/autoShrink__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/autoShrink",
+      "control": "__control/Label__text-1d8efd05"
+    },
+    {
+      "id": "Label/autoShrink__false",
+      "component": "Label",
+      "attribute": "autoShrink",
+      "case": "false",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "autoShrink",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/autoShrink__false.layout.json",
+      "test": "fixtures/Label/autoShrink__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Label/autoShrink",
       "control": "__control/Label__text-1d8efd05"
     },
     {
@@ -5490,6 +5819,7 @@
       "test": "fixtures/Label/minimumScaleFactor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/minimumScaleFactor",
       "control": "__control/Label__autoShrink-True_text-1d8efd05"
     },
     {
@@ -5513,6 +5843,7 @@
       "test": "fixtures/Label/minimumScaleFactor__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/minimumScaleFactor",
       "control": "__control/Label__autoShrink-True_text-1d8efd05"
     },
     {
@@ -5536,6 +5867,7 @@
       "test": "fixtures/Label/linkable__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/linkable",
       "control": "__control/Label__text-5ed92def"
     },
     {
@@ -5559,6 +5891,7 @@
       "test": "fixtures/Label/linkable__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/linkable",
       "control": "__control/Label__text-5ed92def"
     },
     {
@@ -5582,6 +5915,7 @@
       "test": "fixtures/Label/linkable__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/linkable",
       "control": "__control/Label__text-5ed92def"
     },
     {
@@ -5612,6 +5946,7 @@
       "test": "fixtures/Label/textShadow__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Label"
     },
     {
@@ -5635,6 +5970,7 @@
       "test": "fixtures/Label/hintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/hintColor",
       "control": "__control/Label__hint-Conformance-Hint_hintAttributes--fontSize-12_no-text"
     },
     {
@@ -5658,6 +5994,7 @@
       "test": "fixtures/Label/hintColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/hintColor",
       "control": "__control/Label__hint-Conformance-Hint_hintAttributes--fontSize-12_no-text"
     },
     {
@@ -5687,6 +6024,7 @@
       "test": "fixtures/Label/highlightAttributes__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Label__selected-True"
     },
     {
@@ -5710,6 +6048,7 @@
       "test": "fixtures/Label/highlightColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/highlightColor",
       "control": "__control/Label__selected-True"
     },
     {
@@ -5733,6 +6072,7 @@
       "test": "fixtures/Label/highlightColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/highlightColor",
       "control": "__control/Label__selected-True"
     },
     {
@@ -5756,6 +6096,7 @@
       "test": "fixtures/Label/fontWeight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/fontWeight",
       "control": "__control/Label"
     },
     {
@@ -5779,6 +6120,7 @@
       "test": "fixtures/Label/fontWeight__600.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Label/fontWeight",
       "control": "__control/Label"
     },
     {
@@ -5802,6 +6144,7 @@
       "test": "fixtures/TextField/text__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -5856,6 +6199,7 @@
       "test": "fixtures/TextField/hint__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextField"
     },
     {
@@ -5879,6 +6223,7 @@
       "test": "fixtures/TextField/placeholder__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextField__no-hint"
     },
     {
@@ -5902,6 +6247,7 @@
       "test": "fixtures/TextField/hintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/hintColor",
       "control": "__control/TextField"
     },
     {
@@ -5925,6 +6271,7 @@
       "test": "fixtures/TextField/hintColor__alias_placeholderColor.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/hintColor",
       "control": "__control/TextField"
     },
     {
@@ -5948,6 +6295,7 @@
       "test": "fixtures/TextField/hintColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/hintColor",
       "control": "__control/TextField"
     },
     {
@@ -5971,6 +6319,7 @@
       "test": "fixtures/TextField/hintFont__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextField"
     },
     {
@@ -5994,6 +6343,7 @@
       "test": "fixtures/TextField/hintFontSize__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextField"
     },
     {
@@ -6017,6 +6367,7 @@
       "test": "fixtures/TextField/font__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/font",
       "control": "__control/TextField__text-Sample"
     },
     {
@@ -6040,6 +6391,7 @@
       "test": "fixtures/TextField/font__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/font",
       "control": "__control/TextField__text-Sample"
     },
     {
@@ -6063,6 +6415,7 @@
       "test": "fixtures/TextField/fontSize__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/fontSize",
       "control": "__control/TextField"
     },
     {
@@ -6086,6 +6439,7 @@
       "test": "fixtures/TextField/fontSize__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/fontSize",
       "control": "__control/TextField"
     },
     {
@@ -6109,6 +6463,7 @@
       "test": "fixtures/TextField/fontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextField__text-Sample"
     },
     {
@@ -6132,6 +6487,7 @@
       "test": "fixtures/TextField/textAlign__left.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/textAlign",
       "control": "__control/TextField"
     },
     {
@@ -6155,6 +6511,7 @@
       "test": "fixtures/TextField/textAlign__center.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/textAlign",
       "control": "__control/TextField"
     },
     {
@@ -6178,6 +6535,7 @@
       "test": "fixtures/TextField/textAlign__right.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/textAlign",
       "control": "__control/TextField"
     },
     {
@@ -6201,6 +6559,7 @@
       "test": "fixtures/TextField/textAlign__left_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/textAlign",
       "control": "__control/TextField"
     },
     {
@@ -6224,6 +6583,7 @@
       "test": "fixtures/TextField/textAlign__center_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/textAlign",
       "control": "__control/TextField"
     },
     {
@@ -6247,6 +6607,7 @@
       "test": "fixtures/TextField/textAlign__right_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/textAlign",
       "control": "__control/TextField"
     },
     {
@@ -6270,6 +6631,7 @@
       "test": "fixtures/TextField/borderStyle__none.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/borderStyle",
       "control": "__control/TextField"
     },
     {
@@ -6293,6 +6655,7 @@
       "test": "fixtures/TextField/borderStyle__line.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/borderStyle",
       "control": "__control/TextField"
     },
     {
@@ -6316,6 +6679,7 @@
       "test": "fixtures/TextField/borderStyle__bezel.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/borderStyle",
       "control": "__control/TextField"
     },
     {
@@ -6339,6 +6703,7 @@
       "test": "fixtures/TextField/borderStyle__roundedrect.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/borderStyle",
       "control": "__control/TextField"
     },
     {
@@ -6362,6 +6727,7 @@
       "test": "fixtures/TextField/borderStyle__roundedrect_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/borderStyle",
       "control": "__control/TextField"
     },
     {
@@ -6385,6 +6751,7 @@
       "test": "fixtures/TextField/borderStyle__line_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/borderStyle",
       "control": "__control/TextField"
     },
     {
@@ -6408,6 +6775,7 @@
       "test": "fixtures/TextField/borderStyle__bezel_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/borderStyle",
       "control": "__control/TextField"
     },
     {
@@ -6431,6 +6799,7 @@
       "test": "fixtures/TextField/input__default.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6454,6 +6823,7 @@
       "test": "fixtures/TextField/input__alphabet.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6477,6 +6847,7 @@
       "test": "fixtures/TextField/input__allphabet.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6500,6 +6871,7 @@
       "test": "fixtures/TextField/input__email.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6523,6 +6895,7 @@
       "test": "fixtures/TextField/input__number.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6546,6 +6919,7 @@
       "test": "fixtures/TextField/input__phone.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6569,6 +6943,7 @@
       "test": "fixtures/TextField/input__url.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6592,6 +6967,7 @@
       "test": "fixtures/TextField/input__password.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6615,6 +6991,7 @@
       "test": "fixtures/TextField/input__decimal.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6636,6 +7013,7 @@
       "test": "fixtures/TextField/inputType__text.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6657,6 +7035,7 @@
       "test": "fixtures/TextField/inputType__number.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6678,6 +7057,7 @@
       "test": "fixtures/TextField/inputType__numberdecimal.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6699,6 +7079,7 @@
       "test": "fixtures/TextField/inputType__phone.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6720,6 +7101,7 @@
       "test": "fixtures/TextField/inputType__email.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6741,6 +7123,7 @@
       "test": "fixtures/TextField/inputType__password.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6762,6 +7145,7 @@
       "test": "fixtures/TextField/inputType__multiline.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6785,6 +7169,7 @@
       "test": "fixtures/TextField/returnKeyType__done.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6808,6 +7193,7 @@
       "test": "fixtures/TextField/returnKeyType__go.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6831,6 +7217,7 @@
       "test": "fixtures/TextField/returnKeyType__next.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6854,6 +7241,7 @@
       "test": "fixtures/TextField/returnKeyType__return.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6877,6 +7265,7 @@
       "test": "fixtures/TextField/returnKeyType__search.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6900,6 +7289,7 @@
       "test": "fixtures/TextField/returnKeyType__send.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6923,6 +7313,7 @@
       "test": "fixtures/TextField/returnKeyType__continue.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6946,6 +7337,7 @@
       "test": "fixtures/TextField/returnKeyType__join.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6969,6 +7361,7 @@
       "test": "fixtures/TextField/returnKeyType__route.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -6992,6 +7385,7 @@
       "test": "fixtures/TextField/returnKeyType__yahoo.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7015,6 +7409,7 @@
       "test": "fixtures/TextField/returnKeyType__google.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7038,6 +7433,7 @@
       "test": "fixtures/TextField/contentType__username.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7061,6 +7457,7 @@
       "test": "fixtures/TextField/contentType__password.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7084,6 +7481,7 @@
       "test": "fixtures/TextField/contentType__newpassword.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7107,6 +7505,7 @@
       "test": "fixtures/TextField/contentType__onetimecode.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7130,6 +7529,7 @@
       "test": "fixtures/TextField/contentType__email.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7153,6 +7553,7 @@
       "test": "fixtures/TextField/contentType__name.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7176,6 +7577,7 @@
       "test": "fixtures/TextField/contentType__givenname.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7199,6 +7601,7 @@
       "test": "fixtures/TextField/contentType__familyname.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7222,6 +7625,7 @@
       "test": "fixtures/TextField/contentType__telephonenumber.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7245,6 +7649,7 @@
       "test": "fixtures/TextField/contentType__streetaddress.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7268,6 +7673,7 @@
       "test": "fixtures/TextField/contentType__postalcode.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7291,6 +7697,7 @@
       "test": "fixtures/TextField/contentType__country.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7314,6 +7721,7 @@
       "test": "fixtures/TextField/contentType__creditcardnumber.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7337,6 +7745,7 @@
       "test": "fixtures/TextField/contentType__url.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7360,6 +7769,7 @@
       "test": "fixtures/TextField/contentType__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7381,6 +7791,7 @@
       "test": "fixtures/TextField/secure__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/secure",
       "control": "__control/TextField__text-Sample"
     },
     {
@@ -7402,6 +7813,7 @@
       "test": "fixtures/TextField/secure__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/secure",
       "control": "__control/TextField__text-Sample"
     },
     {
@@ -7423,6 +7835,7 @@
       "test": "fixtures/TextField/secure__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/secure",
       "control": "__control/TextField__text-Sample"
     },
     {
@@ -7444,6 +7857,7 @@
       "test": "fixtures/TextField/fieldPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextField"
     },
     {
@@ -7467,6 +7881,7 @@
       "test": "fixtures/TextField/textPaddingLeft__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextField"
     },
     {
@@ -7488,6 +7903,7 @@
       "test": "fixtures/TextField/textPaddingRight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7509,6 +7925,29 @@
       "test": "fixtures/TextField/hasContainer__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "TextField/hasContainer__false",
+      "component": "TextField",
+      "attribute": "hasContainer",
+      "case": "false",
+      "class": "declaration-only",
+      "host": "TextField",
+      "writtenKey": "hasContainer",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": "uikit",
+      "layout": "fixtures/TextField/hasContainer__false.layout.json",
+      "test": "fixtures/TextField/hasContainer__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7530,6 +7969,7 @@
       "test": "fixtures/TextField/textVerticalAlign__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7551,6 +7991,29 @@
       "test": "fixtures/TextField/applyLiquidGlass__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "TextField/applyLiquidGlass__false",
+      "component": "TextField",
+      "attribute": "applyLiquidGlass",
+      "case": "false",
+      "class": "declaration-only",
+      "host": "TextField",
+      "writtenKey": "applyLiquidGlass",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/TextField/applyLiquidGlass__false.layout.json",
+      "test": "fixtures/TextField/applyLiquidGlass__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7572,6 +8035,7 @@
       "test": "fixtures/TextField/accessoryCornerRadius__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7593,6 +8057,7 @@
       "test": "fixtures/TextField/glassEffectStyle__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7614,6 +8079,7 @@
       "test": "fixtures/TextField/accessoryBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7635,6 +8101,7 @@
       "test": "fixtures/TextField/accessoryTextColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7656,6 +8123,7 @@
       "test": "fixtures/TextField/doneText__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7679,6 +8147,7 @@
       "test": "fixtures/TextField/tintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7741,6 +8210,7 @@
       "test": "fixtures/TextField/autocapitalizationType__none.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7764,6 +8234,7 @@
       "test": "fixtures/TextField/autocapitalizationType__words.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7787,6 +8258,7 @@
       "test": "fixtures/TextField/autocapitalizationType__sentences.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7810,6 +8282,7 @@
       "test": "fixtures/TextField/autocapitalizationType__allcharacters.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7833,6 +8306,7 @@
       "test": "fixtures/TextField/autocorrectionType__default.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7856,6 +8330,7 @@
       "test": "fixtures/TextField/autocorrectionType__yes.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7879,6 +8354,7 @@
       "test": "fixtures/TextField/autocorrectionType__no.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7900,6 +8376,7 @@
       "test": "fixtures/TextField/clearButtonMode__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextField__text-Clear-me"
     },
     {
@@ -7921,6 +8398,7 @@
       "test": "fixtures/TextField/leftViewMode__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7942,6 +8420,7 @@
       "test": "fixtures/TextField/rightViewMode__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7965,6 +8444,7 @@
       "test": "fixtures/TextField/maxLength__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -7986,6 +8466,7 @@
       "test": "fixtures/TextField/pattern__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8007,6 +8488,29 @@
       "test": "fixtures/TextField/required__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "TextField/required__false",
+      "component": "TextField",
+      "attribute": "required",
+      "case": "false",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "required",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/required__false.layout.json",
+      "test": "fixtures/TextField/required__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8030,6 +8534,7 @@
       "test": "fixtures/TextField/fontFamily__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/fontFamily",
       "control": "__control/TextField__text-Sample"
     },
     {
@@ -8053,6 +8558,7 @@
       "test": "fixtures/TextField/fontFamily__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextField/fontFamily",
       "control": "__control/TextField__text-Sample"
     },
     {
@@ -8074,6 +8580,7 @@
       "test": "fixtures/TextField/disabledBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextField__enabled-False"
     },
     {
@@ -8097,6 +8604,7 @@
       "test": "fixtures/TextView/text__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8151,6 +8659,7 @@
       "test": "fixtures/TextView/hint__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextView"
     },
     {
@@ -8174,6 +8683,7 @@
       "test": "fixtures/TextView/placeholder__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextView__no-hint"
     },
     {
@@ -8197,6 +8707,7 @@
       "test": "fixtures/TextView/hintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/hintColor",
       "control": "__control/TextView"
     },
     {
@@ -8220,6 +8731,7 @@
       "test": "fixtures/TextView/hintColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/hintColor",
       "control": "__control/TextView"
     },
     {
@@ -8243,6 +8755,7 @@
       "test": "fixtures/TextView/hintFont__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextView"
     },
     {
@@ -8266,6 +8779,7 @@
       "test": "fixtures/TextView/hintFontSize__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextView"
     },
     {
@@ -8289,6 +8803,7 @@
       "test": "fixtures/TextView/hintLineHeightMultiple__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextView__hint-507236bd"
     },
     {
@@ -8312,6 +8827,7 @@
       "test": "fixtures/TextView/font__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/font",
       "control": "__control/TextView__text-Sample"
     },
     {
@@ -8335,6 +8851,7 @@
       "test": "fixtures/TextView/font__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/font",
       "control": "__control/TextView__text-Sample"
     },
     {
@@ -8358,6 +8875,7 @@
       "test": "fixtures/TextView/fontSize__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/fontSize",
       "control": "__control/TextView__text-Sample"
     },
     {
@@ -8381,6 +8899,7 @@
       "test": "fixtures/TextView/fontSize__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/fontSize",
       "control": "__control/TextView__text-Sample"
     },
     {
@@ -8404,6 +8923,7 @@
       "test": "fixtures/TextView/fontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextView__text-Sample"
     },
     {
@@ -8427,6 +8947,7 @@
       "test": "fixtures/TextView/textAlign__left.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/textAlign",
       "control": "__control/TextView"
     },
     {
@@ -8450,6 +8971,7 @@
       "test": "fixtures/TextView/textAlign__center.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/textAlign",
       "control": "__control/TextView"
     },
     {
@@ -8473,6 +8995,7 @@
       "test": "fixtures/TextView/textAlign__right.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/textAlign",
       "control": "__control/TextView"
     },
     {
@@ -8496,6 +9019,7 @@
       "test": "fixtures/TextView/textAlign__left_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/textAlign",
       "control": "__control/TextView"
     },
     {
@@ -8519,6 +9043,7 @@
       "test": "fixtures/TextView/textAlign__center_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/textAlign",
       "control": "__control/TextView"
     },
     {
@@ -8542,6 +9067,7 @@
       "test": "fixtures/TextView/textAlign__right_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/textAlign",
       "control": "__control/TextView"
     },
     {
@@ -8565,6 +9091,7 @@
       "test": "fixtures/TextView/containerInset__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextView"
     },
     {
@@ -8588,6 +9115,31 @@
       "test": "fixtures/TextView/flexible__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/flexible",
+      "control": "__control/TextView"
+    },
+    {
+      "id": "TextView/flexible__false",
+      "component": "TextView",
+      "attribute": "flexible",
+      "case": "false",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "flexible",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/flexible__false.layout.json",
+      "test": "fixtures/TextView/flexible__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "TextView/flexible",
       "control": "__control/TextView"
     },
     {
@@ -8611,6 +9163,7 @@
       "test": "fixtures/TextView/input__default.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8634,6 +9187,7 @@
       "test": "fixtures/TextView/input__alphabet.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8657,6 +9211,7 @@
       "test": "fixtures/TextView/input__allphabet.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8680,6 +9235,7 @@
       "test": "fixtures/TextView/input__email.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8703,6 +9259,7 @@
       "test": "fixtures/TextView/input__number.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8726,6 +9283,7 @@
       "test": "fixtures/TextView/input__phone.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8749,6 +9307,7 @@
       "test": "fixtures/TextView/input__url.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8772,6 +9331,7 @@
       "test": "fixtures/TextView/input__password.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8795,6 +9355,7 @@
       "test": "fixtures/TextView/input__decimal.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8818,6 +9379,7 @@
       "test": "fixtures/TextView/returnKeyType__done.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8841,6 +9403,7 @@
       "test": "fixtures/TextView/returnKeyType__go.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8864,6 +9427,7 @@
       "test": "fixtures/TextView/returnKeyType__next.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8887,6 +9451,7 @@
       "test": "fixtures/TextView/returnKeyType__return.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8910,6 +9475,7 @@
       "test": "fixtures/TextView/returnKeyType__search.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8933,6 +9499,7 @@
       "test": "fixtures/TextView/returnKeyType__send.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8956,6 +9523,7 @@
       "test": "fixtures/TextView/returnKeyType__continue.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -8979,6 +9547,7 @@
       "test": "fixtures/TextView/returnKeyType__join.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9002,6 +9571,7 @@
       "test": "fixtures/TextView/returnKeyType__route.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9025,6 +9595,7 @@
       "test": "fixtures/TextView/returnKeyType__yahoo.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9048,6 +9619,7 @@
       "test": "fixtures/TextView/returnKeyType__google.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9071,6 +9643,31 @@
       "test": "fixtures/TextView/editable__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/editable",
+      "control": "__control/TextView"
+    },
+    {
+      "id": "TextView/editable__true",
+      "component": "TextView",
+      "attribute": "editable",
+      "case": "true",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "editable",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/editable__true.layout.json",
+      "test": "fixtures/TextView/editable__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "TextView/editable",
       "control": "__control/TextView"
     },
     {
@@ -9094,6 +9691,7 @@
       "test": "fixtures/TextView/lineBreakMode__clip.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/lineBreakMode",
       "control": "__control/TextView"
     },
     {
@@ -9117,6 +9715,7 @@
       "test": "fixtures/TextView/lineBreakMode__char.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/lineBreakMode",
       "control": "__control/TextView"
     },
     {
@@ -9140,6 +9739,7 @@
       "test": "fixtures/TextView/lineBreakMode__word.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/lineBreakMode",
       "control": "__control/TextView"
     },
     {
@@ -9163,6 +9763,7 @@
       "test": "fixtures/TextView/lineBreakMode__head.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/lineBreakMode",
       "control": "__control/TextView"
     },
     {
@@ -9186,6 +9787,7 @@
       "test": "fixtures/TextView/lineBreakMode__middle.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/lineBreakMode",
       "control": "__control/TextView"
     },
     {
@@ -9209,6 +9811,7 @@
       "test": "fixtures/TextView/lineBreakMode__tail.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/lineBreakMode",
       "control": "__control/TextView"
     },
     {
@@ -9232,6 +9835,7 @@
       "test": "fixtures/TextView/keyboardType__default.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9255,6 +9859,7 @@
       "test": "fixtures/TextView/keyboardType__asciicapable.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9278,6 +9883,7 @@
       "test": "fixtures/TextView/keyboardType__number.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9301,6 +9907,7 @@
       "test": "fixtures/TextView/keyboardType__decimal.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9324,6 +9931,7 @@
       "test": "fixtures/TextView/keyboardType__phone.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9347,6 +9955,7 @@
       "test": "fixtures/TextView/keyboardType__email.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9370,6 +9979,7 @@
       "test": "fixtures/TextView/keyboardType__url.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9393,6 +10003,7 @@
       "test": "fixtures/TextView/keyboardType__websearch.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9416,6 +10027,7 @@
       "test": "fixtures/TextView/keyboardType__namephonepad.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9439,6 +10051,7 @@
       "test": "fixtures/TextView/keyboardType__twitter.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9499,6 +10112,7 @@
       "test": "fixtures/TextView/maxLength__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9520,6 +10134,7 @@
       "test": "fixtures/TextView/pattern__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9541,6 +10156,29 @@
       "test": "fixtures/TextView/required__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "TextView/required__false",
+      "component": "TextView",
+      "attribute": "required",
+      "case": "false",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "required",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/required__false.layout.json",
+      "test": "fixtures/TextView/required__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9562,6 +10200,29 @@
       "test": "fixtures/TextView/selectable__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/selectable",
+      "control": "__control/TextView"
+    },
+    {
+      "id": "TextView/selectable__true",
+      "component": "TextView",
+      "attribute": "selectable",
+      "case": "true",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "selectable",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/selectable__true.layout.json",
+      "test": "fixtures/TextView/selectable__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "TextView/selectable",
       "control": "__control/TextView"
     },
     {
@@ -9583,6 +10244,7 @@
       "test": "fixtures/TextView/rows__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextView__no-height"
     },
     {
@@ -9604,6 +10266,7 @@
       "test": "fixtures/TextView/cols__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextView__no-width"
     },
     {
@@ -9625,6 +10288,7 @@
       "test": "fixtures/TextView/resize__both.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/resize",
       "control": "__control/TextView"
     },
     {
@@ -9646,6 +10310,7 @@
       "test": "fixtures/TextView/resize__none.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/resize",
       "control": "__control/TextView"
     },
     {
@@ -9667,6 +10332,7 @@
       "test": "fixtures/TextView/resize__horizontal.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/resize",
       "control": "__control/TextView"
     },
     {
@@ -9688,6 +10354,7 @@
       "test": "fixtures/TextView/resize__vertical.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/resize",
       "control": "__control/TextView"
     },
     {
@@ -9711,6 +10378,7 @@
       "test": "fixtures/TextView/fontFamily__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/fontFamily",
       "control": "__control/TextView__text-Sample"
     },
     {
@@ -9734,6 +10402,7 @@
       "test": "fixtures/TextView/fontFamily__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TextView/fontFamily",
       "control": "__control/TextView__text-Sample"
     },
     {
@@ -9755,6 +10424,7 @@
       "test": "fixtures/TextView/disabledBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextView__enabled-False"
     },
     {
@@ -9783,6 +10453,7 @@
       "test": "fixtures/TextView/edgeInset__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TextView"
     },
     {
@@ -9806,6 +10477,7 @@
       "test": "fixtures/Button/text__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9860,6 +10532,7 @@
       "test": "fixtures/Button/font__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Button"
     },
     {
@@ -9883,6 +10556,7 @@
       "test": "fixtures/Button/fontSize__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Button"
     },
     {
@@ -9906,6 +10580,7 @@
       "test": "fixtures/Button/fontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Button"
     },
     {
@@ -9929,6 +10604,7 @@
       "test": "fixtures/Button/disabledFontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Button/disabledFontColor",
       "control": "__control/Button__enabled-False"
     },
     {
@@ -9952,6 +10628,7 @@
       "test": "fixtures/Button/disabledFontColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Button/disabledFontColor",
       "control": "__control/Button__enabled-False"
     },
     {
@@ -9975,6 +10652,7 @@
       "test": "fixtures/Button/highlightColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -9998,6 +10676,7 @@
       "test": "fixtures/Button/highlightColor__alias_hilightColor.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -10021,6 +10700,7 @@
       "test": "fixtures/Button/highlightColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -10044,6 +10724,7 @@
       "test": "fixtures/Button/tapBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -10067,6 +10748,7 @@
       "test": "fixtures/Button/highlightBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -10090,6 +10772,7 @@
       "test": "fixtures/Button/image__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Button"
     },
     {
@@ -10113,6 +10796,7 @@
       "test": "fixtures/Button/textAlign__left.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Button/textAlign",
       "control": "__control/Button"
     },
     {
@@ -10136,6 +10820,7 @@
       "test": "fixtures/Button/textAlign__center.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Button/textAlign",
       "control": "__control/Button"
     },
     {
@@ -10159,6 +10844,7 @@
       "test": "fixtures/Button/textAlign__right.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Button/textAlign",
       "control": "__control/Button"
     },
     {
@@ -10180,6 +10866,7 @@
       "test": "fixtures/Button/buttonType__button.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -10201,6 +10888,7 @@
       "test": "fixtures/Button/buttonType__submit.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -10222,6 +10910,7 @@
       "test": "fixtures/Button/buttonType__reset.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -10245,6 +10934,7 @@
       "test": "fixtures/Button/fontWeight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Button/fontWeight",
       "control": "__control/Button"
     },
     {
@@ -10268,6 +10958,7 @@
       "test": "fixtures/Button/fontWeight__600.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Button/fontWeight",
       "control": "__control/Button"
     },
     {
@@ -10291,6 +10982,7 @@
       "test": "fixtures/Button/fontWeight__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Button/fontWeight",
       "control": "__control/Button"
     },
     {
@@ -10314,6 +11006,7 @@
       "test": "fixtures/Image/src__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Image"
     },
     {
@@ -10337,6 +11030,7 @@
       "test": "fixtures/Image/srcName__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Image"
     },
     {
@@ -10358,6 +11052,7 @@
       "test": "fixtures/Image/highlightSrc__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Image"
     },
     {
@@ -10379,6 +11074,7 @@
       "test": "fixtures/Image/highlightSrcName__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -10402,6 +11098,7 @@
       "test": "fixtures/Image/contentMode__fill.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/contentMode",
       "control": "__control/Image"
     },
     {
@@ -10425,6 +11122,7 @@
       "test": "fixtures/Image/contentMode__fit.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/contentMode",
       "control": "__control/Image"
     },
     {
@@ -10448,6 +11146,7 @@
       "test": "fixtures/Image/contentMode__center.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/contentMode",
       "control": "__control/Image"
     },
     {
@@ -10471,6 +11170,7 @@
       "test": "fixtures/Image/contentMode__top.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/contentMode",
       "control": "__control/Image"
     },
     {
@@ -10494,6 +11194,7 @@
       "test": "fixtures/Image/contentMode__bottom.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/contentMode",
       "control": "__control/Image"
     },
     {
@@ -10517,6 +11218,7 @@
       "test": "fixtures/Image/contentMode__left.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/contentMode",
       "control": "__control/Image"
     },
     {
@@ -10540,6 +11242,7 @@
       "test": "fixtures/Image/contentMode__right.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/contentMode",
       "control": "__control/Image"
     },
     {
@@ -10563,6 +11266,7 @@
       "test": "fixtures/Image/contentMode__aspectfill.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/contentMode",
       "control": "__control/Image"
     },
     {
@@ -10586,6 +11290,7 @@
       "test": "fixtures/Image/contentMode__aspectfit.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/contentMode",
       "control": "__control/Image"
     },
     {
@@ -10609,6 +11314,7 @@
       "test": "fixtures/Image/contentMode__center_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/contentMode",
       "control": "__control/Image"
     },
     {
@@ -10632,6 +11338,7 @@
       "test": "fixtures/Image/contentMode__scaletofill.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/contentMode",
       "control": "__control/Image"
     },
     {
@@ -10655,6 +11362,7 @@
       "test": "fixtures/Image/contentMode__top_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/contentMode",
       "control": "__control/Image"
     },
     {
@@ -10678,6 +11386,7 @@
       "test": "fixtures/Image/contentMode__bottom_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/contentMode",
       "control": "__control/Image"
     },
     {
@@ -10701,6 +11410,7 @@
       "test": "fixtures/Image/contentMode__left_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/contentMode",
       "control": "__control/Image"
     },
     {
@@ -10724,6 +11434,7 @@
       "test": "fixtures/Image/contentMode__right_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/contentMode",
       "control": "__control/Image"
     },
     {
@@ -10747,6 +11458,7 @@
       "test": "fixtures/Image/contentMode__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/contentMode",
       "control": "__control/Image"
     },
     {
@@ -10769,6 +11481,7 @@
       "test": "fixtures/Image/renderingMode__template.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/renderingMode",
       "control": "__control/Image"
     },
     {
@@ -10791,6 +11504,7 @@
       "test": "fixtures/Image/renderingMode__original.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/renderingMode",
       "control": "__control/Image"
     },
     {
@@ -10812,6 +11526,7 @@
       "test": "fixtures/Image/alt__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -10833,6 +11548,7 @@
       "test": "fixtures/Image/loading__lazy.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -10854,6 +11570,7 @@
       "test": "fixtures/Image/loading__eager.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -10876,6 +11593,7 @@
       "test": "fixtures/Image/loadingImage__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Image__no-src"
     },
     {
@@ -10898,6 +11616,7 @@
       "test": "fixtures/Image/errorImage__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Image__no-src"
     },
     {
@@ -10919,6 +11638,29 @@
       "test": "fixtures/Image/systemIcon__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Image/systemIcon",
+      "control": "__control/Image__src-star"
+    },
+    {
+      "id": "Image/systemIcon__false",
+      "component": "Image",
+      "attribute": "systemIcon",
+      "case": "false",
+      "class": "visual",
+      "host": "Image",
+      "writtenKey": "systemIcon",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios"
+      ],
+      "mode": "swiftui",
+      "deprecated": null,
+      "layout": "fixtures/Image/systemIcon__false.layout.json",
+      "test": "fixtures/Image/systemIcon__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Image/systemIcon",
       "control": "__control/Image__src-star"
     },
     {
@@ -10942,6 +11684,7 @@
       "test": "fixtures/NetworkImage/hint__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/NetworkImage"
     },
     {
@@ -10965,6 +11708,7 @@
       "test": "fixtures/NetworkImage/placeholder__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/NetworkImage__no-defaultImage"
     },
     {
@@ -10988,6 +11732,7 @@
       "test": "fixtures/NetworkImage/defaultImage__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/NetworkImage"
     },
     {
@@ -11010,6 +11755,7 @@
       "test": "fixtures/NetworkImage/errorImage__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/NetworkImage__no-defaultImage"
     },
     {
@@ -11032,6 +11778,7 @@
       "test": "fixtures/NetworkImage/loadingImage__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/NetworkImage__no-defaultImage"
     },
     {
@@ -11055,6 +11802,7 @@
       "test": "fixtures/NetworkImage/contentMode__fit.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "NetworkImage/contentMode",
       "control": "__control/NetworkImage"
     },
     {
@@ -11078,6 +11826,7 @@
       "test": "fixtures/NetworkImage/contentMode__fill.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "NetworkImage/contentMode",
       "control": "__control/NetworkImage"
     },
     {
@@ -11101,6 +11850,7 @@
       "test": "fixtures/NetworkImage/contentMode__center.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "NetworkImage/contentMode",
       "control": "__control/NetworkImage"
     },
     {
@@ -11124,6 +11874,7 @@
       "test": "fixtures/NetworkImage/contentMode__top.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "NetworkImage/contentMode",
       "control": "__control/NetworkImage"
     },
     {
@@ -11147,6 +11898,7 @@
       "test": "fixtures/NetworkImage/contentMode__bottom.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "NetworkImage/contentMode",
       "control": "__control/NetworkImage"
     },
     {
@@ -11170,6 +11922,7 @@
       "test": "fixtures/NetworkImage/contentMode__left.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "NetworkImage/contentMode",
       "control": "__control/NetworkImage"
     },
     {
@@ -11193,6 +11946,7 @@
       "test": "fixtures/NetworkImage/contentMode__right.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "NetworkImage/contentMode",
       "control": "__control/NetworkImage"
     },
     {
@@ -11216,6 +11970,7 @@
       "test": "fixtures/NetworkImage/contentMode__aspectfill.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "NetworkImage/contentMode",
       "control": "__control/NetworkImage"
     },
     {
@@ -11239,6 +11994,7 @@
       "test": "fixtures/NetworkImage/contentMode__aspectfit.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "NetworkImage/contentMode",
       "control": "__control/NetworkImage"
     },
     {
@@ -11262,6 +12018,7 @@
       "test": "fixtures/NetworkImage/contentMode__center_2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "NetworkImage/contentMode",
       "control": "__control/NetworkImage"
     },
     {
@@ -11285,6 +12042,7 @@
       "test": "fixtures/NetworkImage/contentMode__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "NetworkImage/contentMode",
       "control": "__control/NetworkImage"
     },
     {
@@ -11306,6 +12064,7 @@
       "test": "fixtures/NetworkImage/alt__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -11327,6 +12086,7 @@
       "test": "fixtures/NetworkImage/loading__lazy.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -11348,6 +12108,7 @@
       "test": "fixtures/NetworkImage/loading__eager.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -11371,6 +12132,7 @@
       "test": "fixtures/SelectBox/prompt__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/SelectBox"
     },
     {
@@ -11394,6 +12156,7 @@
       "test": "fixtures/SelectBox/hint__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/SelectBox"
     },
     {
@@ -11417,6 +12180,7 @@
       "test": "fixtures/SelectBox/placeholder__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/SelectBox"
     },
     {
@@ -11440,6 +12204,7 @@
       "test": "fixtures/SelectBox/hintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/hintColor",
       "control": "__control/SelectBox__prompt-Choose"
     },
     {
@@ -11463,6 +12228,7 @@
       "test": "fixtures/SelectBox/hintColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/hintColor",
       "control": "__control/SelectBox__prompt-Choose"
     },
     {
@@ -11490,6 +12256,7 @@
       "test": "fixtures/SelectBox/items__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -11513,6 +12280,7 @@
       "test": "fixtures/SelectBox/selectItemType__date.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -11536,6 +12304,7 @@
       "test": "fixtures/SelectBox/selectItemType__normal.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -11559,6 +12328,7 @@
       "test": "fixtures/SelectBox/selectedIndex__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/SelectBox"
     },
     {
@@ -11580,6 +12350,7 @@
       "test": "fixtures/SelectBox/selectedItem__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -11603,6 +12374,7 @@
       "test": "fixtures/SelectBox/datePickerMode__time.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/datePickerMode",
       "control": "__control/SelectBox__selectItemType-Date"
     },
     {
@@ -11626,6 +12398,7 @@
       "test": "fixtures/SelectBox/datePickerMode__date.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/datePickerMode",
       "control": "__control/SelectBox__selectItemType-Date"
     },
     {
@@ -11649,6 +12422,7 @@
       "test": "fixtures/SelectBox/datePickerMode__datetime.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/datePickerMode",
       "control": "__control/SelectBox__selectItemType-Date"
     },
     {
@@ -11672,6 +12446,7 @@
       "test": "fixtures/SelectBox/datePickerMode__dateandtime.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/datePickerMode",
       "control": "__control/SelectBox__selectItemType-Date"
     },
     {
@@ -11695,6 +12470,7 @@
       "test": "fixtures/SelectBox/datePickerMode__countdown.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/datePickerMode",
       "control": "__control/SelectBox__selectItemType-Date"
     },
     {
@@ -11718,6 +12494,7 @@
       "test": "fixtures/SelectBox/datePickerStyle__graphical.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -11741,6 +12518,7 @@
       "test": "fixtures/SelectBox/datePickerStyle__automatic.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -11764,6 +12542,7 @@
       "test": "fixtures/SelectBox/datePickerStyle__wheel.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -11787,6 +12566,7 @@
       "test": "fixtures/SelectBox/datePickerStyle__wheels.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -11810,6 +12590,7 @@
       "test": "fixtures/SelectBox/datePickerStyle__compact.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -11833,6 +12614,7 @@
       "test": "fixtures/SelectBox/datePickerStyle__inline.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -11856,6 +12638,7 @@
       "test": "fixtures/SelectBox/dateStringFormat__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -11879,6 +12662,7 @@
       "test": "fixtures/SelectBox/minimumDate__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/minimumDate",
       "control": "__control/SelectBox__datePickerMode-date_selectItemType-Date"
     },
     {
@@ -11902,6 +12686,7 @@
       "test": "fixtures/SelectBox/minimumDate__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/minimumDate",
       "control": "__control/SelectBox__datePickerMode-date_selectItemType-Date"
     },
     {
@@ -11925,6 +12710,7 @@
       "test": "fixtures/SelectBox/maximumDate__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/maximumDate",
       "control": "__control/SelectBox__datePickerMode-date_selectItemType-Date"
     },
     {
@@ -11948,6 +12734,7 @@
       "test": "fixtures/SelectBox/maximumDate__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/maximumDate",
       "control": "__control/SelectBox__datePickerMode-date_selectItemType-Date"
     },
     {
@@ -11971,6 +12758,7 @@
       "test": "fixtures/SelectBox/minuteInterval__1.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -11994,6 +12782,7 @@
       "test": "fixtures/SelectBox/minuteInterval__2.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -12017,6 +12806,7 @@
       "test": "fixtures/SelectBox/minuteInterval__3.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -12040,6 +12830,7 @@
       "test": "fixtures/SelectBox/minuteInterval__4.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -12063,6 +12854,7 @@
       "test": "fixtures/SelectBox/minuteInterval__5.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -12086,6 +12878,7 @@
       "test": "fixtures/SelectBox/minuteInterval__6.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -12109,6 +12902,7 @@
       "test": "fixtures/SelectBox/minuteInterval__10.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -12132,6 +12926,7 @@
       "test": "fixtures/SelectBox/minuteInterval__12.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -12155,6 +12950,7 @@
       "test": "fixtures/SelectBox/minuteInterval__15.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -12178,6 +12974,7 @@
       "test": "fixtures/SelectBox/minuteInterval__20.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -12201,6 +12998,7 @@
       "test": "fixtures/SelectBox/minuteInterval__30.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -12224,6 +13022,7 @@
       "test": "fixtures/SelectBox/minuteInterval__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -12247,6 +13046,7 @@
       "test": "fixtures/SelectBox/font__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/SelectBox__prompt-Choose"
     },
     {
@@ -12270,6 +13070,7 @@
       "test": "fixtures/SelectBox/fontSize__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/SelectBox__prompt-Choose"
     },
     {
@@ -12293,6 +13094,7 @@
       "test": "fixtures/SelectBox/fontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/SelectBox__prompt-Choose"
     },
     {
@@ -12321,6 +13123,7 @@
       "test": "fixtures/SelectBox/labelAttributes__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/SelectBox__prompt-Choose"
     },
     {
@@ -12342,6 +13145,7 @@
       "test": "fixtures/SelectBox/inView__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -12363,6 +13167,7 @@
       "test": "fixtures/SelectBox/referenceView__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -12462,6 +13267,7 @@
       "test": "fixtures/SelectBox/colorScheme__light.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/colorScheme",
       "control": "__control/SelectBox__selectItemType-Date"
     },
     {
@@ -12483,6 +13289,7 @@
       "test": "fixtures/SelectBox/colorScheme__dark.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/colorScheme",
       "control": "__control/SelectBox__selectItemType-Date"
     },
     {
@@ -12504,6 +13311,29 @@
       "test": "fixtures/SelectBox/multiple__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/multiple",
+      "control": "__control/SelectBox"
+    },
+    {
+      "id": "SelectBox/multiple__false",
+      "component": "SelectBox",
+      "attribute": "multiple",
+      "case": "false",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": "multiple",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SelectBox/multiple__false.layout.json",
+      "test": "fixtures/SelectBox/multiple__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "SelectBox/multiple",
       "control": "__control/SelectBox"
     },
     {
@@ -12525,6 +13355,7 @@
       "test": "fixtures/SelectBox/size__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/SelectBox"
     },
     {
@@ -12548,6 +13379,7 @@
       "test": "fixtures/SelectBox/selectedValue__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/selectedValue",
       "control": "__control/SelectBox"
     },
     {
@@ -12571,6 +13403,7 @@
       "test": "fixtures/SelectBox/selectedValue__one.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/selectedValue",
       "control": "__control/SelectBox"
     },
     {
@@ -12594,6 +13427,7 @@
       "test": "fixtures/SelectBox/selectedValue__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SelectBox/selectedValue",
       "control": "__control/SelectBox"
     },
     {
@@ -12617,6 +13451,31 @@
       "test": "fixtures/Switch/isOn__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Switch/isOn",
+      "control": "__control/Switch"
+    },
+    {
+      "id": "Switch/isOn__false",
+      "component": "Switch",
+      "attribute": "isOn",
+      "case": "false",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "isOn",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Switch/isOn__false.layout.json",
+      "test": "fixtures/Switch/isOn__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Switch/isOn",
       "control": "__control/Switch"
     },
     {
@@ -12640,6 +13499,31 @@
       "test": "fixtures/Switch/value__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Switch/value",
+      "control": "__control/Switch"
+    },
+    {
+      "id": "Switch/value__false",
+      "component": "Switch",
+      "attribute": "value",
+      "case": "false",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "value",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Switch/value__false.layout.json",
+      "test": "fixtures/Switch/value__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Switch/value",
       "control": "__control/Switch"
     },
     {
@@ -12663,6 +13547,31 @@
       "test": "fixtures/Switch/checked__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Switch/checked",
+      "control": "__control/Switch"
+    },
+    {
+      "id": "Switch/checked__false",
+      "component": "Switch",
+      "attribute": "checked",
+      "case": "false",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "checked",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Switch/checked__false.layout.json",
+      "test": "fixtures/Switch/checked__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Switch/checked",
       "control": "__control/Switch"
     },
     {
@@ -12686,6 +13595,7 @@
       "test": "fixtures/Switch/enabled__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -12709,6 +13619,7 @@
       "test": "fixtures/Switch/enabled__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -12732,6 +13643,7 @@
       "test": "fixtures/Switch/tint__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Switch/tint",
       "control": "__control/Switch__isOn-True"
     },
     {
@@ -12755,6 +13667,7 @@
       "test": "fixtures/Switch/tint__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Switch/tint",
       "control": "__control/Switch__isOn-True"
     },
     {
@@ -12778,6 +13691,7 @@
       "test": "fixtures/Switch/tintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Switch__isOn-True"
     },
     {
@@ -12801,6 +13715,7 @@
       "test": "fixtures/Switch/onTintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Switch__isOn-True"
     },
     {
@@ -12824,6 +13739,7 @@
       "test": "fixtures/Switch/thumbTintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Switch/thumbTintColor",
       "control": "__control/Switch"
     },
     {
@@ -12847,6 +13763,7 @@
       "test": "fixtures/Switch/thumbTintColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Switch/thumbTintColor",
       "control": "__control/Switch"
     },
     {
@@ -12868,6 +13785,7 @@
       "test": "fixtures/Switch/offTintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -12928,6 +13846,7 @@
       "test": "fixtures/Switch/labelPosition__trailing.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Switch/labelPosition",
       "control": "__control/Switch__labelAttributes--text-Sample"
     },
     {
@@ -12949,6 +13868,7 @@
       "test": "fixtures/Switch/labelPosition__leading.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Switch/labelPosition",
       "control": "__control/Switch__labelAttributes--text-Sample"
     },
     {
@@ -12972,6 +13892,7 @@
       "test": "fixtures/Switch/trackTintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Switch"
     },
     {
@@ -12999,6 +13920,7 @@
       "test": "fixtures/Segment/items__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Segment"
     },
     {
@@ -13022,6 +13944,7 @@
       "test": "fixtures/Segment/selectedIndex__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Segment"
     },
     {
@@ -13045,6 +13968,7 @@
       "test": "fixtures/Segment/tintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Segment"
     },
     {
@@ -13068,6 +13992,7 @@
       "test": "fixtures/Segment/fontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Segment"
     },
     {
@@ -13091,6 +14016,7 @@
       "test": "fixtures/Segment/fontColor__alias_normalColor.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Segment"
     },
     {
@@ -13114,6 +14040,7 @@
       "test": "fixtures/Segment/selectedFontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Segment"
     },
     {
@@ -13137,6 +14064,7 @@
       "test": "fixtures/Segment/selectedFontColor__alias_selectedColor.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Segment"
     },
     {
@@ -13158,6 +14086,29 @@
       "test": "fixtures/Segment/apportionsSegmentWidthsByContent__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "Segment/apportionsSegmentWidthsByContent__false",
+      "component": "Segment",
+      "attribute": "apportionsSegmentWidthsByContent",
+      "case": "false",
+      "class": "declaration-only",
+      "host": "Segment",
+      "writtenKey": "apportionsSegmentWidthsByContent",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/Segment/apportionsSegmentWidthsByContent__false.layout.json",
+      "test": "fixtures/Segment/apportionsSegmentWidthsByContent__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -13181,6 +14132,7 @@
       "test": "fixtures/Slider/value__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Slider"
     },
     {
@@ -13204,6 +14156,7 @@
       "test": "fixtures/Slider/minimum__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Slider/minimum",
       "control": "__control/Slider__value-0.5"
     },
     {
@@ -13227,6 +14180,7 @@
       "test": "fixtures/Slider/minimum__alias_minimumValue.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Slider/minimum",
       "control": "__control/Slider__value-0.5"
     },
     {
@@ -13250,6 +14204,7 @@
       "test": "fixtures/Slider/minimum__alias_minValue.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Slider/minimum",
       "control": "__control/Slider__value-0.5"
     },
     {
@@ -13273,6 +14228,7 @@
       "test": "fixtures/Slider/minimum__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Slider/minimum",
       "control": "__control/Slider__value-0.5"
     },
     {
@@ -13296,6 +14252,7 @@
       "test": "fixtures/Slider/maximum__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Slider/maximum",
       "control": "__control/Slider__value-0.5"
     },
     {
@@ -13319,6 +14276,7 @@
       "test": "fixtures/Slider/maximum__alias_maximumValue.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Slider/maximum",
       "control": "__control/Slider__value-0.5"
     },
     {
@@ -13342,6 +14300,7 @@
       "test": "fixtures/Slider/maximum__alias_maxValue.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Slider/maximum",
       "control": "__control/Slider__value-0.5"
     },
     {
@@ -13365,6 +14324,7 @@
       "test": "fixtures/Slider/maximum__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Slider/maximum",
       "control": "__control/Slider__value-0.5"
     },
     {
@@ -13388,6 +14348,7 @@
       "test": "fixtures/Slider/tintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Slider__value-0.5"
     },
     {
@@ -13409,6 +14370,7 @@
       "test": "fixtures/Slider/minimumValueImage__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -13430,6 +14392,7 @@
       "test": "fixtures/Slider/maximumValueImage__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -13451,6 +14414,7 @@
       "test": "fixtures/Slider/step__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Slider__value-0.5"
     },
     {
@@ -13474,6 +14438,7 @@
       "test": "fixtures/Slider/progressTintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Slider__value-0.5"
     },
     {
@@ -13497,6 +14462,7 @@
       "test": "fixtures/Slider/trackTintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Slider__value-0.5"
     },
     {
@@ -13520,6 +14486,7 @@
       "test": "fixtures/Progress/progress__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Progress"
     },
     {
@@ -13543,6 +14510,7 @@
       "test": "fixtures/Progress/tintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Progress__progress-0.5"
     },
     {
@@ -13566,6 +14534,7 @@
       "test": "fixtures/Progress/progressTintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Progress__progress-0.5"
     },
     {
@@ -13589,6 +14558,7 @@
       "test": "fixtures/Progress/trackTintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Progress__progress-0.5"
     },
     {
@@ -13610,6 +14580,7 @@
       "test": "fixtures/Progress/progressViewStyle__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -13631,6 +14602,7 @@
       "test": "fixtures/Progress/progressImage__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -13652,6 +14624,7 @@
       "test": "fixtures/Progress/trackImage__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -13673,6 +14646,29 @@
       "test": "fixtures/Progress/hidesWhenStopped__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Progress/hidesWhenStopped",
+      "control": "__control/Progress"
+    },
+    {
+      "id": "Progress/hidesWhenStopped__false",
+      "component": "Progress",
+      "attribute": "hidesWhenStopped",
+      "case": "false",
+      "class": "visual",
+      "host": "Progress",
+      "writtenKey": "hidesWhenStopped",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios"
+      ],
+      "mode": "swiftui",
+      "deprecated": null,
+      "layout": "fixtures/Progress/hidesWhenStopped__false.layout.json",
+      "test": "fixtures/Progress/hidesWhenStopped__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Progress/hidesWhenStopped",
       "control": "__control/Progress"
     },
     {
@@ -13694,6 +14690,7 @@
       "test": "fixtures/Progress/indicatorStyle__medium.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Progress/indicatorStyle",
       "control": "__control/Progress"
     },
     {
@@ -13715,6 +14712,7 @@
       "test": "fixtures/Progress/indicatorStyle__large.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Progress/indicatorStyle",
       "control": "__control/Progress"
     },
     {
@@ -13736,6 +14734,7 @@
       "test": "fixtures/Progress/color__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Progress__progress-0.5"
     },
     {
@@ -13759,6 +14758,7 @@
       "test": "fixtures/View/orientation__horizontal.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/orientation",
       "control": "__control/View"
     },
     {
@@ -13782,6 +14782,7 @@
       "test": "fixtures/View/orientation__vertical.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/orientation",
       "control": "__control/View"
     },
     {
@@ -13805,6 +14806,7 @@
       "test": "fixtures/View/direction__bottomtotop.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/direction",
       "control": "__control/View__orientation-vertical"
     },
     {
@@ -13828,6 +14830,7 @@
       "test": "fixtures/View/direction__toptobottom.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/direction",
       "control": "__control/View__orientation-vertical"
     },
     {
@@ -13851,6 +14854,7 @@
       "test": "fixtures/View/direction__lefttoright.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/direction",
       "control": "__control/View__orientation-vertical"
     },
     {
@@ -13874,6 +14878,7 @@
       "test": "fixtures/View/direction__righttoleft.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/direction",
       "control": "__control/View__orientation-vertical"
     },
     {
@@ -13897,6 +14902,7 @@
       "test": "fixtures/View/direction__none.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/direction",
       "control": "__control/View__orientation-vertical"
     },
     {
@@ -13924,6 +14930,7 @@
       "test": "fixtures/View/distribution__fillequally.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/distribution",
       "control": "__control/View__orientation-horizontal_width-300"
     },
     {
@@ -13951,6 +14958,7 @@
       "test": "fixtures/View/distribution__fill.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/distribution",
       "control": "__control/View__orientation-horizontal_width-300"
     },
     {
@@ -13978,6 +14986,7 @@
       "test": "fixtures/View/distribution__equalspacing.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/distribution",
       "control": "__control/View__orientation-horizontal_width-300"
     },
     {
@@ -14005,6 +15014,7 @@
       "test": "fixtures/View/distribution__equalcentering.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/distribution",
       "control": "__control/View__orientation-horizontal_width-300"
     },
     {
@@ -14032,6 +15042,7 @@
       "test": "fixtures/View/spacing__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/spacing",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -14059,6 +15070,7 @@
       "test": "fixtures/View/spacing__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/spacing",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -14083,6 +15095,7 @@
       "test": "fixtures/View/gradient__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -14104,6 +15117,7 @@
       "test": "fixtures/View/gradientDirection__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -14128,6 +15142,7 @@
       "test": "fixtures/View/locations__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -14154,6 +15169,7 @@
       "test": "fixtures/View/safeAreaInsetPositions__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/View"
     },
     {
@@ -14177,6 +15193,31 @@
       "test": "fixtures/View/highlighted__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/highlighted",
+      "control": "__control/View__highlightBackground--FF0000"
+    },
+    {
+      "id": "View/highlighted__false",
+      "component": "View",
+      "attribute": "highlighted",
+      "case": "false",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "highlighted",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/View/highlighted__false.layout.json",
+      "test": "fixtures/View/highlighted__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "View/highlighted",
       "control": "__control/View__highlightBackground--FF0000"
     },
     {
@@ -14198,6 +15239,7 @@
       "test": "fixtures/View/flexWrap__nowrap.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/flexWrap",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -14219,6 +15261,7 @@
       "test": "fixtures/View/flexWrap__wrap.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/flexWrap",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -14240,6 +15283,7 @@
       "test": "fixtures/View/flexWrap__wrap-reverse.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "View/flexWrap",
       "control": "__control/View__orientation-horizontal"
     },
     {
@@ -14261,6 +15305,29 @@
       "test": "fixtures/View/draggable__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "View/draggable__false",
+      "component": "View",
+      "attribute": "draggable",
+      "case": "false",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "draggable",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/View/draggable__false.layout.json",
+      "test": "fixtures/View/draggable__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -14284,6 +15351,7 @@
       "test": "fixtures/ScrollView/orientation__horizontal.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "ScrollView/orientation",
       "control": "__control/ScrollView"
     },
     {
@@ -14307,6 +15375,7 @@
       "test": "fixtures/ScrollView/orientation__vertical.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "ScrollView/orientation",
       "control": "__control/ScrollView"
     },
     {
@@ -14328,6 +15397,7 @@
       "test": "fixtures/ScrollView/scrollMode__window.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "ScrollView/scrollMode",
       "control": "__control/ScrollView"
     },
     {
@@ -14349,6 +15419,7 @@
       "test": "fixtures/ScrollView/scrollMode__inner.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "ScrollView/scrollMode",
       "control": "__control/ScrollView"
     },
     {
@@ -14371,6 +15442,30 @@
       "test": "fixtures/ScrollView/showsHorizontalScrollIndicator__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "ScrollView/showsHorizontalScrollIndicator",
+      "control": "__control/ScrollView__orientation-horizontal"
+    },
+    {
+      "id": "ScrollView/showsHorizontalScrollIndicator__true",
+      "component": "ScrollView",
+      "attribute": "showsHorizontalScrollIndicator",
+      "case": "true",
+      "class": "visual",
+      "host": "ScrollView",
+      "writtenKey": "showsHorizontalScrollIndicator",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/ScrollView/showsHorizontalScrollIndicator__true.layout.json",
+      "test": "fixtures/ScrollView/showsHorizontalScrollIndicator__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "ScrollView/showsHorizontalScrollIndicator",
       "control": "__control/ScrollView__orientation-horizontal"
     },
     {
@@ -14393,6 +15488,30 @@
       "test": "fixtures/ScrollView/showsVerticalScrollIndicator__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "ScrollView/showsVerticalScrollIndicator__true",
+      "component": "ScrollView",
+      "attribute": "showsVerticalScrollIndicator",
+      "case": "true",
+      "class": "visual",
+      "host": "ScrollView",
+      "writtenKey": "showsVerticalScrollIndicator",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/ScrollView/showsVerticalScrollIndicator__true.layout.json",
+      "test": "fixtures/ScrollView/showsVerticalScrollIndicator__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -14417,6 +15536,7 @@
       "test": "fixtures/ScrollView/contentSize__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -14441,6 +15561,7 @@
       "test": "fixtures/ScrollView/contentOffset__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -14462,6 +15583,7 @@
       "test": "fixtures/ScrollView/indicatorStyle__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -14483,6 +15605,7 @@
       "test": "fixtures/ScrollView/scrollBehavior__auto.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "ScrollView/scrollBehavior",
       "control": "__control/ScrollView"
     },
     {
@@ -14504,6 +15627,7 @@
       "test": "fixtures/ScrollView/scrollBehavior__smooth.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "ScrollView/scrollBehavior",
       "control": "__control/ScrollView"
     },
     {
@@ -14527,6 +15651,7 @@
       "test": "fixtures/Collection/lazy__eager.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/lazy",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14553,6 +15678,7 @@
       "test": "fixtures/Collection/lazy__lazy.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/lazy",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14579,6 +15705,7 @@
       "test": "fixtures/Collection/lazy__none.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/lazy",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14605,6 +15732,7 @@
       "test": "fixtures/Collection/lazy__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/lazy",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14631,6 +15759,7 @@
       "test": "fixtures/Collection/columns__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14657,6 +15786,7 @@
       "test": "fixtures/Collection/columnSpacing__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Collection__columns-2",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14683,6 +15813,7 @@
       "test": "fixtures/Collection/itemSpacing__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14709,6 +15840,7 @@
       "test": "fixtures/Collection/lineSpacing__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14735,6 +15867,34 @@
       "test": "fixtures/Collection/horizontalScroll__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/horizontalScroll",
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/horizontalScroll__false",
+      "component": "Collection",
+      "attribute": "horizontalScroll",
+      "case": "false",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "horizontalScroll",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/horizontalScroll__false.layout.json",
+      "test": "fixtures/Collection/horizontalScroll__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Collection/horizontalScroll",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14761,6 +15921,7 @@
       "test": "fixtures/Collection/orientation__horizontal.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/orientation",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14787,6 +15948,7 @@
       "test": "fixtures/Collection/orientation__vertical.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/orientation",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14813,6 +15975,7 @@
       "test": "fixtures/Collection/layout__horizontal.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/layout",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14839,6 +16002,7 @@
       "test": "fixtures/Collection/layout__vertical.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/layout",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14865,6 +16029,7 @@
       "test": "fixtures/Collection/layout__flow.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/layout",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14896,6 +16061,7 @@
       "test": "fixtures/Collection/insets__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14922,6 +16088,7 @@
       "test": "fixtures/Collection/insetHorizontal__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14948,6 +16115,7 @@
       "test": "fixtures/Collection/insetVertical__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -14977,6 +16145,7 @@
       "test": "fixtures/Collection/contentInsets__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -15001,6 +16170,7 @@
       "test": "fixtures/Collection/itemWeight__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Collection__columns-2",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -15026,6 +16196,33 @@
       "test": "fixtures/Collection/showsHorizontalScrollIndicator__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/showsHorizontalScrollIndicator",
+      "control": "__control/Collection__orientation-horizontal",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/showsHorizontalScrollIndicator__true",
+      "component": "Collection",
+      "attribute": "showsHorizontalScrollIndicator",
+      "case": "true",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "showsHorizontalScrollIndicator",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/showsHorizontalScrollIndicator__true.layout.json",
+      "test": "fixtures/Collection/showsHorizontalScrollIndicator__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Collection/showsHorizontalScrollIndicator",
       "control": "__control/Collection__orientation-horizontal",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -15051,6 +16248,33 @@
       "test": "fixtures/Collection/showsVerticalScrollIndicator__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
+      "control": null,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/showsVerticalScrollIndicator__true",
+      "component": "Collection",
+      "attribute": "showsVerticalScrollIndicator",
+      "case": "true",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "showsVerticalScrollIndicator",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/showsVerticalScrollIndicator__true.layout.json",
+      "test": "fixtures/Collection/showsVerticalScrollIndicator__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
       "control": null,
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -15075,6 +16299,7 @@
       "test": "fixtures/Collection/columnCount__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -15101,6 +16326,7 @@
       "test": "fixtures/Collection/scrollAnchor__top.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/scrollAnchor",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -15127,6 +16353,7 @@
       "test": "fixtures/Collection/scrollAnchor__center.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/scrollAnchor",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -15153,6 +16380,7 @@
       "test": "fixtures/Collection/scrollAnchor__bottom.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/scrollAnchor",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -15179,6 +16407,7 @@
       "test": "fixtures/Collection/defaultScrollAnchor__center.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/defaultScrollAnchor",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -15205,6 +16434,7 @@
       "test": "fixtures/Collection/defaultScrollAnchor__top.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/defaultScrollAnchor",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -15231,6 +16461,7 @@
       "test": "fixtures/Collection/defaultScrollAnchor__bottom.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/defaultScrollAnchor",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -15255,6 +16486,32 @@
       "test": "fixtures/Collection/reverseLayout__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Collection/reverseLayout",
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/reverseLayout__false",
+      "component": "Collection",
+      "attribute": "reverseLayout",
+      "case": "false",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "reverseLayout",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "android"
+      ],
+      "mode": "compose",
+      "deprecated": null,
+      "layout": "fixtures/Collection/reverseLayout__false.layout.json",
+      "test": "fixtures/Collection/reverseLayout__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Collection/reverseLayout",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -15284,6 +16541,7 @@
       "test": "fixtures/Collection/containerInset__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -15310,6 +16568,7 @@
       "test": "fixtures/Radio/label__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/label",
       "control": "__control/Radio__no-text"
     },
     {
@@ -15333,6 +16592,7 @@
       "test": "fixtures/Radio/label__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/label",
       "control": "__control/Radio__no-text"
     },
     {
@@ -15356,6 +16616,7 @@
       "test": "fixtures/Radio/text__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -15379,6 +16640,7 @@
       "test": "fixtures/Radio/text__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -15402,6 +16664,7 @@
       "test": "fixtures/Radio/group__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -15424,6 +16687,7 @@
       "test": "fixtures/Radio/icon__square.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/icon",
       "control": "__control/Radio"
     },
     {
@@ -15446,6 +16710,7 @@
       "test": "fixtures/Radio/icon__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/icon",
       "control": "__control/Radio"
     },
     {
@@ -15468,6 +16733,7 @@
       "test": "fixtures/Radio/selectedIcon__checkmark-square-fill.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/selectedIcon",
       "control": "__control/Radio__checked-True"
     },
     {
@@ -15490,6 +16756,7 @@
       "test": "fixtures/Radio/selectedIcon__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/selectedIcon",
       "control": "__control/Radio__checked-True"
     },
     {
@@ -15512,6 +16779,7 @@
       "test": "fixtures/Radio/selectedIcon__alias_selected_icon.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/selectedIcon",
       "control": "__control/Radio__checked-True"
     },
     {
@@ -15535,6 +16803,7 @@
       "test": "fixtures/Radio/checked__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/checked",
       "control": "__control/Radio"
     },
     {
@@ -15558,6 +16827,7 @@
       "test": "fixtures/Radio/checked__true_with_group.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Radio__group-conformance-group"
     },
     {
@@ -15581,6 +16851,7 @@
       "test": "fixtures/Radio/checked__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/checked",
       "control": "__control/Radio"
     },
     {
@@ -15604,6 +16875,7 @@
       "test": "fixtures/Radio/value__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -15627,6 +16899,7 @@
       "test": "fixtures/Radio/font__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/font",
       "control": "__control/Radio"
     },
     {
@@ -15650,6 +16923,7 @@
       "test": "fixtures/Radio/font__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/font",
       "control": "__control/Radio"
     },
     {
@@ -15673,6 +16947,7 @@
       "test": "fixtures/Radio/fontSize__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/fontSize",
       "control": "__control/Radio"
     },
     {
@@ -15696,6 +16971,7 @@
       "test": "fixtures/Radio/fontSize__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/fontSize",
       "control": "__control/Radio"
     },
     {
@@ -15719,6 +16995,7 @@
       "test": "fixtures/Radio/fontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Radio"
     },
     {
@@ -15742,6 +17019,7 @@
       "test": "fixtures/Radio/spacing__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/spacing",
       "control": "__control/Radio__orientation-horizontal"
     },
     {
@@ -15765,6 +17043,7 @@
       "test": "fixtures/Radio/spacing__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/spacing",
       "control": "__control/Radio__orientation-horizontal"
     },
     {
@@ -15787,6 +17066,7 @@
       "test": "fixtures/Radio/checkedColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Radio__checked-True"
     },
     {
@@ -15809,6 +17089,7 @@
       "test": "fixtures/Radio/uncheckedColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Radio"
     },
     {
@@ -15831,6 +17112,7 @@
       "test": "fixtures/Radio/iconSize__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Radio"
     },
     {
@@ -15853,6 +17135,7 @@
       "test": "fixtures/Radio/iconColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Radio"
     },
     {
@@ -15876,6 +17159,7 @@
       "test": "fixtures/Radio/selectedValue__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/selectedValue",
       "control": "__control/Radio__items--Alpha-Beta-Gamma"
     },
     {
@@ -15899,6 +17183,7 @@
       "test": "fixtures/Radio/selectedValue__gamma.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/selectedValue",
       "control": "__control/Radio__items--Alpha-Beta-Gamma"
     },
     {
@@ -15922,6 +17207,7 @@
       "test": "fixtures/Radio/selectedValue__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Radio/selectedValue",
       "control": "__control/Radio__items--Alpha-Beta-Gamma"
     },
     {
@@ -15945,6 +17231,7 @@
       "test": "fixtures/CheckBox/label__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "CheckBox/label",
       "control": "__control/CheckBox"
     },
     {
@@ -15968,6 +17255,7 @@
       "test": "fixtures/CheckBox/label__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "CheckBox/label",
       "control": "__control/CheckBox"
     },
     {
@@ -15991,6 +17279,7 @@
       "test": "fixtures/CheckBox/text__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -16014,6 +17303,7 @@
       "test": "fixtures/CheckBox/text__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -16037,6 +17327,31 @@
       "test": "fixtures/CheckBox/isOn__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "CheckBox/isOn",
+      "control": "__control/CheckBox"
+    },
+    {
+      "id": "CheckBox/isOn__false",
+      "component": "CheckBox",
+      "attribute": "isOn",
+      "case": "false",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": "isOn",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/isOn__false.layout.json",
+      "test": "fixtures/CheckBox/isOn__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "CheckBox/isOn",
       "control": "__control/CheckBox"
     },
     {
@@ -16060,6 +17375,31 @@
       "test": "fixtures/CheckBox/checked__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "CheckBox/checked",
+      "control": "__control/CheckBox"
+    },
+    {
+      "id": "CheckBox/checked__false",
+      "component": "CheckBox",
+      "attribute": "checked",
+      "case": "false",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": "checked",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/checked__false.layout.json",
+      "test": "fixtures/CheckBox/checked__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "CheckBox/checked",
       "control": "__control/CheckBox"
     },
     {
@@ -16082,6 +17422,7 @@
       "test": "fixtures/CheckBox/icon__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/CheckBox"
     },
     {
@@ -16105,6 +17446,7 @@
       "test": "fixtures/CheckBox/src__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/CheckBox"
     },
     {
@@ -16127,6 +17469,7 @@
       "test": "fixtures/CheckBox/selectedIcon__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/CheckBox__checked-True_icon-conformance-sample"
     },
     {
@@ -16149,6 +17492,7 @@
       "test": "fixtures/CheckBox/selectedIcon__alias_onSrc.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/CheckBox__checked-True_icon-conformance-sample"
     },
     {
@@ -16172,6 +17516,31 @@
       "test": "fixtures/CheckBox/value__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "CheckBox/value",
+      "control": "__control/CheckBox"
+    },
+    {
+      "id": "CheckBox/value__false",
+      "component": "CheckBox",
+      "attribute": "value",
+      "case": "false",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": "value",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/value__false.layout.json",
+      "test": "fixtures/CheckBox/value__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "CheckBox/value",
       "control": "__control/CheckBox"
     },
     {
@@ -16195,6 +17564,7 @@
       "test": "fixtures/CheckBox/enabled__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -16218,6 +17588,7 @@
       "test": "fixtures/CheckBox/enabled__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -16241,6 +17612,7 @@
       "test": "fixtures/CheckBox/enabled__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -16264,6 +17636,7 @@
       "test": "fixtures/CheckBox/font__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "CheckBox/font",
       "control": "__control/CheckBox"
     },
     {
@@ -16287,6 +17660,7 @@
       "test": "fixtures/CheckBox/font__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "CheckBox/font",
       "control": "__control/CheckBox"
     },
     {
@@ -16310,6 +17684,7 @@
       "test": "fixtures/CheckBox/fontSize__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "CheckBox/fontSize",
       "control": "__control/CheckBox"
     },
     {
@@ -16333,6 +17708,7 @@
       "test": "fixtures/CheckBox/fontSize__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "CheckBox/fontSize",
       "control": "__control/CheckBox"
     },
     {
@@ -16356,6 +17732,7 @@
       "test": "fixtures/CheckBox/fontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/CheckBox"
     },
     {
@@ -16379,6 +17756,7 @@
       "test": "fixtures/CheckBox/spacing__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "CheckBox/spacing",
       "control": "__control/CheckBox__orientation-horizontal"
     },
     {
@@ -16402,6 +17780,7 @@
       "test": "fixtures/CheckBox/spacing__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "CheckBox/spacing",
       "control": "__control/CheckBox__orientation-horizontal"
     },
     {
@@ -16463,6 +17842,7 @@
       "test": "fixtures/CheckBox/checkedColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/CheckBox__checked-True"
     },
     {
@@ -16485,6 +17865,7 @@
       "test": "fixtures/CheckBox/uncheckedColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/CheckBox"
     },
     {
@@ -16507,6 +17888,7 @@
       "test": "fixtures/CheckBox/iconSize__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/CheckBox"
     },
     {
@@ -16529,6 +17911,7 @@
       "test": "fixtures/CheckBox/iconColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/CheckBox__checked-True"
     },
     {
@@ -16551,6 +17934,30 @@
       "test": "fixtures/Indicator/animating__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Indicator/animating",
+      "control": "__control/Indicator"
+    },
+    {
+      "id": "Indicator/animating__true",
+      "component": "Indicator",
+      "attribute": "animating",
+      "case": "true",
+      "class": "visual",
+      "host": "Indicator",
+      "writtenKey": "animating",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Indicator/animating__true.layout.json",
+      "test": "fixtures/Indicator/animating__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Indicator/animating",
       "control": "__control/Indicator"
     },
     {
@@ -16572,6 +17979,7 @@
       "test": "fixtures/Indicator/indicatorStyle__large.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Indicator/indicatorStyle",
       "control": "__control/Indicator"
     },
     {
@@ -16593,6 +18001,7 @@
       "test": "fixtures/Indicator/indicatorStyle__medium.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Indicator/indicatorStyle",
       "control": "__control/Indicator"
     },
     {
@@ -16614,6 +18023,7 @@
       "test": "fixtures/Indicator/color__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Indicator"
     },
     {
@@ -16635,6 +18045,29 @@
       "test": "fixtures/Indicator/hidesWhenStopped__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Indicator/hidesWhenStopped",
+      "control": "__control/Indicator__animating-False"
+    },
+    {
+      "id": "Indicator/hidesWhenStopped__true",
+      "component": "Indicator",
+      "attribute": "hidesWhenStopped",
+      "case": "true",
+      "class": "visual",
+      "host": "Indicator",
+      "writtenKey": "hidesWhenStopped",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios"
+      ],
+      "mode": "swiftui",
+      "deprecated": null,
+      "layout": "fixtures/Indicator/hidesWhenStopped__true.layout.json",
+      "test": "fixtures/Indicator/hidesWhenStopped__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Indicator/hidesWhenStopped",
       "control": "__control/Indicator__animating-False"
     },
     {
@@ -16661,6 +18094,7 @@
       "test": "fixtures/GradientView/gradient__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/GradientView"
     },
     {
@@ -16684,6 +18118,7 @@
       "test": "fixtures/GradientView/gradientDirection__horizontal.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "GradientView/gradientDirection",
       "control": "__control/GradientView"
     },
     {
@@ -16707,6 +18142,7 @@
       "test": "fixtures/GradientView/gradientDirection__vertical.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "GradientView/gradientDirection",
       "control": "__control/GradientView"
     },
     {
@@ -16730,6 +18166,7 @@
       "test": "fixtures/GradientView/gradientDirection__oblique.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "GradientView/gradientDirection",
       "control": "__control/GradientView"
     },
     {
@@ -16756,6 +18193,7 @@
       "test": "fixtures/GradientView/locations__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/GradientView"
     },
     {
@@ -16779,6 +18217,7 @@
       "test": "fixtures/Blur/effectStyle__light.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Blur/effectStyle",
       "control": "__control/Blur"
     },
     {
@@ -16802,6 +18241,7 @@
       "test": "fixtures/Blur/effectStyle__dark.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Blur/effectStyle",
       "control": "__control/Blur"
     },
     {
@@ -16825,6 +18265,7 @@
       "test": "fixtures/Blur/effectStyle__extralight.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Blur/effectStyle",
       "control": "__control/Blur"
     },
     {
@@ -16847,6 +18288,7 @@
       "test": "fixtures/Blur/blurRadius__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Blur__root.backdrop-b5f80259"
     },
     {
@@ -16870,6 +18312,7 @@
       "test": "fixtures/IconLabel/text__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -16893,6 +18336,7 @@
       "test": "fixtures/IconLabel/text__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -16916,6 +18360,31 @@
       "test": "fixtures/IconLabel/selected__true.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "IconLabel/selected",
+      "control": "__control/IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000"
+    },
+    {
+      "id": "IconLabel/selected__false",
+      "component": "IconLabel",
+      "attribute": "selected",
+      "case": "false",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": "selected",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/IconLabel/selected__false.layout.json",
+      "test": "fixtures/IconLabel/selected__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "IconLabel/selected",
       "control": "__control/IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000"
     },
     {
@@ -16939,6 +18408,7 @@
       "test": "fixtures/IconLabel/font__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/IconLabel"
     },
     {
@@ -16962,6 +18432,7 @@
       "test": "fixtures/IconLabel/fontSize__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/IconLabel"
     },
     {
@@ -16985,6 +18456,7 @@
       "test": "fixtures/IconLabel/fontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/IconLabel"
     },
     {
@@ -17015,6 +18487,7 @@
       "test": "fixtures/IconLabel/textShadow__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/IconLabel"
     },
     {
@@ -17038,6 +18511,7 @@
       "test": "fixtures/IconLabel/selectedFontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/IconLabel__selected-True"
     },
     {
@@ -17061,6 +18535,7 @@
       "test": "fixtures/IconLabel/icon_on__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/IconLabel"
     },
     {
@@ -17084,6 +18559,7 @@
       "test": "fixtures/IconLabel/icon_off__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/IconLabel"
     },
     {
@@ -17107,6 +18583,7 @@
       "test": "fixtures/IconLabel/iconPosition__right.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "IconLabel/iconPosition",
       "control": "__control/IconLabel__icon-off-conformance-sample"
     },
     {
@@ -17130,6 +18607,7 @@
       "test": "fixtures/IconLabel/iconPosition__left.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "IconLabel/iconPosition",
       "control": "__control/IconLabel__icon-off-conformance-sample"
     },
     {
@@ -17153,6 +18631,7 @@
       "test": "fixtures/IconLabel/iconPosition__top.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "IconLabel/iconPosition",
       "control": "__control/IconLabel__icon-off-conformance-sample"
     },
     {
@@ -17176,6 +18655,7 @@
       "test": "fixtures/IconLabel/iconPosition__bottom.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "IconLabel/iconPosition",
       "control": "__control/IconLabel__icon-off-conformance-sample"
     },
     {
@@ -17199,6 +18679,7 @@
       "test": "fixtures/IconLabel/iconMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/IconLabel__icon-off-conformance-sample"
     },
     {
@@ -17222,6 +18703,7 @@
       "test": "fixtures/Web/html__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Web"
     },
     {
@@ -17243,6 +18725,29 @@
       "test": "fixtures/Web/sandbox__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "Web/sandbox",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/sandbox__true",
+      "component": "Web",
+      "attribute": "sandbox",
+      "case": "true",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "sandbox",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/sandbox__true.layout.json",
+      "test": "fixtures/Web/sandbox__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/sandbox",
       "control": "__control/Web"
     },
     {
@@ -17264,6 +18769,7 @@
       "test": "fixtures/Web/allow__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": null
     },
     {
@@ -17287,6 +18793,7 @@
       "test": "fixtures/SafeAreaView/orientation__horizontal.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SafeAreaView/orientation",
       "control": "__control/SafeAreaView"
     },
     {
@@ -17310,6 +18817,7 @@
       "test": "fixtures/SafeAreaView/orientation__vertical.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "SafeAreaView/orientation",
       "control": "__control/SafeAreaView"
     },
     {
@@ -17336,6 +18844,7 @@
       "test": "fixtures/SafeAreaView/safeAreaInsetPositions__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/SafeAreaView__height-200_width-200"
     },
     {
@@ -17362,6 +18871,7 @@
       "test": "fixtures/SafeAreaView/safeAreaInsetPositions__alias_edges.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/SafeAreaView__height-200_width-200"
     },
     {
@@ -17385,6 +18895,7 @@
       "test": "fixtures/TabView/selectedIndex__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TabView"
     },
     {
@@ -17408,6 +18919,7 @@
       "test": "fixtures/TabView/selectedIndex__alias_selectedTabIndex.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TabView"
     },
     {
@@ -17441,6 +18953,7 @@
       "test": "fixtures/TabView/tabs__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TabView"
     },
     {
@@ -17464,6 +18977,7 @@
       "test": "fixtures/TabView/tintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TabView"
     },
     {
@@ -17487,6 +19001,7 @@
       "test": "fixtures/TabView/unselectedColor__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/TabView"
     },
     {
@@ -17510,6 +19025,7 @@
       "test": "fixtures/TabView/tabBarBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TabView/tabBarBackground",
       "control": "__control/TabView"
     },
     {
@@ -17533,6 +19049,7 @@
       "test": "fixtures/TabView/tabBarBackground__binding.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TabView/tabBarBackground",
       "control": "__control/TabView"
     },
     {
@@ -17556,6 +19073,31 @@
       "test": "fixtures/TabView/showLabels__false.test.json",
       "state": null,
       "promotedFrom": null,
+      "peerGroup": "TabView/showLabels",
+      "control": "__control/TabView"
+    },
+    {
+      "id": "TabView/showLabels__true",
+      "component": "TabView",
+      "attribute": "showLabels",
+      "case": "true",
+      "class": "visual",
+      "host": "TabView",
+      "writtenKey": "showLabels",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TabView/showLabels__true.layout.json",
+      "test": "fixtures/TabView/showLabels__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "TabView/showLabels",
       "control": "__control/TabView"
     },
     {
@@ -20786,5 +22328,6 @@
       "attribute": "events",
       "reason": "cross-file reference — attribute sweep skipped; semantic Embed fixtures (navigationMode/params + companion screens) are emitted bespoke by conformance.embed_fixtures"
     }
-  ]
+  ],
+  "peerExpectedIdentical": []
 }

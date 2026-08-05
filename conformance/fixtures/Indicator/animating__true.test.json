@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Indicator/animating__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Indicator.animating (true)",
+    "description": "Conformance fixture for 'animating' on Indicator (section: Indicator, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Indicator"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "animating__true",
+      "description": "Conformance fixture for 'animating' on Indicator (section: Indicator, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Indicator_animating__true"
+        }
+      ]
+    }
+  ]
+}

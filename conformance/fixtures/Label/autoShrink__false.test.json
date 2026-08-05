@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/autoShrink__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.autoShrink (false)",
+    "description": "Conformance fixture for 'autoShrink' on Label (section: Label, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "autoShrink__false",
+      "description": "Conformance fixture for 'autoShrink' on Label (section: Label, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_autoShrink__false"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/selected__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.selected (false)",
+    "description": "Conformance fixture for 'selected' on Label (section: Label, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "selected__false",
+      "description": "Conformance fixture for 'selected' on Label (section: Label, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_selected__false"
+        }
+      ]
+    }
+  ]
+}

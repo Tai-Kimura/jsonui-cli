@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/applyLiquidGlass__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.applyLiquidGlass (false)",
+    "description": "Conformance fixture for 'applyLiquidGlass' on TextField (section: TextField, class: declaration-only). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "applyLiquidGlass__false",
+      "description": "Conformance fixture for 'applyLiquidGlass' on TextField (section: TextField, class: declaration-only). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

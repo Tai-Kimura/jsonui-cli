@@ -857,6 +857,44 @@ BOUND_CASES_BLOCKED: dict[tuple[str, str], dict[str, str]] = {
     # },
 }
 
+#: Fixture pairs that are EXPECTED to render identically to each other.
+#:
+#: The visual check compares each fixture to its control, and nothing compares
+#: two declared values to one another. So "both differ from the control, and
+#: are identical to each other" passes everything — which is exactly what
+#: `distribution`'s four values do. The manifest now carries a `peerGroup` so a
+#: gate can make that comparison; this is where the exceptions are declared,
+#: because some values legitimately draw the same picture.
+#:
+#: `borderStyle__solid` is the shape to keep in mind: `solid` IS the declared
+#: default, so it drawing what the default draws is correct, and a bare
+#: pairwise-distinct rule would file the correct implementation as a defect.
+#: A device that turns adjudicated-correct behaviour red is worse than no
+#: device — it trains people to ignore it.
+#:
+#: Empty on purpose. Populating it from guesses would pre-declare exceptions
+#: nobody has measured; the entries belong to whoever runs the comparison and
+#: sees a pair come back identical. Same three fields as the other ledgers.
+PEER_EXPECTED_IDENTICAL: dict[tuple[str, str, str, str], dict[str, str]] = {
+    # ("common", "borderStyle", "solid", "dashed"): {
+    #     "owner": "E",
+    #     "reason": "…",
+    #     "verify": "…",
+    # },
+}
+
+
+def _check_peer_exceptions() -> None:
+    for key, entry in PEER_EXPECTED_IDENTICAL.items():
+        missing = [f for f in BOUND_HOLD_FIELDS if not entry.get(f)]
+        if missing:
+            raise ValueError(
+                f"PEER_EXPECTED_IDENTICAL[{key!r}] is missing {missing!r} — an "
+                "expected-identical pair without a reason is indistinguishable "
+                "from a defect nobody looked at"
+            )
+
+
 #: Attributes reachable only through UIKit, which nothing in the conformance
 #: suite renders — and which, by the 2026-08-05 user ruling, nothing will.
 #:
@@ -961,6 +999,7 @@ def _check_bound_holds() -> None:
 
 _check_bound_holds()
 _check_unshapeable()
+_check_peer_exceptions()
 
 
 #: Name of the data property a bound case binds to, per attribute.
@@ -2340,24 +2379,38 @@ def plan_attribute(
     bound = bound_case_for(
         section, attribute, cases[0].assertions if cls == CLASS_ASSERTABLE else ()
     )
+    # A boolean attribute planned exactly ONE literal case, and which one
+    # depended on whichever value the representative tables happened to pick.
+    # That is thin on its own — half the attribute's domain untested — and it
+    # bites in two specific ways:
+    #
+    #   * the codegen differential looks for its "second value" in the case
+    #     list, so with one literal it landed on the bound case and compared a
+    #     literal against a `@{...}` expression. That is the C1 question, not
+    #     C2; it filed nine android booleans as "emits a constant" with nothing
+    #     wrong with them, and it MASKED two real findings by going the other
+    #     way.
+    #   * a contract pinned to `__true` silently stops being checked when the
+    #     representative flips to `false`. `TabView/showLabels__true` is
+    #     recorded in `attribute_semantics.json#skinIdioms` and has not existed
+    #     in the manifest since the representative round — a dead contract, and
+    #     no number of measurement rounds would have surfaced it, because the
+    #     fixture it names is not there to measure. (Found by E.)
+    #
+    # Both close the same way: a boolean plans both of its values, always.
+    literals = [c for c in cases if c.alias_of is None]
+    if len(literals) == 1 and isinstance(literals[0].value, bool):
+        cases.append(
+            CasePlan(
+                name=str(not literals[0].value).lower(),
+                value=not literals[0].value,
+                written_key=attribute,
+                assertions=literals[0].assertions,
+            )
+        )
+
     union = bound_union_case_for(section, attribute)
     if bound is not None:
-        # A boolean attribute plans exactly one literal case (`true`), so the
-        # codegen differential's "second value" search would have landed on the
-        # bound case and compared a literal against a `@{...}` expression. That
-        # is the C1 question, not C2, and it filed nine attributes as
-        # "emits a constant" when nothing was wrong with them. Giving the
-        # opposite literal keeps C2 comparing two literals — and a boolean
-        # fixture set that covers only one of its two values was thin anyway.
-        literals = [c for c in cases if c.alias_of is None]
-        if len(literals) == 1 and isinstance(literals[0].value, bool):
-            cases.append(
-                CasePlan(
-                    name=str(not literals[0].value).lower(),
-                    value=not literals[0].value,
-                    written_key=attribute,
-                )
-            )
         cases.append(bound)
     if union is not None:
         cases.append(union)

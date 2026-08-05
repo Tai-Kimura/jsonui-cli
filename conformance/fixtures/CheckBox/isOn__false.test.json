@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/CheckBox/isOn__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance CheckBox.isOn (false)",
+    "description": "Conformance fixture for 'isOn' on CheckBox (section: CheckBox, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "CheckBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "isOn__false",
+      "description": "Conformance fixture for 'isOn' on CheckBox (section: CheckBox, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "CheckBox_isOn__false"
+        }
+      ]
+    }
+  ]
+}

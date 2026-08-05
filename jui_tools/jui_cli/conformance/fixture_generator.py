@@ -405,9 +405,52 @@ def build_interactive_test(plan: InteractivePlan, spec: InteractiveSpec, layout_
 # --------------------------------------------------------------------------- #
 
 
+def _same_variant(plan: AttributePlan, other: CasePlan, variant: str | None) -> bool:
+    """True when *other* belongs to the same variant set as `variant`."""
+    other_variant = next(
+        (
+            sfx
+            for sfx in rules.variant_bases_for(plan.section, plan.attribute)
+            if other.name == sfx or other.name.endswith(f"_{sfx}")
+        ),
+        None,
+    )
+    return other_variant == variant
+
+
 def build_manifest_entry(
     plan: AttributePlan, case: CasePlan, layout_rel: str, test_rel: str
 ) -> dict:
+    # Fixtures of the same attribute that a gate can compare to EACH OTHER.
+    # Only visual ones, and only when there is more than one to compare: the
+    # control comparison answers "did anything happen", and this answers "did
+    # the two declared values do different things", which nothing asked before.
+    # Variants are a SEPARATE group from the plain cases. `borderStyle__solid`
+    # and `borderStyle__dashed_with_border` stand on different bases — one has
+    # a border to style and one deliberately does not — so comparing them
+    # measures the base, not the value. Suffixing the group keeps each set
+    # comparing like with like.
+    variant = next(
+        (
+            sfx
+            for sfx in rules.variant_bases_for(plan.section, plan.attribute)
+            if case.name == sfx or case.name.endswith(f"_{sfx}")
+        ),
+        None,
+    )
+    peers = [
+        c
+        for c in plan.cases
+        if c.alias_of is None
+        and (c.name == case.name or _same_variant(plan, c, variant))
+    ]
+    peer_group = (
+        f"{plan.section}/{plan.attribute}" + (f"#{variant}" if variant else "")
+        if plan.cls == rules.CLASS_VISUAL
+        and not rules.is_non_observable(plan.section, plan.attribute)
+        and len(peers) > 1
+        else None
+    )
     entry = {
         "id": f"{plan.section}/{plan.attribute}__{case.name}",
         "component": plan.section,
@@ -425,6 +468,7 @@ def build_manifest_entry(
         "test": test_rel,
         "state": None,
         "promotedFrom": None,
+        "peerGroup": peer_group,
         # The fixture this one must NOT look like. Visual fixtures only:
         # an assertable fixture already states its expectation, and an
         # off-screen effect (soft-keyboard configuration) cannot be compared.
@@ -881,6 +925,17 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
         },
         "fixtures": fixture_entries,
         "skipped": skipped_entries,
+        # Pairs within a peerGroup that are expected to render the same. The
+        # gate needs these or it files adjudicated-correct behaviour as a
+        # defect — `borderStyle__solid` draws the default because `solid` IS
+        # the default.
+        "peerExpectedIdentical": [
+            {
+                "component": k[0], "attribute": k[1], "cases": [k[2], k[3]],
+                **v,
+            }
+            for k, v in sorted(rules.PEER_EXPECTED_IDENTICAL.items())
+        ],
     }
     summary.manifest_path.write_text(_dump_json(manifest), encoding="utf-8")
     summary.files_written += 1

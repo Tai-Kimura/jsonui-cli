@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/highlighted__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.highlighted (false)",
+    "description": "Conformance fixture for 'highlighted' on View (section: View, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "highlighted__false",
+      "description": "Conformance fixture for 'highlighted' on View (section: View, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_highlighted__false"
+        }
+      ]
+    }
+  ]
+}

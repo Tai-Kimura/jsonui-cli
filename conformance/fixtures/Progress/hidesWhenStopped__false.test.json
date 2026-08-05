@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Progress/hidesWhenStopped__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Progress.hidesWhenStopped (false)",
+    "description": "Conformance fixture for 'hidesWhenStopped' on Progress (section: Progress, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Progress"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "hidesWhenStopped__false",
+      "description": "Conformance fixture for 'hidesWhenStopped' on Progress (section: Progress, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Progress_hidesWhenStopped__false"
+        }
+      ]
+    }
+  ]
+}
