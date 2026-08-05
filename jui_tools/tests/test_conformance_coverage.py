@@ -43,6 +43,44 @@ class ScanReadsTests(unittest.TestCase):
         )
         self.assertEqual({coverage.SHARED: {"a", "b", "c", "d", "e"}}, keys)
 
+    def test_a_comment_about_a_read_is_not_a_read(self):
+        """Prose describing the scanner's own patterns is not code.
+
+        Converters explain fixed bugs by quoting the read that caused them,
+        and the generated attribute tables document an alias by quoting the
+        builder line that reads it. Counting those keeps an attribute
+        "implemented" after the code that read it is gone — six spellings
+        were in that state, two of them declared attributes.
+        """
+        keys = self._scan(
+            "# attributes['centerVertical'] was a truthiness test\n"
+            "  ## json_data['edges'] || json_data['safeAreaInsetPositions']\n"
+            "attributes['real']\n"
+        )
+        self.assertEqual({coverage.SHARED: {"real"}}, keys)
+
+    def test_a_trailing_comment_does_not_hide_the_code_before_it(self):
+        keys = self._scan("attributes['a']  # attributes['b'] is the old name\n")
+        self.assertIn("a", keys[coverage.SHARED])
+
+    def test_frozen_trees_are_not_scanned(self):
+        """KJUI XML mode is frozen; a read there ships to nobody."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "lib"
+            (root / "xml").mkdir(parents=True)
+            (root / "compose").mkdir(parents=True)
+            (root / "xml" / "c.rb").write_text("attributes['frozen']", encoding="utf-8")
+            (root / "compose" / "c.rb").write_text("attributes['live']", encoding="utf-8")
+            self.assertEqual(
+                {coverage.SHARED: {"live"}},
+                coverage.scan_reads(root, platform="android"),
+            )
+            # Scoped to android: an `xml/` tree in another tool still counts.
+            self.assertEqual(
+                {coverage.SHARED: {"frozen", "live"}},
+                coverage.scan_reads(root, platform="web"),
+            )
+
     def test_finds_both_names_of_an_alias_helper(self):
         # highlightColor/hilightColor is read through one call, not two lookups.
         keys = self._scan("attr_with_alias('highlightColor', 'hilightColor')")

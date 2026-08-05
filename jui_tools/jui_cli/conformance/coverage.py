@@ -306,8 +306,44 @@ def components_for_file(path, component_index: dict, platform: str | None = None
     return (component_index.get(stem, SHARED),)
 
 
+#: Directories excluded from the scan, with the reason each one is dead.
+#: An exclusion whose population is currently zero still belongs here: it is
+#: the reason the tree stays out when someone puts a read back into it.
+#: Keys are (platform, path relative to that platform's source root); `None`
+#: matches any platform. Naming the platform keeps the rule from silently
+#: swallowing a directory that happens to share a name in another tree.
+EXCLUDED_DIRS = {
+    # KotlinJsonUI froze XML mode on 2026-07-03 (Compose-only; slated for
+    # removal in 3.0). A read here cannot make an attribute implemented,
+    # because nothing ships it. Zero reads live there today — the rule is
+    # here for the day one comes back, which is exactly when nobody would
+    # think to add it.
+    ("android", "xml"): "KJUI XML mode is frozen (Compose-only since 2026-07-03)",
+    (None, "lib/xml"): "same, for a root given as the tool directory",
+}
+
+
+def _strip_comments(src: str) -> str:
+    """Source with whole-line Ruby comments removed.
+
+    The scanner matches `attributes['x']` as text, and prose about the
+    scanner is text. `base_converter.rb` explains the `centerVertical`
+    truthiness bug by quoting `attributes['centerVertical']`, and
+    `text_view_converter.rb` records that `attributes['resize']` used to be
+    the read — both attributes A has since fixed, both still counted as
+    read because the sentence describing the fix contains the pattern.
+
+    Trailing comments stay: the code before one is a real read, and cutting
+    at the first `#` would also cut string literals and interpolation.
+    """
+    return "\n".join(
+        line for line in src.splitlines() if not line.lstrip().startswith("#")
+    )
+
+
 def _reads_in_source(src: str) -> set:
     """Attribute names one Ruby source file reads."""
+    src = _strip_comments(src)
     keys: set = set()
     for pattern in READ_PATTERNS:
         for match in pattern.findall(src):
@@ -338,6 +374,12 @@ def scan_reads(source_root, definitions: dict | None = None, platform: str | Non
     if not root.is_dir():
         return reads
     for path in sorted(root.rglob("*.rb")):
+        rel = path.relative_to(root).as_posix()
+        if any(
+            (scope is None or scope == platform) and rel.startswith(f"{d}/")
+            for scope, d in EXCLUDED_DIRS
+        ):
+            continue
         src = path.read_text(encoding="utf-8", errors="replace")
         keys = _reads_in_source(src)
         if keys:
