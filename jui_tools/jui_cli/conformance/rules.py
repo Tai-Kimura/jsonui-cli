@@ -968,22 +968,17 @@ def is_uikit_only(defn: dict) -> bool:
 #: table is what stops that inert from being read as a defect — and what tells
 #: the next person which single mechanism unlocks it.
 UNSHAPEABLE_FIXTURES: dict[tuple[str, str], dict[str, str]] = {
-    ("Collection", "scrollAnchor"): {
-        # E closed their half in 9930e18: the canonical class is now a plain
-        # value (String with cellIdProperty, otherwise Int), and the SSoT no
-        # longer prescribes `PassthroughSubject<Int, Never>` — naming a Combine
-        # transport in a cross-platform schema is what put it in consumers'
-        # data sections, where kjui passes an unknown class through verbatim
-        # and the Kotlin build dies. E's own description records the rest of
-        # the gap, which is why the owner moved rather than the entry closing.
-        "owner": "B",
-        "reason": "sjui still emits `data.<prop>.throttle(...)`, so it demands "
-                  "the publisher spelling instead of deriving the transport "
-                  "from the canonical value class — until it does, no single "
-                  "declared class survives all three hosts and the fixture "
-                  "cannot be built",
-        "verify": "sjui:derives-scrollTo-transport",
-    },
+    # Empty, and every entry it ever held came out the way the table was meant
+    # to work: the `verify` condition was written down, somebody else met it,
+    # and the row went. `Blur.blurRadius` and `common.indexAbove` needed a
+    # root-children mechanism, which turned out to be two `root.` companions;
+    # `Collection.scrollAnchor` needed a scrollTo data class that compiles on
+    # three hosts, which E made a plain value (9930e18) and B unblocked by
+    # replacing sjui's `.throttle` with `.onChange` (8c41e3e).
+    #
+    # Keep the table. The next fixture the generator cannot shape needs
+    # somewhere to be declared with its owner and its release condition,
+    # instead of being called "next wave".
 }
 
 
