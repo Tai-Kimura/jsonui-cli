@@ -169,12 +169,16 @@ RSpec.describe SjuiTools::SwiftUI::ConverterFactory do
       end
     end
 
+    # `Table` is a Collection everywhere else — the normalizer synonym table,
+    # the shared validator, rjui and kjui. sjui routing it to its own
+    # converter made the same layout draw two different things depending on
+    # whether it had been normalised (50 §4 / A2 (2)).
     context 'with Table component' do
       let(:component) { { 'type' => 'Table' } }
 
-      it 'returns TableConverter' do
+      it 'returns CollectionConverter, the same as Collection' do
         converter = factory.create_converter(component)
-        expect(converter).to be_a(SjuiTools::SwiftUI::Views::TableConverter)
+        expect(converter).to be_a(SjuiTools::SwiftUI::Views::CollectionConverter)
       end
     end
 

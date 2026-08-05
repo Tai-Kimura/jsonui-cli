@@ -72,7 +72,6 @@ module SjuiTools
       #   - cell: IdentifiedCellItem ForEach
       #   - index, data: the reconfigured().map closure — `data` SHADOWS the
       #     struct's @Binding var data, so it must stay unknown
-      #   - item: table_converter, element type never spelled
       FOREACH_PARAM_TYPES = {
         %w[cellIndex cellData] => { 'cellIndex' => 'Int', 'cellData' => '[String: Any]' },
         %w[sectionIndex section] => { 'sectionIndex' => 'Int', 'section' => 'CollectionDataSection' },
@@ -80,7 +79,6 @@ module SjuiTools
         %w[index data] => { 'index' => 'Int', 'data' => :unknown },
         %w[index] => { 'index' => 'Int' },
         %w[scrollProxy] => { 'scrollProxy' => 'ScrollViewProxy' },
-        %w[item] => { 'item' => :unknown },
       }.freeze
 
       # Line-level `let NAME = ...` bindings the collection emission uses.

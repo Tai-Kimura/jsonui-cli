@@ -11,7 +11,6 @@ require_relative 'views/segment_converter'
 require_relative 'views/progress_converter'
 require_relative 'views/slider_converter'
 require_relative 'views/indicator_converter'
-require_relative 'views/table_converter'
 require_relative 'views/collection_converter'
 require_relative 'views/web_converter'
 require_relative 'views/radio_converter'
@@ -185,9 +184,14 @@ module SjuiTools
           Views::SliderConverter.new(component, indent_level, action_manager, @binding_registry)
         when 'Indicator'
           Views::IndicatorConverter.new(component, indent_level, action_manager, @binding_registry)
-        when 'Table'
-          Views::TableConverter.new(component, indent_level, action_manager, @binding_registry)
-        when 'Collection'
+        # `Table` is a Collection. The normalizer's synonym table, the shared
+        # validator's `map_type_to_definition`, rjui and kjui all resolve it
+        # that way; sjui was the only face routing it somewhere else, so a
+        # layout drew one thing on the normalised path and another on the
+        # direct one. `table_converter.rb` was a scaffold, not an
+        # implementation — with no binding it emitted ten literal
+        # `Text("Row \(index)")` rows (50 §4 / A2 ②).
+        when 'Table', 'Collection'
           Views::CollectionConverter.new(component, indent_level, action_manager, @binding_registry, @data_properties)
         when 'SelectBox'
           Views::SelectBoxConverter.new(component, indent_level, action_manager, @binding_registry)
