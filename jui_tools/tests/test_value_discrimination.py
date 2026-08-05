@@ -207,5 +207,30 @@ class UnmeasurableIsSaidOutLoudTest(unittest.TestCase):
             "the gate is what turns a measured-nothing into a problem",
         )
 
+class WrongResultsShapeRaisesTest(unittest.TestCase):
+    """A shape this does not understand must raise, not measure zero.
+
+    The runners write `{"results": [ … ]}`. Hand the list over, or the whole
+    document, and `.items()` yields nothing: every pair is unmeasurable and
+    the run reports a clean zero collapses. It happened twice in one sitting
+    to someone driving this by hand, who nearly reported the green.
+    """
+
+    def test_a_list_raises(self):
+        with self.assertRaises(TypeError):
+            vd.measure("conformance", "ios", {"fixtures": []}, [], env="ci")
+
+    def test_the_whole_document_raises(self):
+        with self.assertRaises(ValueError):
+            vd.measure(
+                "conformance", "ios", {"fixtures": []},
+                {"results": [{"id": "a"}]}, env="ci",
+            )
+
+    def test_an_empty_mapping_is_allowed(self):
+        """A run with no results is a different thing from a wrong shape."""
+        result = vd.measure("conformance", "ios", {"fixtures": []}, {}, env="ci")
+        self.assertEqual(result.compared, 0)
+
 if __name__ == "__main__":
     unittest.main()

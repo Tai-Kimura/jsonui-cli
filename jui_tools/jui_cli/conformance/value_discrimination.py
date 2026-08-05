@@ -192,10 +192,31 @@ def measure(
     result = DiscriminationResult(platform=platform)
     top, bottom = ignore_bands(platform, env)
 
+    # A results shape this does not understand must raise, not measure zero.
+    # The runners write `{"results": [ … ]}`; callers who hand over the list,
+    # or the whole document, get an empty mapping out of `.items()` and every
+    # pair reads as unmeasurable — a clean "0 collapses" for a run that was
+    # never looked at. That happened twice in one sitting to someone driving
+    # this by hand, and a green zero is exactly the reading this module was
+    # built to make impossible.
+    if not isinstance(results, dict):
+        raise TypeError(
+            "results must be {fixture id: entry}; got "
+            f"{type(results).__name__}. The runners' file nests that under "
+            '"results" — pass `{e["id"]: e for e in doc["results"]}`, not the '
+            "list or the document"
+        )
     shots = {}
-    for fid, entry in (results or {}).items():
+    for fid, entry in results.items():
         if isinstance(entry, dict) and isinstance(entry.get("screenshot"), str):
             shots[str(fid)] = Path(entry["screenshot"]).name
+    if results and not shots:
+        raise ValueError(
+            f"none of the {len(results)} results entries carries a "
+            '"screenshot" path — this looks like the results document rather '
+            "than its `results` mapping. Measuring it would report zero "
+            "collapses for a run nothing was read from"
+        )
 
     groups, excluded = value_groups(manifest, platform)
     result.groups = len(groups)
