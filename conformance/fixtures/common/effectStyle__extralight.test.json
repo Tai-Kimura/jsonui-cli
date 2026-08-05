@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/effectStyle__extralight.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.effectStyle (extralight)",
+    "description": "Conformance fixture for 'effectStyle' on View (section: common, class: visual). Value under test: \"ExtraLight\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "effectStyle__extralight",
+      "description": "Conformance fixture for 'effectStyle' on View (section: common, class: visual). Value under test: \"ExtraLight\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_effectStyle__extralight"
+        }
+      ]
+    }
+  ]
+}

@@ -97,8 +97,8 @@ module JsonUI
         { name: 'disabledBackground', kind: :string, bindable: true }.freeze,
         # Child distribution for orientation-bearing containers. SwiftUI: Spacer/weight synthesis; Compose: Arrangement.
         { name: 'distribution', kind: :enum, values: ['fill', 'fillEqually', 'equalSpacing', 'equalCentering'].freeze }.freeze,
-        # Visual effect style
-        { name: 'effectStyle', kind: :string }.freeze,
+        # Visual effect (blur) style. Measured across the three converters 2026-08-05: the UIKit trio Light/Dark/ExtraLight is what all three map (sjui blur_converter.rb:71, kjui blurview_component.rb:38, rjui blur_converter.rb:98), and web additionally maps the SwiftUI material names. Every converter downcases before matching, so the casing here is presentational. `Regular` is the fallback all three already use for an unrecognised or absent value, hence the declared default. Enumerated because it was declared as a bare string while Blur.effectStyle — the same concept on the component that owns it — carried the enum: the split let the common spelling reach the render stage unvalidated, which is what the codegen-effect gate reported once the mode audit put these fixtures back in scope. [default: Regular]
+        { name: 'effectStyle', kind: :enum, values: ['Light', 'Dark', 'ExtraLight', 'Regular', 'Prominent', 'UltraThin', 'Thin', 'Thick', 'Chrome', 'systemMaterial', 'systemUltraThinMaterial', 'systemThinMaterial', 'systemThickMaterial', 'systemChromeMaterial'].freeze }.freeze,
         # Whether component is enabled (can be data binding)
         { name: 'enabled', kind: :boolean, bindable: true }.freeze,
         # End margin (RTL aware) (binding supported)

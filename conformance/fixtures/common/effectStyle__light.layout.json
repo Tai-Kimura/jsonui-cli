@@ -62,7 +62,7 @@
           "background": "#00AAAA"
         }
       ],
-      "gradientDirection": "sample"
+      "effectStyle": "Light"
     }
   ]
 }

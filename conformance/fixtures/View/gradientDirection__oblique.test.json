@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/gradientDirection__oblique.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.gradientDirection (oblique)",
+    "description": "Conformance fixture for 'gradientDirection' on View (section: View, class: visual). Value under test: \"Oblique\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "gradientDirection__oblique",
+      "description": "Conformance fixture for 'gradientDirection' on View (section: View, class: visual). Value under test: \"Oblique\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_gradientDirection__oblique"
+        }
+      ]
+    }
+  ]
+}

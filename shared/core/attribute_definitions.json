@@ -831,9 +831,33 @@
       "description": "Complex event handlers"
     },
     "effectStyle": {
-      "type": "string",
-      "description": "Visual effect style"
-    },
+        "type": "string",
+        "enum": [
+          "Light",
+          "Dark",
+          "ExtraLight",
+          "Regular",
+          "Prominent",
+          "UltraThin",
+          "Thin",
+          "Thick",
+          "Chrome",
+          "systemMaterial",
+          "systemUltraThinMaterial",
+          "systemThinMaterial",
+          "systemThickMaterial",
+          "systemChromeMaterial"
+        ],
+        "valueAliases": {
+          "systemMaterial": "Regular",
+          "systemUltraThinMaterial": "UltraThin",
+          "systemThinMaterial": "Thin",
+          "systemThickMaterial": "Thick",
+          "systemChromeMaterial": "Chrome"
+        },
+        "default": "Regular",
+        "description": "Visual effect (blur) style. Measured across the three converters 2026-08-05: the UIKit trio Light/Dark/ExtraLight is what all three map (sjui blur_converter.rb:71, kjui blurview_component.rb:38, rjui blur_converter.rb:98), and web additionally maps the SwiftUI material names. Every converter downcases before matching, so the casing here is presentational. `Regular` is the fallback all three already use for an unrecognised or absent value, hence the declared default. Enumerated because it was declared as a bare string while Blur.effectStyle — the same concept on the component that owns it — carried the enum: the split let the common spelling reach the render stage unvalidated, which is what the codegen-effect gate reported once the mode audit put these fixtures back in scope."
+      },
     "tag": {
       "type": [
         "number",
@@ -3171,10 +3195,26 @@
       "platform": "swift"
     },
     "gradientDirection": {
-      "type": "string",
-      "description": "Gradient direction",
-      "platform": "swift"
-    },
+        "type": "string",
+        "enum": [
+          "Vertical",
+          "Horizontal",
+          "Oblique",
+          "LeftToRight",
+          "TopToBottom",
+          "Diagonal",
+          "RightToLeft",
+          "BottomToTop"
+        ],
+        "valueAliases": {
+          "LeftToRight": "Horizontal",
+          "TopToBottom": "Vertical",
+          "Diagonal": "Oblique"
+        },
+        "default": "Vertical",
+        "description": "Gradient direction. Canon copied from GradientView.gradientDirection, which declared the enum for the same concept while this spelling stayed a bare string. Vertical is the fallback on all three. CASE MATTERS on ios: sjui matches 'Horizontal'/'Oblique' literally (modifier_helper.rb:16) without downcasing, while Compose and web downcase — so the capitalised spellings are canonical and the aliases normalise to them before any converter sees the value. RightToLeft and BottomToTop are declared without an alias on purpose: they are reversed directions web implements (gradient_view_converter.rb:88,90) and the other two have no equivalent, so folding them into Horizontal/Vertical would silently reverse the gradient rather than preserve it.",
+        "platform": "swift"
+      },
     "locations": {
       "type": "array",
       "description": "Gradient color stop locations",
