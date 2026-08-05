@@ -912,18 +912,21 @@ module RjuiTools
           bound_value_expr(value) || value.to_s
         end
 
-        # contentMode → the CSS pair, keyed by the LOWERCASED spelling so a
-        # runtime lookup can normalise the way the static `case` does with
-        # `&.downcase`. Covers the union of the canonical enum and the
-        # iOS/Android long forms.
+        # contentMode → the CSS pair, keyed by the LOWERCASED spelling.
         #
-        # The static paths keep their own tables on purpose. ImageConverter's
-        # `case` and NetworkImageConverter's two maps do not accept the same
-        # spellings — `aspect_fit` is only in the first, `centerCrop` and
-        # `fitXY` only in the second — so folding them into this one would
-        # change what a STATIC layout emits, which this lane may not do. That
-        # three-way disagreement is a finding in its own right; it is written
-        # up in the lane report rather than fixed here.
+        # THE one table. It used to be four: ImageConverter's `case`,
+        # NetworkImageConverter's class map, NetworkImageConverter's prop map,
+        # and this one for the bound path — and no two of them accepted the
+        # same spellings. `aspect_fit` was only in the first; `centerCrop` /
+        # `fitCenter` / `fitXY` only in the second and third, which were also
+        # case-SENSITIVE, so a lowercase `aspectfill` fell through to an
+        # `object-#{value}` fallback and emitted a class that matches nothing.
+        # An author writing one declaration got a different answer on `<img>`
+        # than on `<NetworkImage>`.
+        #
+        # The union of both components' declared enums plus the iOS/Android
+        # long forms lives here once. An unrecognised value resolves to the
+        # declared default rather than being interpolated into a class name.
         CONTENT_MODE_OBJECT_FIT = {
           'fit' => 'contain', 'aspectfit' => 'contain', 'aspect_fit' => 'contain',
           'scaleaspectfit' => 'contain', 'fitcenter' => 'contain',
@@ -938,6 +941,24 @@ module RjuiTools
           'center' => 'center', 'top' => 'top', 'bottom' => 'bottom',
           'left' => 'left', 'right' => 'right'
         }.freeze
+
+        #: The declared default when a value is absent or unrecognised
+        #: (`image.defaultContentMode` in shared/core/attribute_semantics.json).
+        CONTENT_MODE_DEFAULT_FIT = 'contain'
+
+        # The Tailwind classes for a STATIC contentMode. `none` is the only fit
+        # that also needs a position, which is why the two tables are separate.
+        def content_mode_classes(value)
+          key = value.to_s.downcase
+          fit = CONTENT_MODE_OBJECT_FIT.fetch(key, CONTENT_MODE_DEFAULT_FIT)
+          position = CONTENT_MODE_OBJECT_POSITION[key]
+          position ? "object-#{fit} object-#{position}" : "object-#{fit}"
+        end
+
+        # The same value as the NetworkImageProps `contentMode` union wants.
+        def content_mode_prop(value)
+          CONTENT_MODE_OBJECT_FIT.fetch(value.to_s.downcase, CONTENT_MODE_DEFAULT_FIT)
+        end
 
         # Route a bound contentMode to object-fit / object-position. Returns
         # true when the binding was routed, false for a static value so the

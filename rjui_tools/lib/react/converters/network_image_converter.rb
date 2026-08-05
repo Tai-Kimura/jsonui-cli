@@ -54,25 +54,7 @@ module RjuiTools
             # `style` at all — writing one is TS2322 on the element. The prop
             # emitted by build_content_mode_attr already carries the binding.
           elsif content_mode
-            mode_map = {
-              'fit' => 'object-contain',
-              'fill' => 'object-fill',
-              'center' => 'object-none object-center',
-              'Center' => 'object-none object-center',
-              'top' => 'object-none object-top',
-              'bottom' => 'object-none object-bottom',
-              'left' => 'object-none object-left',
-              'right' => 'object-none object-right',
-              'scaleAspectFill' => 'object-cover',
-              'scaleAspectFit' => 'object-contain',
-              'scaleToFill' => 'object-fill',
-              'centerCrop' => 'object-cover',
-              'fitCenter' => 'object-contain',
-              'fitXY' => 'object-fill',
-              'AspectFill' => 'object-cover',
-              'AspectFit' => 'object-contain'
-            }
-            classes << (mode_map[content_mode] || "object-#{content_mode}")
+            classes << content_mode_classes(content_mode)
           end
 
           # Circle image
@@ -107,46 +89,26 @@ module RjuiTools
           content_mode = attributes['contentMode'] || attributes['scaleType']
           return '' unless content_mode
 
-          # Normalize the canonical enum (fit/fill/center/top/.../AspectFit)
-          # and the iOS/Android long forms into the NetworkImageProps union
-          # ('cover' | 'contain' | 'fill' | 'none' | 'scaleDown') — the
-          # template contract must accept every value emitted here.
-          # fill = stretch per shared/core/attribute_semantics.json.
-          mode_map = {
-            'fit' => 'contain',
-            'fill' => 'fill',
-            'center' => 'none',
-            'Center' => 'none',
-            'top' => 'none',
-            'bottom' => 'none',
-            'left' => 'none',
-            'right' => 'none',
-            'scaleAspectFill' => 'cover',
-            'scaleAspectFit' => 'contain',
-            'scaleToFill' => 'fill',
-            'centerCrop' => 'cover',
-            'fitCenter' => 'contain',
-            'fitXY' => 'fill',
-            'AspectFill' => 'cover',
-            'AspectFit' => 'contain'
-          }
-
+          # The NetworkImageProps union ('cover' | 'contain' | 'fill' | 'none'
+          # | 'scaleDown' | 'fit') is the same vocabulary object-fit takes, so
+          # this reads BaseConverter's one table rather than keeping a third
+          # copy. The copy it replaced was case-sensitive and had a
+          # pass-the-value-through fallback, so a lowercase `aspectfill` — a
+          # spelling ImageConverter accepted — reached the component as
+          # `aspectfill`, outside the union.
+          #
           # A bound value cannot be normalised at codegen time, and quoting it
-          # handed the component the four characters `@{v}` — outside the
-          # NetworkImageProps union, so the prop was simply wrong. The
-          # normalisation moves into the emitted expression.
+          # handed the component the four characters `@{v}`. The normalisation
+          # moves into the emitted expression, asserted through the component's
+          # own prop type rather than by restating the union.
           if (expr = bound_value_expr(content_mode))
-            lookup = js_object_literal(mode_map.transform_keys(&:downcase))
-            # The prop is a UNION of the five NetworkImageProps spellings, so a
-            # value only known to be `string` is TS2322 there. Asserted through
-            # the component's own prop type rather than by restating the union,
-            # which would be a second copy of it.
+            lookup = js_object_literal(CONTENT_MODE_OBJECT_FIT)
             cast = "React.ComponentProps<typeof NetworkImage>['contentMode']"
-            return " contentMode={((#{lookup})[String(#{expr}).toLowerCase()] ?? 'contain') as #{cast}}"
+            return " contentMode={((#{lookup})[String(#{expr}).toLowerCase()] ?? " \
+                   "'#{CONTENT_MODE_DEFAULT_FIT}') as #{cast}}"
           end
 
-          mapped_mode = mode_map[content_mode] || content_mode
-          " contentMode=\"#{mapped_mode}\""
+          " contentMode=\"#{content_mode_prop(content_mode)}\""
         end
 
         # Native lazy/eager fetch hint, forwarded to the underlying <img>.

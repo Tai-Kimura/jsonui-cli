@@ -111,26 +111,7 @@ module RjuiTools
           # through to the `else` and every binding froze on object-contain.
           # It routes to the CSS pair instead (BaseConverter's shared table).
           unless apply_bound_content_mode(attributes['contentMode'])
-            case attributes['contentMode']&.downcase
-            when 'fit', 'aspectfit', 'aspect_fit'
-              classes << 'object-contain'
-            when 'aspectfill', 'aspect_fill'
-              classes << 'object-cover'
-            when 'center'
-              classes << 'object-none object-center'
-            when 'top'
-              classes << 'object-none object-top'
-            when 'bottom'
-              classes << 'object-none object-bottom'
-            when 'left'
-              classes << 'object-none object-left'
-            when 'right'
-              classes << 'object-none object-right'
-            when 'fill', 'scaletofill', 'scale_to_fill'
-              classes << 'object-fill'
-            else
-              classes << 'object-contain'
-            end
+            classes << content_mode_classes(attributes['contentMode'])
           end
 
           # CircleImage type
