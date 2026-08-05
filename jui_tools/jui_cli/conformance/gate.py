@@ -136,6 +136,7 @@ def evaluate(
     cross_effect: bool = False,
     inert_complete: bool = False,
     codegen_effect: bool = False,
+    ledger_keys: bool = False,
     rendered_by: dict[str, str] | None = None,
     repo_root: Path | None = None,
     ruby: str = "ruby",
@@ -187,6 +188,9 @@ def evaluate(
             )
             outcome.problems.extend(problems)
             outcome.notices.extend(notices)
+
+    if ledger_keys:
+        outcome.problems.extend(judge_ledger_keys(conformance_dir, semantics_path))
 
     if visual and rendered_by:
         outcome.notices.extend(
@@ -290,6 +294,90 @@ def evaluate(
                     f"{verdict.accepted} accepted deviation(s) on ledger"
                 )
     return outcome
+
+
+#: Ledgers keyed by a fixture id, and the field that holds it. A rename
+#: moves the fixture and leaves the row pointing nowhere: the entry is still
+#: there, the gate still runs, and nothing it says is ever checked again.
+FIXTURE_KEYED_LEDGERS = (
+    ("control_diff.json", "fixture"),
+    ("cross_effect.json", "fixture"),
+    ("inert_audit.json", "fixture"),
+)
+
+#: Same, keyed by screenshot name instead (`a/b__c` -> `a_b__c.png`).
+SCREENSHOT_KEYED_LEDGERS = (("codegen_parity.json", "screenshot"),)
+
+
+def screenshot_name(fixture_id: str) -> str:
+    return fixture_id.replace("/", "_") + ".png"
+
+
+def judge_ledger_keys(conformance_dir: Path, semantics_path: Path | None = None) -> list[str]:
+    """Every ledger key must name a fixture the manifest still has.
+
+    Three renames in one wave broke three different things this way: the
+    committed baselines, a control shape, and a semantics contract whose
+    member pointed at a fixture whose representative value had been flipped.
+    The contract was on the ledger, the gate was running, and it had not
+    been checked once since the rename.
+
+    Dangling rows are reported, never deleted. Whoever renamed the fixture
+    knows what the row was for; a device that quietly drops it destroys the
+    only record that something was being tracked.
+    """
+    conformance_dir = Path(conformance_dir)
+    manifest_path = conformance_dir / "manifest.json"
+    if not manifest_path.is_file():
+        return [f"ledger keys: no manifest to check against ({manifest_path})"]
+
+    fixtures = json.loads(manifest_path.read_text(encoding="utf-8")).get("fixtures", [])
+    ids = {f.get("id") for f in fixtures if f.get("id")}
+    shots = {screenshot_name(i) for i in ids}
+
+    problems: list[str] = []
+
+    def sweep(path: Path, field: str, universe: set, noun: str) -> None:
+        if not path.is_file():
+            return
+        entries = json.loads(path.read_text(encoding="utf-8")).get("entries", [])
+        dangling = sorted(
+            {e.get(field) for e in entries if e.get(field) and e.get(field) not in universe}
+        )
+        if dangling:
+            shown = ", ".join(dangling[:5]) + (" …" if len(dangling) > 5 else "")
+            problems.append(
+                f"{path.name}: {len(dangling)} entr(y/ies) name a {noun} the manifest "
+                f"no longer has — the fixture was renamed or removed and the row was "
+                f"left behind, so nothing it claims has been checked since: {shown}"
+            )
+
+    for name, field in FIXTURE_KEYED_LEDGERS:
+        sweep(conformance_dir / name, field, ids, "fixture")
+    for name, field in SCREENSHOT_KEYED_LEDGERS:
+        sweep(conformance_dir / name, field, shots, "screenshot")
+
+    if semantics_path and Path(semantics_path).is_file():
+        semantics = json.loads(
+            Path(semantics_path).read_text(encoding="utf-8")
+        ).get("semantics", {})
+        dangling = sorted(
+            {
+                f"{topic}:{key}"
+                for topic, body in semantics.items()
+                if isinstance(body, dict)
+                for key in (body.get("observable") or {})
+                if key not in ids
+            }
+        )
+        if dangling:
+            shown = ", ".join(dangling[:5]) + (" …" if len(dangling) > 5 else "")
+            problems.append(
+                f"attribute_semantics.json: {len(dangling)} observable key(s) name a "
+                f"fixture the manifest no longer has — the contract reads as live and "
+                f"measures nothing: {shown}"
+            )
+    return problems
 
 
 def library_drift_notices(

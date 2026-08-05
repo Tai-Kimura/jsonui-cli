@@ -20,6 +20,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from jui_cli.conformance import gate
 from jui_cli.conformance.fixture_generator import generate_conformance
 from jui_cli.conformance.gate import (
     RATCHET_FILENAME,
@@ -370,3 +371,70 @@ class JudgeInertCompleteTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LedgerKeyTest(unittest.TestCase):
+    """A ledger key has to name a fixture the manifest still has.
+
+    Three renames in one wave broke three separate things this way — the
+    committed baselines, a control shape, and a semantics contract whose
+    member pointed at a fixture whose representative value had been
+    flipped. That contract sat on the ledger with the gate running and had
+    not been checked once since the rename.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.conf = Path(self._tmp.name)
+        (self.conf / "manifest.json").write_text(
+            json.dumps({"fixtures": [{"id": "Label/text__static"}]})
+        )
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _write(self, name, entries):
+        (self.conf / name).write_text(json.dumps({"entries": entries}))
+
+    def test_live_keys_pass(self):
+        self._write("control_diff.json", [{"fixture": "Label/text__static"}])
+        self._write("codegen_parity.json", [{"screenshot": "Label_text__static.png"}])
+        self.assertEqual(gate.judge_ledger_keys(self.conf), [])
+
+    def test_a_renamed_fixture_leaves_a_dangling_row(self):
+        self._write("control_diff.json", [{"fixture": "Label/text__flipped"}])
+        problems = gate.judge_ledger_keys(self.conf)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("Label/text__flipped", problems[0])
+
+    def test_screenshot_keys_are_matched_in_their_own_shape(self):
+        self._write("codegen_parity.json", [{"screenshot": "Label_text__gone.png"}])
+        problems = gate.judge_ledger_keys(self.conf)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("Label_text__gone.png", problems[0])
+
+    def test_a_contract_pointing_at_a_renamed_fixture_is_caught(self):
+        semantics = self.conf / "attribute_semantics.json"
+        semantics.write_text(
+            json.dumps(
+                {"semantics": {"skin": {"observable": {"TabView/showLabels__true": "x"}}}}
+            )
+        )
+        problems = gate.judge_ledger_keys(self.conf, semantics)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("skin:TabView/showLabels__true", problems[0])
+
+    def test_reports_without_deleting(self):
+        """Whoever renamed the fixture knows what the row was for.
+
+        A device that quietly drops it destroys the only record that
+        something was being tracked.
+        """
+        self._write("control_diff.json", [{"fixture": "Label/text__flipped"}])
+        before = (self.conf / "control_diff.json").read_text()
+        gate.judge_ledger_keys(self.conf)
+        self.assertEqual((self.conf / "control_diff.json").read_text(), before)
+
+    def test_missing_manifest_is_a_problem_not_a_pass(self):
+        (self.conf / "manifest.json").unlink()
+        self.assertEqual(len(gate.judge_ledger_keys(self.conf)), 1)

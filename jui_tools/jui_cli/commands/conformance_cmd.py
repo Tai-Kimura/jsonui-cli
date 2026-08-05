@@ -130,6 +130,17 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         ),
     )
     gate.add_argument(
+        "--ledger-keys",
+        dest="ledger_keys",
+        action="store_true",
+        help=(
+            "Also check that every ledger key still names a fixture the "
+            "manifest has. A rename leaves the row pointing nowhere: the "
+            "entry looks live, the gate keeps running, and nothing it claims "
+            "is checked again. Dangling rows are reported, never deleted"
+        ),
+    )
+    gate.add_argument(
         "--rendered-by",
         dest="rendered_by",
         action="append",
@@ -1659,6 +1670,7 @@ def _cmd_gate(args: argparse.Namespace) -> int:
             cross_effect=bool(getattr(args, "cross_effect", False)),
             inert_complete=bool(getattr(args, "inert_complete", False)),
             codegen_effect=bool(getattr(args, "codegen_effect", False)),
+            ledger_keys=bool(getattr(args, "ledger_keys", False)),
             rendered_by=_parse_rendered_by(getattr(args, "rendered_by", None)),
             repo_root=_REPO_ROOT,
             definitions_path=_DEFAULT_DEFINITIONS,

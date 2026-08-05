@@ -480,7 +480,7 @@ jobs:
         # drawn by a different library, the gate says so — a notice, not a
         # failure. Thirteen regressions in one run were neither fixture nor
         # codegen and two lanes reached "the library moved" by elimination.
-        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web','--env','ci','--parity','--cross-effect','--inert-complete','--rendered-by','swiftjsonui=${{ needs.ios.outputs.library_sha }}','--rendered-by','kotlinjsonui=${{ needs.android.outputs.library_sha }}']))"
+        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web','--env','ci','--parity','--cross-effect','--inert-complete','--ledger-keys','--rendered-by','swiftjsonui=${{ needs.ios.outputs.library_sha }}','--rendered-by','kotlinjsonui=${{ needs.android.outputs.library_sha }}']))"
       - name: Upload combined report
         if: always()
         uses: actions/upload-artifact@v4
