@@ -157,20 +157,6 @@
       "note": ""
     },
     {
-      "fixture": "CheckBox/value__static",
-      "component": "CheckBox",
-      "attribute": "value",
-      "inertOn": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
       "fixture": "Collection/itemWeight__static",
       "component": "Collection",
       "attribute": "itemWeight",

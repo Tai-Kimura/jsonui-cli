@@ -276,31 +276,7 @@
       ]
     },
     {
-      "fixture": "Collection/layout__flow_2",
-      "platforms": [
-        "android",
-        "ios",
-        "web"
-      ]
-    },
-    {
       "fixture": "Collection/layout__horizontal",
-      "platforms": [
-        "android",
-        "ios",
-        "web"
-      ]
-    },
-    {
-      "fixture": "Collection/layout__leftaligned",
-      "platforms": [
-        "android",
-        "ios",
-        "web"
-      ]
-    },
-    {
-      "fixture": "Collection/layout__leftaligned_2",
       "platforms": [
         "android",
         "ios",
@@ -583,12 +559,6 @@
         "android",
         "ios",
         "web"
-      ]
-    },
-    {
-      "fixture": "Image/systemIcon__static",
-      "platforms": [
-        "ios"
       ]
     },
     {
