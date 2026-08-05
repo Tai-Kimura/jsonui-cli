@@ -54,8 +54,7 @@
       "type": "Blur",
       "id": "target",
       "width": 100,
-      "height": 100,
-      "blurRadius": 8
+      "height": 100
     }
   ]
 }

@@ -895,21 +895,6 @@ def is_uikit_only(defn: dict) -> bool:
 #: table is what stops that inert from being read as a defect — and what tells
 #: the next person which single mechanism unlocks it.
 UNSHAPEABLE_FIXTURES: dict[tuple[str, str], dict[str, str]] = {
-    ("Blur", "blurRadius"): {
-        "owner": "next wave",
-        "reason": "backdrop-filter blurs what is BEHIND the element, and the "
-                  "root's children are [anchor?, target] — there is no way to "
-                  "put a textured sibling behind the target, so the blur has "
-                  "a flat colour to blur and renders it unchanged",
-        "verify": "mechanism:root-children",
-    },
-    ("common", "indexAbove"): {
-        "owner": "next wave",
-        "reason": "the anchor is always emitted BEFORE the target, so the "
-                  "target already paints on top and raising it changes "
-                  "nothing. `indexBelow` works for the same reason reversed",
-        "verify": "mechanism:root-children",
-    },
     ("Collection", "scrollAnchor"): {
         # E closed their half in 9930e18: the canonical class is now a plain
         # value (String with cellIdProperty, otherwise Int), and the SSoT no
@@ -1281,6 +1266,30 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # spare and leaves a 70pt shift to see. Checked arithmetically for 50 / 100
     # / 200 before writing it down; 100 fits but only shifts 20pt, and 200 does
     # not fit at all.
+    # `backdrop-filter` blurs what is BEHIND the element, and the root is an
+    # overlay — so an earlier sibling sits underneath the target. A flat colour
+    # blurs to the same flat colour, which is why every radius rendered its
+    # control; stripes give the blur something to smear.
+    "Blur.blurRadius": {
+        "root.backdrop": [
+            {"type": "View", "id": "backdrop", "width": 100, "height": 100,
+             "background": "#FF0000", "orientation": "horizontal", "child": [
+                 {"type": "View", "id": "stripe_a", "width": 20, "height": 100,
+                  "background": "#FFFFFF"},
+                 {"type": "View", "id": "stripe_b", "width": 20, "height": 100,
+                  "background": "#0000FF"},
+                 {"type": "View", "id": "stripe_c", "width": 20, "height": 100,
+                  "background": "#FFFFFF"},
+                 {"type": "View", "id": "stripe_d", "width": 20, "height": 100,
+                  "background": "#00AA00"},
+             ]},
+        ],
+    },
+    # The anchor goes LAST so the target starts underneath it and `indexAbove`
+    # has somewhere to travel from. `indexBelow` needs no such thing — the
+    # default order already puts the target on top, which is exactly why only
+    # one of the pair was ever inert.
+    "indexAbove": {"root.anchorLast": True},
     "alignTopOfView": {"width": 50, "height": 50},
     "alignBottomOfView": {"width": 50, "height": 50},
     "alignLeftOfView": {"width": 50, "height": 50},
@@ -1690,6 +1699,34 @@ def apply_base_overrides(base: dict[str, Any], extra: dict[str, Any] | None) -> 
             base[key] = value
 
 
+#: `root.` keys that describe the root's CHILDREN rather than its attributes.
+#: Handled structurally by the layout builders; never written as JSON keys.
+ROOT_STRUCTURE_KEYS = ("backdrop", "anchorLast")
+
+
+def root_backdrop(extra: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Nodes to place BEHIND the target, in the root's own child list.
+
+    A root with no orientation is an overlay, so an earlier sibling sits
+    underneath. `Blur` needs one: `backdrop-filter` blurs what is behind the
+    element, and a flat colour blurs to the same flat colour — the fixture and
+    its control came out identical no matter what radius was asked for.
+    """
+    return [dict(n) for n in (split_root_attrs(extra).get("backdrop") or [])]
+
+
+def root_anchor_last(extra: dict[str, Any] | None) -> bool:
+    """True when the anchor must be emitted AFTER the target.
+
+    `indexAbove` raises the target above the referenced view, and the anchor is
+    normally emitted first — so the target was already on top and raising it
+    changed nothing. Emitting the anchor last is what gives the attribute
+    somewhere to travel from. (`indexBelow` works precisely because of the
+    default order, which is why only one of the pair was ever inert.)
+    """
+    return bool(split_root_attrs(extra).get("anchorLast"))
+
+
 def split_root_attrs(extra: dict[str, Any] | None) -> dict[str, Any]:
     """The ``root.``-prefixed companions in *extra*, with the prefix stripped.
 
@@ -1707,6 +1744,19 @@ def split_root_attrs(extra: dict[str, Any] | None) -> dict[str, Any]:
         key[len(ROOT_ATTR_PREFIX):]: value
         for key, value in (extra or {}).items()
         if key.startswith(ROOT_ATTR_PREFIX)
+    }
+
+
+def root_node_attrs(extra: dict[str, Any] | None) -> dict[str, Any]:
+    """:func:`split_root_attrs` minus the structural keys.
+
+    Only these belong in the root node's own JSON; `backdrop` and `anchorLast`
+    describe its children and are consumed by the builders.
+    """
+    return {
+        k: v
+        for k, v in split_root_attrs(extra).items()
+        if k not in ROOT_STRUCTURE_KEYS
     }
 
 

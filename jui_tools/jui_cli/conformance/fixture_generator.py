@@ -166,10 +166,7 @@ def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> d
     # The attribute under test always wins over base attributes.
     target[case.written_key] = case.value
 
-    root_children: list[dict] = []
-    if plan.needs_anchor:
-        root_children.append(dict(ANCHOR_NODE))
-    root_children.append(target)
+    root_children = _root_children(target, plan.needs_anchor, extra)
 
     layout: dict[str, Any] = {
         "_generated": json_marker(source=source_label, generator=GENERATOR_NAME),
@@ -177,7 +174,7 @@ def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> d
         "id": "root",
         "width": "matchParent",
         "height": "matchParent",
-        **rules.split_root_attrs(extra),
+        **rules.root_node_attrs(extra),
         "child": root_children,
     }
     _attach_data(
@@ -195,6 +192,30 @@ def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> d
         ),
     )
     return layout
+
+
+def _root_children(
+    target: dict, needs_anchor: bool, extra: dict | None
+) -> list[dict]:
+    """The root's child list: backdrop, anchor and target in drawing order.
+
+    A root with no orientation overlays its children, so position in this list
+    IS depth — which is what both structural companions trade on. The backdrop
+    goes first so it sits underneath; the anchor goes last when the attribute
+    needs the target to start below it.
+
+    The control is built through the same call with the same extras, so a
+    fixture that gained a backdrop is compared against a control that has one
+    too, and the attribute stays the only difference.
+    """
+    children: list[dict] = list(rules.root_backdrop(extra))
+    anchor_last = rules.root_anchor_last(extra)
+    if needs_anchor and not anchor_last:
+        children.append(dict(ANCHOR_NODE))
+    children.append(target)
+    if needs_anchor and anchor_last:
+        children.append(dict(ANCHOR_NODE))
+    return children
 
 
 def _attach_data(layout: dict, host: str, base: dict, bound: dict | None = None) -> None:
@@ -516,10 +537,7 @@ def build_control_layout(
     if children:
         target["child"] = [dict(c) for c in children]
 
-    root_children: list[dict] = []
-    if needs_anchor:
-        root_children.append(dict(ANCHOR_NODE))
-    root_children.append(target)
+    root_children = _root_children(target, needs_anchor, extra)
 
     layout: dict[str, Any] = {
         "_generated": json_marker(source=source_label, generator=GENERATOR_NAME),
@@ -527,7 +545,7 @@ def build_control_layout(
         "id": "root",
         "width": "matchParent",
         "height": "matchParent",
-        **rules.split_root_attrs(extra),
+        **rules.root_node_attrs(extra),
         "child": root_children,
     }
     _attach_data(layout, host, base)
