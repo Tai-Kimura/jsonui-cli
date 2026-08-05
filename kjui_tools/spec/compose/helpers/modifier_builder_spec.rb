@@ -154,6 +154,31 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
       expect(width_in_idx).to be < fill_idx
     end
 
+    # WRAP is the opposite of FILL, and the comment used to cover both with
+    # one sentence. `.wrapContentWidth()` measures its content ignoring the
+    # incoming minimum, so a preceding `.widthIn(min = N)` is exactly the
+    # constraint it discards — the node came out at its content's width
+    # (40dp) where dynamic and web both render the 150dp floor. The bound
+    # goes AFTER the wrap, which is also where the dynamic chain puts it
+    # (plan 49 lane C, G's 3-column measurement).
+    it 'emits widthIn(min=...) AFTER wrapContentWidth' do
+      json_data = { 'width' => 'wrapContent', 'minWidth' => 150 }
+      result = described_class.build_size(json_data)
+      expect(result.index('.wrapContentWidth()')).to be < result.index('.widthIn(min = 150.dp)')
+    end
+
+    it 'emits heightIn(min=...) AFTER wrapContentHeight' do
+      json_data = { 'height' => 'wrapContent', 'minHeight' => 150 }
+      result = described_class.build_size(json_data)
+      expect(result.index('.wrapContentHeight()')).to be < result.index('.heightIn(min = 150.dp)')
+    end
+
+    it 'puts a wrap max bound after the wrap too, matching the dynamic chain' do
+      json_data = { 'width' => 'wrapContent', 'maxWidth' => 150 }
+      result = described_class.build_size(json_data)
+      expect(result).to eq(['.wrapContentWidth()', '.widthIn(max = 150.dp)'])
+    end
+
     # An EXPLICIT numeric size is the opposite case: the declared dimension
     # wins over the min/max bounds — the dynamic chain `.width(N).widthIn(...)`
     # pins the constraints first, leaving the bound inert, and all render

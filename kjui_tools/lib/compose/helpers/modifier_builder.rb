@@ -331,19 +331,31 @@ module KjuiTools
             return modifiers
           end
 
-          # Min/Max constraints must be emitted BEFORE the fill/wrap
-          # structural modifiers. Compose modifier semantics chain
-          # constraints outside-in: an outer `.fillMaxWidth()` locks
-          # min == max == parent's maxWidth, and a later `.widthIn(max =
-          # N.dp)` can no longer narrow it because minWidth is already
-          # pinned to parent's maxWidth. Putting widthIn first caps the
-          # maxWidth bound, then fillMaxWidth fills WITHIN that cap.
+          # Where the min/max constraint goes depends on WHICH structural
+          # modifier follows it, and the three cases do not agree. This used
+          # to say "before the fill/wrap modifiers", which is right for fill
+          # and backwards for wrap — one sentence covering two cases, and the
+          # wrong half was silent (plan 49 lane C, G's 3-column measurement).
+          #
+          # FILL — constraint FIRST. An outer `.fillMaxWidth()` locks
+          # min == max == parent's maxWidth, so a later `.widthIn(max = N)`
+          # can no longer narrow it. Emitting widthIn first caps the bound and
+          # fillMaxWidth then fills WITHIN that cap.
           # Regression: kjui-responsive-widthin-after-fillmaxwidth-no-op.
           #
-          # An EXPLICIT numeric width is the opposite case: the declared
-          # width wins over min/max bounds (all render paths agree — the
-          # dynamic chain is `.width(N).widthIn(...)`, where the fixed
-          # width pins the constraints and the bound is inert). Emitting
+          # WRAP — constraint LAST. `.wrapContentWidth()` deliberately measures
+          # its content ignoring the incoming minimum, so an earlier
+          # `.widthIn(min = N)` is exactly the constraint it discards: the node
+          # came out at its content's width with the floor thrown away
+          # (measured 40dp against dynamic's 150dp). The dynamic chain puts the
+          # bound after the wrap for the same reason — `applySize` runs
+          # `applyWidthConstraints` AFTER `applySingleDimension` unless the
+          # dimension is a fill.
+          #
+          # EXPLICIT numeric width — constraint LAST, for a different reason:
+          # the declared width wins over min/max bounds (all render paths
+          # agree — the dynamic chain is `.width(N).widthIn(...)`, where the
+          # fixed width pins the constraints and the bound is inert). Emitting
           # widthIn first would clamp the declared width instead.
           width_constraint =
             if json_data['minWidth'] && json_data['maxWidth']
@@ -357,13 +369,15 @@ module KjuiTools
                            json_data['width'] != 'matchParent' &&
                            json_data['width'] != 'wrapContent' &&
                            !(json_data['weight'] && json_data['width'] == 0)
-          modifiers << width_constraint if width_constraint && !explicit_width
+          wrap_width = json_data['width'] == 'wrapContent'
+          modifiers << width_constraint if width_constraint && !explicit_width && !wrap_width
 
           # Width - skip if weight is present and width is 0
           if json_data['width'] == 'matchParent'
             modifiers << ".fillMaxWidth()"
-          elsif json_data['width'] == 'wrapContent'
+          elsif wrap_width
             modifiers << ".wrapContentWidth()"
+            modifiers << width_constraint if width_constraint
           elsif explicit_width
             modifiers << ".width(#{process_dimension(json_data['width'])})"
             modifiers << width_constraint if width_constraint
@@ -428,15 +442,20 @@ module KjuiTools
                             json_data['height'] != 'matchParent' &&
                             json_data['height'] != 'wrapContent' &&
                             !(json_data['heightWeight'] && json_data['height'] == 0)
-          modifiers << height_constraint if height_constraint && !explicit_height
+          # Same three cases as the width axis: constraint before a fill,
+          # after a wrap (which discards the incoming minimum), after an
+          # explicit height.
+          wrap_height = json_data['height'] == 'wrapContent'
+          modifiers << height_constraint if height_constraint && !explicit_height && !wrap_height
 
           # Height - skip if heightWeight is present and height is 0
           fills_height = false
           if json_data['height'] == 'matchParent'
             modifiers << ".fillMaxHeight()"
             fills_height = true
-          elsif json_data['height'] == 'wrapContent'
+          elsif wrap_height
             modifiers << ".wrapContentHeight()"
+            modifiers << height_constraint if height_constraint
           elsif explicit_height
             modifiers << ".height(#{process_dimension(json_data['height'])})"
             modifiers << height_constraint if height_constraint
