@@ -3,7 +3,7 @@
   "generatedBy": "jui generate attr-bindings --lang all",
   "source": {
     "file": "shared/core/attribute_definitions.json",
-    "sha256": "15ac13deec105f6f0781639d783b7430b7e8436d4b518ffe9d205483aae4f374"
+    "sha256": "6fe3a29573b58d85aeda06ce02156f23a0851d1d6837b8164a0f099452bc635d"
   },
   "files": {
     "kotlin/AttrCodegenSupport.kt": "98bee31ed2dcc5be8c4b44b7c0d5f5f27ae6fc1bce9c1040b0fb481fec8efff9",
@@ -24,7 +24,7 @@
     "kotlin/LabelAttributes.kt": "eebb05d9e14487eb849156f324df471d224b94867f6469ef3cd1c8a9b8327495",
     "kotlin/NetworkImageAttributes.kt": "97efabbe6cca6f781e1479fae4bb0eb4a61c10414df1c188c41d8431098d4b2c",
     "kotlin/ProgressAttributes.kt": "a39b5d551c6e4ab0b496fe2ccdae406fbf81b7f3e93fb9493ada02904496e7cf",
-    "kotlin/RadioAttributes.kt": "88ddd335b79f6f2c27dbb07f9da1a5df8afe4cb385ba233c449394c8de8297a2",
+    "kotlin/RadioAttributes.kt": "dc303763c7893fde4add5c4c5019c56068333f76c8fe82d6b202d62ccd8798e7",
     "kotlin/SafeAreaViewAttributes.kt": "52ffdf82492f237c721b606f7692a7b11059fe7dab9a78a8d01fd72845e1d84a",
     "kotlin/ScrollViewAttributes.kt": "77467ee35db6ca923e53be607a3a06ed52bf3f32bb37dacfd952fc5c315d3fae",
     "kotlin/SegmentAttributes.kt": "ba038a232f2b1ea12c73366d36c883044d22ba565ce768c11c04de7d2c3f64f2",
@@ -56,7 +56,7 @@
     "ruby/label_attributes.rb": "c9fe976fd4f7fb03cf3b3ac93f4d297406837f4bba935304e6cf23a81c530784",
     "ruby/network_image_attributes.rb": "f35a0f54fdbcad7adb22cdcbc307c188d53a1a8b7fa448d8753a5ac0546dfc55",
     "ruby/progress_attributes.rb": "024887c62e85c728977acbd89b70417e54331d19018413d28e0cc9ee001d3172",
-    "ruby/radio_attributes.rb": "9ad62c3ee9ba67adbf7e0c608dc3fcae78d28dbd799fcfd5450b95bd703a505d",
+    "ruby/radio_attributes.rb": "8f72940b36e775deb27f766c96f9403185d3a49de8c96b724cf428aac7447f8e",
     "ruby/safe_area_view_attributes.rb": "a6803330e9855e9799b873d10e09b366c973b2d134c369b24d9738fa4de8d9d5",
     "ruby/scroll_view_attributes.rb": "4f44df10373d74effeeebadf8a650e872d1babcd8a0f65e42b7f8d7ffa7b70e5",
     "ruby/segment_attributes.rb": "293243208eed34841aff358d215c6a2aa990a0079080ee56fde70fca3a8a3637",
@@ -88,7 +88,7 @@
     "swift/LabelAttributes.swift": "7d2f8312af6f3603424e84e096bee20fa36c2c36332d81c8c63528c66014826e",
     "swift/NetworkImageAttributes.swift": "a8df078259d6d5d1094c27bed0053eddd9ac6c25f7121ca14f19ccb0a2a0cea1",
     "swift/ProgressAttributes.swift": "301e18c3cdfdf333fec06be4168a33f9c12dee64661c8381b644c11f3efa93fc",
-    "swift/RadioAttributes.swift": "922752993282da0f75849a8b65dbc26be101dbeaee4817e59d50c61b49443951",
+    "swift/RadioAttributes.swift": "307f995627659c52fc1e939f5352414ada76aea059317ebfc7c1c3f78299d782",
     "swift/SafeAreaViewAttributes.swift": "31a3642fecfe2fcbdd023a0d29a412a6194e43f272ef6b493d8974e90072b698",
     "swift/ScrollViewAttributes.swift": "01ab17c272de6e29ada5017f7fb8a51520a507d0d3ed030ec7f5693a58898049",
     "swift/SegmentAttributes.swift": "9db05b0eac256128121b23debef8c224c42dfea7bc3c8d46a5b9fe8f34dca844",
