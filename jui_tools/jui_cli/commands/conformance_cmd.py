@@ -1339,13 +1339,15 @@ def _cmd_codegen_effect(args: argparse.Namespace) -> int:
         (
             "defect(s) not recorded",
             verdict.unrecorded,
-            "fix the converter, or record with an owner and a reason "
-            "(`jui conformance codegen-effect --update`)",
+            "fix the converter, or record it with an owner and a reason. "
+            "`--update` records ALL of them at once, so use it only when that "
+            "is what you mean",
         ),
         (
             "stale ledger entr(y/ies)",
             verdict.stale,
-            "the defect is gone — the row goes with it",
+            "the defect is gone — DELETE those rows, in the commit that fixed "
+            "it. Not with `--update`: that also records every unaccepted defect",
         ),
         (
             "entr(y/ies) without an owner or a reason",

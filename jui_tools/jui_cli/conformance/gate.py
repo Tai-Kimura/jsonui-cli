@@ -495,8 +495,10 @@ def judge_codegen_effect(
         shown = ", ".join(verdict.stale[:5]) + (" …" if len(verdict.stale) > 5 else "")
         outcome.problems.append(
             f"{len(verdict.stale)} stale {ce.LEDGER_NAME} entr(y/ies) — the defect is "
-            f"gone, so the row has to go with it (`jui conformance codegen-effect "
-            f"--update`): {shown}"
+            f"gone, so DELETE those rows, in the commit that fixed it. Do not reach "
+            f"for `--update` to do it: that rewrites the platform's rows from the "
+            f"current measurement, which also records every defect nobody has "
+            f"accepted yet: {shown}"
         )
     if verdict.incomplete:
         shown = "; ".join(verdict.incomplete[:5]) + (
