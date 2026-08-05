@@ -535,6 +535,21 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       expect(code).to include('scrollProxy.scrollTo(index, anchor: .center)')
     end
 
+    it 'autocorrectionType default leaves it to the platform' do
+      # `default` and `yes` both emitted `.autocorrectionDisabled(false)`, so
+      # the attribute reacted to being PRESENT and not to its value
+      # (codegen-effect C2/presence-only). The SSoT says `default` means
+      # "leave it to the platform" and web deliberately emits nothing.
+      def corr(v)
+        convert(:TextFieldConverter, 'type' => 'TextField', 'autocorrectionType' => v)
+      end
+      expect(corr('default')).not_to include('.autocorrectionDisabled')
+      expect(corr('yes')).to include('.autocorrectionDisabled(false)')
+      expect(corr('on')).to include('.autocorrectionDisabled(false)')
+      expect(corr('no')).to include('.autocorrectionDisabled(true)')
+      expect(corr('off')).to include('.autocorrectionDisabled(true)')
+    end
+
     it 'a bound clipToBounds resolves at render time' do
       expect(convert_tree('type' => 'View', 'clipToBounds' => true,
                           'child' => [{ 'type' => 'Label', 'text' => 'a' }]))

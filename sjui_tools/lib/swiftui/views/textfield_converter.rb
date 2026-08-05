@@ -492,11 +492,21 @@ module SjuiTools
             ) if resolved
           end
 
+          # `default` means "leave it to the platform" — the SSoT says so and
+          # web deliberately emits nothing for it. Emitting
+          # `.autocorrectionDisabled(false)` made `default` and `yes` the same
+          # text, so the attribute reacted to being PRESENT and not to its
+          # value (`jui conformance codegen-effect` C2/presence-only on ios).
+          # Not emitting is how "the platform decides" is spelled.
           if (corr = @component['autocorrectionType'])
-            disabled = %w[no none false off].include?(corr.to_s.downcase)
-            @modifier_bag.append(
-              :component_specific, ".autocorrectionDisabled(#{disabled})"
-            )
+            case corr.to_s.downcase
+            when 'default'
+              # nothing: SwiftUI's own default stands
+            when 'no', 'none', 'false', 'off'
+              @modifier_bag.append(:component_specific, '.autocorrectionDisabled(true)')
+            else
+              @modifier_bag.append(:component_specific, '.autocorrectionDisabled(false)')
+            end
           end
 
           if (padding = @component['fieldPadding'])
