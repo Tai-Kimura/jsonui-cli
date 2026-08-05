@@ -525,6 +525,19 @@
       "note": ""
     },
     {
+      "fixture": "SelectBox/datePickerMode__countdown",
+      "component": "SelectBox",
+      "attribute": "datePickerMode",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "declared-value-degrades-to-another",
+      "family": "attributed",
+      "owner": "A (rjui) — declaration fix owned by E",
+      "reason": "NOT an accepted inert. `countDown` selects a DURATION (hours:minutes of length); HTML has no `<input type>` for one — date / time / datetime-local / month / week all name a point in time. rjui falls through to `type=\"date\"` (select_box_converter.rb:418 `else`), so a layout that declares countDown renders a control for picking a DATE: the declaration and the result disagree and the author is not told. This row records the degradation, it does not accept it. Measured across all three toolchains 2026-08-05: no platform implements countDown (android forwards the string to the library, ios does not read datePickerMode at all). The fix is a `platform` declaration removing countDown from web, owned by E and deferred past this release because it needs three-platform agreement; this row goes when that lands.",
+      "note": "Not in value_discrimination.json: countDown and date are BOTH inert against their control, so the pair is excluded by not-both-active and never compared. A discrimination row would claim a measurement the gate does not make."
+    },
+    {
       "fixture": "SelectBox/dateStringFormat__static",
       "component": "SelectBox",
       "attribute": "dateStringFormat",
@@ -581,19 +594,6 @@
       "note": ""
     },
     {
-      "fixture": "Slider/minimum__static",
-      "component": "Slider",
-      "attribute": "minimum",
-      "inertOn": [
-        "android",
-        "ios"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
       "fixture": "Slider/minimum__alias_minValue",
       "component": "Slider",
       "attribute": "minimum",
@@ -618,6 +618,19 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "alias-of-queued-canonical",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Slider/minimum__static",
+      "component": "Slider",
+      "attribute": "minimum",
+      "inertOn": [
+        "android",
+        "ios"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
