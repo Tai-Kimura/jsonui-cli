@@ -67,54 +67,17 @@ module RjuiTools
         end
 
         def get_blur_amount
-          # Use blurRadius if provided directly
+          # An explicit radius or intensity wins; otherwise the material's own
+          # default (BaseConverter::EFFECT_STYLE_BLUR_PX — the same table the
+          # common spelling reads, so Blur and a plain View cannot disagree).
           return attributes['blurRadius'] if attributes['blurRadius']
+          return (attributes['intensity'] * 20).round if attributes['intensity']
 
-          # Use intensity if provided (0.0 to 1.0 mapped to 0 to 20px)
-          if attributes['intensity']
-            (attributes['intensity'] * 20).round
-          else
-            # Default blur based on effect style
-            case get_effect_style
-            when 'ultrathin', 'systemultrathinmaterial'
-              4
-            when 'thin', 'systemthinmaterial'
-              8
-            when 'regular', 'systemmaterial'
-              12
-            when 'thick', 'systemthickmaterial'
-              16
-            when 'chrome', 'systemchromematerial'
-              20
-            else
-              10 # default
-            end
-          end
+          effect_style_blur_px(get_effect_style)
         end
 
         def get_background_color
-          style = get_effect_style
-
-          case style
-          when 'light', 'extralight'
-            'rgba(255, 255, 255, 0.7)'
-          when 'dark'
-            'rgba(0, 0, 0, 0.5)'
-          when 'ultrathin', 'systemultrathinmaterial'
-            'rgba(255, 255, 255, 0.3)'
-          when 'thin', 'systemthinmaterial'
-            'rgba(255, 255, 255, 0.5)'
-          when 'regular', 'systemmaterial'
-            'rgba(255, 255, 255, 0.7)'
-          when 'thick', 'systemthickmaterial'
-            'rgba(255, 255, 255, 0.85)'
-          when 'chrome', 'systemchromematerial'
-            'rgba(255, 255, 255, 0.9)'
-          when 'prominent'
-            'rgba(240, 240, 240, 0.8)'
-          else
-            'rgba(255, 255, 255, 0.6)'
-          end
+          effect_style_background(get_effect_style)
         end
 
         def get_effect_style
@@ -123,7 +86,7 @@ module RjuiTools
           # styled screen matched its style-file reference against blur
           # appearances. sjui had the same misread and no `effectStyle` read at
           # all.
-          attributes['effectStyle'].to_s.downcase.gsub(/\s+/, '').then { |v| v.empty? ? 'regular' : v }
+          effect_style_key
         end
       end
     end

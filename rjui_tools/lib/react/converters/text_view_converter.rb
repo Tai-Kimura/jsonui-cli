@@ -314,7 +314,11 @@ module RjuiTools
           when 'emailaddress', 'email' then 'email'
           when 'url', 'weburl' then 'url'
           when 'websearch', 'search' then 'search'
-          when 'default', 'asciicapable', 'text' then 'text'
+          # `asciiCapable` is an explicit request for a text keyboard;
+          # `default` is "whatever the platform picks", which on the web IS
+          # the absence of an inputMode. Collapsing both onto 'text' made two
+          # declared values emit byte-identical output (C2/presence-only).
+          when 'asciicapable', 'text' then 'text'
           end
         end
 

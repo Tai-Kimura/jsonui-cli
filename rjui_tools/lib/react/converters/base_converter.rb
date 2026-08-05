@@ -415,6 +415,17 @@ module RjuiTools
             classes << 'pointer-events-none'
           end
 
+          # A visual-effect material declared on any component, not just Blur.
+          # BlurConverter builds its own (richer) style from the same tables
+          # and skips this, so the two cannot disagree.
+          if attributes['effectStyle'] && json['type'] != 'Blur'
+            key = effect_style_key
+            blur = effect_style_blur_px(key)
+            @dynamic_styles['backdropFilter'] = "'blur(#{blur}px)'"
+            @dynamic_styles['WebkitBackdropFilter'] = "'blur(#{blur}px)'"
+            @dynamic_styles['backgroundColor'] ||= "'#{effect_style_background(key)}'"
+          end
+
           # Clip to bounds. `map_overflow` is a bare truthiness test, and a
           # `"@{v}"` string is truthy in Ruby — every bound clipToBounds
           # froze to overflow-hidden regardless of what the value became.
@@ -1017,6 +1028,60 @@ module RjuiTools
         def distribution_size_value
           key = attributes['distribution'].to_s.downcase
           DISTRIBUTION_CHILD_CLASS.key?(key) ? key : nil
+        end
+
+        # `effectStyle` — the UIKit visual-effect material, declared on `common`
+        # and not just on Blur.
+        #
+        # Only BlurConverter read it, so a plain View declaring a material got
+        # nothing at all: the codegen-effect gate reported `common.effectStyle`
+        # as unread on all three platforms the moment E's mode audit put these
+        # fixtures back in scope. The vocabulary lives here now rather than in
+        # BlurConverter, so the component that OWNS the concept and the common
+        # spelling cannot answer differently.
+        #
+        # Keys are downcased and whitespace-stripped, matching the way all
+        # three converters already normalise. `Regular` is the declared
+        # default and the fallback all three already used.
+        EFFECT_STYLE_BLUR_PX = {
+          'ultrathin' => 4, 'systemultrathinmaterial' => 4,
+          'thin' => 8, 'systemthinmaterial' => 8,
+          'regular' => 12, 'systemmaterial' => 12,
+          'thick' => 16, 'systemthickmaterial' => 16,
+          'chrome' => 20, 'systemchromematerial' => 20
+        }.freeze
+        EFFECT_STYLE_DEFAULT_BLUR_PX = 10
+
+        EFFECT_STYLE_BACKGROUND = {
+          'light' => 'rgba(255, 255, 255, 0.7)',
+          'extralight' => 'rgba(255, 255, 255, 0.7)',
+          'dark' => 'rgba(0, 0, 0, 0.5)',
+          'ultrathin' => 'rgba(255, 255, 255, 0.3)',
+          'systemultrathinmaterial' => 'rgba(255, 255, 255, 0.3)',
+          'thin' => 'rgba(255, 255, 255, 0.5)',
+          'systemthinmaterial' => 'rgba(255, 255, 255, 0.5)',
+          'regular' => 'rgba(255, 255, 255, 0.7)',
+          'systemmaterial' => 'rgba(255, 255, 255, 0.7)',
+          'thick' => 'rgba(255, 255, 255, 0.85)',
+          'systemthickmaterial' => 'rgba(255, 255, 255, 0.85)',
+          'chrome' => 'rgba(255, 255, 255, 0.9)',
+          'systemchromematerial' => 'rgba(255, 255, 255, 0.9)',
+          'prominent' => 'rgba(240, 240, 240, 0.8)'
+        }.freeze
+        EFFECT_STYLE_DEFAULT_BACKGROUND = 'rgba(255, 255, 255, 0.6)'
+
+        # The declared value, normalised. `regular` when absent.
+        def effect_style_key(value = attributes['effectStyle'])
+          normalized = value.to_s.downcase.gsub(/\s+/, '')
+          normalized.empty? ? 'regular' : normalized
+        end
+
+        def effect_style_blur_px(key)
+          EFFECT_STYLE_BLUR_PX.fetch(key, EFFECT_STYLE_DEFAULT_BLUR_PX)
+        end
+
+        def effect_style_background(key)
+          EFFECT_STYLE_BACKGROUND.fetch(key, EFFECT_STYLE_DEFAULT_BACKGROUND)
         end
 
         #: The declared default when a value is absent or unrecognised
@@ -1732,8 +1797,13 @@ module RjuiTools
             'url'
           when 'search', 'websearch'
             'search'
-          else
-            nil
+          # `alphabet` (and its `allphabet` typo alias) is the ASCII-capable
+          # keyboard — the author asking for a TEXT keyboard explicitly, as
+          # distinct from `default`, which is "whatever the platform picks".
+          # Both used to emit nothing, so two declared values reached the DOM
+          # identically and `input` measured as unread on web.
+          when 'alphabet', 'allphabet', 'asciicapable', 'text'
+            'text'
           end
         end
 

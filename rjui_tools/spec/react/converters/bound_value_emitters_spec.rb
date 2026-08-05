@@ -11,6 +11,7 @@ require 'react/converters/switch_converter'
 require 'react/converters/text_view_converter'
 require 'react/converters/text_field_converter'
 require 'react/converters/collection_converter'
+require 'react/converters/blur_converter'
 
 # The bound-value emitter series (plan 49 lane A).
 #
@@ -275,6 +276,79 @@ RSpec.describe 'bound value emitters' do
         expect(out).to include("#{property}: data.v ? 'auto' : undefined")
         expect(out).not_to include('-auto"'), 'baked the class for a runtime value'
       end
+    end
+  end
+
+  # `effectStyle` is declared on `common`, not just on Blur, but only
+  # BlurConverter read it — so a plain View declaring a material got nothing.
+  # The vocabulary now lives in BaseConverter, which is also what stops the
+  # component that OWNS the concept and the common spelling from answering
+  # differently.
+  describe 'effectStyle on a component that is not Blur' do
+    # The vocabulary has two halves: the THICKNESS names (ultraThin … chrome)
+    # carry a blur radius, the APPEARANCE names (light / dark / extraLight /
+    # prominent) carry only a tint and take the default radius. That split is
+    # what BlurConverter already did; it is preserved, not invented.
+    it 'emits the material a declared style asks for' do
+      out = view('effectStyle' => 'Dark')
+      expect(out).to include("backdropFilter: 'blur(10px)'")
+      expect(out).to include("backgroundColor: 'rgba(0, 0, 0, 0.5)'")
+    end
+
+    it 'gives the appearance names their own tint at the default radius' do
+      tints = %w[Light Dark Prominent].map { |s| view('effectStyle' => s)[/backgroundColor: '([^']+)'/, 1] }
+      expect(tints.uniq.length).to eq(3)
+      expect(%w[Light Dark Prominent].map { |s| view('effectStyle' => s)[/blur\((\d+)px\)/, 1] }).to all(eq('10'))
+    end
+
+    it 'gives the thickness vocabulary distinct blur radii' do
+      radii = %w[UltraThin Thin Regular Thick Chrome].map do |style|
+        view('effectStyle' => style)[/blur\((\d+)px\)/, 1]
+      end
+      expect(radii).to eq(%w[4 8 12 16 20])
+    end
+
+    it 'leaves Blur to its own richer builder' do
+      out = convert({ 'type' => 'Blur', 'effectStyle' => 'Thin' },
+                    RjuiTools::React::Converters::BlurConverter)
+      expect(out.scan('backdropFilter').length).to eq(1), 'base and Blur both emitted'
+      expect(out).to include("blur(8px)")
+    end
+
+    # A Blur with no declared style falls back to `regular`, whose radius is
+    # 12 — NOT the 10 the unrecognised-value fallback uses. Dropping that row
+    # while moving the table into BaseConverter silently moved every default
+    # Blur from 12px to 10px; the fixture diff caught it.
+    it 'keeps the regular default at 12, distinct from the unknown fallback' do
+      out = convert({ 'type' => 'Blur' }, RjuiTools::React::Converters::BlurConverter)
+      expect(out).to include('blur(12px)')
+    end
+  end
+
+  # `alphabet` / `asciiCapable` is an explicit request for a text keyboard;
+  # `default` is "whatever the platform picks", which on the web IS the
+  # absence of an inputMode. Collapsing both onto the same output made two
+  # declared values indistinguishable.
+  describe 'the text-keyboard vocabulary' do
+    it 'emits inputMode for an explicit alphabet keyboard' do
+      out = convert({ 'type' => 'TextField', 'input' => 'alphabet' },
+                    RjuiTools::React::Converters::TextFieldConverter)
+      expect(out).to include('inputMode="text"')
+    end
+
+    it 'emits no inputMode for default' do
+      out = convert({ 'type' => 'TextField', 'input' => 'default' },
+                    RjuiTools::React::Converters::TextFieldConverter)
+      expect(out).not_to include('inputMode')
+    end
+
+    it 'distinguishes keyboardType default from asciiCapable on TextView' do
+      a = convert({ 'type' => 'TextView', 'keyboardType' => 'default' },
+                  RjuiTools::React::Converters::TextViewConverter)
+      b = convert({ 'type' => 'TextView', 'keyboardType' => 'asciiCapable' },
+                  RjuiTools::React::Converters::TextViewConverter)
+      expect(a).not_to eq(b)
+      expect(b).to include('inputMode="text"')
     end
   end
 
