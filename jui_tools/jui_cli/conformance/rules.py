@@ -405,8 +405,28 @@ def is_non_observable(section: str, attribute: str) -> bool:
     )
 
 
+#: Required pixel size of every bundled conformance asset, on every host.
+#:
+#: The contract used to name the assets and say nothing about their size, and
+#: the three hosts drifted: ios 64x64, web 96x96, android 128x128 (measured
+#: 2026-08-05). Size is not cosmetic here — it decides whether `contentMode` is
+#: measurable at all. Against the 140x80 Image frame:
+#:
+#:   64   fits INSIDE the frame, so top / center / bottom can only move 8pt
+#:        apart and the position values are nearly indistinguishable
+#:   96   overflows vertically, so each position crops different content
+#:   128  overflows further, same effect
+#:
+#: 96 is the smallest size that overflows, and `conformance_sample_alt` is
+#: already 96 on all three, so aligning on it is the one-file change.
+#:
+#: The hosts own their asset directories (ios F, android G, web A), so this
+#: constant is the contract, not the fix.
+CONFORMANCE_ASSET_PIXELS = 96
+
 #: Attributes that reference a bundled image asset. Platform host apps
-#: (plans 02/03/04) must bundle an asset with this name.
+#: (plans 02/03/04) must bundle an asset with this name, at
+#: :data:`CONFORMANCE_ASSET_PIXELS` square.
 IMAGE_ASSET_NAME = "conformance_sample"
 
 #: Distinct second asset for STATE images (NetworkImage placeholder/hint/
