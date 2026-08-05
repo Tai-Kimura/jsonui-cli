@@ -438,3 +438,47 @@ class LedgerKeyTest(unittest.TestCase):
     def test_missing_manifest_is_a_problem_not_a_pass(self):
         (self.conf / "manifest.json").unlink()
         self.assertEqual(len(gate.judge_ledger_keys(self.conf)), 1)
+
+
+class LedgerKeyFlagBecomesDefaultTest(unittest.TestCase):
+    """The flag is temporary, and this is what stops it from being forever.
+
+    `--ledger-keys` is opt-in only because 31 rows were already dangling
+    when the check landed, and turning it on would have reddened every
+    other lane's gate for someone else's rename. The moment those are gone
+    the reason is gone with them — and a check nobody passes the flag for
+    is a check that does not run, which is the exact failure plan 50 found
+    in a script the dev-guide swore was enforcing something.
+
+    So this test fails as soon as the backlog clears: not a reminder in a
+    document, which is the form that failed before.
+    """
+
+    REPO = Path(__file__).resolve().parents[2]
+
+    @unittest.skipUnless((REPO / "conformance" / "manifest.json").is_file(),
+                         "not a repo checkout")
+    def test_flag_flips_to_default_once_the_backlog_is_clear(self):
+        import inspect
+
+        problems = gate.judge_ledger_keys(
+            self.REPO / "conformance",
+            self.REPO / "shared" / "core" / "attribute_semantics.json",
+        )
+        default_on = (
+            inspect.signature(gate.evaluate).parameters["ledger_keys"].default is True
+        )
+        if problems:
+            self.assertFalse(
+                default_on,
+                "dangling ledger rows remain; turning the check on by default now "
+                "would fail every lane's gate for someone else's rename",
+            )
+            return
+        self.assertTrue(
+            default_on,
+            "no ledger row is dangling any more, so --ledger-keys has nothing left "
+            "to protect other lanes from: make it the default (evaluate(..., "
+            "ledger_keys: bool = True)) and drop the flag from the workflows, or "
+            "it becomes a check that only runs when someone remembers to ask",
+        )
