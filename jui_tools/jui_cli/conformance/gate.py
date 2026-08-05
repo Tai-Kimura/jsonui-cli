@@ -137,6 +137,7 @@ def evaluate(
     inert_complete: bool = False,
     codegen_effect: bool = False,
     ledger_keys: bool = False,
+    value_discrimination: bool = False,
     rendered_by: dict[str, str] | None = None,
     repo_root: Path | None = None,
     ruby: str = "ruby",
@@ -184,6 +185,23 @@ def evaluate(
                 results_dir=results_dir,
                 definitions_path=definitions_path,
                 semantics_path=semantics_path,
+                env=env,
+            )
+            outcome.problems.extend(problems)
+            outcome.notices.extend(notices)
+
+    if value_discrimination:
+        if not visual:
+            outcome.problems.append(
+                "--value-discrimination needs the visual checks: it compares two "
+                "values' screenshots, which --no-visual does not produce"
+            )
+        else:
+            problems, notices = judge_value_discrimination(
+                conformance_dir,
+                platforms,
+                results_dir=results_dir,
+                definitions_path=definitions_path,
                 env=env,
             )
             outcome.problems.extend(problems)
@@ -311,6 +329,96 @@ SCREENSHOT_KEYED_LEDGERS = (("codegen_parity.json", "screenshot"),)
 
 def screenshot_name(fixture_id: str) -> str:
     return fixture_id.replace("/", "_") + ".png"
+
+
+def judge_value_discrimination(
+    conformance_dir: Path,
+    platforms: Sequence[str],
+    *,
+    results_dir: Path | None = None,
+    definitions_path: Path | None = None,
+    env: str = DEFAULT_ENV,
+) -> tuple[list[str], list[str]]:
+    """Two declared values of one attribute must not draw the same picture.
+
+    The gap the other checks leave: a value that is read, reacted to, and
+    then mapped onto the same layout as its sibling satisfies every one of
+    them. `distribution` sat there with four declared values and three
+    distinct renders until someone compared them by hand.
+
+    Only pairs where BOTH values are active against their control are
+    judged — if either is inert the attribute is not discriminating at all,
+    and --inert-complete owns that. Alias cases, bound cases, and values the
+    SSoT calls the same are excluded before comparing.
+    """
+    import hashlib
+    import json as _json
+
+    from . import control_diff as cd
+    from . import value_discrimination as vd
+    from .report import load_platform_results
+
+    conformance_dir = Path(conformance_dir)
+    problems: list[str] = []
+    notices: list[str] = []
+
+    manifest_path = conformance_dir / "manifest.json"
+    if not manifest_path.is_file():
+        return ([f"value-discrimination: no manifest ({manifest_path})"], [])
+    manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+
+    definitions = {}
+    if definitions_path and Path(definitions_path).is_file():
+        definitions = _json.loads(Path(definitions_path).read_text(encoding="utf-8"))
+
+    results_dir = Path(results_dir) if results_dir else conformance_dir / "results"
+    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash)}
+    ledger = vd.load_ledger(vd.ledger_path(conformance_dir))
+
+    for platform in dict.fromkeys(platforms):
+        pr = loaded.get(platform)
+        if pr is None:
+            continue
+        active = set(
+            cd.compare(conformance_dir, platform, manifest, pr.results, env=env).active
+        )
+        result = vd.measure(
+            conformance_dir,
+            platform,
+            manifest,
+            pr.results,
+            env=env,
+            definitions=definitions,
+            active=active,
+        )
+        verdict = vd.check(result, ledger)
+        if verdict.unrecorded:
+            shown = "; ".join(verdict.unrecorded[:5]) + (
+                " ..." if len(verdict.unrecorded) > 5 else ""
+            )
+            problems.append(
+                f"{platform}: {len(verdict.unrecorded)} declared value(s) that draw "
+                f"what another declared value draws, not in {vd.LEDGER_NAME} - the "
+                f"SSoT says they differ and the render says they do not: {shown}"
+            )
+        if verdict.stale:
+            shown = ", ".join(verdict.stale[:5]) + (" ..." if len(verdict.stale) > 5 else "")
+            problems.append(
+                f"{platform}: {len(verdict.stale)} stale {vd.LEDGER_NAME} entr(y/ies) - "
+                f"the values discriminate now, so the row goes: {shown}"
+            )
+        if verdict.incomplete:
+            problems.append(
+                f"{platform}: {len(verdict.incomplete)} {vd.LEDGER_NAME} entr(y/ies) "
+                f"without an owner or a reason"
+            )
+        notices.append(
+            f"{platform}: value discrimination - {result.compared} pair(s) compared "
+            f"over {result.groups} attribute(s), {verdict.accepted} accepted collapse(s) "
+            f"on ledger, excluded {result.excluded}"
+        )
+    return problems, notices
 
 
 def judge_ledger_keys(conformance_dir: Path, semantics_path: Path | None = None) -> list[str]:

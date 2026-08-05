@@ -130,6 +130,19 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         ),
     )
     gate.add_argument(
+        "--value-discrimination",
+        dest="value_discrimination",
+        action="store_true",
+        help=(
+            "Also judge that two declared VALUES of one attribute draw "
+            "different pictures. Every other check compares a fixture to its "
+            "control, another platform, or the codegen's render of itself; an "
+            "attribute that maps every value onto the same layout passes all "
+            "of them. Collapses must be recorded in value_discrimination.json "
+            "with an owner and a reason; stale entries fail too"
+        ),
+    )
+    gate.add_argument(
         "--ledger-keys",
         dest="ledger_keys",
         action="store_true",
@@ -1673,6 +1686,9 @@ def _cmd_gate(args: argparse.Namespace) -> int:
             inert_complete=bool(getattr(args, "inert_complete", False)),
             codegen_effect=bool(getattr(args, "codegen_effect", False)),
             ledger_keys=bool(getattr(args, "ledger_keys", False)),
+            value_discrimination=bool(
+                getattr(args, "value_discrimination", False)
+            ),
             rendered_by=_parse_rendered_by(getattr(args, "rendered_by", None)),
             repo_root=_REPO_ROOT,
             definitions_path=_DEFAULT_DEFINITIONS,
