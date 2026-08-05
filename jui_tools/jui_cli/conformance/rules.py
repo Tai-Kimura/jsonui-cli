@@ -1338,6 +1338,20 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # there were no glyphs for a colour to land on.
     "SelectBox.fontColor": {"prompt": "Choose"},
     "SelectBox.hintColor": {"prompt": "Choose"},
+    # Same gap, same companion, two attributes further along: a weight and a
+    # size need glyphs to apply to just as much as a colour does. The A3 round
+    # caught the colours and stopped there, so `font` and `fontSize` kept
+    # styling the closed box's empty selected text. Found by G while
+    # registering the `selectedIndex` prediction — the point being that fixing
+    # `selectedIndex` would not have moved these two either.
+    "SelectBox.font": {"prompt": "Choose"},
+    "SelectBox.fontSize": {"prompt": "Choose"},
+    # Found by checking the siblings rather than reported: `labelAttributes`
+    # declares font / fontSize / fontColor / textAlign and no text of its own,
+    # so it styles the same empty closed label. `hint` and `placeholder` are
+    # deliberately NOT here — they ARE the text under test, and a prompt would
+    # win over them exactly the way the base `text` used to beat `Label.hint`.
+    "SelectBox.labelAttributes": {"prompt": "Choose"},
     # Track/progress tints need a nonzero value or there is nothing to
     # paint (a zero-length active track is invisible on every platform).
     # Slider's canonical value attribute is `value`; Progress's is `progress`

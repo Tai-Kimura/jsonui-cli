@@ -12201,7 +12201,7 @@
       "test": "fixtures/SelectBox/font__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox"
+      "control": "__control/SelectBox__prompt-Choose"
     },
     {
       "id": "SelectBox/fontSize__static",
@@ -12224,7 +12224,7 @@
       "test": "fixtures/SelectBox/fontSize__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox"
+      "control": "__control/SelectBox__prompt-Choose"
     },
     {
       "id": "SelectBox/fontColor__static",
@@ -12275,7 +12275,7 @@
       "test": "fixtures/SelectBox/labelAttributes__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox"
+      "control": "__control/SelectBox__prompt-Choose"
     },
     {
       "id": "SelectBox/inView__static",

@@ -21,6 +21,7 @@
         "One",
         "Two"
       ],
+      "prompt": "Choose",
       "labelAttributes": {
         "font": "bold",
         "fontSize": 24,
