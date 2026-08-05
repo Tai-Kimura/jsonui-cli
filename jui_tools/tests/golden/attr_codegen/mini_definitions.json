@@ -68,6 +68,10 @@
     }
   },
   "Label": {
+    "_comment": {
+      "type": "string",
+      "description": "Developer comment (ignored at runtime) — a DECLARED attribute whose name reads like a section directive. Excluded, and the exclusion is recorded."
+    },
     "text": {
       "type": [
         "string",

@@ -181,7 +181,16 @@ def build_model(data: dict[str, Any]) -> AttrModel:
                 section = target
         attrs: list[Attribute] = []
         overrides: list[str] = []
-        for attr_name in sorted(k for k in section if not k.startswith("_")):
+        # `_`-prefixed keys are section DIRECTIVES (`_alias_of`, `_alias`, and
+        # the prose `_comment`) — 15 of the 16 in the SSoT, all strings, and
+        # the `isinstance(entry, dict)` guard below drops every one of them.
+        # The sixteenth is `View._comment`, a real declared attribute carrying
+        # a type and a description. Filtering the prefix here excluded it
+        # BEFORE `classify_attr`, i.e. before the only place that records why
+        # an attribute was excluded, so it was the one spelling dropped
+        # without a line in skipped_attributes.json. Excluding it is right;
+        # doing so silently is the part that was not (plan 49 lane C).
+        for attr_name in sorted(section):
             entry = section[attr_name]
             if not isinstance(entry, dict):
                 continue
@@ -236,6 +245,16 @@ def classify_attr(
             component=component,
             name=name,
             reason="callback type — function-valued, not extractable from JSON",
+            type_repr=type_repr,
+        )
+    if name.startswith("_"):
+        # A declared attribute whose name reads as a section directive — the
+        # SSoT has exactly one (`View._comment`). Never emitted, and now said
+        # so out loud rather than filtered upstream of this function.
+        return SkippedAttr(
+            component=component,
+            name=name,
+            reason="developer metadata — leading underscore, never rendered",
             type_repr=type_repr,
         )
     if name in METADATA_ATTRS or name.startswith("$"):

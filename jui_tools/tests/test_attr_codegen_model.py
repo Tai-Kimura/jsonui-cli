@@ -199,6 +199,55 @@ class BuildModelTests(unittest.TestCase):
         switch = next(c for c in model.components if c.name == "Switch")
         self.assertEqual(switch.common_overrides, ("tintColor",))
 
+    def test_a_declared_underscore_attribute_is_skipped_WITH_a_reason(self):
+        """`_`-prefixed names are two different things in one namespace.
+
+        Section DIRECTIVES (`_alias_of`, `_alias`, the prose `_comment`) are
+        strings and are not attributes at all. `View._comment` is a dict
+        carrying a type — a declared attribute whose name happens to read
+        like a directive. Both are excluded from the emitted tables, and
+        that is right; only the second one has something to record, and it
+        used to be filtered out upstream of classify_attr, so it was the
+        one exclusion with no line in skipped_attributes.json.
+        """
+        defs = {
+            "common": {"id": {"type": "string"}},
+            "Label": {
+                "_comment": {"type": "string", "description": "dev comment"},
+                "text": {"type": "string"},
+            },
+            # Directives only — no declared attribute with a `_` name.
+            "Switch": {
+                "_alias": "Toggle",
+                "_comment": "prose, not an attribute",
+                "value": {"type": "boolean"},
+            },
+            "Text": {"_alias_of": "Label", "_comment": "prose, not an attribute"},
+        }
+        model = build_model(defs)
+        skipped = {(s.component, s.name): s.reason for s in model.skipped}
+
+        self.assertIn(("Label", "_comment"), skipped)
+        self.assertIn("leading underscore", skipped[("Label", "_comment")])
+        # Never emitted — recording it must not smuggle it into the table.
+        label = next(c for c in model.components if c.name == "Label")
+        self.assertEqual([a.name for a in label.attrs], ["text"])
+
+        # String directives stay invisible: they are not attributes, so a row
+        # for them would be noise, and `_alias_of` still does its job.
+        self.assertNotIn(("Switch", "_alias"), skipped)
+        self.assertNotIn(("Switch", "_comment"), skipped)
+        switch = next(c for c in model.components if c.name == "Switch")
+        self.assertEqual([a.name for a in switch.attrs], ["value"])
+
+        # An alias clones the whole target section, so it inherits the row —
+        # same as any other skipped attribute of the target, and its own
+        # prose `_comment` is discarded with the rest of its body.
+        text = next(c for c in model.components if c.name == "Text")
+        self.assertEqual(text.alias_of, "Label")
+        self.assertIn("leading underscore", skipped[("Text", "_comment")])
+        self.assertNotIn(("Text", "_alias_of"), skipped)
+
     def test_skip_list(self):
         model = build_model(self.DEFS)
         skipped = {(s.component, s.name) for s in model.skipped}
@@ -238,7 +287,16 @@ class RealDefinitionsTests(unittest.TestCase):
         # `callback` said "not extractable from JSON", which is true of a
         # function and false of the `@{handler}` string a layout actually holds.
         self.assertNotIn(("Collection", "onItemAppear"), skipped)
-        self.assertTrue(all(c == "common" for c, _ in skipped), skipped)
+        # Two families, and nothing else. `common`'s metadata keys, plus the
+        # one declared attribute whose NAME reads as a section directive:
+        # `View._comment` is a dict carrying a type, unlike the 15 other
+        # `_`-prefixed keys in the SSoT, which are strings (`_alias_of`,
+        # `_alias`, and the prose `_comment`). It used to be filtered out
+        # upstream of classify_attr, i.e. upstream of the only place that
+        # records WHY something was excluded — the one spelling dropped with
+        # no row in skipped_attributes.json (plan 49 lane C).
+        self.assertEqual({c for c, _ in skipped}, {"common", "View"}, skipped)
+        self.assertIn(("View", "_comment"), skipped)
 
     def test_no_alias_is_cancelled_by_a_declaration_of_its_own_name(self):
         """An alias spelling must not ALSO be a declared attribute.
