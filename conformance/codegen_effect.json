@@ -31,46 +31,6 @@
       "owner": "H",
       "reason": "probe-scope",
       "note": "rjui emits this at the GENERATOR level, not in a converter, and tools/codegen_probe.rb drives `<X>Converter#convert` only. Driving ReactGenerator directly gives 'top' for the fixture and 'bottom' for its control, so the attribute IS read. The same blind spot covers defaultScrollAnchor / currentPage / onItemAppear (react_generator.rb:751-793)."
-    },
-    {
-      "component": "common",
-      "attribute": "heightWeight",
-      "platform": "android",
-      "check": "C1",
-      "class": "bound-dropped",
-      "owner": "C",
-      "reason": "kjui-codegen",
-      "note": "kjui build_weight reads json_data['weight'] and nothing else; `heightWeight` and `widthWeight` do not appear in it at all (modifier_builder.rb:98-117). C0 passes because the SPELLING is read elsewhere in the same file to decide `explicit_height`; the VALUE never reaches a modifier."
-    },
-    {
-      "component": "common",
-      "attribute": "heightWeight",
-      "platform": "android",
-      "check": "C2",
-      "class": "presence-only",
-      "owner": "C",
-      "reason": "kjui-codegen",
-      "note": "Same cause as the C1 row: two different weights emit identical text because build_weight never looks at the heightWeight value."
-    },
-    {
-      "component": "common",
-      "attribute": "tintColor",
-      "platform": "android",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "unreviewed-initial-measurement",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "component": "common",
-      "attribute": "tintColor",
-      "platform": "android",
-      "check": "C1",
-      "class": "bound-dropped",
-      "owner": "unreviewed-initial-measurement",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
     }
   ]
 }
