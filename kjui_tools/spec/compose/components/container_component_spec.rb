@@ -82,22 +82,70 @@ RSpec.describe KjuiTools::Compose::Components::ContainerComponent do
       expect(result[:code]).to include('horizontalArrangement = Arrangement.spacedBy(16.dp)')
     end
 
-    it 'adds distribution for fillEqually' do
-      json_data = { 'type' => 'View', 'orientation' => 'vertical', 'distribution' => 'fillEqually' }
-      result = described_class.generate(json_data, 0, required_imports)
-      expect(result[:code]).to include('Arrangement.SpaceEvenly')
+    # `distribution` has two halves. `equalSpacing` / `equalCentering`
+    # distribute the space BETWEEN children (an Arrangement); `fill` /
+    # `fillEqually` instruct the CHILD's axis (a weight on each child, and no
+    # arrangement at all). All four used to emit an arrangement, and all four
+    # picked the wrong one. The corrected pair is the dynamic component's,
+    # which is canonical (plan 49 lane C, 4th-round parity).
+    def child_pair
+      [{ 'type' => 'Label', 'text' => 'A' }, { 'type' => 'Label', 'text' => 'BBBB' }]
     end
 
-    it 'adds distribution for fill' do
-      json_data = { 'type' => 'View', 'orientation' => 'horizontal', 'distribution' => 'fill' }
+    it 'gives fill a weight per child, loose, and no arrangement' do
+      json_data = { 'type' => 'View', 'orientation' => 'horizontal',
+                    'distribution' => 'fill', 'child' => child_pair }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result[:code]).to include('Arrangement.SpaceBetween')
+      expect(result[:code]).not_to include('Arrangement')
+      expect(result[:children].map { |c| c['weight'] }).to eq([1, 1])
+      expect(result[:children].map { |c| c[described_class::LOOSE] }).to eq([true, true])
     end
 
-    it 'adds distribution for equalSpacing' do
+    it 'gives fillEqually a weight per child, filled, and no arrangement' do
+      json_data = { 'type' => 'View', 'orientation' => 'horizontal',
+                    'distribution' => 'fillEqually', 'child' => child_pair }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result[:code]).not_to include('Arrangement')
+      expect(result[:children].map { |c| c['weight'] }).to eq([1, 1])
+      expect(result[:children].map { |c| c[described_class::LOOSE] }).to eq([nil, nil])
+    end
+
+    it 'distributes a Column along its own axis' do
+      json_data = { 'type' => 'View', 'orientation' => 'vertical',
+                    'distribution' => 'fillEqually', 'child' => child_pair }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result[:children].map { |c| c['heightWeight'] }).to eq([1, 1])
+      expect(result[:children].map { |c| c['weight'] }).to eq([nil, nil])
+    end
+
+    it 'leaves a child that declares its own weight alone' do
+      json_data = { 'type' => 'View', 'orientation' => 'horizontal',
+                    'distribution' => 'fill',
+                    'child' => [{ 'type' => 'Label', 'weight' => 2 }] }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result[:children].first['weight']).to eq(2)
+      expect(result[:children].first[described_class::LOOSE]).to be_nil
+    end
+
+    it 'maps equalSpacing to the gaps BETWEEN children' do
       json_data = { 'type' => 'View', 'orientation' => 'vertical', 'distribution' => 'equalSpacing' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result[:code]).to include('Arrangement.SpaceAround')
+      expect(result[:code]).to include('verticalArrangement = Arrangement.SpaceBetween')
+    end
+
+    it 'maps equalCentering to equal centre-to-centre tracks' do
+      json_data = { 'type' => 'View', 'orientation' => 'horizontal', 'distribution' => 'equalCentering' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result[:code]).to include('horizontalArrangement = Arrangement.SpaceAround')
+    end
+
+    it 'lets an explicit spacing win the axis it speaks about' do
+      json_data = { 'type' => 'View', 'orientation' => 'horizontal',
+                    'distribution' => 'equalSpacing', 'spacing' => 8 }
+      result = described_class.generate(json_data, 0, required_imports)
+      # Emitting both put the same named argument twice, which does not compile.
+      expect(result[:code].scan('horizontalArrangement =').size).to eq(1)
+      expect(result[:code]).to include('Arrangement.spacedBy(8.dp)')
     end
 
     it 'reverses children for bottomToTop direction' do

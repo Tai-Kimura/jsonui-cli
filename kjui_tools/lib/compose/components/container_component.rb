@@ -8,6 +8,9 @@ module KjuiTools
   module Compose
     module Components
       class ContainerComponent
+        # Marker this container sets on a child it distributes `fill` to.
+        LOOSE = Helpers::ModifierBuilder::LOOSE_WEIGHT_KEY
+
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
           container_type = json_data['type'] || 'View'
           orientation = json_data['orientation']
@@ -122,24 +125,38 @@ module KjuiTools
             code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{spacing_dp})", depth + 1) if layout == 'Row'
           end
           
-          # Add distribution for Column/Row
+          # `distribution` has two halves and they are not the same half.
+          #
+          # `equalSpacing` / `equalCentering` distribute the SPACE BETWEEN
+          # children — an Arrangement. `fill` / `fillEqually` instruct the
+          # CHILD's axis — a weight on each child, and no arrangement at all.
+          # Every one of the four was emitted as an arrangement here, and all
+          # four picked the wrong one:
+          #
+          #   fill           SpaceBetween -> child weights, fill = false
+          #   fillEqually    SpaceEvenly  -> child weights, fill = true
+          #   equalSpacing   SpaceAround  -> SpaceBetween
+          #   equalCentering SpaceEvenly  -> SpaceAround
+          #
+          # The two corrected arrangements are the dynamic component's, which
+          # is canonical here (DynamicContainerComponent.parseColumnVertical/
+          # RowHorizontalArrangement): equalSpacing is equal gaps BETWEEN
+          # adjacent children with no outer gap (SpaceBetween), and
+          # equalCentering is equal centre-to-centre distance, i.e. each child
+          # centred in an equal track (SpaceAround) — SpaceEvenly leaves the
+          # outer children off-centre in their tracks, so it is neither.
+          #
+          # An explicit `spacing` pins the gap and wins the axis it speaks
+          # about; emitting both also produced the same named argument twice,
+          # which does not compile (plan 49 lane C, 4th round parity).
           if json_data['distribution'] && (layout == 'Column' || layout == 'Row')
-            required_imports&.add(:arrangement)
-            
             arrangement = case json_data['distribution']
-            when 'fillEqually'
-              'Arrangement.SpaceEvenly'
-            when 'fill'
-              'Arrangement.SpaceBetween'
-            when 'equalSpacing'
-              'Arrangement.SpaceAround'
-            when 'equalCentering'
-              'Arrangement.SpaceEvenly'
-            else
-              nil
-            end
-            
-            if arrangement
+                          when 'equalSpacing' then 'Arrangement.SpaceBetween'
+                          when 'equalCentering' then 'Arrangement.SpaceAround'
+                          end
+
+            if arrangement && !json_data['spacing']
+              required_imports&.add(:arrangement)
               code += ",\n" + indent("verticalArrangement = #{arrangement}", depth + 1) if layout == 'Column'
               code += ",\n" + indent("horizontalArrangement = #{arrangement}", depth + 1) if layout == 'Row'
             end
@@ -161,12 +178,48 @@ module KjuiTools
             end
           end
           
+          # The size half of `distribution`: `fill` and `fillEqually` give each
+          # child a share of the main axis, which in Compose is a weight ON THE
+          # CHILD. Nothing here emitted one, so both values only ever moved the
+          # gaps — the two of them were indistinguishable from each other and
+          # from their control until D gave the fixture children of different
+          # intrinsic sizes (661bfba).
+          #
+          # `fill` keeps those intrinsic proportions while consuming the axis
+          # (`fill = false` lets a child stay smaller than its share);
+          # `fillEqually` flattens them (the default `fill = true`). A child
+          # that declares its own weight keeps it, and keeps the default fill —
+          # it is no longer being distributed to. Same three rules as
+          # DynamicContainerComponent (`getWeight(child) ?: distributedWeight`).
+          distribute_main_axis!(children, json_data['distribution'], layout)
+
           # Return structure for parent to process children
           { code: code, children: children, closing: "\n" + indent("}", depth), layout_type: layout, json_data: json_data }
         end
         
         private
         
+        # Give each child of a `fill` / `fillEqually` container its share of
+        # the main axis. Mutates the child hashes, the way the dynamic
+        # component injects into the child JSON — `build_weight` is what
+        # emits, so the weight lands in the CHILD's own modifier chain, which
+        # is where Compose needs it (`weight` is scope-bound).
+        def self.distribute_main_axis!(children, distribution, layout)
+          return unless %w[fill fillEqually].include?(distribution)
+          return unless layout == 'Column' || layout == 'Row'
+
+          axis_weight = layout == 'Column' ? 'heightWeight' : 'weight'
+          children.each do |child|
+            next unless child.is_a?(Hash)
+            # A child that declares its own weight keeps it and is not being
+            # distributed to, so it keeps the default fill as well.
+            next if child['weight'] || child['heightWeight'] || child['widthWeight']
+
+            child[axis_weight] = 1
+            child[Helpers::ModifierBuilder::LOOSE_WEIGHT_KEY] = true if distribution == 'fill'
+          end
+        end
+
         def self.has_relative_positioning?(children)
           relative_attrs = [
             'alignTopOfView', 'alignBottomOfView', 'alignLeftOfView', 'alignRightOfView',
