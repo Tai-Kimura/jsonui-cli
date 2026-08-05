@@ -57,14 +57,59 @@ class ParityMeasureTest(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
-    def test_buckets_every_baseline_name_exactly_once(self):
+    def test_buckets_every_name_from_both_pipelines_exactly_once(self):
         result = parity.measure(self.conf, "ios")
         self.assertIsNone(result.error)
+        self.assertEqual(result.source, "dynamic")
         self.assertEqual(result.matched, ["A.png"])
         self.assertEqual([n for n, _ in result.mismatched], ["B.png"])
         self.assertGreater(result.mismatched[0][1], result.threshold)
+        # One-sided names are kept apart from the deviations and from each
+        # other: C is a fixture the codegen host did not render, D one the
+        # dynamic host did not. Neither is "the two draw different things".
         self.assertEqual(result.missing, ["C.png"])
-        self.assertEqual(result.extra, ["D.png"])
+        self.assertEqual(result.codegen_only, ["D.png"])
+
+    def test_compares_names_the_baseline_predates(self):
+        """A fixture added after the bake is compared, not skipped.
+
+        The first shape looped over the baseline's key space, so a new
+        fixture was never measured — 168 of 662 renders in the run that
+        found it, most of them this wave's bound fixtures.
+        """
+        _write_png(self.conf / "artifacts" / "ios" / "E.png")
+        _write_png(
+            self.conf / "artifacts" / "ios-codegen" / "E.png", box=(0, 0, 200, 180)
+        )
+        result = parity.measure(self.conf, "ios")
+        self.assertIn("E.png", [n for n, _ in result.mismatched])
+
+    def test_stale_baseline_does_not_invent_deviations(self):
+        """Drift of the baseline is not drift between the pipelines.
+
+        Rehashing the baseline off a different render leaves the two
+        pipelines agreeing; only the baseline moved. The measurement must
+        not report that as a codegen defect.
+        """
+        _write_png(self.conf / "artifacts" / "ios-codegen" / "C.png",
+                   gradient_horizontal=False)
+        for name in ("A.png", "B.png", "C.png"):
+            _write_png(self.conf / "artifacts" / "ios" / name,
+                       box=(5, 5, 250, 185))
+            _write_png(self.conf / "artifacts" / "ios-codegen" / name,
+                       box=(5, 5, 250, 185))
+        result = parity.measure(self.conf, "ios")
+        self.assertEqual(result.mismatched, [])
+        self.assertEqual(result.missing, [])
+        self.assertEqual(result.codegen_only, ["D.png"])
+
+    def test_falls_back_to_baseline_without_dynamic_renders(self):
+        result = parity.measure(
+            self.conf, "ios", dynamic_dir=self.conf / "artifacts" / "absent"
+        )
+        self.assertEqual(result.source, "baseline")
+        self.assertEqual(result.matched, ["A.png"])
+        self.assertEqual([n for n, _ in result.mismatched], ["B.png"])
 
     def test_no_baseline_for_env_is_an_error_not_a_pass(self):
         result = parity.measure(self.conf, "ios", env="ci")

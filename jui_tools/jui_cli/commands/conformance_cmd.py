@@ -952,15 +952,26 @@ def _cmd_parity(args: argparse.Namespace) -> int:
         return 1
 
     compared = len(result.matched) + len(result.mismatched)
+    against = (
+        "this run's dynamic renders"
+        if result.source == "dynamic"
+        else "the committed dynamic baseline (fallback — no dynamic renders in this run)"
+    )
     print(
         f"codegen parity ({args.platform}, env {env}, threshold {result.threshold}): "
-        f"{compared} screenshot(s) compared against the dynamic baseline"
+        f"{compared} screenshot(s) compared against {against}"
     )
     print(f"  dynamic ≡ codegen: {len(result.matched)}")
     print(f"  mismatched:        {len(result.mismatched)}")
-    print(f"  missing (no codegen render): {len(result.missing)}")
-    if result.extra:
-        print(f"  extra codegen shots without a baseline hash: {len(result.extra)}")
+    if result.missing:
+        print(f"  rendered by dynamic only: {len(result.missing)}")
+    if result.codegen_only:
+        print(f"  rendered by codegen only: {len(result.codegen_only)}")
+    if result.baseline_only:
+        print(
+            f"  in the baseline, produced by neither: {len(result.baseline_only)} "
+            f"(rename/deletion residue — not a deviation)"
+        )
 
     path = par.ledger_path(conformance_dir)
     ledger = par.load_ledger(path)
@@ -991,6 +1002,17 @@ def _cmd_parity(args: argparse.Namespace) -> int:
             print(f"  {line}")
         if len(verdict.unrecorded) > 30:
             print(f"  … {len(verdict.unrecorded) - 30} more")
+    if verdict.one_sided:
+        print()
+        print(
+            f"{len(verdict.one_sided)} fixture(s) only one pipeline rendered — nothing "
+            "was compared for them. Not a drawing difference: a host skipped work, or "
+            "the two artifact sets are of different vintages:"
+        )
+        for line in verdict.one_sided[:30]:
+            print(f"  {line}")
+        if len(verdict.one_sided) > 30:
+            print(f"  … {len(verdict.one_sided) - 30} more")
     if verdict.stale:
         print()
         print(

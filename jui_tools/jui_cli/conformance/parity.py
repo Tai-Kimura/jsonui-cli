@@ -8,12 +8,32 @@ times in a row (grid spacing, Collection defaults, enabled, .disabled
 order). This module makes the invariant mechanical.
 
 No second truth is minted: the codegen host's screenshots are compared
-against the **same platform's committed dynamic baseline**
-(``baselines/<env>/<platform>.hashes.json``, same dhash-64, same stored
-threshold). A fixture whose codegen render matches the dynamic baseline
-within the calibrated threshold is proof — for that fixture, on that
-platform, in that render environment — that dynamic and codegen draw the
-same thing.
+against **this run's own dynamic renders** (``artifacts/<platform>``),
+hashed with the same dhash-64 and judged against the baseline's calibrated
+threshold. A fixture whose two renders agree within that threshold is
+proof — for that fixture, on that platform, in that render environment —
+that dynamic and codegen draw the same thing.
+
+Comparing against the committed baseline instead was the first shape, and
+it measured the wrong quantity: codegen-now against dynamic-as-of-the-bake,
+which is the invariant PLUS however far the baseline has drifted. Measured
+both ways over one iOS run: with a baseline faithful to that run the two
+agree exactly (44 deviations either way); with a baseline from another
+environment the baseline route reports 510. The stale half was all phantom.
+Worse, the loop ran over the baseline's key space, so a fixture with no
+baseline entry was never compared at all — 168 of 662 codegen renders in
+the run that found this, and the bound fixtures this wave added were most
+of them.
+
+Same-run comparison also drops the environment coupling: both sides come
+out of one renderer in one run, so a local measurement means something,
+which the baseline route could never offer (a local baseline says nothing
+about the CI renderer's). The baseline remains the fallback for when a run
+has no dynamic artifacts to compare against.
+
+Drift of the dynamic renders themselves is deliberately NOT this gate's
+job — that is the visual check against the baseline. One gate, one
+invariant; folding both in here is what made the deviations unreadable.
 
 Deviations live in ``conformance/codegen_parity.json``, operated like
 ``coverage.json``: an entry is an ACCEPTED deviation with a recorded
@@ -62,6 +82,11 @@ def artifacts_dir(conformance_dir: Path, platform: str) -> Path:
     return Path(conformance_dir) / "artifacts" / f"{platform}-codegen"
 
 
+def dynamic_artifacts_dir(conformance_dir: Path, platform: str) -> Path:
+    """This run's dynamic renders — the other half of the comparison."""
+    return Path(conformance_dir) / "artifacts" / platform
+
+
 def ledger_path(conformance_dir: Path) -> Path:
     return Path(conformance_dir) / LEDGER_NAME
 
@@ -73,16 +98,26 @@ class ParityResult:
     platform: str
     env: str = DEFAULT_ENV
     threshold: int = 0
+    #: what the codegen renders were compared against: "dynamic" (this run's
+    #: own renders — the real invariant) or "baseline" (the fallback).
+    source: str = "dynamic"
     #: names compared and within threshold — dynamic ≡ codegen holds
     matched: list = field(default_factory=list)
     #: (name, distance) beyond threshold — the codegen draws something else
     mismatched: list = field(default_factory=list)
-    #: baseline names with no codegen screenshot — fixture missing from the
-    #: codegen host (generation failed, compile skip, not captured)
+    #: rendered by dynamic, absent from the codegen host (generation failed,
+    #: compile skip, not captured)
     missing: list = field(default_factory=list)
-    #: codegen screenshots with no baseline hash (informational — e.g. a
-    #: name deliberately excluded from the baseline)
-    extra: list = field(default_factory=list)
+    #: rendered by the codegen host, absent from dynamic. Kept apart from
+    #: `missing` because the two have opposite causes, and out of the
+    #: deviation count entirely: neither is "the two pipelines draw
+    #: different things", it is "only one pipeline drew it".
+    codegen_only: list = field(default_factory=list)
+    #: baseline names neither side produced — rename/deletion residue. Purely
+    #: informational: it says something about the baseline's age, nothing
+    #: about either pipeline, and folding it into the deviation count is what
+    #: made a run report 104 "codegen defects" of which 78 were phantom.
+    baseline_only: list = field(default_factory=list)
     error: str | None = None  # nothing was measured (no baseline / Pillow …)
 
 
@@ -91,12 +126,18 @@ def measure(
     platform: str,
     env: str = DEFAULT_ENV,
     codegen_dir: Path | None = None,
+    dynamic_dir: Path | None = None,
 ) -> ParityResult:
-    """Compare every codegen screenshot against the dynamic baseline.
+    """Compare this run's codegen screenshots against its dynamic ones.
 
-    Comparison is name-wise over the baseline's own key space: every
-    baseline entry must have a matching codegen render within the stored
-    threshold; anything else lands in a non-passing bucket.
+    Comparison is name-wise over the INTERSECTION of the two render sets,
+    so a fixture is compared the day it is added — the old loop ran over
+    the baseline's key space and silently skipped anything the baseline
+    predated.
+
+    Falls back to the committed baseline when the run has no dynamic
+    artifacts (a codegen-only job). That path measures the invariant plus
+    the baseline's drift, so it is a fallback and says so in `source`.
     """
     conformance_dir = Path(conformance_dir)
     if codegen_dir is None:
@@ -105,11 +146,18 @@ def measure(
 
     result = ParityResult(platform=platform, env=env)
 
+    if dynamic_dir is None:
+        dynamic_dir = dynamic_artifacts_dir(conformance_dir, platform)
+    dynamic_dir = Path(dynamic_dir)
+
+    # The threshold is calibrated per env and lives with the baseline, so it
+    # is read even when the baseline is not the comparison target.
     baseline = load_baseline(conformance_dir, platform, env)
     if baseline is None:
         result.error = (
-            f"no dynamic baseline for env '{env}' / {platform} — parity compares "
-            f"against baselines/{env}/{platform}.hashes.json; bake it first"
+            f"no dynamic baseline for env '{env}' / {platform} — parity needs its "
+            f"calibrated threshold from baselines/{env}/{platform}.hashes.json; "
+            f"bake it first"
         )
         return result
     if not codegen_dir.is_dir():
@@ -121,29 +169,44 @@ def measure(
 
     result.threshold = int(baseline.get("threshold", 0))
     hashes: dict = baseline.get("hashes", {})
-    # The dynamic baseline was hashed with this lane's chrome crop; the codegen
-    # renders must be hashed the same way or every fixture reads as a deviation.
+    # Both sides are hashed with this lane's chrome crop; mixing crops would
+    # read as a deviation on every fixture.
     crop = chrome_crop(platform, env)
-    seen = set()
-    for name, expected in hashes.items():
-        png = codegen_dir / name
-        if not png.is_file():
-            result.missing.append(name)
-            continue
-        seen.add(name)
-        try:
-            distance = hamming(dhash_file(png, crop), expected)
-        except BaselineError as exc:
-            result.error = str(exc)
-            return result
-        if distance <= result.threshold:
-            result.matched.append(name)
-        else:
-            result.mismatched.append((name, distance))
+    codegen = {png.name: png for png in sorted(codegen_dir.glob("*.png"))}
 
-    for png in sorted(codegen_dir.glob("*.png")):
-        if png.name not in hashes:
-            result.extra.append(png.name)
+    dynamic = {}
+    if dynamic_dir.is_dir():
+        dynamic = {png.name: png for png in sorted(dynamic_dir.glob("*.png"))}
+    if not dynamic:
+        result.source = "baseline"
+
+    try:
+        if result.source == "dynamic":
+            for name in sorted(set(codegen) & set(dynamic)):
+                distance = hamming(
+                    dhash_file(codegen[name], crop), dhash_file(dynamic[name], crop)
+                )
+                if distance <= result.threshold:
+                    result.matched.append(name)
+                else:
+                    result.mismatched.append((name, distance))
+            result.missing = sorted(set(dynamic) - set(codegen))
+            result.codegen_only = sorted(set(codegen) - set(dynamic))
+            result.baseline_only = sorted(
+                set(hashes) - set(dynamic) - set(codegen)
+            )
+        else:
+            for name in sorted(set(codegen) & set(hashes)):
+                distance = hamming(dhash_file(codegen[name], crop), hashes[name])
+                if distance <= result.threshold:
+                    result.matched.append(name)
+                else:
+                    result.mismatched.append((name, distance))
+            result.missing = sorted(set(hashes) - set(codegen))
+            result.codegen_only = sorted(set(codegen) - set(hashes))
+    except BaselineError as exc:
+        result.error = str(exc)
+        return result
 
     return result
 
@@ -226,14 +289,16 @@ def update_ledger(existing: dict, result: ParityResult) -> dict:
             "reason": prior.get("reason", UNREVIEWED),
             "note": prior.get("note", ""),
         }
-    for name in result.missing:
+    one_sided = [(name, "missing") for name in result.missing]
+    one_sided += [(name, "codegen-only") for name in result.codegen_only]
+    for name, status in one_sided:
         key = (name, result.platform, result.env)
         prior = existing.get(key, {})
         merged[key] = {
             "screenshot": name,
             "platform": result.platform,
             "env": result.env,
-            "status": "missing",
+            "status": status,
             "reason": prior.get("reason", UNREVIEWED),
             "note": prior.get("note", ""),
         }
@@ -248,11 +313,21 @@ class ParityCheck:
     unrecorded: list = field(default_factory=list)  # deviations not in ledger
     stale: list = field(default_factory=list)  # ledger entries now clean
     accepted: int = 0  # deviations covered by ledger entries
+    #: names only one pipeline produced, not on the ledger. Reported apart
+    #: from `unrecorded` because "only one side drew it" and "the two sides
+    #: drew different things" need different fixes, and merging them makes
+    #: the deviation count a number nobody can act on.
+    one_sided: list = field(default_factory=list)
     error: str | None = None
 
     @property
     def ok(self) -> bool:
-        return not self.unrecorded and not self.stale and self.error is None
+        return (
+            not self.unrecorded
+            and not self.stale
+            and not self.one_sided
+            and self.error is None
+        )
 
 
 def check(result: ParityResult, ledger: dict) -> ParityCheck:
@@ -261,17 +336,24 @@ def check(result: ParityResult, ledger: dict) -> ParityCheck:
     if result.error is not None:
         return verdict
 
-    measured = {name for name, _ in result.mismatched} | set(result.missing)
+    one_sided = [(name, "codegen host did not render it") for name in result.missing]
+    one_sided += [(name, "dynamic did not render it") for name in result.codegen_only]
+
+    measured = (
+        {name for name, _ in result.mismatched}
+        | set(result.missing)
+        | set(result.codegen_only)
+    )
     for name, distance in result.mismatched:
         if (name, result.platform, result.env) in ledger:
             verdict.accepted += 1
         else:
             verdict.unrecorded.append(f"{name} (distance {distance})")
-    for name in result.missing:
+    for name, why in one_sided:
         if (name, result.platform, result.env) in ledger:
             verdict.accepted += 1
         else:
-            verdict.unrecorded.append(f"{name} (missing)")
+            verdict.one_sided.append(f"{name} ({why})")
 
     for (name, platform, env), _entry in ledger.items():
         if platform == result.platform and env == result.env and name not in measured:

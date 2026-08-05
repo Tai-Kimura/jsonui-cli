@@ -185,8 +185,8 @@ def evaluate(
             outcome.notices.extend(notices)
 
     if parity and visual:
-        # dynamic ≡ codegen, judged per selected platform against the same
-        # env's dynamic baseline. Requested explicitly (--parity) — a missing
+        # dynamic ≡ codegen, judged per selected platform against this run's
+        # own dynamic renders. Requested explicitly (--parity) — a missing
         # codegen artifacts dir is then a failure, not a silent skip: the
         # lane that asks for parity must actually have run the codegen host.
         from . import parity as parity_mod
@@ -209,6 +209,16 @@ def evaluate(
                     f"{parity_mod.LEDGER_NAME} — dynamic and generated code no longer "
                     f"draw the same thing: {shown}"
                 )
+            if verdict.one_sided:
+                shown = ", ".join(verdict.one_sided[:5]) + (
+                    " …" if len(verdict.one_sided) > 5 else ""
+                )
+                outcome.problems.append(
+                    f"{p}: {len(verdict.one_sided)} fixture(s) rendered by only one "
+                    f"pipeline — nothing was compared for them, so this is not a "
+                    f"drawing difference but a host that skipped work (or artifacts "
+                    f"of two different vintages): {shown}"
+                )
             if verdict.stale:
                 shown = ", ".join(verdict.stale[:5]) + (
                     " …" if len(verdict.stale) > 5 else ""
@@ -217,6 +227,18 @@ def evaluate(
                     f"{p}: {len(verdict.stale)} stale {parity_mod.LEDGER_NAME} entr(y/ies) — "
                     f"codegen now matches; prune with `jui conformance parity --update "
                     f"--platform {p}`: {shown}"
+                )
+            if result.source == "baseline":
+                outcome.notices.append(
+                    f"{p}: parity fell back to the committed baseline — this run has "
+                    f"no dynamic renders in artifacts/{p}, so the measurement carries "
+                    f"the baseline's drift as well as the invariant"
+                )
+            if result.baseline_only:
+                outcome.notices.append(
+                    f"{p}: {len(result.baseline_only)} baseline name(s) neither "
+                    f"pipeline produced — rename/deletion residue, cleared by the "
+                    f"next bake; not counted as a deviation"
                 )
             if verdict.ok:
                 outcome.notices.append(
