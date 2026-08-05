@@ -3,6 +3,7 @@
 require 'json'
 require 'fileutils'
 require 'set'
+require_relative 'helpers/tint_helper'
 require_relative '../core/config_manager'
 require_relative '../core/project_finder'
 require_relative '../core/logger'
@@ -293,7 +294,7 @@ module KjuiTools
           # path), so without this the `visibility: "@{...}"` binding on a
           # responsive Embed is silently dropped. Wrap the whole if/else
           # chain in one VisibilityWrapper, mirroring sjui's single wrapper.
-          return Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, @required_imports, parent_type)
+          return Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type)
         end
 
         # Collection + responsive: same inline treatment as Embed. The
@@ -310,7 +311,7 @@ module KjuiTools
           # carrying `visibility: "@{...}"` (e.g. a grid/list display toggle)
           # would otherwise render unconditionally on Android while iOS
           # honors it. Wrap the inline if/else chain in one VisibilityWrapper.
-          return Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, @required_imports, parent_type)
+          return Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type)
         end
 
         # Check for responsive component — delegate to responsive generation
@@ -406,7 +407,7 @@ module KjuiTools
         # path applies and `visibility: "@{...}"` on an Embed node actually
         # gates rendering.
         unless %w[View ScrollView Scroll GradientView Blur BlurView TabView].include?(component_type)
-          code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
+          code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
         end
 
         code
@@ -717,7 +718,7 @@ module KjuiTools
 
           # Wrap with VisibilityWrapper if visibility binding is specified
           if json_data
-            code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, @required_imports, parent_type)
+            code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type)
           end
 
           code
