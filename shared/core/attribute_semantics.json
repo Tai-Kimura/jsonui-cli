@@ -6,7 +6,7 @@
     "border": {
       "widthAlone": "no-draw",
       "styleAlone": "no-draw",
-      "ruling": "A border is drawn only when BOTH borderWidth and borderColor are declared; borderWidth alone renders nothing on every platform — there is no default border color (2026-08-03 user ruling; supersedes the transient gray-default direction of d2c8628, unified across toolchains in 3e87b96). borderColor alone renders nothing for the same reason — the pair is what requests a border, and neither half requests one on its own (measured 2026-08-04, plan 34 re-measure: 0 px against the control on all three platforms; the android codegen does emit on the attribute's PRESENCE, which is a codegen-stage fact plan 41 tracks, not a rendered difference). borderStyle alone likewise renders nothing: it styles a border the width+color pair requests, it never summons one (2026-08-03 user ruling #2). NOTE: TextField.borderStyle is a DIFFERENT attribute (UIKit text-field chrome: roundedRect/line/bezel/none) and is outside this entry. The `__*_with_border` fixtures are the paired variants (borderStyle declared ALONGSIDE borderWidth + borderColor) that plan 49 added once three lanes had implemented the attribute with nothing measuring it — the lone-style fixtures above stay inert and keep testing the AND rule. `solid_with_border` is inert for a different reason from the lone ones: solid is the declared default of borderStyle, so stating it explicitly draws the same picture as omitting it (codegen_effect calls this class `value-is-default`). dashed/dotted are the two that must differ from the control. If the 3PF measurement comes back split rather than uniform, the honest record is a per-platform map like skinIdioms uses, not a forced uniform verdict: plan 34 caught ios emitting identical text for solid and dashed (C2/presence-only), and B/C/A implemented the three platforms separately in this wave.",
+      "ruling": "A border is drawn only when BOTH borderWidth and borderColor are declared; borderWidth alone renders nothing on every platform — there is no default border color (2026-08-03 user ruling; supersedes the transient gray-default direction of d2c8628, unified across toolchains in 3e87b96). borderColor alone renders nothing for the same reason — the pair is what requests a border, and neither half requests one on its own (measured 2026-08-04, plan 34 re-measure: 0 px against the control on all three platforms; the android codegen does emit on the attribute's PRESENCE, which is a codegen-stage fact plan 41 tracks, not a rendered difference). borderStyle alone likewise renders nothing: it styles a border the width+color pair requests, it never summons one (2026-08-03 user ruling #2). NOTE: TextField.borderStyle is a DIFFERENT attribute (UIKit text-field chrome: roundedRect/line/bezel/none) and is outside this entry. The `__*_with_border` fixtures are the paired variants (borderStyle declared ALONGSIDE borderWidth + borderColor) that plan 49 added once three lanes had implemented the attribute with nothing measuring it — the lone-style fixtures above stay inert and keep testing the AND rule. `solid_with_border` is inert for a different reason from the lone ones: solid is the declared default of borderStyle, so stating it explicitly draws the same picture as omitting it (codegen_effect calls this class `value-is-default`). dashed/dotted are the two that must differ from the control. If the 3PF measurement comes back split rather than uniform, the honest record is a per-platform map like skinIdioms uses, not a forced uniform verdict: plan 34 caught ios emitting identical text for solid and dashed (C2/presence-only), and B/C/A implemented the three platforms separately in this wave. MEASURED 2026-08-05 (conformance-mobile run 30950551601 @ 5aada98), and the split the paragraph above anticipated is what happened: dashed and dotted are active on android and web and INERT on ios — the three borderStyle values render pixel-identical to each other and to the control on ios, which is the same symptom plan 34 recorded at the codegen stage (sjui emitting the same text for solid and dashed, C2/presence-only). They are therefore recorded as per-platform maps, not forced to a uniform verdict. This records today's reality; it does not bless it. If ios is supposed to draw a dashed border, the entry moves to uniformly-active once it does. solid_with_border stays uniformly-inert on all three because solid is borderStyle's declared default.",
       "observable": {
         "common/borderWidth__static": "uniformly-inert",
         "common/borderColor__static": "uniformly-inert",
@@ -14,16 +14,28 @@
         "common/borderStyle__dashed": "uniformly-inert",
         "common/borderStyle__dotted": "uniformly-inert",
         "common/borderStyle__solid_with_border": "uniformly-inert",
-        "common/borderStyle__dashed_with_border": "uniformly-active",
-        "common/borderStyle__dotted_with_border": "uniformly-active"
+        "common/borderStyle__dashed_with_border": {
+          "ios": "inert",
+          "android": "active",
+          "web": "active"
+        },
+        "common/borderStyle__dotted_with_border": {
+          "ios": "inert",
+          "android": "active",
+          "web": "active"
+        }
       }
     },
     "highlight": {
       "highlightedAlone": "no-draw",
       "highlightBackgroundAlone": "no-draw",
-      "ruling": "The highlighted appearance is drawn only when BOTH `highlighted` and a highlight colour are declared — the same pair-required shape as `border`, and ruled the same way. `highlighted: true` alone swaps the background to a colour that was never given, so nothing changes; `highlightBackground` alone names a colour for a state the view is never in. Every codegen already treats them as a pair (kjui modifier_builder.rb:490 combines highlight_cond with highlight_bg; sjui apply_highlighted_to_bag does the same), so a single-attribute fixture measures the absence of the companion rather than the converter. Established by measurement, not assumption: plan 41's paired probe carried View.highlighted as its one PROVISIONAL entry, and giving it `highlightBackground` made the ios/C0 and android/C0 findings disappear — the converters were correct and the fixture was missing the other half. This entry retires that PROVISIONAL: the pairing is now derived from the ledger like every other family (2026-08-05, plan 49-E, on plan 41's evidence).",
+      "ruling": "The highlighted appearance is drawn only when BOTH `highlighted` and a highlight colour are declared — the same pair-required shape as `border`, and ruled the same way. `highlighted: true` alone swaps the background to a colour that was never given, so nothing changes; `highlightBackground` alone names a colour for a state the view is never in. Every codegen already treats them as a pair (kjui modifier_builder.rb:490 combines highlight_cond with highlight_bg; sjui apply_highlighted_to_bag does the same), so a single-attribute fixture measures the absence of the companion rather than the converter. Established by measurement, not assumption: plan 41's paired probe carried View.highlighted as its one PROVISIONAL entry, and giving it `highlightBackground` made the ios/C0 and android/C0 findings disappear — the converters were correct and the fixture was missing the other half. This entry retires that PROVISIONAL: the pairing is now derived from the ledger like every other family (2026-08-05, plan 49-E, on plan 41's evidence). MEASURED 2026-08-05 (same run): web is active — A routed the highlight background through an inline style instead of a losing Tailwind class — while ios and android are still inert, so the verdict is recorded per platform. NOTE for anyone tidying this block: `common/highlightBackground__static` carries no control in the generated fixture set, so it is never compared and its verdict here is not checked against anything. It must NOT be deleted regardless — companions.py derives the pairing from this topic's `observable` KEYS, and a topic with fewer than two members stops producing companions at all.",
       "observable": {
-        "View/highlighted__true": "uniformly-inert",
+        "View/highlighted__true": {
+          "ios": "inert",
+          "android": "inert",
+          "web": "active"
+        },
         "common/highlightBackground__static": "uniformly-inert"
       }
     },
@@ -56,12 +68,18 @@
     },
     "networkImage": {
       "noSrc": "defaultImage",
-      "ruling": "2026-08-03 user ruling: with no src, NetworkImage displays defaultImage; while loading it displays the first of hint/placeholder/loadingImage; on error it displays errorImage, falling back to defaultImage. Implemented on all platforms in the 33 wave (KotlinJsonUI defaultImage read + Coil fallback chain; ios placeholder no longer collapses over defaultImage; rjui defaultImage prop + template state machine). State-image fixtures use the DISTINCT conformance_sample_alt asset, so a hijacked no-src state renders visibly — the uniformly-inert observables verify the chain end-to-end.",
+      "ruling": "2026-08-03 user ruling: with no src, NetworkImage displays defaultImage; while loading it displays the first of hint/placeholder/loadingImage; on error it displays errorImage, falling back to defaultImage. Implemented on all platforms in the 33 wave (KotlinJsonUI defaultImage read + Coil fallback chain; ios placeholder no longer collapses over defaultImage; rjui defaultImage prop + template state machine). State-image fixtures use the DISTINCT conformance_sample_alt asset, so a hijacked no-src state renders visibly — the uniformly-inert observables verify the chain end-to-end. MEASURED 2026-08-05 (same run): placeholder is now active on all three — the conformance host never completes a network load, so the loading state persists and the placeholder is what the fixture shows; inert was the wrong expectation for it and the contract is updated. errorImage and loadingImage are active on android and inert on ios (they are out of scope on web), recorded per platform. OPEN QUESTION, deliberately not resolved by this entry: under the ruling above a state image should only appear in its own state, so android rendering a difference for errorImage — when the fixture never errors — reads like android showing a state image it should not, i.e. a defect rather than a contract. Recorded as measured because the gate cannot be satisfied by a ledger reason, but the android/ios split here needs adjudicating by the lanes that own those runtimes before it is treated as intended.",
       "observable": {
-        "NetworkImage/placeholder__static": "uniformly-inert",
+        "NetworkImage/placeholder__static": "uniformly-active",
         "NetworkImage/hint__static": "uniformly-inert",
-        "NetworkImage/errorImage__static": "uniformly-inert",
-        "NetworkImage/loadingImage__static": "uniformly-inert"
+        "NetworkImage/errorImage__static": {
+          "ios": "inert",
+          "android": "active"
+        },
+        "NetworkImage/loadingImage__static": {
+          "ios": "inert",
+          "android": "active"
+        }
       }
     },
     "margins": {
