@@ -505,3 +505,37 @@ class LedgerKeyFlagBecomesDefaultTest(unittest.TestCase):
             "ledger_keys: bool = True)) and drop the flag from the workflows, or "
             "it becomes a check that only runs when someone remembers to ask",
         )
+
+
+class InertAuditCountsTest(unittest.TestCase):
+    """`counts` is derived from `entries`, so it must agree with them.
+
+    The generator computes both from the same list and cannot disagree; a
+    hand edit to `entries` can, and did — 77 entries carried counts of
+    78/84. Anyone reading `counts` to decide something reads a number
+    nobody re-derived, which is the shape this whole plan keeps finding: a
+    summary that outlived what it summarised.
+    """
+
+    LEDGER = Path(__file__).resolve().parents[2] / "conformance" / "inert_audit.json"
+
+    @unittest.skipUnless(LEDGER.is_file(), "no committed inert_audit.json")
+    def test_counts_match_the_entries_they_summarise(self):
+        from jui_cli.conformance.inert_audit import UNREVIEWED
+
+        doc = json.loads(self.LEDGER.read_text(encoding="utf-8"))
+        entries = doc.get("entries", [])
+        counts = doc.get("counts", {})
+        self.assertEqual(
+            counts.get("entries"),
+            len(entries),
+            "counts.entries disagrees with the entry list — regenerate, or the "
+            "next reader trusts a number nobody re-derived",
+        )
+        self.assertEqual(
+            counts.get("unreviewed"),
+            sum(1 for e in entries if e.get("reason") == UNREVIEWED),
+            "counts.unreviewed disagrees with the entry list. It counts ENTRIES, "
+            "not (fixture, platform) pairs: one entry inert on two platforms "
+            "counts once",
+        )

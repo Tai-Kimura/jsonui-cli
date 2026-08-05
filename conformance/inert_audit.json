@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "_comment": "Accepted UNATTRIBUTED inert verdicts — fixtures whose attribute changed no pixels on the listed platforms and which no other ledger has an opinion about. This is the completeness ratchet behind `jui conformance gate --inert-complete`: an unattributed inert verdict that is NOT here fails the gate (an attribute can otherwise stop rendering and nothing says so), and an entry the measurement no longer supports fails too (a fixed attribute must not keep an excuse on file). Reason 'unreviewed-initial-measurement' marks the backlog — consume it by replacing the reason with the adjudication, or by fixing the platform and letting the entry go stale. An entry whose platform set changes returns to the backlog, because the adjudication was written about a different fact.",
+  "_comment": "Accepted UNATTRIBUTED inert verdicts — fixtures whose attribute changed no pixels on the listed platforms and which no other ledger has an opinion about. This is the completeness ratchet behind `jui conformance gate --inert-complete`: an unattributed inert verdict that is NOT here fails the gate (an attribute can otherwise stop rendering and nothing says so), and an entry the measurement no longer supports fails too (a fixed attribute must not keep an excuse on file). Reason 'unreviewed-initial-measurement' marks the backlog — consume it by replacing the reason with the adjudication, or by fixing the platform and letting the entry go stale. An entry whose platform set changes returns to the backlog, because the adjudication was written about a different fact. `counts` is derived from `entries` and counts ENTRIES, not (fixture, platform) pairs: one entry inert on two platforms counts once. It is regenerated with the file; an entry edited by hand leaves it stale, which is what happened when 77 entries carried counts of 78/84. `counts` is per ENTRY, not per (fixture, platform): an entry inert on two platforms counts once. It is derived from `entries` by update_ledger and must never be hand-edited — three lanes (E included) edited entries and left it stale, so `unreviewed` still read 84 from the first bake while the real figure had fallen to 74. A test now fails when the two disagree.",
   "platforms": [
     "ios",
     "android",
     "web"
   ],
   "counts": {
-    "entries": 78,
-    "unreviewed": 84
+    "entries": 77,
+    "unreviewed": 74
   },
   "entries": [
     {
