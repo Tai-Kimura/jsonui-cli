@@ -680,7 +680,7 @@
       "note": ""
     },
     {
-      "fixture": "TextField/placeholderColor__static",
+      "fixture": "TextField/hintColor__static",
       "platforms": {
         "android": "active",
         "ios": "inert",

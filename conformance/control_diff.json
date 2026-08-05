@@ -1031,7 +1031,7 @@
       ]
     },
     {
-      "fixture": "Radio/selected_icon__static",
+      "fixture": "Radio/selectedIcon__static",
       "platforms": [
         "android",
         "ios",
@@ -1100,13 +1100,13 @@
       ]
     },
     {
-      "fixture": "Segment/normalColor__static",
+      "fixture": "Segment/fontColor__static",
       "platforms": [
         "ios"
       ]
     },
     {
-      "fixture": "Segment/selectedColor__static",
+      "fixture": "Segment/selectedFontColor__static",
       "platforms": [
         "ios"
       ]
@@ -1233,7 +1233,7 @@
       ]
     },
     {
-      "fixture": "Slider/maxValue__static",
+      "fixture": "Slider/maximum__static",
       "platforms": [
         "android",
         "ios",
@@ -1529,7 +1529,7 @@
       ]
     },
     {
-      "fixture": "TextField/placeholderColor__static",
+      "fixture": "TextField/hintColor__static",
       "platforms": [
         "android",
         "web"
@@ -1947,7 +1947,7 @@
       ]
     },
     {
-      "fixture": "common/alpha__static",
+      "fixture": "common/opacity__static",
       "platforms": [
         "android",
         "ios",

@@ -7,7 +7,7 @@
     "web"
   ],
   "counts": {
-    "entries": 84,
+    "entries": 78,
     "unreviewed": 84
   },
   "entries": [
@@ -103,9 +103,9 @@
       "note": ""
     },
     {
-      "fixture": "Button/hilightColor__static",
+      "fixture": "Button/highlightColor__static",
       "component": "Button",
-      "attribute": "hilightColor",
+      "attribute": "highlightColor",
       "inertOn": [
         "android",
         "ios"
@@ -595,21 +595,9 @@
       "note": ""
     },
     {
-      "fixture": "SelectBox/text__static",
-      "component": "SelectBox",
-      "attribute": "text",
-      "inertOn": [
-        "ios"
-      ],
-      "kind": "single-platform-scope",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Slider/minValue__static",
+      "fixture": "Slider/minimum__static",
       "component": "Slider",
-      "attribute": "minValue",
+      "attribute": "minimum",
       "inertOn": [
         "android",
         "ios"
@@ -698,32 +686,6 @@
       "note": ""
     },
     {
-      "fixture": "TextField/contentType__static",
-      "component": "TextField",
-      "attribute": "contentType",
-      "inertOn": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "type-fallback-value",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/keyboardAppearance__static",
-      "component": "TextField",
-      "attribute": "keyboardAppearance",
-      "inertOn": [
-        "android"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "type-fallback-value",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
       "fixture": "TextField/maxLength__static",
       "component": "TextField",
       "attribute": "maxLength",
@@ -758,18 +720,6 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/spellCheckingType__static",
-      "component": "TextField",
-      "attribute": "spellCheckingType",
-      "inertOn": [
-        "ios"
-      ],
-      "kind": "single-platform-scope",
-      "family": "type-fallback-value",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
@@ -810,20 +760,6 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/lineBreakMode__static",
-      "component": "TextView",
-      "attribute": "lineBreakMode",
-      "inertOn": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "type-fallback-value",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
@@ -942,18 +878,6 @@
       "fixture": "Web/allow__static",
       "component": "Web",
       "attribute": "allow",
-      "inertOn": [
-        "web"
-      ],
-      "kind": "single-platform-scope",
-      "family": "type-fallback-value",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Web/sandbox__static",
-      "component": "Web",
-      "attribute": "sandbox",
       "inertOn": [
         "web"
       ],
