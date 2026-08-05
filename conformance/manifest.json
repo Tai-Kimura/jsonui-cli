@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "cad487195f506f2d780b1c91fd51fc59164682cdac026d909c0219748d447605",
   "counts": {
-    "fixtures": 909,
+    "fixtures": 910,
     "assertable": 33,
     "visual": 694,
     "interactive": 35,
-    "control": 88,
+    "control": 89,
     "declarationOnly": 59,
     "skipped": 150,
     "promoted": {
@@ -3654,7 +3654,7 @@
       "attribute": "effectStyle",
       "case": "light",
       "class": "visual",
-      "host": "View",
+      "host": "Blur",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "Light",
@@ -3670,7 +3670,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "common/effectStyle",
-      "control": "__control/View"
+      "control": "__control/Blur"
     },
     {
       "id": "common/effectStyle__dark",
@@ -3678,7 +3678,7 @@
       "attribute": "effectStyle",
       "case": "dark",
       "class": "visual",
-      "host": "View",
+      "host": "Blur",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "Dark",
@@ -3694,7 +3694,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "common/effectStyle",
-      "control": "__control/View"
+      "control": "__control/Blur"
     },
     {
       "id": "common/effectStyle__extralight",
@@ -3702,7 +3702,7 @@
       "attribute": "effectStyle",
       "case": "extralight",
       "class": "visual",
-      "host": "View",
+      "host": "Blur",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "ExtraLight",
@@ -3718,7 +3718,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "common/effectStyle",
-      "control": "__control/View"
+      "control": "__control/Blur"
     },
     {
       "id": "common/effectStyle__regular",
@@ -3726,7 +3726,7 @@
       "attribute": "effectStyle",
       "case": "regular",
       "class": "visual",
-      "host": "View",
+      "host": "Blur",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "Regular",
@@ -3742,7 +3742,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "common/effectStyle",
-      "control": "__control/View"
+      "control": "__control/Blur"
     },
     {
       "id": "common/effectStyle__prominent",
@@ -3750,7 +3750,7 @@
       "attribute": "effectStyle",
       "case": "prominent",
       "class": "visual",
-      "host": "View",
+      "host": "Blur",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "Prominent",
@@ -3766,7 +3766,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "common/effectStyle",
-      "control": "__control/View"
+      "control": "__control/Blur"
     },
     {
       "id": "common/effectStyle__ultrathin",
@@ -3774,7 +3774,7 @@
       "attribute": "effectStyle",
       "case": "ultrathin",
       "class": "visual",
-      "host": "View",
+      "host": "Blur",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "UltraThin",
@@ -3790,7 +3790,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "common/effectStyle",
-      "control": "__control/View"
+      "control": "__control/Blur"
     },
     {
       "id": "common/effectStyle__thin",
@@ -3798,7 +3798,7 @@
       "attribute": "effectStyle",
       "case": "thin",
       "class": "visual",
-      "host": "View",
+      "host": "Blur",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "Thin",
@@ -3814,7 +3814,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "common/effectStyle",
-      "control": "__control/View"
+      "control": "__control/Blur"
     },
     {
       "id": "common/effectStyle__thick",
@@ -3822,7 +3822,7 @@
       "attribute": "effectStyle",
       "case": "thick",
       "class": "visual",
-      "host": "View",
+      "host": "Blur",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "Thick",
@@ -3838,7 +3838,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "common/effectStyle",
-      "control": "__control/View"
+      "control": "__control/Blur"
     },
     {
       "id": "common/effectStyle__chrome",
@@ -3846,7 +3846,7 @@
       "attribute": "effectStyle",
       "case": "chrome",
       "class": "visual",
-      "host": "View",
+      "host": "Blur",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "Chrome",
@@ -3862,7 +3862,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "common/effectStyle",
-      "control": "__control/View"
+      "control": "__control/Blur"
     },
     {
       "id": "common/enabled__true",
@@ -15395,7 +15395,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "View/gradientDirection",
-      "control": "__control/View"
+      "control": "__control/View__gradient--FF0000-0000FF"
     },
     {
       "id": "View/gradientDirection__horizontal",
@@ -15417,7 +15417,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "View/gradientDirection",
-      "control": "__control/View"
+      "control": "__control/View__gradient--FF0000-0000FF"
     },
     {
       "id": "View/gradientDirection__oblique",
@@ -15439,7 +15439,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "View/gradientDirection",
-      "control": "__control/View"
+      "control": "__control/View__gradient--FF0000-0000FF"
     },
     {
       "id": "View/gradientDirection__righttoleft",
@@ -15461,7 +15461,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "View/gradientDirection",
-      "control": "__control/View"
+      "control": "__control/View__gradient--FF0000-0000FF"
     },
     {
       "id": "View/gradientDirection__bottomtotop",
@@ -15483,7 +15483,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "View/gradientDirection",
-      "control": "__control/View"
+      "control": "__control/View__gradient--FF0000-0000FF"
     },
     {
       "id": "View/locations__static",
@@ -21128,6 +21128,28 @@
       "deprecated": null,
       "layout": "fixtures/__control/View__borderColor--FF0000_borderWidth-2.layout.json",
       "test": "fixtures/__control/View__borderColor--FF0000_borderWidth-2.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/View__gradient--FF0000-0000FF",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__gradient--FF0000-0000FF.layout.json",
+      "test": "fixtures/__control/View__gradient--FF0000-0000FF.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

@@ -1615,6 +1615,10 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # that all three read these once the parent has an orientation. They were
     # filed as "the codegen does not read the spelling" when the fixture was
     # not letting it.
+    # A gradient DIRECTION needs a gradient to point. B measured it: with no
+    # `gradient` the converter emits nothing at all; with one it emits
+    # `.background(LinearGradient(colors: [...], startPoint:, endPoint:))`.
+    "View.gradientDirection": {"gradient": ["#FF0000", "#0000FF"]},
     "widthWeight": {"root.orientation": "horizontal"},
     # `height: 0` is not decoration — it is how you say "the weight decides
     # this axis". kjui spells the rule out: `explicit_height` is false only
@@ -2113,6 +2117,16 @@ SUPPORT_LAYOUTS: dict[str, dict[str, Any]] = {
 #: (`aria-disabled` on web, the `Disabled` semantics on Compose), which is the
 #: only thing a UI test can observe on a non-input element.
 COMMON_HOST_OVERRIDES: dict[str, str] = {
+    # `effectStyle`'s enum IS the UIBlurEffect vocabulary — Light, Dark,
+    # ExtraLight, systemThinMaterial … — and a bare View has no blur to style,
+    # so the probe emitted nothing and the spelling read as unread. B measured
+    # both hosts: View emits nothing, Blur emits `.preferredColorScheme(.dark)`.
+    #
+    # `Blur` already declares `effectStyle` in its own section, so the `common`
+    # copy is a duplicate; whether the declaration should move there is E's
+    # call, and hosting the common fixture on Blur is correct either way — a
+    # blur effect style is only meaningful on something that blurs.
+    "effectStyle": "Blur",
     "tapBackground": "Button",
     "highlightBackground": "Button",
     "disabledBackground": "Button",

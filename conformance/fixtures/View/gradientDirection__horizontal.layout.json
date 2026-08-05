@@ -18,6 +18,10 @@
       "width": 200,
       "height": 200,
       "background": "#DDDDDD",
+      "gradient": [
+        "#FF0000",
+        "#0000FF"
+      ],
       "child": [
         {
           "type": "View",

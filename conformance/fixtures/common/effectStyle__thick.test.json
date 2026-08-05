@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance common.effectStyle (thick)",
-    "description": "Conformance fixture for 'effectStyle' on View (section: common, class: visual). Value under test: \"Thick\".",
+    "description": "Conformance fixture for 'effectStyle' on Blur (section: common, class: visual). Value under test: \"Thick\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "effectStyle__thick",
-      "description": "Conformance fixture for 'effectStyle' on View (section: common, class: visual). Value under test: \"Thick\".",
+      "description": "Conformance fixture for 'effectStyle' on Blur (section: common, class: visual). Value under test: \"Thick\".",
       "steps": [
         {
           "action": "waitFor",

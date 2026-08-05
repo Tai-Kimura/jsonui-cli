@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance common.effectStyle (light)",
-    "description": "Conformance fixture for 'effectStyle' on View (section: common, class: visual). Value under test: \"Light\".",
+    "description": "Conformance fixture for 'effectStyle' on Blur (section: common, class: visual). Value under test: \"Light\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "effectStyle__light",
-      "description": "Conformance fixture for 'effectStyle' on View (section: common, class: visual). Value under test: \"Light\".",
+      "description": "Conformance fixture for 'effectStyle' on Blur (section: common, class: visual). Value under test: \"Light\".",
       "steps": [
         {
           "action": "waitFor",
