@@ -226,8 +226,15 @@ class GateParityTest(unittest.TestCase):
         ids = [f["id"] for f in manifest["fixtures"]]
         _write_results(self.conf, "android", {fixture_id: "pass" for fixture_id in ids})
 
+        # Name the stand-in screenshot after a fixture the manifest really
+        # has: the parity ledger is screenshot-keyed and judge_ledger_keys
+        # now runs by default, so an invented "A.png" would (correctly) be
+        # reported as a row pointing nowhere.
+        from jui_cli.conformance.gate import screenshot_name
+
+        self.shot = screenshot_name(ids[0])
         dyn = self.conf / "artifacts" / "android"
-        _write_png(dyn / "A.png")
+        _write_png(dyn / self.shot)
         baseline.update_baseline(self.conf, "android")
         # The synthetic results reference no screenshots, so the baked
         # baseline entry counts as missing_artifact on the DYNAMIC side —
@@ -251,7 +258,7 @@ class GateParityTest(unittest.TestCase):
 
     def test_unrecorded_drift_fails_and_ledgered_drift_passes(self):
         cg = self.conf / "artifacts" / "android-codegen"
-        _write_png(cg / "A.png", box=(120, 100, 240, 180))
+        _write_png(cg / self.shot, box=(120, 100, 240, 180))
 
         outcome = self._evaluate()
         self.assertFalse(outcome.ok)
@@ -282,19 +289,19 @@ class GateParityTest(unittest.TestCase):
         ids = [f["id"] for f in manifest["fixtures"]]
         _write_results(self.conf, "web", {fixture_id: "pass" for fixture_id in ids})
         dyn = self.conf / "artifacts" / "web"
-        _write_png(dyn / "A.png")
+        _write_png(dyn / self.shot)
         baseline.update_baseline(self.conf, "web")
         (self.conf / "gate_ratchet.json").write_text(
             _json.dumps({"missing_artifact": {"web": 1, "android": 1}}), encoding="utf-8"
         )
         cg = self.conf / "artifacts" / "android-codegen"
-        _write_png(cg / "A.png")
+        _write_png(cg / self.shot)
         outcome = evaluate(self.conf, ["web", "android"], parity=True)
         self.assertTrue(outcome.ok, outcome.problems)
 
     def test_matching_codegen_render_passes_clean(self):
         cg = self.conf / "artifacts" / "android-codegen"
-        _write_png(cg / "A.png")
+        _write_png(cg / self.shot)
         outcome = self._evaluate()
         self.assertTrue(outcome.ok)
         self.assertTrue(any("codegen parity OK" in n for n in outcome.notices))

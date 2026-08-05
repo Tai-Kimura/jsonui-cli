@@ -146,11 +146,19 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         "--ledger-keys",
         dest="ledger_keys",
         action="store_true",
+        default=True,
+        help=argparse.SUPPRESS,
+    )
+    gate.add_argument(
+        "--no-ledger-keys",
+        dest="ledger_keys",
+        action="store_false",
         help=(
-            "Also check that every ledger key still names a fixture the "
-            "manifest has. A rename leaves the row pointing nowhere: the "
-            "entry looks live, the gate keeps running, and nothing it claims "
-            "is checked again. Dangling rows are reported, never deleted"
+            "Skip the check that every ledger key still names a fixture the "
+            "manifest has. It runs by DEFAULT: a rename leaves the row "
+            "pointing nowhere, the entry looks live, the gate keeps running, "
+            "and nothing it claims is checked again. Dangling rows are "
+            "reported, never deleted. Opting out is for a checkout mid-rename"
         ),
     )
     gate.add_argument(
@@ -1685,7 +1693,7 @@ def _cmd_gate(args: argparse.Namespace) -> int:
             cross_effect=bool(getattr(args, "cross_effect", False)),
             inert_complete=bool(getattr(args, "inert_complete", False)),
             codegen_effect=bool(getattr(args, "codegen_effect", False)),
-            ledger_keys=bool(getattr(args, "ledger_keys", False)),
+            ledger_keys=bool(getattr(args, "ledger_keys", True)),
             value_discrimination=bool(
                 getattr(args, "value_discrimination", False)
             ),

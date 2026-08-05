@@ -387,7 +387,14 @@ class LedgerKeyTest(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.conf = Path(self._tmp.name)
         (self.conf / "manifest.json").write_text(
-            json.dumps({"fixtures": [{"id": "Label/text__static"}]})
+            json.dumps(
+                {
+                    "fixtures": [
+                        {"id": "Label/text__static"},
+                        {"id": "__control/TabView"},
+                    ]
+                }
+            )
         )
 
     def tearDown(self):
@@ -412,6 +419,22 @@ class LedgerKeyTest(unittest.TestCase):
         problems = gate.judge_ledger_keys(self.conf)
         self.assertEqual(len(problems), 1)
         self.assertIn("Label_text__gone.png", problems[0])
+
+    def test_a_control_row_is_matched_under_the_name_the_runners_write(self):
+        # `__control/TabView` is written `control_TabView.png` by all three
+        # runners — 166 such files across the committed ci baselines, and no
+        # `__control_*.png` anywhere. Deriving the id verbatim made every
+        # control row permanently dangling, so a PERMANENT accepted deviation
+        # read as stale and "cleanup" would have un-accepted a user ruling.
+        self.assertEqual(gate.screenshot_name("__control/TabView"), "control_TabView.png")
+        self._write("codegen_parity.json", [{"screenshot": "control_TabView.png"}])
+        self.assertEqual(gate.judge_ledger_keys(self.conf), [])
+
+    def test_a_control_row_can_still_go_stale(self):
+        self._write("codegen_parity.json", [{"screenshot": "control_Gone.png"}])
+        problems = gate.judge_ledger_keys(self.conf)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("control_Gone.png", problems[0])
 
     def test_a_contract_pointing_at_a_renamed_fixture_is_caught(self):
         semantics = self.conf / "attribute_semantics.json"
