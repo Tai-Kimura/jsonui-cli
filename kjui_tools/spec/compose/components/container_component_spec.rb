@@ -118,6 +118,16 @@ RSpec.describe KjuiTools::Compose::Components::ContainerComponent do
       expect(result[:children].map { |c| c['weight'] }).to eq([nil, nil])
     end
 
+    it 'makes the distributed child occupy its share, unless it sizes itself' do
+      json_data = { 'type' => 'View', 'orientation' => 'horizontal',
+                    'distribution' => 'fillEqually',
+                    'child' => [{ 'type' => 'Label' }, { 'type' => 'Label', 'width' => 40 }] }
+      result = described_class.generate(json_data, 0, required_imports)
+      # A share is a slot; without this the child's intrinsic size sits in an
+      # empty slot. Same rule and same guard as the dynamic `injectFillSize`.
+      expect(result[:children].map { |c| c['width'] }).to eq(['matchParent', 40])
+    end
+
     it 'leaves a child that declares its own weight alone' do
       json_data = { 'type' => 'View', 'orientation' => 'horizontal',
                     'distribution' => 'fill',

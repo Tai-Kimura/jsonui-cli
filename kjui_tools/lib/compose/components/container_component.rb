@@ -209,6 +209,7 @@ module KjuiTools
           return unless layout == 'Column' || layout == 'Row'
 
           axis_weight = layout == 'Column' ? 'heightWeight' : 'weight'
+          axis_size = layout == 'Column' ? 'height' : 'width'
           children.each do |child|
             next unless child.is_a?(Hash)
             # A child that declares its own weight keeps it and is not being
@@ -217,6 +218,12 @@ module KjuiTools
 
             child[axis_weight] = 1
             child[Helpers::ModifierBuilder::LOOSE_WEIGHT_KEY] = true if distribution == 'fill'
+            # The share is a slot; the child has to occupy it or the picture is
+            # the child's intrinsic size sitting in an empty slot. The dynamic
+            # component does exactly this (`injectFillSize`), and only when the
+            # child does not size that axis itself. The fixture children are
+            # Labels with no width, so without this nothing about them moves.
+            child[axis_size] ||= 'matchParent'
           end
         end
 
