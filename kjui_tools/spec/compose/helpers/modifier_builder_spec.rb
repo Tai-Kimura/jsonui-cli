@@ -1328,3 +1328,41 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
     end
   end
 end
+
+# Plan 49 lane C. `heightWeight` is the vertical spelling of `weight`, and it
+# was consulted without ever being emitted: build_size reads it to decide an
+# explicit height is absent and that the node fills its slot, then no
+# `.weight(...)` was produced — so declaring it changed the layout's shape
+# without distributing anything.
+RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
+  describe '.build_weight with heightWeight' do
+    it 'distributes on the vertical axis inside a Column' do
+      expect(described_class.build_weight({ 'heightWeight' => 2 }, 'Column')).to eq(['.weight(2f)'])
+    end
+
+    it 'stays out of a Row — it is the vertical share' do
+      expect(described_class.build_weight({ 'heightWeight' => 2 }, 'Row')).to be_empty
+    end
+
+    it 'wins over the shorthand in a Column, being the axis-specific spelling' do
+      expect(described_class.build_weight({ 'weight' => 1, 'heightWeight' => 3 }, 'Column'))
+        .to eq(['.weight(3f)'])
+    end
+
+    it 'leaves the shorthand exactly as it was in both scopes' do
+      # No existing output may move: `weight` keeps meaning what it meant.
+      expect(described_class.build_weight({ 'weight' => 1 }, 'Column')).to eq(['.weight(1f)'])
+      expect(described_class.build_weight({ 'weight' => 1 }, 'Row')).to eq(['.weight(1f)'])
+    end
+
+    it 'lifts the positive-weight guard to runtime for a bound value' do
+      out = described_class.build_weight({ 'heightWeight' => '@{hw}' }, 'Column').join
+      expect(out).to include('> 0f)')
+      expect(out).to include('Modifier.weight(')
+    end
+
+    it 'emits nothing without a distributing parent' do
+      expect(described_class.build_weight({ 'heightWeight' => 2 }, nil)).to be_empty
+    end
+  end
+end

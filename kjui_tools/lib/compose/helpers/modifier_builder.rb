@@ -101,7 +101,20 @@ module KjuiTools
 
           # Weight only works in Row/Column contexts
           # Weight must be greater than 0 in Compose
-          weight = json_data['weight']
+          #
+          # `heightWeight` is the vertical spelling and was consulted but never
+          # emitted: `build_size` reads it to decide that an explicit height is
+          # absent (line ~409) and that the node fills its slot, and then no
+          # `.weight(...)` was ever produced — so declaring it changed the
+          # layout's shape without ever distributing anything. In a Column it
+          # is the axis-specific spelling and wins over the shorthand; `weight`
+          # keeps its current meaning everywhere else, so no existing output
+          # moves (plan 49 lane C).
+          weight = if parent_orientation == 'Column' && json_data['heightWeight']
+                     json_data['heightWeight']
+                   else
+                     json_data['weight']
+                   end
           return modifiers unless weight && parent_orientation
 
           if BoundValue.bound?(weight)
