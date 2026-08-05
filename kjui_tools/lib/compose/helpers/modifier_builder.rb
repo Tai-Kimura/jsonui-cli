@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'effect_style_helper'
 require_relative 'binding_expression'
 require_relative 'bound_value'
 require_relative 'resource_resolver'
@@ -587,6 +588,19 @@ module KjuiTools
               modifiers << '.statusBarsPadding()' if edges.include?('top') || edges.include?('vertical')
               modifiers << '.navigationBarsPadding()' if edges.include?('bottom') || edges.include?('vertical')
             end
+          end
+
+          # `effectStyle` is declared on `common`, not just on Blur, and only
+          # the Blur component read it — so a plain View declaring a material
+          # got nothing (plan 49 lane C). The vocabulary is shared with that
+          # component (EffectStyleHelper) so the two cannot answer differently,
+          # which is the shape rjui settled on. Blur builds its own richer
+          # chain from the same tables and is skipped here.
+          if json_data['effectStyle'] && json_data['type'] != 'Blur' && json_data['type'] != 'BlurView'
+            required_imports&.add(:background)
+            required_imports&.add(:blur)
+            modifiers << ".background(#{EffectStyleHelper.scrim(json_data['effectStyle'])})"
+            modifiers << ".blur(#{EffectStyleHelper.blur_dp(json_data['effectStyle'])}.dp)"
           end
 
           # clipToBounds — declared boolean|binding. A plain truthiness test

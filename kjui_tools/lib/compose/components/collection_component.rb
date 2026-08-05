@@ -41,6 +41,14 @@ module KjuiTools
           code
         end
 
+        # `scrollTo` carries an index, and the data section may declare it as
+        # a String or a number — E has it open as "no class compiles on all
+        # three platforms at once". The emit used to assume String and call
+        # `isEmpty` / `substringBefore` straight on the property, so a numeric
+        # declaration produced a view that does not compile. `?.toString()
+        # .orEmpty()` reads the same for either, and for a nullable one too.
+        # Same family as the `Int.lowercase()` this lane hit on fontWeight: a
+        # binding spelling carries no type (plan 49 lane C).
         # `scrollAnchor` decides WHERE the scrollTo target lands in the
         # viewport. kjui read the attribute into a local (line ~289) and then
         # used it nowhere — neither the grid path nor the stack path (plan 49
@@ -378,7 +386,7 @@ module KjuiTools
             scroll_code = indent("val gridState = rememberLazyGridState()", depth) + "\n" +
                           indent("// Programmatic scrolling", depth) + "\n" +
                           indent("LaunchedEffect(data.#{scroll_prop}) {", depth) + "\n" +
-                          indent("val raw = data.#{scroll_prop}", depth + 1) + "\n" +
+                          indent("val raw = data.#{scroll_prop}?.toString().orEmpty()", depth + 1) + "\n" +
                           indent("if (raw.isEmpty()) return@LaunchedEffect", depth + 1) + "\n" +
                           indent("val index = raw.substringBefore(\"#\").toIntOrNull() ?: return@LaunchedEffect", depth + 1) + "\n"
 
@@ -1298,7 +1306,7 @@ module KjuiTools
 
             code += indent("val collectionStackState = androidx.compose.foundation.lazy.rememberLazyListState()", depth) + "\n"
             code += indent("LaunchedEffect(data.#{scroll_prop}) {", depth) + "\n"
-            code += indent("val raw = data.#{scroll_prop}", depth + 1) + "\n"
+            code += indent("val raw = data.#{scroll_prop}?.toString().orEmpty()", depth + 1) + "\n"
             code += indent("if (raw.isEmpty()) return@LaunchedEffect", depth + 1) + "\n"
             code += indent("val index = raw.substringBefore(\"#\").toIntOrNull() ?: return@LaunchedEffect", depth + 1) + "\n"
             stack_anchor_decl, stack_anchor_arg = scroll_anchor_offset_code(json_data, 'collectionStackState', depth)

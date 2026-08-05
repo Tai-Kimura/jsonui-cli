@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../helpers/effect_style_helper'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 
@@ -42,11 +43,12 @@ module KjuiTools
           bg_expr = if bg_source
                       Helpers::ResourceResolver.process_color(bg_source, required_imports)
                     else
-                      case effect_style
-                      when 'light' then 'Color.White.copy(alpha = 0.4f)'
-                      when 'dark' then 'Color.Black.copy(alpha = 0.4f)'
-                      when 'extralight' then 'Color.White.copy(alpha = 0.6f)'
-                      end
+                      # Same table the common path uses (EffectStyleHelper):
+                      # the component that owns the concept and the `common`
+                      # spelling must not answer differently. The UIKit trio
+                      # keeps the alphas this component already emitted, so
+                      # sharing the table changes no Blur output.
+                      Helpers::EffectStyleHelper.scrim(json_data['effectStyle'])
                     end
           if bg_expr
             opacity = json_data['opacity'] || json_data['alpha']
