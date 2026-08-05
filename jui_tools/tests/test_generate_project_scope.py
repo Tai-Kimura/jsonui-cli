@@ -32,10 +32,30 @@ def _make_args(**overrides):
 
 
 def _spec(name: str, method: str) -> dict:
+    """A spec the SpecValidator accepts.
+
+    It has to be valid, not merely well-shaped for the generator: the
+    command validates every spec first, but only when `document_tools` is
+    importable, and whether it is depends on the working directory. Run
+    from `jui_tools/` it is not, validation silently does not happen, and
+    an invalid spec sails through; run from the repo root it does, and the
+    same test fails. A spec that validates makes the outcome the same
+    either way — and stops the test passing because a check was absent.
+    """
     return {
         "type": "screen_spec",
-        "metadata": {"name": name, "displayName": name},
-        "structure": {"components": []},
+        "version": "1.0",
+        "metadata": {
+            "name": name,
+            "displayName": name,
+            "description": f"{name} scope-regression fixture",
+        },
+        "structure": {
+            "layout": {"root": "root", "children": []},
+            "components": [
+                {"id": "root", "type": "View", "description": "root container"}
+            ],
+        },
         "dataFlow": {
             "repositories": [{
                 "name": "ItemRepository",
