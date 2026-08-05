@@ -79,6 +79,21 @@ module SjuiTools
               @modifier_bag.append(:component_specific, ".frame(width: #{w}, height: #{h}, alignment: #{positional_alignment})")
               @modifier_bag.append(:component_specific, ".clipped()")
             end
+          elsif bound_value?(@component['contentMode'])
+            # A BOUND contentMode is ImageBindingHandler's — it emits the
+            # run-time ternary. This branch used to run `map_content_mode` on
+            # the `@{...}` string, which does not match any spelling and
+            # returned `.fit`, so the emit carried BOTH a frozen `.fit` and
+            # the handler's bound line. `:component_specific` is a
+            # multi-value bag key, so neither replaced the other and the
+            # image got two `.aspectRatio` modifiers (measured d=94 against
+            # dynamic, plan 49 parity worklist).
+            #
+            # Known limit: canonically `fill` is the STRETCH, spelled as the
+            # ABSENCE of the modifier, and absence is not something a ternary
+            # can express. A bound `fill` therefore renders as SwiftUI's
+            # aspect-fill crop. Closing that needs the same kind of library
+            # seam `clipToBounds` needed.
           elsif %w[fill scaletofill].include?(mode_raw)
             # stretch: no aspectRatio modifier
           elsif @component['contentMode']

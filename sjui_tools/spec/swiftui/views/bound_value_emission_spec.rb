@@ -27,6 +27,7 @@ require 'swiftui/views/slider_converter'
 require 'swiftui/views/button_converter'
 require 'swiftui/views/icon_label_converter'
 require 'swiftui/views/view_converter'
+require 'swiftui/views/image_converter'
 require 'swiftui/views/selectbox_converter'
 require 'swiftui/views/color_helper'
 require 'swiftui/converter_factory'
@@ -492,6 +493,19 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
         .to include('.padding(.top, CGFloat(Double(data.p) ?? 0))')
     ensure
       SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {}
+    end
+
+    it 'a bound contentMode leaves exactly one aspectRatio modifier' do
+      static = convert(:ImageConverter, 'type' => 'Image', 'src' => 'x', 'contentMode' => 'fit')
+      expect(static.scan('.aspectRatio(').length).to eq(1)
+
+      bound = convert(:ImageConverter, 'type' => 'Image', 'src' => 'x', 'contentMode' => '@{mode}')
+      expect_no_leak(bound)
+      # The converter used to run its static mapper on the `@{...}` string,
+      # get `.fit`, and append it NEXT TO the handler's run-time ternary —
+      # `:component_specific` is multi-value, so both survived.
+      expect(bound.scan('.aspectRatio(').length).to eq(1)
+      expect(bound).to include('data.mode == "fill" ? .fill : .fit')
     end
 
     it 'a bound clipToBounds resolves at render time' do
