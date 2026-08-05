@@ -106,12 +106,45 @@ class BuildToolEnvTest(unittest.TestCase):
             bin_path.write_text("#!/bin/sh\n")
             (tool_dir / ".ruby-version").write_text("3.2.2\n")
 
-            env = build_tool_env(
-                str(bin_path), "rjui", extra={"JUI_SKIP_EXISTING": "1"}
-            )
+            # Cleared, because the assertion below is about what the
+            # resolver PUT there and `build_tool_env` returns
+            # `{**os.environ, **overrides}`. Run from a shell that exports
+            # RBENV_VERSION — which is how you drive kjui's bundler — the
+            # variable is in the result no matter what the resolver decided,
+            # and the test fails while the code is behaving correctly. An
+            # assertion about absence means nothing when the surroundings
+            # can supply the thing.
+            with patch.dict(os.environ, {}, clear=True):
+                env = build_tool_env(
+                    str(bin_path), "rjui", extra={"JUI_SKIP_EXISTING": "1"}
+                )
             self.assertIsNotNone(env)
             self.assertNotIn("RBENV_VERSION", env)
             self.assertEqual(env.get("JUI_SKIP_EXISTING"), "1")
+
+    @patch("jui_cli.core.tool_resolver._rbenv_version_installed", return_value=False)
+    def test_an_inherited_rbenv_version_is_passed_through_untouched(self, _mock):
+        """Omitting the pin means the parent's Ruby wins, not that it vanishes.
+
+        The other half of the same contract: when the pinned version is not
+        installed the resolver declines to force one, and whatever the shell
+        already had must reach the child unchanged. Testing only the absence
+        case leaves this unpinned, and it is the behaviour people actually
+        depend on.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bin_dir = root / "rjui_tools" / "bin"
+            bin_dir.mkdir(parents=True)
+            bin_path = bin_dir / "rjui"
+            bin_path.write_text("#!/bin/sh\n")
+            (root / "rjui_tools" / ".ruby-version").write_text("3.2.2\n")
+
+            with patch.dict(os.environ, {"RBENV_VERSION": "3.2.9"}, clear=True):
+                env = build_tool_env(
+                    str(bin_path), "rjui", extra={"JUI_SKIP_EXISTING": "1"}
+                )
+            self.assertEqual(env.get("RBENV_VERSION"), "3.2.9")
 
     @patch("jui_cli.core.tool_resolver._rbenv_version_installed", return_value=True)
     def test_merges_extra_env_on_top(self, _mock):
