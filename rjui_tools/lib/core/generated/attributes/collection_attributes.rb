@@ -62,6 +62,8 @@ module JsonUI
         { name: 'lazy', kind: :enum, bindable: true, values: ['lazy', 'eager', 'none'].freeze }.freeze,
         # Spacing between rows
         { name: 'lineSpacing', kind: :number }.freeze,
+        # Called with the cell index (Int) when a cell appears on screen. Use for pagination by checking index against total count in ViewModel. Declared `binding` because that is what a layout actually carries: the author writes `@{handlerName}`, a STRING, and every reader matches it as one (kjui collection_component.rb:364 `json_data['onItemAppear'].match(/@\{([^}]+)\}/)`, and the binding validators infer `((Int) -> Unit)?` from that spelling). It was `type: "callback"` — the only callback-typed attribute in the whole SSoT — and attr-codegen skips that type as "function-valued, not extractable from JSON". True of a function; not true of the `@{...}` string a JSON layout can hold, so the attribute had no row in any generated table and no platform could read it typed (2026-08-05, plan 49-E, raised by A).
+        { name: 'onItemAppear', kind: :string, bindable: true }.freeze,
         # Collection page/selection change handler. Canonical; prefer over onPageChanged. [binding: one-way]
         { name: 'onValueChange', kind: :string, bindable: true, aliases: ['onValueChanged', 'onPageChanged'].freeze }.freeze,
         # Scroll orientation (horizontal or vertical)

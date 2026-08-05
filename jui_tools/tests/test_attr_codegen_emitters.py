@@ -157,8 +157,14 @@ class DeterminismTests(unittest.TestCase):
             skipped = {
                 (e["component"], e["attribute"]) for e in payload["skipped"]
             }
-            self.assertIn(("Collection", "onItemAppear"), skipped)
+            # Metadata is the only thing the real table skips now.
+            # onItemAppear used to be here as the SSoT's one callback-typed
+            # attribute; 49-E found the layout carries `@{handler}` as a
+            # STRING, so it is declared ["string","binding"] like every other
+            # handler and has a row. classify_attr's callback arm still has
+            # its own tests above — the mechanism is right, nothing uses it.
             self.assertIn(("common", "generatedBy"), skipped)
+            self.assertNotIn(("Collection", "onItemAppear"), skipped)
 
 
 class SmokeCheckTests(unittest.TestCase):

@@ -244,7 +244,12 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'blur_converter.rb' => %w[backgroundColor intensity],
     'button_converter.rb' => %w[href partialAttributes],
     'circle_view_converter.rb' => %w[backgroundColor fillColor strokeColor strokeWidth],
-    'collection_converter.rb' => %w[contentInset onItemAppear scrollDirection spacing],
+    # onItemAppear left this list in 49-E: it was the SSoT's only `callback`-typed
+    # attribute, which attr-codegen skips as "not extractable from JSON", so it
+    # had no declaration for this scan to find. A layout carries `@{handler}` as a
+    # string, so it is declared like every other handler now and the allowlist
+    # tightens by one.
+    'collection_converter.rb' => %w[contentInset scrollDirection spacing],
     'embed_converter.rb' => %w[],
     'gradient_view_converter.rb' => %w[angle colors direction endPoint gradientType orientation startPoint],
     'icon_label_converter.rb' => %w[fontWeight icon iconOff iconOn iconSize iconTintColor spacing strikethrough underline],

@@ -3,10 +3,10 @@
   "source": "shared/core/attribute_definitions.json",
   "skipped": [
     {
-      "component": "Collection",
-      "attribute": "onItemAppear",
-      "type": "\"callback\"",
-      "reason": "callback type — function-valued, not extractable from JSON"
+      "component": "View",
+      "attribute": "_comment",
+      "type": "\"string\"",
+      "reason": "developer metadata — leading underscore, never rendered"
     },
     {
       "component": "common",

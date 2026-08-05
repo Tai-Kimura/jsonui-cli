@@ -233,8 +233,12 @@ class RealDefinitionsTests(unittest.TestCase):
 
     def test_known_skips_present(self):
         skipped = {(s.component, s.name) for s in self.model.skipped}
-        self.assertIn(("Collection", "onItemAppear"), skipped)
         self.assertIn(("common", "generatedBy"), skipped)
+        # Every real skip is metadata now. onItemAppear left this set in 49-E:
+        # `callback` said "not extractable from JSON", which is true of a
+        # function and false of the `@{handler}` string a layout actually holds.
+        self.assertNotIn(("Collection", "onItemAppear"), skipped)
+        self.assertTrue(all(c == "common" for c, _ in skipped), skipped)
 
     def test_no_alias_is_cancelled_by_a_declaration_of_its_own_name(self):
         """An alias spelling must not ALSO be a declared attribute.

@@ -3,7 +3,7 @@
   "generatedBy": "jui generate attr-bindings --lang all",
   "source": {
     "file": "shared/core/attribute_definitions.json",
-    "sha256": "cad487195f506f2d780b1c91fd51fc59164682cdac026d909c0219748d447605"
+    "sha256": "eaae82f9b29d0298d60001c776cae620d7a0cb82d59f24168f78a2a2c19e2ab7"
   },
   "files": {
     "kotlin/AttrCodegenSupport.kt": "3f56c8021ab16a32d0ed4a38e7839c27a08237bd095c4469255c800d1600b165",
@@ -12,7 +12,7 @@
     "kotlin/CheckAttributes.kt": "6b51aad1539b6a99765e92b104c92ac19a84f1c3c91935d9862c5c4644ff0ea5",
     "kotlin/CheckBoxAttributes.kt": "ff90b1c0d1cc157d018d102de456079494f75d5970b127cb0036486e2e0961ad",
     "kotlin/CircleViewAttributes.kt": "d1a55a7802d8f97ec5ab1dd6e65834f13964abba9b10895231f11bd0a043935d",
-    "kotlin/CollectionAttributes.kt": "1de699027eacfce74a6ee943d3bb3e647d8d5bab8acbf1fbccc14fc9b6c47095",
+    "kotlin/CollectionAttributes.kt": "b6fe44927c62d6aa609ecb82a9b132b8374a240fe84f2e487aafe17a60ed686f",
     "kotlin/CommonAttributes.kt": "d44a9aaa80618c24ee31eb3e3784dee13f154f71bc54a1d3a032e2512475770b",
     "kotlin/EditTextAttributes.kt": "7944ad07238dbd3f9f49a567efcad9961af2346e586d46e0ce8d56921d734738",
     "kotlin/EmbedAttributes.kt": "1430408ff28f779da4935ddb84da3385142f1674ccd4418c8ac27fab8030e11f",
@@ -37,14 +37,14 @@
     "kotlin/ToggleAttributes.kt": "d01eaf666f8fafbfeb3757f29e92f6c5caeffdc83144b7dd751cd30c61c752bb",
     "kotlin/ViewAttributes.kt": "04b8b5f4ec88f20ef73156b672d1d0568621ceae001ed4aa1936302f0eb4efe6",
     "kotlin/WebAttributes.kt": "879621a42fb51cf636e968bde95980ac7b744ccb382ed01147082c64c6a8472d",
-    "kotlin/skipped_attributes.json": "59a6a69b4d4257ac012cac9131ac1e67ff0ca76a59de81a9f7ce9fd77c06833b",
+    "kotlin/skipped_attributes.json": "91523bae8f1d575dcfc795171b6b7f46dc7b8c7a4068b3ad628742526e1527d0",
     "ruby/attr_support.rb": "145cf82a2c2ad951b8b78bea99e438727b28b58154f463d1addf7a7bd7840d94",
     "ruby/blur_attributes.rb": "6ddcbbc62a3d69118129361c75f2a7c380adc64b4c67c14f122b388da38f443d",
     "ruby/button_attributes.rb": "1119010f290eb28f35544314e06b797033fb16cd6e56ecb139cafe00d4e64b7e",
     "ruby/check_attributes.rb": "5bbb3e1bdd0de269d7b31c16e603be5af513c2c80fd0700cc214863a17f58966",
     "ruby/check_box_attributes.rb": "450dc2167ca850d1ca2c1edd98455b89002c3c243c8cc0397596e8565b630d9b",
     "ruby/circle_view_attributes.rb": "b9d97589711091071c676e81add90b385ce0bc7c6e70ee65cee1c594ce9bbaf7",
-    "ruby/collection_attributes.rb": "b6927bd7d1ab4b8fb6f375e0036acf5833d50155eea8b245ffb9c78dd6edc77a",
+    "ruby/collection_attributes.rb": "e538e8f354c3cd4c4b495f76856d8ead0583a9681eaad06c98668761f306dcf5",
     "ruby/common_attributes.rb": "595508687f0cb503251a85798676f25e24ae75668961cbf2ef695bf56688e1a9",
     "ruby/edit_text_attributes.rb": "1b82a9ff51e144f745f00944a029456c25830f58fc8c029fb4cba45262655c0a",
     "ruby/embed_attributes.rb": "39a9958d0d8a6e33a8d9a1d762322a9ec027e3d4934be85428b98bf79b477937",
@@ -61,7 +61,7 @@
     "ruby/scroll_view_attributes.rb": "4f44df10373d74effeeebadf8a650e872d1babcd8a0f65e42b7f8d7ffa7b70e5",
     "ruby/segment_attributes.rb": "293243208eed34841aff358d215c6a2aa990a0079080ee56fde70fca3a8a3637",
     "ruby/select_box_attributes.rb": "f8df25fe1155eb9937156856ce7215be41f5abf766696d5a02f3dca2599b90f5",
-    "ruby/skipped_attributes.json": "59a6a69b4d4257ac012cac9131ac1e67ff0ca76a59de81a9f7ce9fd77c06833b",
+    "ruby/skipped_attributes.json": "91523bae8f1d575dcfc795171b6b7f46dc7b8c7a4068b3ad628742526e1527d0",
     "ruby/slider_attributes.rb": "f4ef776439aa8d2c5ff0d77c5ebe5e8711a3db2258b82197dba95642bb2d7581",
     "ruby/switch_attributes.rb": "e983ba4fe2add8e5179b33efe2774a2b1fd37f36344a66804a2a6c5f88ebe77e",
     "ruby/tab_view_attributes.rb": "272e251a1293a665df7923628f00182a0a03ea191894668a9e9288c928c68abe",
@@ -76,7 +76,7 @@
     "swift/CheckAttributes.swift": "114cffe834147717266ba7c2bc2a70684914b0de84ab9b82ccfc46c08e2b7ce4",
     "swift/CheckBoxAttributes.swift": "a8f4a58df2a08778ddd29394b0f717cba5e4bc217e86a6a7021168b01c1ec733",
     "swift/CircleViewAttributes.swift": "f3223932ace924e1cbc575901552b7d181004e90e88eba5abb7c474959bf9062",
-    "swift/CollectionAttributes.swift": "7d79a25ee21ea89c6061006b14ff5c5b82f095b4b21c86909500c1f11930a3bb",
+    "swift/CollectionAttributes.swift": "f914a93db309b18f31a0f95070df2c47a17f6e7185d0907a5d2ecb3c45428e37",
     "swift/CommonAttributes.swift": "6b1bf75113482581fd85a151884a319619ae75e973662b2fe77a69de80afff12",
     "swift/EditTextAttributes.swift": "4291e4f1e3f1f03761498f895239bdf3a970d2fcd1f92affc3e34c4f5a408168",
     "swift/EmbedAttributes.swift": "c3c1fda005dc75c85699c824c1ccd0bc592a4a06d9b9555d70ae0c79f9d6b0ca",
@@ -101,6 +101,6 @@
     "swift/ToggleAttributes.swift": "883cc9c9093a6bdd81daf67e91b43dd3f5765cdeaad02f2f44d23fcd33e179b7",
     "swift/ViewAttributes.swift": "7900f0d20f99ce61cc9227f4c31c853f27eb898edd187bb530650b9f82e1ff0d",
     "swift/WebAttributes.swift": "17b91ffe5c9d21fa8d111529c745ae764c55adc22cd96ae45bf76db1e6a70253",
-    "swift/skipped_attributes.json": "59a6a69b4d4257ac012cac9131ac1e67ff0ca76a59de81a9f7ce9fd77c06833b"
+    "swift/skipped_attributes.json": "91523bae8f1d575dcfc795171b6b7f46dc7b8c7a4068b3ad628742526e1527d0"
   }
 }
