@@ -383,6 +383,17 @@ NON_OBSERVABLE_BY_SECTION: set[tuple[str, str]] = {
     ("SelectBox", "datePickerStyle"),
     ("SelectBox", "minuteInterval"),
     ("SelectBox", "dateStringFormat"),
+    # An in-flight image exists for the length of a request. A still capture
+    # has no duration, so the loading face cannot be photographed however the
+    # fixture is shaped — the request either has not started or has already
+    # failed by the time the shutter opens. The ERROR face is a resting state
+    # and stays photographed; only this one is timing.
+    #
+    # Deliberately here and not in UNSHAPEABLE_FIXTURES: that table is for what
+    # the generator cannot build yet, and this fixture builds fine. The codegen
+    # probe still measures it — measured reading the spelling on both mobile
+    # converters — which is exactly the split this table is for.
+    ("NetworkImage", "loadingImage"),
 }
 
 
@@ -1417,8 +1428,30 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     "Label.linkable": {"text": LINK_TEXT},
     # The no-source state shows `defaultImage` FIRST, so the state images
     # behind it were never displayed — same shape as Image.errorImage above.
-    "NetworkImage.errorImage": {"defaultImage": None},
-    "NetworkImage.loadingImage": {"defaultImage": None},
+    # An error image needs a REQUEST THAT FAILS, and every NetworkImage fixture
+    # was in the no-src state — 19 of them, none carrying a url — so neither
+    # the error nor the loading face had ever occurred (C, #19). kjui says so
+    # at the point of the branch: an absent source is a NULL model that selects
+    # the fallback, while a real URL routes through the request/error path.
+    #
+    # `.invalid` is reserved by RFC 2606 precisely so it can never resolve, so
+    # this fails at DNS without leaving the machine and keeps the offline rule
+    # the v1 fixtures are built on. `defaultImage` still goes, or the no-src
+    # fallback would win before the request was ever made.
+    "NetworkImage.errorImage": {
+        "defaultImage": None,
+        "url": "https://conformance.invalid/missing.png",
+    },
+    # Same failing request as errorImage: without a url there is no in-flight
+    # state either, and the codegen DOES read the spelling once there is one
+    # (measured on both mobile converters against a control on the same base).
+    # What no still capture can hold is the MOMENT — see
+    # NON_OBSERVABLE_BY_SECTION, where the screenshot is switched off and the
+    # codegen probe goes on measuring it.
+    "NetworkImage.loadingImage": {
+        "defaultImage": None,
+        "url": "https://conformance.invalid/missing.png",
+    },
     "NetworkImage.placeholder": {"defaultImage": None},
     # A closed SelectBox draws `prompt` when there is one and the (initially
     # empty) selected text when there is not — so with no prompt declared

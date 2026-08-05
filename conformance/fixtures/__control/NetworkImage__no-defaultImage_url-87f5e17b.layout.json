@@ -17,8 +17,7 @@
       "id": "target",
       "width": 140,
       "height": 80,
-      "url": "https://conformance.invalid/missing.png",
-      "loadingImage": "conformance_sample_alt"
+      "url": "https://conformance.invalid/missing.png"
     }
   ]
 }
