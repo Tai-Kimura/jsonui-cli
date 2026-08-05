@@ -438,6 +438,41 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       end
     end
 
+    # `view_binding_handler` carried a second copy of all six size spellings,
+    # and every `.frame(` categorises to `:frame_size` — a MULTI_VALUE bag key
+    # that `apply_binding_modifiers` fills with `register`, which REPLACES the
+    # whole array. So one bound size attribute deleted every static frame on
+    # the same view. Measured as the ios codegen-parity four
+    # (`common_{max,min}{Width,Height}__binding`): the bound fixture and the
+    # static fixture point at the same number, so they must draw the same
+    # picture, and codegen's differed because it had lost the other axis.
+    it 'a bound size constraint does not delete the static frame beside it' do
+      %w[minWidth maxWidth minHeight maxHeight].each do |attribute|
+        code = convert(:ViewConverter, 'type' => 'View', 'id' => 't',
+                       'width' => 'wrapContent', 'height' => 200, attribute => '@{n}')
+        expect(code).to include('.frame(minHeight: 200, idealHeight: 200, maxHeight: 200)'),
+                        "#{attribute} must not clobber the declared height"
+        # Count the BOUND spelling: the declared height frame legitimately
+        # carries `minHeight:` / `maxHeight:` of its own.
+        expect(code.scan(/#{attribute}: CGFloat\(data\.n \?\? 0\)/).length).to eq(1),
+               "#{attribute} must be emitted once, not by two owners"
+      end
+    end
+
+    # The same mechanism, one step less visible: `width`/`height` did not
+    # double-emit because the entry that replaced the array happened to carry
+    # the same text as one of the entries it destroyed. The other axis still
+    # went missing.
+    it 'a bound width keeps the static height (and the reverse)' do
+      code = convert(:ViewConverter, 'type' => 'View', 'id' => 't',
+                     'width' => '@{n}', 'height' => 100)
+      expect(code).to include('.frame(width: CGFloat(data.n ?? 0), height: 100)')
+
+      code = convert(:ViewConverter, 'type' => 'View', 'id' => 't',
+                     'width' => 100, 'height' => '@{n}')
+      expect(code).to include('.frame(width: 100, height: CGFloat(data.n ?? 0))')
+    end
+
     it 'a bound Label fontSize reaches the font modifier as a CGFloat' do
       code = convert(:LabelConverter, 'type' => 'Label', 'text' => 'a', 'fontSize' => '@{size}')
       expect(code).to include('.font(.system(size: CGFloat(data.size ?? 0)))')

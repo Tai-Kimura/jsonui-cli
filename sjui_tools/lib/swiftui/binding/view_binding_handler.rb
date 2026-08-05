@@ -76,19 +76,32 @@ module SjuiTools
             ".opacity(#{bound_number(value, cast: 'Double')})"
           when 'disabled'
             ".disabled(#{BindingExpression.swift_bool_expr(value[2..-2])})"
-          # Size constraints
-          when 'width'
-            ".frame(width: #{bound_number(value)})"
-          when 'height'
-            ".frame(height: #{bound_number(value)})"
-          when 'minWidth'
-            ".frame(minWidth: #{bound_number(value)})"
-          when 'maxWidth'
-            ".frame(maxWidth: #{bound_number(value)})"
-          when 'minHeight'
-            ".frame(minHeight: #{bound_number(value)})"
-          when 'maxHeight'
-            ".frame(maxHeight: #{bound_number(value)})"
+          # Size constraints are NOT handled here, for the reason padding and
+          # border are not (below): `FrameHelper` owns all six spellings and
+          # has read the bound form through the canonical numeric emitter
+          # since plan 49 — `apply_frame_size` branches on `is_binding?` for
+          # `width`/`height`, `apply_frame_constraints` for the min/max four.
+          #
+          # Keeping a second copy here was destructive in the same way the
+          # padding branch was, and worse than a duplicate. Every `.frame(`
+          # categorises to `:frame_size`, a MULTI_VALUE key, and
+          # `apply_binding_modifiers` uses `register`, which REPLACES the
+          # whole array. So one bound size attribute deleted every static
+          # frame on the same view:
+          #
+          #   { width: "wrapContent", height: 200, minWidth: "@{x}" }
+          #     before: .frame(minWidth: …) emitted TWICE, and the declared
+          #             `.frame(minHeight: 200, idealHeight: 200,
+          #             maxHeight: 200)` gone entirely
+          #     after:  .frame(minWidth: …) once, height frame intact
+          #
+          # Measured as the ios codegen-parity four
+          # (`common_{max,min}{Width,Height}__binding`, 4 周目): dynamic
+          # resolved the binding and drew the same picture as the static
+          # fixture; codegen did not, because it had lost the other axis.
+          # `width`/`height` share the mechanism exactly — they did not
+          # double-emit only because the replacement happened to be the same
+          # text as the entry it destroyed.
           # Padding and margin are NOT handled here.
           #
           # `SpacingHelper#apply_padding` / `#apply_margins` read every
