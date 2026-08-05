@@ -14949,28 +14949,6 @@
       "control": "__control/Progress"
     },
     {
-      "id": "Progress/indicatorStyle__medium",
-      "component": "Progress",
-      "attribute": "indicatorStyle",
-      "case": "medium",
-      "class": "visual",
-      "host": "Progress",
-      "writtenKey": "indicatorStyle",
-      "aliasOf": null,
-      "value": "medium",
-      "platforms": [
-        "ios"
-      ],
-      "mode": "swiftui",
-      "deprecated": null,
-      "layout": "fixtures/Progress/indicatorStyle__medium.layout.json",
-      "test": "fixtures/Progress/indicatorStyle__medium.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "peerGroup": "Progress/indicatorStyle",
-      "control": "__control/Progress"
-    },
-    {
       "id": "Progress/indicatorStyle__large",
       "component": "Progress",
       "attribute": "indicatorStyle",
@@ -14987,6 +14965,28 @@
       "deprecated": null,
       "layout": "fixtures/Progress/indicatorStyle__large.layout.json",
       "test": "fixtures/Progress/indicatorStyle__large.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Progress/indicatorStyle",
+      "control": "__control/Progress"
+    },
+    {
+      "id": "Progress/indicatorStyle__medium",
+      "component": "Progress",
+      "attribute": "indicatorStyle",
+      "case": "medium",
+      "class": "visual",
+      "host": "Progress",
+      "writtenKey": "indicatorStyle",
+      "aliasOf": null,
+      "value": "medium",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "swiftui",
+      "deprecated": null,
+      "layout": "fixtures/Progress/indicatorStyle__medium.layout.json",
+      "test": "fixtures/Progress/indicatorStyle__medium.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": "Progress/indicatorStyle",
@@ -15376,28 +15376,6 @@
       "control": "__control/View"
     },
     {
-      "id": "View/gradientDirection__vertical",
-      "component": "View",
-      "attribute": "gradientDirection",
-      "case": "vertical",
-      "class": "visual",
-      "host": "View",
-      "writtenKey": "gradientDirection",
-      "aliasOf": null,
-      "value": "Vertical",
-      "platforms": [
-        "ios"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/View/gradientDirection__vertical.layout.json",
-      "test": "fixtures/View/gradientDirection__vertical.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "peerGroup": "View/gradientDirection",
-      "control": "__control/View__gradient--FF0000-0000FF"
-    },
-    {
       "id": "View/gradientDirection__horizontal",
       "component": "View",
       "attribute": "gradientDirection",
@@ -15414,6 +15392,28 @@
       "deprecated": null,
       "layout": "fixtures/View/gradientDirection__horizontal.layout.json",
       "test": "fixtures/View/gradientDirection__horizontal.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "View/gradientDirection",
+      "control": "__control/View__gradient--FF0000-0000FF"
+    },
+    {
+      "id": "View/gradientDirection__vertical",
+      "component": "View",
+      "attribute": "gradientDirection",
+      "case": "vertical",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "gradientDirection",
+      "aliasOf": null,
+      "value": "Vertical",
+      "platforms": [
+        "ios"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/View/gradientDirection__vertical.layout.json",
+      "test": "fixtures/View/gradientDirection__vertical.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": "View/gradientDirection",

@@ -1086,6 +1086,15 @@ PREFERRED_PRIMARY_CASE: dict[tuple[str, str], Any] = {
     # control's. `large` adds `.scaleEffect(1.5)` and discriminates. Measured
     # by B, same family as GradientView.locations.
     ("Indicator", "indicatorStyle"): "large",
+    # Progress has the same pair and the same trap, one component along:
+    # `medium` is the size an indeterminate ProgressView already draws, so the
+    # fixture asked for its control. B measured it as value-is-default.
+    ("Progress", "indicatorStyle"): "large",
+    # `Vertical` is the default gradient axis, so the direction fixture drew
+    # what a gradient with no direction draws. Now that the fixture has a
+    # gradient at all (this round), the representative has to be off the
+    # default for the attribute to show.
+    ("View", "gradientDirection"): "Horizontal",
     ("Collection", "defaultScrollAnchor"): "center",
     ("Collection", "layout"): "horizontal",
     ("Collection", "lazy"): "eager",
