@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "_comment": "Accepted codegen-differential defects, per (component, attribute, platform, check). An entry means the converter demonstrably fails that judgement and the failure is accepted FOR A STATED REASON — not that it is fine. Unrecorded defects fail `jui conformance gate --codegen-effect`; entries the measurement no longer supports are stale and fail too, so fixing a defect forces its row out (the one-directional version lets a fixed row sit here forever, which is how the previous freeze ledgers rotted). Advisory classes (value-is-default, numeric-string-divergence) are re-derived every run and are deliberately absent. Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
+  "entries": [
+    {
+      "component": "Collection",
+      "attribute": "scrollAnchor",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "common",
+      "attribute": "tintColor",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "common",
+      "attribute": "tintColor",
+      "platform": "android",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "Collection",
+      "attribute": "scrollAnchor",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "TextField",
+      "attribute": "autocorrectionType",
+      "platform": "ios",
+      "check": "C2",
+      "class": "presence-only",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "Collection",
+      "attribute": "defaultScrollAnchor",
+      "platform": "web",
+      "check": "C2",
+      "class": "presence-only",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "Collection",
+      "attribute": "lazy",
+      "platform": "web",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "Collection",
+      "attribute": "scrollAnchor",
+      "platform": "web",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "TextField",
+      "attribute": "input",
+      "platform": "web",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "TextView",
+      "attribute": "input",
+      "platform": "web",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "TextView",
+      "attribute": "keyboardType",
+      "platform": "web",
+      "check": "C2",
+      "class": "presence-only",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "common",
+      "attribute": "alignBottom",
+      "platform": "web",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "common",
+      "attribute": "alignBottom",
+      "platform": "web",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "common",
+      "attribute": "alignLeft",
+      "platform": "web",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "common",
+      "attribute": "alignLeft",
+      "platform": "web",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "common",
+      "attribute": "alignRight",
+      "platform": "web",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "common",
+      "attribute": "alignRight",
+      "platform": "web",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "common",
+      "attribute": "alignTop",
+      "platform": "web",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "component": "common",
+      "attribute": "alignTop",
+      "platform": "web",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "unreviewed-initial-measurement",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    }
+  ]
+}

@@ -129,13 +129,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # `platform` is the codegen-differential name for the same tree —
+          # the differential rides this matrix because these legs already
+          # carry each tool's ruby dependencies, and standing up a fourth job
+          # would mean maintaining a second copy of that setup.
           - tool: sjui_tools
+            platform: ios
             bundler: false
             os: macos-15 # specs compile emitted Swift against the SwiftUI SDK
           - tool: kjui_tools
+            platform: android
             bundler: true
             os: ubuntu-latest
           - tool: rjui_tools
+            platform: web
             bundler: true
             os: ubuntu-latest
     steps:
@@ -145,6 +152,9 @@ jobs:
           ruby-version: "3.3"
           bundler-cache: ${{ matrix.bundler }}
           working-directory: ${{ matrix.bundler && matrix.tool || '' }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
       - name: Install gems (no Gemfile)
         # sjui_tools has no Gemfile; its specs need rspec + simplecov and the
         # non-default gems its lib requires (xcodeproj, listen).
@@ -158,6 +168,20 @@ jobs:
         if: ${{ !matrix.bundler }}
         working-directory: ${{ matrix.tool }}
         run: rspec
+      # Codegen differential (plan 41 measured it, plan 49-H gates it). Drives
+      # this tool's production converter over layout hashes and judges the
+      # emitted TEXT — no device, no fixture, no renders — so it is seconds
+      # on top of a job that already has the converter's dependencies.
+      # Defects must be recorded in conformance/codegen_effect.json with an
+      # owner and a reason; entries the measurement no longer supports fail
+      # too, so a fix takes its row with it.
+      - name: Install jui_tools (codegen differential)
+        working-directory: jui_tools
+        run: python -m pip install --upgrade pip && python -m pip install -e .
+      - name: Codegen differential (${{ matrix.platform }})
+        run: |
+          python3 -c "import sys; from jui_cli.cli import main; sys.exit(main([
+            'conformance','codegen-effect','--paired','--platform','${{ matrix.platform }}']))"
 
   # ------------------------------------------------------------------ #
   # Drift guards between shared/core/attribute_definitions.json and the

@@ -130,6 +130,18 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         ),
     )
     gate.add_argument(
+        "--codegen-effect",
+        dest="codegen_effect",
+        action="store_true",
+        help=(
+            "Also judge the codegen differential (C0/C1/C2/C3) against "
+            "codegen_effect.json: defects must be recorded with an owner and a "
+            "reason, and recorded entries must still measure — unrecorded "
+            "defects and stale entries both fail. Needs no renders, so it is "
+            "unaffected by --no-visual."
+        ),
+    )
+    gate.add_argument(
         "--parity",
         action="store_true",
         help=(
@@ -562,6 +574,21 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         type=int,
         default=40,
         help="How many findings to print (default: 40; the JSON holds them all)",
+    )
+    codegen.add_argument(
+        "--update",
+        action="store_true",
+        help=(
+            "Record the measured defects into codegen_effect.json (owners and "
+            "reasons on surviving entries are preserved) instead of judging "
+            "against it. Without it, unrecorded defects and stale entries both "
+            "exit non-zero — the same check `gate --codegen-effect` runs"
+        ),
+    )
+    codegen.add_argument(
+        "--conformance-dir",
+        default=None,
+        help=f"Where codegen_effect.json lives (default: {_DEFAULT_OUT})",
     )
 
 
@@ -1240,10 +1267,58 @@ def _cmd_codegen_effect(args: argparse.Namespace) -> int:
         print()
         print(f"  queue written to {out}")
 
-    # Reporting only until the queue is consumed (plan 41 Phase 2 puts these
-    # three judgements on the gate; a gate that is red on arrival teaches
-    # people to ignore it).
-    return 0
+    conformance_dir = Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    path = ce.ledger_path(conformance_dir)
+    ledger = ce.load_ledger(path)
+
+    if args.update:
+        merged = ce.update_ledger(ledger, result, platforms=platforms)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(ce.render_ledger(merged), encoding="utf-8")
+        unreviewed = sum(1 for e in merged.values() if e.get("reason") == ce.UNREVIEWED)
+        print()
+        print(
+            f"  ledger written to {path} ({len(merged)} entr(y/ies), "
+            f"{unreviewed} unreviewed)"
+        )
+        return 0
+
+    verdict = ce.check_ledger(result, ledger, platforms=platforms)
+    for label, rows, hint in (
+        (
+            "defect(s) not recorded",
+            verdict.unrecorded,
+            "fix the converter, or record with an owner and a reason "
+            "(`jui conformance codegen-effect --update`)",
+        ),
+        (
+            "stale ledger entr(y/ies)",
+            verdict.stale,
+            "the defect is gone — the row goes with it",
+        ),
+        (
+            "entr(y/ies) without an owner or a reason",
+            verdict.incomplete,
+            "an accepted defect nobody owns is a permanent one",
+        ),
+    ):
+        if not rows:
+            continue
+        print()
+        print(f"{len(rows)} {label} in {path.name} — {hint}:")
+        for line in rows[: max(0, args.limit)]:
+            print(f"  {line}")
+        if len(rows) > args.limit:
+            print(f"  … {len(rows) - args.limit} more")
+
+    if verdict.ok:
+        print()
+        print(
+            f"codegen-effect OK: no unrecorded defects "
+            f"({verdict.accepted} accepted on ledger)"
+        )
+        return 0
+    return 1
 
 
 def _cmd_effect(args: argparse.Namespace) -> int:
@@ -1543,6 +1618,8 @@ def _cmd_gate(args: argparse.Namespace) -> int:
             parity=bool(getattr(args, "parity", False)),
             cross_effect=bool(getattr(args, "cross_effect", False)),
             inert_complete=bool(getattr(args, "inert_complete", False)),
+            codegen_effect=bool(getattr(args, "codegen_effect", False)),
+            repo_root=_REPO_ROOT,
             definitions_path=_DEFAULT_DEFINITIONS,
             semantics_path=_REPO_ROOT / "shared" / "core" / "attribute_semantics.json",
         )

@@ -135,6 +135,9 @@ def evaluate(
     parity: bool = False,
     cross_effect: bool = False,
     inert_complete: bool = False,
+    codegen_effect: bool = False,
+    repo_root: Path | None = None,
+    ruby: str = "ruby",
     definitions_path: Path | None = None,
     semantics_path: Path | None = None,
 ) -> GateOutcome:
@@ -183,6 +186,41 @@ def evaluate(
             )
             outcome.problems.extend(problems)
             outcome.notices.extend(notices)
+
+    if codegen_effect:
+        # Judged from emitted TEXT, so unlike every other check here it needs
+        # no renders and does not care about --no-visual.
+        import json as _json
+
+        if definitions_path is None or not Path(definitions_path).is_file():
+            outcome.problems.append(
+                "--codegen-effect needs attribute_definitions.json "
+                f"(looked at {definitions_path})"
+            )
+        else:
+            companion_specs = None
+            if semantics_path and Path(semantics_path).is_file():
+                from . import companions as comp
+
+                semantics = _json.loads(
+                    Path(semantics_path).read_text(encoding="utf-8")
+                ).get("semantics", {})
+                # Companions come from the adjudication ledger, never a hand
+                # list: an attribute ruled inert on its own can otherwise only
+                # ever measure the ruling.
+                companion_specs = comp.derive(semantics, _json.loads(
+                    Path(definitions_path).read_text(encoding="utf-8")
+                ))
+            sub = judge_codegen_effect(
+                conformance_dir,
+                _json.loads(Path(definitions_path).read_text(encoding="utf-8")),
+                Path(repo_root) if repo_root else Path(definitions_path).parents[2],
+                platforms,
+                companion_specs=companion_specs,
+                ruby=ruby,
+            )
+            outcome.problems.extend(sub.problems)
+            outcome.notices.extend(sub.notices)
 
     if parity and visual:
         # dynamic ≡ codegen, judged per selected platform against this run's
@@ -245,6 +283,87 @@ def evaluate(
                     f"{p}: codegen parity OK — {len(result.matched)} matched, "
                     f"{verdict.accepted} accepted deviation(s) on ledger"
                 )
+    return outcome
+
+
+def judge_codegen_effect(
+    conformance_dir: Path,
+    definitions: dict,
+    repo_root: Path,
+    platforms: Sequence[str],
+    *,
+    companion_specs: dict | None = None,
+    ruby: str = "ruby",
+) -> GateOutcome:
+    """C0/C1/C2/C3 against `codegen_effect.json`, both directions.
+
+    Renders nothing: the probes drive the production converters over layout
+    dicts, so this runs on any machine with ruby in seconds. That is why it
+    belongs on per-push CI rather than the weekly mobile run — the defects
+    it finds are in emitted text, and text is available long before a
+    simulator is.
+    """
+    from . import codegen_effect as ce
+
+    outcome = GateOutcome()
+    platforms = tuple(p for p in dict.fromkeys(platforms) if p in ce.PLATFORMS)
+    if not platforms:
+        outcome.problems.append(
+            "codegen-effect: no probeable platform selected — it judges emitted "
+            f"text for {', '.join(ce.PLATFORMS)}"
+        )
+        return outcome
+
+    try:
+        result = ce.check(
+            definitions,
+            repo_root,
+            platforms=platforms,
+            ruby=ruby,
+            companion_specs=companion_specs,
+        )
+    except ce.ProbeError as exc:
+        outcome.problems.append(f"codegen-effect: probe did not run — {exc}")
+        return outcome
+
+    ledger = ce.load_ledger(ce.ledger_path(conformance_dir))
+    verdict = ce.check_ledger(result, ledger, platforms=platforms)
+
+    if verdict.errors:
+        shown = "; ".join(verdict.errors[:3]) + (" …" if len(verdict.errors) > 3 else "")
+        outcome.problems.append(
+            f"{len(verdict.errors)} probe error(s) — the converter raised, so every "
+            f"judgement about that attribute is vacuous and no ledger entry can "
+            f"stand in for it: {shown}"
+        )
+    if verdict.unrecorded:
+        shown = "; ".join(verdict.unrecorded[:5]) + (
+            " …" if len(verdict.unrecorded) > 5 else ""
+        )
+        outcome.problems.append(
+            f"{len(verdict.unrecorded)} codegen defect(s) not in {ce.LEDGER_NAME} — "
+            f"fix the converter, or record the defect with an owner and a reason: {shown}"
+        )
+    if verdict.stale:
+        shown = ", ".join(verdict.stale[:5]) + (" …" if len(verdict.stale) > 5 else "")
+        outcome.problems.append(
+            f"{len(verdict.stale)} stale {ce.LEDGER_NAME} entr(y/ies) — the defect is "
+            f"gone, so the row has to go with it (`jui conformance codegen-effect "
+            f"--update`): {shown}"
+        )
+    if verdict.incomplete:
+        shown = "; ".join(verdict.incomplete[:5]) + (
+            " …" if len(verdict.incomplete) > 5 else ""
+        )
+        outcome.problems.append(
+            f"{len(verdict.incomplete)} {ce.LEDGER_NAME} entr(y/ies) without an owner "
+            f"or a reason — an accepted defect nobody owns is a permanent one: {shown}"
+        )
+    if verdict.ok:
+        outcome.notices.append(
+            f"codegen-effect OK — {result.checks_run} judgement(s) over "
+            f"{result.probes} probe(s), {verdict.accepted} accepted defect(s) on ledger"
+        )
     return outcome
 
 

@@ -1228,3 +1228,157 @@ def render_report(result: EffectResult, table: JobTable, platforms=PLATFORMS) ->
             )
         ],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Ledger
+# --------------------------------------------------------------------------- #
+
+#: Ledger schema version; bump when the entry shape changes.
+LEDGER_SCHEMA_VERSION = 1
+
+LEDGER_NAME = "codegen_effect.json"
+
+#: Reason recorded by ``--update`` for defects nobody has reviewed yet. The
+#: gate accepts it (it IS recorded) while the string keeps the backlog
+#: grep-able — same convention as the parity ledger.
+UNREVIEWED = "unreviewed-initial-measurement"
+
+#: Fields every entry must carry. An accepted defect with no owner is how a
+#: temporary exception becomes permanent: plan 50 measured that the
+#: attribution column is the only thing that stops a frozen row from
+#: outliving the reason it was frozen for.
+REQUIRED_FIELDS = ("owner", "reason")
+
+
+def ledger_path(conformance_dir) -> Path:
+    return Path(conformance_dir) / LEDGER_NAME
+
+
+def entry_key(finding: "Finding") -> tuple:
+    """What makes two measurements the same defect.
+
+    Deliberately NOT the finding class: a `bound-dropped` that becomes a
+    `bound-frozen` is the same attribute still broken on the same platform,
+    and rekeying it would drop the recorded reason on the floor. The class
+    travels in the entry so a change is visible, not silent.
+    """
+    return (finding.component, finding.attribute, finding.platform, finding.check)
+
+
+def load_ledger(path) -> dict:
+    """``{(component, attribute, platform, check): entry}``."""
+    path = Path(path)
+    if not path.is_file():
+        return {}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    out: dict = {}
+    for entry in raw.get("entries", []):
+        key = (
+            entry.get("component"),
+            entry.get("attribute"),
+            entry.get("platform"),
+            entry.get("check"),
+        )
+        if all(key):
+            out[key] = entry
+    return out
+
+
+def render_ledger(entries: dict) -> str:
+    """Deterministic ledger JSON."""
+    doc = {
+        "schemaVersion": LEDGER_SCHEMA_VERSION,
+        "_comment": (
+            "Accepted codegen-differential defects, per (component, attribute, "
+            "platform, check). An entry means the converter demonstrably fails "
+            "that judgement and the failure is accepted FOR A STATED REASON — "
+            "not that it is fine. Unrecorded defects fail `jui conformance gate "
+            "--codegen-effect`; entries the measurement no longer supports are "
+            "stale and fail too, so fixing a defect forces its row out (the "
+            "one-directional version lets a fixed row sit here forever, which "
+            "is how the previous freeze ledgers rotted). Advisory classes "
+            "(value-is-default, numeric-string-divergence) are re-derived every "
+            "run and are deliberately absent. Reason '" + UNREVIEWED + "' marks "
+            "the initial-measurement backlog — consume it."
+        ),
+        "entries": [
+            entries[key] for key in sorted(entries, key=lambda k: (k[2], k[0], k[1], k[3]))
+        ],
+    }
+    return json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
+
+
+def update_ledger(existing: dict, result: EffectResult, platforms=PLATFORMS) -> dict:
+    """Fold a measurement into the ledger.
+
+    Only the measured platforms are rewritten: an ios run says nothing about
+    android, and dropping android's rows because they were not measured would
+    quietly widen what the gate accepts.
+    """
+    measured = set(platforms)
+    merged = {key: entry for key, entry in existing.items() if key[2] not in measured}
+    for finding in result.defects:
+        key = entry_key(finding)
+        prior = existing.get(key, {})
+        merged[key] = {
+            "component": finding.component,
+            "attribute": finding.attribute,
+            "platform": finding.platform,
+            "check": finding.check,
+            "class": finding.finding_class,
+            "owner": prior.get("owner", UNREVIEWED),
+            "reason": prior.get("reason", UNREVIEWED),
+            "note": prior.get("note", ""),
+        }
+    return merged
+
+
+@dataclass
+class EffectCheck:
+    """Pure ledger-vs-measurement verdict (consumed by the gate)."""
+
+    unrecorded: list = field(default_factory=list)
+    stale: list = field(default_factory=list)
+    incomplete: list = field(default_factory=list)  # entries missing owner/reason
+    accepted: int = 0
+    errors: list = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return not (self.unrecorded or self.stale or self.incomplete or self.errors)
+
+
+def check_ledger(result: EffectResult, ledger: dict, platforms=PLATFORMS) -> EffectCheck:
+    """Judge one measurement against the ledger. Pure.
+
+    Probe errors are their own bucket and always fail: a converter that
+    raised emitted nothing, so every judgement about it is vacuous — the
+    ledger cannot accept a defect that was never measured.
+    """
+    verdict = EffectCheck(errors=[str(f) for f in result.errors])
+    measured = {entry_key(f) for f in result.defects}
+
+    for finding in result.defects:
+        key = entry_key(finding)
+        entry = ledger.get(key)
+        if entry is None:
+            verdict.unrecorded.append(str(finding))
+            continue
+        missing = [f for f in REQUIRED_FIELDS if not entry.get(f)]
+        if missing:
+            verdict.incomplete.append(
+                f"{finding.key} [{finding.platform}] {finding.check} — "
+                f"missing {', '.join(missing)}"
+            )
+        else:
+            verdict.accepted += 1
+
+    for key in sorted(ledger):
+        if key[2] not in set(platforms):
+            continue  # not measured this run; says nothing either way
+        if key not in measured:
+            component, attribute, platform, check = key
+            verdict.stale.append(f"{component}.{attribute} [{platform}] {check}")
+
+    return verdict
