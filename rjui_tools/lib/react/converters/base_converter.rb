@@ -444,6 +444,13 @@ module RjuiTools
             classes << TailwindMapper.map_z_index(1)
           end
 
+          # The SIZE half of the parent's `distribution`. An explicit `weight`
+          # below is the more specific declaration and wins the same axis, the
+          # way an explicit size wins over a bound one.
+          if (parent_distribution = json['_parent_distribution']) && !attributes['weight']
+            classes << DISTRIBUTION_CHILD_CLASS[parent_distribution]
+          end
+
           # Flex grow (weight). `map_flex_grow` calls `.to_f` on its argument
           # and `"@{v}".to_f` is 0.0, so every bound weight froze to
           # `flex-none` — the exact opposite of what a weight is for.
@@ -942,6 +949,53 @@ module RjuiTools
           'left' => 'left', 'right' => 'right'
         }.freeze
 
+        # `distribution` splits into TWO KINDS, and conflating them is the
+        # defect the canon names (shared/core/attribute_semantics.json,
+        # semantics.distribution, 2026-08-05 ruling):
+        #
+        #   SIZE  fill / fillEqually        distribute SIZE among the children
+        #   GAP   equalSpacing / equalCentering  distribute the FREE SPACE
+        #
+        # The size values are NOT an arrangement. `fill` means the children
+        # grow until there is no free space LEFT to distribute, so mapping it
+        # to `justify-between` — which distributes free space — is, in the
+        # ruling's words, precisely backwards. They are `flex-grow` on each
+        # child, the same shape as `Modifier.weight(1f)` on Compose and
+        # `.frame(maxWidth: .infinity)` on SwiftUI.
+        #
+        #   fill         children grow FROM their content size  -> `grow`
+        #                (flex-grow:1, flex-basis:auto)
+        #   fillEqually  every child the SAME size regardless    -> `flex-1`
+        #                (flex:1 1 0%)
+        #
+        # web used to send fillEqually and equalCentering both to
+        # justify-evenly, so no fixture comparing those two values could tell
+        # them apart — and `--inert-complete` could not see it, because both
+        # differ from the CONTROL while being identical to each other.
+        DISTRIBUTION_CHILD_CLASS = {
+          'fill' => 'grow',
+          'fillequally' => 'flex-1 min-w-0 min-h-0'
+        }.freeze
+
+        # The GAP values, which really are `justify-content`.
+        #
+        # `equalCentering` is equal CENTRE-TO-CENTRE distance. CSS's exact
+        # equivalent is an equal-track grid, but `space-around` is what the
+        # other two platforms reach for (Compose `Arrangement.SpaceAround`),
+        # and three platforms agreeing matters more here than CSS purity —
+        # the whole point of the ruling is that the four values must stop
+        # collapsing into each other in DIFFERENT ways per platform.
+        DISTRIBUTION_JUSTIFY = {
+          'equalspacing' => 'justify-between',
+          'equalcentering' => 'justify-around'
+        }.freeze
+
+        # The lowercased SIZE value this container declares, or nil.
+        def distribution_size_value
+          key = attributes['distribution'].to_s.downcase
+          DISTRIBUTION_CHILD_CLASS.key?(key) ? key : nil
+        end
+
         #: The declared default when a value is absent or unrecognised
         #: (`image.defaultContentMode` in shared/core/attribute_semantics.json).
         CONTENT_MODE_DEFAULT_FIT = 'contain'
@@ -1106,12 +1160,17 @@ module RjuiTools
           # cross-axis instruction. Same pattern as `_overlay` injection in
           # ViewConverter.
           parent_orientation = attributes['orientation']
+          # `distribution`'s two SIZE values are an instruction to the CHILDREN,
+          # not an arrangement of them — see DISTRIBUTION_CHILD_CLASS.
+          parent_distribution = distribution_size_value
 
           child_array.map do |child|
             # Skip data-only elements (they define props, not rendered content)
             next nil if data_only_element?(child)
 
-            annotated = parent_orientation ? child.merge('_parent_orientation' => parent_orientation) : child
+            annotated = child
+            annotated = annotated.merge('_parent_orientation' => parent_orientation) if parent_orientation
+            annotated = annotated.merge('_parent_distribution' => parent_distribution) if parent_distribution
             converter = create_converter_for_child(annotated)
             converter.convert_node(indent + 2)
           end.compact.join("\n")

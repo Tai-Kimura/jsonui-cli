@@ -180,18 +180,18 @@ module RjuiTools
             classes << "gap-#{spacing}"
           end
 
-          # Distribution (justify-content for flex containers)
-          if attributes['distribution']
-            case attributes['distribution']
-            when 'fill'
-              classes << 'justify-between'
-            when 'fillEqually'
-              classes << 'justify-evenly'
-            when 'equalSpacing'
-              classes << 'justify-around'
-            when 'equalCentering'
-              classes << 'justify-evenly'
-            end
+          # Distribution. Only the GAP half is a justify-content — the SIZE
+          # half (fill / fillEqually) is carried to the children as a flex
+          # instruction (BaseConverter::DISTRIBUTION_CHILD_CLASS), because
+          # `fill` means there is no free space left to distribute.
+          #
+          # An explicit `spacing` above pins the GAP, so it overrides what
+          # equalSpacing / equalCentering would compute; it says nothing about
+          # size, so the size values still apply underneath it (the canon's
+          # spacingWins clause).
+          distribution = attributes['distribution'].to_s.downcase
+          if (justify = DISTRIBUTION_JUSTIFY[distribution]) && !attributes['spacing']
+            classes << justify
           end
 
           # Cursor pointer for clickable items

@@ -40,65 +40,103 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
       end
     end
 
+    # The canon (shared/core/attribute_semantics.json, semantics.distribution,
+    # 2026-08-05 user-raised ruling) splits the four values into TWO KINDS:
+    # fill / fillEqually distribute SIZE among the children, equalSpacing /
+    # equalCentering distribute the FREE SPACE between them.
+    #
+    # These pins used to hold the opposite: `fill` -> justify-between, which
+    # the ruling calls precisely backwards (fill means no free space is LEFT
+    # to distribute), and fillEqually / equalCentering BOTH -> justify-evenly,
+    # so no fixture comparing those two could tell them apart.
     context 'with distribution' do
-      it 'adds justify-between for fill distribution' do
-        converter = create_converter({
-          'type' => 'View',
-          'orientation' => 'horizontal',
-          'distribution' => 'fill',
-          'child' => []
-        })
-        classes = converter.send(:build_class_name)
-        expect(classes).to include('justify-between')
+      it 'keeps the size values off justify-content entirely' do
+        %w[fill fillEqually].each do |value|
+          converter = create_converter({
+            'type' => 'View', 'orientation' => 'horizontal',
+            'distribution' => value, 'child' => []
+          })
+          classes = converter.send(:build_class_name)
+          expect(classes).not_to match(/justify-/), value
+        end
       end
 
-      it 'adds justify-evenly for fillEqually distribution' do
+      it 'maps equalSpacing to justify-between — equal gaps, no outer gap' do
         converter = create_converter({
-          'type' => 'View',
-          'orientation' => 'horizontal',
-          'distribution' => 'fillEqually',
-          'child' => []
+          'type' => 'View', 'orientation' => 'vertical',
+          'distribution' => 'equalSpacing', 'child' => []
         })
-        classes = converter.send(:build_class_name)
-        expect(classes).to include('justify-evenly')
+        expect(converter.send(:build_class_name)).to include('justify-between')
       end
 
-      it 'adds justify-around for equalSpacing distribution' do
+      it 'maps equalCentering to justify-around — equal centre-to-centre' do
         converter = create_converter({
-          'type' => 'View',
-          'orientation' => 'vertical',
-          'distribution' => 'equalSpacing',
-          'child' => []
+          'type' => 'View', 'orientation' => 'horizontal',
+          'distribution' => 'equalCentering', 'child' => []
         })
-        classes = converter.send(:build_class_name)
-        expect(classes).to include('justify-around')
+        expect(converter.send(:build_class_name)).to include('justify-around')
       end
 
-      it 'adds justify-evenly for equalCentering distribution' do
-        converter = create_converter({
-          'type' => 'View',
-          'orientation' => 'horizontal',
-          'distribution' => 'equalCentering',
-          'child' => []
-        })
-        classes = converter.send(:build_class_name)
-        expect(classes).to include('justify-evenly')
+      it 'gives the four values four distinct answers' do
+        outputs = %w[fill fillEqually equalSpacing equalCentering].map do |value|
+          create_converter({
+            'type' => 'View', 'orientation' => 'horizontal', 'distribution' => value,
+            'child' => [{ 'type' => 'View', 'id' => 'a' }, { 'type' => 'View', 'id' => 'b' }]
+          }).convert_node(2)
+        end
+        expect(outputs.uniq.length).to eq(4), 'two declared values collapsed into one output'
+      end
+
+      it 'sends the size values to the CHILDREN as a flex instruction' do
+        node = {
+          'type' => 'View', 'orientation' => 'horizontal', 'distribution' => 'fill',
+          'child' => [{ 'type' => 'View', 'id' => 'a' }, { 'type' => 'View', 'id' => 'b' }]
+        }
+        out = create_converter(node).convert_node(2)
+        expect(out.scan(/id="[ab]"[^>]*\bgrow\b/).length).to eq(2)
+      end
+
+      it 'gives fillEqually the equal-size flex, not the grow-from-content one' do
+        node = {
+          'type' => 'View', 'orientation' => 'horizontal', 'distribution' => 'fillEqually',
+          'child' => [{ 'type' => 'View', 'id' => 'a' }]
+        }
+        out = create_converter(node).convert_node(2)
+        expect(out).to match(/id="a"[^>]*flex-1/)
+      end
+
+      it 'lets an explicit weight on a child win over the parent distribution' do
+        node = {
+          'type' => 'View', 'orientation' => 'horizontal', 'distribution' => 'fillEqually',
+          'child' => [{ 'type' => 'View', 'id' => 'a', 'weight' => 2 }]
+        }
+        out = create_converter(node).convert_node(2)
+        expect(out).to include('flex-[2]')
       end
     end
 
     context 'with spacing and distribution combined' do
-      it 'applies both spacing and distribution classes' do
+      # The canon's spacingWins clause: an explicit `spacing` pins the GAP, so
+      # it overrides the gap equalSpacing would compute. It says nothing about
+      # size, so the SIZE values still apply underneath it.
+      it 'lets spacing pin the gap and drops the gap-distributing justify' do
         converter = create_converter({
-          'type' => 'View',
-          'orientation' => 'horizontal',
-          'spacing' => 12,
-          'distribution' => 'equalSpacing',
-          'child' => []
+          'type' => 'View', 'orientation' => 'horizontal',
+          'spacing' => 12, 'distribution' => 'equalSpacing', 'child' => []
         })
         classes = converter.send(:build_class_name)
-        # 12px maps to Tailwind gap-3
         expect(classes).to include('gap-3')
-        expect(classes).to include('justify-around')
+        expect(classes).not_to match(/justify-/)
+      end
+
+      it 'keeps the size half working underneath an explicit spacing' do
+        node = {
+          'type' => 'View', 'orientation' => 'horizontal', 'spacing' => 12,
+          'distribution' => 'fill', 'child' => [{ 'type' => 'View', 'id' => 'a' }]
+        }
+        out = create_converter(node).convert_node(2)
+        expect(out).to include('gap-3')
+        expect(out).to match(/id="a"[^>]*\bgrow\b/)
       end
     end
   end
