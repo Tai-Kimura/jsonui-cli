@@ -90,10 +90,13 @@ module KjuiTools
 
           code += Helpers::ModifierBuilder.format(modifiers, depth)
           
-          # Content mode (case-insensitive). The vocabulary lives in
+          # Content mode (case-insensitive). Vocabulary AND default live in
           # ContentScaleHelper so Image and NetworkImage cannot drift apart
           # again, and so a `@{...}` mode resolves at runtime instead of
-          # freezing to the default (plan 49 lane C: Image.contentMode).
+          # freezing (plan 49 lane C: Image.contentMode). This caller used to
+          # emit NOTHING for a mode outside the table; the declared default is
+          # `fit` (attribute_semantics.json#image), which is also Compose's own
+          # default for Image — so naming it changes no picture.
           if json_data['contentMode']
             required_imports&.add(:content_scale)
             if (scale = Helpers::ContentScaleHelper.scale_expression(json_data['contentMode']))

@@ -45,17 +45,15 @@ module KjuiTools
           code += "\n" + indent("model = #{image_model(json_data, url, required_imports)},", depth + 1)
           code += "\n" + indent("contentDescription = \"#{content_description}\",", depth + 1)
 
-          # Content scale (case-insensitive check). Shared vocabulary — see
-          # ContentScaleHelper. This caller keeps its own two quirks: an
-          # unknown mode falls back to Fit (Image emits nothing), and its
-          # alignment table has no `center` entry.
+          # Content scale (case-insensitive check). Shared vocabulary AND
+          # shared default — see ContentScaleHelper. The two local quirks this
+          # caller used to keep are gone: `attribute_semantics.json#image` puts
+          # the default at `fit` and the positional table at all five modes.
           if json_data['contentMode']
             required_imports&.add(:content_scale)
-            scale = Helpers::ContentScaleHelper.scale_expression(json_data['contentMode'], default: 'ContentScale.Fit')
+            scale = Helpers::ContentScaleHelper.scale_expression(json_data['contentMode'])
             code += "\n" + indent("contentScale = #{scale},", depth + 1)
-            alignment = Helpers::ContentScaleHelper.alignment_expression(
-              json_data['contentMode'], keys: %w[top bottom left right]
-            )
+            alignment = Helpers::ContentScaleHelper.alignment_expression(json_data['contentMode'])
             if alignment
               required_imports&.add(:alignment)
               code += "\n" + indent("alignment = #{alignment},", depth + 1)

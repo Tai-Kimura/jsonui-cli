@@ -14,13 +14,27 @@ module KjuiTools
       # `"@{...}"`, so a bound contentMode froze to each component's default
       # (plan 49 lane C: Image.contentMode, NetworkImage.contentMode).
       #
-      # The two behavioural differences above are preserved as PARAMETERS
-      # rather than silently unified — changing them would move static output,
-      # which is out of scope here. They are recorded in the lane report.
+      # Those two differences are GONE now, and the answer was written down
+      # the whole time. `shared/core/attribute_semantics.json#image` records
+      # the 2026-08-03 user rulings: the default contentMode is `fit` on every
+      # platform, and all three platforms implement the full mapping including
+      # the positional modes. So NetworkImage was right about the default and
+      # Image was right about `center`, which is why neither could be folded
+      # into the other by inspection — and why reading the ruling instead of
+      # inspecting was the whole job (plan 49 lane C, #11b).
       module ContentScaleHelper
         module_function
 
+        # The declared default, in one place: `fit` on every platform
+        # (attribute_semantics.json#image, 2026-08-03 user ruling).
+        DEFAULT_SCALE = 'ContentScale.Fit'
+
         SCALE_MAPPING = {
+          # `fit` is the canonical spelling and was missing from this table —
+          # it only ever worked because it fell through to a caller-supplied
+          # default that happened to be Fit. NetworkImage supplied one; Image
+          # did not, and emitted nothing.
+          'fit' => 'ContentScale.Fit',
           'aspectfit' => 'ContentScale.Fit',
           'aspectfill' => 'ContentScale.Crop',
           'fill' => 'ContentScale.FillBounds',
@@ -42,20 +56,21 @@ module KjuiTools
           'center' => 'Alignment.Center'
         }.freeze
 
-        # Kotlin `ContentScale` expression, or nil when nothing should be
-        # emitted. `default:` is the caller's own unknown-value behaviour.
-        def scale_expression(value, default: nil)
+        # Kotlin `ContentScale` expression. An unknown value resolves to the
+        # declared default rather than to whatever each caller happened to do
+        # — Image emitted nothing and NetworkImage `Fit`, for the same input.
+        def scale_expression(value, default: DEFAULT_SCALE)
           BoundValue.enum(value, SCALE_MAPPING,
                           default: default,
-                          bound_default: default || 'ContentScale.Fit',
+                          bound_default: default || DEFAULT_SCALE,
                           lowercase: true)
         end
 
-        # Kotlin `Alignment` expression for the positional modes, or nil.
-        # `keys:` lets a caller keep a narrower table than the canonical one.
-        def alignment_expression(value, keys: ALIGNMENT_MAPPING.keys)
-          mapping = ALIGNMENT_MAPPING.select { |k, _| keys.include?(k) }
-          BoundValue.enum(value, mapping, bound_default: 'Alignment.Center', lowercase: true)
+        # Kotlin `Alignment` expression for the positional modes, or nil. The
+        # table is the canonical five; `center` was missing from one caller.
+        def alignment_expression(value)
+          BoundValue.enum(value, ALIGNMENT_MAPPING,
+                          bound_default: 'Alignment.Center', lowercase: true)
         end
       end
     end
