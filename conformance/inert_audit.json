@@ -229,9 +229,9 @@
         "ios"
       ],
       "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "family": "adjudicated-correct",
+      "reason": "fallback-not-a-state",
+      "note": "A static Image issues no request, so it has neither an in-flight state nor an error state. Both converters say so at the branch and treat the two spellings as one fallback chain for a missing `src` (sjui image_converter.rb:36/42, kjui image_component.rb:13-16). Measured on both: each differs from the no-src control, and the two are IDENTICAL to each other. That identity is the correct answer here, not a defect — the distinct states belong to NetworkImage, where a real request exists and where D gave them one (3e713cc)."
     },
     {
       "fixture": "Image/highlightSrc__static",
@@ -254,9 +254,9 @@
         "ios"
       ],
       "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "family": "adjudicated-correct",
+      "reason": "fallback-not-a-state",
+      "note": "A static Image issues no request, so it has neither an in-flight state nor an error state. Both converters say so at the branch and treat the two spellings as one fallback chain for a missing `src` (sjui image_converter.rb:36/42, kjui image_component.rb:13-16). Measured on both: each differs from the no-src control, and the two are IDENTICAL to each other. That identity is the correct answer here, not a defect — the distinct states belong to NetworkImage, where a real request exists and where D gave them one (3e713cc)."
     },
     {
       "fixture": "Image/loading__eager",
