@@ -469,6 +469,29 @@ module RjuiTools
           # is the same declaration behind a runtime condition.
           classes << 'mx-auto' if bound_flag_style('marginInline', attributes['centerHorizontal'], on: 'auto')
           classes << 'my-auto' if bound_flag_style('marginBlock', attributes['centerVertical'], on: 'auto')
+
+          # Edge alignment for a FLOW child.
+          #
+          # The four align* spellings were consumed only by
+          # `overlay_position_classes`, the ABSOLUTE path — a flow child had a
+          # center* path and no align* path at all, so the declaration reached
+          # nothing (plan 41: `common.alignBottom` / `alignRight` C0
+          # unread-spelling, and all four C1 bound-dropped for the same
+          # reason: there was no code to drop it in).
+          #
+          # An auto margin is the flow answer, the same one center* already
+          # uses one line above: in flexbox an auto margin absorbs the free
+          # space on EITHER axis, so `mt-auto` pushes the child to the bottom
+          # whether the parent is a row or a column. That is why this needs no
+          # `_parent_orientation` — unlike `height: matchParent`, which has to
+          # know which axis it is on.
+          #
+          # The opposite-edge margin is what does the pushing: to sit at the
+          # bottom you take all the free space ABOVE you.
+          classes << 'mt-auto' if bound_flag_style('marginTop', attributes['alignBottom'], on: 'auto')
+          classes << 'mb-auto' if bound_flag_style('marginBottom', attributes['alignTop'], on: 'auto')
+          classes << 'ms-auto' if bound_flag_style('marginInlineStart', attributes['alignRight'], on: 'auto')
+          classes << 'me-auto' if bound_flag_style('marginInlineEnd', attributes['alignLeft'], on: 'auto')
           center_in_parent = attributes['centerInParent']
           if (center_expr = bound_value_expr(center_in_parent))
             dynamic_styles['marginInline'] = "#{center_expr} ? 'auto' : undefined"

@@ -241,6 +241,43 @@ RSpec.describe 'bound value emitters' do
     end
   end
 
+  # The four align* spellings were consumed ONLY by
+  # `overlay_position_classes`, the absolute path. A flow child had a center*
+  # path and no align* path at all, so the declaration reached nothing — which
+  # is why plan 41 measured `alignBottom` / `alignRight` as C0 unread-spelling
+  # AND all four as C1 bound-dropped: there was no code for the binding to be
+  # dropped in.
+  #
+  # An auto margin is the flow answer, the same one center* already uses: in
+  # flexbox an auto margin absorbs free space on EITHER axis, so this needs no
+  # parent-orientation. The OPPOSITE-edge margin does the pushing.
+  describe 'align* on a flow child' do
+    {
+      'alignTop' => 'mb-auto', 'alignBottom' => 'mt-auto',
+      'alignLeft' => 'me-auto', 'alignRight' => 'ms-auto'
+    }.each do |attribute, utility|
+      it "maps a static #{attribute} to #{utility}" do
+        expect(view(attribute => true)).to include(utility)
+      end
+    end
+
+    it 'gives the four edges four different answers' do
+      outputs = %w[alignTop alignBottom alignLeft alignRight].map { |a| view(a => true) }
+      expect(outputs.uniq.length).to eq(4)
+    end
+
+    {
+      'alignTop' => 'marginBottom', 'alignBottom' => 'marginTop',
+      'alignLeft' => 'marginInlineEnd', 'alignRight' => 'marginInlineStart'
+    }.each do |attribute, property|
+      it "decides a bound #{attribute} at runtime rather than baking it" do
+        out = view(attribute => '@{v}')
+        expect(out).to include("#{property}: data.v ? 'auto' : undefined")
+        expect(out).not_to include('-auto"'), 'baked the class for a runtime value'
+      end
+    end
+  end
+
   # The other half of the contract, and the reason the change is safe: a value
   # with no binding in it takes the byte-identical path it always took.
   describe 'static values are untouched' do
