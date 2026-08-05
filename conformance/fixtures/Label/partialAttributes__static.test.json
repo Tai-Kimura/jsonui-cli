@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/partialAttributes__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.partialAttributes (static)",
+    "description": "Conformance fixture for 'partialAttributes' on Label (section: Label, class: visual). Value under test: [{\"range\": [0, 3], \"fontColor\": \"#FF0000\", \"underline\": true}].",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "partialAttributes__static",
+      "description": "Conformance fixture for 'partialAttributes' on Label (section: Label, class: visual). Value under test: [{\"range\": [0, 3], \"fontColor\": \"#FF0000\", \"underline\": true}].",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_partialAttributes__static"
+        }
+      ]
+    }
+  ]
+}

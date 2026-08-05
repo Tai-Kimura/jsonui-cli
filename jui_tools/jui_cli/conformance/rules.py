@@ -585,6 +585,16 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     # highlight dictionary and so ignored both; it builds its own copy now, and
     # Compose and web implement the swap too, so all four surfaces agree and the
     # fixture can assert the whole set.
+    # `partialAttributes` was skipped as "composite value (no representative
+    # static value)", so a declared attribute whose semantics the SSoT pins
+    # down precisely had no fixture at all. The declaration is specific enough
+    # to write one: an array range is [start, end) with the end exclusive,
+    # resolved at runtime against the resolved string. "Sample" is the Label
+    # base text, so [0, 3) styles "Sam" and leaves "ple" alone — visible on
+    # every platform and independent of localisation.
+    ("Label", "partialAttributes"): [
+        {"range": [0, 3], "fontColor": "#FF0000", "underline": True},
+    ],
     ("Label", "highlightAttributes"): {
         "font": "bold",
         "fontSize": 24,
@@ -704,10 +714,16 @@ EXTRA_CASES: dict[tuple[str, str], list[Any]] = {
     # The NUMERIC face of a union-typed attribute. `fontWeight` is declared
     # `["string", "number"]` and every fixture wrote `"bold"`, so the numeric
     # spelling — legal, and named in the attribute's own description — was
-    # untested on all three platforms. It is not a hypothetical: this input
-    # killed `sjui build` with a NoMethodError, because label_converter kept a
-    # private copy of the weight vocabulary and called `.downcase` on an
-    # Integer (B, fixed in 2b58e99).
+    # untested on all three platforms. It is not a hypothetical, though the
+    # crash is narrower than first recorded here: a numeric fontWeight
+    # ALONGSIDE `partialAttributes` killed `sjui build` with a NoMethodError,
+    # because the partial path reached label_converter's private copy of the
+    # weight vocabulary and called `.downcase` on an Integer (B, fixed in
+    # 2b58e99). B isolated it by controlled experiment against the pre-fix
+    # tools, where a numeric weight ON ITS OWN generated all 708 layouts.
+    #
+    # So this case proves the value is READ; the build failure needs the pair,
+    # and that lives in VARIANT_CASES (`fontWeight__*_with_partial`).
     #
     # No new table needed. A union's second type is another literal value, and
     # EXTRA_CASES is where an attribute's extra literals go — same as Radio's
@@ -1646,6 +1662,22 @@ VARIANT_CASES: dict[tuple[str, str], dict[str, dict[str, Any]]] = {
     # the parity this pair measures.
     ("Radio", "checked"): {
         "with_group": {"group": "conformance_group"},
+    },
+    # B isolated the real crash and it is narrower than either of us wrote
+    # down: a numeric `fontWeight` alone generates fine, `partialAttributes`
+    # alone generates fine, and only the PAIR raised NoMethodError — the
+    # partial path reached label_converter's private copy of the weight
+    # vocabulary and called `.downcase` on an Integer (fixed in 2b58e99).
+    #
+    # `fontWeight__600` proves the numeric value is READ. It does not
+    # reproduce the build failure; only this variant does. Both faces get the
+    # pairing, because `"bold"` with partials is the control for it.
+    ("Label", "fontWeight"): {
+        "with_partial": {
+            "partialAttributes": [
+                {"range": [0, 3], "fontColor": "#FF0000"},
+            ],
+        },
     },
 }
 
