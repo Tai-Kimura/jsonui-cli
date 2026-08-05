@@ -409,6 +409,16 @@ def judge_value_discrimination(
             active=active,
         )
         verdict = vd.check(result, ledger)
+        # The count on its own reads backwards. A platform where an attribute
+        # stopped working drops every one of its pairs out of this check —
+        # both sides have to be active for the question to mean anything — so
+        # the more broken the platform, the smaller the number here. iOS
+        # reported 6 against android's 33 in run 30990560599 and looked like
+        # the healthy one; it had 783 pairs it could not measure at all,
+        # because contentMode had gone inert on 15 of 16 fixtures. Whoever
+        # reads the failure has to see both numbers or they will read a
+        # regression as good news.
+        unmeasurable = result.excluded.get("not-both-active", 0)
         if verdict.unrecorded:
             shown = "; ".join(verdict.unrecorded[:5]) + (
                 " ..." if len(verdict.unrecorded) > 5 else ""
@@ -416,7 +426,9 @@ def judge_value_discrimination(
             problems.append(
                 f"{platform}: {len(verdict.unrecorded)} declared value(s) that draw "
                 f"what another declared value draws, not in {vd.LEDGER_NAME} - the "
-                f"SSoT says they differ and the render says they do not: {shown}"
+                f"SSoT says they differ and the render says they do not "
+                f"({result.compared} pair(s) compared; {unmeasurable} more could not "
+                f"be, one side being inert against its control): {shown}"
             )
         if verdict.stale:
             shown = ", ".join(verdict.stale[:5]) + (" ..." if len(verdict.stale) > 5 else "")
@@ -429,10 +441,19 @@ def judge_value_discrimination(
                 f"{platform}: {len(verdict.incomplete)} {vd.LEDGER_NAME} entr(y/ies) "
                 f"without an owner or a reason"
             )
+        if result.compared == 0 and result.groups:
+            problems.append(
+                f"{platform}: value discrimination compared NOTHING - all "
+                f"{result.groups} attribute(s) with two declared values had at "
+                f"least one side inert against its control. A silent zero here "
+                f"is the worst possible reading: it means the check ran and "
+                f"could say nothing, not that the values discriminate"
+            )
         notices.append(
             f"{platform}: value discrimination - {result.compared} pair(s) compared "
-            f"over {result.groups} attribute(s), {verdict.accepted} accepted collapse(s) "
-            f"on ledger, excluded {result.excluded}"
+            f"over {result.groups} attribute(s), {unmeasurable} pair(s) unmeasurable "
+            f"(one side inert), {verdict.accepted} accepted collapse(s) on ledger, "
+            f"excluded {result.excluded}"
         )
     return problems, notices
 

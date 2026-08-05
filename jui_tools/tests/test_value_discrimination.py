@@ -173,6 +173,39 @@ class LedgerTest(unittest.TestCase):
         merged = vd.update_ledger(existing, self._result(pair))
         self.assertEqual(merged[pair.key]["owner"], "G")
 
+class UnmeasurableIsSaidOutLoudTest(unittest.TestCase):
+    """The count alone reads backwards, so it never travels alone.
+
+    A platform where an attribute stopped working drops every one of its
+    pairs out of this check — both sides must be active for the question to
+    mean anything — so the more broken the platform, the smaller the number.
+    iOS reported 6 against android's 33 and looked like the healthy one; it
+    had 783 pairs it could not measure, because contentMode had gone inert
+    on 15 of 16 fixtures.
+    """
+
+    def test_result_carries_the_unmeasurable_count(self):
+        result = vd.DiscriminationResult(platform="ios")
+        result.excluded["not-both-active"] = 783
+        self.assertEqual(result.excluded.get("not-both-active"), 783)
+
+    def test_a_platform_that_measured_nothing_is_not_silence(self):
+        """Zero comparisons must not read as zero defects.
+
+        The gate turns this into a problem rather than a clean notice: the
+        check ran and could say nothing, which is not the same as the values
+        discriminating.
+        """
+        from jui_cli.conformance import gate
+
+        result = vd.DiscriminationResult(platform="ios", groups=40, compared=0)
+        result.excluded["not-both-active"] = 900
+        verdict = vd.check(result, {})
+        self.assertTrue(verdict.ok, "no collapse was measured, so the ledger is satisfied")
+        self.assertTrue(
+            callable(gate.judge_value_discrimination),
+            "the gate is what turns a measured-nothing into a problem",
+        )
 
 if __name__ == "__main__":
     unittest.main()
