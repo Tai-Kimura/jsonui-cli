@@ -100,11 +100,14 @@ RSpec.describe SjuiTools::SwiftUI::Views::ColorHelper do
         expect(result).to eq('data.buttonColor')
       end
 
-      it 'returns data binding with ?? Color.clear when property not in definitions' do
-        # Property not in definitions is treated as optional
+      it 'resolves an UNDECLARED property as a colour name, not as a Color' do
+        # A colour arrives from JSON as a string, so String is what an
+        # undeclared property almost certainly is. `data.x ?? Color.clear`
+        # only compiles if a `Color?` property happens to exist — it was
+        # guessing the rarer case exactly where the generator knows least.
         SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {}
         result = helper_instance.get_swiftui_color('@{unknownColor}')
-        expect(result).to eq('data.unknownColor ?? Color.clear')
+        expect(result).to eq('SwiftJsonUIConfiguration.shared.getColor(for: data.unknownColor) ?? Color.clear')
       end
     end
   end

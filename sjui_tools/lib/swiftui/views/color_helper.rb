@@ -58,7 +58,18 @@ module SjuiTools
               return "SwiftJsonUIConfiguration.shared.getColor(for: #{color_expr}) ?? Color.clear"
             end
             # Color type: use directly (inline defaults are string literals —
-            # not typeable as Color — so only the path is emitted)
+            # not typeable as Color — so only the path is emitted).
+            #
+            # An UNDECLARED property takes the String route instead of this
+            # one. A colour arrives from JSON as a string, so String is what
+            # an undeclared property almost certainly is, and `data.x ??
+            # Color.clear` only compiles if a `Color?` property happens to
+            # exist. Guessing `Color` was guessing the rarer case in the
+            # situation where the generator knows least.
+            return "SwiftJsonUIConfiguration.shared.getColor(for: #{
+              SwiftUI::Binding::BindingExpression.swift_value_expr(color_value[2..-2])
+            }) ?? Color.clear" if data_def.nil?
+
             if ColorHelper.has_default_value?(property_name)
               return "data.#{property_name}"
             else
