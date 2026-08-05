@@ -78,8 +78,42 @@ LEDGER_NAME = "control_diff.json"
 #: frames — measured 2026-08-03 as 14 false actives whose diff bbox was
 #: exactly the indicator strip (y 2583–2598 on a 2622px 3x screenshot).
 #: 64px covers the strip with margin; fixtures render nowhere near it
-#: (full-screen white root, content top/center).
+#: (full-screen white root, content top/center). Not env-keyed: the
+#: indicator is there in every iOS environment.
 PLATFORM_IGNORE_BOTTOM = {"ios": 64}
+
+
+def ignore_bands(platform: str, env: str | None) -> tuple[int, int]:
+    """``(top, bottom)`` rows this comparison must not look at.
+
+    The system chrome comes from :data:`baseline.PLATFORM_ENV_CHROME_CROP`,
+    read rather than restated. That table already holds the measured bands
+    for each (platform, env) — including the android CI status bar, whose
+    clock ticks between the two captures of a pair and put 120 fixtures on
+    the active side of a comparison that is supposed to be about attributes.
+
+    Reading it from there is the whole fix. "Both screenshots come off the
+    same device in the same run, so rendering is deterministic" was the
+    assumption in this file, and same-run is not same-instant: the hashing
+    lane had already worked that out and cropped for it, while this lane
+    kept comparing the clock. Two devices, one repository, opposite beliefs
+    about the same pixels.
+
+    The env key carries an asymmetry that matters: locally those rows hold
+    real content (tab bar, alignBottom, fill clamps) and must NOT be cropped,
+    so `(android, local)` is deliberately absent from the table and this
+    returns no top band there.
+    """
+    from .baseline import chrome_crop
+
+    top, bottom = chrome_crop(platform, env)
+    # max, not replace: the two tables were cut for different reasons and
+    # happen to share an axis. chrome_crop's bottom is the android CI
+    # taskbar; PLATFORM_IGNORE_BOTTOM's is the iOS home indicator. Taking
+    # either one alone drops whatever the other knew, and today that would
+    # be iOS's 64px — the fade that produced 14 false actives on 2026-08-03.
+    # Whichever band is taller covers both claims about the same rows.
+    return (top, max(bottom, PLATFORM_IGNORE_BOTTOM.get(platform, 0)))
 
 
 def ledger_path(conformance_dir) -> Path:
@@ -183,7 +217,9 @@ def _screenshot_names(results: dict) -> dict:
     return out
 
 
-def diff_pixels(path_a: Path, path_b: Path, ignore_bottom: int = 0) -> int:
+def diff_pixels(
+    path_a: Path, path_b: Path, ignore_bottom: int = 0, ignore_top: int = 0
+) -> int:
     """Number of pixels that differ between two PNGs.
 
     Different dimensions mean the renders cannot be the same image; report the
@@ -198,8 +234,8 @@ def diff_pixels(path_a: Path, path_b: Path, ignore_bottom: int = 0) -> int:
         a, b = ia.convert("RGB"), ib.convert("RGB")
         if a.size != b.size:
             return a.size[0] * a.size[1]
-        if ignore_bottom > 0 and a.size[1] > ignore_bottom:
-            box = (0, 0, a.size[0], a.size[1] - ignore_bottom)
+        if (ignore_top or ignore_bottom) and a.size[1] > ignore_top + ignore_bottom:
+            box = (0, ignore_top, a.size[0], a.size[1] - ignore_bottom)
             a, b = a.crop(box), b.crop(box)
         diff = ImageChops.difference(a, b)
         # getbbox() is the C fast path and answers "any pixel at all?" — worth
@@ -220,6 +256,7 @@ def compare(
     results: dict,
     artifacts_dir=None,
     min_pixels: int = DEFAULT_MIN_PIXELS,
+    env: str | None = None,
 ) -> DiffResult:
     """Compare each visual fixture's screenshot against its control's.
 
@@ -232,6 +269,7 @@ def compare(
     artifacts_dir = Path(artifacts_dir)
 
     result = DiffResult(platform=platform)
+    _top, _bottom = ignore_bands(platform, env)
     expected = load_ledger(ledger_path(conformance_dir), platform)
     shots = _screenshot_names(results)
 
@@ -264,7 +302,10 @@ def compare(
 
         try:
             changed = diff_pixels(
-                png_a, png_b, ignore_bottom=PLATFORM_IGNORE_BOTTOM.get(platform, 0)
+                png_a,
+                png_b,
+                ignore_top=_top,
+                ignore_bottom=_bottom,
             )
         except BaselineError as exc:
             result.error = str(exc)

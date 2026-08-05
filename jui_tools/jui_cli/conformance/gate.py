@@ -676,7 +676,7 @@ def judge_inert_complete(
         if pr is None:
             continue
         diffs[platform] = control_diff_mod.compare(
-            conformance_dir, platform, manifest, pr.results
+            conformance_dir, platform, manifest, pr.results, env=env
         )
 
     definitions: dict = {}
