@@ -1090,7 +1090,7 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder, 'enabled' do
 
   it 'gates the click on a binding' do
     expect(clickable('enabled' => '@{isEnabled}'))
-      .to include('.clickable(enabled = data.isEnabled) {')
+      .to include('.clickable(enabled = (data.isEnabled ?: false)) {')
   end
 
   it 'gates it on the literal false' do
@@ -1108,7 +1108,7 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder, 'enabled' do
   describe 'a11y' do
     it 'marks the node disabled, checking inside the semantics lambda' do
       expect(clickable('enabled' => '@{isEnabled}'))
-        .to include('.semantics { if (!data.isEnabled) disabled() }')
+        .to include('.semantics { if (!(data.isEnabled ?: false)) disabled() }')
       expect(required_imports).to include(:semantics_disabled)
     end
 
@@ -1145,7 +1145,7 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder, 'touch gating' do
   describe 'canTap' do
     it 'gates the click on a binding' do
       expect(clickable('canTap' => '@{isTappable}'))
-        .to include('.clickable(enabled = data.isTappable) {')
+        .to include('.clickable(enabled = (data.isTappable ?: false)) {')
     end
 
     it 'gates it on the literal false' do
@@ -1155,7 +1155,7 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder, 'touch gating' do
     # Both gate the click, so both apply.
     it 'ands with enabled' do
       expect(clickable('enabled' => '@{isEnabled}', 'canTap' => '@{isTappable}'))
-        .to include('.clickable(enabled = data.isEnabled && data.isTappable) {')
+        .to include('.clickable(enabled = (data.isEnabled ?: false) && (data.isTappable ?: false)) {')
     end
 
     # A view that is merely not tappable is not "disabled" to a screen reader.
@@ -1169,8 +1169,8 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder, 'touch gating' do
     # pass, before any child sees them.
     it 'consumes pointer events in the Initial pass on a binding' do
       result = clickable('userInteractionEnabled' => '@{isInteractive}')
-      expect(result).to include('.pointerInput(data.isInteractive) {')
-      expect(result).to include('if (!(data.isInteractive)) {')
+      expect(result).to include('.pointerInput((data.isInteractive ?: false)) {')
+      expect(result).to include('if (!((data.isInteractive ?: false))) {')
       expect(result).to include('awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }')
       expect(required_imports).to include(:interaction_blocker)
     end

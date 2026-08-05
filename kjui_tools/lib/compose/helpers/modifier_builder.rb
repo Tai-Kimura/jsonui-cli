@@ -759,12 +759,26 @@ module KjuiTools
         # A boolean|binding attribute as a Kotlin expression. `true` yields nil:
         # it is the default for every one of these gates, so emitting it would
         # only add noise.
+        # The bound branch used to be `data.#{$1}` — the inner expression
+        # spliced in verbatim, so `@{on ?? true}` emitted `data.on ?? true`.
+        # `??` is not Kotlin, and no validator rule fires here: only
+        # attributes DECLARED `binding_direction: "two-way"` are checked for a
+        # complex expression, and `enabled` is not one of them. Measured on
+        # Button / Slider / TextField before the fix (plan 49 lane C, the
+        # audit the "the validator rejects it anyway" claim did not survive).
         def self.boolean_expression(value)
-          return nil if value.nil? || value == true || value == 'true'
-          return 'false' if value == false || value == 'false'
-          return nil unless is_binding?(value)
+          # ABSENT is not the same as `false` here: an absent flag means "no
+          # gate at all", while a declared `false` means "gate, permanently
+          # shut". BoundValue#bool folds both into :off, so absence is checked
+          # before asking it.
+          return nil if value.nil?
 
-          "data.#{extract_binding_property(value)}"
+          state = BoundValue.bool(value)
+          case state
+          when :on then nil     # the default for every gate that calls this
+          when :off then 'false'
+          else state
+          end
         end
 
         # A click-gated node is still `enabled` in the a11y tree, and the a11y

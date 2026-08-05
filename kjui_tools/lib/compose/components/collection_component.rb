@@ -644,7 +644,7 @@ module KjuiTools
                 # onItemAppear callback
                 on_item_appear = json_data['onItemAppear']
                 if on_item_appear && on_item_appear.match(/@\{([^}]+)\}/)
-                  code += "\n" + indent("LaunchedEffect(Unit) { data.#{$1}?.invoke(cellIndex) }", depth + 4)
+                  code += "\n" + indent("LaunchedEffect(Unit) { data.#{Helpers::BindingExpression.path_only($1)}?.invoke(cellIndex) }", depth + 4)
                 end
                 # Wrap cell in Box for alignment
                 code += "\n" + indent("Box(", depth + 4)
@@ -1458,7 +1458,7 @@ module KjuiTools
 
             on_item_appear = json_data['onItemAppear']
             if on_item_appear && on_item_appear.match(/@\{([^}]+)\}/)
-              out += "\n" + indent("LaunchedEffect(Unit) { data.#{$1}?.invoke(cellIndex) }", depth + 3)
+              out += "\n" + indent("LaunchedEffect(Unit) { data.#{Helpers::BindingExpression.path_only($1)}?.invoke(cellIndex) }", depth + 3)
             end
 
             out += "\n" + indent("val currentCellData = #{data_access}[cellIndex]", depth + 3)
@@ -1547,7 +1547,7 @@ module KjuiTools
             out += "\n" + indent("#{data_access}.forEachIndexed { cellIndex, _ ->", depth + 2)
             on_item_appear = json_data['onItemAppear']
             if on_item_appear && on_item_appear.match(/@\{([^}]+)\}/)
-              out += "\n" + indent("LaunchedEffect(Unit) { data.#{$1}?.invoke(cellIndex) }", depth + 3)
+              out += "\n" + indent("LaunchedEffect(Unit) { data.#{Helpers::BindingExpression.path_only($1)}?.invoke(cellIndex) }", depth + 3)
             end
 
             out += "\n" + indent("val currentCellData = #{data_access}[cellIndex]", depth + 3)

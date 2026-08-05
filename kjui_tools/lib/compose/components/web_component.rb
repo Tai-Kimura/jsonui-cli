@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../helpers/binding_expression'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 
@@ -12,8 +13,12 @@ module KjuiTools
           
           # Web uses 'url' for the web page URL
           url = if json_data['url'] && json_data['url'].match(/@\{([^}]+)\}/)
-            variable = $1
-            "data.#{variable}"
+            # `data.#{$1}` spliced the inner expression in verbatim, so a
+            # `?? default` reached the emit as `data.x ?? y`, which is not
+            # Kotlin. No validator rule covers this attribute (only
+            # `binding_direction: "two-way"` ones are checked for a complex
+            # expression) — plan 49 lane C.
+            Helpers::BindingExpression.value_access($1)
           elsif json_data['url']
             "\"#{json_data['url']}\""
           else

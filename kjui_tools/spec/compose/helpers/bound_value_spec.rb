@@ -2,6 +2,7 @@
 
 require 'spec_helper'
 require 'compose/helpers/bound_value'
+require 'compose/helpers/modifier_builder'
 
 # Plan 49 lane C. The two properties every one of these pins is defending:
 #
@@ -189,6 +190,59 @@ RSpec.describe KjuiTools::Compose::Helpers::BoundValue do
     it 'guards the fragment at runtime for a binding' do
       expect(described.conditional_modifier('data.c', '.clipToBounds()'))
         .to eq('.then(if (data.c) Modifier.clipToBounds() else Modifier)')
+    end
+  end
+end
+
+# Plan 49 lane C, #11a. The claim that "the validator rejects a `??` in these
+# contexts anyway" did not survive being measured: `binding-two-way-complex`
+# only fires for attributes DECLARED `binding_direction: "two-way"`, and of the
+# 25 (component, attribute) pairs read by a hand-rolled regex, 9 are not. Eight
+# of them emitted `data.x ?? y` — Kotlin has no `??` — with nothing reporting
+# it. These pin the shape at the shared root; the per-component call sites are
+# pinned in their own specs.
+RSpec.describe 'binding contexts the validator does not guard' do
+  let(:builder) { KjuiTools::Compose::Helpers::ModifierBuilder }
+
+  around do |example|
+    KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+    example.run
+    KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+  end
+
+  describe 'ModifierBuilder.boolean_expression — the shared root of the enabled family' do
+    it 'evaluates an authored ?? default instead of splicing it in' do
+      expect(builder.boolean_expression('@{on ?? true}')).to eq('(data.on ?: true)')
+    end
+
+    it 'coalesces a bare nullable read so the gate takes a Boolean' do
+      expect(builder.boolean_expression('@{on}')).to eq('(data.on ?: false)')
+    end
+
+    it 'emits a real negation for @{!on}' do
+      expect(builder.boolean_expression('@{!on}')).to eq('!(data.on ?: false)')
+    end
+
+    it 'keeps absent distinct from an explicit false' do
+      # Absent means "no gate at all"; a declared false means "gate, shut".
+      expect(builder.boolean_expression(nil)).to be_nil
+      expect(builder.boolean_expression(false)).to eq('false')
+      expect(builder.boolean_expression(true)).to be_nil
+    end
+
+    it 'never lets `??` reach the output' do
+      %w[@{on} @{!on} @{on\ ??\ true} @{on\ ??\ false}].each do |v|
+        expect(builder.boolean_expression(v.tr('\\', '')).to_s).not_to include('??')
+      end
+    end
+  end
+
+  describe 'path-only contexts (write-back keys, handler names)' do
+    it 'strips an authored default from a property NAME' do
+      # The name is a map key / a `data.<name>` receiver — a `??` inside it is
+      # not part of the name.
+      expect(KjuiTools::Compose::Helpers::BindingExpression.path_only('sel ?? "A"')).to eq('sel')
+      expect(KjuiTools::Compose::Helpers::BindingExpression.path_only('!flag')).to eq('flag')
     end
   end
 end

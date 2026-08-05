@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../helpers/binding_expression'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
@@ -17,16 +18,18 @@ module KjuiTools
           # SelectBox uses 'selectedItem', 'selectedDate', or 'bind' for selected value
           # For date pickers, selectedDate takes priority
           selected = if is_date_picker && json_data['selectedDate'] && json_data['selectedDate'].match(/@\{([^}]+)\}/)
-            variable = $1
-            "data.#{variable}"
+            # `data.#{$1}` spliced the inner expression in verbatim, so a
+            # `?? default` reached the emit as `data.x ?? y`, which is not
+            # Kotlin. No validator rule covers this attribute (only
+            # `binding_direction: "two-way"` ones are checked for a complex
+            # expression) — plan 49 lane C.
+            Helpers::BindingExpression.value_access($1)
           elsif json_data['selectedItem'] && json_data['selectedItem'].match(/@\{([^}]+)\}/)
-            variable = $1
-            "data.#{variable}"
+            Helpers::BindingExpression.value_access($1)
           elsif json_data['selectedValue'] && json_data['selectedValue'].match(/@\{([^}]+)\}/)
             # `selectedValue` is the cross-platform spelling of the same
             # two-way selection binding (web reads it; selectedItem wins).
-            variable = $1
-            "data.#{variable}"
+            Helpers::BindingExpression.value_access($1)
           elsif json_data['selectedIndex'].is_a?(String) && json_data['selectedIndex'].match(/@\{([^}]+)\}/)
             index_var = $1
             items = json_data['items']
@@ -40,8 +43,7 @@ module KjuiTools
               "\"\""
             end
           elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-            variable = $1
-            "data.#{variable}"
+            Helpers::BindingExpression.value_access($1)
           elsif json_data['selectedIndex'].is_a?(Integer) && json_data['items'].is_a?(Array)
             # Static selectedIndex: display the addressed item, as dynamic
             # mode does. (An Integer here used to crash the converter —
@@ -105,9 +107,9 @@ module KjuiTools
                   else
                     code += "\n" + indent("val index = 0", depth + 2)
                   end
-                  code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to index))", depth + 2)
+                  code += "\n" + indent("viewModel.updateData(mapOf(\"#{Helpers::BindingExpression.path_only(binding_variable)}\" to index))", depth + 2)
                 else
-                  code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue))", depth + 2)
+                  code += "\n" + indent("viewModel.updateData(mapOf(\"#{Helpers::BindingExpression.path_only(binding_variable)}\" to newValue))", depth + 2)
                 end
                 code += "\n" + indent("#{handler_call}", depth + 2)
                 code += "\n" + indent("},", depth + 1)
@@ -119,7 +121,7 @@ module KjuiTools
             end
           elsif binding_variable
             code += "\n" + indent("onValueChange = { newValue ->", depth + 1)
-            code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue))", depth + 2)
+            code += "\n" + indent("viewModel.updateData(mapOf(\"#{Helpers::BindingExpression.path_only(binding_variable)}\" to newValue))", depth + 2)
             code += "\n" + indent("},", depth + 1)
           else
             code += "\n" + indent("onValueChange = { },", depth + 1)

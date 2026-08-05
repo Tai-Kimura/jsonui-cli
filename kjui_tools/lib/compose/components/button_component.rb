@@ -254,9 +254,13 @@ module KjuiTools
           # Handle enabled attribute
           if json_data.key?('enabled')
             if json_data['enabled'].is_a?(String) && json_data['enabled'].start_with?('@{')
-              # Data binding for enabled
-              variable = json_data['enabled'].match(/@\{([^}]+)\}/)[1]
-              code += ",\n" + indent("enabled = data.#{variable}", depth + 1)
+              # `data.#{$1}` spliced the inner expression in verbatim, so
+              # `@{on ?? true}` emitted `data.on ?? true` — not Kotlin. No
+              # validator rule covers it: only `binding_direction: "two-way"`
+              # attributes are checked for a complex expression, and `enabled`
+              # is not one (plan 49 lane C).
+              inner = json_data['enabled'][2..-2]
+              code += ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner, negatable: true)}", depth + 1)
             else
               code += ",\n" + indent("enabled = #{json_data['enabled']}", depth + 1)
             end

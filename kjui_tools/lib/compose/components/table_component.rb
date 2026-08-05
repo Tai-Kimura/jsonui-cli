@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../helpers/binding_expression'
 require_relative '../helpers/modifier_builder'
 
 module KjuiTools
@@ -11,11 +12,14 @@ module KjuiTools
           
           # Table uses data binding for items
           items = if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-            variable = $1
-            "data.#{variable}"
+            # `data.#{$1}` spliced the inner expression in verbatim, so a
+            # `?? default` reached the emit as `data.x ?? y`, which is not
+            # Kotlin. No validator rule covers this attribute (only
+            # `binding_direction: "two-way"` ones are checked for a complex
+            # expression) — plan 49 lane C.
+            Helpers::BindingExpression.value_access($1)
           elsif json_data['items'] && json_data['items'].match(/@\{([^}]+)\}/)
-            variable = $1
-            "data.#{variable}"
+            Helpers::BindingExpression.value_access($1)
           else
             'emptyList()'
           end
