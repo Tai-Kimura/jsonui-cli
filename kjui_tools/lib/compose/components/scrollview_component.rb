@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../helpers/content_inset_helper'
 require_relative '../helpers/modifier_builder'
 
 module KjuiTools
@@ -56,6 +57,16 @@ module KjuiTools
           if paging
             code += "\n" + indent("state = #{state_var},", depth + 1)
             code += "\n" + indent("flingBehavior = rememberSnapFlingBehavior(lazyListState = #{state_var}),", depth + 1)
+          end
+
+          # `contentInsetAdjustmentBehavior` — see ContentInsetHelper. UIKit
+          # adjusts by default and the attribute stops it; Compose never
+          # adjusts, so the values that need code are the opposite ones.
+          if (safe_inset = Helpers::ContentInsetHelper.safe_area_padding(
+                json_data['contentInsetAdjustmentBehavior'], horizontal: is_horizontal))
+            Helpers::ContentInsetHelper.imports_for(json_data['contentInsetAdjustmentBehavior'])
+                                       .each { |k| required_imports&.add(k) }
+            code += "\n" + indent("contentPadding = #{safe_inset},", depth + 1)
           end
 
           # Build modifiers

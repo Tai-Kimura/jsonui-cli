@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../helpers/content_inset_helper'
 require_relative '../helpers/modifier_builder'
 require_relative '../../core/normalization'
 
@@ -104,6 +105,13 @@ module KjuiTools
         end
 
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+          # Registered here, before the routing: `generate` forks into the
+          # grid emitter and the CollectionStack emitter, and the inset can
+          # come out of either. Registering inside one of them is how half a
+          # feature ships (plan 49 lane C, #4).
+          Helpers::ContentInsetHelper.imports_for(json_data['contentInsetAdjustmentBehavior'])
+                                     .each { |k| required_imports&.add(k) }
+
           # Check if sections are defined
           sections = json_data['sections'] || []
           # Support both 'layout' and 'orientation' attributes for horizontal/vertical/flow.
@@ -248,6 +256,14 @@ module KjuiTools
             h_inset = inset_horizontal || 0
             v_inset = inset_vertical || 0
             code += "\n" + indent("contentPadding = PaddingValues(horizontal = #{h_inset}.dp, vertical = #{v_inset}.dp),", depth + 1)
+          elsif (safe_inset = Helpers::ContentInsetHelper.safe_area_padding(
+                   json_data['contentInsetAdjustmentBehavior'], horizontal: is_horizontal))
+            # A DECLARED numeric contentPadding/insets wins: the author named
+            # an exact value, and this attribute only says "clear the system
+            # bars" — it cannot also mean "and discard the number I wrote".
+            # `never` emits nothing, which is Compose's own default, so
+            # existing screens do not move (plan 49 lane C, #4).
+            code += "\n" + indent("contentPadding = #{safe_inset},", depth + 1)
           end
           
           # Item spacing
@@ -1375,6 +1391,18 @@ module KjuiTools
             inset_v = json_data['insetVertical']
             if inset_h || inset_v
               "PaddingValues(horizontal = #{inset_h || 0}.dp, vertical = #{inset_v || 0}.dp)"
+            else
+              # Same precedence as the grid path: a declared numeric padding
+              # wins, and only when none is declared does
+              # `contentInsetAdjustmentBehavior` get to ask for the safe-area
+              # inset. Both of Collection's emitters go through this one
+              # method now — the grid path and the stack path are chosen by
+              # `single_column_sections?`, and a change that reaches only one
+              # of them reaches roughly half the collections in a project
+              # (plan 49 lane C, #4).
+              Helpers::ContentInsetHelper.safe_area_padding(
+                json_data['contentInsetAdjustmentBehavior'], horizontal: is_horizontal
+              )
             end
           end
         end

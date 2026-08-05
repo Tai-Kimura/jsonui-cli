@@ -59,6 +59,13 @@ module KjuiTools
             button_padding: "import androidx.compose.foundation.layout.PaddingValues",
             padding_values: "import androidx.compose.foundation.layout.PaddingValues",
             text_decoration: "import androidx.compose.ui.text.style.TextDecoration",
+            # `contentInsetAdjustmentBehavior` — the safe-area inset a
+            # LazyColumn/LazyRow takes as contentPadding (plan 49 lane C).
+            window_insets: ["import androidx.compose.foundation.layout.WindowInsets",
+                            "import androidx.compose.foundation.layout.safeDrawing",
+                            "import androidx.compose.foundation.layout.asPaddingValues"],
+            window_insets_sides: ["import androidx.compose.foundation.layout.WindowInsetsSides",
+                                  "import androidx.compose.foundation.layout.only"],
             # `Dp.Infinity` — the unresolved value of a bound maxWidth/maxHeight
             # (a 0.dp cap would annihilate the view). Plan 49 lane C.
             dp_infinity: "import androidx.compose.ui.unit.Dp",
