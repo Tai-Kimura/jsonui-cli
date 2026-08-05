@@ -590,5 +590,57 @@ class CompletenessRatchetTest(unittest.TestCase):
         self.assertEqual(len(unrecorded), 1)
 
 
+class RealLedgerCountsTests(unittest.TestCase):
+    """`counts` in the committed ledger must describe `entries`.
+
+    It is derived by update_ledger, but the file is hand-adjudicated between
+    runs — three lanes edited entries and left counts alone, so `unreviewed`
+    still read 84 from the first bake while the real figure had fallen to 74.
+    A number nobody recomputes is read by people who do not read the entries.
+    """
+
+    @staticmethod
+    def _ledger():
+        import json
+        from pathlib import Path
+
+        path = Path(__file__).resolve().parents[2] / "conformance" / "inert_audit.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def test_counts_match_the_entries_they_describe(self):
+        doc = self._ledger()
+        entries = doc["entries"]
+        self.assertEqual(doc["counts"]["entries"], len(entries))
+        self.assertEqual(
+            doc["counts"]["unreviewed"],
+            sum(1 for e in entries if e["reason"] == ia.UNREVIEWED),
+        )
+
+    def test_an_added_entry_that_forgets_counts_fails(self):
+        """The regression this guards is adding a row and not recounting.
+
+        Asserted by doing exactly that to a copy — not by editing `counts`,
+        which would only prove the comparison runs.
+        """
+        doc = self._ledger()
+        doc["entries"].append(
+            {
+                "fixture": "common/invented__static",
+                "component": "common",
+                "attribute": "invented",
+                "inertOn": ["web"],
+                "kind": "uniform-inert-undeclared-value",
+                "family": "untriaged",
+                "reason": ia.UNREVIEWED,
+                "note": "",
+            }
+        )
+        self.assertNotEqual(doc["counts"]["entries"], len(doc["entries"]))
+        self.assertNotEqual(
+            doc["counts"]["unreviewed"],
+            sum(1 for e in doc["entries"] if e["reason"] == ia.UNREVIEWED),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
