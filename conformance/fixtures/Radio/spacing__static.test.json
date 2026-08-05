@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance Radio.spacing (static)",
-    "description": "Conformance fixture for 'spacing' on Radio (section: Radio, class: visual). Value under test: 8.",
+    "description": "Conformance fixture for 'spacing' on Radio (section: Radio, class: visual). Value under test: 16.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "spacing__static",
-      "description": "Conformance fixture for 'spacing' on Radio (section: Radio, class: visual). Value under test: 8.",
+      "description": "Conformance fixture for 'spacing' on Radio (section: Radio, class: visual). Value under test: 16.",
       "steps": [
         {
           "action": "waitFor",

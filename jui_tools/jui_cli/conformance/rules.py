@@ -662,6 +662,12 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     ("Indicator", "hidesWhenStopped"): False,
     # DEFAULT_NUMBER (8) is also the cross-platform default gap.
     ("CheckBox", "spacing"): 16,
+    # Same fallback, one component along, and the A §5(2) round only caught the
+    # CheckBox: `radio_spacing_dp` is `json_data['spacing'] || 8`
+    # (kjui radio_component.rb:534), so the generic 8 was the default spelled
+    # out. Read out of the implementation rather than inferred from the number
+    # happening to match CheckBox's.
+    ("Radio", "spacing"): 16,
     # rjui's own fallback is `attributes['minimumScaleFactor'] || 0.5`, so the
     # generic 0.5 was the default spelled out.
     ("Label", "minimumScaleFactor"): 0.25,

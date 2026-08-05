@@ -17291,7 +17291,7 @@
       "host": "Radio",
       "writtenKey": "spacing",
       "aliasOf": null,
-      "value": 8,
+      "value": 16,
       "platforms": [
         "ios",
         "android",
