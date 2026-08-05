@@ -290,3 +290,82 @@ jobs:
             conformance/REPORT.md
             conformance/results/web.results.json
             conformance/artifacts/web/
+
+  # ------------------------------------------------------------------ #
+  # Ruby generation parity.
+  #
+  # `kjui` runs under the HOST'S system Ruby in consumer projects, which on
+  # macOS is 2.6 (kjui_tools/lib/compose/helpers/section_extractor.rb:625
+  # states the contract). CI runs 3.3. Those are different interpreters
+  # generating the code a consumer ships, and nothing was comparing them.
+  #
+  # rjui_tools/spec/react/ruby_baseline_spec.rb already forbids 2.7+ APIs, so
+  # the "wrote filter_map" family is covered. This job covers the other one:
+  # the SAME source behaving differently between interpreters — Ruby 3.0's
+  # keyword-argument separation above all, plus Hash ordering and String
+  # changes. Those produce no syntax error and no failing unit test; they
+  # produce a different file.
+  #
+  # It is worth wiring even though the current diff is empty. A consumer's
+  # system Ruby does not move, but CI's does — so the day a difference
+  # appears is a day nobody is looking at this.
+  #
+  # ubuntu-24.04 is PINNED, not ubuntu-latest. ruby/ruby-builder publishes no
+  # ubuntu-26.04 assets at all (measured: 94 for 24.04, 94 for 22.04, 0 for
+  # 26.04), so the day the `latest` label moves this job would stop being able
+  # to fetch 2.6 — and would leave behind a green record claiming 2.6 parity
+  # is checked.
+  # ------------------------------------------------------------------ #
+  ruby-generation-parity:
+    name: kjui generates the same bytes on Ruby 2.6 and 3.3
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/KotlinJsonUI
+          ref: main
+          path: KotlinJsonUI
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "2.6.10"
+      - name: Generate with Ruby 2.6
+        env:
+          CONFORMANCE_DIR: ${{ github.workspace }}/conformance
+          KJUI_TOOLS_PATH: ${{ github.workspace }}/kjui_tools
+        run: |
+          ruby -v
+          ruby KotlinJsonUI/conformance-host/scripts/generate_codegen_host.rb
+          mv KotlinJsonUI/conformance-host/src/codegen/kotlin "$RUNNER_TEMP/out26"
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - name: Generate with Ruby 3.3
+        env:
+          CONFORMANCE_DIR: ${{ github.workspace }}/conformance
+          KJUI_TOOLS_PATH: ${{ github.workspace }}/kjui_tools
+        run: |
+          ruby -v
+          ruby KotlinJsonUI/conformance-host/scripts/generate_codegen_host.rb
+          mv KotlinJsonUI/conformance-host/src/codegen/kotlin "$RUNNER_TEMP/out33"
+
+      - name: Compare
+        # The count check comes FIRST and is the point: `diff -r` returns 0
+        # for two empty trees, so a run where generation failed on both sides
+        # — or produced a stub on one — would report parity it never measured.
+        # Same shape as the fixture lane's `assert len(names) > 400`.
+        run: |
+          MIN_KT=2000   # 2557 at the time of writing; a floor fixture growth cannot trip
+          for t in out26 out33; do
+            n=$(find "$RUNNER_TEMP/$t" -name '*.kt' | wc -l)
+            echo "$t: $n .kt files"
+            if [ "$n" -lt "$MIN_KT" ]; then
+              echo "::error::$t holds $n .kt files (< $MIN_KT) — generation did not run, so there is nothing to compare"
+              exit 1
+            fi
+          done
+          diff -r "$RUNNER_TEMP/out26" "$RUNNER_TEMP/out33"
+          echo "identical on both interpreters"
