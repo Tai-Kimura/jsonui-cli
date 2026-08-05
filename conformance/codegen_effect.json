@@ -43,16 +43,6 @@
       "note": ""
     },
     {
-      "component": "TextField",
-      "attribute": "autocorrectionType",
-      "platform": "ios",
-      "check": "C2",
-      "class": "presence-only",
-      "owner": "unreviewed-initial-measurement",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
       "component": "Collection",
       "attribute": "defaultScrollAnchor",
       "platform": "web",
