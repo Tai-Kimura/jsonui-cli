@@ -79,6 +79,38 @@ converter certainly reads them.
   (`type`, `id`, `child`, `$jui`, …), classified by the same taxonomy the
   fixture generator uses (`conformance/rules.py`).
 
+### The `mode` declaration itself is unaudited — OPEN, next wave
+
+Everything above takes the declared `mode` at face value: `mode: uikit` means
+"skip, the Ruby scanner cannot see it". So a **wrong** `mode` does not read as
+a gap — it reads as nothing at all, and the attribute leaves the ledger's
+field of view entirely.
+
+That is not hypothetical. `TextField.hintAttributes` was declared `mode: uikit`
+while the SwiftUI codegen merged it onto the flat hint spellings
+(`textfield_converter.rb:40-45`); the dynamic renderer trusted the declaration
+and skipped it, so the same layout rendered styled through codegen and
+unstyled through dynamic. Corrected 2026-08-05 (plan 49-E). The `deprecated`
+audit in the same wave found six of eight claims contradicted by this
+repository's own code, and `mode` is the same shape of assertion with roughly
+seventeen times as many declarations (139).
+
+- **owner**: E (SSoT lane) — the declarations are `shared/core/`.
+- **what to audit**: for each of the 139 attributes carrying `mode`, does an
+  implementation on an EXCLUDED mode read it? (`mode: uikit` read by
+  `sjui_tools/lib/swiftui`, `mode: compose` read by `kjui_tools/lib/xml`, …)
+- **status**: deferred out of plan 49 deliberately. A name-level scan produced
+  23 candidates, but it is not trustworthy as-is — spot-checking found three
+  classes of false positive: hits in a *different component's* converter
+  (`TextField.hintAttributes` matching TextView's and Label's), a **value**
+  keyword matching an attribute name (`common.wrapContent` matching a width
+  value), and converters that merely emit a `// comment` naming the attribute
+  (`variables`, `binding_id`, `bindingScript`). Doing it properly needs the
+  routing-group resolution `coverage.py` already implements, applied per
+  component rather than per file. Moving 23 declarations on an untrustworthy
+  scan, immediately before a baseline re-bake, is the failure mode this wave
+  kept hitting.
+
 **Detection is a source scan**, so it is deliberately biased: a read form the
 scanner does not know reads as a gap. False gaps are recoverable (record them
 with `reason: dynamic-key`); a missed gap is not. Known read forms are the
