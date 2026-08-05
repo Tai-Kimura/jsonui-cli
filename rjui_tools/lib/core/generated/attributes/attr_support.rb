@@ -116,11 +116,31 @@ module JsonUI
       end
 
       def self.number(raw)
-        raw.is_a?(Numeric) && !raw.is_a?(Complex) ? raw : nil
+        return raw if raw.is_a?(Numeric) && !raw.is_a?(Complex)
+        # A numeric string is a number - see .boolean for why returning nil
+        # here is worse than it looks.
+        return nil unless raw.is_a?(String)
+
+        Float(raw.strip, exception: false)
       end
 
       def self.boolean(raw)
-        raw == true || raw == false ? raw : nil
+        return raw if raw == true || raw == false
+        # Canon: bool / integral number / "true"|"1"|"false"|"0", matching
+        # DataBindingContext.coerceToBoolean. `secure: "true"` reading as
+        # undeclared is how plaintext came back after the binding entrance was
+        # closed - one symptom, two entrances.
+        if raw.is_a?(Numeric) && !raw.is_a?(Complex)
+          return nil unless raw.finite? && raw == raw.floor
+
+          return raw != 0
+        end
+        return nil unless raw.is_a?(String)
+
+        case raw.strip.downcase
+        when 'true', '1' then true
+        when 'false', '0' then false
+        end
       end
 
       def self.object(raw)

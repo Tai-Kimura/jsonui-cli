@@ -112,9 +112,28 @@ object AttrCoerce {
 
     fun string(raw: Any?): String? = raw as? String
 
-    fun number(raw: Any?): Double? = (raw as? Number)?.toDouble()
+    fun number(raw: Any?): Double? = when (raw) {
+        is Number -> raw.toDouble()
+        // A numeric string is a number — see AttrCoerce.boolean for why
+        // returning null here is worse than it looks.
+        is String -> raw.trim().toDoubleOrNull()
+        else -> null
+    }
 
-    fun boolean(raw: Any?): Boolean? = raw as? Boolean
+    fun boolean(raw: Any?): Boolean? = when (raw) {
+        is Boolean -> raw
+        // Canon: bool / integral number / "true"|"1"|"false"|"0", matching
+        // DataBindingContext.coerceToBoolean. `secure: "true"` reading as
+        // undeclared is how plaintext came back after the binding entrance
+        // was closed — one symptom, two entrances.
+        is Number -> raw.toDouble().let { if (it.isFinite() && it == Math.floor(it)) it != 0.0 else null }
+        is String -> when (raw.trim().lowercase()) {
+            "true", "1" -> true
+            "false", "0" -> false
+            else -> null
+        }
+        else -> null
+    }
 
     fun obj(raw: Any?): Map<String, Any?>? {
         val m = raw as? Map<*, *> ?: return null
