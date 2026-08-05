@@ -18,14 +18,14 @@
       "width": 50,
       "height": 50,
       "background": "#CCCCCC",
-      "topMargin": 60,
-      "leftMargin": 60
+      "topMargin": 120,
+      "leftMargin": 120
     },
     {
       "type": "View",
       "id": "target",
-      "width": 200,
-      "height": 200,
+      "width": 50,
+      "height": 50,
       "background": "#DDDDDD",
       "child": [
         {

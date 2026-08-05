@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "49217e3d0a8e464fe1b7d7efd727e59037bcf4548b2e920dbae4927504576cc0",
   "counts": {
-    "fixtures": 850,
+    "fixtures": 852,
     "assertable": 33,
     "visual": 640,
     "interactive": 35,
-    "control": 81,
+    "control": 83,
     "declarationOnly": 61,
     "skipped": 151,
     "promoted": {
@@ -2835,7 +2835,7 @@
       "test": "fixtures/common/alignTopOfView__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__anchored"
+      "control": "__control/View__anchored__height-50_width-50"
     },
     {
       "id": "common/alignBottomOfView__static",
@@ -2858,7 +2858,7 @@
       "test": "fixtures/common/alignBottomOfView__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__anchored"
+      "control": "__control/View__anchored__height-50_width-50"
     },
     {
       "id": "common/alignLeftOfView__static",
@@ -2881,7 +2881,7 @@
       "test": "fixtures/common/alignLeftOfView__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__anchored"
+      "control": "__control/View__anchored__height-50_width-50"
     },
     {
       "id": "common/alignRightOfView__static",
@@ -2904,7 +2904,7 @@
       "test": "fixtures/common/alignRightOfView__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__anchored"
+      "control": "__control/View__anchored__height-50_width-50"
     },
     {
       "id": "common/alignTopView__static",
@@ -17290,7 +17290,7 @@
       "test": "fixtures/SafeAreaView/safeAreaInsetPositions__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SafeAreaView"
+      "control": "__control/SafeAreaView__height-200_width-200"
     },
     {
       "id": "SafeAreaView/safeAreaInsetPositions__alias_edges",
@@ -17316,7 +17316,7 @@
       "test": "fixtures/SafeAreaView/safeAreaInsetPositions__alias_edges.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SafeAreaView"
+      "control": "__control/SafeAreaView__height-200_width-200"
     },
     {
       "id": "TabView/selectedIndex__static",
@@ -18448,6 +18448,30 @@
       "isControl": true
     },
     {
+      "id": "__control/SafeAreaView__height-200_width-200",
+      "component": "__control",
+      "attribute": null,
+      "case": "SafeAreaView",
+      "class": "visual",
+      "host": "SafeAreaView",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/SafeAreaView__height-200_width-200.layout.json",
+      "test": "fixtures/__control/SafeAreaView__height-200_width-200.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/ScrollView",
       "component": "__control",
       "attribute": null,
@@ -19365,6 +19389,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/View__anchored.layout.json",
       "test": "fixtures/__control/View__anchored.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/View__anchored__height-50_width-50",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__anchored__height-50_width-50.layout.json",
+      "test": "fixtures/__control/View__anchored__height-50_width-50.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

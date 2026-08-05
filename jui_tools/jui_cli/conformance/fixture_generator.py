@@ -57,8 +57,12 @@ ANCHOR_NODE: dict[str, Any] = {
     "width": 50,
     "height": 50,
     "background": "#CCCCCC",
-    "topMargin": 60,
-    "leftMargin": 60,
+    # 120, not 60: `align*OfView` places the target OUTSIDE this edge, so the
+    # gap between the anchor and the screen edge has to hold a whole target.
+    # At 60 the top and left directions pushed it off-screen and both hosts
+    # drew nothing — see the align*OfView entry in BASE_ATTRS_BY_ATTRIBUTE.
+    "topMargin": 120,
+    "leftMargin": 120,
 }
 
 

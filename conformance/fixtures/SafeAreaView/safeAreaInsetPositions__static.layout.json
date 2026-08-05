@@ -15,8 +15,8 @@
     {
       "type": "SafeAreaView",
       "id": "target",
-      "width": "matchParent",
-      "height": "matchParent",
+      "width": 200,
+      "height": 200,
       "background": "#DDDDDD",
       "child": [
         {

@@ -13,16 +13,7 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "View",
-      "id": "anchor",
-      "width": 50,
-      "height": 50,
-      "background": "#CCCCCC",
-      "topMargin": 120,
-      "leftMargin": 120
-    },
-    {
-      "type": "View",
+      "type": "SafeAreaView",
       "id": "target",
       "width": 200,
       "height": 200,
@@ -48,30 +39,8 @@
           "width": 40,
           "height": 40,
           "background": "#00AA00"
-        },
-        {
-          "type": "View",
-          "id": "box_d",
-          "width": 40,
-          "height": 40,
-          "background": "#FFAA00"
-        },
-        {
-          "type": "View",
-          "id": "box_e",
-          "width": 40,
-          "height": 40,
-          "background": "#AA00AA"
-        },
-        {
-          "type": "View",
-          "id": "box_f",
-          "width": 40,
-          "height": 40,
-          "background": "#00AAAA"
         }
-      ],
-      "alignTopView": "anchor"
+      ]
     }
   ]
 }

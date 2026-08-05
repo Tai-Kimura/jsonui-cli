@@ -1255,6 +1255,36 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     "TextField.secure": {"text": "Sample"},
     # columnSpacing is the gap BETWEEN columns — the default single-column
     # collection has no gap to size.
+    # A safe-area inset is PADDING, and padding does not move the outside of a
+    # box that is already pinned to both parent edges — `matchParent x
+    # matchParent` is the same rectangle whatever is inset inside it. Fixing
+    # the size lets the inset show on the outline. F measured it: at 200x200 a
+    # local smoke gives distance 10 where matchParent gives 0.
+    #
+    # Scoped to SafeAreaView: `View.safeAreaInsetPositions` sits on the View
+    # base, which is already a fixed 200x200 square.
+    "SafeAreaView.safeAreaInsetPositions": {
+        "width": 200,
+        "height": 200,
+    },
+    # `align*OfView` places the target OUTSIDE the anchor's edge, so the target
+    # needs that much room between the anchor and the screen edge. With the
+    # 200pt View base and the anchor 60pt in, `alignTopOfView` put the target
+    # at y = -140..60 and `alignLeftOfView` at x = -140..60: off-screen, so
+    # BOTH the dynamic and the codegen host drew nothing, parity read the two
+    # blanks as agreement, and inert-complete saw no difference either. Two
+    # empty pictures agreeing is the most convincing kind of nothing. (Lane G.)
+    #
+    # A 50pt target with the anchor 120pt in puts all four directions on
+    # screen — top/left at 70..120, bottom/right at 170..220, against a control
+    # at 0..50 — which fits the narrowest host (a ~390pt phone) with room to
+    # spare and leaves a 70pt shift to see. Checked arithmetically for 50 / 100
+    # / 200 before writing it down; 100 fits but only shifts 20pt, and 200 does
+    # not fit at all.
+    "alignTopOfView": {"width": 50, "height": 50},
+    "alignBottomOfView": {"width": 50, "height": 50},
+    "alignLeftOfView": {"width": 50, "height": 50},
+    "alignRightOfView": {"width": 50, "height": 50},
     "Collection.columnSpacing": {"columns": 2},
     # `cols` and `rows` size a textarea in characters and lines, and an
     # explicit width/height overrides them everywhere. Dropping the base size
