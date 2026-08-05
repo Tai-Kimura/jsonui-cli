@@ -931,13 +931,12 @@
       "attribute": "safeAreaInsetPositions",
       "inertOn": [
         "android",
-        "ios",
         "web"
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "android-unimplemented-web-environment-limited",
+      "note": "owner: G (kjui + KotlinJsonUI). why: the declaration carries no platform scope and its description names the sjui and rjui call sites that honour it on a PLAIN view, so all three are supposed to. android decodes it (ViewAttributes.kt) and reads it only in DynamicSafeAreaViewComponent — the plain-View path (ModifierBuilder / DynamicViewComponent, kjui compose_builder.rb:722) never reads it. Declared, decoded, unread: an implementation gap, NOT a semantics ruling, which is why it is here and not in attribute_semantics.json — a contract would bless the gap. web is inert for an unrelated and legitimate reason: rjui emits env(safe-area-inset-*) padding, and a headless viewport with no notch resolves those to 0, so the attribute works and has nothing to inset. ios is ACTIVE as of run 30950551601 (57,600 px differing over a 600x696 bbox) — the older all-three-inert fact in this ledger predates that landing. verify: implement the plain-View path on Compose, then this fixture must go active on android and this entry must disappear from the ledger; web stays inert until a fixture runs in a viewport that actually reports safe-area insets."
     },
     {
       "fixture": "Web/allow__static",
