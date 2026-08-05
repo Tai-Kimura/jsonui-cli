@@ -24,6 +24,7 @@
         }
       ],
       "items": "@{items}",
+      "scrollTo": "@{scrollTarget}",
       "scrollAnchor": "top"
     }
   ],
@@ -42,6 +43,11 @@
           "title": "Gamma"
         }
       ]
+    },
+    {
+      "name": "scrollTarget",
+      "class": "Int",
+      "defaultValue": 0
     }
   ]
 }

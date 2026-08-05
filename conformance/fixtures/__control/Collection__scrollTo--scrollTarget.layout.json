@@ -24,8 +24,7 @@
         }
       ],
       "items": "@{items}",
-      "scrollTo": "@{scrollTarget}",
-      "scrollAnchor": "center"
+      "scrollTo": "@{scrollTarget}"
     }
   ],
   "data": [

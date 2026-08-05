@@ -11,12 +11,13 @@
   "id": "root",
   "width": "matchParent",
   "height": "matchParent",
+  "orientation": "vertical",
   "child": [
     {
       "type": "View",
       "id": "target",
       "width": 200,
-      "height": 200,
+      "height": 0,
       "background": "#DDDDDD",
       "child": [
         {

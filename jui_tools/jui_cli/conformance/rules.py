@@ -1554,6 +1554,17 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     "SelectBox.colorScheme": {"selectItemType": "Date"},
     "SelectBox.minimumDate": {"selectItemType": "Date", "datePickerMode": "date"},
     "SelectBox.maximumDate": {"selectItemType": "Date", "datePickerMode": "date"},
+    # scrollAnchor is the anchor OF a programmatic scroll and every platform
+    # reads it only inside the scrollTo path. D withdrew this companion in an
+    # earlier round for a reason that no longer holds: scrollTo's declared
+    # class had to be `PassthroughSubject<Int, Never>` for sjui's
+    # `data.<prop>.throttle(...)`, and no class satisfied all three hosts at
+    # once. E made the canonical class a plain value (9930e18) and B dropped
+    # the throttle for `.onChange` (8c41e3e), so `Int` now compiles everywhere.
+    #
+    # The withdrawal was right at the time and the entry said what would undo
+    # it; both halves happened, so it goes in.
+    "Collection.scrollAnchor": {"scrollTo": "@{scrollTarget}"},
     # itemWeight is the fraction of the container width ONE ITEM takes, which
     # is a grid concept: sjui applies it from apply_grid_padding /
     # apply_insets_only (collection_converter.rb:1606/1834) and the default
@@ -1600,6 +1611,22 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # (textfield_converter.rb:519, and its own comment at 511-513). The base is
     # hint-only, with no bound text.
     "TextField.maxLength": {"text": "@{inputText}"},
+    # Same parent-axis rule as `weight` below, and the same fix: B measured
+    # that all three read these once the parent has an orientation. They were
+    # filed as "the codegen does not read the spelling" when the fixture was
+    # not letting it.
+    "widthWeight": {"root.orientation": "horizontal"},
+    # `height: 0` is not decoration — it is how you say "the weight decides
+    # this axis". kjui spells the rule out: `explicit_height` is false only
+    # when `heightWeight && height == 0`, and an explicit height wins over the
+    # weight branch entirely (modifier_builder.rb:404-421). With the base's
+    # 200pt height the weight branch was unreachable on Compose, which is why
+    # iOS cleared on the orientation alone and android did not.
+    "heightWeight": {"root.orientation": "vertical", "height": 0},
+    "maxWidthWeight": {"root.orientation": "horizontal"},
+    "minWidthWeight": {"root.orientation": "horizontal"},
+    "maxHeightWeight": {"root.orientation": "vertical"},
+    "minHeightWeight": {"root.orientation": "vertical"},
     # `weight` is a share of the PARENT's main axis, and every platform gates
     # it on that parent being a Row/Column (kjui modifier_builder.rb:105
     # `parent_orientation`, sjui view_converter.rb:160). The fixture root is a
@@ -1858,7 +1885,12 @@ def root_node_attrs(extra: dict[str, Any] | None) -> dict[str, Any]:
 #: the narrow cross-platform vocabulary — `String` / `Int` / `Boolean` /
 #: `CollectionDataSource` — does not survive kjui's `map_to_kotlin_type`,
 #: which passes unknown classes through verbatim into Kotlin source.
-BINDING_DATA_CLASSES: dict[str, str] = {}
+BINDING_DATA_CLASSES: dict[str, str] = {
+    # Collection.scrollTo carries a cell INDEX unless cellIdProperty names an
+    # id, and the SSoT now says so in those words. `Int` is in the four-class
+    # vocabulary that survives all three generators.
+    "scrollTarget": "Int",
+}
 
 
 def _fits(value: Any, cls: str) -> bool:

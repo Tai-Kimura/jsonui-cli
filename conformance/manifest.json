@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "cad487195f506f2d780b1c91fd51fc59164682cdac026d909c0219748d447605",
   "counts": {
-    "fixtures": 907,
+    "fixtures": 909,
     "assertable": 33,
     "visual": 694,
     "interactive": 35,
-    "control": 86,
+    "control": 88,
     "declarationOnly": 59,
     "skipped": 150,
     "promoted": {
@@ -378,7 +378,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
-      "control": "__control/View"
+      "control": "__control/View__root.orientation-horizontal"
     },
     {
       "id": "common/heightWeight__static",
@@ -401,7 +401,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
-      "control": "__control/View"
+      "control": "__control/View__height-0_root.orientation-vertical"
     },
     {
       "id": "common/maxWidthWeight__static",
@@ -16692,7 +16692,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "Collection/scrollAnchor",
-      "control": "__control/Collection",
+      "control": "__control/Collection__scrollTo--scrollTarget",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]
@@ -16719,7 +16719,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "Collection/scrollAnchor",
-      "control": "__control/Collection",
+      "control": "__control/Collection__scrollTo--scrollTarget",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]
@@ -16746,7 +16746,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "Collection/scrollAnchor",
-      "control": "__control/Collection",
+      "control": "__control/Collection__scrollTo--scrollTarget",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]
@@ -19735,6 +19735,33 @@
       ]
     },
     {
+      "id": "__control/Collection__scrollTo--scrollTarget",
+      "component": "__control",
+      "attribute": null,
+      "case": "Collection",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Collection__scrollTo--scrollTarget.layout.json",
+      "test": "fixtures/__control/Collection__scrollTo--scrollTarget.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
       "id": "__control/GradientView",
       "component": "__control",
       "attribute": null,
@@ -21101,6 +21128,29 @@
       "deprecated": null,
       "layout": "fixtures/__control/View__borderColor--FF0000_borderWidth-2.layout.json",
       "test": "fixtures/__control/View__borderColor--FF0000_borderWidth-2.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/View__height-0_root.orientation-vertical",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__height-0_root.orientation-vertical.layout.json",
+      "test": "fixtures/__control/View__height-0_root.orientation-vertical.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
