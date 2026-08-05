@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/fontWeight__600.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.fontWeight (600)",
+    "description": "Conformance fixture for 'fontWeight' on Button (section: Button, class: visual). Value under test: 600.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontWeight__600",
+      "description": "Conformance fixture for 'fontWeight' on Button (section: Button, class: visual). Value under test: 600.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_fontWeight__600"
+        }
+      ]
+    }
+  ]
+}

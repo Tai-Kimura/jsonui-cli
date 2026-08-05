@@ -10,9 +10,9 @@
   "schemaVersion": 2,
   "generatedFrom": "e5d289945ed5c0f57c076b3a9970b42bd26d8e6147aebb78ae608a952db5bb39",
   "counts": {
-    "fixtures": 854,
+    "fixtures": 856,
     "assertable": 33,
-    "visual": 640,
+    "visual": 642,
     "interactive": 35,
     "control": 85,
     "declarationOnly": 61,
@@ -5759,6 +5759,29 @@
       "control": "__control/Label"
     },
     {
+      "id": "Label/fontWeight__600",
+      "component": "Label",
+      "attribute": "fontWeight",
+      "case": "600",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "fontWeight",
+      "aliasOf": null,
+      "value": 600,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/fontWeight__600.layout.json",
+      "test": "fixtures/Label/fontWeight__600.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Label"
+    },
+    {
       "id": "TextField/text__static",
       "component": "TextField",
       "attribute": "text",
@@ -10220,6 +10243,29 @@
       "deprecated": null,
       "layout": "fixtures/Button/fontWeight__static.layout.json",
       "test": "fixtures/Button/fontWeight__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Button"
+    },
+    {
+      "id": "Button/fontWeight__600",
+      "component": "Button",
+      "attribute": "fontWeight",
+      "case": "600",
+      "class": "visual",
+      "host": "Button",
+      "writtenKey": "fontWeight",
+      "aliasOf": null,
+      "value": 600,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Button/fontWeight__600.layout.json",
+      "test": "fixtures/Button/fontWeight__600.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Button"

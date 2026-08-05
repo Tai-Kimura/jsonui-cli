@@ -695,6 +695,19 @@ EXTRA_CASES: dict[tuple[str, str], list[Any]] = {
     # Values are drawn from each fixture's own `items`.
     ("Radio", "selectedValue"): ["Gamma"],
     ("SelectBox", "selectedValue"): ["One"],
+    # The NUMERIC face of a union-typed attribute. `fontWeight` is declared
+    # `["string", "number"]` and every fixture wrote `"bold"`, so the numeric
+    # spelling — legal, and named in the attribute's own description — was
+    # untested on all three platforms. It is not a hypothetical: this input
+    # killed `sjui build` with a NoMethodError, because label_converter kept a
+    # private copy of the weight vocabulary and called `.downcase` on an
+    # Integer (B, fixed in 2b58e99).
+    #
+    # No new table needed. A union's second type is another literal value, and
+    # EXTRA_CASES is where an attribute's extra literals go — same as Radio's
+    # icon vocabulary above. `600` is semibold in every platform's table.
+    ("Label", "fontWeight"): [600],
+    ("Button", "fontWeight"): [600],
 }
 
 #: Attributes that get a BOUND case: the value under test written as
