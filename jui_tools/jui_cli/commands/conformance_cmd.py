@@ -130,6 +130,21 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         ),
     )
     gate.add_argument(
+        "--rendered-by",
+        dest="rendered_by",
+        action="append",
+        default=None,
+        metavar="NAME=SHA",
+        help=(
+            "Which library drew this run's screenshots (repeatable, e.g. "
+            "swiftjsonui=<sha>). Compared against what the baseline records, "
+            "and when a regression is reported against a baseline drawn by a "
+            "different library, that is said out loud — it is a notice, not a "
+            "failure: the library is meant to move and the baseline is meant "
+            "to be rebaked"
+        ),
+    )
+    gate.add_argument(
         "--codegen-effect",
         dest="codegen_effect",
         action="store_true",
@@ -243,6 +258,20 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
             "local). Bake 'ci' baselines from CI-run artifacts, never from a "
             "local render — the manifest records the env and refuses to be "
             "compared under a different one."
+        ),
+    )
+    baseline_update.add_argument(
+        "--rendered-by",
+        dest="rendered_by",
+        action="append",
+        default=None,
+        metavar="NAME=SHA",
+        help=(
+            "Record which library drew these pixels (repeatable, e.g. "
+            "swiftjsonui=<sha>). CI passes the SHA it checked out; nothing "
+            "looks it up, because a local bake genuinely does not know what "
+            "CI would have used and guessing would put a wrong answer in the "
+            "manifest. Metadata only — it never takes part in a comparison"
         ),
     )
     baseline_update.add_argument(
@@ -1105,6 +1134,16 @@ def _cmd_compat_doc(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_rendered_by(pairs) -> dict:
+    """`["swiftjsonui=abc123"]` -> `{"swiftjsonui": "abc123"}`."""
+    out: dict = {}
+    for raw in pairs or ():
+        name, _, sha = str(raw).partition("=")
+        if name and sha:
+            out[name.strip()] = sha.strip()
+    return out
+
+
 def _cmd_baseline(args: argparse.Namespace) -> int:
     from ..conformance.baseline import DEFAULT_ENV, BaselineError, update_baseline
 
@@ -1127,6 +1166,7 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
             artifacts_dir=artifacts_dir,
             env=env,
             threshold=threshold,
+            rendered_by=_parse_rendered_by(getattr(args, "rendered_by", None)),
         )
     except BaselineError as e:
         print(f"ERROR: {e}")
@@ -1619,6 +1659,7 @@ def _cmd_gate(args: argparse.Namespace) -> int:
             cross_effect=bool(getattr(args, "cross_effect", False)),
             inert_complete=bool(getattr(args, "inert_complete", False)),
             codegen_effect=bool(getattr(args, "codegen_effect", False)),
+            rendered_by=_parse_rendered_by(getattr(args, "rendered_by", None)),
             repo_root=_REPO_ROOT,
             definitions_path=_DEFAULT_DEFINITIONS,
             semantics_path=_REPO_ROOT / "shared" / "core" / "attribute_semantics.json",

@@ -301,6 +301,12 @@ jobs:
         #   jui conformance baseline update --platform web --env ci \
         #     --artifacts <downloaded>/artifacts/web
         # and commit baselines/ci/web.hashes.json with the change.
+        # For ios/android add --rendered-by swiftjsonui=<sha> (resp.
+        # kotlinjsonui=<sha>) with the commit that run checked out: the
+        # mobile lanes float on master/main, and without it the bake cannot
+        # later answer whether a regression came from the library moving.
+        # Web needs none — its conformance host renders through rjui codegen
+        # in this repo, so there is no separate library to record.
         # Same command runs locally; logic lives in
         # jui_tools/jui_cli/conformance/gate.py (tests: test_conformance_gate).
         run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','web','--env','ci']))"

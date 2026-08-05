@@ -197,6 +197,7 @@ def update_baseline(
     artifacts_dir: Path | None = None,
     env: str = DEFAULT_ENV,
     threshold: int | None = None,
+    rendered_by: dict[str, str] | None = None,
 ) -> BaselineUpdateSummary:
     """Hash every PNG under the platform's artifacts dir into the manifest.
 
@@ -232,6 +233,20 @@ def update_baseline(
         "environment": env,
         "algorithm": ALGORITHM,
         "threshold": DEFAULT_THRESHOLD if threshold is None else int(threshold),
+        # Which library drew these pixels. The manifest already recorded how
+        # the measurement was taken (platform, env, algorithm, threshold) and
+        # nothing about what was measured: conformance-mobile checks the
+        # libraries out at `master` / `main`, so two bakes at the same
+        # jsonui-cli commit can legitimately hold different pictures, and the
+        # baseline could not say why. Thirteen regressions in one run were
+        # neither fixture nor codegen; two lanes reached "the library moved"
+        # by elimination because the device could not point at it.
+        #
+        # Metadata only — deliberately outside `hashes` so it never
+        # participates in a comparison. Folding it in would make a library
+        # bump read as "the picture changed", which is the confusion this
+        # exists to end.
+        "rendered_by": dict(sorted((rendered_by or {}).items())),
         "hashes": hashes,
     }
     out_path.write_text(

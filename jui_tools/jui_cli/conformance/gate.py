@@ -136,6 +136,7 @@ def evaluate(
     cross_effect: bool = False,
     inert_complete: bool = False,
     codegen_effect: bool = False,
+    rendered_by: dict[str, str] | None = None,
     repo_root: Path | None = None,
     ruby: str = "ruby",
     definitions_path: Path | None = None,
@@ -186,6 +187,11 @@ def evaluate(
             )
             outcome.problems.extend(problems)
             outcome.notices.extend(notices)
+
+    if visual and rendered_by:
+        outcome.notices.extend(
+            library_drift_notices(conformance_dir, platforms, summary, rendered_by, env)
+        )
 
     if codegen_effect:
         # Judged from emitted TEXT, so unlike every other check here it needs
@@ -284,6 +290,59 @@ def evaluate(
                     f"{verdict.accepted} accepted deviation(s) on ledger"
                 )
     return outcome
+
+
+def library_drift_notices(
+    conformance_dir: Path,
+    platforms: Sequence[str],
+    summary: ReportSummary,
+    rendered_by: dict[str, str],
+    env: str = DEFAULT_ENV,
+) -> list[str]:
+    """Say when a regression might be the library moving, not the code.
+
+    conformance-mobile checks the libraries out at `master` / `main`, so the
+    pictures a baseline holds were drawn by whatever was on those branches
+    that day. Nothing recorded which, and thirteen regressions in one run
+    turned out to be neither fixture nor codegen — two lanes got there by
+    elimination because the device could not point at it.
+
+    A notice, never a failure: the library is supposed to move and the
+    baseline is supposed to be rebaked, so "newer than the bake" is a state,
+    not a defect. Emitted only when there is something to explain — on a
+    clean run it would be noise every time, and a line people learn to skip
+    is worse than no line.
+    """
+    from .baseline import load_baseline
+
+    notices: list[str] = []
+    for platform in dict.fromkeys(platforms):
+        if not summary.visual_regressions.get(platform, 0):
+            continue
+        baseline = load_baseline(conformance_dir, platform, env)
+        if baseline is None:
+            continue
+        baked = baseline.get("rendered_by") or {}
+        if not baked:
+            notices.append(
+                f"{platform}: {summary.visual_regressions[platform]} regression(s), "
+                f"and this baseline predates library-version recording — whether "
+                f"the library moved since the bake cannot be answered from it"
+            )
+            continue
+        moved = [
+            f"{name} {baked[name][:8]}->{sha[:8]}"
+            for name, sha in sorted(rendered_by.items())
+            if name in baked and baked[name] != sha
+        ]
+        if moved:
+            notices.append(
+                f"{platform}: {summary.visual_regressions[platform]} regression(s) "
+                f"measured against a baseline drawn by a different library "
+                f"({', '.join(moved)}) — some of them may be library-side rather "
+                f"than fixture or codegen"
+            )
+    return notices
 
 
 def judge_codegen_effect(

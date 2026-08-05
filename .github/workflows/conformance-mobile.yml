@@ -86,6 +86,8 @@ jobs:
     env:
       CONFORMANCE_DIR: ${{ github.workspace }}/conformance
       JSONUI_TEST_RUNNER_PATH: ${{ github.workspace }}/jsonui-test-runner
+    outputs:
+      library_sha: ${{ steps.library_sha.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -93,6 +95,9 @@ jobs:
           repository: Tai-Kimura/SwiftJsonUI
           ref: master
           path: SwiftJsonUI
+      - name: Record the SwiftJsonUI commit these pixels were drawn by
+        id: library_sha
+        run: echo "sha=$(git -C SwiftJsonUI rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
           repository: Tai-Kimura/jsonui-test-runner
@@ -244,6 +249,8 @@ jobs:
     timeout-minutes: 210
     env:
       CONFORMANCE_DIR: ${{ github.workspace }}/conformance
+    outputs:
+      library_sha: ${{ steps.library_sha.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -251,6 +258,9 @@ jobs:
           repository: Tai-Kimura/KotlinJsonUI
           ref: main
           path: KotlinJsonUI
+      - name: Record the KotlinJsonUI commit these pixels were drawn by
+        id: library_sha
+        run: echo "sha=$(git -C KotlinJsonUI rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -465,7 +475,12 @@ jobs:
         # "is this specific recorded thing still true", and a newly-inert
         # fixture nobody has an opinion about answers none of them. Same
         # env-scoping again — asserted local, notice here.
-        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web','--env','ci','--parity','--cross-effect','--inert-complete']))"
+        # --rendered-by: which library drew this run's pixels. A baseline
+        # records the same, so when a regression is measured against one
+        # drawn by a different library, the gate says so — a notice, not a
+        # failure. Thirteen regressions in one run were neither fixture nor
+        # codegen and two lanes reached "the library moved" by elimination.
+        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web','--env','ci','--parity','--cross-effect','--inert-complete','--rendered-by','swiftjsonui=${{ needs.ios.outputs.library_sha }}','--rendered-by','kotlinjsonui=${{ needs.android.outputs.library_sha }}']))"
       - name: Upload combined report
         if: always()
         uses: actions/upload-artifact@v4
