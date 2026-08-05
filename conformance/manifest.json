@@ -16507,27 +16507,6 @@
       "control": "__control/Indicator"
     },
     {
-      "id": "Indicator/indicatorStyle__medium",
-      "component": "Indicator",
-      "attribute": "indicatorStyle",
-      "case": "medium",
-      "class": "visual",
-      "host": "Indicator",
-      "writtenKey": "indicatorStyle",
-      "aliasOf": null,
-      "value": "medium",
-      "platforms": [
-        "ios"
-      ],
-      "mode": "swiftui",
-      "deprecated": null,
-      "layout": "fixtures/Indicator/indicatorStyle__medium.layout.json",
-      "test": "fixtures/Indicator/indicatorStyle__medium.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": "__control/Indicator"
-    },
-    {
       "id": "Indicator/indicatorStyle__large",
       "component": "Indicator",
       "attribute": "indicatorStyle",
@@ -16544,6 +16523,27 @@
       "deprecated": null,
       "layout": "fixtures/Indicator/indicatorStyle__large.layout.json",
       "test": "fixtures/Indicator/indicatorStyle__large.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": "__control/Indicator"
+    },
+    {
+      "id": "Indicator/indicatorStyle__medium",
+      "component": "Indicator",
+      "attribute": "indicatorStyle",
+      "case": "medium",
+      "class": "visual",
+      "host": "Indicator",
+      "writtenKey": "indicatorStyle",
+      "aliasOf": null,
+      "value": "medium",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "swiftui",
+      "deprecated": null,
+      "layout": "fixtures/Indicator/indicatorStyle__medium.layout.json",
+      "test": "fixtures/Indicator/indicatorStyle__medium.test.json",
       "state": null,
       "promotedFrom": null,
       "control": "__control/Indicator"

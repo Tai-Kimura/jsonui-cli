@@ -979,6 +979,11 @@ PREFERRED_PRIMARY_CASE: dict[tuple[str, str], Any] = {
     # gets its own fixture; this only moves the REPRESENTATIVE off the default.
     # The replacements are the machine's own second value (`codegen-effect`
     # `representativeValueCandidates`), not hand-picked.
+    # `medium` IS the circular style an indeterminate ProgressView already
+    # draws, so the emit was correct (C0 passes) and the picture was the
+    # control's. `large` adds `.scaleEffect(1.5)` and discriminates. Measured
+    # by B, same family as GradientView.locations.
+    ("Indicator", "indicatorStyle"): "large",
     ("Collection", "defaultScrollAnchor"): "center",
     ("Collection", "layout"): "horizontal",
     ("Collection", "lazy"): "eager",
