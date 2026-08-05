@@ -27,6 +27,7 @@ require 'swiftui/views/slider_converter'
 require 'swiftui/views/button_converter'
 require 'swiftui/views/icon_label_converter'
 require 'swiftui/views/view_converter'
+require 'swiftui/views/collection_converter'
 require 'swiftui/views/image_converter'
 require 'swiftui/views/selectbox_converter'
 require 'swiftui/views/color_helper'
@@ -506,6 +507,21 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       # `:component_specific` is multi-value, so both survived.
       expect(bound.scan('.aspectRatio(').length).to eq(1)
       expect(bound).to include('data.mode == "fill" ? .fill : .fit')
+    end
+
+    it 'scrollTo keys an effect on a plain value, not a Combine publisher' do
+      code = convert(:CollectionConverter,
+                     'type' => 'Collection', 'id' => 't', 'width' => 200, 'height' => 200,
+                     'sections' => [{ 'cell' => 'conformance_cell' }], 'items' => '@{items}',
+                     'scrollTo' => '@{scrollTarget}', 'scrollAnchor' => 'center')
+      # `.throttle` only typechecks on a publisher, which is what forced
+      # consumers to declare PassthroughSubject in their data section — the
+      # spelling the SSoT withdrew because kjui passes unknown classes
+      # through to Kotlin verbatim. Compose keys `LaunchedEffect(data.x)` and
+      # web a `useEffect`; `.onChange(of:)` is the same shape.
+      expect(code).to include('.onChange(of: data.scrollTarget) { _, index in')
+      expect(code).not_to include('.throttle(')
+      expect(code).to include('scrollProxy.scrollTo(index, anchor: .center)')
     end
 
     it 'a bound clipToBounds resolves at render time' do

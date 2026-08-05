@@ -1139,8 +1139,30 @@ module SjuiTools
           scroll_animated = @component['scrollAnimated']
           cell_id_property = @component['cellIdProperty']
           recv_var = cell_id_property ? 'cellId' : 'index'
-          # Throttle scrollTo to prevent animation stalls during rapid updates
-          add_modifier_line ".onReceive(data.#{scroll_prop}.throttle(for: .milliseconds(100), scheduler: DispatchQueue.main, latest: true)) { #{recv_var} in"
+          # `scrollTo` is declared as a PLAIN VALUE — `String` when
+          # `cellIdProperty` is set, `Int` otherwise. This used to emit
+          # `data.x.throttle(...)`, which only typechecks if the property is a
+          # Combine publisher, so the attribute forced consumers to declare
+          # `PassthroughSubject<Int, Never>` in their data section. The SSoT
+          # withdrew that (2026-08-05, plan 49-E): naming a Swift transport in
+          # a cross-platform declaration is what made kjui's
+          # `map_to_kotlin_type` pass the Combine type through verbatim and
+          # kill the Kotlin build. How the request travels is each platform's
+          # own business.
+          #
+          # The other two platforms both key an effect on the value —
+          # Compose `LaunchedEffect(data.<prop>)`
+          # (collection_component.rb:364), web a `useEffect` on it — and
+          # `.onChange(of:)` is that same shape in SwiftUI. Derived from them
+          # rather than invented here.
+          #
+          # The throttle goes with the publisher: it existed to damp a rapid
+          # stream of sends, and a value that changes has nothing to damp
+          # (neither of the other two throttles either). What is also gone is
+          # "sending the SAME value again re-scrolls" — that is publisher
+          # behaviour a plain value cannot express, and the declaration is now
+          # a plain value.
+          add_modifier_line ".onChange(of: data.#{scroll_prop}) { _, #{recv_var} in"
           indent do
             scroll_call = "scrollProxy.scrollTo(#{recv_var}, anchor: .#{anchor})"
             if scroll_animated.is_a?(String) && scroll_animated.start_with?('@{') && scroll_animated.end_with?('}')
