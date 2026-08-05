@@ -21,46 +21,22 @@
       "orientation": "horizontal",
       "child": [
         {
-          "type": "View",
+          "type": "Label",
           "id": "box_a",
-          "width": 40,
-          "height": 40,
+          "text": "A",
           "background": "#FF0000"
         },
         {
-          "type": "View",
+          "type": "Label",
           "id": "box_b",
-          "width": 40,
-          "height": 40,
+          "text": "BBBB",
           "background": "#0000FF"
         },
         {
-          "type": "View",
+          "type": "Label",
           "id": "box_c",
-          "width": 40,
-          "height": 40,
+          "text": "CCCCCCCC",
           "background": "#00AA00"
-        },
-        {
-          "type": "View",
-          "id": "box_d",
-          "width": 40,
-          "height": 40,
-          "background": "#FFAA00"
-        },
-        {
-          "type": "View",
-          "id": "box_e",
-          "width": 40,
-          "height": 40,
-          "background": "#AA00AA"
-        },
-        {
-          "type": "View",
-          "id": "box_f",
-          "width": 40,
-          "height": 40,
-          "background": "#00AAAA"
         }
       ],
       "distribution": "fill"

@@ -1769,6 +1769,41 @@ def variant_bases_for(section: str, attribute: str) -> dict[str, dict[str, Any]]
     return VARIANT_CASES.get((section, attribute), {})
 
 
+#: Extra base attributes for ONE case of an attribute, keyed by
+#: ``(section, attribute, case_name)``.
+#:
+#: :data:`VARIANT_CASES` repeats every case under a suffix; this replaces the
+#: base of a case that already exists. Needed when the values of a single enum
+#: want incompatible fixtures — which `distribution` does, in a way that is
+#: geometric rather than incidental:
+#:
+#:   fill / fillEqually    are instructions to the CHILD's axis, and E's `size`
+#:                         adjudication orders explicit > bounds > fill, so a
+#:                         child with an explicit width correctly ignores them.
+#:                         They need children with no declared width.
+#:   equalSpacing /        distribute the space BETWEEN children, so the
+#:   equalCentering        children have to occupy space to be spaced apart.
+#:                         They need the explicit-width boxes.
+#:
+#: One child set cannot serve both. And children of EQUAL intrinsic width
+#: cannot separate `fill` from `fillEqually` either — both end up thirds of the
+#: row — so the fill children are Labels of different text lengths: `fill`
+#: consumes the axis while keeping their proportions, `fillEqually` flattens
+#: them to equal shares.
+_FILL_CHILDREN = [
+    {"type": "Label", "id": "box_a", "text": "A", "background": "#FF0000"},
+    {"type": "Label", "id": "box_b", "text": "BBBB", "background": "#0000FF"},
+    {"type": "Label", "id": "box_c", "text": "CCCCCCCC", "background": "#00AA00"},
+]
+
+CASE_BASE_ATTRS: dict[tuple[str, str, str], dict[str, Any]] = {
+    ("common", "distribution", "fill"): {"child": _FILL_CHILDREN},
+    ("common", "distribution", "fillequally"): {"child": _FILL_CHILDREN},
+    ("View", "distribution", "fill"): {"child": _FILL_CHILDREN},
+    ("View", "distribution", "fillequally"): {"child": _FILL_CHILDREN},
+}
+
+
 def base_attrs_for(host: str, attribute: str, case_name: str = "") -> dict[str, Any]:
     """Extra base attributes that make `attribute` observable on `host`.
 
@@ -1790,6 +1825,11 @@ def base_attrs_for(host: str, attribute: str, case_name: str = "") -> dict[str, 
 
     if not case_name:
         return shared
+    # A case-scoped base replaces the shared one for that case only.
+    for section in (host, "common" if host == DEFAULT_COMMON_HOST else host):
+        case_extra = CASE_BASE_ATTRS.get((section, attribute, case_name))
+        if case_extra is not None:
+            return {**shared, **case_extra}
     # `View` hosts both its own section and `common`, so both keys are checked.
     for section in (host, "common" if host == DEFAULT_COMMON_HOST else host):
         for suffix, overlay in VARIANT_CASES.get((section, attribute), {}).items():
