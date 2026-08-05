@@ -33,16 +33,6 @@
       "note": "rjui emits this at the GENERATOR level, not in a converter, and tools/codegen_probe.rb drives `<X>Converter#convert` only. Driving ReactGenerator directly gives 'top' for the fixture and 'bottom' for its control, so the attribute IS read. The same blind spot covers defaultScrollAnchor / currentPage / onItemAppear (react_generator.rb:751-793)."
     },
     {
-      "component": "TextField",
-      "attribute": "autocorrectionType",
-      "platform": "ios",
-      "check": "C2",
-      "class": "presence-only",
-      "owner": "unreviewed-initial-measurement",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
       "component": "common",
       "attribute": "heightWeight",
       "platform": "android",
