@@ -93,15 +93,10 @@ module SjuiTools
           end
         end
 
+        # Delegates to the shared table: Progress reads the same declared
+        # vocabulary, and two copies of one vocabulary drift (plan 40).
         def get_scale_for_style(style)
-          case style.to_s.downcase
-          when 'large'
-            1.5
-          when 'small'
-            0.8
-          else
-            1.0
-          end
+          indicator_size_scale(style)
         end
 
         def to_camel_case(str)

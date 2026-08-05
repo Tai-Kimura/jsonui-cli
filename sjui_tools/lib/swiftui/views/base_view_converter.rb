@@ -971,6 +971,15 @@ module SjuiTools
         end
 
         # Build border overlay code as a single multi-line string
+        #: `indicatorStyle` / `style` as a scale factor. One home because two
+        #: components read the same declared vocabulary — Indicator and
+        #: Progress — and a second copy is how they drift (plan 40).
+        INDICATOR_SIZE_SCALES = { 'large' => 1.5, 'small' => 0.8 }.freeze
+
+        def indicator_size_scale(style)
+          INDICATOR_SIZE_SCALES.fetch(style.to_s.downcase, 1.0)
+        end
+
         # The border overlay this component declares, or nil when it declares
         # no border.
         #

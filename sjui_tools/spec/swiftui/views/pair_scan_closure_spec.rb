@@ -105,13 +105,13 @@ RSpec.describe 'pair-scan closure (swiftui)' do
     large = convert(:ProgressConverter,
                     'type' => 'Progress', 'progress' => 0.4,
                     'indicatorStyle' => 'large', 'color' => '#FF0000')
-    expect(large).to include('.controlSize(.large)')
+    expect(large).to include('.scaleEffect(1.5)')
     expect(large).to include('.tint(')
 
     medium = convert(:ProgressConverter,
                      'type' => 'Progress', 'progress' => 0.4,
                      'indicatorStyle' => 'medium', 'color' => '#FF0000')
-    expect(medium).to include('.controlSize(.regular)')
+    expect(medium).not_to include('.scaleEffect(')
     expect(medium).not_to eq(large)
   end
 

@@ -32,16 +32,26 @@ module SjuiTools
           # as the shape mapped BOTH declared values to
           # `CircularProgressViewStyle()`, so the attribute emitted one
           # constant whatever you wrote (`jui conformance codegen-effect` C2).
-          # `controlSize` is the size knob a ProgressView actually has.
           #
           # `style` keeps the shape reading: it is the separate spelling that
           # carries linear/circular and is not the same attribute.
-          case @component['indicatorStyle'].to_s.downcase
-          when 'large'
-            add_modifier_line ".controlSize(.large)"
-          when 'medium'
-            add_modifier_line ".controlSize(.regular)"
-          end
+          #
+          # `.scaleEffect`, not `.controlSize`. `controlSize` is the API a
+          # size vocabulary reads like it wants, and the 3PF round-3 measure
+          # says it does nothing to a determinate `ProgressView(value:)` on
+          # ios: BOTH declared values went inert against their control the
+          # moment this converter started emitting it. The Indicator
+          # converter has used `scaleEffect` for the same vocabulary all
+          # along and its `large` fixture measures ACTIVE, so the mechanism
+          # that works on this platform is already in the tree.
+          #
+          # `medium` is scale 1.0 and emits nothing — the same
+          # `value-is-default` shape Indicator's medium has. That is honest
+          # rather than fixed: the representative value is what would need to
+          # change for the fixture to discriminate (lane D's
+          # PREFERRED_PRIMARY_CASE).
+          scale = indicator_size_scale(@component['indicatorStyle'])
+          add_modifier_line ".scaleEffect(#{scale})" if scale != 1.0
 
           style = @component['style']
           if style

@@ -189,13 +189,13 @@ module SjuiTools
                 else
                   add_line "selectedIndex: #{@component['selectedIndex']},"
                 end
-              elsif @component['selectedValue'] && !is_binding?(@component['selectedValue']) &&
-                    items.is_a?(Array) && (idx = items.index(@component['selectedValue']))
-                # A literal selectedValue resolves to its item index at
+              elsif selected_declaration && !is_binding?(selected_declaration) &&
+                    items.is_a?(Array) && (idx = items.index(selected_declaration))
+                # A literal selection resolves to its item index at
                 # generation time — the dynamic path does the same lookup
                 # (32 parity: the declared selection rendered empty here).
                 add_line "selectedIndex: #{idx},"
-              elsif (selected_expr = bound_string(@component['selectedValue']))
+              elsif (selected_expr = bound_string(selected_declaration))
                 # The same lookup, a step later. The note here used to say
                 # "selectedItem binding is not supported in the current
                 # implementation" — SelectBoxView takes `selectedIndex: Int?`,
@@ -294,6 +294,19 @@ module SjuiTools
         end
 
         private
+
+        # The declared selection. `selectedItem` and `selectedValue` are the
+        # same two-way selection under two spellings, and `selectedItem`
+        # wins — the precedence kjui's SelectBox has taken since it was
+        # written (`selectbox_component.rb:27`, `selectedItem` tested before
+        # `selectedValue`). Only `selectedValue` was read here, so a layout
+        # that used the other spelling opened the picker with nothing
+        # selected, in both its literal and its bound form
+        # (`jui conformance codegen-effect`: SelectBox.selectedItem C0 and C1
+        # on ios).
+        def selected_declaration
+          @component['selectedItem'] || @component['selectedValue']
+        end
 
         # The item list as a Swift expression, for the lookups that have to
         # index into it at run time.

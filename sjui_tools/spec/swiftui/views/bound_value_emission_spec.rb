@@ -21,6 +21,7 @@ require 'swiftui/views/label_converter'
 require 'swiftui/views/textview_converter'
 require 'swiftui/views/textfield_converter'
 require 'swiftui/views/progress_converter'
+require 'swiftui/views/indicator_converter'
 require 'swiftui/views/radio_converter'
 require 'swiftui/views/checkbox_converter'
 require 'swiftui/views/slider_converter'
@@ -301,11 +302,21 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       expect(seen.uniq.length).to eq(seen.length)
     end
 
-    it 'Progress indicatorStyle is a size, not a shape' do
+    it 'Progress indicatorStyle sizes the way Indicator does' do
+      # `.controlSize` reads like the right API for a size vocabulary and does
+      # nothing to a determinate ProgressView on ios: the 3PF round-3 measure
+      # put BOTH declared values inert against their control. Indicator has
+      # used `scaleEffect` for the same vocabulary all along and its `large`
+      # measures active, so the two share one table now.
+      large = convert(:ProgressConverter, 'type' => 'Progress', 'indicatorStyle' => 'large')
+      expect(large).to include('.scaleEffect(1.5)')
+      expect(large).not_to include('.controlSize(')
+      # medium is scale 1.0 = no modifier: a `value-is-default` fixture, not a
+      # converter that ignores the attribute.
       expect(convert(:ProgressConverter, 'type' => 'Progress', 'indicatorStyle' => 'medium'))
-        .to include('.controlSize(.regular)')
-      expect(convert(:ProgressConverter, 'type' => 'Progress', 'indicatorStyle' => 'large'))
-        .to include('.controlSize(.large)')
+        .not_to include('.scaleEffect(')
+      expect(convert(:IndicatorConverter, 'type' => 'Indicator', 'indicatorStyle' => 'large'))
+        .to include('.scaleEffect(1.5)')
     end
   end
 
