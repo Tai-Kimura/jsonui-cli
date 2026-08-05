@@ -3,24 +3,6 @@
   "_comment": "Declared attributes no platform converter reads. Hand-maintained: close a gap by implementing it (then delete the entry) or by narrowing platform/mode in attribute_definitions.json. reason is one of: dynamic-key, legacy, platform-na, runtime-only, unimplemented.",
   "entries": [
     {
-      "component": "Collection",
-      "attribute": "contentInsetAdjustmentBehavior",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "XML 専用。Compose 側の読みは 0 件（grep 実測）。読んでいるのは kjui_tools/lib/xml/helpers/mappers/style_mapper.rb だけで、lib/xml/ は 2026-07-03 に凍結済み（Compose-only、3.0 削除候補）。つまり出荷経路には実装が無く、凍結されたツリーが実装を名乗っていた（走査がコメントと凍結ツリーを数えていた 49-H の 除外規則で露出）。enum は never/always/automatic/scrollableAxes で UIScrollView.ContentInsetAdjustmentBehavior 由来の語彙。次の波で Compose 実装か 宣言の見直しかを判断する。"
-    },
-    {
-      "component": "ScrollView",
-      "attribute": "contentInsetAdjustmentBehavior",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "XML 専用。Compose 側の読みは 0 件（grep 実測）。読んでいるのは kjui_tools/lib/xml/helpers/mappers/style_mapper.rb だけで、lib/xml/ は 2026-07-03 に凍結済み（Compose-only、3.0 削除候補）。つまり出荷経路には実装が無く、凍結されたツリーが実装を名乗っていた（走査がコメントと凍結ツリーを数えていた 49-H の 除外規則で露出）。enum は never/always/automatic/scrollableAxes で UIScrollView.ContentInsetAdjustmentBehavior 由来の語彙。次の波で Compose 実装か 宣言の見直しかを判断する。"
-    },
-    {
       "component": "ScrollView",
       "attribute": "minZoom",
       "platforms": [
