@@ -53,11 +53,11 @@ module JsonUI
         { name: 'bind', kind: :binding }.freeze,
         # Legacy UIKit KVC binding: names the data property a view is bound to (SJUIViewCreator sets view.binding / view.bindingSet, and UIKit's Binding class pushes values through it). The object form is also the pre-@{} Table data source ({"data": "@{items}"}). Superseded by '@{...}' in the attribute value itself — use `bind` or the component's own value attribute instead. [accepts: string | object]
         { name: 'binding', kind: :raw }.freeze,
-        # Custom Swift binding code
+        # Custom Swift binding code The SwiftUI codegen DOES read this (base_view_converter.rb), but only to echo it back as a `// bindingScript: ...` comment — nothing reaches the rendered view, so `mode: uikit` stands. Recorded because the 2026-08-05 mode audit flags the read and the next auditor would otherwise re-derive it: the read is real, the effect is not.
         { name: 'bindingScript', kind: :string }.freeze,
         # Groups related bindings for batch updates (can be array for multiple groups) [accepts: string | array]
         { name: 'binding_group', kind: :raw }.freeze,
-        # Binding ID
+        # Binding ID The SwiftUI codegen DOES read this (base_view_converter.rb), but only to echo it back as a `// binding_id: ...` comment — nothing reaches the rendered view, so `mode: uikit` stands. Recorded because the 2026-08-05 mode audit flags the read and the next auditor would otherwise re-derive it: the read is real, the effect is not.
         { name: 'binding_id', kind: :string }.freeze,
         # Border color - hex string or color name from colors.json (binding supported). There is deliberately NO default: a border is drawn only when borderWidth AND borderColor are both declared, and neither half summons one on its own (2026-08-03 user ruling, recorded in attribute_semantics.json#semantics.border and gated by `jui conformance gate --cross-effect` against the five `observable` entries there). Declaring a default here would make borderWidth alone draw, which is the direction d2c8628 took once and the ruling superseded.
         { name: 'borderColor', kind: :string, bindable: true }.freeze,
@@ -283,7 +283,7 @@ module JsonUI
         { name: 'type', kind: :string }.freeze,
         # Enable user interaction (binding supported)
         { name: 'userInteractionEnabled', kind: :boolean, bindable: true }.freeze,
-        # Variables for include
+        # Variables for include The SwiftUI codegen DOES read this (base_view_converter.rb), but only to echo it back as a `// variables: ...` comment — nothing reaches the rendered view, so `mode: uikit` stands. Recorded because the 2026-08-05 mode audit flags the read and the next auditor would otherwise re-derive it: the read is real, the effect is not.
         { name: 'variables', kind: :object }.freeze,
         # View visibility state (can be data binding)
         { name: 'visibility', kind: :enum, bindable: true, values: ['visible', 'invisible', 'gone'].freeze }.freeze,

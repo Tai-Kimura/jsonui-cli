@@ -31,17 +31,23 @@ RSpec.describe SjuiTools::Core::AttributeValidator do
   end
 
   describe 'platform-scoped attributes surface as info, not warnings' do
+    # The example attribute is incidental — the subject is that a mode-scoped
+    # attribute surfaces as info rather than a warning. It was `widthWeight`
+    # until the 2026-08-05 mode audit found the SwiftUI converter implements
+    # that one (weighted_stack_helper.rb), so `mode: uikit` was wrong and the
+    # test was pinning the wrong declaration. `maxWidthWeight` is its sibling
+    # and is genuinely UIKit-only.
     it 'reports a UIKit-only attribute as informational in SwiftUI mode' do
-      validator.validate({ 'type' => 'View', 'widthWeight' => 1 })
+      validator.validate({ 'type' => 'View', 'maxWidthWeight' => 1 })
       expect(validator.has_infos?).to be(true)
       expect(validator.infos).to include(
-        a_string_matching(/Attribute 'widthWeight' in 'View' is for Uikit mode \(current: Swiftui\)/)
+        a_string_matching(/Attribute 'maxWidthWeight' in 'View' is for Uikit mode \(current: Swiftui\)/)
       )
     end
 
     it 'prints infos with the SJUI Info prefix' do
-      validator.validate({ 'type' => 'View', 'widthWeight' => 1 })
-      expect { validator.print_infos }.to output(/\[SJUI Info\].*widthWeight/).to_stdout
+      validator.validate({ 'type' => 'View', 'maxWidthWeight' => 1 })
+      expect { validator.print_infos }.to output(/\[SJUI Info\].*maxWidthWeight/).to_stdout
     end
   end
 

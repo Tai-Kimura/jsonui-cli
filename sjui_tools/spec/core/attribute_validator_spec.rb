@@ -613,15 +613,19 @@ RSpec.describe SjuiTools::Core::AttributeValidator do
     context 'with SwiftUI mode' do
       subject(:validator) { described_class.new(:swiftui) }
 
-      it 'logs info for UIKit-only gradient attribute' do
+      # `gradient` itself is no longer UIKit-only: the 2026-08-05 mode audit
+      # found modifier_helper.rb / view_converter.rb implementing it on
+      # SwiftUI. `locations` (the gradient stop positions) is the member of
+      # that family that really is UIKit-only, and keeps this test's subject.
+      it 'logs info for a UIKit-only gradient attribute' do
         component = {
           'type' => 'View',
           'width' => 'matchParent',
           'height' => 'wrapContent',
-          'gradient' => ['#FF0000', '#0000FF']
+          'locations' => [0, 1]
         }
         validator.validate(component)
-        expect(validator.infos.any? { |i| i.include?('gradient') }).to be true
+        expect(validator.infos.any? { |i| i.include?('locations') }).to be true
         expect(validator.infos.any? { |i| i.include?('Uikit') }).to be true
       end
 

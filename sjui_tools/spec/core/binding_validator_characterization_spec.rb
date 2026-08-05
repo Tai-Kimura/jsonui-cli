@@ -68,13 +68,16 @@ RSpec.describe SjuiTools::Core::BindingValidator do
   end
 
   describe 'mode-scoped attributes are exempt from binding checks' do
-    it 'skips bindings on attributes scoped to the other mode (widthWeight is UIKit-only)' do
+    # `widthWeight` stopped being UIKit-only on 2026-08-05 (the mode audit
+    # found the SwiftUI weighted-stack implementation), so the example moved to
+    # its sibling `maxWidthWeight`, which is UIKit-only and bindable.
+    it 'skips bindings on attributes scoped to the other mode (maxWidthWeight is UIKit-only)' do
       warnings = validator.validate(
         'type' => 'View',
         'data' => [{ 'name' => 'w', 'class' => 'Int' }],
-        'widthWeight' => '@{w}'
+        'maxWidthWeight' => '@{w}'
       )
-      expect(warnings).not_to include(a_string_matching(/widthWeight/))
+      expect(warnings).not_to include(a_string_matching(/maxWidthWeight/))
     end
   end
 

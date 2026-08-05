@@ -101,8 +101,7 @@
         "binding"
       ],
       "description": "Width weight for flexible layouts (binding supported)",
-      "platform": "swift",
-      "mode": "uikit"
+      "platform": "swift"
     },
     "heightWeight": {
       "type": [
@@ -110,8 +109,10 @@
         "binding"
       ],
       "description": "Height weight for flexible layouts (binding supported)",
-      "platform": "swift",
-      "mode": "uikit"
+      "platform": [
+        "swift",
+        "kotlin"
+      ]
     },
     "maxWidthWeight": {
       "type": [
@@ -725,7 +726,7 @@
     },
     "variables": {
       "type": "object",
-      "description": "Variables for include",
+      "description": "Variables for include The SwiftUI codegen DOES read this (base_view_converter.rb), but only to echo it back as a `// variables: ...` comment — nothing reaches the rendered view, so `mode: uikit` stands. Recorded because the 2026-08-05 mode audit flags the read and the next auditor would otherwise re-derive it: the read is real, the effect is not.",
       "platform": "swift",
       "mode": "uikit"
     },
@@ -769,7 +770,7 @@
     },
     "binding_id": {
       "type": "string",
-      "description": "Binding ID",
+      "description": "Binding ID The SwiftUI codegen DOES read this (base_view_converter.rb), but only to echo it back as a `// binding_id: ...` comment — nothing reaches the rendered view, so `mode: uikit` stands. Recorded because the 2026-08-05 mode audit flags the read and the next auditor would otherwise re-derive it: the read is real, the effect is not.",
       "platform": "swift",
       "mode": "uikit"
     },
@@ -827,15 +828,11 @@
     },
     "events": {
       "type": "object",
-      "description": "Complex event handlers",
-      "platform": "swift",
-      "mode": "uikit"
+      "description": "Complex event handlers"
     },
     "effectStyle": {
       "type": "string",
-      "description": "Visual effect style",
-      "platform": "swift",
-      "mode": "uikit"
+      "description": "Visual effect style"
     },
     "tag": {
       "type": [
@@ -843,8 +840,10 @@
         "binding"
       ],
       "description": "View tag for identification (binding supported)",
-      "platform": "swift",
-      "mode": "uikit"
+      "platform": [
+        "swift",
+        "react"
+      ]
     },
     "userInteractionEnabled": {
       "type": [
@@ -895,8 +894,7 @@
     "touchDisabledState": {
       "type": "string",
       "description": "Touch disable mode",
-      "platform": "swift",
-      "mode": "uikit"
+      "platform": "swift"
     },
     "touchEnabledViewIds": {
       "type": "array",
@@ -910,7 +908,7 @@
     },
     "bindingScript": {
       "type": "string",
-      "description": "Custom Swift binding code",
+      "description": "Custom Swift binding code The SwiftUI codegen DOES read this (base_view_converter.rb), but only to echo it back as a `// bindingScript: ...` comment — nothing reaches the rendered view, so `mode: uikit` stands. Recorded because the 2026-08-05 mode audit flags the read and the next auditor would otherwise re-derive it: the read is real, the effect is not.",
       "platform": "swift",
       "mode": "uikit"
     },
@@ -2540,8 +2538,10 @@
         "binding"
       ],
       "description": "Selected item value (two-way binding)",
-      "platform": "swift",
-      "mode": "uikit"
+      "platform": [
+        "swift",
+        "kotlin"
+      ]
     },
     "selectedDate": {
       "type": [
@@ -3168,14 +3168,12 @@
     "gradient": {
       "type": "array",
       "description": "Gradient colors",
-      "platform": "swift",
-      "mode": "uikit"
+      "platform": "swift"
     },
     "gradientDirection": {
       "type": "string",
       "description": "Gradient direction",
-      "platform": "swift",
-      "mode": "uikit"
+      "platform": "swift"
     },
     "locations": {
       "type": "array",
@@ -3247,15 +3245,11 @@
     "_comment": "Sparse by design, not an alias: only the Kotlin dynamic runtime dispatches CircleView (DynamicCircleViewComponent, CircleShape clip) - P18 audit 2026-08-01. Everything it renders beyond child/children comes from common. component_metadata.json carries the per-platform truth.",
     "child": {
       "type": "array",
-      "description": "Child component(s)",
-      "platform": "swift",
-      "mode": "uikit"
+      "description": "Child component(s)"
     },
     "children": {
       "type": "array",
-      "description": "Child components (alias for child)",
-      "platform": "swift",
-      "mode": "uikit"
+      "description": "Child components (alias for child)"
     }
   },
   "ScrollView": {
