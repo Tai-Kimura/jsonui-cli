@@ -624,13 +624,21 @@ def generate_report(
     # Fixture-vs-control comparison: does the attribute change anything on
     # this platform at all? Independent of baselines — both images come from
     # this run — so it survives a runner upgrade that invalidates every hash.
-    # (No env key here: both screenshots come off the same device in the same
-    # run. Only the *enforcement* of the expected-to-differ ledger is
-    # env-scoped — see gate.judge.)
+    #
+    # The env key IS needed, and the comment that used to sit here said the
+    # opposite: "both screenshots come off the same device in the same run".
+    # Same run is not same instant. The android CI capture includes a live
+    # status bar, and a fixture and its control are photographed seconds
+    # apart, so the clock alone put 120 fixtures on the active side (49-E,
+    # measured; a8583be taught control_diff to crop for it via ignore_bands).
+    # These verdicts feed cross_effect and the semantics contracts through
+    # `effect_verdicts` below, so dropping the key here re-introduced the
+    # clock into every contract judgement — 13 of the 18 violations reported
+    # on round 4.
     diffs: dict[str, control_diff_mod.DiffResult] = {}
     for p in platforms:
         diffs[p.platform] = control_diff_mod.compare(
-            conformance_dir, p.platform, manifest, p.results
+            conformance_dir, p.platform, manifest, p.results, env=env
         )
 
     if definitions_path is None:

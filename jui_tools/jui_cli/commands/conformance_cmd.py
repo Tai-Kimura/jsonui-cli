@@ -460,6 +460,18 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         ),
     )
 
+    cross.add_argument(
+        "--env",
+        default=None,
+        help=(
+            "Render-environment key (default: local). Passed through to the "
+            "fixture-vs-control comparison so the system chrome bands for that "
+            "environment are excluded — the android CI status bar's clock ticks "
+            "between a pair's two captures and otherwise reads as the attribute "
+            "having an effect."
+        ),
+    )
+
     inert = sub.add_parser(
         "inert-audit",
         help=(
@@ -530,6 +542,18 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         ),
     )
 
+    inert.add_argument(
+        "--env",
+        default=None,
+        help=(
+            "Render-environment key (default: local). Passed through to the "
+            "fixture-vs-control comparison so the system chrome bands for that "
+            "environment are excluded — the android CI status bar's clock ticks "
+            "between a pair's two captures and otherwise reads as the attribute "
+            "having an effect."
+        ),
+    )
+
     eff = sub.add_parser(
         "effect",
         help="Record/check which fixtures render differently from their control",
@@ -559,6 +583,18 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
             "control_diff.json. Existing entries are kept: an attribute that "
             "used to have an effect must not lose it because one run measured "
             "nothing."
+        ),
+    )
+
+    eff.add_argument(
+        "--env",
+        default=None,
+        help=(
+            "Render-environment key (default: local). Passed through to the "
+            "fixture-vs-control comparison so the system chrome bands for that "
+            "environment are excluded — the android CI status bar's clock ticks "
+            "between a pair's two captures and otherwise reads as the attribute "
+            "having an effect."
         ),
     )
 
@@ -693,6 +729,10 @@ def _cmd_cross_effect(args: argparse.Namespace) -> int:
     from ..conformance import cross_effect as ce
     from ..conformance.report import load_platform_results
 
+    from ..conformance.baseline import DEFAULT_ENV
+    # Same key `gate` uses: it selects the chrome bands control_diff must
+    # not compare. Without it this command measures the android clock.
+    env = getattr(args, "env", None) or DEFAULT_ENV
     conformance_dir = (
         Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
     )
@@ -728,7 +768,7 @@ def _cmd_cross_effect(args: argparse.Namespace) -> int:
                 "before trusting fixture-level conclusions"
             )
         diffs[platform] = control_diff_mod.compare(
-            conformance_dir, platform, manifest, pr.results
+            conformance_dir, platform, manifest, pr.results, env=env
         )
         if diffs[platform].error:
             print(f"note: {platform} comparison errored — {diffs[platform].error}")
@@ -865,6 +905,10 @@ def _cmd_inert_audit(args: argparse.Namespace) -> int:
     from ..conformance import inert_audit as ia
     from ..conformance.report import load_platform_results
 
+    from ..conformance.baseline import DEFAULT_ENV
+    # Same key `gate` uses: it selects the chrome bands control_diff must
+    # not compare. Without it this command measures the android clock.
+    env = getattr(args, "env", None) or DEFAULT_ENV
     conformance_dir = (
         Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
     )
@@ -896,7 +940,7 @@ def _cmd_inert_audit(args: argparse.Namespace) -> int:
                 "re-run the suite before trusting fixture-level conclusions"
             )
         diffs[platform] = control_diff_mod.compare(
-            conformance_dir, platform, manifest, pr.results
+            conformance_dir, platform, manifest, pr.results, env=env
         )
         if diffs[platform].error:
             print(f"note: {platform} comparison errored — {diffs[platform].error}")
@@ -1401,6 +1445,10 @@ def _cmd_effect(args: argparse.Namespace) -> int:
 
     from ..conformance import control_diff as cd
 
+    from ..conformance.baseline import DEFAULT_ENV
+    # Same key `gate` uses: it selects the chrome bands control_diff must
+    # not compare. Without it this command measures the android clock.
+    env = getattr(args, "env", None) or DEFAULT_ENV
     conformance_dir = Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
     manifest_path = conformance_dir / "manifest.json"
     results_path = conformance_dir / "results" / f"{args.platform}.results.json"
@@ -1423,7 +1471,8 @@ def _cmd_effect(args: argparse.Namespace) -> int:
 
     artifacts = Path(args.artifacts) if args.artifacts else None
     result = cd.compare(
-        conformance_dir, args.platform, manifest, results, artifacts_dir=artifacts
+        conformance_dir, args.platform, manifest, results,
+        artifacts_dir=artifacts, env=env
     )
     if result.error:
         print(f"ERROR: nothing was compared: {result.error}")
