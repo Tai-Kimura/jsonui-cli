@@ -117,7 +117,12 @@
   },
   "Image": {
     "description": "Local image component",
-    "aliases": [],
+    "aliases": [
+      "CircleImage",
+      "CircleImageView",
+      "ImageView",
+      "Img"
+    ],
     "platforms": {
       "swift_generated": true,
       "swift_dynamic": true,
@@ -233,7 +238,11 @@
   },
   "Collection": {
     "description": "List/grid collection with data binding",
-    "aliases": [],
+    "aliases": [
+      "Table",
+      "TableView",
+      "RecyclerView"
+    ],
     "platforms": {
       "swift_generated": true,
       "swift_dynamic": true,

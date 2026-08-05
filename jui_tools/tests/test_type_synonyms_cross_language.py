@@ -54,7 +54,10 @@ UNIFIED_TABLE: dict[str, str] = {
     # images
     "Image": "Image", "ImageView": "Image", "Img": "Image",
     "NetworkImage": "NetworkImage", "NetworkImageView": "NetworkImage",
-    "CircleImage": "NetworkImage", "CircleImageView": "NetworkImage",
+    # CircleImage is an Image with a circular clip, not a URL loader —
+    # component_metadata.json Image.platformSpecific.swift.circleImage, and all
+    # three factories route it to the Image converter (49-E, 2026-08-05).
+    "CircleImage": "Image", "CircleImageView": "Image",
     "AsyncImage": "NetworkImage",
     # selection / input controls
     "SelectBox": "SelectBox", "Spinner": "SelectBox", "DatePicker": "SelectBox",

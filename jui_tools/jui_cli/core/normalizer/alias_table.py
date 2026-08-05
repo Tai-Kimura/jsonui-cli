@@ -42,8 +42,16 @@ _TYPE_SYNONYMS = {
     "ImageView": "Image",
     "Img": "Image",
     "NetworkImageView": "NetworkImage",
-    "CircleImage": "NetworkImage",
-    "CircleImageView": "NetworkImage",
+    # CircleImage is an IMAGE, not a NetworkImage. component_metadata.json
+    # says so under Image.platformSpecific.swift.circleImage ("type='CircleImage'
+    # adds .clipShape(Circle())"), and all three factories route it to the
+    # Image converter (sjui converter_factory.rb:163, kjui :70, rjui
+    # typed_attributes.rb:58). Only this table said NetworkImage, so a layout
+    # normalised by `jui build` became a URL loader while the same layout read
+    # directly stayed a local asset — the same file drawing two different
+    # things depending on the path it arrived by (plan 49-E, 2026-08-05).
+    "CircleImage": "Image",
+    "CircleImageView": "Image",
     "AsyncImage": "NetworkImage",
     "Spinner": "SelectBox",
     "DatePicker": "SelectBox",
