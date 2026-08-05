@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance TextField.hasContainer (true)",
-    "description": "Conformance fixture for 'hasContainer' on TextField (section: TextField, class: visual). Value under test: true.",
+    "description": "Conformance fixture for 'hasContainer' on TextField (section: TextField, class: declaration-only). Value under test: true.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "hasContainer__true",
-      "description": "Conformance fixture for 'hasContainer' on TextField (section: TextField, class: visual). Value under test: true.",
+      "description": "Conformance fixture for 'hasContainer' on TextField (section: TextField, class: declaration-only). Value under test: true.",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "TextField_hasContainer__true"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

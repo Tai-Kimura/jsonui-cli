@@ -10,11 +10,12 @@
   "schemaVersion": 2,
   "generatedFrom": "49217e3d0a8e464fe1b7d7efd727e59037bcf4548b2e920dbae4927504576cc0",
   "counts": {
-    "fixtures": 851,
+    "fixtures": 850,
     "assertable": 33,
-    "visual": 701,
+    "visual": 640,
     "interactive": 35,
-    "control": 82,
+    "control": 81,
+    "declarationOnly": 61,
     "skipped": 151,
     "promoted": {
       "callback": 11
@@ -348,7 +349,7 @@
       "component": "common",
       "attribute": "widthWeight",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "widthWeight",
       "aliasOf": null,
@@ -362,14 +363,14 @@
       "test": "fixtures/common/widthWeight__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/heightWeight__static",
       "component": "common",
       "attribute": "heightWeight",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "heightWeight",
       "aliasOf": null,
@@ -383,14 +384,14 @@
       "test": "fixtures/common/heightWeight__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/maxWidthWeight__static",
       "component": "common",
       "attribute": "maxWidthWeight",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "maxWidthWeight",
       "aliasOf": null,
@@ -404,14 +405,14 @@
       "test": "fixtures/common/maxWidthWeight__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/maxHeightWeight__static",
       "component": "common",
       "attribute": "maxHeightWeight",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "maxHeightWeight",
       "aliasOf": null,
@@ -425,14 +426,14 @@
       "test": "fixtures/common/maxHeightWeight__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/minWidthWeight__static",
       "component": "common",
       "attribute": "minWidthWeight",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "minWidthWeight",
       "aliasOf": null,
@@ -446,14 +447,14 @@
       "test": "fixtures/common/minWidthWeight__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/minHeightWeight__static",
       "component": "common",
       "attribute": "minHeightWeight",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "minHeightWeight",
       "aliasOf": null,
@@ -467,14 +468,14 @@
       "test": "fixtures/common/minHeightWeight__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/aspectWidth__static",
       "component": "common",
       "attribute": "aspectWidth",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "aspectWidth",
       "aliasOf": null,
@@ -488,14 +489,14 @@
       "test": "fixtures/common/aspectWidth__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/aspectHeight__static",
       "component": "common",
       "attribute": "aspectHeight",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "aspectHeight",
       "aliasOf": null,
@@ -509,7 +510,7 @@
       "test": "fixtures/common/aspectHeight__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/weight__static",
@@ -746,7 +747,7 @@
       "component": "common",
       "attribute": "defaultBackground",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "Button",
       "writtenKey": "defaultBackground",
       "aliasOf": null,
@@ -760,7 +761,7 @@
       "test": "fixtures/common/defaultBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Button"
+      "control": null
     },
     {
       "id": "common/cornerRadius__static",
@@ -1833,7 +1834,7 @@
       "component": "common",
       "attribute": "minTopPadding",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "minTopPadding",
       "aliasOf": null,
@@ -1847,14 +1848,14 @@
       "test": "fixtures/common/minTopPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/minBottomPadding__static",
       "component": "common",
       "attribute": "minBottomPadding",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "minBottomPadding",
       "aliasOf": null,
@@ -1868,14 +1869,14 @@
       "test": "fixtures/common/minBottomPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/minLeftPadding__static",
       "component": "common",
       "attribute": "minLeftPadding",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "minLeftPadding",
       "aliasOf": null,
@@ -1889,14 +1890,14 @@
       "test": "fixtures/common/minLeftPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/minRightPadding__static",
       "component": "common",
       "attribute": "minRightPadding",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "minRightPadding",
       "aliasOf": null,
@@ -1910,14 +1911,14 @@
       "test": "fixtures/common/minRightPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/maxTopPadding__static",
       "component": "common",
       "attribute": "maxTopPadding",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "maxTopPadding",
       "aliasOf": null,
@@ -1931,14 +1932,14 @@
       "test": "fixtures/common/maxTopPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/maxBottomPadding__static",
       "component": "common",
       "attribute": "maxBottomPadding",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "maxBottomPadding",
       "aliasOf": null,
@@ -1952,14 +1953,14 @@
       "test": "fixtures/common/maxBottomPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/maxLeftPadding__static",
       "component": "common",
       "attribute": "maxLeftPadding",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "maxLeftPadding",
       "aliasOf": null,
@@ -1973,14 +1974,14 @@
       "test": "fixtures/common/maxLeftPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/maxRightPadding__static",
       "component": "common",
       "attribute": "maxRightPadding",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "maxRightPadding",
       "aliasOf": null,
@@ -1994,7 +1995,7 @@
       "test": "fixtures/common/maxRightPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/margins__static",
@@ -2167,7 +2168,7 @@
       "component": "common",
       "attribute": "minTopMargin",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "minTopMargin",
       "aliasOf": null,
@@ -2181,14 +2182,14 @@
       "test": "fixtures/common/minTopMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/minBottomMargin__static",
       "component": "common",
       "attribute": "minBottomMargin",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "minBottomMargin",
       "aliasOf": null,
@@ -2202,14 +2203,14 @@
       "test": "fixtures/common/minBottomMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/minLeftMargin__static",
       "component": "common",
       "attribute": "minLeftMargin",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "minLeftMargin",
       "aliasOf": null,
@@ -2223,14 +2224,14 @@
       "test": "fixtures/common/minLeftMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/minRightMargin__static",
       "component": "common",
       "attribute": "minRightMargin",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "minRightMargin",
       "aliasOf": null,
@@ -2244,14 +2245,14 @@
       "test": "fixtures/common/minRightMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/maxTopMargin__static",
       "component": "common",
       "attribute": "maxTopMargin",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "maxTopMargin",
       "aliasOf": null,
@@ -2265,14 +2266,14 @@
       "test": "fixtures/common/maxTopMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/maxBottomMargin__static",
       "component": "common",
       "attribute": "maxBottomMargin",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "maxBottomMargin",
       "aliasOf": null,
@@ -2286,14 +2287,14 @@
       "test": "fixtures/common/maxBottomMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/maxLeftMargin__static",
       "component": "common",
       "attribute": "maxLeftMargin",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "maxLeftMargin",
       "aliasOf": null,
@@ -2307,14 +2308,14 @@
       "test": "fixtures/common/maxLeftMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/maxRightMargin__static",
       "component": "common",
       "attribute": "maxRightMargin",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "maxRightMargin",
       "aliasOf": null,
@@ -2328,7 +2329,7 @@
       "test": "fixtures/common/maxRightMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/centerInParent__true",
@@ -3048,7 +3049,7 @@
       "component": "common",
       "attribute": "toView",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "toView",
       "aliasOf": null,
@@ -3062,7 +3063,7 @@
       "test": "fixtures/common/toView__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View__anchored"
+      "control": null
     },
     {
       "id": "common/shadow__static",
@@ -3362,7 +3363,7 @@
       "component": "common",
       "attribute": "compressHorizontal",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "compressHorizontal",
       "aliasOf": null,
@@ -3376,14 +3377,14 @@
       "test": "fixtures/common/compressHorizontal__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/compressVertical__static",
       "component": "common",
       "attribute": "compressVertical",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "compressVertical",
       "aliasOf": null,
@@ -3397,14 +3398,14 @@
       "test": "fixtures/common/compressVertical__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/hugHorizontal__static",
       "component": "common",
       "attribute": "hugHorizontal",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "hugHorizontal",
       "aliasOf": null,
@@ -3418,14 +3419,14 @@
       "test": "fixtures/common/hugHorizontal__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/hugVertical__static",
       "component": "common",
       "attribute": "hugVertical",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "hugVertical",
       "aliasOf": null,
@@ -3439,14 +3440,14 @@
       "test": "fixtures/common/hugVertical__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/wrapContent__true",
       "component": "common",
       "attribute": "wrapContent",
       "case": "true",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "wrapContent",
       "aliasOf": null,
@@ -3460,14 +3461,14 @@
       "test": "fixtures/common/wrapContent__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/innerPadding__static",
       "component": "common",
       "attribute": "innerPadding",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "innerPadding",
       "aliasOf": null,
@@ -3481,14 +3482,14 @@
       "test": "fixtures/common/innerPadding__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/effectStyle__static",
       "component": "common",
       "attribute": "effectStyle",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "effectStyle",
       "aliasOf": null,
@@ -3502,7 +3503,7 @@
       "test": "fixtures/common/effectStyle__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "common/enabled__true",
@@ -7450,7 +7451,7 @@
       "component": "TextField",
       "attribute": "textPaddingRight",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "TextField",
       "writtenKey": "textPaddingRight",
       "aliasOf": null,
@@ -7464,14 +7465,14 @@
       "test": "fixtures/TextField/textPaddingRight__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/hasContainer__true",
       "component": "TextField",
       "attribute": "hasContainer",
       "case": "true",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "TextField",
       "writtenKey": "hasContainer",
       "aliasOf": null,
@@ -7485,14 +7486,14 @@
       "test": "fixtures/TextField/hasContainer__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/textVerticalAlign__static",
       "component": "TextField",
       "attribute": "textVerticalAlign",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "TextField",
       "writtenKey": "textVerticalAlign",
       "aliasOf": null,
@@ -7506,14 +7507,14 @@
       "test": "fixtures/TextField/textVerticalAlign__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/applyLiquidGlass__true",
       "component": "TextField",
       "attribute": "applyLiquidGlass",
       "case": "true",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "TextField",
       "writtenKey": "applyLiquidGlass",
       "aliasOf": null,
@@ -7527,14 +7528,14 @@
       "test": "fixtures/TextField/applyLiquidGlass__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/accessoryCornerRadius__static",
       "component": "TextField",
       "attribute": "accessoryCornerRadius",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "TextField",
       "writtenKey": "accessoryCornerRadius",
       "aliasOf": null,
@@ -7548,14 +7549,14 @@
       "test": "fixtures/TextField/accessoryCornerRadius__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/glassEffectStyle__static",
       "component": "TextField",
       "attribute": "glassEffectStyle",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "TextField",
       "writtenKey": "glassEffectStyle",
       "aliasOf": null,
@@ -7569,14 +7570,14 @@
       "test": "fixtures/TextField/glassEffectStyle__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/accessoryBackground__static",
       "component": "TextField",
       "attribute": "accessoryBackground",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "TextField",
       "writtenKey": "accessoryBackground",
       "aliasOf": null,
@@ -7590,14 +7591,14 @@
       "test": "fixtures/TextField/accessoryBackground__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/accessoryTextColor__static",
       "component": "TextField",
       "attribute": "accessoryTextColor",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "TextField",
       "writtenKey": "accessoryTextColor",
       "aliasOf": null,
@@ -7611,14 +7612,14 @@
       "test": "fixtures/TextField/accessoryTextColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/doneText__static",
       "component": "TextField",
       "attribute": "doneText",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "TextField",
       "writtenKey": "doneText",
       "aliasOf": null,
@@ -7632,7 +7633,7 @@
       "test": "fixtures/TextField/doneText__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/tintColor__static",
@@ -7883,7 +7884,7 @@
       "component": "TextField",
       "attribute": "leftViewMode",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "TextField",
       "writtenKey": "leftViewMode",
       "aliasOf": null,
@@ -7897,14 +7898,14 @@
       "test": "fixtures/TextField/leftViewMode__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/rightViewMode__static",
       "component": "TextField",
       "attribute": "rightViewMode",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "TextField",
       "writtenKey": "rightViewMode",
       "aliasOf": null,
@@ -7918,7 +7919,7 @@
       "test": "fixtures/TextField/rightViewMode__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/TextField"
+      "control": null
     },
     {
       "id": "TextField/maxLength__static",
@@ -10318,7 +10319,7 @@
       "component": "Image",
       "attribute": "highlightSrcName",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "Image",
       "writtenKey": "highlightSrcName",
       "aliasOf": null,
@@ -10332,7 +10333,7 @@
       "test": "fixtures/Image/highlightSrcName__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Image"
+      "control": null
     },
     {
       "id": "Image/contentMode__fill",
@@ -11519,7 +11520,7 @@
       "component": "SelectBox",
       "attribute": "selectedItem",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "SelectBox",
       "writtenKey": "selectedItem",
       "aliasOf": null,
@@ -11533,7 +11534,7 @@
       "test": "fixtures/SelectBox/selectedItem__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox"
+      "control": null
     },
     {
       "id": "SelectBox/datePickerMode__time",
@@ -12281,7 +12282,7 @@
       "component": "SelectBox",
       "attribute": "inView",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "SelectBox",
       "writtenKey": "inView",
       "aliasOf": null,
@@ -12295,14 +12296,14 @@
       "test": "fixtures/SelectBox/inView__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__anchored"
+      "control": null
     },
     {
       "id": "SelectBox/referenceView__static",
       "component": "SelectBox",
       "attribute": "referenceView",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "SelectBox",
       "writtenKey": "referenceView",
       "aliasOf": null,
@@ -12316,7 +12317,7 @@
       "test": "fixtures/SelectBox/referenceView__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/SelectBox__anchored"
+      "control": null
     },
     {
       "id": "SelectBox/onValueChange__callback_fire",
@@ -12807,7 +12808,7 @@
       "component": "Switch",
       "attribute": "offTintColor",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "Switch",
       "writtenKey": "offTintColor",
       "aliasOf": null,
@@ -12821,7 +12822,7 @@
       "test": "fixtures/Switch/offTintColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Switch"
+      "control": null
     },
     {
       "id": "Switch/onValueChange__callback_fire",
@@ -13097,7 +13098,7 @@
       "component": "Segment",
       "attribute": "apportionsSegmentWidthsByContent",
       "case": "true",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "Segment",
       "writtenKey": "apportionsSegmentWidthsByContent",
       "aliasOf": null,
@@ -13111,7 +13112,7 @@
       "test": "fixtures/Segment/apportionsSegmentWidthsByContent__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Segment"
+      "control": null
     },
     {
       "id": "Slider/value__static",
@@ -13348,7 +13349,7 @@
       "component": "Slider",
       "attribute": "minimumValueImage",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "Slider",
       "writtenKey": "minimumValueImage",
       "aliasOf": null,
@@ -13362,14 +13363,14 @@
       "test": "fixtures/Slider/minimumValueImage__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Slider"
+      "control": null
     },
     {
       "id": "Slider/maximumValueImage__static",
       "component": "Slider",
       "attribute": "maximumValueImage",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "Slider",
       "writtenKey": "maximumValueImage",
       "aliasOf": null,
@@ -13383,7 +13384,7 @@
       "test": "fixtures/Slider/maximumValueImage__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Slider"
+      "control": null
     },
     {
       "id": "Slider/step__static",
@@ -13549,7 +13550,7 @@
       "component": "Progress",
       "attribute": "progressViewStyle",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "Progress",
       "writtenKey": "progressViewStyle",
       "aliasOf": null,
@@ -13563,14 +13564,14 @@
       "test": "fixtures/Progress/progressViewStyle__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Progress"
+      "control": null
     },
     {
       "id": "Progress/progressImage__static",
       "component": "Progress",
       "attribute": "progressImage",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "Progress",
       "writtenKey": "progressImage",
       "aliasOf": null,
@@ -13584,14 +13585,14 @@
       "test": "fixtures/Progress/progressImage__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Progress"
+      "control": null
     },
     {
       "id": "Progress/trackImage__static",
       "component": "Progress",
       "attribute": "trackImage",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "Progress",
       "writtenKey": "trackImage",
       "aliasOf": null,
@@ -13605,7 +13606,7 @@
       "test": "fixtures/Progress/trackImage__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/Progress"
+      "control": null
     },
     {
       "id": "Progress/hidesWhenStopped__true",
@@ -14019,7 +14020,7 @@
       "component": "View",
       "attribute": "gradient",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "gradient",
       "aliasOf": null,
@@ -14036,14 +14037,14 @@
       "test": "fixtures/View/gradient__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "View/gradientDirection__static",
       "component": "View",
       "attribute": "gradientDirection",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "gradientDirection",
       "aliasOf": null,
@@ -14057,14 +14058,14 @@
       "test": "fixtures/View/gradientDirection__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "View/locations__static",
       "component": "View",
       "attribute": "locations",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "View",
       "writtenKey": "locations",
       "aliasOf": null,
@@ -14081,7 +14082,7 @@
       "test": "fixtures/View/locations__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/View"
+      "control": null
     },
     {
       "id": "View/safeAreaInsetPositions__static",
@@ -14353,7 +14354,7 @@
       "component": "ScrollView",
       "attribute": "contentSize",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "ScrollView",
       "writtenKey": "contentSize",
       "aliasOf": null,
@@ -14370,14 +14371,14 @@
       "test": "fixtures/ScrollView/contentSize__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/ScrollView"
+      "control": null
     },
     {
       "id": "ScrollView/contentOffset__static",
       "component": "ScrollView",
       "attribute": "contentOffset",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "ScrollView",
       "writtenKey": "contentOffset",
       "aliasOf": null,
@@ -14394,14 +14395,14 @@
       "test": "fixtures/ScrollView/contentOffset__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/ScrollView"
+      "control": null
     },
     {
       "id": "ScrollView/indicatorStyle__static",
       "component": "ScrollView",
       "attribute": "indicatorStyle",
       "case": "static",
-      "class": "visual",
+      "class": "declaration-only",
       "host": "ScrollView",
       "writtenKey": "indicatorStyle",
       "aliasOf": null,
@@ -14415,7 +14416,7 @@
       "test": "fixtures/ScrollView/indicatorStyle__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "control": "__control/ScrollView"
+      "control": null
     },
     {
       "id": "ScrollView/scrollBehavior__auto",
@@ -18608,28 +18609,6 @@
       "deprecated": null,
       "layout": "fixtures/__control/SelectBox__selectItemType-Date.layout.json",
       "test": "fixtures/__control/SelectBox__selectItemType-Date.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": null,
-      "isControl": true
-    },
-    {
-      "id": "__control/SelectBox__anchored",
-      "component": "__control",
-      "attribute": null,
-      "case": "SelectBox",
-      "class": "visual",
-      "host": "SelectBox",
-      "writtenKey": null,
-      "aliasOf": null,
-      "value": null,
-      "platforms": [
-        "ios"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/__control/SelectBox__anchored.layout.json",
-      "test": "fixtures/__control/SelectBox__anchored.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

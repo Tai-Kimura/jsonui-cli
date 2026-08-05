@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance Progress.progressViewStyle (static)",
-    "description": "Conformance fixture for 'progressViewStyle' on Progress (section: Progress, class: visual). Value under test: \"sample\".",
+    "description": "Conformance fixture for 'progressViewStyle' on Progress (section: Progress, class: declaration-only). Value under test: \"sample\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "progressViewStyle__static",
-      "description": "Conformance fixture for 'progressViewStyle' on Progress (section: Progress, class: visual). Value under test: \"sample\".",
+      "description": "Conformance fixture for 'progressViewStyle' on Progress (section: Progress, class: declaration-only). Value under test: \"sample\".",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "Progress_progressViewStyle__static"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

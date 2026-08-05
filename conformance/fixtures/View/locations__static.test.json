@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance View.locations (static)",
-    "description": "Conformance fixture for 'locations' on View (section: View, class: visual). Value under test: [0.0, 1.0].",
+    "description": "Conformance fixture for 'locations' on View (section: View, class: declaration-only). Value under test: [0.0, 1.0].",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "locations__static",
-      "description": "Conformance fixture for 'locations' on View (section: View, class: visual). Value under test: [0.0, 1.0].",
+      "description": "Conformance fixture for 'locations' on View (section: View, class: declaration-only). Value under test: [0.0, 1.0].",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "View_locations__static"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

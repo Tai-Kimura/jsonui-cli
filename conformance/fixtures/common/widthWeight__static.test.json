@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance common.widthWeight (static)",
-    "description": "Conformance fixture for 'widthWeight' on View (section: common, class: visual). Value under test: 1.",
+    "description": "Conformance fixture for 'widthWeight' on View (section: common, class: declaration-only). Value under test: 1.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "widthWeight__static",
-      "description": "Conformance fixture for 'widthWeight' on View (section: common, class: visual). Value under test: 1.",
+      "description": "Conformance fixture for 'widthWeight' on View (section: common, class: declaration-only). Value under test: 1.",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "common_widthWeight__static"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

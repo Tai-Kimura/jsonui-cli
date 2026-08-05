@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance Image.highlightSrcName (static)",
-    "description": "Conformance fixture for 'highlightSrcName' on Image (section: Image, class: visual). Value under test: \"conformance_sample\".",
+    "description": "Conformance fixture for 'highlightSrcName' on Image (section: Image, class: declaration-only). Value under test: \"conformance_sample\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "highlightSrcName__static",
-      "description": "Conformance fixture for 'highlightSrcName' on Image (section: Image, class: visual). Value under test: \"conformance_sample\".",
+      "description": "Conformance fixture for 'highlightSrcName' on Image (section: Image, class: declaration-only). Value under test: \"conformance_sample\".",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "Image_highlightSrcName__static"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

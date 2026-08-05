@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance TextField.accessoryCornerRadius (static)",
-    "description": "Conformance fixture for 'accessoryCornerRadius' on TextField (section: TextField, class: visual). Value under test: 8.",
+    "description": "Conformance fixture for 'accessoryCornerRadius' on TextField (section: TextField, class: declaration-only). Value under test: 8.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "accessoryCornerRadius__static",
-      "description": "Conformance fixture for 'accessoryCornerRadius' on TextField (section: TextField, class: visual). Value under test: 8.",
+      "description": "Conformance fixture for 'accessoryCornerRadius' on TextField (section: TextField, class: declaration-only). Value under test: 8.",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "TextField_accessoryCornerRadius__static"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

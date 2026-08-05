@@ -26,6 +26,13 @@ from typing import Any
 CLASS_ASSERTABLE = "assertable"
 CLASS_VISUAL = "visual"
 CLASS_UNTESTABLE = "untestable"
+#: Generated, loaded and compiled — but deliberately not photographed.
+#:
+#: See :func:`is_uikit_only`. A fixture in this class still proves its
+#: declaration is legal and that the host renders the screen without falling
+#: over; it makes no claim about pixels, so it carries no control and takes no
+#: screenshot, and it is not counted as visual coverage.
+CLASS_DECLARATION_ONLY = "declaration-only"
 
 #: id given to the component under test in every generated layout.
 TARGET_ID = "target"
@@ -836,6 +843,42 @@ BOUND_CASES_BLOCKED: dict[tuple[str, str], dict[str, str]] = {
     #     "verify": "web-host-typecheck",
     # },
 }
+
+#: Attributes reachable only through UIKit, which nothing in the conformance
+#: suite renders — and which, by the 2026-08-05 user ruling, nothing will.
+#:
+#: Neither iOS path can photograph them, for two independent reasons:
+#:
+#:   codegen host   UIKit attributes are applied by the Swift runtime and
+#:                  never pass through a Ruby converter (the same fact
+#:                  MODE_PLATFORM_MAP records: `uikit` maps to no codegen).
+#:   dynamic host   it is the SwiftUI dynamic renderer, not the UIKit one
+#:                  (INTERACTIVE_HOST_CONTRACT.md:56).
+#:
+#: 61 fixtures sat in this position calling themselves `visual`: generated,
+#: control-bearing, counted as visual coverage, and never once captured. Only
+#: three ever surfaced, because only those three happened to be in a baseline;
+#: the rest were absorbed by the no_baseline / missing_artifact ratchets.
+#:
+#: The ruling is to stop measuring them, and the class is where that has to be
+#: recorded — a ledger entry alone would leave 61 fixtures still claiming
+#: coverage they do not have, which is the failure this wave exists to remove.
+#: A decision not to measure has to show up in the numbers.
+#:
+#: The fixtures STAY. A `mode: uikit` attribute is a legal iOS layout and the
+#: fixture proves the declaration survives generation; what changes is that it
+#: stops pretending to be a photograph.
+#:
+#: Deliberately NOT `is_non_observable`, which means "no still capture could
+#: ever show this". These could be shown — by a UIKit host. The reason is that
+#: we chose not to point a camera at them, and the two reasons should not be
+#: filed under one name.
+def is_uikit_only(defn: dict) -> bool:
+    """True when ``mode`` names UIKit and nothing else."""
+    raw = defn.get("mode")
+    modes = raw if isinstance(raw, list) else ([raw] if raw else [])
+    return bool(modes) and set(modes) == {"uikit"}
+
 
 #: Attributes whose fixture cannot be SHAPED to observe them yet, with what is
 #: missing. Same three fields as the bound-hold table: who owns it, what the
@@ -2175,6 +2218,12 @@ def plan_attribute(
         if not cases:
             return SkippedAttribute(section, attribute, REASON_COMPOSITE)
         cls = CLASS_VISUAL
+
+    # The user ruling above: UIKit-only attributes are not photographed, so the
+    # plan stops claiming visual coverage before anything downstream reads it —
+    # the control, the screenshot step and the counts all follow from `cls`.
+    if cls == CLASS_VISUAL and is_uikit_only(defn):
+        cls = CLASS_DECLARATION_ONLY
 
     cases = _with_alias_cases(section, attribute, defn, cases)
 

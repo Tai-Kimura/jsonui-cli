@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance View.gradientDirection (static)",
-    "description": "Conformance fixture for 'gradientDirection' on View (section: View, class: visual). Value under test: \"sample\".",
+    "description": "Conformance fixture for 'gradientDirection' on View (section: View, class: declaration-only). Value under test: \"sample\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "gradientDirection__static",
-      "description": "Conformance fixture for 'gradientDirection' on View (section: View, class: visual). Value under test: \"sample\".",
+      "description": "Conformance fixture for 'gradientDirection' on View (section: View, class: declaration-only). Value under test: \"sample\".",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "View_gradientDirection__static"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

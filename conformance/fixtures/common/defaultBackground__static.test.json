@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance common.defaultBackground (static)",
-    "description": "Conformance fixture for 'defaultBackground' on Button (section: common, class: visual). Value under test: \"#FF0000\".",
+    "description": "Conformance fixture for 'defaultBackground' on Button (section: common, class: declaration-only). Value under test: \"#FF0000\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "defaultBackground__static",
-      "description": "Conformance fixture for 'defaultBackground' on Button (section: common, class: visual). Value under test: \"#FF0000\".",
+      "description": "Conformance fixture for 'defaultBackground' on Button (section: common, class: declaration-only). Value under test: \"#FF0000\".",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "common_defaultBackground__static"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

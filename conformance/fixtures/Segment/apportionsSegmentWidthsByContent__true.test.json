@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance Segment.apportionsSegmentWidthsByContent (true)",
-    "description": "Conformance fixture for 'apportionsSegmentWidthsByContent' on Segment (section: Segment, class: visual). Value under test: true.",
+    "description": "Conformance fixture for 'apportionsSegmentWidthsByContent' on Segment (section: Segment, class: declaration-only). Value under test: true.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "apportionsSegmentWidthsByContent__true",
-      "description": "Conformance fixture for 'apportionsSegmentWidthsByContent' on Segment (section: Segment, class: visual). Value under test: true.",
+      "description": "Conformance fixture for 'apportionsSegmentWidthsByContent' on Segment (section: Segment, class: declaration-only). Value under test: true.",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "Segment_apportionsSegmentWidthsByContent__true"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance Progress.progressImage (static)",
-    "description": "Conformance fixture for 'progressImage' on Progress (section: Progress, class: visual). Value under test: \"conformance_sample\".",
+    "description": "Conformance fixture for 'progressImage' on Progress (section: Progress, class: declaration-only). Value under test: \"conformance_sample\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "progressImage__static",
-      "description": "Conformance fixture for 'progressImage' on Progress (section: Progress, class: visual). Value under test: \"conformance_sample\".",
+      "description": "Conformance fixture for 'progressImage' on Progress (section: Progress, class: declaration-only). Value under test: \"conformance_sample\".",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "Progress_progressImage__static"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

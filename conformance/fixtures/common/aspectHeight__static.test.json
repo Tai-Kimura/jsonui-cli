@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance common.aspectHeight (static)",
-    "description": "Conformance fixture for 'aspectHeight' on View (section: common, class: visual). Value under test: 3.",
+    "description": "Conformance fixture for 'aspectHeight' on View (section: common, class: declaration-only). Value under test: 3.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "aspectHeight__static",
-      "description": "Conformance fixture for 'aspectHeight' on View (section: common, class: visual). Value under test: 3.",
+      "description": "Conformance fixture for 'aspectHeight' on View (section: common, class: declaration-only). Value under test: 3.",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "common_aspectHeight__static"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

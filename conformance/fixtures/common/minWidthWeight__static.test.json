@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance common.minWidthWeight (static)",
-    "description": "Conformance fixture for 'minWidthWeight' on View (section: common, class: visual). Value under test: 0.25.",
+    "description": "Conformance fixture for 'minWidthWeight' on View (section: common, class: declaration-only). Value under test: 0.25.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "minWidthWeight__static",
-      "description": "Conformance fixture for 'minWidthWeight' on View (section: common, class: visual). Value under test: 0.25.",
+      "description": "Conformance fixture for 'minWidthWeight' on View (section: common, class: declaration-only). Value under test: 0.25.",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "common_minWidthWeight__static"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

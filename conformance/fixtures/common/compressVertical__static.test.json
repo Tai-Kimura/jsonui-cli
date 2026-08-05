@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance common.compressVertical (static)",
-    "description": "Conformance fixture for 'compressVertical' on View (section: common, class: visual). Value under test: \"sample\".",
+    "description": "Conformance fixture for 'compressVertical' on View (section: common, class: declaration-only). Value under test: \"sample\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "compressVertical__static",
-      "description": "Conformance fixture for 'compressVertical' on View (section: common, class: visual). Value under test: \"sample\".",
+      "description": "Conformance fixture for 'compressVertical' on View (section: common, class: declaration-only). Value under test: \"sample\".",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "common_compressVertical__static"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance ScrollView.contentSize (static)",
-    "description": "Conformance fixture for 'contentSize' on ScrollView (section: ScrollView, class: visual). Value under test: [200, 400].",
+    "description": "Conformance fixture for 'contentSize' on ScrollView (section: ScrollView, class: declaration-only). Value under test: [200, 400].",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "contentSize__static",
-      "description": "Conformance fixture for 'contentSize' on ScrollView (section: ScrollView, class: visual). Value under test: [200, 400].",
+      "description": "Conformance fixture for 'contentSize' on ScrollView (section: ScrollView, class: declaration-only). Value under test: [200, 400].",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "ScrollView_contentSize__static"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

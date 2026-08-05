@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance common.minLeftMargin (static)",
-    "description": "Conformance fixture for 'minLeftMargin' on View (section: common, class: visual). Value under test: 8.",
+    "description": "Conformance fixture for 'minLeftMargin' on View (section: common, class: declaration-only). Value under test: 8.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "minLeftMargin__static",
-      "description": "Conformance fixture for 'minLeftMargin' on View (section: common, class: visual). Value under test: 8.",
+      "description": "Conformance fixture for 'minLeftMargin' on View (section: common, class: declaration-only). Value under test: 8.",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "common_minLeftMargin__static"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance common.maxTopPadding (static)",
-    "description": "Conformance fixture for 'maxTopPadding' on View (section: common, class: visual). Value under test: 8.",
+    "description": "Conformance fixture for 'maxTopPadding' on View (section: common, class: declaration-only). Value under test: 8.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "maxTopPadding__static",
-      "description": "Conformance fixture for 'maxTopPadding' on View (section: common, class: visual). Value under test: 8.",
+      "description": "Conformance fixture for 'maxTopPadding' on View (section: common, class: declaration-only). Value under test: 8.",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "common_maxTopPadding__static"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

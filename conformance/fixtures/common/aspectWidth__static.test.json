@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance common.aspectWidth (static)",
-    "description": "Conformance fixture for 'aspectWidth' on View (section: common, class: visual). Value under test: 4.",
+    "description": "Conformance fixture for 'aspectWidth' on View (section: common, class: declaration-only). Value under test: 4.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "aspectWidth__static",
-      "description": "Conformance fixture for 'aspectWidth' on View (section: common, class: visual). Value under test: 4.",
+      "description": "Conformance fixture for 'aspectWidth' on View (section: common, class: declaration-only). Value under test: 4.",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "common_aspectWidth__static"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }

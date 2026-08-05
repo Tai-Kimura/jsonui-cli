@@ -74,6 +74,8 @@ class GenerationSummary:
     interactive_count: int = 0
     #: control fixtures (base attributes only) each visual fixture is diffed against
     control_count: int = 0
+    #: generated and loaded, but deliberately not photographed (UIKit-only)
+    declaration_only_count: int = 0
     skipped_count: int = 0
     files_written: int = 0
     skipped: list[dict] = field(default_factory=list)
@@ -217,6 +219,12 @@ def build_test(plan: AttributePlan, case: CasePlan, layout_rel: str) -> dict:
     steps: list[dict] = [{"action": "waitFor", "id": "root"}]
     if plan.cls == rules.CLASS_ASSERTABLE:
         steps.extend(dict(a) for a in case.assertions)
+    elif plan.cls == rules.CLASS_DECLARATION_ONLY:
+        # No screenshot: nothing compares it, and capturing one is what put 61
+        # uncomparable images into the ratchets. The fixture still asserts that
+        # the component renders — a UIKit-only attribute must not break the
+        # SwiftUI screen it appears in, which is the one thing worth checking.
+        steps.append({"assert": "visible", "id": rules.TARGET_ID})
     else:
         steps.append(
             {"action": "screenshot", "name": f"{plan.section}_{case_id}"}
@@ -724,6 +732,8 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
             summary.fixture_count += 1
             if plan.cls == rules.CLASS_ASSERTABLE:
                 summary.assertable_count += 1
+            elif plan.cls == rules.CLASS_DECLARATION_ONLY:
+                summary.declaration_only_count += 1
             else:
                 summary.visual_count += 1
                 if not rules.is_non_observable(plan.section, plan.attribute):
@@ -843,6 +853,7 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
             "visual": summary.visual_count,
             "interactive": summary.interactive_count,
             "control": summary.control_count,
+            "declarationOnly": summary.declaration_only_count,
             "skipped": summary.skipped_count,
             "promoted": {k: promoted[k] for k in sorted(promoted)},
         },

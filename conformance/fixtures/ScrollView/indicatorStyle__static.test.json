@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance ScrollView.indicatorStyle (static)",
-    "description": "Conformance fixture for 'indicatorStyle' on ScrollView (section: ScrollView, class: visual). Value under test: \"sample\".",
+    "description": "Conformance fixture for 'indicatorStyle' on ScrollView (section: ScrollView, class: declaration-only). Value under test: \"sample\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,15 +18,15 @@
   "cases": [
     {
       "name": "indicatorStyle__static",
-      "description": "Conformance fixture for 'indicatorStyle' on ScrollView (section: ScrollView, class: visual). Value under test: \"sample\".",
+      "description": "Conformance fixture for 'indicatorStyle' on ScrollView (section: ScrollView, class: declaration-only). Value under test: \"sample\".",
       "steps": [
         {
           "action": "waitFor",
           "id": "root"
         },
         {
-          "action": "screenshot",
-          "name": "ScrollView_indicatorStyle__static"
+          "assert": "visible",
+          "id": "target"
         }
       ]
     }
