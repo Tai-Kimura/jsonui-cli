@@ -910,6 +910,45 @@ BOUND_CASES_BLOCKED: dict[tuple[str, str], dict[str, str]] = {
     # },
 }
 
+#: Declared types whose fixture is held back because EMITTING it breaks the
+#: generator. Same three fields as the other holds.
+#:
+#: An attribute typed `string|array` whose array face nothing has ever written
+#: is not a hypothetical gap: measured on all three, writing
+#: `onclick: ["confPush", "confPop"]` gives
+#:
+#:   ios      both selectors emitted — the codegen is right, and F's finding is
+#:            that the DYNAMIC path invokes neither
+#:   android  generation dies: NoMethodError, undefined method `match?' for
+#:            Array (kjui get_event_handler_call, reached from
+#:            modifier_builder.rb:732 and button_component.rb:71)
+#:   web      emits `onClick={data.["confPush", "confPop"]}` — TS1003,
+#:            not valid syntax
+#:
+#: Two of three cannot build, and a fixture that stops a host building takes
+#: that platform's whole run with it. So the fixture is written and held, the
+#: same way the bound cases were: each entry names what has to be true for it
+#: to come out, and it comes out the moment that is true.
+ARRAY_FACE_BLOCKED: dict[tuple[str, str], dict[str, str]] = {
+    ("common", "onclick"): {
+        "owner": "C + A",
+        "reason": "kjui raises NoMethodError (`match?` on an Array) and rjui "
+                  "emits `data.[...]`, which is not syntax; ios emits both "
+                  "selectors correctly",
+        "verify": "codegen-probe:all-three-emit",
+    },
+}
+
+
+def _check_array_face_blocked() -> None:
+    for pair, hold in ARRAY_FACE_BLOCKED.items():
+        missing = [f for f in BOUND_HOLD_FIELDS if not hold.get(f)]
+        if missing:
+            raise ValueError(
+                f"ARRAY_FACE_BLOCKED[{pair!r}] is missing {missing!r}"
+            )
+
+
 #: Fixture pairs that are EXPECTED to render identically to each other.
 #:
 #: The visual check compares each fixture to its control, and nothing compares
@@ -1048,6 +1087,7 @@ def _check_bound_holds() -> None:
 _check_bound_holds()
 _check_unshapeable()
 _check_peer_exceptions()
+_check_array_face_blocked()
 
 
 #: Name of the data property a bound case binds to, per attribute.
@@ -2449,6 +2489,9 @@ def _untestable_reason(section: str, attribute: str, defn: dict) -> str | None:
     ):
         return REASON_CALLBACK
     if attribute == "onclick":
+        # The array face of `onclick` is measurable and is NOT here — it is
+        # held in ARRAY_FACE_BLOCKED, because emitting it breaks two of the
+        # three generators outright. See that table.
         return REASON_CALLBACK
     if attribute in BINDING_ATTRS:
         return REASON_BINDING_ONLY
