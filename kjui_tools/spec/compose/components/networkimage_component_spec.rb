@@ -31,6 +31,62 @@ RSpec.describe KjuiTools::Compose::Components::NetworkImageComponent do
       expect(result).to include('Modifier')
     end
   end
+
+  # Each Coil slot carries ONLY the images the ruling puts in its own state
+  # (attribute_semantics.json#networkImage; plan 49 #19). `fallback` is the
+  # no-src slot and takes defaultImage alone — it used to end in
+  # `|| errorImage || placeholder`, which made a state image appear outside
+  # its state. Every NetworkImage conformance fixture is no-src, so that tail
+  # was what the whole family actually rendered.
+  describe 'state images' do
+    def generate(attrs)
+      described_class.generate({ 'type' => 'NetworkImage' }.merge(attrs), 0, Set.new)
+    end
+
+    it 'gives the no-src slot defaultImage and nothing else' do
+      result = generate('defaultImage' => 'fallback_asset')
+      expect(result).to include('fallback = painterResource(R.drawable.fallback_asset)')
+    end
+
+    it 'summons no image at all when only errorImage is declared' do
+      result = generate('errorImage' => 'error_asset')
+      expect(result).not_to include('fallback = ')
+      expect(result).to include('error = painterResource(R.drawable.error_asset)')
+    end
+
+    it 'summons no image at all when only loadingImage is declared' do
+      result = generate('loadingImage' => 'loading_asset')
+      expect(result).not_to include('fallback = ')
+      expect(result).not_to include('error = ')
+      expect(result).to include('placeholder = painterResource(R.drawable.loading_asset)')
+    end
+
+    it 'summons no image at all when only placeholder is declared' do
+      result = generate('placeholder' => 'loading_asset')
+      expect(result).not_to include('fallback = ')
+      expect(result).not_to include('error = ')
+    end
+
+    it 'falls the error slot back to defaultImage, never to the loading image' do
+      result = generate('placeholder' => 'loading_asset', 'defaultImage' => 'fallback_asset')
+      expect(result).to include('error = painterResource(R.drawable.fallback_asset)')
+      expect(result).to include('fallback = painterResource(R.drawable.fallback_asset)')
+    end
+
+    it 'keeps errorImage ahead of defaultImage in the error slot' do
+      result = generate('errorImage' => 'error_asset', 'defaultImage' => 'fallback_asset')
+      expect(result).to include('error = painterResource(R.drawable.error_asset)')
+      expect(result).to include('fallback = painterResource(R.drawable.fallback_asset)')
+    end
+
+    it 'emits no state slot, and no painter imports, when none is declared' do
+      imports = Set.new
+      result = described_class.generate({ 'type' => 'NetworkImage' }, 0, imports)
+      expect(result).not_to include('fallback = ')
+      expect(result).not_to include('error = ')
+      expect(imports).not_to include(:painter_resource)
+    end
+  end
 end
 
 # `headers` is declared `platform: kotlin, mode: compose` — a plain String model

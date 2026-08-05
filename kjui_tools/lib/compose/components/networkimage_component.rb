@@ -101,22 +101,35 @@ module KjuiTools
 
           code += Helpers::ModifierBuilder.format(modifiers, depth)
 
-          # Error/fallback per the canonical no-src chain
-          # (networkImage.noSrc = defaultImage, shared/core/
-          # attribute_semantics.json): with no src the view shows
-          # defaultImage; on error it shows errorImage, falling back to
-          # defaultImage. defaultImage was previously never read here —
-          # a Collection control declaring only defaultImage rendered blank.
+          # Error/fallback per the canonical state chain
+          # (shared/core/attribute_semantics.json#networkImage): with no src
+          # the view shows defaultImage; while loading it shows the first of
+          # hint/placeholder/loadingImage; on error it shows errorImage,
+          # falling back to defaultImage.
+          #
+          # Each Coil slot takes ONLY the images the ruling puts in its own
+          # state. `fallback` is the NO-SRC slot, and it used to end in
+          # `|| errorImage || placeholder`; `error` used to end in
+          # `|| placeholder`. Those tails made a state image appear in a state
+          # it does not belong to — every NetworkImage conformance fixture is
+          # no-src (not one of the 19 declares source/url/src), so the whole
+          # family rendered through `fallback`, and errorImage__static /
+          # loadingImage__static / placeholder__static went visibly active
+          # while hint__static — the only one declaring defaultImage — stayed
+          # inert. Same rule as `semantics.border`: an image that was never
+          # declared for this state does not get summoned into it, and a
+          # no-src view with no defaultImage correctly shows nothing (plan 49
+          # #19, C's verdict, ratified 2026-08-05).
           default_image = json_data['defaultImage']
-          error_image = json_data['errorImage'] || default_image || placeholder
-          fallback_image = default_image || json_data['errorImage'] || placeholder
-          if error_image || fallback_image
+          error_image = json_data['errorImage'] || default_image
+          fallback_image = default_image
+          state_args = []
+          state_args << "error = painterResource(R.drawable.#{drawable_for(error_image)})" if error_image
+          state_args << "fallback = painterResource(R.drawable.#{drawable_for(fallback_image)})" if fallback_image
+          unless state_args.empty?
             required_imports&.add(:painter_resource)
             required_imports&.add(:r_class)
-            error_name = error_image.gsub('.png', '').gsub('.jpg', '')
-            fallback_name = fallback_image.gsub('.png', '').gsub('.jpg', '')
-            code += ",\n" + indent("error = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(error_name)}),", depth + 1)
-            code += "\n" + indent("fallback = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(fallback_name)})", depth + 1)
+            code += ",\n" + state_args.map { |arg| indent(arg, depth + 1) }.join(",\n")
           end
 
           code += "\n" + indent(")", depth)
@@ -124,6 +137,12 @@ module KjuiTools
         end
 
         private
+
+        # Drawable identifier for a state image, with the file extension the
+        # layout may carry stripped first.
+        def self.drawable_for(name)
+          Helpers::ResourceResolver.drawable_name(name.gsub('.png', '').gsub('.jpg', ''))
+        end
 
         def self.process_data_binding(text)
           return quote(text) unless text.is_a?(String)
