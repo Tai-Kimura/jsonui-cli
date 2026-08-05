@@ -401,7 +401,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
-      "control": "__control/View__height-0_root.orientation-vertical"
+      "control": "__control/View__root.orientation-vertical"
     },
     {
       "id": "common/maxWidthWeight__static",
@@ -21203,29 +21203,6 @@
       "isControl": true
     },
     {
-      "id": "__control/View__height-0_root.orientation-vertical",
-      "component": "__control",
-      "attribute": null,
-      "case": "View",
-      "class": "visual",
-      "host": "View",
-      "writtenKey": null,
-      "aliasOf": null,
-      "value": null,
-      "platforms": [
-        "ios",
-        "android"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/__control/View__height-0_root.orientation-vertical.layout.json",
-      "test": "fixtures/__control/View__height-0_root.orientation-vertical.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": null,
-      "isControl": true
-    },
-    {
       "id": "__control/View__height-wrapContent",
       "component": "__control",
       "attribute": null,
@@ -21460,6 +21437,29 @@
       "deprecated": null,
       "layout": "fixtures/__control/View__root.orientation-horizontal.layout.json",
       "test": "fixtures/__control/View__root.orientation-horizontal.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/View__root.orientation-vertical",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__root.orientation-vertical.layout.json",
+      "test": "fixtures/__control/View__root.orientation-vertical.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

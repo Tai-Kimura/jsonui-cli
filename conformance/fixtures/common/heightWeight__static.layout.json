@@ -17,7 +17,7 @@
       "type": "View",
       "id": "target",
       "width": 200,
-      "height": 0,
+      "height": 200,
       "background": "#DDDDDD",
       "child": [
         {

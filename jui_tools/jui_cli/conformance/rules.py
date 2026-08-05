@@ -1683,7 +1683,22 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # weight branch entirely (modifier_builder.rb:404-421). With the base's
     # 200pt height the weight branch was unreachable on Compose, which is why
     # iOS cleared on the orientation alone and android did not.
-    "heightWeight": {"root.orientation": "vertical", "height": 0},
+    # NOTE `height: 0` was here and had to come out. kjui needs it — an
+    # explicit height beats the weight branch entirely — but it only means
+    # "the weight decides this axis" WHEN A WEIGHT IS PRESENT, and the control
+    # by definition has no `heightWeight`. sjui says so exactly:
+    # `should_ignore_height` is `height == 0 AND (weight || heightWeight)`
+    # (frame_helper.rb:127), so on the control the zero survived into a real
+    # frame request and the control drew nothing — parity distance 35 between
+    # the two iOS paths, and every comparison against that control inherited
+    # it.
+    #
+    # A control that renders differently from every fixture it controls is
+    # worse than a weaker fixture: it moves the baseline the other comparisons
+    # subtract. The android C1/C2 finding this was chasing is owned by C
+    # anyway (`build_weight` never reads `heightWeight`), so the fixture gives
+    # up nothing real by dropping it.
+    "heightWeight": {"root.orientation": "vertical"},
     "maxWidthWeight": {"root.orientation": "horizontal"},
     "minWidthWeight": {"root.orientation": "horizontal"},
     "maxHeightWeight": {"root.orientation": "vertical"},

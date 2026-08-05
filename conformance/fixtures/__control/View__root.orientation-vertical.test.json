@@ -1,7 +1,7 @@
 {
   "type": "screen",
   "source": {
-    "layout": "fixtures/__control/View__height-0_root.orientation-vertical.layout.json"
+    "layout": "fixtures/__control/View__root.orientation-vertical.layout.json"
   },
   "metadata": {
     "name": "conformance control View",
@@ -15,7 +15,7 @@
   "platform": "all",
   "cases": [
     {
-      "name": "View__height-0_root.orientation-vertical",
+      "name": "View__root.orientation-vertical",
       "description": "Control for View: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
       "steps": [
         {
@@ -24,7 +24,7 @@
         },
         {
           "action": "screenshot",
-          "name": "control_View__height-0_root.orientation-vertical"
+          "name": "control_View__root.orientation-vertical"
         }
       ]
     }
