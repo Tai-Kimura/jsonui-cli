@@ -542,17 +542,24 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {}
     end
 
-    it 'a bound contentMode leaves exactly one aspectRatio modifier' do
+    it 'a bound contentMode goes through the library seam, and only the seam' do
       static = convert(:ImageConverter, 'type' => 'Image', 'src' => 'x', 'contentMode' => 'fit')
       expect(static.scan('.aspectRatio(').length).to eq(1)
 
-      bound = convert(:ImageConverter, 'type' => 'Image', 'src' => 'x', 'contentMode' => '@{mode}')
+      bound = convert(:ImageConverter, 'type' => 'Image', 'src' => 'x',
+                      'width' => 140, 'height' => 80, 'contentMode' => '@{mode}')
       expect_no_leak(bound)
-      # The converter used to run its static mapper on the `@{...}` string,
-      # get `.fit`, and append it NEXT TO the handler's run-time ternary —
-      # `:component_specific` is multi-value, so both survived.
-      expect(bound.scan('.aspectRatio(').length).to eq(1)
-      expect(bound).to include('data.mode == "fill" ? .fill : .fit')
+      # ONE owner: the seam resolves the whole vocabulary at run time,
+      # including the stretch that is spelled as the ABSENCE of aspectRatio —
+      # the old handler ternary (`== "fill" ? .fill : .fit`) could not, and
+      # binding(fill) drew a different picture from literal fill (run 5,
+      # Image_contentMode__binding d=29).
+      expect(bound).to include(
+        '.imageContentMode(ImageContentModeIntent.from(data.mode ?? ""), size: (width: 140, height: 80))'
+      )
+      expect(bound.scan('.aspectRatio(').length).to eq(0)
+      # The seam owns .resizable() too (positional modes must not have it).
+      expect(bound.scan('.resizable()').length).to eq(0)
     end
 
     it 'scrollTo keys an effect on a plain value, not a Combine publisher' do

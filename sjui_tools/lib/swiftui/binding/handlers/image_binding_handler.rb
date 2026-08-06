@@ -12,11 +12,13 @@ module SjuiTools
             # Image source is handled in Image initialization
             nil
           when 'contentMode'
-            if is_binding?(value)
-              binding = parse_binding(value, read_only: true)
-              # Map contentMode to SwiftUI ContentMode
-              ".aspectRatio(contentMode: #{binding} == \"fill\" ? .fill : .fit)"
-            end
+            # Owned by ImageConverter, which emits the library seam
+            # (`.imageContentMode(ImageContentModeIntent.from(...))`) — the
+            # run-time twin of its own literal table. The ternary that lived
+            # here (`== "fill" ? .fill : .fit`) collapsed fifteen declared
+            # values to two and read canonical fill (stretch, spelled as the
+            # ABSENCE of aspectRatio) as SwiftUI's aspect-fill crop.
+            nil
           else
             nil
           end

@@ -33,6 +33,16 @@ module SjuiTools
         # suppress compile-time fast-paths (single-column list, etc.) that
         # require a known column count.
         def columns_info
+          # itemWeight has its say first (mirror of the dynamic face's
+          # effectiveGridColumns): a weight is a per-ITEM width, and in a
+          # spacing-0 grid "each item is W×w wide" IS "round(1/w) flexible
+          # columns" — so the weight wins over a conflicting `columns`
+          # declaration, the same way the UIKit layout
+          # (SJUICollectionView.getCollectionViewLayout) never consults
+          # `columns` for item sizing.
+          if (count = item_weight_count)
+            return { expr: count.to_s, literal: count, is_binding: false }
+          end
           value = @component['columns']
           if value.is_a?(String) && is_binding?(value)
             { expr: "data.#{extract_binding_property(value)}", literal: nil, is_binding: true }
@@ -40,6 +50,19 @@ module SjuiTools
             literal = (value || 1).to_i
             { expr: literal.to_s, literal: literal, is_binding: false }
           end
+        end
+
+        # `itemWeight` as a column count. Declared `number` with no binding
+        # form; 0 < w <= 1, anything else inert (same guard the dynamic face
+        # and the retired content-level emit used).
+        def item_weight_count
+          weight = @component['itemWeight']
+          return nil if weight.nil?
+
+          value = weight.to_f
+          return nil unless value > 0 && value <= 1.0
+
+          (1.0 / value).round
         end
 
         # True when the runtime column count is unknown or > 1. Used to gate
@@ -1625,7 +1648,6 @@ module SjuiTools
             add_modifier_line ".padding(EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right}))"
           end
           apply_inset_vertical
-          apply_item_weight
         end
 
         # Section headers/footers sit outside the LazyVGrid; follow the
@@ -1721,23 +1743,14 @@ module SjuiTools
           end
         end
 
-        # itemWeight — the fraction of the container width one item takes.
-        #
-        # UIKit computes `itemSize.width = screenWidth * weight`
-        # (SJUICollectionView.getCollectionViewLayout). The SwiftUI equivalent is
-        # a containerRelativeFrame fraction, which is relative to the collection
-        # rather than the screen — the same intent, and correct inside a split
-        # view or a sheet where the screen is not the container.
-        def apply_item_weight
-          weight = @component['itemWeight']
-          return if weight.nil?
-
-          value = weight.to_f
-          return unless value > 0 && value <= 1.0
-
-          count = (1.0 / value).round
-          add_modifier_line ".containerRelativeFrame(.horizontal, count: #{count}, span: 1, spacing: 0)"
-        end
+        # itemWeight is folded into the COLUMN COUNT (columns_info /
+        # item_weight_count), not emitted as a modifier. The previous emit
+        # here — `.containerRelativeFrame(.horizontal, count:, span: 1)` on
+        # the collection CONTENT via apply_insets_only — declared the
+        # per-item intent in its own comment and then squeezed the whole
+        # content to 1/count width instead: run 5 measured ZERO cell pixels
+        # against 43k on neighbouring Collection fixtures. The dynamic face
+        # (effectiveGridColumns) carries the canonical reading.
 
         # insetVertical — vertical-only content inset.
         #
@@ -1853,7 +1866,6 @@ module SjuiTools
             add_modifier_line ".padding(EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right}))"
           end
           apply_inset_vertical
-          apply_item_weight
         end
 
         def to_camel_case(str)

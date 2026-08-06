@@ -20,12 +20,14 @@ RSpec.describe SjuiTools::SwiftUI::Binding::ImageBindingHandler do
       expect(result).to be_nil
     end
 
-    it 'handles contentMode binding' do
+    it 'leaves contentMode to the converter (library seam owns the bound form)' do
       component = { 'type' => 'Image', 'contentMode' => '@{mode}' }
       result = handler.handle_specific_binding(component, 'contentMode', '@{mode}')
 
-      expect(result).to include('.aspectRatio')
-      expect(result).to include('mode')
+      # The ternary that lived here collapsed fifteen declared values to two
+      # and read canonical fill (stretch = ABSENCE of aspectRatio) as
+      # SwiftUI's aspect-fill crop (run 5, Image_contentMode__binding d=29).
+      expect(result).to be_nil
     end
 
     it 'returns nil for unknown key' do

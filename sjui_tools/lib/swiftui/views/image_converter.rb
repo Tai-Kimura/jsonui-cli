@@ -63,7 +63,12 @@ module SjuiTools
           # the declared frame and cropped (UIKit contentMode positions —
           # 33 cross-effect: both mobile platforms dropped them to fit).
           # No .resizable(): intrinsic size is the point.
-          @modifier_bag.append(:component_specific, ".resizable()") unless positional_alignment
+          # A BOUND contentMode owns its own .resizable() through the library
+          # seam below (stretch is spelled as resizable-without-aspectRatio,
+          # positional modes as no-resizable — only the seam can pick at
+          # run time).
+          content_mode_bound = bound_value?(@component['contentMode'])
+          @modifier_bag.append(:component_specific, ".resizable()") unless positional_alignment || content_mode_bound
 
           apply_highlight_src
 
@@ -79,21 +84,25 @@ module SjuiTools
               @modifier_bag.append(:component_specific, ".frame(width: #{w}, height: #{h}, alignment: #{positional_alignment})")
               @modifier_bag.append(:component_specific, ".clipped()")
             end
-          elsif bound_value?(@component['contentMode'])
-            # A BOUND contentMode is ImageBindingHandler's — it emits the
-            # run-time ternary. This branch used to run `map_content_mode` on
-            # the `@{...}` string, which does not match any spelling and
-            # returned `.fit`, so the emit carried BOTH a frozen `.fit` and
-            # the handler's bound line. `:component_specific` is a
-            # multi-value bag key, so neither replaced the other and the
-            # image got two `.aspectRatio` modifiers (measured d=94 against
-            # dynamic, plan 49 parity worklist).
-            #
-            # Known limit: canonically `fill` is the STRETCH, spelled as the
-            # ABSENCE of the modifier, and absence is not something a ternary
-            # can express. A bound `fill` therefore renders as SwiftUI's
-            # aspect-fill crop. Closing that needs the same kind of library
-            # seam `clipToBounds` needed.
+          elsif content_mode_bound
+            # The library seam the dynamic face uses (ImageContentModeSeam,
+            # SwiftJsonUI >= 10.12): resolves the spelling at run time,
+            # including the stretch that is spelled as the ABSENCE of an
+            # aspectRatio modifier — which no compile-time ternary can emit.
+            # The previous emit here was ImageBindingHandler's
+            # `== "fill" ? .fill : .fit`, a two-value collapse of a
+            # fifteen-value vocabulary that also read canonical fill as
+            # SwiftUI's aspect-fill crop: run 5 measured binding(fill)
+            # drawing an aspect-kept 140x140 while literal fill stretched
+            # (`Image_contentMode__binding` d=29). One owner, one table —
+            # the handler branch is retired with this.
+            expr = SjuiTools::SwiftUI::Binding::BindingExpression
+                   .swift_text_expr(@component['contentMode'][2..-2])
+            w = @component['width']
+            h = @component['height']
+            size = w.is_a?(Numeric) && h.is_a?(Numeric) ? ", size: (width: #{w}, height: #{h})" : ''
+            @modifier_bag.append(:component_specific,
+                                 ".imageContentMode(ImageContentModeIntent.from(#{expr})#{size})")
           elsif %w[fill scaletofill].include?(mode_raw)
             # stretch: no aspectRatio modifier
           elsif @component['contentMode']
