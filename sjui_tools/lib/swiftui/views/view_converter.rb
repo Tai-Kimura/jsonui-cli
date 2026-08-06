@@ -212,9 +212,17 @@ module SjuiTools
               alignment = get_hstack_alignment
               add_line "HStack(alignment: #{alignment}, spacing: #{spacing_value}) {"
 
-              # Add Spacer at beginning for right gravity or distribution
+              # Leading spacer: gravity, or equalCentering's END unit.
+              # semantics.distribution iosGapConstruction: equalCentering is
+              # ONE spacer at each end and TWO between each pair (ends = half
+              # a between gap, justify-around); equalSpacing is between-only,
+              # ends FLUSH (justify-between) — it gets NO leading spacer. The
+              # previous emit gave both values 1/1/1, which is neither, and
+              # made the two values one picture on ios while android/web
+              # distinguish them (collapsedPairs, run 5).
               distribution = @component['distribution']
-              if should_add_leading_spacer_for_hstack(@component['gravity']) || distribution == 'equalSpacing' || distribution == 'equalCentering'
+              gap_distribution = %w[equalSpacing equalCentering].include?(distribution)
+              if (!gap_distribution && should_add_leading_spacer_for_hstack(@component['gravity'])) || distribution == 'equalCentering'
                 indent do
                   add_line "Spacer(minLength: 0)"
                 end
@@ -224,9 +232,11 @@ module SjuiTools
               alignment = get_vstack_alignment
               add_line "VStack(alignment: #{alignment}, spacing: #{spacing_value}) {"
 
-              # Add Spacer at beginning for bottom gravity or distribution
+              # Leading spacer: gravity, or equalCentering's END unit
+              # (same construction note as the HStack branch above).
               distribution = @component['distribution']
-              if should_add_leading_spacer_for_vstack(@component['gravity']) || distribution == 'equalSpacing' || distribution == 'equalCentering'
+              gap_distribution = %w[equalSpacing equalCentering].include?(distribution)
+              if (!gap_distribution && should_add_leading_spacer_for_vstack(@component['gravity'])) || distribution == 'equalCentering'
                 indent do
                   add_line "Spacer(minLength: 0)"
                 end
@@ -363,9 +373,19 @@ module SjuiTools
                       render_child_element(child, orientation, index, 0, 0)
                     end
 
-                    # Add Spacer between children for distribution
-                    if index < children.size - 1 && (distribution == 'fillEqually' || distribution == 'equalSpacing' || distribution == 'equalCentering')
-                      add_line "Spacer(minLength: 0)"
+                    # Between-children spacers (semantics.distribution
+                    # iosGapConstruction): equalSpacing ONE per pair,
+                    # equalCentering TWO per pair — the 1:2 end:between count
+                    # ratio is what makes each end gap exactly half a between
+                    # gap. fillEqually keeps its single separator.
+                    if index < children.size - 1
+                      case distribution
+                      when 'equalCentering'
+                        add_line "Spacer(minLength: 0)"
+                        add_line "Spacer(minLength: 0)"
+                      when 'fillEqually', 'equalSpacing'
+                        add_line "Spacer(minLength: 0)"
+                      end
                     end
                   end
 
@@ -380,12 +400,25 @@ module SjuiTools
                     width_expands = width == 'matchParent' || width == -1
                     height_expands = height == 'matchParent' || height == -1
 
-                    if orientation == 'horizontal' && width_expands && (should_add_trailing_spacer_for_hstack(@component['gravity']) || distribution == 'equalSpacing' || distribution == 'equalCentering')
+                    # equalCentering's trailing END unit is emitted
+                    # unconditionally (below, outside the expands gate) so the
+                    # two ends stay symmetric with the leading one;
+                    # equalSpacing ends are FLUSH and get nothing.
+                    # A gap distribution owns the free-space construction —
+                    # gravity's spacers must not stack on top of it (a
+                    # default-gravity trailing spacer would give equalSpacing
+                    # a phantom end gap and equalCentering a doubled one).
+                    gap_distribution = %w[equalSpacing equalCentering].include?(distribution)
+                    if !gap_distribution && orientation == 'horizontal' && width_expands && should_add_trailing_spacer_for_hstack(@component['gravity'])
                       add_line "Spacer(minLength: 0)"
-                    elsif orientation == 'vertical' && height_expands && (should_add_trailing_spacer_for_vstack(@component['gravity']) || distribution == 'equalSpacing' || distribution == 'equalCentering')
+                    elsif !gap_distribution && orientation == 'vertical' && height_expands && should_add_trailing_spacer_for_vstack(@component['gravity'])
                       add_line "Spacer(minLength: 0)"
                     end
                   end
+                  # equalCentering trailing END unit — mirrors the leading
+                  # one exactly (a minLength-0 spacer collapses to nothing
+                  # when the container has no free space, so no expands gate).
+                  add_line "Spacer(minLength: 0)" if distribution == 'equalCentering'
                 end
               end
 

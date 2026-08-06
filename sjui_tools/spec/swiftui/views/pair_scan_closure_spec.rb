@@ -148,6 +148,52 @@ RSpec.describe 'pair-scan closure (swiftui)' do
   end
 end
 
+# distribution gap values (semantics.distribution iosGapConstruction,
+# 2026-08-06): the two GAP values used to share one 1/1/1 spacer emit, which
+# is neither — ios drew one picture for both while android/web distinguish
+# them (run-5 collapsedPairs).
+RSpec.describe 'distribution gap construction (swiftui)' do
+  before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+  after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+
+  def stack(distribution, orientation: 'horizontal')
+    SjuiTools::SwiftUI::ConverterFactory.new.create_converter(
+      'type' => 'View', 'id' => 't', 'orientation' => orientation,
+      'width' => 'matchParent', 'height' => 'matchParent',
+      'distribution' => distribution,
+      'child' => Array.new(3) { |i| { 'type' => 'View', 'id' => "c#{i}", 'width' => 40, 'height' => 40 } }
+    ).convert.to_s
+  end
+
+  it 'equalSpacing: between-children only, ends flush (justify-between)' do
+    code = stack('equalSpacing')
+    expect(code.scan('Spacer(minLength: 0)').length).to eq(2)
+    lines = code.lines.map(&:strip)
+    si = lines.index { |l| l.start_with?('HStack(') }
+    expect(lines[si + 1]).not_to include('Spacer'), 'ends must be flush — no leading spacer'
+  end
+
+  it 'equalCentering: one spacer per end, two per pair — ends are half a between gap' do
+    code = stack('equalCentering')
+    # 3 children: 1 leading + 2×2 between + 1 trailing = 6
+    expect(code.scan('Spacer(minLength: 0)').length).to eq(6)
+    lines = code.lines.map(&:strip)
+    si = lines.index { |l| l.start_with?('HStack(') }
+    expect(lines[si + 1]).to include('Spacer'), 'equalCentering has an END unit'
+  end
+
+  it 'a gap distribution suppresses the gravity-default trailing spacer' do
+    # Without the suppression, default gravity handed equalSpacing a phantom
+    # end gap (3 spacers, not 2) and equalCentering a doubled one.
+    expect(stack('equalSpacing', orientation: 'vertical').scan('Spacer(minLength: 0)').length).to eq(2)
+    expect(stack('equalCentering', orientation: 'vertical').scan('Spacer(minLength: 0)').length).to eq(6)
+  end
+
+  it 'fillEqually keeps its single separator (a SIZE value, untouched by the gap rule)' do
+    expect(stack('fillEqually').scan('Spacer(minLength: 0)').length).to eq(3)
+  end
+end
+
 # Group-2 backlog closure (2026-07-31).
 RSpec.describe 'backlog closure group 2 (swiftui)' do
   before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
