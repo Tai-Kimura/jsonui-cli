@@ -217,6 +217,8 @@ module KjuiTools
                             "import com.kotlinjsonui.dynamic.helpers.dottedBorder"],
             border_stroke: "import androidx.compose.foundation.BorderStroke",
             intrinsic_size: "import androidx.compose.foundation.layout.IntrinsicSize",
+            distribution_fill: ["import com.kotlinjsonui.components.DistributionFillRow",
+                                "import com.kotlinjsonui.components.DistributionFillColumn"],
             collection_stack: ["import com.kotlinjsonui.components.CollectionStack",
                                "import com.kotlinjsonui.components.CollectionStackMode",
                                "import com.kotlinjsonui.components.CollectionStackAxis"],

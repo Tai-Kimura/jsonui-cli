@@ -8,9 +8,6 @@ module KjuiTools
   module Compose
     module Components
       class ContainerComponent
-        # Marker this container sets on a child it distributes `fill` to.
-        LOOSE = Helpers::ModifierBuilder::LOOSE_WEIGHT_KEY
-
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
           container_type = json_data['type'] || 'View'
           orientation = json_data['orientation']
@@ -26,8 +23,25 @@ module KjuiTools
           
           # Determine layout type
           layout = determine_layout(container_type, orientation)
-          
-          code = indent("#{layout}(", depth)
+
+          # `distribution: "fill"` is its own measurement pass. G measured both
+          # weight encodings on the device: `weight(1f)` + injected matchParent
+          # IS fillEqually (the 0px collapse run 4 caught), and
+          # `weight(1f, fill = false)` packs children by measured size, which
+          # is pixel-identical to the CONTROL — inert (run 5, d25 ×2). Fill is
+          # CSS flex-grow with an auto basis — content plus an equal split of
+          # the leftover — and Modifier.weight cannot say that. The policy
+          # lives ONCE in the base library (DistributionFillRow/Column,
+          # KotlinJsonUI c7d2dfb) precisely so this emitter and the dynamic
+          # renderer cannot drift; children render plain inside it (no scope,
+          # no weight), and a child declaring its own axis size is excluded
+          # from growth via `grows` (explicit > fill).
+          fill_distribution = json_data['distribution'] == 'fill' &&
+                              (layout == 'Column' || layout == 'Row')
+          composable = fill_distribution ? "DistributionFill#{layout}" : layout
+          required_imports&.add(:distribution_fill) if fill_distribution
+
+          code = indent("#{composable}(", depth)
           
           # Build modifiers (correct order for Compose)
           modifiers = []
@@ -115,8 +129,12 @@ module KjuiTools
             # No reverseLayout parameter for regular Row/Column
           end
           
-          # Add spacing for Column/Row
-          if json_data['spacing'] && (layout == 'Column' || layout == 'Row')
+          # Add spacing for Column/Row. On the fill layout `spacing` is the
+          # `gap` parameter — it pins the gap and growth happens in the space
+          # the gaps leave (spacingWins); there is no Arrangement to name.
+          if json_data['spacing'] && fill_distribution
+            code += ",\n" + indent("gap = #{Helpers::BoundValue.dp(json_data['spacing'])}", depth + 1)
+          elsif json_data['spacing'] && (layout == 'Column' || layout == 'Row')
             required_imports&.add(:arrangement)
             # `spacing` is `["number", "binding"]` — the raw interpolation put
             # `@{v}.dp` in code position (plan 49 lane C: View.spacing).
@@ -124,27 +142,33 @@ module KjuiTools
             code += ",\n" + indent("verticalArrangement = Arrangement.spacedBy(#{spacing_dp})", depth + 1) if layout == 'Column'
             code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{spacing_dp})", depth + 1) if layout == 'Row'
           end
+
+          # A child that declares its own size on the grow axis keeps it and
+          # is excluded from growth (explicit > fill) — same presence test as
+          # the dynamic caller (`grows = children.map { !it.has("width") }`).
+          # All-grow is the layout's default, so the argument is only emitted
+          # when some child opts out.
+          if fill_distribution
+            axis_key = layout == 'Column' ? 'height' : 'width'
+            grows = children.map { |c| !(c.is_a?(Hash) && c[axis_key]) }
+            unless grows.all?
+              code += ",\n" + indent("grows = listOf(#{grows.join(', ')})", depth + 1)
+            end
+          end
           
           # `distribution` has two halves and they are not the same half.
           #
           # `equalSpacing` / `equalCentering` distribute the SPACE BETWEEN
-          # children — an Arrangement. `fill` / `fillEqually` instruct the
-          # CHILD's axis — a weight on each child, and no arrangement at all.
-          # Every one of the four was emitted as an arrangement here, and all
-          # four picked the wrong one:
-          #
-          #   fill           SpaceBetween -> child weights, fill = false
-          #   fillEqually    SpaceEvenly  -> child weights, fill = true
-          #   equalSpacing   SpaceAround  -> SpaceBetween
-          #   equalCentering SpaceEvenly  -> SpaceAround
-          #
-          # The two corrected arrangements are the dynamic component's, which
-          # is canonical here (DynamicContainerComponent.parseColumnVertical/
-          # RowHorizontalArrangement): equalSpacing is equal gaps BETWEEN
+          # children — an Arrangement, and the corrected pair is the dynamic
+          # component's (canonical here): equalSpacing is equal gaps BETWEEN
           # adjacent children with no outer gap (SpaceBetween), and
           # equalCentering is equal centre-to-centre distance, i.e. each child
           # centred in an equal track (SpaceAround) — SpaceEvenly leaves the
           # outer children off-centre in their tracks, so it is neither.
+          #
+          # The SIZE half is handled above (`fill` → DistributionFillRow/
+          # Column) and below (`fillEqually` → child weights); neither is an
+          # Arrangement at all, which is what all four used to be emitted as.
           #
           # An explicit `spacing` pins the gap and wins the axis it speaks
           # about; emitting both also produced the same named argument twice,
@@ -178,34 +202,33 @@ module KjuiTools
             end
           end
           
-          # The size half of `distribution`: `fill` and `fillEqually` give each
-          # child a share of the main axis, which in Compose is a weight ON THE
-          # CHILD. Nothing here emitted one, so both values only ever moved the
-          # gaps — the two of them were indistinguishable from each other and
-          # from their control until D gave the fixture children of different
-          # intrinsic sizes (661bfba).
-          #
-          # `fill` keeps those intrinsic proportions while consuming the axis
-          # (`fill = false` lets a child stay smaller than its share);
-          # `fillEqually` flattens them (the default `fill = true`). A child
-          # that declares its own weight keeps it, and keeps the default fill —
-          # it is no longer being distributed to. Same three rules as
-          # DynamicContainerComponent (`getWeight(child) ?: distributedWeight`).
-          distribute_main_axis!(children, json_data['distribution'], layout)
+          # The size half of `distribution`. `fillEqually` is equal shares
+          # regardless of content — which is exactly what a child weight of 1
+          # plus an injected matchParent means, so it stays a weight per child
+          # (G's device measurement: that encoding IS fillEqually). `fill`
+          # cannot be said with weights at all and became the DistributionFill
+          # composable above; its children render plain, so they must NOT be
+          # distributed to here.
+          distribute_main_axis!(children, json_data['distribution'], layout) unless fill_distribution
 
-          # Return structure for parent to process children
-          { code: code, children: children, closing: "\n" + indent("}", depth), layout_type: layout, json_data: json_data }
+          # Return structure for parent to process children. `layout_type` is
+          # what the children see as parent_type: inside DistributionFillRow/
+          # Column there is NO Row/Column scope, so the fill name (matching no
+          # scope-bound emitter) keeps `.weight(` / `.align(` out of the
+          # children — the dynamic side renders them plain the same way.
+          { code: code, children: children, closing: "\n" + indent("}", depth), layout_type: composable, json_data: json_data }
         end
         
         private
         
-        # Give each child of a `fill` / `fillEqually` container its share of
-        # the main axis. Mutates the child hashes, the way the dynamic
-        # component injects into the child JSON — `build_weight` is what
-        # emits, so the weight lands in the CHILD's own modifier chain, which
-        # is where Compose needs it (`weight` is scope-bound).
+        # Give each child of a `fillEqually` container its equal share of the
+        # main axis. Mutates the child hashes, the way the dynamic component
+        # injects into the child JSON — `build_weight` is what emits, so the
+        # weight lands in the CHILD's own modifier chain, which is where
+        # Compose needs it (`weight` is scope-bound). `fill` does not come
+        # here: it is the DistributionFill composable, not a weight.
         def self.distribute_main_axis!(children, distribution, layout)
-          return unless %w[fill fillEqually].include?(distribution)
+          return unless distribution == 'fillEqually'
           return unless layout == 'Column' || layout == 'Row'
 
           axis_weight = layout == 'Column' ? 'heightWeight' : 'weight'
@@ -213,16 +236,14 @@ module KjuiTools
           children.each do |child|
             next unless child.is_a?(Hash)
             # A child that declares its own weight keeps it and is not being
-            # distributed to, so it keeps the default fill as well.
+            # distributed to.
             next if child['weight'] || child['heightWeight'] || child['widthWeight']
 
             child[axis_weight] = 1
-            child[Helpers::ModifierBuilder::LOOSE_WEIGHT_KEY] = true if distribution == 'fill'
             # The share is a slot; the child has to occupy it or the picture is
             # the child's intrinsic size sitting in an empty slot. The dynamic
             # component does exactly this (`injectFillSize`), and only when the
-            # child does not size that axis itself. The fixture children are
-            # Labels with no width, so without this nothing about them moves.
+            # child does not size that axis itself.
             child[axis_size] ||= 'matchParent'
           end
         end

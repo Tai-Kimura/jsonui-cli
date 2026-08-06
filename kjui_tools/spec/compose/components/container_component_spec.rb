@@ -92,13 +92,37 @@ RSpec.describe KjuiTools::Compose::Components::ContainerComponent do
       [{ 'type' => 'Label', 'text' => 'A' }, { 'type' => 'Label', 'text' => 'BBBB' }]
     end
 
-    it 'gives fill a weight per child, loose, and no arrangement' do
+    # `fill` cannot be said with Modifier.weight at all — G measured both
+    # encodings on the device: weight(1f)+matchParent IS fillEqually, and
+    # weight(1f, fill = false) is pixel-identical to the control. The policy
+    # lives once in the base library (DistributionFillRow/Column) and this
+    # emitter calls it; children render plain inside (no scope, no weight).
+    it 'gives fill the DistributionFill layout, children plain' do
       json_data = { 'type' => 'View', 'orientation' => 'horizontal',
                     'distribution' => 'fill', 'child' => child_pair }
       result = described_class.generate(json_data, 0, required_imports)
+      expect(result[:code]).to include('DistributionFillRow(')
       expect(result[:code]).not_to include('Arrangement')
-      expect(result[:children].map { |c| c['weight'] }).to eq([1, 1])
-      expect(result[:children].map { |c| c[described_class::LOOSE] }).to eq([true, true])
+      expect(result[:children].map { |c| c['weight'] }).to eq([nil, nil])
+      expect(result[:layout_type]).to eq('DistributionFillRow')
+      expect(required_imports).to include(:distribution_fill)
+    end
+
+    it 'excludes a self-sized child from growth via grows' do
+      json_data = { 'type' => 'View', 'orientation' => 'horizontal',
+                    'distribution' => 'fill',
+                    'child' => [{ 'type' => 'Label' }, { 'type' => 'Label', 'width' => 40 }] }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result[:code]).to include('grows = listOf(true, false)')
+    end
+
+    it 'passes spacing to fill as the gap parameter, not an Arrangement' do
+      json_data = { 'type' => 'View', 'orientation' => 'vertical',
+                    'distribution' => 'fill', 'spacing' => 8, 'child' => child_pair }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result[:code]).to include('DistributionFillColumn(')
+      expect(result[:code]).to include('gap = 8.dp')
+      expect(result[:code]).not_to include('Arrangement')
     end
 
     it 'gives fillEqually a weight per child, filled, and no arrangement' do
@@ -106,8 +130,8 @@ RSpec.describe KjuiTools::Compose::Components::ContainerComponent do
                     'distribution' => 'fillEqually', 'child' => child_pair }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result[:code]).not_to include('Arrangement')
+      expect(result[:code]).not_to include('DistributionFill')
       expect(result[:children].map { |c| c['weight'] }).to eq([1, 1])
-      expect(result[:children].map { |c| c[described_class::LOOSE] }).to eq([nil, nil])
     end
 
     it 'distributes a Column along its own axis' do
@@ -128,13 +152,12 @@ RSpec.describe KjuiTools::Compose::Components::ContainerComponent do
       expect(result[:children].map { |c| c['width'] }).to eq(['matchParent', 40])
     end
 
-    it 'leaves a child that declares its own weight alone' do
+    it 'leaves a child that declares its own weight alone (fillEqually)' do
       json_data = { 'type' => 'View', 'orientation' => 'horizontal',
-                    'distribution' => 'fill',
+                    'distribution' => 'fillEqually',
                     'child' => [{ 'type' => 'Label', 'weight' => 2 }] }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result[:children].first['weight']).to eq(2)
-      expect(result[:children].first[described_class::LOOSE]).to be_nil
     end
 
     it 'maps equalSpacing to the gaps BETWEEN children' do

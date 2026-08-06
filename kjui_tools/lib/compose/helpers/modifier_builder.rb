@@ -96,12 +96,6 @@ module KjuiTools
           BoundValue.dp(value)
         end
 
-        # Set by ContainerComponent on a child it is distributing `fill` to.
-        # Not an attribute and never declared — it says "this weight came from
-        # the parent's `fill`", which is the one case Compose needs
-        # `fill = false` so the child may stay smaller than its share.
-        LOOSE_WEIGHT_KEY = '__jui_loose_weight'
-
         def self.build_weight(json_data, parent_orientation = nil)
           modifiers = []
 
@@ -123,16 +117,14 @@ module KjuiTools
                    end
           return modifiers unless weight && parent_orientation
 
-          fill_arg = json_data[LOOSE_WEIGHT_KEY] ? ', fill = false' : ''
-
           if BoundValue.bound?(weight)
             # `"@{w}".to_f == 0.0`, so the static guard below dropped every
             # bound weight. Lift the SAME guard to runtime instead: Compose
             # throws on `weight <= 0`, so the zero case must stay unweighted.
             expr = BoundValue.float(weight, fallback: 0)
-            modifiers << ".then(if (#{expr} > 0f) Modifier.weight(#{expr}#{fill_arg}) else Modifier)"
+            modifiers << ".then(if (#{expr} > 0f) Modifier.weight(#{expr}) else Modifier)"
           elsif weight.to_f > 0
-            modifiers << ".weight(#{weight}f#{fill_arg})"
+            modifiers << ".weight(#{weight}f)"
           end
 
           modifiers
