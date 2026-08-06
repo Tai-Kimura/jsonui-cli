@@ -25,11 +25,14 @@ RSpec.describe SjuiTools::SwiftUI::Views::PositioningHelper do
     context 'with no margins' do
       let(:child) { { 'id' => 'child1', 'type' => 'View' } }
 
-      it 'adds zIndex' do
+      # A positional `.zIndex(index)` replicated ZStack's own document-order
+      # default and, worse, overrode the `.zIndex(±N)` indexAbove/indexBelow
+      # emit inside the child's chain (ios parity run 4, common_indexAbove).
+      it 'emits no positional zIndex stamp' do
         helper = helper_class.new
         helper.apply_zstack_positioning(child, 0)
 
-        expect(helper.generated_code.last).to include('.zIndex(0)')
+        expect(helper.generated_code.join).not_to include('.zIndex(')
       end
     end
 
@@ -231,14 +234,14 @@ RSpec.describe SjuiTools::SwiftUI::Views::PositioningHelper do
       end
     end
 
-    context 'with different zIndex values' do
+    context 'with a non-zero index' do
       let(:child) { { 'id' => 'child1', 'type' => 'View' } }
 
-      it 'uses provided index' do
+      it 'still emits no positional zIndex stamp' do
         helper = helper_class.new
         helper.apply_zstack_positioning(child, 5)
 
-        expect(helper.generated_code.last).to include('.zIndex(5)')
+        expect(helper.generated_code.join).not_to include('.zIndex(')
       end
     end
   end

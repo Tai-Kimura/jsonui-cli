@@ -70,8 +70,17 @@ module SjuiTools
             end
           end
 
-          # z-indexの処理（デフォルトは描画順序）
-          add_modifier_line ".zIndex(#{index})"
+          # NO positional zIndex stamp. `.zIndex(#{index})` per document
+          # position replicated SwiftUI's own default (ZStack draws later
+          # children on top; every child's default z is 0 and ties break in
+          # document order) — redundant when nothing declares a z, and
+          # destructive when something does: the stamp landed OUTSIDE the
+          # child's modifier chain, overriding the `.zIndex(±N)` that
+          # indexAbove/indexBelow put inside it, so `indexAbove` drew the
+          # anchor IN FRONT (ios parity, run 4, common_indexAbove d41).
+          # The dynamic face has no positional stamps either
+          # (DynamicViewContainer zstackContent) — removing this is what
+          # makes the two faces one picture.
         end
 
         private

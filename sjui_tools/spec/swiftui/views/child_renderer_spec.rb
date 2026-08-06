@@ -31,7 +31,8 @@ RSpec.describe SjuiTools::SwiftUI::Views::ChildRenderer do
       end
 
       def apply_zstack_positioning(child, index)
-        @generated_code << ".zIndex(#{index})"
+        # mirrors the real helper: offsets only, no positional zIndex stamp
+        @generated_code << ".offset(x: 0, y: 0)"
       end
     end
   end
@@ -66,7 +67,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::ChildRenderer do
 
         expect(renderer.generated_code).to include('Group {')
         expect(renderer.generated_code).to include('}')
-        expect(renderer.generated_code).to include('.zIndex(0)')
+        expect(renderer.generated_code).to include('.offset(x: 0, y: 0)')
       end
     end
 
