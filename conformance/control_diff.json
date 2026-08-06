@@ -606,14 +606,6 @@
       ]
     },
     {
-      "fixture": "Image/contentMode__scaletofill",
-      "platforms": [
-        "android",
-        "ios",
-        "web"
-      ]
-    },
-    {
       "fixture": "Image/contentMode__top",
       "platforms": [
         "android",
@@ -1498,12 +1490,6 @@
     },
     {
       "fixture": "SelectBox/datePickerMode__dateandtime",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "SelectBox/datePickerMode__datetime",
       "platforms": [
         "web"
       ]

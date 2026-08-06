@@ -502,16 +502,6 @@
       "note": ""
     },
     {
-      "fixture": "SelectBox/datePickerMode__datetime",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
       "fixture": "SelectBox/datePickerMode__time",
       "platforms": {
         "android": "active",

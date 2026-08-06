@@ -40,8 +40,7 @@
         "Image/contentMode__aspectfit": "uniformly-inert",
         "NetworkImage/contentMode__fit": "uniformly-inert",
         "NetworkImage/contentMode__aspectfit": "uniformly-inert",
-        "Image/contentMode__fill": "uniformly-active",
-        "Image/contentMode__scaletofill": "uniformly-active"
+        "Image/contentMode__fill": "uniformly-active"
       }
     },
     "textView": {
