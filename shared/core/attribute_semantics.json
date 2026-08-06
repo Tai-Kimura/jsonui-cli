@@ -234,6 +234,10 @@
         }
       },
       "iosSwitchConstraint": "SwiftUI's Toggle has no paintable OFF-track surface; both ios paths degrade to .tint(), visible only while ON"
+    },
+    "fontProvider": {
+      "ruling": "Configuration.Font.fontProvider is the app's typeface-policy injection point, and the presence of `fontFamily` must NOT change whether it is consulted: every font resolution routes through the provider as FontSpec(family:, weight:, size:), family nil included. A path that bypasses the provider when family is absent makes the same attribute on the same screen pass or skip the app's policy depending on mode — the checked/unchecked shape this wave kept finding. The codegen path is the conforming side; SwiftJsonUI's dynamic path (DynamicDecodingHelper.fontFromComponent) is being aligned to it with a regression test (F, plan 49). A provider that ignores family nil sees no change; one that returns a custom face was silently falling back to the system font on dynamic — either way the contract converges on: the typeface does not depend on mode. Preserving a consumer's current look is not a reason to keep the bypass (canonical semantics win). 2026-08-06 ruling.",
+      "contract": "family presence must not gate provider consultation — every implementer, current or future, routes every FontSpec through fontProvider"
     }
   }
 }
