@@ -287,6 +287,42 @@
    "owner": "G (kjui) — adjudicated; fixture-side follow-up owned by D",
    "reason": "backdrop-collapses-8bit: over the fixture's flat backdrop the Prominent and Thick material scrims quantise to the same 8-bit pixels — the two values differ by less than one quantisation step against this background. The pair becomes measurable when the fixture gains a high-frequency backdrop (D); until then the collapse is the measurement floor, not a defect.",
    "note": "G's adjudication relayed 2026-08-06 (run 31080217407 triage) — the receiving row G had already requested; leaves the ledger when D's backdrop fix lands."
+  },
+  {
+   "component": "Button",
+   "attribute": "fontWeight",
+   "platform": "web",
+   "cases": [
+    "600",
+    "static"
+   ],
+   "owner": "A (rjui) — adjudicated; fixture-side follow-up owned by D",
+   "reason": "DOM differs and deliberately so (`font-[600]` vs `font-bold`, TSX measured); the collapse is in the renderer's font, not the emit. The host declares no font-family, the CI container's default sans carries 400/700 faces only, and CSS font-weight matching resolves a 600 request above 500 upward to 700 — so 600 and bold select the same face and the same pixels. Until D's variable-weight-font fixture (the same family as effectStyle's 8-bit backdrop: a measurement-environment limit, not a codegen one).",
+   "note": "A's adjudication relayed 2026-08-07 (run 31088841656 triage; pair first comparable after d983b62 made web fontWeight active — not a regression). Row written by E per the relay; pair names from the run-7 instrument."
+  },
+  {
+   "component": "Label",
+   "attribute": "fontWeight",
+   "platform": "web",
+   "cases": [
+    "600",
+    "static"
+   ],
+   "owner": "A (rjui) — adjudicated; fixture-side follow-up owned by D",
+   "reason": "DOM differs and deliberately so (`font-[600]` vs `font-bold`, TSX measured); the collapse is in the renderer's font, not the emit. The host declares no font-family, the CI container's default sans carries 400/700 faces only, and CSS font-weight matching resolves a 600 request above 500 upward to 700 — so 600 and bold select the same face and the same pixels. Until D's variable-weight-font fixture (the same family as effectStyle's 8-bit backdrop: a measurement-environment limit, not a codegen one).",
+   "note": "A's adjudication relayed 2026-08-07 (run 31088841656 triage; pair first comparable after d983b62 made web fontWeight active — not a regression). Row written by E per the relay; pair names from the run-7 instrument."
+  },
+  {
+   "component": "Label",
+   "attribute": "fontWeight",
+   "platform": "web",
+   "cases": [
+    "600_with_partial",
+    "static_with_partial"
+   ],
+   "owner": "A (rjui) — adjudicated; fixture-side follow-up owned by D",
+   "reason": "DOM differs and deliberately so (`font-[600]` vs `font-bold`, TSX measured); the collapse is in the renderer's font, not the emit. The host declares no font-family, the CI container's default sans carries 400/700 faces only, and CSS font-weight matching resolves a 600 request above 500 upward to 700 — so 600 and bold select the same face and the same pixels. Until D's variable-weight-font fixture (the same family as effectStyle's 8-bit backdrop: a measurement-environment limit, not a codegen one).",
+   "note": "A's adjudication relayed 2026-08-07 (run 31088841656 triage; pair first comparable after d983b62 made web fontWeight active — not a regression). Row written by E per the relay; pair names from the run-7 instrument."
   }
  ]
 }
