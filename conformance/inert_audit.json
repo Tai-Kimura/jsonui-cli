@@ -7,24 +7,10 @@
     "web"
   ],
   "counts": {
-    "entries": 74,
-    "unreviewed": 74
+    "entries": 71,
+    "unreviewed": 71
   },
   "entries": [
-    {
-      "fixture": "Button/fontWeight__600",
-      "component": "Button",
-      "attribute": "fontWeight",
-      "inertOn": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
     {
       "fixture": "Button/fontWeight__binding",
       "component": "Button",
@@ -214,34 +200,6 @@
       "fixture": "Label/autoShrink__false",
       "component": "Label",
       "attribute": "autoShrink",
-      "inertOn": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Label/fontWeight__600",
-      "component": "Label",
-      "attribute": "fontWeight",
-      "inertOn": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Label/fontWeight__600_with_partial",
-      "component": "Label",
-      "attribute": "fontWeight",
       "inertOn": [
         "android",
         "ios",

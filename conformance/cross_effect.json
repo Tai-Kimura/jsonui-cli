@@ -3,6 +3,16 @@
   "_comment": "Accepted cross-platform attribute-effect findings, two kinds. DIVERGENCE ({fixture, platforms}): the control-diff verdict (active = the attribute changed the render, inert = it did not) disagrees across the platforms the attribute is declared for — semantic drift unless a deliberate platform idiom; the reason says which. UNIFORMLY-INERT ({fixture, verdict, declared}): a value the SSoT enumerates changes nothing on ANY platform — either it is the default rendering (say so in the reason) or it is dead/unimplemented everywhere. Unrecorded findings fail `jui conformance gate --cross-effect`; entries the measurement no longer supports are stale and must be pruned (`jui conformance cross-effect --update`). Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
   "entries": [
     {
+      "fixture": "Button/fontWeight__600",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "ios-only active is CORRECT for today's implementations: F's da12616 taught the SwiftJsonUI paths to map a numeric fontWeight ('600'), so ios draws it. The SSoT declares fontWeight as [\"string\", \"number\"] with numeric examples on ALL platforms, so android and web staying inert is a DEFECT against the declaration, not a platform idiom — kjui (codegen+dynamic) and rjui map only the named weights (bold/semibold/...). Recorded so the divergence is owned, not excused: owner android = C (kjui codegen) + G (dynamic), web = A (rjui). Routing (this wave vs post-release) is the orchestrator's call — flagged in 49-E-progress 2026-08-06. The row folds to uniformly-active when the numeric mapping lands.",
+      "note": "Adjudicated 2026-08-06 by E on run 31080217407."
+    },
+    {
       "fixture": "Button/textAlign__center",
       "platforms": {
         "android": "active",
@@ -184,6 +194,26 @@
       },
       "reason": "adjudicated font availability: the declared family name is not bundled on the inert platform, which falls back to the system font (identical render); the active side ships it. A cross-platform font asset is consumer territory, not a converter gap. Family: font-availability.",
       "note": ""
+    },
+    {
+      "fixture": "Label/fontWeight__600",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "ios-only active is CORRECT for today's implementations: F's da12616 taught the SwiftJsonUI paths to map a numeric fontWeight ('600'), so ios draws it. The SSoT declares fontWeight as [\"string\", \"number\"] with numeric examples on ALL platforms, so android and web staying inert is a DEFECT against the declaration, not a platform idiom — kjui (codegen+dynamic) and rjui map only the named weights (bold/semibold/...). Recorded so the divergence is owned, not excused: owner android = C (kjui codegen) + G (dynamic), web = A (rjui). Routing (this wave vs post-release) is the orchestrator's call — flagged in 49-E-progress 2026-08-06. The row folds to uniformly-active when the numeric mapping lands.",
+      "note": "Adjudicated 2026-08-06 by E on run 31080217407."
+    },
+    {
+      "fixture": "Label/fontWeight__600_with_partial",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "ios-only active is CORRECT for today's implementations: F's da12616 taught the SwiftJsonUI paths to map a numeric fontWeight ('600'), so ios draws it. The SSoT declares fontWeight as [\"string\", \"number\"] with numeric examples on ALL platforms, so android and web staying inert is a DEFECT against the declaration, not a platform idiom — kjui (codegen+dynamic) and rjui map only the named weights (bold/semibold/...). Recorded so the divergence is owned, not excused: owner android = C (kjui codegen) + G (dynamic), web = A (rjui). Routing (this wave vs post-release) is the orchestrator's call — flagged in 49-E-progress 2026-08-06. The row folds to uniformly-active when the numeric mapping lands.",
+      "note": "Adjudicated 2026-08-06 by E on run 31080217407."
     },
     {
       "fixture": "Label/highlightColor__binding",
@@ -408,24 +438,6 @@
         "android": "inert",
         "ios": "active",
         "web": "active"
-      },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Radio/icon__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active"
-      },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Radio/selectedIcon__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active"
       },
       "reason": "unreviewed-initial-measurement",
       "note": ""
@@ -972,16 +984,6 @@
       "note": ""
     },
     {
-      "fixture": "Web/html__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
       "fixture": "common/alignLeftView__static",
       "platforms": {
         "android": "inert",
@@ -1220,31 +1222,11 @@
       "note": ""
     },
     {
-      "fixture": "common/gravity__centerhorizontal",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
       "fixture": "common/gravity__left",
       "platforms": {
         "android": "inert",
         "ios": "active",
         "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/gravity__right",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
       },
       "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
       "note": ""

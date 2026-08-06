@@ -253,28 +253,6 @@
    "note": "android has no row for this pair on purpose: the pair was not compared there (not-both-active) because kjui's dynamic renderer drops the line entirely for the object face — styled renders byte-identical to the CONTROL, a run-5 finding reported to G. When android draws the plain line for the object face it will collapse into this same pair and need its own row until styling lands."
   },
   {
-   "component": "View",
-   "attribute": "distribution",
-   "platform": "ios",
-   "cases": [
-    "equalcentering",
-    "equalspacing"
-   ],
-   "owner": "E (SSoT) — ledger row; the implementation decision is under the orchestrator's adjudication",
-   "reason": "ios does not implement the gap half of distribution: equalSpacing and equalCentering both synthesise the same Spacer set, so the two values draw one picture — recorded as the ios row of attribute_semantics.json#semantics.distribution.collapsedPairs since run 3, re-measured on run 31068716186 (identical child positions, 32 px gap for both). android and web distinguish the pair (run-5 geometry: android gaps 26 vs 22, web 14 vs 12 with equalCentering's end half-gaps visible). This row is the fixture-side receipt of that known gap, not a new finding; it leaves this ledger together with the collapsedPairs row when ios implements the perValueMapping (Spacer-between-only vs half-spacers-at-ends). Implement-vs-defer for this release is under adjudication (E's proposal in 49-E-progress, 2026-08-06)."
-  },
-  {
-   "component": "common",
-   "attribute": "distribution",
-   "platform": "ios",
-   "cases": [
-    "equalcentering",
-    "equalspacing"
-   ],
-   "owner": "E (SSoT) — ledger row; the implementation decision is under the orchestrator's adjudication",
-   "reason": "ios does not implement the gap half of distribution: equalSpacing and equalCentering both synthesise the same Spacer set, so the two values draw one picture — recorded as the ios row of attribute_semantics.json#semantics.distribution.collapsedPairs since run 3, re-measured on run 31068716186 (identical child positions, 32 px gap for both). android and web distinguish the pair (run-5 geometry: android gaps 26 vs 22, web 14 vs 12 with equalCentering's end half-gaps visible). This row is the fixture-side receipt of that known gap, not a new finding; it leaves this ledger together with the collapsedPairs row when ios implements the perValueMapping (Spacer-between-only vs half-spacers-at-ends). Implement-vs-defer for this release is under adjudication (E's proposal in 49-E-progress, 2026-08-06)."
-  },
-  {
    "component": "common",
    "attribute": "gravity",
    "platform": "ios",
@@ -283,29 +261,32 @@
     "top"
    ],
    "owner": "D (fixture design)",
-   "reason": "gravity's unspecified axis defaults to top/start on every platform (LinearLayout gravity, SwiftUI frame alignment as sjui maps it, flex start): `left` pins x and defaults y to top, `top` pins y and defaults x to start — both name the top-left corner of the free space. Run-5 artifacts show the pair byte-identical on all three platforms while every other gravity pair differs (after the width-300 slack fix of the same round). Not a defect: no platform HAS a rendering in which these two values disagree."
+   "reason": "sjui maps both `left` and `top` to the same SwiftUI frame alignment family whose unspecified axis defaults to top/leading, so both values name the top-left corner of the free space. ios-only: run 6 measured android and web telling the pair apart under the same 60pt slack (their unspecified-axis defaults are not top/start). Whether ios SHOULD center the unspecified axis (as SwiftUI's own default alignment does) is a semantics question for the canon — if it ever rules that way, this row records a defect and the owner moves to B/F.",
+   "note": "Reason replaced 2026-08-06 at D's request (49-D-progress round 43) — the old 'on every platform' rationale died when run 6 distinguished the pair on android/web."
   },
   {
    "component": "common",
-   "attribute": "gravity",
+   "attribute": "clipToBounds",
    "platform": "android",
    "cases": [
-    "left",
-    "top"
+    "false",
+    "true"
    ],
-   "owner": "D (fixture design)",
-   "reason": "gravity's unspecified axis defaults to top/start on every platform (LinearLayout gravity, SwiftUI frame alignment as sjui maps it, flex start): `left` pins x and defaults y to top, `top` pins y and defaults x to start — both name the top-left corner of the free space. Run-5 artifacts show the pair byte-identical on all three platforms while every other gravity pair differs (after the width-300 slack fix of the same round). Not a defect: no platform HAS a rendering in which these two values disagree."
+   "owner": "G (kjui) — adjudicated; fixture-side follow-up owned by D",
+   "reason": "compose-measure-constraint: in Compose the fixture's child cannot paint outside its measured bounds in this fixture shape, so clip-on and clip-off compose the same picture — there is nothing to clip. The pair becomes measurable only when a child actually overflows its parent (D's placed-overflow fixture); until then the collapse is structural, not a defect.",
+   "note": "G's adjudication relayed 2026-08-06 (run 31080217407 triage); row leaves the ledger when D's overflow fixture lands and the values separate."
   },
   {
    "component": "common",
-   "attribute": "gravity",
-   "platform": "web",
+   "attribute": "effectStyle",
+   "platform": "android",
    "cases": [
-    "left",
-    "top"
+    "prominent",
+    "thick"
    ],
-   "owner": "D (fixture design)",
-   "reason": "gravity's unspecified axis defaults to top/start on every platform (LinearLayout gravity, SwiftUI frame alignment as sjui maps it, flex start): `left` pins x and defaults y to top, `top` pins y and defaults x to start — both name the top-left corner of the free space. Run-5 artifacts show the pair byte-identical on all three platforms while every other gravity pair differs (after the width-300 slack fix of the same round). Not a defect: no platform HAS a rendering in which these two values disagree."
+   "owner": "G (kjui) — adjudicated; fixture-side follow-up owned by D",
+   "reason": "backdrop-collapses-8bit: over the fixture's flat backdrop the Prominent and Thick material scrims quantise to the same 8-bit pixels — the two values differ by less than one quantisation step against this background. The pair becomes measurable when the fixture gains a high-frequency backdrop (D); until then the collapse is the measurement floor, not a defect.",
+   "note": "G's adjudication relayed 2026-08-06 (run 31080217407 triage) — the receiving row G had already requested; leaves the ledger when D's backdrop fix lands."
   }
  ]
 }
