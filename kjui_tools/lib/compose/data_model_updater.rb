@@ -49,9 +49,21 @@ module KjuiTools
       end
 
       # Legacy convention: lowercase 'onclick' carries the bare callback name
+      # — or an array of them to call in order (SSoT: ["string", "array"]).
+      # The shared core only puts the returned value in a Set, so the array
+      # rides through whole; generate_data_content flattens it. Both ends
+      # live in this profile — the core stays untouched. Without this, the
+      # array handlers were never declared on the Data class while the view
+      # code invokes them, so the layout could not compile.
       def onclick_action_name(node)
-        return nil unless node['onclick'].is_a?(String)
-        node['onclick']
+        value = node['onclick']
+        case value
+        when String
+          value
+        when Array
+          names = value.grep(String)
+          names.empty? ? nil : names
+        end
       end
 
       def data_platform_filter
@@ -115,6 +127,8 @@ module KjuiTools
       end
 
       def generate_data_content(view_name, data_properties, onclick_actions = [], json_base_name: nil)
+        # The other end of onclick_action_name's array ride-through.
+        onclick_actions = onclick_actions.flat_map { |a| Array(a) }.uniq
         marker_source = json_base_name ? "Layouts/#{json_base_name}.json" : "#{view_name}Data"
         marker_header = Core::GeneratedMarker.comment_header(
           source: marker_source,

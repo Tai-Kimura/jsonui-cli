@@ -830,19 +830,22 @@ module KjuiTools
               code += "\n" + indent(")", depth + 1)
             end
 
-            # Add clickable annotation if onclick/onClick is specified
+            # Add clickable annotation if onclick/onClick is specified.
+            # `onclick` is ["string", "array"]; an array names handlers to
+            # call in order, and calling `match?` on it raised instead
+            # (same family as get_event_handler_call, plan 49 lane C).
             click_handler = attr['onclick'] || attr['onClick']
             if click_handler
-              # Extract method name from binding format if needed
-              method_name = if click_handler.match?(/^@\{(.+)\}$/)
-                click_handler.match(/^@\{(.+)\}$/)[1]
-              else
-                click_handler.gsub(':', '')
+              # Extract each method name from binding format if needed
+              names = (click_handler.is_a?(Array) ? click_handler : [click_handler]).map do |h|
+                h = h.to_s
+                (h.match(/^@\{(.+)\}$/) || [nil, h.gsub(':', '')])[1]
               end
+              listener_calls = names.map { |n| "viewModel.handlePartialClick(\"#{n}\")" }.join('; ')
               code += "\n" + indent("addLink(", depth + 1)
               code += "\n" + indent("LinkAnnotation.Clickable(", depth + 2)
               code += "\n" + indent("tag = \"CLICKABLE\",", depth + 3)
-              code += "\n" + indent("linkInteractionListener = { viewModel.handlePartialClick(\"#{method_name}\") }", depth + 3)
+              code += "\n" + indent("linkInteractionListener = { #{listener_calls} }", depth + 3)
               code += "\n" + indent("),", depth + 2)
               code += "\n" + indent("start = #{start_idx},", depth + 2)
               code += "\n" + indent("end = #{end_idx}", depth + 2)

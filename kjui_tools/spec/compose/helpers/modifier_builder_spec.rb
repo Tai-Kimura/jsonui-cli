@@ -910,6 +910,35 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
     end
   end
 
+  # `onclick` is declared ["string", "array"] — the array names several
+  # handlers to call in the order written. `get_event_handler_call` used to
+  # call `match?` straight on the value, so an array did not emit wrong code:
+  # it raised NoMethodError and killed the whole android generation, for a
+  # shape the SSoT allows (plan 49 lane C; D probed all three converters).
+  # The semantics come from the ios converter, which already implemented
+  # "a bare string, or an array of them to call in order".
+  describe '.get_event_handler_call with an array' do
+    it 'calls every handler in the order written' do
+      result = described_class.get_event_handler_call(%w[confPush confPop])
+      expect(result).to eq('data.confPush?.invoke(); data.confPop?.invoke()')
+    end
+
+    it 'still resolves a binding spelling inside the array' do
+      result = described_class.get_event_handler_call(['confPush', '@{onTap}'])
+      expect(result).to eq('data.confPush?.invoke(); data.onTap?.invoke()')
+    end
+
+    it 'leaves the single-string form exactly as before' do
+      expect(described_class.get_event_handler_call('confPush')).to eq('data.confPush?.invoke()')
+      expect(described_class.get_event_handler_call('@{onTap}')).to eq('data.onTap?.invoke()')
+    end
+
+    it 'sequences the calls inside .clickable too' do
+      result = described_class.build_clickable({ 'onclick' => %w[confPush confPop] }, Set.new)
+      expect(result).to include('.clickable { data.confPush?.invoke(); data.confPop?.invoke() }')
+    end
+  end
+
   describe '.build_long_pressable' do
     before do
       KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}

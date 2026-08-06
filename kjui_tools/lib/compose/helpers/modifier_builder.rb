@@ -1331,14 +1331,25 @@ module KjuiTools
         # Convert event handler to method call
         # onClick -> binding format only: @{functionName} -> data.functionName?.invoke()
         def self.get_event_handler_call(handler, is_camel_case: false)
+          # `onclick` is declared `["string", "array"]`, and the array names
+          # several handlers to call in the order written. This called
+          # `match?` straight on the value, so an array did not produce wrong
+          # output — it raised NoMethodError and took the whole android
+          # generation down with it, for a shape the SSoT allows.
+          #
+          # The semantics are not a new decision: the ios converter already
+          # implements them (`build_selector_click_lines` — "a bare string, or
+          # an array of them to call in order"). Both call sites embed this in
+          # a Kotlin lambda body, so the calls are simply sequenced.
+          names = handler.is_a?(Array) ? handler : [handler]
+          names.compact.map { |name| single_event_handler_call(name.to_s) }.join('; ')
+        end
+
+        def self.single_event_handler_call(handler)
           # Extract function name from binding format @{functionName}
-          if handler.match?(/^@\{(.+)\}$/)
-            method_name = handler.match(/^@\{(.+)\}$/)[1]
-            "data.#{method_name}?.invoke()"
-          else
-            # Direct function name (non-binding)
-            "data.#{handler}?.invoke()"
-          end
+          match = handler.match(/^@\{(.+)\}$/)
+          method_name = match ? match[1] : handler
+          "data.#{method_name}?.invoke()"
         end
 
         # Generate event handler invocation code based on data section type definition
