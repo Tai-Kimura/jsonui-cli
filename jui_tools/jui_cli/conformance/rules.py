@@ -761,6 +761,21 @@ EXTRA_CASES: dict[tuple[str, str], list[Any]] = {
     # icon vocabulary above. `600` is semibold in every platform's table.
     ("Label", "fontWeight"): [600],
     ("Button", "fontWeight"): [600],
+    # The faces F measured making the node DISAPPEAR on the dynamic path —
+    # the same mechanism as the wave's first finding (`fontSize: "@{x}"`
+    # deleting a Label). The object shapes are the declared properties
+    # (underline: color/lineOffset/lineStyle, strikethrough: color/lineStyle).
+    # Unlike onclick's array face, these do not kill any generator (measured:
+    # all three emit and differ from control), so they ship rather than hold.
+    ("Label", "underline"): [
+        ("styled", {"color": "#FF0000", "lineStyle": "Single", "lineOffset": 2}),
+    ],
+    ("Label", "strikethrough"): [
+        ("styled", {"color": "#FF0000", "lineStyle": "Single"}),
+    ],
+    # The string spelling of a weight. "2" also differs from the numeric
+    # case's 1, so the two faces are distinguishable from each other too.
+    ("common", "weight"): [("as_string", "2")],
 }
 
 #: Attributes that get a BOUND case: the value under test written as
@@ -2637,14 +2652,20 @@ def plan_attribute(
     #     fixture it names is not there to measure. (Found by E.)
     #
     # Both close the same way: a boolean plans both of its values, always.
-    literals = [c for c in cases if c.alias_of is None]
-    if len(literals) == 1 and isinstance(literals[0].value, bool):
+    # Count only the BOOLEAN literals. Counting every literal made the rule
+    # stop firing the moment an attribute gained a non-boolean extra case —
+    # adding `underline__styled` silently deleted `underline__false`, which is
+    # exactly the dead-contract shape this rule exists to prevent.
+    bool_literals = [
+        c for c in cases if c.alias_of is None and isinstance(c.value, bool)
+    ]
+    if len(bool_literals) == 1:
         cases.append(
             CasePlan(
-                name=str(not literals[0].value).lower(),
-                value=not literals[0].value,
+                name=str(not bool_literals[0].value).lower(),
+                value=not bool_literals[0].value,
                 written_key=attribute,
-                assertions=literals[0].assertions,
+                assertions=bool_literals[0].assertions,
             )
         )
 
@@ -2732,7 +2753,13 @@ def _visual_cases(section: str, attribute: str, defn: dict) -> list[CasePlan]:
 
     # Second (third...) value from a vocabulary the SSoT does not enumerate:
     # the case name is the value's own slug, so it stays greppable and stable.
-    for name, extra in dedupe_case_names(EXTRA_CASES.get((section, attribute), [])):
+    # A (name, value) tuple names the case explicitly — needed for dict values,
+    # whose stringified slug would otherwise become the filename.
+    declared = EXTRA_CASES.get((section, attribute), [])
+    named = [v for v in declared if isinstance(v, tuple)]
+    for name, extra in dedupe_case_names([v for v in declared if not isinstance(v, tuple)]):
+        cases.append(CasePlan(name=name, value=extra, written_key=attribute))
+    for name, extra in named:
         cases.append(CasePlan(name=name, value=extra, written_key=attribute))
 
     return _with_variant_cases(

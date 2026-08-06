@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/weight__as_string.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.weight (as_string)",
+    "description": "Conformance fixture for 'weight' on View (section: common, class: visual). Value under test: \"2\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "weight__as_string",
+      "description": "Conformance fixture for 'weight' on View (section: common, class: visual). Value under test: \"2\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_weight__as_string"
+        }
+      ]
+    }
+  ]
+}
