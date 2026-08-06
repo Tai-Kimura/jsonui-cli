@@ -719,6 +719,28 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
           expect(result).not_to match(/modifier = Modifier\b\s+\.fillMaxWidth/)
         end
 
+        # The inline SafeAreaView helper opened with a FIXED `.fillMaxWidth()`
+        # (`.fillMaxSize()` on the constraint path), called no size builder and
+        # emitted no testTag — a declared `width: 200 / height: 200` was never
+        # read and the node was invisible to the test driver, where the
+        # dynamic component runs applyTestTag → applySize with the declared
+        # dimensions winning (plan 49 lane C, D's measurement; the known
+        # compose_builder.rb-inline-helper trap).
+        it 'SafeAreaView honours declared size and carries a testTag' do
+          json = { 'type' => 'SafeAreaView', 'id' => 'target', 'width' => 200, 'height' => 200 }
+          result = builder.send(:generate_component, json)
+          expect(result).to include('.testTag("target")')
+          expect(result).to include('.width(200.dp)')
+          expect(result).to include('.height(200.dp)')
+          expect(result).not_to include('.fillMaxWidth()')
+        end
+
+        it 'SafeAreaView keeps the full-width default only while undeclared' do
+          json = { 'type' => 'SafeAreaView', 'orientation' => 'vertical' }
+          result = builder.send(:generate_component, json)
+          expect(result).to include('.fillMaxWidth()')
+        end
+
         it 'non-root SafeAreaView falls back to `modifier = Modifier` (regression guard)' do
           json = { 'type' => 'SafeAreaView', 'orientation' => 'vertical' }
           result = builder.send(:generate_component, json)

@@ -772,8 +772,20 @@ module KjuiTools
 
         # Build modifiers
         # Background must come BEFORE systemBarsPadding so it extends to screen edges
+        #
+        # testTag + declared size first, exactly like the dynamic component
+        # (DynamicSafeAreaViewComponent: applyTestTag → applySize with the
+        # declared dimensions winning and fillMaxWidth only as the default).
+        # This inline helper used to open with a FIXED `.fillMaxWidth()`, no
+        # size builder and no tag — a declared `width: 200 / height: 200` was
+        # never read, and the node was invisible to the test driver. The known
+        # trap: kwargs threaded through components/ miss compose_builder.rb's
+        # inline helpers (plan 49 lane C, D's measurement).
         modifiers = ["Modifier"]
-        modifiers << ".fillMaxWidth()"
+        modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, @required_imports))
+        size_modifiers = Helpers::ModifierBuilder.build_size(json_data, nil, @required_imports)
+        size_modifiers << ".fillMaxWidth()" unless json_data['width']
+        modifiers.concat(size_modifiers)
         modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, @required_imports))
 
         # Apply safe area padding based on edges (after background)
@@ -837,9 +849,15 @@ module KjuiTools
 
         code += "\n\n" + indent("ConstraintLayout(", depth)
 
-        # Build modifiers
+        # Build modifiers — same repair as generate_safe_area_view: testTag +
+        # declared size first (this one opened with a fixed `.fillMaxSize()`),
+        # the full-size default only when the dimension is undeclared.
         modifiers = ["Modifier"]
-        modifiers << ".fillMaxSize()"
+        modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, @required_imports))
+        size_modifiers = Helpers::ModifierBuilder.build_size(json_data, nil, @required_imports)
+        size_modifiers << ".fillMaxWidth()" unless json_data['width']
+        size_modifiers << ".fillMaxHeight()" unless json_data['height']
+        modifiers.concat(size_modifiers)
         modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, @required_imports))
 
         # Apply safe area padding based on edges (after background)
