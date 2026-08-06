@@ -200,15 +200,22 @@
           "web": "flex-1 min-w-0 min-h-0 on each child"
         },
         "equalSpacing": {
-          "swiftui": "Spacer between children only",
+          "swiftui": "Spacer between children only, flush ends (see iosGapConstruction)",
           "compose": "Arrangement.SpaceBetween",
           "web": "justify-between"
         },
         "equalCentering": {
-          "swiftui": "Spacer between plus half-spacers at the ends",
+          "swiftui": "one Spacer at each end, two between each pair — the count ratio makes the ends half (see iosGapConstruction)",
           "compose": "Arrangement.SpaceAround",
           "web": "justify-around"
         }
+      },
+      "iosGapConstruction": {
+        "equalSpacing": "[child] Spacer [child] Spacer [child] — between-children only, ends flush (justify-between)",
+        "equalCentering": "Spacer [child] Spacer Spacer [child] Spacer Spacer [child] Spacer — ONE spacer at each end, TWO between each pair; free space splits into 2(n-1)+2 equal units, so each end gap is exactly half a between gap (justify-around)",
+        "spacerMinLength": "every synthesised Spacer MUST be Spacer(minLength: 0) — SwiftUI's default minLength pollutes the computed gaps",
+        "spacingWins": "an explicit `spacing` pins the gap and suppresses this synthesis, same as the topic-level spacingWins",
+        "note": "Pinned 2026-08-06 (E's proposal, orchestrator-approved: implement this release, B codegen + F dynamic) so the two ios paths emit ONE counting instead of deriving Spacer arithmetic twice — two paths growing children separately is exactly what collapsed distribution's SIZE half before c7d2dfb. Spacer counting suffices because HStack/VStack split free space equally among unconstrained Spacers: the 1:2 end:between count ratio IS space-around's half-gap. No custom Layout, no measurement pass. Acceptance is already wired: when this lands, run 6 must delete collapsedPairs' ios row and turn the two value_discrimination receiving rows stale."
       },
       "explicitChildSizeWins": "an explicit child width/height beats distribution's size half — size topic's explicit > bounds > fill",
       "collapsedPairs": {
