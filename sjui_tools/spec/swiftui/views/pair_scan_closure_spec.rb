@@ -192,6 +192,30 @@ RSpec.describe 'distribution gap construction (swiftui)' do
   it 'fillEqually keeps its single separator (a SIZE value, untouched by the gap rule)' do
     expect(stack('fillEqually').scan('Spacer(minLength: 0)').length).to eq(3)
   end
+
+  # F's dynamic implementation (e8f99c7, measured): the TRAILING end unit
+  # stays out of a wrapContent axis, where a spacer expands the container
+  # and swallows the trailing padding. The leading unit is unconditional on
+  # both faces; fixed sizes keep the trailing unit (free space for the
+  # ratio, cannot be expanded — the old widthExpands gate was too narrow).
+  it 'equalCentering on a wrapContent axis drops only the trailing end unit' do
+    code = SjuiTools::SwiftUI::ConverterFactory.new.create_converter(
+      'type' => 'View', 'id' => 't', 'orientation' => 'horizontal',
+      'width' => 'wrapContent', 'height' => 60, 'distribution' => 'equalCentering',
+      'child' => Array.new(3) { |i| { 'type' => 'View', 'id' => "c#{i}", 'width' => 40, 'height' => 40 } }
+    ).convert.to_s
+    # 1 leading + 2x2 between, no trailing
+    expect(code.scan('Spacer(minLength: 0)').length).to eq(5)
+  end
+
+  it 'equalCentering on a FIXED axis keeps the trailing end unit' do
+    code = SjuiTools::SwiftUI::ConverterFactory.new.create_converter(
+      'type' => 'View', 'id' => 't', 'orientation' => 'horizontal',
+      'width' => 300, 'height' => 60, 'distribution' => 'equalCentering',
+      'child' => Array.new(3) { |i| { 'type' => 'View', 'id' => "c#{i}", 'width' => 40, 'height' => 40 } }
+    ).convert.to_s
+    expect(code.scan('Spacer(minLength: 0)').length).to eq(6)
+  end
 end
 
 # Group-2 backlog closure (2026-07-31).

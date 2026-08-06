@@ -415,10 +415,18 @@ module SjuiTools
                       add_line "Spacer(minLength: 0)"
                     end
                   end
-                  # equalCentering trailing END unit — mirrors the leading
-                  # one exactly (a minLength-0 spacer collapses to nothing
-                  # when the container has no free space, so no expands gate).
-                  add_line "Spacer(minLength: 0)" if distribution == 'equalCentering'
+                  # equalCentering trailing END unit. Emitted for FIXED sizes
+                  # too (fixed = free space for the ratio, cannot be expanded
+                  # — the old widthExpands gate was too narrow), but stays out
+                  # of a wrapContent AXIS, where a spacer expands the
+                  # container and swallows the trailing padding (F's dynamic
+                  # implementation e8f99c7, measured; the leading unit is
+                  # unconditional on both faces).
+                  if distribution == 'equalCentering'
+                    axis_size = orientation == 'horizontal' ? @component['width'] : @component['height']
+                    axis_wraps = axis_size.nil? || axis_size == 'wrapContent'
+                    add_line "Spacer(minLength: 0)" unless axis_wraps
+                  end
                 end
               end
 
