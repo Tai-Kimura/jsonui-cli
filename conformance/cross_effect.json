@@ -4,9 +4,12 @@
   "entries": [
     {
       "fixture": "Button/textAlign__center",
-      "verdict": "uniformly-inert",
-      "declared": "Center",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -27,6 +30,16 @@
         "web": "active"
       },
       "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "CheckBox/font__binding",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -61,6 +74,16 @@
       "verdict": "uniformly-inert",
       "declared": "vertical",
       "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/lazy__binding",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -126,40 +149,10 @@
       "note": ""
     },
     {
-      "fixture": "IconLabel/selectedFontColor__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "codegen-innocent, library/dynamic gap (ios, android): the emitted output CHANGES when the attribute is written (plan 41 codegen lane) and the render does not move, so everything upstream of the runtime did its job. The selected-state font colour is not applied by the SwiftUI/Compose dynamic components. Family: selected-state-dynamic-gap.",
-      "note": ""
-    },
-    {
-      "fixture": "IconLabel/selected__true",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "codegen-innocent, library/dynamic gap (ios): same root as IconLabel/selectedFontColor — codegen emits the selected state, the SwiftUI dynamic component does not render it. Android and web do. Family: selected-state-dynamic-gap.",
-      "note": ""
-    },
-    {
       "fixture": "Image/renderingMode__original",
       "verdict": "uniformly-inert",
       "declared": "original",
       "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/autoShrink__true",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
       "note": ""
     },
     {
@@ -173,6 +166,16 @@
       "note": ""
     },
     {
+      "fixture": "Label/fontFamily__binding",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
       "fixture": "Label/fontFamily__static",
       "platforms": {
         "android": "inert",
@@ -183,17 +186,53 @@
       "note": ""
     },
     {
+      "fixture": "Label/highlightColor__binding",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Label/hintColor__binding",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Label/hintColor__static",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
       "fixture": "Label/lineBreakMode__char",
-      "verdict": "uniformly-inert",
-      "declared": "Char",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
       "fixture": "Label/lineBreakMode__clip",
-      "verdict": "uniformly-inert",
-      "declared": "Clip",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -208,16 +247,22 @@
     },
     {
       "fixture": "Label/lineBreakMode__middle",
-      "verdict": "uniformly-inert",
-      "declared": "Middle",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
       "fixture": "Label/lineBreakMode__tail",
-      "verdict": "uniformly-inert",
-      "declared": "Tail",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -228,43 +273,83 @@
       "note": ""
     },
     {
+      "fixture": "Label/lineHeightMultiple__binding",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
       "fixture": "Label/lineHeightMultiple__static",
       "platforms": {
         "android": "active",
-        "ios": "inert",
+        "ios": "active",
         "web": "inert"
       },
-      "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Label/lineSpacing__binding",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
       "fixture": "Label/lineSpacing__static",
       "platforms": {
         "android": "active",
-        "ios": "inert",
+        "ios": "active",
         "web": "inert"
       },
-      "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
-      "fixture": "Label/linkable__true",
+      "fixture": "Label/minimumScaleFactor__binding",
       "platforms": {
         "android": "active",
-        "ios": "inert",
+        "ios": "active",
         "web": "inert"
       },
-      "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
       "fixture": "Label/minimumScaleFactor__static",
       "platforms": {
         "android": "active",
-        "ios": "inert",
+        "ios": "active",
         "web": "inert"
       },
-      "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Label/strikethrough__styled",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Label/textAlign__binding",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -288,13 +373,71 @@
       "note": ""
     },
     {
-      "fixture": "Radio/label__static",
+      "fixture": "Label/underline__styled",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/checked__binding",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/checked__true_with_group",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/font__binding",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/icon__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/selectedIcon__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/selectedValue__gamma",
       "platforms": {
         "android": "inert",
         "ios": "inert",
         "web": "active"
       },
-      "reason": "measured drift, NOT accepted as correct — and the two inert platforms are NOT the same defect. iOS never reads the spelling on either path (sjui radio_converter.rb: zero `label` hits). Android reads it in CODEGEN (`text || label`) but not in the DYNAMIC component, whose declared-attribute list is group/text/icon/selectedIcon/fontColor/tintColor and which branches on `a.text` — and the fixtures render through the dynamic path, so plan 41's codegen probe passes android while the pixels do not move. The base used to supply `text`, which masked all of this as a uniform inert. Family: label-unread-spelling.",
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -308,37 +451,17 @@
       "note": ""
     },
     {
-      "fixture": "SafeAreaView/orientation__horizontal",
+      "fixture": "SafeAreaView/safeAreaInsetPositions__alias_edges",
       "platforms": {
         "android": "inert",
         "ios": "active",
         "web": "inert"
       },
-      "reason": "adjudicated container behavior: ios draws inset/orientation chrome at this size; android/web render the default identically. Geometry probe closes it. Family: container-behavior.",
-      "note": ""
-    },
-    {
-      "fixture": "SafeAreaView/orientation__vertical",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated container behavior: ios draws inset/orientation chrome at this size; android/web render the default identically. Geometry probe closes it. Family: container-behavior.",
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
       "fixture": "SafeAreaView/safeAreaInsetPositions__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated container behavior: ios draws inset/orientation chrome at this size; android/web render the default identically. Geometry probe closes it. Family: container-behavior.",
-      "note": ""
-    },
-    {
-      "fixture": "ScrollView/orientation__horizontal",
       "platforms": {
         "android": "inert",
         "ios": "active",
@@ -370,23 +493,32 @@
     },
     {
       "fixture": "SelectBox/datePickerMode__dateandtime",
-      "verdict": "uniformly-inert",
-      "declared": "dateAndTime",
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
       "fixture": "SelectBox/datePickerMode__datetime",
-      "verdict": "uniformly-inert",
-      "declared": "datetime",
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
       "fixture": "SelectBox/datePickerMode__time",
-      "verdict": "uniformly-inert",
-      "declared": "time",
-      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -442,23 +574,23 @@
       "note": ""
     },
     {
-      "fixture": "SelectBox/fontSize__static",
+      "fixture": "SelectBox/hintColor__binding",
       "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
       },
-      "reason": "adjudicated: the closed select control styles its label differently per platform (ios renders its own chrome label); fontSize/fontWeight forwarding landed on android (46b905c) — remaining splits are closed-control chrome. Interactive promotion measures the open state. Family: selectbox-chrome.",
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
-      "fixture": "SelectBox/font__static",
+      "fixture": "SelectBox/hintColor__static",
       "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
       },
-      "reason": "adjudicated: the closed select control styles its label differently per platform (ios renders its own chrome label); fontSize/fontWeight forwarding landed on android (46b905c) — remaining splits are closed-control chrome. Interactive promotion measures the open state. Family: selectbox-chrome.",
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -469,16 +601,6 @@
         "web": "active"
       },
       "reason": "adjudicated fixture-shape: the item list is only visible while the picker is OPEN. iOS and Android photograph the closed control, which shows the selection, not the options; the web <select> renders its options into the same box. Joins the existing selectbox-closed-control family. Family: selectbox-interactive.",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/labelAttributes__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated: the closed select control styles its label differently per platform (ios renders its own chrome label); fontSize/fontWeight forwarding landed on android (46b905c) — remaining splits are closed-control chrome. Interactive promotion measures the open state. Family: selectbox-chrome.",
       "note": ""
     },
     {
@@ -583,43 +705,32 @@
       "note": ""
     },
     {
-      "fixture": "SelectBox/selectedIndex__static",
+      "fixture": "SelectBox/selectedItem__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/selectedValue__one",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TabView/showLabels__true",
       "platforms": {
         "android": "inert",
         "ios": "active",
-        "web": "active"
+        "web": "inert"
       },
-      "reason": "adjudicated: literal initial-selection seeding landed on all three platforms (89d0f87/46b905c/fd3c20c); the remaining split reflects closed-control label chrome differences pending the interactive probe. Family: selectbox-chrome.",
-      "note": ""
-    },
-    {
-      "fixture": "Slider/progressTintColor__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "platform idiom, adjudicated: SwiftUI exposes ONE unified tint for a slider, which is why attribute_definitions marks these spellings deprecated:swift — android/web colour the two tracks separately and iOS cannot. Family: tint-swiftui-unified.",
-      "note": ""
-    },
-    {
-      "fixture": "Slider/trackTintColor__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "platform idiom, adjudicated: SwiftUI exposes ONE unified tint for a slider, which is why attribute_definitions marks these spellings deprecated:swift — android/web colour the two tracks separately and iOS cannot. Family: tint-swiftui-unified.",
-      "note": ""
-    },
-    {
-      "fixture": "Switch/trackTintColor__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "platform idiom, adjudicated: SwiftUI's Toggle takes one tint (the ON track); the OFF track is system-drawn and not colourable, so the declared trackTintColor lands on android/web only. Family: tint-swiftui-unified.",
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -627,66 +738,6 @@
       "verdict": "uniformly-inert",
       "declared": "none",
       "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/fontFamily__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated font availability: the declared family name is not bundled on the inert platform, which falls back to the system font (identical render); the active side ships it. A cross-platform font asset is consumer territory, not a converter gap. Family: font-availability.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/font__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated: font weight applies to TEXT; with the W1 text base both actives render bold — the remaining inert side styles its input chrome font separately (measured single-platform). Follow the font-availability/idiom evidence per row. Family: font-chain-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/hintColor__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated: hintColor is declared deprecated for the swiftui scope (SSoT deprecation, hintAttributes is the ios spelling) — ios inert is the declared state; android/web render it. Family: hint-deprecated-scope.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/hintFontSize__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "codegen-innocent, library gap (ios): the placeholder font size reaches the generated Swift and SwiftUI still draws the placeholder in the field's own font — the same surface as TextField/hintFont. Family: hint-metrics.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/hintFont__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "measured drift, NOT accepted as correct: with a value from the weight vocabulary (plan 41 item 4 — the old 'sample' was outside it and could only render nothing), android and web apply the placeholder weight and iOS does not. SwiftUI's placeholder inherits the field's font, so the declared hint font needs an explicit attributed placeholder on the sjui side. Family: hint-metrics.",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/hintColor__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "codegen-innocent, library gap (ios): the alias resolves and the emitted code carries the colour; SwiftUI's plain placeholder takes no colour without an attributed string. android/web apply it. Family: hint-metrics.",
       "note": ""
     },
     {
@@ -748,9 +799,19 @@
       "platforms": {
         "android": "inert",
         "ios": "active",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/editable__false",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
         "web": "inert"
       },
-      "reason": "codegen-innocent, library/dynamic gap (android): the content inset reaches the emitted Compose and the render does not move. iOS applies it (plan 34 routed edgeInset into containerInset on the sjui side this round). Family: container-behavior.",
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -764,43 +825,75 @@
       "note": ""
     },
     {
-      "fixture": "TextView/fontFamily__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated font availability: the declared family name is not bundled on the inert platform, which falls back to the system font (identical render); the active side ships it. A cross-platform font asset is consumer territory, not a converter gap. Family: font-availability.",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/font__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated: font weight applies to TEXT; with the W1 text base both actives render bold — the remaining inert side styles its input chrome font separately (measured single-platform). Follow the font-availability/idiom evidence per row. Family: font-chain-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/hintFont__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "measured drift, NOT accepted as correct: the mirror image of the TextField case — iOS and web apply the placeholder weight, android does not. kjui's TextView hint path reads hintFont only in the TextField component. Family: hint-metrics.",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/hintLineHeightMultiple__static",
+      "fixture": "TextView/fontFamily__binding",
       "platforms": {
         "android": "active",
         "ios": "inert",
         "web": "active"
       },
-      "reason": "text-metrics: hintLineHeightMultiple line-box semantics — android/web line-height sizes the line box (active; android revived by the 32 parity wave's LocalTextStyle fix), while ios SwiftUI lineSpacing is INTER-line only and structurally cannot show on a single-line hint (inert is the platform idiom, not a gap). Adjudicated 2026-08-04.",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/fontFamily__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/hintColor__binding",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/lineBreakMode__char",
+      "verdict": "uniformly-inert",
+      "declared": "Char",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/lineBreakMode__clip",
+      "verdict": "uniformly-inert",
+      "declared": "Clip",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/lineBreakMode__head",
+      "verdict": "uniformly-inert",
+      "declared": "Head",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/lineBreakMode__middle",
+      "verdict": "uniformly-inert",
+      "declared": "Middle",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/lineBreakMode__tail",
+      "verdict": "uniformly-inert",
+      "declared": "Tail",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/lineBreakMode__word",
+      "verdict": "uniformly-inert",
+      "declared": "Word",
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -879,41 +972,23 @@
       "note": ""
     },
     {
-      "fixture": "View/distribution__equalcentering",
-      "verdict": "uniformly-inert",
-      "declared": "equalCentering",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "View/distribution__equalspacing",
-      "verdict": "uniformly-inert",
-      "declared": "equalSpacing",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "View/distribution__fill",
-      "verdict": "uniformly-inert",
-      "declared": "fill",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "View/distribution__fillequally",
-      "verdict": "uniformly-inert",
-      "declared": "fillEqually",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "common/alignBottom__true",
+      "fixture": "View/safeAreaInsetPositions__static",
       "platforms": {
-        "android": "active",
+        "android": "inert",
         "ios": "active",
         "web": "inert"
       },
-      "reason": "measured drift, NOT accepted (web): the emitted markup for the target is BYTE-IDENTICAL to the control's — no `absolute bottom-0`, no positioning class at all. rjui only emits parent-relative position classes when the PARENT is in overlay mode, and a plain View parent stays a flex column, so a child's parent-relative constraint is dropped before anything can render it. Structural container-mode change, not a one-line fix; same shape as the iOS matchParent-parent defect this plan fixed in SwiftJsonUI. Family: relative-position-container-mode.",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Web/html__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -927,43 +1002,13 @@
       "note": ""
     },
     {
-      "fixture": "common/alignLeft__true",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "measured drift, NOT accepted as correct: same root cause as alignTop — the iOS container's default anchor is center where Compose/CSS default to start, so only iOS measures an effect. Family: gravity-default-drift.",
-      "note": ""
-    },
-    {
-      "fixture": "common/alignRight__true",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "measured drift, NOT accepted (web): same root as common/alignBottom__true — the parent never enters overlay mode, so the emitted target markup is byte-identical to the control's. Family: relative-position-container-mode.",
-      "note": ""
-    },
-    {
       "fixture": "common/alignTopView__static",
       "platforms": {
         "android": "inert",
         "ios": "active",
-        "web": "inert"
+        "web": "active"
       },
-      "reason": "measured drift, NOT accepted as correct: view-relative alignment against a sibling that the centered iOS default already separates; on Compose/CSS the two views already share the same top edge, so the constraint is a no-op there. Same root cause as common/alignTop__true. Family: gravity-default-drift.",
-      "note": ""
-    },
-    {
-      "fixture": "common/alignTop__true",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "measured drift, NOT accepted as correct: the divergence is in the DEFAULT, not in the attribute. Compose/CSS already stack a child at top/start, so declaring it changes nothing; SwiftUI's plain container centers (measured: control_View places the 200pt child at y=351..551pt of an 874pt screen), so declaring alignTop moves it. attribute_semantics gravityDefaults.defaultGravity rules the canonical default is top|start — the iOS default contradicts the ruling. Family: gravity-default-drift.",
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -1046,23 +1091,13 @@
       "note": ""
     },
     {
-      "fixture": "common/bottomMargin__static",
+      "fixture": "common/centerInParent__binding",
       "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
       },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/bottomPadding__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -1076,13 +1111,13 @@
       "note": ""
     },
     {
-      "fixture": "common/clipToBounds__true",
+      "fixture": "common/clipToBounds__false",
       "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
       },
-      "reason": "codegen-innocent, library/dynamic gap (android): with a horizontal orientation base giving the child something to overflow, ios and web clip and Compose does not. Family: container-behavior.",
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -1096,41 +1131,92 @@
       "note": ""
     },
     {
-      "fixture": "common/distribution__equalcentering",
-      "verdict": "uniformly-inert",
-      "declared": "equalCentering",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "common/distribution__equalspacing",
-      "verdict": "uniformly-inert",
-      "declared": "equalSpacing",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
       "fixture": "common/distribution__fill",
-      "verdict": "uniformly-inert",
-      "declared": "fill",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "common/distribution__fillequally",
-      "verdict": "uniformly-inert",
-      "declared": "fillEqually",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "common/endMargin__static",
       "platforms": {
-        "android": "inert",
-        "ios": "active",
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/effectStyle__chrome",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
         "web": "inert"
       },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/effectStyle__extralight",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/effectStyle__light",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/effectStyle__prominent",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/effectStyle__regular",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/effectStyle__thick",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/effectStyle__thin",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/effectStyle__ultrathin",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -1194,33 +1280,13 @@
       "note": ""
     },
     {
-      "fixture": "common/paddingBottom__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/paddingEnd__static",
+      "fixture": "common/padding__binding",
       "platforms": {
         "android": "active",
-        "ios": "active",
-        "web": "inert"
+        "ios": "inert",
+        "web": "active"
       },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/paddingRight__static",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+      "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
@@ -1237,36 +1303,6 @@
       "fixture": "common/paddings__static",
       "platforms": {
         "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/rightMargin__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/rightPadding__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/weight__static",
-      "platforms": {
-        "android": "inert",
         "ios": "inert",
         "web": "active"
       },

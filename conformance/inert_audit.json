@@ -1,131 +1,55 @@
 {
   "schemaVersion": 1,
-  "_comment": "Accepted UNATTRIBUTED inert verdicts — fixtures whose attribute changed no pixels on the listed platforms and which no other ledger has an opinion about. This is the completeness ratchet behind `jui conformance gate --inert-complete`: an unattributed inert verdict that is NOT here fails the gate (an attribute can otherwise stop rendering and nothing says so), and an entry the measurement no longer supports fails too (a fixed attribute must not keep an excuse on file). Reason 'unreviewed-initial-measurement' marks the backlog — consume it by replacing the reason with the adjudication, or by fixing the platform and letting the entry go stale. An entry whose platform set changes returns to the backlog, because the adjudication was written about a different fact. `counts` is derived from `entries` and counts ENTRIES, not (fixture, platform) pairs: one entry inert on two platforms counts once. It is regenerated with the file; an entry edited by hand leaves it stale, which is what happened when 77 entries carried counts of 78/84. `counts` is per ENTRY, not per (fixture, platform): an entry inert on two platforms counts once. It is derived from `entries` by update_ledger and must never be hand-edited — three lanes (E included) edited entries and left it stale, so `unreviewed` still read 84 from the first bake while the real figure had fallen to 74. A test now fails when the two disagree.",
+  "_comment": "Accepted UNATTRIBUTED inert verdicts — fixtures whose attribute changed no pixels on the listed platforms and which no other ledger has an opinion about. This is the completeness ratchet behind `jui conformance gate --inert-complete`: an unattributed inert verdict that is NOT here fails the gate (an attribute can otherwise stop rendering and nothing says so), and an entry the measurement no longer supports fails too (a fixed attribute must not keep an excuse on file). Reason 'unreviewed-initial-measurement' marks the backlog — consume it by replacing the reason with the adjudication, or by fixing the platform and letting the entry go stale. An entry whose platform set changes returns to the backlog, because the adjudication was written about a different fact.",
   "platforms": [
     "ios",
     "android",
     "web"
   ],
   "counts": {
-    "entries": 78,
+    "entries": 74,
     "unreviewed": 74
   },
   "entries": [
     {
-      "fixture": "Blur/blurRadius__static",
-      "component": "Blur",
-      "attribute": "blurRadius",
-      "inertOn": [
-        "android",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "type-fallback-value",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Button/buttonType__button",
+      "fixture": "Button/fontWeight__600",
       "component": "Button",
-      "attribute": "buttonType",
-      "inertOn": [
-        "web"
-      ],
-      "kind": "single-platform-scope",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Button/buttonType__reset",
-      "component": "Button",
-      "attribute": "buttonType",
-      "inertOn": [
-        "web"
-      ],
-      "kind": "single-platform-scope",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Button/buttonType__submit",
-      "component": "Button",
-      "attribute": "buttonType",
-      "inertOn": [
-        "web"
-      ],
-      "kind": "single-platform-scope",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Button/highlightBackground__static",
-      "component": "Button",
-      "attribute": "highlightBackground",
+      "attribute": "fontWeight",
       "inertOn": [
         "android",
         "ios",
         "web"
       ],
       "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
-      "fixture": "Button/highlightColor__alias_hilightColor",
+      "fixture": "Button/fontWeight__binding",
       "component": "Button",
-      "attribute": "highlightColor",
+      "attribute": "fontWeight",
       "inertOn": [
         "android",
         "ios",
         "web"
       ],
       "kind": "uniform-inert-undeclared-value",
-      "family": "alias-of-queued-canonical",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
-      "fixture": "Button/highlightColor__static",
-      "component": "Button",
-      "attribute": "highlightColor",
+      "fixture": "CheckBox/checked__false",
+      "component": "CheckBox",
+      "attribute": "checked",
       "inertOn": [
         "android",
         "ios",
         "web"
       ],
       "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Button/highlightColor__static",
-      "component": "Button",
-      "attribute": "highlightColor",
-      "inertOn": [
-        "android",
-        "ios"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Button/tapBackground__static",
-      "component": "Button",
-      "attribute": "tapBackground",
-      "inertOn": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
@@ -143,28 +67,83 @@
       "note": ""
     },
     {
-      "fixture": "CheckBox/spacing__static",
+      "fixture": "CheckBox/isOn__false",
       "component": "CheckBox",
-      "attribute": "spacing",
+      "attribute": "isOn",
       "inertOn": [
         "android",
         "ios",
         "web"
       ],
       "kind": "uniform-inert-undeclared-value",
-      "family": "type-fallback-value",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
-      "fixture": "Collection/itemWeight__static",
-      "component": "Collection",
-      "attribute": "itemWeight",
+      "fixture": "CheckBox/value__false",
+      "component": "CheckBox",
+      "attribute": "value",
       "inertOn": [
-        "ios"
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "CheckBox/value__true",
+      "component": "CheckBox",
+      "attribute": "value",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/horizontalScroll__false",
+      "component": "Collection",
+      "attribute": "horizontalScroll",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/reverseLayout__false",
+      "component": "Collection",
+      "attribute": "reverseLayout",
+      "inertOn": [
+        "android"
       ],
       "kind": "single-platform-scope",
-      "family": "type-fallback-value",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/showsHorizontalScrollIndicator__false",
+      "component": "Collection",
+      "attribute": "showsHorizontalScrollIndicator",
+      "inertOn": [
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
@@ -182,56 +161,18 @@
       "note": ""
     },
     {
-      "fixture": "Collection/showsVerticalScrollIndicator__true",
-      "component": "Collection",
-      "attribute": "showsVerticalScrollIndicator",
-      "inertOn": [
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "GradientView/locations__static",
-      "component": "GradientView",
-      "attribute": "locations",
+      "fixture": "IconLabel/selected__false",
+      "component": "IconLabel",
+      "attribute": "selected",
       "inertOn": [
         "android",
         "ios",
         "web"
       ],
       "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
-    },
-    {
-      "fixture": "Image/alt__static",
-      "component": "Image",
-      "attribute": "alt",
-      "inertOn": [
-        "web"
-      ],
-      "kind": "single-platform-scope",
-      "family": "type-fallback-value",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Image/errorImage__static",
-      "component": "Image",
-      "attribute": "errorImage",
-      "inertOn": [
-        "android",
-        "ios"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "adjudicated-correct",
-      "reason": "fallback-not-a-state",
-      "note": "A static Image issues no request, so it has neither an in-flight state nor an error state. Both converters say so at the branch and treat the two spellings as one fallback chain for a missing `src` (sjui image_converter.rb:36/42, kjui image_component.rb:13-16). Measured on both: each differs from the no-src control, and the two are IDENTICAL to each other. That identity is the correct answer here, not a defect — the distinct states belong to NetworkImage, where a real request exists and where D gave them one (3e713cc)."
     },
     {
       "fixture": "Image/highlightSrc__static",
@@ -246,24 +187,23 @@
       "note": ""
     },
     {
-      "fixture": "Image/loadingImage__static",
+      "fixture": "Image/systemIcon__false",
       "component": "Image",
-      "attribute": "loadingImage",
+      "attribute": "systemIcon",
       "inertOn": [
-        "android",
         "ios"
       ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "adjudicated-correct",
-      "reason": "fallback-not-a-state",
-      "note": "A static Image issues no request, so it has neither an in-flight state nor an error state. Both converters say so at the branch and treat the two spellings as one fallback chain for a missing `src` (sjui image_converter.rb:36/42, kjui image_component.rb:13-16). Measured on both: each differs from the no-src control, and the two are IDENTICAL to each other. That identity is the correct answer here, not a defect — the distinct states belong to NetworkImage, where a real request exists and where D gave them one (3e713cc)."
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
     },
     {
-      "fixture": "Image/loading__eager",
-      "component": "Image",
-      "attribute": "loading",
+      "fixture": "Indicator/hidesWhenStopped__false",
+      "component": "Indicator",
+      "attribute": "hidesWhenStopped",
       "inertOn": [
-        "web"
+        "ios"
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
@@ -271,56 +211,86 @@
       "note": ""
     },
     {
-      "fixture": "Image/loading__lazy",
-      "component": "Image",
-      "attribute": "loading",
-      "inertOn": [
-        "web"
-      ],
-      "kind": "single-platform-scope",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Label/hintColor__static",
+      "fixture": "Label/autoShrink__false",
       "component": "Label",
-      "attribute": "hintColor",
+      "attribute": "autoShrink",
       "inertOn": [
         "android",
         "ios",
         "web"
       ],
       "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
-      "fixture": "Label/hint__static",
+      "fixture": "Label/fontWeight__600",
       "component": "Label",
-      "attribute": "hint",
+      "attribute": "fontWeight",
       "inertOn": [
         "android",
         "ios",
         "web"
       ],
       "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
-      "fixture": "Label/placeholder__static",
+      "fixture": "Label/fontWeight__600_with_partial",
       "component": "Label",
-      "attribute": "placeholder",
+      "attribute": "fontWeight",
       "inertOn": [
         "android",
         "ios",
         "web"
       ],
       "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Label/linkable__false",
+      "component": "Label",
+      "attribute": "linkable",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Label/selected__false",
+      "component": "Label",
+      "attribute": "selected",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Label/strikethrough__false",
+      "component": "Label",
+      "attribute": "strikethrough",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
@@ -349,92 +319,42 @@
       "note": ""
     },
     {
-      "fixture": "NetworkImage/alt__static",
-      "component": "NetworkImage",
-      "attribute": "alt",
+      "fixture": "Label/underline__false",
+      "component": "Label",
+      "attribute": "underline",
       "inertOn": [
+        "android",
+        "ios",
         "web"
       ],
-      "kind": "single-platform-scope",
-      "family": "type-fallback-value",
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
-      "fixture": "NetworkImage/loading__eager",
+      "fixture": "NetworkImage/contentMode__binding",
       "component": "NetworkImage",
-      "attribute": "loading",
+      "attribute": "contentMode",
       "inertOn": [
+        "android",
+        "ios",
         "web"
       ],
-      "kind": "single-platform-scope",
-      "family": "untriaged",
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
-      "fixture": "NetworkImage/loading__lazy",
-      "component": "NetworkImage",
-      "attribute": "loading",
-      "inertOn": [
-        "web"
-      ],
-      "kind": "single-platform-scope",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Progress/hidesWhenStopped__true",
+      "fixture": "Progress/hidesWhenStopped__false",
       "component": "Progress",
       "attribute": "hidesWhenStopped",
       "inertOn": [
         "ios"
       ],
       "kind": "single-platform-scope",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Radio/group__static",
-      "component": "Radio",
-      "attribute": "group",
-      "inertOn": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "type-fallback-value",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Radio/spacing__static",
-      "component": "Radio",
-      "attribute": "spacing",
-      "inertOn": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "type-fallback-value",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Radio/value__static",
-      "component": "Radio",
-      "attribute": "value",
-      "inertOn": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
@@ -475,6 +395,19 @@
       "note": ""
     },
     {
+      "fixture": "ScrollView/showsHorizontalScrollIndicator__false",
+      "component": "ScrollView",
+      "attribute": "showsHorizontalScrollIndicator",
+      "inertOn": [
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
       "fixture": "ScrollView/showsHorizontalScrollIndicator__true",
       "component": "ScrollView",
       "attribute": "showsHorizontalScrollIndicator",
@@ -488,31 +421,6 @@
       "note": ""
     },
     {
-      "fixture": "ScrollView/showsVerticalScrollIndicator__true",
-      "component": "ScrollView",
-      "attribute": "showsVerticalScrollIndicator",
-      "inertOn": [
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/colorScheme__dark",
-      "component": "SelectBox",
-      "attribute": "colorScheme",
-      "inertOn": [
-        "web"
-      ],
-      "kind": "single-platform-scope",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
       "fixture": "SelectBox/colorScheme__light",
       "component": "SelectBox",
       "attribute": "colorScheme",
@@ -520,41 +428,14 @@
         "web"
       ],
       "kind": "single-platform-scope",
-      "family": "untriaged",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
-      "fixture": "SelectBox/datePickerMode__countdown",
+      "fixture": "SelectBox/maximumDate__binding",
       "component": "SelectBox",
-      "attribute": "datePickerMode",
-      "inertOn": [
-        "web"
-      ],
-      "kind": "declared-value-degrades-to-another",
-      "family": "attributed",
-      "owner": "A (rjui) — declaration fix owned by E",
-      "reason": "NOT an accepted inert. `countDown` selects a DURATION (hours:minutes of length); HTML has no `<input type>` for one — date / time / datetime-local / month / week all name a point in time. rjui falls through to `type=\"date\"` (select_box_converter.rb:418 `else`), so a layout that declares countDown renders a control for picking a DATE: the declaration and the result disagree and the author is not told. This row records the degradation, it does not accept it. Measured across all three toolchains 2026-08-05: no platform implements countDown (android forwards the string to the library, ios does not read datePickerMode at all). The fix is a `platform` declaration removing countDown from web, owned by E and deferred past this release because it needs three-platform agreement; this row goes when that lands.",
-      "note": "Not in value_discrimination.json: countDown and date are BOTH inert against their control, so the pair is excluded by not-both-active and never compared. A discrimination row would claim a measurement the gate does not make. ios: the converter's `else` is a CONSEQUENCE, not the cause — SwiftUI `SelectBoxView.DatePickerMode` (SelectBoxView.swift:98) declares only date/time/dateTime, so the branch has no case to pass. The UIKit view `SJUISelectBox.swift:145` already maps countDown to `UIDatePicker.Mode.countDownTimer`, and `SelectBoxAttributes.DatePickerMode` parses the spelling, so ios loses the value at the SwiftUI view boundary alone. The three platforms degrade for three different reasons: web has no HTML duration input, ios is missing one enum case, android delegates the raw string to the library."
-    },
-    {
-      "fixture": "SelectBox/dateStringFormat__static",
-      "component": "SelectBox",
-      "attribute": "dateStringFormat",
-      "inertOn": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/hintColor__static",
-      "component": "SelectBox",
-      "attribute": "hintColor",
+      "attribute": "maximumDate",
       "inertOn": [
         "android",
         "ios",
@@ -580,6 +461,20 @@
       "note": ""
     },
     {
+      "fixture": "SelectBox/minimumDate__binding",
+      "component": "SelectBox",
+      "attribute": "minimumDate",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
       "fixture": "SelectBox/minimumDate__static",
       "component": "SelectBox",
       "attribute": "minimumDate",
@@ -594,57 +489,14 @@
       "note": ""
     },
     {
-      "fixture": "Slider/minimum__alias_minValue",
-      "component": "Slider",
-      "attribute": "minimum",
+      "fixture": "SelectBox/multiple__false",
+      "component": "SelectBox",
+      "attribute": "multiple",
       "inertOn": [
-        "android",
-        "ios",
         "web"
       ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "alias-of-queued-canonical",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Slider/minimum__alias_minimumValue",
-      "component": "Slider",
-      "attribute": "minimum",
-      "inertOn": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "alias-of-queued-canonical",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Slider/minimum__static",
-      "component": "Slider",
-      "attribute": "minimum",
-      "inertOn": [
-        "android",
-        "ios"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "Slider/minimum__static",
-      "component": "Slider",
-      "attribute": "minimum",
-      "inertOn": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
@@ -661,6 +513,34 @@
       "note": ""
     },
     {
+      "fixture": "Switch/checked__false",
+      "component": "Switch",
+      "attribute": "checked",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "Switch/isOn__false",
+      "component": "Switch",
+      "attribute": "isOn",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
       "fixture": "Switch/labelPosition__leading",
       "component": "Switch",
       "attribute": "labelPosition",
@@ -668,71 +548,33 @@
         "android"
       ],
       "kind": "single-platform-scope",
-      "family": "untriaged",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
-      "fixture": "Switch/labelPosition__trailing",
+      "fixture": "Switch/value__false",
       "component": "Switch",
-      "attribute": "labelPosition",
-      "inertOn": [
-        "android"
-      ],
-      "kind": "single-platform-scope",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/maxLength__static",
-      "component": "TextField",
-      "attribute": "maxLength",
+      "attribute": "value",
       "inertOn": [
         "android",
         "ios",
         "web"
       ],
       "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
-      "fixture": "TextField/pattern__static",
+      "fixture": "TextField/secure__false",
       "component": "TextField",
-      "attribute": "pattern",
+      "attribute": "secure",
       "inertOn": [
-        "web"
+        "ios"
       ],
       "kind": "single-platform-scope",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/required__true",
-      "component": "TextField",
-      "attribute": "required",
-      "inertOn": [
-        "web"
-      ],
-      "kind": "single-platform-scope",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "TextField/tintColor__static",
-      "component": "TextField",
-      "attribute": "tintColor",
-      "inertOn": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
@@ -763,45 +605,23 @@
       "note": ""
     },
     {
-      "fixture": "TextView/maxLength__static",
+      "fixture": "TextView/flexible__false",
       "component": "TextView",
-      "attribute": "maxLength",
+      "attribute": "flexible",
       "inertOn": [
+        "android",
+        "ios",
         "web"
       ],
-      "kind": "single-platform-scope",
+      "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
-      "fixture": "TextView/pattern__static",
+      "fixture": "TextView/selectable__false",
       "component": "TextView",
-      "attribute": "pattern",
-      "inertOn": [
-        "web"
-      ],
-      "kind": "single-platform-scope",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/required__true",
-      "component": "TextView",
-      "attribute": "required",
-      "inertOn": [
-        "web"
-      ],
-      "kind": "single-platform-scope",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/rows__static",
-      "component": "TextView",
-      "attribute": "rows",
+      "attribute": "selectable",
       "inertOn": [
         "web"
       ],
@@ -823,18 +643,6 @@
       "note": ""
     },
     {
-      "fixture": "View/draggable__true",
-      "component": "View",
-      "attribute": "draggable",
-      "inertOn": [
-        "web"
-      ],
-      "kind": "single-platform-scope",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
       "fixture": "View/flexWrap__nowrap",
       "component": "View",
       "attribute": "flexWrap",
@@ -847,7 +655,79 @@
       "note": ""
     },
     {
-      "fixture": "View/highlighted__true",
+      "fixture": "View/gradientDirection__bottomtotop",
+      "component": "View",
+      "attribute": "gradientDirection",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "View/gradientDirection__horizontal",
+      "component": "View",
+      "attribute": "gradientDirection",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "View/gradientDirection__oblique",
+      "component": "View",
+      "attribute": "gradientDirection",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "View/gradientDirection__righttoleft",
+      "component": "View",
+      "attribute": "gradientDirection",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "View/gradientDirection__vertical",
+      "component": "View",
+      "attribute": "gradientDirection",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "value-is-default",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "View/gradient__static",
+      "component": "View",
+      "attribute": "gradient",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "View/highlighted__false",
       "component": "View",
       "attribute": "highlighted",
       "inertOn": [
@@ -861,34 +741,89 @@
       "note": ""
     },
     {
-      "fixture": "View/safeAreaInsetPositions__static",
-      "component": "View",
-      "attribute": "safeAreaInsetPositions",
-      "inertOn": [
-        "android",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
-      "reason": "android-unimplemented-web-environment-limited",
-      "note": "owner: G (kjui + KotlinJsonUI). why: the declaration carries no platform scope and its description names the sjui and rjui call sites that honour it on a PLAIN view, so all three are supposed to. android decodes it (ViewAttributes.kt) and reads it only in DynamicSafeAreaViewComponent — the plain-View path (ModifierBuilder / DynamicViewComponent, kjui compose_builder.rb:722) never reads it. Declared, decoded, unread: an implementation gap, NOT a semantics ruling, which is why it is here and not in attribute_semantics.json — a contract would bless the gap. web is inert for an unrelated and legitimate reason: rjui emits env(safe-area-inset-*) padding, and a headless viewport with no notch resolves those to 0, so the attribute works and has nothing to inset. ios is ACTIVE as of run 30950551601 (57,600 px differing over a 600x696 bbox) — the older all-three-inert fact in this ledger predates that landing. verify: implement the plain-View path on Compose, then this fixture must go active on android and this entry must disappear from the ledger; web stays inert until a fixture runs in a viewport that actually reports safe-area insets."
-    },
-    {
-      "fixture": "Web/allow__static",
+      "fixture": "Web/sandbox__false",
       "component": "Web",
-      "attribute": "allow",
+      "attribute": "sandbox",
       "inertOn": [
         "web"
       ],
       "kind": "single-platform-scope",
-      "family": "type-fallback-value",
+      "family": "untriaged",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
     {
-      "fixture": "common/highlightBackground__static",
+      "fixture": "Web/sandbox__true",
+      "component": "Web",
+      "attribute": "sandbox",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignBottom__false",
       "component": "common",
-      "attribute": "highlightBackground",
+      "attribute": "alignBottom",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignLeft__false",
+      "component": "common",
+      "attribute": "alignLeft",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignRight__false",
+      "component": "common",
+      "attribute": "alignRight",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignTop__false",
+      "component": "common",
+      "attribute": "alignTop",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/borderWidth__binding",
+      "component": "common",
+      "attribute": "borderWidth",
       "inertOn": [
         "android",
         "ios",
@@ -896,6 +831,48 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/centerHorizontal__false",
+      "component": "common",
+      "attribute": "centerHorizontal",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/centerInParent__false",
+      "component": "common",
+      "attribute": "centerInParent",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/centerVertical__false",
+      "component": "common",
+      "attribute": "centerVertical",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
@@ -924,15 +901,16 @@
       "note": ""
     },
     {
-      "fixture": "common/indexAbove__static",
+      "fixture": "common/maxHeight__binding",
       "component": "common",
-      "attribute": "indexAbove",
+      "attribute": "maxHeight",
       "inertOn": [
+        "android",
         "ios",
         "web"
       ],
       "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
+      "family": "sibling-value-active",
       "reason": "unreviewed-initial-measurement",
       "note": ""
     },
@@ -940,6 +918,20 @@
       "fixture": "common/maxHeight__static",
       "component": "common",
       "attribute": "maxHeight",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "unreviewed-initial-measurement",
+      "note": ""
+    },
+    {
+      "fixture": "common/maxWidth__binding",
+      "component": "common",
+      "attribute": "maxWidth",
       "inertOn": [
         "android",
         "ios",
@@ -965,37 +957,9 @@
       "note": ""
     },
     {
-      "fixture": "common/minHeight__static",
+      "fixture": "common/tintColor__binding",
       "component": "common",
-      "attribute": "minHeight",
-      "inertOn": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "common/minWidth__static",
-      "component": "common",
-      "attribute": "minWidth",
-      "inertOn": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "common/tapBackground__static",
-      "component": "common",
-      "attribute": "tapBackground",
+      "attribute": "tintColor",
       "inertOn": [
         "android",
         "ios",
