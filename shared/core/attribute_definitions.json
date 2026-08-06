@@ -2348,7 +2348,10 @@
         "Left",
         "Right"
       ],
-      "description": "Content mode (binding supported)"
+      "valueAliases": {
+        "ScaleToFill": "fill"
+      },
+      "description": "Content mode (binding supported). ScaleToFill is a declared synonym of fill (the stretch — see attribute_semantics.json#semantics.image); the normalizer folds it, fixtures are generated for the canonical spelling only."
     },
     "renderingMode": {
       "type": "string",
@@ -2583,7 +2586,10 @@
         "dateAndTime",
         "countDown"
       ],
-      "description": "Date picker mode"
+      "valueAliases": {
+        "datetime": "dateAndTime"
+      },
+      "description": "Date picker mode. datetime is a declared synonym of dateAndTime and the normalizer folds it: sjui and rjui accept both spellings (selectbox_converter.rb case arms; rjui downcases), but KotlinJsonUI's DateSelectBox matches \"dateAndTime\" literally and datetime would silently fall to the date-only branch — so the UIKit spelling is canonical, same reasoning as gradientDirection's capitalised canon."
     },
     "datePickerStyle": {
       "type": "string",

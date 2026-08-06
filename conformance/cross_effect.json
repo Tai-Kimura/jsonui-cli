@@ -339,8 +339,8 @@
         "ios": "active",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "android's kjui DYNAMIC renderer drops the line entirely for the object face: styled renders byte-identical to the CONTROL on android, while ios and web draw the plain line for it (byte-identical to the true face — their collapse is the recorded C2/presence-only family, value_discrimination.json). Measured on run 31068716186 artifacts, band-aware. This is NOT the presence-only shape: on android's dynamic path the presence itself is lost for the object face. The codegen path is unaffected — codegen text for true and styled is byte-identical on all three (codegen_effect.json). Owner: G (kjui dynamic). The row leaves this ledger when the android dynamic renderer draws the line for the object face; full styling stays post-release.",
+      "note": "Adjudicated 2026-08-06 by E from run-5 measurement; reported to G in 49-E-progress."
     },
     {
       "fixture": "Label/textAlign__binding",
@@ -379,8 +379,8 @@
         "ios": "active",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "android's kjui DYNAMIC renderer drops the line entirely for the object face: styled renders byte-identical to the CONTROL on android, while ios and web draw the plain line for it (byte-identical to the true face — their collapse is the recorded C2/presence-only family, value_discrimination.json). Measured on run 31068716186 artifacts, band-aware. This is NOT the presence-only shape: on android's dynamic path the presence itself is lost for the object face. The codegen path is unaffected — codegen text for true and styled is byte-identical on all three (codegen_effect.json). Owner: G (kjui dynamic). The row leaves this ledger when the android dynamic renderer draws the line for the object face; full styling stays post-release.",
+      "note": "Adjudicated 2026-08-06 by E from run-5 measurement; reported to G in 49-E-progress."
     },
     {
       "fixture": "Radio/checked__binding",
