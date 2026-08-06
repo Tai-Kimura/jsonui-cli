@@ -199,6 +199,29 @@ RSpec.describe KjuiTools::Compose::Helpers::FontSpecHelper do
     end
   end
 
+  describe '.weight_literal_for (static numeric)' do
+    # The SSoT declares fontWeight ["string", "number"] on all three
+    # platforms, and a static 600 fell through the name table into
+    # warn+Normal — ios drew SemiBold where android drew Normal (run 6
+    # cross_effect fontWeight__600, ruled a cross-platform divergence to
+    # fix). Numbers resolve through the SHARED table's css column first, so
+    # the numeric vocabulary cannot drift from the name one.
+    it 'resolves a table number through the shared css column' do
+      expect(described_class.weight_literal_for(600)).to eq('FontWeight.SemiBold')
+      expect(described_class.weight_literal_for('500')).to eq('FontWeight.Medium')
+      expect(described_class.weight_literal_for('100')).to eq('FontWeight.Thin')
+    end
+
+    it 'passes an in-range number outside the table straight to FontWeight(n)' do
+      expect(described_class.weight_literal_for(450)).to eq('FontWeight(450)')
+    end
+
+    it 'drops an out-of-range number to Normal like an unknown name' do
+      expect(described_class.weight_literal_for(0)).to eq('FontWeight.Normal')
+      expect(described_class.weight_literal_for(1200)).to eq('FontWeight.Normal')
+    end
+  end
+
   describe '.weight_expression (bound numeric)' do
     # `FontWeight(n)` throws outside [1, 1000], and a non-nullable Int
     # property composes first with its default 0 — the unguarded emit took

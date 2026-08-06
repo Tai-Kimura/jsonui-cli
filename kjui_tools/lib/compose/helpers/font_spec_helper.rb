@@ -128,8 +128,36 @@ module KjuiTools
             return mapping[target] if mapping.key?(target)
           end
 
+          # NUMERIC weight. The SSoT declares ["string", "number"] on all
+          # three platforms, and a `600` fell through the name table into the
+          # warn+Normal arm — ios drew SemiBold where android drew Normal
+          # (run 6 cross_effect: fontWeight__600 active on ios only; ruled a
+          # cross-platform divergence to fix, not to ledger). The css column
+          # of the SHARED table is the numeric vocabulary, so a number that
+          # names a table row resolves through the table (600 -> SemiBold) —
+          # one source for all three tools — and any other in-range value is
+          # a direct FontWeight(n), which is exactly what the ios converter
+          # does with it. Out of Compose's [1, 1000] falls to the same
+          # warn+Normal arm as an unknown name.
+          if key.match?(/\A\d+\z/)
+            css_hit = css_weight_index[key]
+            return css_hit if css_hit
+            return "FontWeight(#{key.to_i})" if (1..1000).cover?(key.to_i)
+          end
+
           warn "[kjui] Unknown font weight '#{weight_string}', defaulting to FontWeight.Normal"
           'FontWeight.Normal'
+        end
+
+        # `css numeric string -> kotlin literal`, derived from the shared
+        # table so the numeric vocabulary cannot drift from the name one.
+        # Non-numeric css spellings ("normal", "bold") are already reachable
+        # as names and stay out.
+        def self.css_weight_index
+          @css_weight_index ||= raw_weight_rows.each_with_object({}) do |(_, row), index|
+            css = row['css'].to_s
+            index[css] ||= row['kotlin'] if css.match?(/\A\d+\z/) && row['kotlin']
+          end
         end
 
         # Kotlin `FontWeight` expression for a `font` / `fontWeight` value that
@@ -280,29 +308,39 @@ module KjuiTools
         # Test-only seam: inject candidate paths (highest priority first).
         def self.weight_mapping_candidates=(paths)
           @weight_mapping_candidates = paths
-          @weight_mapping = nil
+          reset_weight_mapping_cache!
         end
 
-        # Test-only seam: drop the cached mapping.
+        # Test-only seam: drop the cached mapping — all three derived caches,
+        # or a candidate swap serves rows from the previous file.
         def self.reset_weight_mapping_cache!
           @weight_mapping = nil
+          @raw_weight_rows = nil
+          @css_weight_index = nil
         end
 
         def self.load_weight_mapping
-          path = weight_mapping_candidates.find { |p| p && File.exist?(p) }
-          unless path
-            warn '[kjui] font_weight_mapping.json not found on any candidate path; using built-in fallback.'
-            return fallback_weight_mapping
-          end
-          parsed = JSON.parse(File.read(path))
-          weights = parsed['weights'] || {}
-          mapped = weights.each_with_object({}) do |(name, platforms), acc|
+          mapped = raw_weight_rows.each_with_object({}) do |(name, platforms), acc|
             kotlin = platforms['kotlin']
             acc[name.downcase] = kotlin if kotlin
           end
           mapped.empty? ? fallback_weight_mapping : mapped
-        rescue JSON::ParserError
-          fallback_weight_mapping
+        end
+
+        # The shared table's rows whole, css column included — the numeric
+        # weight vocabulary lives there and `css_weight_index` needs it.
+        def self.raw_weight_rows
+          @raw_weight_rows ||= begin
+            path = weight_mapping_candidates.find { |p| p && File.exist?(p) }
+            if path
+              JSON.parse(File.read(path))['weights'] || {}
+            else
+              warn '[kjui] font_weight_mapping.json not found on any candidate path; using built-in fallback.'
+              {}
+            end
+          rescue JSON::ParserError
+            {}
+          end
         end
 
         def self.fallback_weight_mapping
