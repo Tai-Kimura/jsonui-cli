@@ -672,16 +672,19 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     # be one of the group's items or it selects nothing — see the `items`
     # companion below.
     ("Radio", "selectedValue"): "Beta",
-    # Radio icons are a VOCABULARY, not an asset name: kjui matches them
-    # against SF-Symbol spellings and maps each to a Material icon
-    # (radio_component.rb:209-236, map_icon_name:423-437), and anything outside
-    # the table falls to the same `Icons.Outlined.Star` — so two arbitrary
-    # asset names emitted byte-identical text and the value read as unread.
-    # `circle`/`square` (+ their `checkmark.*.fill` selected forms) are the
-    # spellings both the SwiftUI and the Compose sides name.
-    ("Radio", "icon"): "circle",
-    ("Radio", "selectedIcon"): "checkmark.circle.fill",
-    ("Radio", "selected_icon"): "checkmark.circle.fill",
+    # Radio icons are BOTH an asset name and a vocabulary, and neither face
+    # can serve as the other's representative. sjui resolves the string as an
+    # asset (`Image(name)`), so the SF-Symbol spellings that used to sit here
+    # named assets no host bundles and every icon fixture drew the same empty
+    # glyph — icon ≡ selectedIcon, value discrimination gone (lane F, 5th
+    # run). kjui instead matches the string against SF-Symbol spellings
+    # (radio_component.rb:209-236, map_icon_name:423-437) and drops anything
+    # else to the same `Icons.Outlined.Star`, so two asset names emit
+    # byte-identical text. The PRIMARY takes the bundled asset (ios draws it,
+    # kjui's Star arm still differs from the vocabulary arms) and the
+    # vocabulary face lives on in EXTRA_CASES. No row needed here: `icon`
+    # falls back to IMAGE_ASSET_NAME via IMAGE_ATTRS, and selectedIcon's
+    # distinct-asset rows are declared with the other state images above.
     # --- representative == platform default, non-enum half (lane A §5) ------ #
     #
     # Same defect as PREFERRED_PRIMARY_CASE below, for attributes with no enum
@@ -726,11 +729,14 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
 #: (`circle` -> `circleTwo`), which falls straight back to the vocabulary's
 #: default arm and emits identical text — the C2 "presence-only" verdict.
 EXTRA_CASES: dict[tuple[str, str], list[Any]] = {
-    # `circle` -> the default RadioButton arm, `square` -> the Checkbox arm.
+    # The VOCABULARY face of the Radio icons (see the representative-value
+    # comment above): the primary is the bundled asset, and this second value
+    # is the SF-Symbol spelling that reaches kjui's Checkbox arm — a different
+    # arm from the fallback Star the asset name lands on, so the value stays
+    # provably read on Compose. `circle`/`checkmark.circle.fill` are NOT
+    # cases: kjui maps them to the arm an icon-less radio already renders,
+    # i.e. the default in disguise.
     ("Radio", "icon"): ["square"],
-    # `checkmark.circle.fill` -> the RadioButton arm, `checkmark.square.fill`
-    # -> the custom IconButton arm (the square arm additionally needs
-    # `icon: square`, which this fixture does not carry).
     ("Radio", "selectedIcon"): ["checkmark.square.fill"],
     ("Radio", "selected_icon"): ["checkmark.square.fill"],
     # A second LITERAL, so the codegen differential's "second value" is not the
@@ -1194,12 +1200,11 @@ PREFERRED_PRIMARY_CASE: dict[tuple[str, str], Any] = {
     ("View", "distribution"): "fillEqually",
     ("common", "alignment"): "top",
     ("common", "distribution"): "fillEqually",
-    # `circle` renders the arm an icon-less radio already renders (kjui maps it
-    # to the default RadioButton), so it was the default in disguise. `square`
-    # reaches the Checkbox arm; `circle` stays as the second case.
-    ("Radio", "icon"): "square",
-    ("Radio", "selectedIcon"): "checkmark.square.fill",
-    ("Radio", "selected_icon"): "checkmark.square.fill",
+    # Radio icon/selectedIcon rows (promote `square` over `circle`) were
+    # removed when the primary became the bundled asset: an SF-Symbol
+    # representative names an asset ios cannot resolve, and its empty glyph
+    # sits exactly on the icon-less control — the inert false positive this
+    # table exists to prevent.
 }
 
 #: Text-ish string attributes that read better with a hint payload.

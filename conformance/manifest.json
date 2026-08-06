@@ -17112,6 +17112,29 @@
       "control": null
     },
     {
+      "id": "Radio/icon__static",
+      "component": "Radio",
+      "attribute": "icon",
+      "case": "static",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": "icon",
+      "aliasOf": null,
+      "value": "conformance_sample",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Radio/icon__static.layout.json",
+      "test": "fixtures/Radio/icon__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Radio/icon@Radio",
+      "control": "__control/Radio"
+    },
+    {
       "id": "Radio/icon__square",
       "component": "Radio",
       "attribute": "icon",
@@ -17135,27 +17158,27 @@
       "control": "__control/Radio"
     },
     {
-      "id": "Radio/icon__static",
+      "id": "Radio/selectedIcon__static",
       "component": "Radio",
-      "attribute": "icon",
+      "attribute": "selectedIcon",
       "case": "static",
       "class": "visual",
       "host": "Radio",
-      "writtenKey": "icon",
+      "writtenKey": "selectedIcon",
       "aliasOf": null,
-      "value": "circle",
+      "value": "conformance_sample_alt",
       "platforms": [
         "ios",
         "android"
       ],
       "mode": null,
       "deprecated": null,
-      "layout": "fixtures/Radio/icon__static.layout.json",
-      "test": "fixtures/Radio/icon__static.test.json",
+      "layout": "fixtures/Radio/selectedIcon__static.layout.json",
+      "test": "fixtures/Radio/selectedIcon__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Radio/icon@Radio",
-      "control": "__control/Radio"
+      "peerGroup": "Radio/selectedIcon@Radio__checked-True",
+      "control": "__control/Radio__checked-True"
     },
     {
       "id": "Radio/selectedIcon__checkmark-square-fill",
@@ -17181,29 +17204,6 @@
       "control": "__control/Radio__checked-True"
     },
     {
-      "id": "Radio/selectedIcon__static",
-      "component": "Radio",
-      "attribute": "selectedIcon",
-      "case": "static",
-      "class": "visual",
-      "host": "Radio",
-      "writtenKey": "selectedIcon",
-      "aliasOf": null,
-      "value": "checkmark.circle.fill",
-      "platforms": [
-        "ios",
-        "android"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/Radio/selectedIcon__static.layout.json",
-      "test": "fixtures/Radio/selectedIcon__static.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "peerGroup": "Radio/selectedIcon@Radio__checked-True",
-      "control": "__control/Radio__checked-True"
-    },
-    {
       "id": "Radio/selectedIcon__alias_selected_icon",
       "component": "Radio",
       "attribute": "selectedIcon",
@@ -17211,8 +17211,8 @@
       "class": "visual",
       "host": "Radio",
       "writtenKey": "selected_icon",
-      "aliasOf": "Radio/selectedIcon__checkmark-square-fill",
-      "value": "checkmark.square.fill",
+      "aliasOf": "Radio/selectedIcon__static",
+      "value": "conformance_sample_alt",
       "platforms": [
         "ios",
         "android"
