@@ -15,6 +15,20 @@ RSpec.describe KjuiTools::Compose::Helpers::FontSpecHelper do
     end
   end
 
+  describe '.weight_mapping candidate paths' do
+    # Every developer machine with a ~/.jsonui-cli install resolves candidate
+    # 3, so a wrong depth in candidates 1/2 is invisible locally and only CI
+    # sees the empty table (84a5cb8: numbers fell to FontWeight(n) because
+    # only the css index starved — the names were caught by the fallback).
+    # This asserts the checkout's own layout resolves WITHOUT the global
+    # install, so the hidden-by-environment failure cannot come back.
+    it 'resolves a real file from the repo checkout, before the global install' do
+      local = described_class.weight_mapping_candidates.reject { |p| p.include?('.jsonui-cli') }
+      expect(local.any? { |p| File.exist?(p) }).to be(true),
+        "no repo-local candidate exists: #{local.inspect}"
+    end
+  end
+
   describe '.weight_mapping resolution chain' do
     after { described_class.weight_mapping_candidates = nil }
 

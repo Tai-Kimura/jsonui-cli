@@ -295,11 +295,20 @@ module KjuiTools
         #   3. `~/.jsonui-cli/shared/core/...` — the global install location.
         # If none resolve, fall back to the built-in table below.
         def self.weight_mapping_candidates
+          # With a __FILE__ base the FIRST `../` strips the filename, so every
+          # hop count reads one deeper than the directory walk it describes.
+          # Both paths below were one level short — candidate 1 pointed at
+          # lib/shared/core and candidate 2 at kjui_tools/shared/core, neither
+          # of which exists in the repo — and every machine with a
+          # ~/.jsonui-cli install silently fell through to candidate 3, which
+          # made the bug invisible everywhere except CI (84a5cb8 red). The
+          # repo-checkout spec now asserts a candidate actually resolves.
           @weight_mapping_candidates || [
-            # <tool_dir>/shared/core: helpers → compose → lib → kjui_tools
-            File.expand_path('../../../shared/core/font_weight_mapping.json', __FILE__),
-            # repo-root shared/core: one level above kjui_tools (library layout)
+            # <tool_dir>/shared/core: font_spec_helper.rb → helpers → compose
+            # → lib → kjui_tools (consumer layout, tool dir carries the table)
             File.expand_path('../../../../shared/core/font_weight_mapping.json', __FILE__),
+            # repo-root shared/core: one level above kjui_tools (this repo)
+            File.expand_path('../../../../../shared/core/font_weight_mapping.json', __FILE__),
             # global install
             File.expand_path('~/.jsonui-cli/shared/core/font_weight_mapping.json')
           ]
