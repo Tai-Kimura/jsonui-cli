@@ -347,7 +347,16 @@ module RjuiTools
         def map_font_weight(weight)
           return '' unless weight
 
-          FONT_WEIGHT_MAP[weight.to_s.downcase] || ''
+          # The SSoT declares fontWeight ["string","number"], and CSS takes a
+          # numeric font-weight verbatim — but the name table answered '' for
+          # `600`, so the numeric face silently vanished from the emit
+          # (run 6: ios active, android/web inert on the same declaration).
+          # A number becomes the arbitrary-value class; Tailwind reads a bare
+          # number in `font-[...]` as font-weight, not family.
+          key = weight.to_s.downcase
+          return "font-[#{key}]" if key.match?(/\A\d{1,4}\z/)
+
+          FONT_WEIGHT_MAP[key] || ''
         end
 
         # Map font attribute - can be weight name or font family
