@@ -20,7 +20,7 @@ module JsonUI
         { name: 'caretAttributes', kind: :object }.freeze,
         # Color scheme for native date picker icon visibility (set 'dark' for dark backgrounds)
         { name: 'colorScheme', kind: :enum, values: ['light', 'dark'].freeze }.freeze,
-        # Date picker mode
+        # Date picker mode. datetime is a declared synonym of dateAndTime and the normalizer folds it: sjui and rjui accept both spellings (selectbox_converter.rb case arms; rjui downcases), but KotlinJsonUI's DateSelectBox matches "dateAndTime" literally and datetime would silently fall to the date-only branch — so the UIKit spelling is canonical, same reasoning as gradientDirection's capitalised canon.
         { name: 'datePickerMode', kind: :enum, values: ['date', 'time', 'datetime', 'dateAndTime', 'countDown'].freeze }.freeze,
         # Date picker style
         { name: 'datePickerStyle', kind: :enum, values: ['automatic', 'wheel', 'wheels', 'compact', 'graphical', 'inline'].freeze }.freeze,
