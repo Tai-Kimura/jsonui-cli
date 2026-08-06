@@ -307,5 +307,51 @@ class GateParityTest(unittest.TestCase):
         self.assertTrue(any("codegen parity OK" in n for n in outcome.notices))
 
 
+@unittest.skipUnless(HAVE_PILLOW, "Pillow not installed (jui-tools[conformance])")
+class ParityZeroDenominatorTest(GateParityTest):
+    """Zero comparisons must fail, not read as agreement.
+
+    An empty intersection means the two pipelines rendered no screenshot in
+    common — a broken run, not parity. Every path into it (empty codegen
+    directory, empty baseline hashes, all names one-sided-but-ledgered) used
+    to end in `codegen parity OK — 0 matched`, which is the exact shape the
+    wave's rule forbids: a device that excludes must say what it excluded,
+    and a denominator of zero must not be silent.
+    """
+
+    def test_empty_intersection_is_a_problem_not_a_green(self):
+        # Empty both sides: no codegen renders, no dynamic renders, and a
+        # baseline whose hash set is empty. The ledger arithmetic is
+        # perfectly clean — that is the trap.
+        for png in (self.conf / "artifacts" / "android").glob("*.png"):
+            png.unlink()
+        baseline_file = (
+            self.conf / "baselines" / "local" / "android.hashes.json"
+        )
+        doc = json.loads(baseline_file.read_text(encoding="utf-8"))
+        doc["hashes"] = {}
+        baseline_file.write_text(json.dumps(doc), encoding="utf-8")
+        cg = self.conf / "artifacts" / "android-codegen"
+        cg.mkdir(parents=True, exist_ok=True)
+
+        outcome = self._evaluate()
+        self.assertFalse(outcome.ok)
+        self.assertTrue(
+            any("parity compared NOTHING" in p for p in outcome.problems),
+            outcome.problems,
+        )
+        self.assertFalse(any("codegen parity OK" in n for n in outcome.notices))
+
+    def test_the_green_notice_carries_the_denominator(self):
+        cg = self.conf / "artifacts" / "android-codegen"
+        _write_png(cg / self.shot)
+        outcome = self._evaluate()
+        self.assertTrue(outcome.ok)
+        self.assertTrue(
+            any("1 matched of 1 compared" in n for n in outcome.notices),
+            outcome.notices,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

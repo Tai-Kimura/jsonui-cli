@@ -368,6 +368,106 @@ class JudgeInertCompleteTest(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertTrue(any("inert completeness OK" in n for n in notices))
 
+    # ------------------------------------------------------------------ #
+    # Zero-denominator holes (the wave's homework): an audit whose
+    # denominator shrinks must say so, and one whose denominator is zero
+    # while the manifest holds work must fail. "0 unattributed, all on the
+    # ledger" from an empty measurement is the exact silence this exists
+    # to forbid.
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _manifest_with_scope(root: Path) -> None:
+        (root / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "fixtures": [
+                        {
+                            "id": "Label/text__static",
+                            "platforms": ["ios", "web"],
+                            "control": "__control/Label",
+                        },
+                        {
+                            "id": "__control/Label",
+                            "platforms": ["ios", "web"],
+                            "isControl": True,
+                        },
+                    ]
+                }
+            )
+        )
+
+    @staticmethod
+    def _write_results(root: Path, platform: str, results: list[dict]) -> None:
+        import hashlib
+
+        manifest_hash = hashlib.sha256(
+            (root / "manifest.json").read_bytes()
+        ).hexdigest()
+        results_dir = root / "results"
+        results_dir.mkdir(exist_ok=True)
+        (results_dir / f"{platform}.results.json").write_text(
+            json.dumps(
+                {
+                    "platform": platform,
+                    "manifestHash": manifest_hash,
+                    "results": results,
+                }
+            )
+        )
+
+    def test_fixtures_in_scope_with_no_results_measured_nothing(self):
+        from jui_cli.conformance.gate import judge_inert_complete
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._manifest_with_scope(root)
+            problems, notices = judge_inert_complete(root, ["ios", "web"])
+        self.assertTrue(
+            any("measured NOTHING" in p for p in problems), problems
+        )
+        self.assertFalse(any("inert completeness OK" in n for n in notices))
+
+    def test_a_platform_that_left_the_denominator_is_said_out_loud(self):
+        from jui_cli.conformance.gate import judge_inert_complete
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._manifest_with_scope(root)
+            self._write_results(
+                root,
+                "web",
+                [{"id": "Label/text__static", "status": "pass", "screenshot": None}],
+            )
+            problems, notices = judge_inert_complete(root, ["ios", "web"])
+        self.assertFalse(any("measured NOTHING" in p for p in problems))
+        self.assertTrue(
+            any("no results for ios" in n for n in notices), notices
+        )
+
+    def test_a_fixture_without_its_control_is_an_exclusion_not_a_pass(self):
+        from jui_cli.conformance.gate import judge_inert_complete
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._manifest_with_scope(root)
+            self._write_results(
+                root,
+                "web",
+                [
+                    {
+                        "id": "Label/text__static",
+                        "status": "pass",
+                        "screenshot": "artifacts/web/Label_text__static.png",
+                    }
+                ],
+            )
+            problems, notices = judge_inert_complete(root, ["web", "ios"])
+        self.assertTrue(
+            any("excluded from the completeness audit" in n for n in notices),
+            notices,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

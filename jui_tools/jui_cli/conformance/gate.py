@@ -266,6 +266,20 @@ def evaluate(
             if verdict.error:
                 outcome.problems.append(f"{p}: parity not measured — {verdict.error}")
                 continue
+            # The denominator, out loud. Every exclusion below (one-sided,
+            # baseline-only) is reported with its count, and an empty
+            # denominator is a failure: zero comparisons cannot support a
+            # parity verdict, however green the ledger arithmetic comes out —
+            # the intersection being empty means the two pipelines rendered
+            # no screenshot in common, which is a broken run, not agreement.
+            compared = len(result.matched) + len(result.mismatched)
+            if compared == 0:
+                outcome.problems.append(
+                    f"{p}: parity compared NOTHING — no screenshot was rendered by "
+                    f"both pipelines (one-sided {len(result.missing) + len(result.codegen_only)}, "
+                    f"baseline-only {len(result.baseline_only)}); zero comparisons "
+                    f"cannot support a parity verdict"
+                )
             if verdict.unrecorded:
                 shown = ", ".join(verdict.unrecorded[:5]) + (
                     " …" if len(verdict.unrecorded) > 5 else ""
@@ -306,10 +320,11 @@ def evaluate(
                     f"pipeline produced — rename/deletion residue, cleared by the "
                     f"next bake; not counted as a deviation"
                 )
-            if verdict.ok:
+            if verdict.ok and compared:
                 outcome.notices.append(
-                    f"{p}: codegen parity OK — {len(result.matched)} matched, "
-                    f"{verdict.accepted} accepted deviation(s) on ledger"
+                    f"{p}: codegen parity OK — {len(result.matched)} matched of "
+                    f"{compared} compared, {verdict.accepted} accepted deviation(s) "
+                    f"on ledger"
                 )
     return outcome
 
@@ -823,6 +838,49 @@ def judge_inert_complete(
         diffs[platform] = control_diff_mod.compare(
             conformance_dir, platform, manifest, pr.results, env=env
         )
+
+    # A platform that produced no results leaves the denominator, and a
+    # denominator that shrinks silently is how a completeness check stops
+    # being one. Say what left; and if the manifest holds fixtures in the
+    # selected scope while NOTHING was measured, that is a failed audit, not
+    # zero findings — the same rule value-discrimination applies to a run
+    # that compared no pairs.
+    absent = [p for p in selected if p not in loaded]
+    in_scope = sum(
+        1
+        for entry in manifest.get("fixtures", [])
+        if not entry.get("isControl")
+        and any(p in (entry.get("platforms") or []) for p in selected)
+    )
+    if absent and in_scope:
+        if len(absent) == len(selected):
+            problems.append(
+                f"--inert-complete measured NOTHING — no selected platform has "
+                f"results ({', '.join(absent)}) while the manifest holds "
+                f"{in_scope} fixture(s) in their scope; a completeness verdict "
+                f"from an empty measurement covers none of them"
+            )
+            return problems, notices
+        notices.append(
+            f"--inert-complete: no results for {', '.join(absent)} — their "
+            f"verdicts are absent from the audit's denominator, not clean"
+        )
+    for platform in selected:
+        diff = diffs.get(platform)
+        if diff is None:
+            continue
+        if diff.error:
+            problems.append(
+                f"--inert-complete: {platform} comparison errored — {diff.error} "
+                f"— its verdicts are absent, not clean"
+            )
+        excluded = len(diff.no_control) + len(diff.unmeasured)
+        if excluded:
+            notices.append(
+                f"{platform}: {excluded} fixture(s) excluded from the completeness "
+                f"audit — control produced no screenshot ({len(diff.no_control)}), "
+                f"recorded assertion unmeasured ({len(diff.unmeasured)})"
+            )
 
     definitions: dict = {}
     if definitions_path and Path(definitions_path).is_file():
