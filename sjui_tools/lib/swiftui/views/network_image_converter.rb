@@ -49,8 +49,16 @@ module SjuiTools
               add_line "errorImage: \"#{@component['errorImage']}\","
             end
 
-            # contentMode
-            if @component['contentMode']
+            # contentMode. A BOUND spelling resolves at run time through the
+            # non-DEBUG library seam (NetworkImage.ContentMode.from,
+            # SwiftJsonUI >= 911293f) — the compile-time map cannot see a
+            # `@{...}` value and fell through to `.fit`, freezing the binding
+            # to a constant (C1/bound-frozen, NetworkImage.contentMode [ios]).
+            if bound_value?(@component['contentMode'])
+              expr = SjuiTools::SwiftUI::Binding::BindingExpression
+                     .swift_text_expr(@component['contentMode'][2..-2])
+              add_line "contentMode: NetworkImage.ContentMode.from(#{expr}),"
+            elsif @component['contentMode']
               content_mode = map_content_mode_enum(@component['contentMode'])
               add_line "contentMode: #{content_mode},"
             end
