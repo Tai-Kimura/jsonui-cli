@@ -687,9 +687,14 @@ module KjuiTools
             if attr['fontSize']
               code += "\n" + indent("fontSize = #{attr['fontSize']},", depth + 3)
             end
-            # Handle font/fontWeight - support both "font" and "fontWeight" keys
+            # Handle font/fontWeight - support both "font" and "fontWeight" keys.
+            # The value goes through as a STRING and the runtime seam
+            # (parseFontWeight) resolves it — deliberately no second table
+            # here (G's relay). An integral Float must not cast "600.0" into
+            # that string: 600.0 is legal JSON and the seam resolves "600".
             font_weight = attr['fontWeight'] || attr['font']
             if font_weight
+              font_weight = font_weight.to_i if font_weight.is_a?(Float) && font_weight == font_weight.to_i
               code += "\n" + indent("fontWeight = \"#{font_weight}\",", depth + 3)
             end
             if attr['background']

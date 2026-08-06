@@ -117,6 +117,12 @@ module KjuiTools
           return nil if weight_string.is_a?(String) && weight_string.match?(/^@\{.*\}$/)
 
           key = weight_string.to_s.downcase
+          # 600.0 is legal JSON, Ruby reads it as Float, and Float#to_s casts
+          # "600.0" — which misses both the css index and the \d+ guard. Same
+          # shape G caught gson's Double doing at runtime ("600.0" slipping
+          # past toIntOrNull): the cast happens between "implemented" and
+          # "the picture moved". An integral number is the integer it prints as.
+          key = key.sub(/\.0+\z/, '') if key.match?(/\A\d+\.0+\z/)
           mapping = weight_mapping
 
           # Direct hit on the shared mapping table.

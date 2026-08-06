@@ -230,6 +230,14 @@ RSpec.describe KjuiTools::Compose::Helpers::FontSpecHelper do
       expect(described_class.weight_literal_for(450)).to eq('FontWeight(450)')
     end
 
+    it 'reads an integral Float as the integer it prints as' do
+      # 600.0 is legal JSON; Float#to_s casts "600.0", which missed both the
+      # css index and the numeric guard — the same Double-cast shape G caught
+      # gson doing at runtime.
+      expect(described_class.weight_literal_for(600.0)).to eq('FontWeight.SemiBold')
+      expect(described_class.weight_literal_for(450.0)).to eq('FontWeight(450)')
+    end
+
     it 'drops an out-of-range number to Normal like an unknown name' do
       expect(described_class.weight_literal_for(0)).to eq('FontWeight.Normal')
       expect(described_class.weight_literal_for(1200)).to eq('FontWeight.Normal')
