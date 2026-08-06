@@ -195,7 +195,7 @@
       "perValueMapping": {
         "fill": {
           "swiftui": ".frame(maxWidth/maxHeight: .infinity) on each child",
-          "compose": "Modifier.weight(1f) on each child",
+          "compose": "grow from content — NOT expressible with Modifier.weight (weight(1f) IS fillEqually, the run-4 0px collapse; weight(1f, fill=false) packs by content and is inert). Dedicated measurement pass DistributionFillRow/Column in the base KotlinJsonUI library (c7d2dfb): content size plus an equal split of the leftover, one policy shared by the kjui codegen emit and the dynamic renderer. Device-verified: all 6 value pairs pairwise distinct, explicit child size never grown, spacing gaps pinned",
           "web": "grow on each child"
         },
         "fillEqually": {
