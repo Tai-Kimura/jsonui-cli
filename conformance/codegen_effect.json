@@ -8,9 +8,9 @@
       "platform": "web",
       "check": "C0",
       "class": "unread-spelling",
-      "owner": "unreviewed-initial-measurement",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "owner": "A (rjui) — probe value fix owned by D",
+      "reason": "NOT an unread spelling. collection_converter.rb:149-151 reads it and every container branch acts on it: static `none` drops the overflow scroll classes (measured: CONTROL/lazy/eager byte-identical, none differs), and the bound form emits a runtime overflow override in all three branches. The C0 verdict is an artifact of the value plan: representative_value('Collection','lazy') is 'lazy' — the declared DEFAULT — so emit(v1) equals the control by construction, and the second value 'eager' also equals it because lazy-vs-eager is virtualization, which the plain `.map()` emit does not have. `none` is the only web-observable value and the probe never picks it.",
+      "note": "Accepted degeneracy: web lazy≡eager (no virtualization to switch off). Probe fix: representative value `none` in rules.py (D's file, not touched here)."
     }
   ]
 }
