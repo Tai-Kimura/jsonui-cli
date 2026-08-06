@@ -156,7 +156,15 @@ module KjuiTools
           inner = BindingExpression.extract_inner(value)
           path = BindingExpression.parse(inner).path
           if NUMERIC_PROPERTY_CLASSES.include?(ResourceResolver.get_property_class(path).to_s)
-            return "FontWeight(#{BoundValue.int(value, fallback: 400)})"
+            # `FontWeight(n)` THROWS outside [1, 1000], and a non-nullable Int
+            # property composes first with its default 0 — the raw emit took
+            # the whole codegen host down for Button.fontWeight__binding
+            # (5th-round: the one screenshot missing from the run). The
+            # dynamic path resolves weights through a name table and cannot
+            # throw, so the guard belongs here: out-of-range falls to 400,
+            # which is what the fallback already meant.
+            expr = BoundValue.int(value, fallback: 400)
+            return "FontWeight(#{expr}.let { if (it in 1..1000) it else 400 })"
           end
 
           # The static path downcases before the lookup, so the runtime one has

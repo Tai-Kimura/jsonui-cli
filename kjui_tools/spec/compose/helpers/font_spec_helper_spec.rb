@@ -199,6 +199,26 @@ RSpec.describe KjuiTools::Compose::Helpers::FontSpecHelper do
     end
   end
 
+  describe '.weight_expression (bound numeric)' do
+    # `FontWeight(n)` throws outside [1, 1000], and a non-nullable Int
+    # property composes first with its default 0 — the unguarded emit took
+    # the codegen host down for Button.fontWeight__binding (the one missing
+    # screenshot of the 5th round). Out-of-range falls to 400, which is what
+    # the fallback already meant; the dynamic path resolves weights through
+    # a name table and cannot throw.
+    before do
+      allow(KjuiTools::Compose::Helpers::ResourceResolver)
+        .to receive(:get_property_class).with('boundFontWeight').and_return('Int')
+      allow(KjuiTools::Compose::Helpers::BindingExpression)
+        .to receive(:property_nullable?).with('boundFontWeight').and_return(false)
+    end
+
+    it 'guards the runtime range instead of emitting a bare constructor' do
+      expr = described_class.weight_expression('@{boundFontWeight}')
+      expect(expr).to eq('FontWeight(data.boundFontWeight.let { if (it in 1..1000) it else 400 })')
+    end
+  end
+
   describe '.text_arg_lines' do
     it 'emits four destructured Text args with proper fallbacks' do
       lines = described_class.text_arg_lines('resolved_text7', 0, Set.new)
