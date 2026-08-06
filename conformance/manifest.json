@@ -8,11 +8,11 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "eaae82f9b29d0298d60001c776cae620d7a0cb82d59f24168f78a2a2c19e2ab7",
+  "generatedFrom": "72be1322e4500de51442b09ff28873b2366eb8fff5f27f1f6d591c995a58207e",
   "counts": {
-    "fixtures": 915,
+    "fixtures": 913,
     "assertable": 33,
-    "visual": 697,
+    "visual": 695,
     "interactive": 35,
     "control": 91,
     "declarationOnly": 59,
@@ -11673,30 +11673,6 @@
       "control": "__control/Image"
     },
     {
-      "id": "Image/contentMode__scaletofill",
-      "component": "Image",
-      "attribute": "contentMode",
-      "case": "scaletofill",
-      "class": "visual",
-      "host": "Image",
-      "writtenKey": "contentMode",
-      "aliasOf": null,
-      "value": "ScaleToFill",
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/Image/contentMode__scaletofill.layout.json",
-      "test": "fixtures/Image/contentMode__scaletofill.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "peerGroup": "Image/contentMode@Image",
-      "control": "__control/Image"
-    },
-    {
       "id": "Image/contentMode__top_2",
       "component": "Image",
       "attribute": "contentMode",
@@ -12752,30 +12728,6 @@
       "deprecated": null,
       "layout": "fixtures/SelectBox/datePickerMode__date.layout.json",
       "test": "fixtures/SelectBox/datePickerMode__date.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "peerGroup": "SelectBox/datePickerMode@SelectBox__selectItemType-Date",
-      "control": "__control/SelectBox__selectItemType-Date"
-    },
-    {
-      "id": "SelectBox/datePickerMode__datetime",
-      "component": "SelectBox",
-      "attribute": "datePickerMode",
-      "case": "datetime",
-      "class": "visual",
-      "host": "SelectBox",
-      "writtenKey": "datePickerMode",
-      "aliasOf": null,
-      "value": "datetime",
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/SelectBox/datePickerMode__datetime.layout.json",
-      "test": "fixtures/SelectBox/datePickerMode__datetime.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": "SelectBox/datePickerMode@SelectBox__selectItemType-Date",
