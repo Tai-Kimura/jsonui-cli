@@ -219,6 +219,13 @@
         "ios": "equalSpacing == equalCentering",
         "android": "fill == fillEqually"
       }
+    },
+    "trackColors": {
+      "sliderTrack": "trackTintColor is the UNFILLED track; progressTintColor is the filled one",
+      "switchTrack": "trackTintColor is the OFF track; onTintColor overrides it while on",
+      "notTheView": "neither paints the view's background",
+      "ruling": "2026-08-06 (plan 49-E), asked for by A after ios parity showed three implementations doing three different things. Ruled from the ones that already agree rather than from the name: Compose and web BOTH read trackTintColor as the unfilled Slider track (kjui slider_component.rb:102, rjui slider_converter.rb:85 -> ::-webkit-slider-runnable-track) and BOTH read it as the OFF Switch track with onTintColor winning while on (kjui switch_component.rb:99, rjui switch_converter.rb:30). sjui's SwiftUI Slider says the same thing in its comment. So: Slider = the unfilled side only, the filled side is progressTintColor, and tintColor stays the accent that colours the thumb and the active track when nothing more specific is declared. Switch = the OFF track, and onTintColor is not an alias of it but the state that overrides it. The view's BACKGROUND is wrong on both, and that is what the codegen emits — `.background(color)` paints the whole control, so a declared track colour swallows the component. It is also why the two ios parity findings exist: dynamic reaches the track, codegen reaches the view. RECORDED HERE BECAUSE IT WAS ALREADY CITED: kjui and rjui both carry comments pointing at `slider.trackColors` / `switch.trackColors` in this file, and neither entry existed — the ruling was referenced by three converters and written down nowhere, which is why three implementations could drift while each believed it was following the canon.",
+      "observable": {}
     }
   }
 }
