@@ -15,6 +15,14 @@
   "child": [
     {
       "type": "View",
+      "id": "rival",
+      "width": 0,
+      "height": 200,
+      "weight": 1,
+      "background": "#334455"
+    },
+    {
+      "type": "View",
       "id": "target",
       "width": 200,
       "height": 200,

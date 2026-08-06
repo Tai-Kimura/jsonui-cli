@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "72be1322e4500de51442b09ff28873b2366eb8fff5f27f1f6d591c995a58207e",
   "counts": {
-    "fixtures": 913,
+    "fixtures": 915,
     "assertable": 33,
     "visual": 695,
     "interactive": 35,
-    "control": 91,
+    "control": 93,
     "declarationOnly": 59,
     "skipped": 150,
     "promoted": {
@@ -556,8 +556,8 @@
       "test": "fixtures/common/weight__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/weight@View__root.orientation-horizontal",
-      "control": "__control/View__root.orientation-horizontal"
+      "peerGroup": "common/weight@View__root.backdrop-309d3595_root.orientation-horizontal",
+      "control": "__control/View__root.backdrop-309d3595_root.orientation-horizontal"
     },
     {
       "id": "common/weight__as_string",
@@ -580,8 +580,8 @@
       "test": "fixtures/common/weight__as_string.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/weight@View__root.orientation-horizontal",
-      "control": "__control/View__root.orientation-horizontal"
+      "peerGroup": "common/weight@View__root.backdrop-309d3595_root.orientation-horizontal",
+      "control": "__control/View__root.backdrop-309d3595_root.orientation-horizontal"
     },
     {
       "id": "common/weight__binding",
@@ -604,8 +604,8 @@
       "test": "fixtures/common/weight__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/weight@View__root.orientation-horizontal",
-      "control": "__control/View__root.orientation-horizontal"
+      "peerGroup": "common/weight@View__root.backdrop-309d3595_root.orientation-horizontal",
+      "control": "__control/View__root.backdrop-309d3595_root.orientation-horizontal"
     },
     {
       "id": "common/weight__binding_as_string",
@@ -628,8 +628,8 @@
       "test": "fixtures/common/weight__binding_as_string.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/weight@View__root.orientation-horizontal",
-      "control": "__control/View__root.orientation-horizontal"
+      "peerGroup": "common/weight@View__root.backdrop-309d3595_root.orientation-horizontal",
+      "control": "__control/View__root.backdrop-309d3595_root.orientation-horizontal"
     },
     {
       "id": "common/background__static",
@@ -4003,8 +4003,8 @@
       "test": "fixtures/common/gravity__top.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/gravity@View__orientation-horizontal",
-      "control": "__control/View__orientation-horizontal"
+      "peerGroup": "common/gravity@View__orientation-horizontal_width-300",
+      "control": "__control/View__orientation-horizontal_width-300"
     },
     {
       "id": "common/gravity__bottom",
@@ -4027,8 +4027,8 @@
       "test": "fixtures/common/gravity__bottom.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/gravity@View__orientation-horizontal",
-      "control": "__control/View__orientation-horizontal"
+      "peerGroup": "common/gravity@View__orientation-horizontal_width-300",
+      "control": "__control/View__orientation-horizontal_width-300"
     },
     {
       "id": "common/gravity__centervertical",
@@ -4051,8 +4051,8 @@
       "test": "fixtures/common/gravity__centervertical.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/gravity@View__orientation-horizontal",
-      "control": "__control/View__orientation-horizontal"
+      "peerGroup": "common/gravity@View__orientation-horizontal_width-300",
+      "control": "__control/View__orientation-horizontal_width-300"
     },
     {
       "id": "common/gravity__left",
@@ -4075,8 +4075,8 @@
       "test": "fixtures/common/gravity__left.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/gravity@View__orientation-horizontal",
-      "control": "__control/View__orientation-horizontal"
+      "peerGroup": "common/gravity@View__orientation-horizontal_width-300",
+      "control": "__control/View__orientation-horizontal_width-300"
     },
     {
       "id": "common/gravity__right",
@@ -4099,8 +4099,8 @@
       "test": "fixtures/common/gravity__right.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/gravity@View__orientation-horizontal",
-      "control": "__control/View__orientation-horizontal"
+      "peerGroup": "common/gravity@View__orientation-horizontal_width-300",
+      "control": "__control/View__orientation-horizontal_width-300"
     },
     {
       "id": "common/gravity__centerhorizontal",
@@ -4123,8 +4123,8 @@
       "test": "fixtures/common/gravity__centerhorizontal.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/gravity@View__orientation-horizontal",
-      "control": "__control/View__orientation-horizontal"
+      "peerGroup": "common/gravity@View__orientation-horizontal_width-300",
+      "control": "__control/View__orientation-horizontal_width-300"
     },
     {
       "id": "common/gravity__center",
@@ -4147,8 +4147,8 @@
       "test": "fixtures/common/gravity__center.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/gravity@View__orientation-horizontal",
-      "control": "__control/View__orientation-horizontal"
+      "peerGroup": "common/gravity@View__orientation-horizontal_width-300",
+      "control": "__control/View__orientation-horizontal_width-300"
     },
     {
       "id": "common/onAppear__callback_fire",
@@ -15162,8 +15162,8 @@
       "test": "fixtures/View/direction__lefttoright.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "View/direction@View__orientation-vertical",
-      "control": "__control/View__orientation-vertical"
+      "peerGroup": "View/direction@View__orientation-horizontal",
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "View/direction__righttoleft",
@@ -15186,8 +15186,8 @@
       "test": "fixtures/View/direction__righttoleft.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "View/direction@View__orientation-vertical",
-      "control": "__control/View__orientation-vertical"
+      "peerGroup": "View/direction@View__orientation-horizontal",
+      "control": "__control/View__orientation-horizontal"
     },
     {
       "id": "View/direction__none",
@@ -16371,8 +16371,8 @@
       "test": "fixtures/Collection/layout__horizontal.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Collection/layout@Collection",
-      "control": "__control/Collection",
+      "peerGroup": "Collection/layout@Collection__width-150",
+      "control": "__control/Collection__width-150",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]
@@ -16398,8 +16398,8 @@
       "test": "fixtures/Collection/layout__vertical.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Collection/layout@Collection",
-      "control": "__control/Collection",
+      "peerGroup": "Collection/layout@Collection__width-150",
+      "control": "__control/Collection__width-150",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]
@@ -16425,8 +16425,8 @@
       "test": "fixtures/Collection/layout__flow.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Collection/layout@Collection",
-      "control": "__control/Collection",
+      "peerGroup": "Collection/layout@Collection__width-150",
+      "control": "__control/Collection__width-150",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]
@@ -16556,7 +16556,7 @@
       "host": "Collection",
       "writtenKey": "itemWeight",
       "aliasOf": null,
-      "value": 0.5,
+      "value": 0.25,
       "platforms": [
         "ios"
       ],
@@ -19793,6 +19793,33 @@
       ]
     },
     {
+      "id": "__control/Collection__width-150",
+      "component": "__control",
+      "attribute": null,
+      "case": "Collection",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Collection__width-150.layout.json",
+      "test": "fixtures/__control/Collection__width-150.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
       "id": "__control/GradientView",
       "component": "__control",
       "attribute": null,
@@ -21402,6 +21429,30 @@
       "isControl": true
     },
     {
+      "id": "__control/View__root.backdrop-309d3595_root.orientation-horizontal",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__root.backdrop-309d3595_root.orientation-horizontal.layout.json",
+      "test": "fixtures/__control/View__root.backdrop-309d3595_root.orientation-horizontal.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/View__root.gravity-bottom",
       "component": "__control",
       "attribute": null,
@@ -21460,9 +21511,7 @@
       "aliasOf": null,
       "value": null,
       "platforms": [
-        "ios",
-        "android",
-        "web"
+        "ios"
       ],
       "mode": null,
       "deprecated": null,

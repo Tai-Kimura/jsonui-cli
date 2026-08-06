@@ -23,8 +23,7 @@
           "cell": "conformance_cell"
         }
       ],
-      "items": "@{items}",
-      "layout": "vertical"
+      "items": "@{items}"
     }
   ],
   "data": [

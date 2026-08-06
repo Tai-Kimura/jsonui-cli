@@ -18,7 +18,7 @@
       "width": 200,
       "height": 200,
       "background": "#DDDDDD",
-      "orientation": "vertical",
+      "orientation": "horizontal",
       "child": [
         {
           "type": "View",

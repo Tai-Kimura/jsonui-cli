@@ -15,7 +15,7 @@
     {
       "type": "Collection",
       "id": "target",
-      "width": 200,
+      "width": 150,
       "height": 200,
       "background": "#DDDDDD",
       "sections": [

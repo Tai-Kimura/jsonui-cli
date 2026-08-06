@@ -659,8 +659,14 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     #
     # `return unless value > 0 && value <= 1.0` (sjui collection_converter.rb:
     # 1713) — the name-keyed fallback DEFAULT_NUMBER (8) is outside the domain,
-    # so the fixture could only ever measure the guard.
-    ("Collection", "itemWeight"): 0.5,
+    # so the fixture could only ever measure the guard. And within the domain,
+    # 0.5 was the companion in disguise: fed0d27 folds the weight into a
+    # column count, round(1/0.5) = 2 = the companion's own `columns: 2`, so
+    # control, representative and the derived second value (1.5 - out of
+    # domain, ignored) all drew a 2-column grid. 0.25 asks for FOUR columns
+    # against the companion's two (B's arithmetic, probe-confirmed:
+    # count: 4 vs count: 2).
+    ("Collection", "itemWeight"): 0.25,
     # `value` is Slider/Progress vocabulary in the name-keyed table (0.5), but
     # CheckBox/Radio declare it as `any`: the checked state's associated value.
     # sjui reads `@component['value'] == true` for the checkbox seed, so 0.5
@@ -1464,6 +1470,12 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     "alignLeftOfView": {"width": 50, "height": 50},
     "alignRightOfView": {"width": 50, "height": 50},
     "Collection.columnSpacing": {"columns": 2},
+    # `flow` is only distinguishable from `horizontal` once a row FILLS: the
+    # three 60pt cells total 180pt, which fits the 200pt host in one row, so
+    # flow never wrapped and the pair drew one picture (run 5, android/web).
+    # 150pt forces flow into a 2+1 grid while horizontal keeps one scrolling
+    # row — and vertical is untouched by width.
+    "Collection.layout": {"width": 150},
     # `cols` and `rows` size a textarea in characters and lines, and an
     # explicit width/height overrides them everywhere. Dropping the base size
     # is what lets the attribute decide the box (lane A §5(4)).
@@ -1569,7 +1581,15 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # Distribution shares out FREE space, and six 40pt boxes in a 200pt row
     # leave none — they overflow it. A 300pt row leaves 60pt to share.
     "distribution": {"orientation": "horizontal", "width": 300},
-    "gravity": {"orientation": "horizontal"},
+    # Gravity positions CONTENT inside free space, so it needs slack on BOTH
+    # axes — the six boxes overflow a 200pt row and the horizontal half of
+    # every value was invisible (run 5: android rendered centerhorizontal,
+    # left, top and right as one picture). 300pt leaves 60pt of horizontal
+    # slack, the same lever distribution uses. left ≡ top survives this on
+    # purpose: the unspecified axis defaults to top/start on every platform,
+    # so both values name the top-left corner — that pair is recorded, not
+    # fixtured away.
+    "gravity": {"orientation": "horizontal", "width": 300},
     "spacing": {"orientation": "horizontal"},
     "padding": {"orientation": "horizontal"},
     "paddings": {"orientation": "horizontal"},
@@ -1633,7 +1653,12 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     "View.highlighted": {"highlightBackground": "#FF0000"},
     # `direction` reverses the children of an ORIENTED container; with no
     # orientation the canonical answer is "no effect", so the fixture has to
-    # supply one or it can never show anything.
+    # supply one or it can never show anything. One orientation cannot serve
+    # every value: the reversal only acts on its OWN axis, so the horizontal
+    # values get a horizontal container via CASE_BASE_ATTRS below — on the
+    # shared vertical base, `rightToLeft` was a designed no-op, and the only
+    # thing its fixture ever caught was an ios dynamic missing the axis guard
+    # (run 5: it reversed a vertical stack).
     "direction": {"orientation": "vertical"},
     # The highlight attribute sets only take effect while the label is
     # selected — that is the whole contract (UIKit: `selected ?
@@ -1683,11 +1708,11 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # it; both halves happened, so it goes in.
     "Collection.scrollAnchor": {"scrollTo": "@{scrollTarget}"},
     # itemWeight is the fraction of the container width ONE ITEM takes, which
-    # is a grid concept: sjui applies it from apply_grid_padding /
-    # apply_insets_only (collection_converter.rb:1606/1834) and the default
-    # single-column CollectionStackView path reaches neither. Measured: with
-    # `columns: 2` the fixture emits `.containerRelativeFrame(...)` and its
-    # control does not; without it the two are byte-identical.
+    # is a grid concept: sjui folds it into the grid's column count
+    # (fed0d27: round(1/weight) columns) and the default single-column
+    # CollectionStackView path never consults it. The companion supplies the
+    # grid; the REPRESENTATIVE (0.25, above) is what has to disagree with the
+    # companion's own column count, or all three probe pictures collapse.
     #
     # `Collection.scrollAnchor` is the other half of this family and is NOT
     # fixable here — see the 49-D report. It needs `scrollTo` as a companion,
@@ -1769,7 +1794,22 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # plain View — an overlay — so there was no axis to take a share of. The
     # `root.` prefix puts the orientation on the ROOT node rather than on the
     # target (see `split_root_attrs`).
-    "weight": {"root.orientation": "horizontal"},
+    #
+    # A share also needs a COMPETITOR: a lone weighted child takes all the
+    # leftover space whatever its weight says, so 1 and '2' drew one picture
+    # on all three platforms (run 5). The backdrop sibling holds weight 1
+    # against the target's value; its width is 0 — the width-0-plus-weight
+    # pairing every platform special-cases — so the boundary between the two
+    # is set by the ratio alone. The target's own 200pt width is untouched:
+    # the control has no weight, and a zero-size control draws nothing (the
+    # heightWeight lesson).
+    "weight": {
+        "root.orientation": "horizontal",
+        "root.backdrop": [
+            {"type": "View", "id": "rival", "width": 0, "height": 200,
+             "weight": 1, "background": "#334455"},
+        ],
+    },
     # The ON-state colours are invisible on an off switch, so the fixture
     # rendered pixel-identical to its control and read as inert.
     "Switch.tint": {"isOn": True},
@@ -1929,6 +1969,15 @@ CASE_BASE_ATTRS: dict[tuple[str, str, str], dict[str, Any]] = {
     ("common", "distribution", "fillequally"): {"child": _FILL_CHILDREN},
     ("View", "distribution", "fill"): {"child": _FILL_CHILDREN},
     ("View", "distribution", "fillequally"): {"child": _FILL_CHILDREN},
+    # The horizontal direction values act on a horizontal axis (the canonical
+    # UIKit contract reverses along the orientation axis only), so they get a
+    # row: on the shared vertical base both were designed no-ops, and the
+    # value pair bottomToTop/rightToLeft could only ever be told apart by an
+    # implementation that ignores the axis — which is a library bug to catch
+    # in the library's tests, not a picture this suite can hold once each
+    # value sits on its own axis.
+    ("View", "direction", "righttoleft"): {"orientation": "horizontal"},
+    ("View", "direction", "lefttoright"): {"orientation": "horizontal"},
 }
 
 

@@ -273,6 +273,39 @@
    ],
    "owner": "E (SSoT) — ledger row; the implementation decision is under the orchestrator's adjudication",
    "reason": "ios does not implement the gap half of distribution: equalSpacing and equalCentering both synthesise the same Spacer set, so the two values draw one picture — recorded as the ios row of attribute_semantics.json#semantics.distribution.collapsedPairs since run 3, re-measured on run 31068716186 (identical child positions, 32 px gap for both). android and web distinguish the pair (run-5 geometry: android gaps 26 vs 22, web 14 vs 12 with equalCentering's end half-gaps visible). This row is the fixture-side receipt of that known gap, not a new finding; it leaves this ledger together with the collapsedPairs row when ios implements the perValueMapping (Spacer-between-only vs half-spacers-at-ends). Implement-vs-defer for this release is under adjudication (E's proposal in 49-E-progress, 2026-08-06)."
+  },
+  {
+   "component": "common",
+   "attribute": "gravity",
+   "platform": "ios",
+   "cases": [
+    "left",
+    "top"
+   ],
+   "owner": "D (fixture design)",
+   "reason": "gravity's unspecified axis defaults to top/start on every platform (LinearLayout gravity, SwiftUI frame alignment as sjui maps it, flex start): `left` pins x and defaults y to top, `top` pins y and defaults x to start — both name the top-left corner of the free space. Run-5 artifacts show the pair byte-identical on all three platforms while every other gravity pair differs (after the width-300 slack fix of the same round). Not a defect: no platform HAS a rendering in which these two values disagree."
+  },
+  {
+   "component": "common",
+   "attribute": "gravity",
+   "platform": "android",
+   "cases": [
+    "left",
+    "top"
+   ],
+   "owner": "D (fixture design)",
+   "reason": "gravity's unspecified axis defaults to top/start on every platform (LinearLayout gravity, SwiftUI frame alignment as sjui maps it, flex start): `left` pins x and defaults y to top, `top` pins y and defaults x to start — both name the top-left corner of the free space. Run-5 artifacts show the pair byte-identical on all three platforms while every other gravity pair differs (after the width-300 slack fix of the same round). Not a defect: no platform HAS a rendering in which these two values disagree."
+  },
+  {
+   "component": "common",
+   "attribute": "gravity",
+   "platform": "web",
+   "cases": [
+    "left",
+    "top"
+   ],
+   "owner": "D (fixture design)",
+   "reason": "gravity's unspecified axis defaults to top/start on every platform (LinearLayout gravity, SwiftUI frame alignment as sjui maps it, flex start): `left` pins x and defaults y to top, `top` pins y and defaults x to start — both name the top-left corner of the free space. Run-5 artifacts show the pair byte-identical on all three platforms while every other gravity pair differs (after the width-300 slack fix of the same round). Not a defect: no platform HAS a rendering in which these two values disagree."
   }
  ]
 }
