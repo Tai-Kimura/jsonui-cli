@@ -71,6 +71,186 @@
    ],
    "owner": "A (rjui)",
    "reason": "Same as both/horizontal: the grabber is identical across the three resizable values. See that row."
+  },
+  {
+   "component": "TextField",
+   "attribute": "borderStyle",
+   "platform": "android",
+   "cases": [
+    "bezel",
+    "line"
+   ],
+   "owner": "C (kjui)",
+   "reason": "Compose Material defines exactly two text-field chromes - filled (underline) and outlined - where UIKit defines four (none/line/bezel/roundedRect). Both android render paths map the three bordered spellings onto the SAME outlined chrome on purpose: the codegen emits a binary `isOutlined` (textfield_component.rb borderStyle case) and the dynamic renderer resolves the same boolean (DynamicTextFieldComponent.resolveIsOutlined), so codegen and dynamic agree - run 5 parity has NO borderStyle row, only this value gate does. Drawing three distinct android chromes would invent android-only visuals with no Material counterpart and desynchronise the two renderers. `none` is NOT here: it maps to not-outlined and discriminates, which is the evidence the mapping is read at all. Recorded as measured, not blessed: if a ruling later assigns distinct android chromes, these rows go stale and the gate forces them out (plan 49 lane C, run 5)."
+  },
+  {
+   "component": "TextField",
+   "attribute": "borderStyle",
+   "platform": "android",
+   "cases": [
+    "bezel",
+    "line_2"
+   ],
+   "owner": "C (kjui)",
+   "reason": "Same as bezel/line: Material has two chromes, UIKit four. See that row."
+  },
+  {
+   "component": "TextField",
+   "attribute": "borderStyle",
+   "platform": "android",
+   "cases": [
+    "bezel",
+    "roundedrect"
+   ],
+   "owner": "C (kjui)",
+   "reason": "Same as bezel/line: Material has two chromes, UIKit four. See that row."
+  },
+  {
+   "component": "TextField",
+   "attribute": "borderStyle",
+   "platform": "android",
+   "cases": [
+    "bezel",
+    "roundedrect_2"
+   ],
+   "owner": "C (kjui)",
+   "reason": "Same as bezel/line: Material has two chromes, UIKit four. See that row."
+  },
+  {
+   "component": "TextField",
+   "attribute": "borderStyle",
+   "platform": "android",
+   "cases": [
+    "bezel_2",
+    "line"
+   ],
+   "owner": "C (kjui)",
+   "reason": "Same as bezel/line: Material has two chromes, UIKit four. See that row."
+  },
+  {
+   "component": "TextField",
+   "attribute": "borderStyle",
+   "platform": "android",
+   "cases": [
+    "bezel_2",
+    "line_2"
+   ],
+   "owner": "C (kjui)",
+   "reason": "Same as bezel/line: Material has two chromes, UIKit four. See that row."
+  },
+  {
+   "component": "TextField",
+   "attribute": "borderStyle",
+   "platform": "android",
+   "cases": [
+    "bezel_2",
+    "roundedrect"
+   ],
+   "owner": "C (kjui)",
+   "reason": "Same as bezel/line: Material has two chromes, UIKit four. See that row."
+  },
+  {
+   "component": "TextField",
+   "attribute": "borderStyle",
+   "platform": "android",
+   "cases": [
+    "bezel_2",
+    "roundedrect_2"
+   ],
+   "owner": "C (kjui)",
+   "reason": "Same as bezel/line: Material has two chromes, UIKit four. See that row."
+  },
+  {
+   "component": "TextField",
+   "attribute": "borderStyle",
+   "platform": "android",
+   "cases": [
+    "line",
+    "roundedrect"
+   ],
+   "owner": "C (kjui)",
+   "reason": "Same as bezel/line: Material has two chromes, UIKit four. See that row."
+  },
+  {
+   "component": "TextField",
+   "attribute": "borderStyle",
+   "platform": "android",
+   "cases": [
+    "line",
+    "roundedrect_2"
+   ],
+   "owner": "C (kjui)",
+   "reason": "Same as bezel/line: Material has two chromes, UIKit four. See that row."
+  },
+  {
+   "component": "TextField",
+   "attribute": "borderStyle",
+   "platform": "android",
+   "cases": [
+    "line_2",
+    "roundedrect"
+   ],
+   "owner": "C (kjui)",
+   "reason": "Same as bezel/line: Material has two chromes, UIKit four. See that row."
+  },
+  {
+   "component": "TextField",
+   "attribute": "borderStyle",
+   "platform": "android",
+   "cases": [
+    "line_2",
+    "roundedrect_2"
+   ],
+   "owner": "C (kjui)",
+   "reason": "Same as bezel/line: Material has two chromes, UIKit four. See that row."
+  },
+  {
+   "component": "Label",
+   "attribute": "underline",
+   "platform": "ios",
+   "cases": [
+    "styled",
+    "true"
+   ],
+   "owner": "E (SSoT) — recorded per 49 ruling; implementation is post-release work",
+   "reason": "Declared styled face unimplemented, scheduled post-release — the fixture-side counterpart of the six C2/presence-only rows in codegen_effect.json (same family, B's ledger). The boolean face works: presence is read and the line is drawn; only the object face's contents (lineStyle, color, lineOffset) are unread, so {styled} and true draw the same picture BY CONSTRUCTION until styling lands. Do not read this row as 'underline does not work'. The row leaves this ledger when the styled renderer ships and the two pictures separate.",
+   "note": "android has no row for this pair on purpose: the pair was not compared there (not-both-active) because kjui's dynamic renderer drops the line entirely for the object face — styled renders byte-identical to the CONTROL, a run-5 finding reported to G. When android draws the plain line for the object face it will collapse into this same pair and need its own row until styling lands."
+  },
+  {
+   "component": "Label",
+   "attribute": "underline",
+   "platform": "web",
+   "cases": [
+    "styled",
+    "true"
+   ],
+   "owner": "E (SSoT) — recorded per 49 ruling; implementation is post-release work",
+   "reason": "Declared styled face unimplemented, scheduled post-release — the fixture-side counterpart of the six C2/presence-only rows in codegen_effect.json (same family, B's ledger). The boolean face works: presence is read and the line is drawn; only the object face's contents (lineStyle, color, lineOffset) are unread, so {styled} and true draw the same picture BY CONSTRUCTION until styling lands. Do not read this row as 'underline does not work'. The row leaves this ledger when the styled renderer ships and the two pictures separate.",
+   "note": "android has no row for this pair on purpose: the pair was not compared there (not-both-active) because kjui's dynamic renderer drops the line entirely for the object face — styled renders byte-identical to the CONTROL, a run-5 finding reported to G. When android draws the plain line for the object face it will collapse into this same pair and need its own row until styling lands."
+  },
+  {
+   "component": "Label",
+   "attribute": "strikethrough",
+   "platform": "ios",
+   "cases": [
+    "styled",
+    "true"
+   ],
+   "owner": "E (SSoT) — recorded per 49 ruling; implementation is post-release work",
+   "reason": "Declared styled face unimplemented, scheduled post-release — the fixture-side counterpart of the six C2/presence-only rows in codegen_effect.json (same family, B's ledger). The boolean face works: presence is read and the line is drawn; only the object face's contents (lineStyle, color) are unread, so {styled} and true draw the same picture BY CONSTRUCTION until styling lands. Do not read this row as 'strikethrough does not work'. The row leaves this ledger when the styled renderer ships and the two pictures separate.",
+   "note": "android has no row for this pair on purpose: the pair was not compared there (not-both-active) because kjui's dynamic renderer drops the line entirely for the object face — styled renders byte-identical to the CONTROL, a run-5 finding reported to G. When android draws the plain line for the object face it will collapse into this same pair and need its own row until styling lands."
+  },
+  {
+   "component": "Label",
+   "attribute": "strikethrough",
+   "platform": "web",
+   "cases": [
+    "styled",
+    "true"
+   ],
+   "owner": "E (SSoT) — recorded per 49 ruling; implementation is post-release work",
+   "reason": "Declared styled face unimplemented, scheduled post-release — the fixture-side counterpart of the six C2/presence-only rows in codegen_effect.json (same family, B's ledger). The boolean face works: presence is read and the line is drawn; only the object face's contents (lineStyle, color) are unread, so {styled} and true draw the same picture BY CONSTRUCTION until styling lands. Do not read this row as 'strikethrough does not work'. The row leaves this ledger when the styled renderer ships and the two pictures separate.",
+   "note": "android has no row for this pair on purpose: the pair was not compared there (not-both-active) because kjui's dynamic renderer drops the line entirely for the object face — styled renders byte-identical to the CONTROL, a run-5 finding reported to G. When android draws the plain line for the object face it will collapse into this same pair and need its own row until styling lands."
   }
  ]
 }
