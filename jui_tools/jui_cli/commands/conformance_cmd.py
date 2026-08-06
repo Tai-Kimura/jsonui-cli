@@ -721,7 +721,32 @@ def cmd_conformance(args: argparse.Namespace) -> int:
     return 1
 
 
+def _require_env_for_update(args: argparse.Namespace) -> int | None:
+    """`--update` writes a ledger from an env-dependent measurement.
+
+    The screenshot comparisons behind cross-effect, effect and inert-audit
+    select their chrome bands by env: under `ci` the android status bar is
+    cropped, under `local` it must not be. The default is `local`, so a
+    `--update` run against CI artifacts with the flag forgotten records the
+    android clock as 43 findings — measured on the run-4 artifacts, all 43
+    inside the band. The ledger keeps them and nothing ever says why.
+
+    Reading is unaffected: a wrong env on a read shows wrong numbers, which
+    the reader can question. A wrong env on a write becomes the record.
+    """
+    if getattr(args, "update", False) and getattr(args, "env", None) is None:
+        print(
+            "ERROR: --update writes the ledger; pass --env explicitly "
+            "(local and ci differ by 43 entries on the android clock band)"
+        )
+        return 2
+    return None
+
+
 def _cmd_cross_effect(args: argparse.Namespace) -> int:
+    rc = _require_env_for_update(args)
+    if rc is not None:
+        return rc
     import hashlib
     import json
 
@@ -897,6 +922,9 @@ def _cmd_cross_effect(args: argparse.Namespace) -> int:
 
 
 def _cmd_inert_audit(args: argparse.Namespace) -> int:
+    rc = _require_env_for_update(args)
+    if rc is not None:
+        return rc
     import hashlib
     import json
 
@@ -1440,6 +1468,9 @@ def _cmd_codegen_effect(args: argparse.Namespace) -> int:
 
 
 def _cmd_effect(args: argparse.Namespace) -> int:
+    rc = _require_env_for_update(args)
+    if rc is not None:
+        return rc
     """Measure fixture-vs-control renders, and record or check the ledger."""
     import json as _json
 
