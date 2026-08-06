@@ -199,9 +199,13 @@ module RjuiTools
 
       def extract_onclick_actions(json_data, actions = Set.new)
         if json_data.is_a?(Hash)
-          # Check for onclick attribute (selector format)
-          if json_data['onclick'] && json_data['onclick'].is_a?(String)
-            actions.add(json_data['onclick'])
+          # Check for onclick attribute (selector format, string|array — the
+          # String guard silently dropped the array face's actions)
+          onclick = json_data['onclick']
+          if onclick.is_a?(String)
+            actions.add(onclick)
+          elsif onclick.is_a?(Array)
+            onclick.each { |a| actions.add(a) if a.is_a?(String) }
           end
 
           # Process children

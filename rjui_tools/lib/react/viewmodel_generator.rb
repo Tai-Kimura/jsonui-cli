@@ -303,8 +303,14 @@ module RjuiTools
 
       def extract_onclick_actions(json_data, actions = Set.new)
         if json_data.is_a?(Hash)
-          if json_data['onclick'] && json_data['onclick'].is_a?(String)
-            actions.add(json_data['onclick'])
+          # string|array declaration: the `is_a?(String)` guard silently
+          # dropped the array face, so the JSX called handlers no stub was
+          # generated for.
+          onclick = json_data['onclick']
+          if onclick.is_a?(String)
+            actions.add(onclick)
+          elsif onclick.is_a?(Array)
+            onclick.each { |a| actions.add(a) if a.is_a?(String) }
           end
 
           child = json_data['child'] || json_data['children']

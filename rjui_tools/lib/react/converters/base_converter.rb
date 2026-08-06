@@ -1738,17 +1738,31 @@ module RjuiTools
 
           # Check onclick (lowercase) - selector format only
           if attributes['onclick']
-            handler = attributes['onclick']
-            if is_binding_format?(handler)
-              # ERROR: onclick (lowercase) must use selector format
-              return " {/* ERROR: onclick requires selector format (string) */}"
-            else
-              # Valid selector: functionName -> data.functionName
-              return " onClick={data.#{handler}}"
-            end
+            expr = onclick_selector_expr(attributes['onclick'])
+            return expr ? " onClick={#{expr}}" : " {/* ERROR: onclick requires selector format (string) */}"
           end
 
           ''
+        end
+
+        # The declared onclick as a JS expression, or nil for the
+        # not-a-selector error case. The declaration is string|array
+        # (attribute_definitions common.onclick); interpolating the array
+        # directly produced `data.["a", "b"]`, which is not syntax. Multiple
+        # selectors are called in declared order — the semantics the ios
+        # codegen (both selectors emitted) already exhibits.
+        def onclick_selector_expr(handler)
+          if handler.is_a?(Array)
+            return nil if handler.empty? || handler.any? { |h| is_binding_format?(h) }
+
+            calls = handler.map { |h| "data.#{h}?.();" }.join(' ')
+            "() => { #{calls} }"
+          elsif is_binding_format?(handler)
+            nil
+          else
+            # Valid selector: functionName -> data.functionName
+            "data.#{handler}"
+          end
         end
 
         # Check if value is binding format (@{...})
@@ -2171,12 +2185,15 @@ module RjuiTools
             parts << "className: '#{klass}'" unless klass.empty?
 
             if partial['onclick']
-              parts << if is_binding_format?(partial['onclick'])
-                         # Same contract as every other handler site: a
-                         # handler is a selector, not a binding. Kept as an
-                         # inline comment so the marker survives into the
-                         # emitted object literal instead of vanishing.
+              # Same contract as every other handler site: a handler is a
+              # selector (string|array), not a binding. The error marker is
+              # kept as an inline comment so it survives into the emitted
+              # object literal instead of vanishing.
+              expr = onclick_selector_expr(partial['onclick'])
+              parts << if expr.nil?
                          '/* ERROR: onclick requires selector format (string) */'
+                       elsif partial['onclick'].is_a?(Array)
+                         "onClick: #{expr}"
                        else
                          "onClick: #{add_viewmodel_data_prefix(partial['onclick'])}"
                        end

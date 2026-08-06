@@ -150,6 +150,14 @@ module RjuiTools
           onclick = attributes['onclick'] || attributes['onClick']
           return '' unless onclick
 
+          # The array face first: `end_with?` on an Array is a NoMethodError
+          # (the exact crash kjui's get_event_handler_call had), so the whole
+          # generation died on a declaration the SSoT allows.
+          if onclick.is_a?(Array)
+            expr = onclick_selector_expr(onclick)
+            return expr ? " onClick={#{expr}}" : ''
+          end
+
           if onclick.end_with?(':')
             # Selector format: "methodName:"
             method_name = onclick.chomp(':')
