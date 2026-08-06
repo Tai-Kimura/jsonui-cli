@@ -326,3 +326,32 @@ RSpec.describe SjuiTools::SwiftUI::Views::ToggleConverter do
     end
   end
 end
+
+# trackTintColor closes the tint fallback chain (canonical: the OFF track,
+# onTintColor overrides it while on — trackColors.switchTrack, 2026-08-06;
+# SwiftUI exposes no OFF-track surface, so both sides degrade it to `.tint()`
+# identically). The old emit was `.background()`, which the ruling names as
+# the wrong reading (ios parity d 23), and nothing pinned it.
+RSpec.describe 'Toggle trackTintColor emit' do
+  before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+  after(:all)  { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+
+  def emit(attrs)
+    SjuiTools::SwiftUI::Views::ToggleConverter.new(
+      { 'type' => 'Toggle' }.merge(attrs)
+    ).convert
+  end
+
+  it 'falls back to .tint(), not the view background' do
+    code = emit('trackTintColor' => '#FF0000')
+    expect(code).to include('.tint(')
+    expect(code).not_to include('.background(')
+  end
+
+  it 'is overridden by onTintColor, which is not its alias' do
+    code = emit('trackTintColor' => '#FF0000', 'onTintColor' => '#00FF00')
+    expect(code.scan(/\.tint\(/).length).to eq(1)
+    expect(code).to include('#00FF00')      # the green won
+    expect(code).not_to include('#FF0000')  # the track colour lost, whole
+  end
+end

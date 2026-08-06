@@ -103,20 +103,21 @@ module SjuiTools
           end
 
           # onTintColor / tintColor / tint -> .tint() modifier (`tint` is the
-          # short spelling kjui's switch precedence also accepts)
-          tint = @component['onTintColor'] || @component['tintColor'] || @component['tint']
+          # short spelling kjui's switch precedence also accepts).
+          #
+          # trackTintColor closes the chain, matching the dynamic
+          # ToggleConverter. Canonically it is the OFF track and onTintColor
+          # overrides it while on (attribute_semantics.json
+          # trackColors.switchTrack, 2026-08-06); SwiftUI's Toggle exposes no
+          # OFF-track surface, so both sides degrade it identically to the
+          # `.tint()` fallback rather than painting the view's background —
+          # the reading the same ruling names as wrong (`.background()` was
+          # the previous emit here, ios parity d 23).
+          tint = @component['onTintColor'] || @component['tintColor'] ||
+                 @component['tint'] || @component['trackTintColor']
           if tint
             color = get_swiftui_color(tint)
             add_modifier_line ".tint(#{color})"
-          end
-
-          # trackTintColor — the track itself, distinct from the ON colour
-          # `.tint()` paints. Declared `deprecated: swiftui` ("unified tint
-          # only") until 2026-08-05; a Toggle is no more limited than a
-          # Progress, which reaches the same result through `.background()`.
-          if @component['trackTintColor']
-            color = get_swiftui_color(@component['trackTintColor'])
-            add_modifier_line ".background(#{color})"
           end
 
           apply_thumb_tint_color

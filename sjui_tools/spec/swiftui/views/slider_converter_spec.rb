@@ -184,3 +184,22 @@ RSpec.describe SjuiTools::SwiftUI::Views::SliderConverter do
     end
   end
 end
+
+# trackTintColor is the UNFILLED track (attribute_semantics.json
+# trackColors.sliderTrack, ruled 2026-08-06 after ios parity d 32 showed the
+# codegen painting the view's background while dynamic tinted the track).
+# Nothing pinned the old `.background()` emit, which is how the two sides
+# drifted without a red.
+RSpec.describe 'Slider trackTintColor emit' do
+  before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+  after(:all)  { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+
+  it 'goes through UISlider.appearance, the emit the dynamic side has' do
+    code = SjuiTools::SwiftUI::Views::SliderConverter.new(
+      { 'type' => 'Slider', 'value' => 0.5, 'trackTintColor' => '#FF0000' }
+    ).convert
+
+    expect(code).to include('UISlider.appearance().maximumTrackTintColor')
+    expect(code).not_to include('.background(')
+  end
+end

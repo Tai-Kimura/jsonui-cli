@@ -57,11 +57,19 @@ module SjuiTools
             add_modifier_line ".accentColor(#{color})"
           end
 
-          # trackTintColor — the unfilled track, behind the control
-          # (ProgressConverter.swift takes the same route for the same word).
+          # trackTintColor — the UNFILLED track (canonical:
+          # attribute_semantics.json trackColors.sliderTrack, 2026-08-06).
+          # `.background()` painted the view's whole frame, which the same
+          # ruling names as the wrong reading. SwiftUI exposes nothing for
+          # the unfilled track, so this goes through UISlider.appearance()
+          # at appear time — the identical emit the dynamic SliderConverter
+          # has carried all along (ios parity d 32 was the two sides
+          # disagreeing, not either one missing the attribute).
           if @component['trackTintColor']
             color = get_swiftui_color(@component['trackTintColor'])
-            add_modifier_line ".background(#{color})"
+            add_modifier_line ".onAppear {"
+            add_modifier_line "    UISlider.appearance().maximumTrackTintColor = UIColor(#{color})"
+            add_modifier_line "}"
           end
           
           # Disabled state
