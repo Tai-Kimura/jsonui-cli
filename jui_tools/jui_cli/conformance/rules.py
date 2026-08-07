@@ -383,17 +383,18 @@ NON_OBSERVABLE_BY_SECTION: set[tuple[str, str]] = {
     ("SelectBox", "datePickerStyle"),
     ("SelectBox", "minuteInterval"),
     ("SelectBox", "dateStringFormat"),
-    # An in-flight image exists for the length of a request. A still capture
-    # has no duration, so the loading face cannot be photographed however the
-    # fixture is shaped — the request either has not started or has already
-    # failed by the time the shutter opens. The ERROR face is a resting state
-    # and stays photographed; only this one is timing.
+    # `("NetworkImage", "loadingImage")` used to live here, on the argument
+    # that an in-flight image exists only for the length of a request and a
+    # still capture has no duration — so the shutter opens either before the
+    # request starts or after it has failed, however the fixture is shaped.
     #
-    # Deliberately here and not in UNSHAPEABLE_FIXTURES: that table is for what
-    # the generator cannot build yet, and this fixture builds fine. The codegen
-    # probe still measures it — measured reading the spelling on both mobile
-    # converters — which is exactly the split this table is for.
-    ("NetworkImage", "loadingImage"),
+    # The argument holds only while requests are ALLOWED TO COMPLETE. H's
+    # `pending.invalid` contract (INTERACTIVE_HOST_CONTRACT.md §5) reserves a
+    # host that never completes and never fails, which makes the loading face
+    # a state of REST rather than a state of time — on screen for the whole
+    # run, photographed like any other resting fixture. The claim written here
+    # became false, so the entry is gone rather than left standing with a
+    # rationale nothing supports.
 }
 
 
@@ -1581,15 +1582,32 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
         "defaultImage": None,
         "url": "https://conformance.invalid/missing.png",
     },
-    # Same failing request as errorImage: without a url there is no in-flight
-    # state either, and the codegen DOES read the spelling once there is one
-    # (measured on both mobile converters against a control on the same base).
-    # What no still capture can hold is the MOMENT — see
-    # NON_OBSERVABLE_BY_SECTION, where the screenshot is switched off and the
-    # codegen probe goes on measuring it.
+    # The loading face needs a request that is IN FLIGHT when the shutter
+    # opens, which `conformance.invalid` cannot give it — that host's whole
+    # job is to fail synchronously, so the errorImage sibling's url would
+    # photograph the error face here too.
+    #
+    # `pending.invalid` is the second reserved host from H's contract
+    # (INTERACTIVE_HOST_CONTRACT.md §5): the platform hosts stall it forever
+    # instead of failing it, so the in-flight state stops being a moment and
+    # becomes the resting state of the run. Still under `.invalid` (RFC 2606),
+    # so it cannot leave the machine either way.
+    #
+    # The face itself stays a STATIC asset, never a spinner (contract §5.5):
+    # the web and Android capture paths shoot until two frames are identical,
+    # and an animated face never converges. `VALUE_OVERRIDES_BY_SECTION` gives
+    # this pair the alt asset, which is what makes it a still.
+    #
+    # If a host has NOT installed the stall, the request reaches a resolver,
+    # `pending.invalid` NXDOMAINs like any `.invalid` name, and the error face
+    # is photographed instead. That is why this fixture must have a control:
+    # stall installed → alt asset vs blank control → active; stall missing →
+    # both faces are the error face → inert, and an inert row cannot hide from
+    # the ratchet. The control follows automatically now that the pair is no
+    # longer recorded non-observable.
     "NetworkImage.loadingImage": {
         "defaultImage": None,
-        "url": "https://conformance.invalid/missing.png",
+        "url": "https://pending.invalid/stalled.png",
     },
     "NetworkImage.placeholder": {"defaultImage": None},
     # A closed SelectBox draws `prompt` when there is one and the (initially
