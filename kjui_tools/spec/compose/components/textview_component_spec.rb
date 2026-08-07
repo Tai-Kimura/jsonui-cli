@@ -257,7 +257,7 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent do
       it 'uses specific width when provided' do
         json_data = { 'type' => 'TextView', 'width' => 200 }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('.width(200.dp)')
+        expect(result).to include('.requiredWidth(200.dp)')
       end
     end
 

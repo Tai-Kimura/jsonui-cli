@@ -95,8 +95,8 @@ RSpec.describe KjuiTools::Compose::Components::WebComponent do
       it 'uses custom width and height when provided' do
         json_data = { 'type' => 'Web', 'width' => 300, 'height' => 400 }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('.width(300.dp)')
-        expect(result).to include('.height(400.dp)')
+        expect(result).to include('.requiredWidth(300.dp)')
+        expect(result).to include('.requiredHeight(400.dp)')
       end
 
       it 'includes padding' do

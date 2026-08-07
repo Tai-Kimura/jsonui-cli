@@ -94,13 +94,13 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
     it 'builds width modifier' do
       json_data = { 'width' => 100 }
       result = described_class.build_size(json_data)
-      expect(result).to include('.width(100.dp)')
+      expect(result).to include('.requiredWidth(100.dp)')
     end
 
     it 'builds height modifier' do
       json_data = { 'height' => 50 }
       result = described_class.build_size(json_data)
-      expect(result).to include('.height(50.dp)')
+      expect(result).to include('.requiredHeight(50.dp)')
     end
 
     it 'builds fillMaxWidth for matchParent' do
@@ -188,7 +188,7 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
     it 'emits width(N) before widthIn(max=...) when the width is explicit' do
       json_data = { 'width' => 200, 'maxWidth' => 150 }
       result = described_class.build_size(json_data)
-      width_idx = result.index('.width(200.dp)')
+      width_idx = result.index('.requiredWidth(200.dp)')
       width_in_idx = result.index('.widthIn(max = 150.dp)')
       expect(width_idx).not_to be_nil
       expect(width_in_idx).not_to be_nil
@@ -198,7 +198,7 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
     it 'emits height(N) before heightIn(max=...) when the height is explicit' do
       json_data = { 'height' => 200, 'maxHeight' => 150 }
       result = described_class.build_size(json_data)
-      height_idx = result.index('.height(200.dp)')
+      height_idx = result.index('.requiredHeight(200.dp)')
       height_in_idx = result.index('.heightIn(max = 150.dp)')
       expect(height_idx).not_to be_nil
       expect(height_in_idx).not_to be_nil

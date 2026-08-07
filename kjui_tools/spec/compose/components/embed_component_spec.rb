@@ -227,7 +227,7 @@ RSpec.describe KjuiTools::Compose::Components::EmbedComponent do
           required_imports,
           'Row'
         )
-        expect(result).to include('.width(360.dp)')
+        expect(result).to include('.requiredWidth(360.dp)')
         expect(result).to include('.fillMaxHeight()')
       end
 

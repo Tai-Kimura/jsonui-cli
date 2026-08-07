@@ -307,7 +307,7 @@ module KjuiTools
               elsif frame['width'] == 'wrapContent'
                 modifiers << ".wrapContentWidth()"
               else
-                modifiers << ".width(#{process_dimension(frame['width'])})"
+                modifiers << ".requiredWidth(#{process_dimension(frame['width'])})"
               end
             end
             if frame['height']
@@ -316,7 +316,7 @@ module KjuiTools
               elsif frame['height'] == 'wrapContent'
                 modifiers << ".wrapContentHeight()"
               else
-                modifiers << ".height(#{process_dimension(frame['height'])})"
+                modifiers << ".requiredHeight(#{process_dimension(frame['height'])})"
               end
             end
             # If frame is specified, skip individual width/height processing
@@ -371,7 +371,14 @@ module KjuiTools
             modifiers << ".wrapContentWidth()"
             modifiers << width_constraint if width_constraint
           elsif explicit_width
-            modifiers << ".width(#{process_dimension(json_data['width'])})"
+            # requiredWidth/requiredHeight, not width/height: a declared size
+            # WINS over the parent constraint (canonical size ruling; ios/web
+            # both draw the declared box). Modifier.width silently coerced an
+            # over-constrained child to the parent size, which made the
+            # clipToBounds overflow probes byte-identical on android — the
+            # child could never overflow, so the FALSE face was unexpressible
+            # at the measurement layer (2026-08-08, run 31160838024 pixels).
+            modifiers << ".requiredWidth(#{process_dimension(json_data['width'])})"
             modifiers << width_constraint if width_constraint
           end
 
@@ -449,7 +456,7 @@ module KjuiTools
             modifiers << ".wrapContentHeight()"
             modifiers << height_constraint if height_constraint
           elsif explicit_height
-            modifiers << ".height(#{process_dimension(json_data['height'])})"
+            modifiers << ".requiredHeight(#{process_dimension(json_data['height'])})"
             modifiers << height_constraint if height_constraint
           elsif parent_type == 'Column' && (json_data['weight'] || json_data['heightWeight'])
             # Weight in a vertical container fills the height slice (the

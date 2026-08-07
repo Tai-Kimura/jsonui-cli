@@ -50,13 +50,13 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
     it 'generates Button with width' do
       json_data = { 'type' => 'Button', 'text' => 'Test', 'width' => 200 }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('.width(200.dp)')
+      expect(result).to include('.requiredWidth(200.dp)')
     end
 
     it 'generates Button with height' do
       json_data = { 'type' => 'Button', 'text' => 'Test', 'height' => 50 }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('.height(50.dp)')
+      expect(result).to include('.requiredHeight(50.dp)')
     end
 
     it 'generates Button with single padding value' do

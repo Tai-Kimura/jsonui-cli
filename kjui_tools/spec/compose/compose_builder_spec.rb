@@ -730,8 +730,8 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
           json = { 'type' => 'SafeAreaView', 'id' => 'target', 'width' => 200, 'height' => 200 }
           result = builder.send(:generate_component, json)
           expect(result).to include('.testTag("target")')
-          expect(result).to include('.width(200.dp)')
-          expect(result).to include('.height(200.dp)')
+          expect(result).to include('.requiredWidth(200.dp)')
+          expect(result).to include('.requiredHeight(200.dp)')
           expect(result).not_to include('.fillMaxWidth()')
         end
 
@@ -1438,7 +1438,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         expect(result).to include('.fillMaxHeight()')
       end
 
-      it 'override-only width: 240 emits .width(240.dp) in the regular branch' do
+      it 'override-only width: 240 emits .requiredWidth(240.dp) in the regular branch' do
         json = {
           'type' => 'View',
           'orientation' => 'vertical',
@@ -1449,7 +1449,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
           'child' => [{ 'type' => 'Text', 'text' => 'A' }]
         }
         result = builder.send(:generate_component, json, 0, nil)
-        expect(result).to include('.width(240.dp)')
+        expect(result).to include('.requiredWidth(240.dp)')
         expect(result).to include('.fillMaxWidth()') # default branch
       end
 
