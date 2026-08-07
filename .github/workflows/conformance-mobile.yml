@@ -82,6 +82,12 @@ jobs:
   # ------------------------------------------------------------------ #
   ios:
     runs-on: macos-15
+    # 2026-08-07 (plan 51-H) re-measure — held, with the reading recorded so
+    # the next resize starts from a number instead of re-deriving one.
+    # Measured 41 min (run 31135850340, green) and 36 min (31088841656) of
+    # 90. iOS-eligible fixtures go to 958 with the Wave 3 expansion (+13%
+    # on the manifest), putting it near 47 — still ~1.9x headroom, and the
+    # simulator has no degraded-runner attempt loop to absorb like Android's.
     timeout-minutes: 90
     env:
       CONFORMANCE_DIR: ${{ github.workspace }}/conformance
@@ -241,12 +247,31 @@ jobs:
     # needs ~85-95 min there, which the old 70-minute steps could not hold.
     # Two of three runs on 2026-07-29 died on that ceiling.
     #
+    # 2026-08-07 (plan 51-H) re-measure — the Wave 3 fixture expansion:
+    #   android-eligible fixtures 672 → 853 (+27%; manifest total 1031).
+    #   The degraded-runner case is the one that sizes this, and it scales
+    #   with fixture count: 87 min at 672 (4 resumed attempts at the
+    #   measured worst rate of ~325 outcomes per 20-min attempt, plus boot
+    #   ~2 + gradle ~5) → 87 × 853/672 ≈ 110 min at 853. Cross-check from
+    #   the outcome side, since outcomes ≈ 1.8 × fixtures (1207 measured
+    #   at 672): 853 × 1.8 ≈ 1532 outcomes → ceil(1532/325) = 5 attempts
+    #   → 5 × 20 + 7 = 107 min. Two independent derivations, 107 vs 110.
+    #   The OLD retry step of 100 no longer holds either number, which is
+    #   the whole failure mode this budget exists to prevent (a cancelled
+    #   job reads as a red suite, and "cancelled" means suspect the
+    #   timeout first).
+    #   Good-runner readings for scale, same workflow: android 20 min and
+    #   android-codegen 18 min in run 31135850340 (green, 2026-08-07) —
+    #   the budget is sized for the bad runner, not these.
+    #
     # attempt < step < job:
     #   per-attempt cap 20 min (run_conformance.sh), resumed on timeout
-    #   step 75 + retry 100 + setup ~15 + upload ≈ 190 → job 210
+    #   step 95 + retry 130 + setup ~15 + upload ≈ 245 → job 270
+    #   (retry 130 holds the 110-min degraded case with ~18% margin, the
+    #   same margin ratio the old 100-vs-87 pair carried)
     # Weekly on a public repo — runner minutes are free; wall-clock only
     # gates the weekly report.
-    timeout-minutes: 210
+    timeout-minutes: 270
     env:
       CONFORMANCE_DIR: ${{ github.workspace }}/conformance
     outputs:
@@ -282,7 +307,7 @@ jobs:
       - name: Run Android conformance suite (emulator)
         id: android_emu
         continue-on-error: true
-        timeout-minutes: 75
+        timeout-minutes: 95
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -305,7 +330,7 @@ jobs:
         if: steps.android_emu.outcome == 'failure'
         # Wider than attempt 1: this is the one that has to absorb a degraded
         # runner, where the suite needs ~85-95 min rather than ~10.
-        timeout-minutes: 100
+        timeout-minutes: 130
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -341,7 +366,7 @@ jobs:
   # ------------------------------------------------------------------ #
   android-codegen:
     runs-on: ubuntu-latest
-    timeout-minutes: 210
+    timeout-minutes: 270
     env:
       CONFORMANCE_DIR: ${{ github.workspace }}/conformance
       KJUI_TOOLS_PATH: ${{ github.workspace }}/kjui_tools
@@ -374,7 +399,7 @@ jobs:
       - name: Run Android codegen suite (emulator)
         id: android_codegen_emu
         continue-on-error: true
-        timeout-minutes: 75
+        timeout-minutes: 95
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -389,7 +414,7 @@ jobs:
             HOST_MODE=codegen KotlinJsonUI/conformance-host/scripts/collect_results.sh
       - name: Retry Android codegen suite (fresh emulator)
         if: steps.android_codegen_emu.outcome == 'failure'
-        timeout-minutes: 100
+        timeout-minutes: 130
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -421,7 +446,22 @@ jobs:
   # ------------------------------------------------------------------ #
   report:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 2026-08-07 (plan 51-H) re-measure. This was the TIGHTEST budget in the
+    # file and nobody had noticed, because it is also the shortest: 8 min
+    # used of 10 in run 31135850340 (green) and 6 of 10 in 31088841656 —
+    # 80% and 60%. Every other job sat under 50%.
+    #
+    # It scales with fixture count twice over: the baseline compare dHashes
+    # every PNG of all five artifact sets, and the control diff pixel-diffs
+    # each fixture against its control. The Wave 3 expansion takes the
+    # manifest 915 → 1031 (+13%), which lands the measured 8 min at ~9 —
+    # inside 10 only until the next fixture lands, and a gate job that gets
+    # cut off reads as a red suite rather than as a budget problem
+    # ("cancelled" means suspect the timeout first).
+    #
+    # 20 restores roughly the 2x headroom the other jobs carry. Cheap: this
+    # is a weekly public-repo run, so wall-clock only gates the report.
+    timeout-minutes: 20
     needs: [web, ios, android, ios-codegen, android-codegen]
     steps:
       - uses: actions/checkout@v4
