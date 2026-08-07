@@ -3478,9 +3478,9 @@
       "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "action selectOption(target): Action 'selectOption' failed: Picker sheet did not appear within 5000ms",
       "id" : "SelectBox/onValueChange__callback_fire",
-      "status" : "pass"
+      "status" : "error"
     },
     {
       "detail" : "",

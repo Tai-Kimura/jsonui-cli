@@ -10,7 +10,9 @@ Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
 
 ## Cross-platform mismatches
 
-_No cross-platform mismatches._
+| Fixture | Class | android | ios | web | Detail |
+|---|---|---|---|---|---|
+| `SelectBox/onValueChange__callback_fire` | interactive | ✅ | ⚠️ | ✅ | ios: action selectOption(target): Action 'selectOption' failed: Picker sheet did not appear within 5000ms |
 
 ## Interactive fixtures
 
@@ -46,7 +48,7 @@ _No cross-platform mismatches._
 | `TextView/text__binding_twoway` | `binding_twoway` | — | ✅ | ✅ | ✅ |  |
 | `TextView/onTextChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
 | `Button/text__binding_initial` | `binding_initial` | — | ✅ | ✅ | ✅ |  |
-| `SelectBox/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
+| `SelectBox/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ⚠️ | ✅ | ios: action selectOption(target): Action 'selectOption' failed: Picker sheet did not appear within 5000ms |
 | `SelectBox/onValueChanged__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
 | `Switch/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
 | `CheckBox/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
@@ -71,10 +73,10 @@ Each visual fixture is compared against its **control** — the same layout with
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
 | android | 550 | 435 | 115 | 0 | 0 |
-| ios | 592 | 456 | 136 | **11** | 0 |
+| ios | 592 | 459 | 133 | **8** | 0 |
 | web | 532 | 429 | 103 | **2** | 0 |
 
-**ios: 11 fixture(s) recorded as expected-to-differ now render identically to their control — the attribute stopped taking effect.**
+**ios: 8 fixture(s) recorded as expected-to-differ now render identically to their control — the attribute stopped taking effect.**
 
 - `common/gravity__top`
 - `common/gravity__left`
@@ -83,9 +85,6 @@ Each visual fixture is compared against its **control** — the same layout with
 - `TextView/flexible__true`
 - `Progress/indicatorStyle__large`
 - `Progress/indicatorStyle__medium`
-- `Collection/lazy__eager`
-- `Collection/lazy__binding`
-- `Indicator/indicatorStyle__medium`
 - `Indicator/hidesWhenStopped__true`
 
 **web: 2 fixture(s) recorded as expected-to-differ now render identically to their control — the attribute stopped taking effect.**
@@ -97,7 +96,7 @@ Each visual fixture is compared against its **control** — the same layout with
 
 Pixel comparison across platforms is out of scope by design, but each platform's control-diff verdict — *did the attribute change the render?* — is platform-independent. A fixture whose activeness disagrees across the platforms its attribute is declared for is a semantic-drift suspect, and an SSoT-enumerated value that is inert on **every** platform is flagged uniformly-inert (default rendering, or dead everywhere). Only fixtures compared on **all** their in-scope platforms are judged; findings are accepted (with a reason) in `cross_effect.json` and enforced by `jui conformance gate --cross-effect`.
 
-- Compared on all in-scope platforms: 554 (consistent: 468, **diverging: 86**, **uniformly-inert declared values: 48**) · not compared everywhere: 22 · in scope on <2 platforms: 75
+- Compared on all in-scope platforms: 554 (consistent: 466, **diverging: 88**, **uniformly-inert declared values: 47**) · not compared everywhere: 22 · in scope on <2 platforms: 75
 
 | Fixture | android | ios | web |
 |---|---|---|---|
@@ -113,6 +112,8 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `Collection/cellHeight__static` | active | inert | inert |
 | `Collection/defaultScrollAnchor__bottom` | inert | active | inert |
 | `Collection/defaultScrollAnchor__center` | inert | active | inert |
+| `Collection/lazy__binding` | inert | active | inert |
+| `Collection/lazy__eager` | inert | active | inert |
 | `Collection/lazy__none` | inert | active | inert |
 | `IconLabel/iconSize__static` | inert | inert | active |
 | `Label/autoShrink__true` | active | active | inert |
@@ -192,7 +193,6 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 
 - `Collection/defaultScrollAnchor__top` (value `'top'`)
 - `Collection/layout__vertical` (value `'vertical'`)
-- `Collection/lazy__eager` (value `'eager'`)
 - `Collection/lazy__lazy` (value `'lazy'`)
 - `Collection/listStyle__grouped` (value `'grouped'`)
 - `Collection/listStyle__insetgrouped` (value `'insetGrouped'`)
@@ -244,7 +244,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | Platform | Runner | Results | pass | fail | error | skipped | Manifest |
 |---|---|---|---|---|---|---|---|
 | android | uiautomator 2.3.0 | 1031 | 853 | 0 | 0 | 178 | current |
-| ios | xcuitest ios-26.2 | 1031 | 899 | 0 | 0 | 132 | current |
+| ios | xcuitest ios-26.2 | 1031 | 898 | 0 | 1 | 132 | current |
 | web | playwright 1.61.1 | 1031 | 855 | 0 | 0 | 176 | current |
 
 ## Matrix
@@ -889,7 +889,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `labelAttributes` | `static` | visual | ✅ | ✅ | ✅ |
 | `inView` | `static` | declaration-only | – | – | – |
 | `referenceView` | `static` | declaration-only | – | – | – |
-| `onValueChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
+| `onValueChange` | `callback_fire` | interactive | ✅ | ⚠️ | ✅ |
 | `onValueChanged` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `colorScheme` | `light` | visual | – | – | ✅ |
 | `colorScheme` | `dark` | visual | – | – | ✅ |
