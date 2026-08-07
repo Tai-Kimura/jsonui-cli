@@ -9,7 +9,7 @@
         "ios": "inert",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated value-is-default (measured, web artifacts at HEAD 2026-08-07): against the same control, textAlign left/right move 816/813 px on web while center moves 0 — center IS the default title alignment of the ios and web control, so their inert verdict is the definition of the value, not a dropped spelling (the codegen differential --paired reads the spelling on all three). Android's Compose button re-lays the label from a different default. Joins the Wave-2 rows Button/textAlign__left|right. Family: textalign-no-slack.",
       "note": ""
     },
     {
@@ -83,7 +83,7 @@
         "ios": "active",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated collection behavior: the fixture's data section resolves boundLazy to \"eager\", so this row is the binding face of Collection/lazy__eager and inherits its ruling — ios renders the eager layout visibly at this fixture size while android/web equal their defaults. Measured on web at HEAD: all four lazy faces (lazy/eager/none/binding) move 0 px, consistent with the ledgered C0/unread-spelling for Collection.lazy [web]. Behavioral attributes need the interactive/geometry probe, not activeness. Family: collection-behavior.",
       "note": ""
     },
     {
@@ -222,7 +222,7 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated text metrics: joins Label/lineBreakMode__head. Measured on web at HEAD the four truncating values move 3504-3519 px against the long-text control, so web folds the line; ios and android photograph the same picture because the Label wraps instead of truncating at this fixture shape (no line limit companion, so a truncation policy has nothing to apply) — the same reasoning the Wave-2 TextView/lineBreakMode rows carry. The codegen differential --paired reads the spelling and the value on all three. Geometry/line-count probes close it. Family: text-metrics.",
       "note": ""
     },
     {
@@ -232,7 +232,7 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated text metrics: joins Label/lineBreakMode__head. Measured on web at HEAD the four truncating values move 3504-3519 px against the long-text control, so web folds the line; ios and android photograph the same picture because the Label wraps instead of truncating at this fixture shape (no line limit companion, so a truncation policy has nothing to apply) — the same reasoning the Wave-2 TextView/lineBreakMode rows carry. The codegen differential --paired reads the spelling and the value on all three. Geometry/line-count probes close it. Family: text-metrics.",
       "note": ""
     },
     {
@@ -252,7 +252,7 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated text metrics: joins Label/lineBreakMode__head. Measured on web at HEAD the four truncating values move 3504-3519 px against the long-text control, so web folds the line; ios and android photograph the same picture because the Label wraps instead of truncating at this fixture shape (no line limit companion, so a truncation policy has nothing to apply) — the same reasoning the Wave-2 TextView/lineBreakMode rows carry. The codegen differential --paired reads the spelling and the value on all three. Geometry/line-count probes close it. Family: text-metrics.",
       "note": ""
     },
     {
@@ -262,7 +262,7 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated text metrics: joins Label/lineBreakMode__head. Measured on web at HEAD the four truncating values move 3504-3519 px against the long-text control, so web folds the line; ios and android photograph the same picture because the Label wraps instead of truncating at this fixture shape (no line limit companion, so a truncation policy has nothing to apply) — the same reasoning the Wave-2 TextView/lineBreakMode rows carry. The codegen differential --paired reads the spelling and the value on all three. Geometry/line-count probes close it. Family: text-metrics.",
       "note": ""
     },
     {
@@ -349,7 +349,7 @@
         "ios": "active",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated value-is-default: the fixture's own data section declares boundTextAlign with defaultValue \"Left\", so the binding resolves to the platforms' default alignment — measured 0 px on web at HEAD while textAlign center/right move 816/809 px against the same control. The ios activeness is its own text-box metrics, the same split already adjudicated for Label/textAlign__left. Family: textalign-no-slack.",
       "note": ""
     },
     {
@@ -419,7 +419,7 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "measured drift, NOT accepted (ios, android) — owner F (ios dynamic) + G (kjui dynamic): the literal `selectedValue` spelling is never read on either platform (the Compose dynamic component derives its selection from `bind` only, and the codegen lane agrees the spelling is unread), so the declared selection never reaches the drawn radio group; web renders it (measured 133 px at HEAD). Same finding and owners as the sibling selectedValue row already in this ledger. The row leaves the ledger when a literal selectedValue selects the item on both dynamic renderers. Family: selected-state-dynamic-gap.",
       "note": ""
     },
     {
@@ -439,7 +439,7 @@
         "ios": "active",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated container behavior: joins SafeAreaView/safeAreaInsetPositions__static. The inset reserved is whatever the host environment reports, and it is zero for a 200x200 box nested in the page on the web host (no notch in the desktop viewport, env(safe-area-inset-*) = 0) — measured 0 px on web at HEAD for all three safe-area fixtures — while the ios device has real insets to reserve. Not a dropped spelling: the codegen differential --paired reads it on all three. Family: container-behavior.",
       "note": ""
     },
     {
@@ -480,7 +480,7 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; joins the already-adjudicated datePickerMode date/time/countdown rows. Measured on web at HEAD: 72 px, the closed-control chrome the web <select> shows for a datetime input, which the ios and android closed controls do not. Promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
       "note": ""
     },
     {
@@ -702,7 +702,7 @@
         "ios": "active",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "MEASURED DIVERGENCE FROM THE DECLARED DEFAULT, not accepted — owner B (ios codegen) + F (ios dynamic). The SSoT declares TabView.showLabels default true. On web that declaration holds and is measured: showLabels__false moves 2968 px against the control while showLabels__true moves 0 px, i.e. the control already shows labels. Android agrees (inert). iOS is active for the TRUE face, which means its implicit default hides the labels — a platform whose default contradicts the declared default. The row leaves this ledger when an ios TabView without showLabels renders labels. Family: declared-default-divergence.",
       "note": ""
     },
     {
@@ -783,7 +783,7 @@
         "ios": "inert",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated platform idiom: a read-only text area is not a still-visible state on web or ios (measured on web at HEAD: both editable__true and editable__false move 0 px against the same control — the browser draws a readOnly textarea identically), while Compose restyles a non-editable field, which is why android alone is active. The codegen differential --paired reads the spelling on all three, so this is neither a dropped spelling nor a value gap; the observable is an interaction (can the caret enter), which the interactive probe owns. Family: editable-not-still-visible.",
       "note": ""
     },
     {
@@ -950,7 +950,7 @@
         "ios": "active",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated container behavior: joins SafeAreaView/safeAreaInsetPositions__static. The inset reserved is whatever the host environment reports, and it is zero for a 200x200 box nested in the page on the web host (no notch in the desktop viewport, env(safe-area-inset-*) = 0) — measured 0 px on web at HEAD for all three safe-area fixtures — while the ios device has real insets to reserve. Not a dropped spelling: the codegen differential --paired reads it on all three. Family: container-behavior.",
       "note": ""
     },
     {
@@ -1079,7 +1079,7 @@
         "ios": "inert",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated compose-measure-constraint (joins the value_discrimination row owned by G, fixture-side follow-up owned by D) AND an SSoT canon question raised with E: measured on web at HEAD, clipToBounds__true moves 1600 px while __false moves 0 — not clipping is the web and ios default, so writing false changes nothing there, whereas Compose clips by default and false is a real change. common.clipToBounds declares no `default` in the SSoT, so the ledger is recording a platform-implicit default that differs across the three. E: declare the canon default. D: the placed-overflow fixture makes the pair measurable. Family: compose-measure-constraint.",
       "note": ""
     },
     {
@@ -1108,7 +1108,7 @@
         "ios": "inert",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated blur-value-not-derived (ios) + backdrop-collapses-8bit (web/android), joining the already-measured common/effectStyle__prominent row: sjui blur_converter.rb hardcodes `.background(.ultraThinMaterial)` for EVERY value and derives nothing from effectStyle — only Dark/Light/ExtraLight select a `.preferredColorScheme`, and on a host that is already light that selection is itself a no-op, so every spelling in this group photographs the same on ios. Over the fixture's flat backdrop the remaining material scrims quantise into the same 8-bit pixels. Closure: D's high-frequency backdrop fixture makes the values separable, and the spelling canon is open with E (same question as the prominent row). NOTE 2026-08-07: A's in-flight web re-measure already reports these fixtures ACTIVE on web (10000 px against the backdrop control); when that run is committed the recorded platform set changes and the ratchet returns the row for re-adjudication, which is the correct behaviour. Family: blur-value-not-derived.",
       "note": ""
     },
     {
@@ -1118,7 +1118,7 @@
         "ios": "inert",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated blur-value-not-derived (ios) + backdrop-collapses-8bit (web/android), joining the already-measured common/effectStyle__prominent row: sjui blur_converter.rb hardcodes `.background(.ultraThinMaterial)` for EVERY value and derives nothing from effectStyle — only Dark/Light/ExtraLight select a `.preferredColorScheme`, and on a host that is already light that selection is itself a no-op, so every spelling in this group photographs the same on ios. Over the fixture's flat backdrop the remaining material scrims quantise into the same 8-bit pixels. Closure: D's high-frequency backdrop fixture makes the values separable, and the spelling canon is open with E (same question as the prominent row). NOTE 2026-08-07: A's in-flight web re-measure already reports these fixtures ACTIVE on web (10000 px against the backdrop control); when that run is committed the recorded platform set changes and the ratchet returns the row for re-adjudication, which is the correct behaviour. Family: blur-value-not-derived.",
       "note": ""
     },
     {
@@ -1128,7 +1128,7 @@
         "ios": "inert",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated blur-value-not-derived (ios) + backdrop-collapses-8bit (web/android), joining the already-measured common/effectStyle__prominent row: sjui blur_converter.rb hardcodes `.background(.ultraThinMaterial)` for EVERY value and derives nothing from effectStyle — only Dark/Light/ExtraLight select a `.preferredColorScheme`, and on a host that is already light that selection is itself a no-op, so every spelling in this group photographs the same on ios. Over the fixture's flat backdrop the remaining material scrims quantise into the same 8-bit pixels. Closure: D's high-frequency backdrop fixture makes the values separable, and the spelling canon is open with E (same question as the prominent row). NOTE 2026-08-07: A's in-flight web re-measure already reports these fixtures ACTIVE on web (10000 px against the backdrop control); when that run is committed the recorded platform set changes and the ratchet returns the row for re-adjudication, which is the correct behaviour. Family: blur-value-not-derived.",
       "note": ""
     },
     {
@@ -1148,7 +1148,7 @@
         "ios": "inert",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated blur-value-not-derived (ios) + backdrop-collapses-8bit (web/android), joining the already-measured common/effectStyle__prominent row: sjui blur_converter.rb hardcodes `.background(.ultraThinMaterial)` for EVERY value and derives nothing from effectStyle — only Dark/Light/ExtraLight select a `.preferredColorScheme`, and on a host that is already light that selection is itself a no-op, so every spelling in this group photographs the same on ios. Over the fixture's flat backdrop the remaining material scrims quantise into the same 8-bit pixels. Closure: D's high-frequency backdrop fixture makes the values separable, and the spelling canon is open with E (same question as the prominent row). NOTE 2026-08-07: A's in-flight web re-measure already reports these fixtures ACTIVE on web (10000 px against the backdrop control); when that run is committed the recorded platform set changes and the ratchet returns the row for re-adjudication, which is the correct behaviour. Family: blur-value-not-derived.",
       "note": ""
     },
     {
@@ -1158,7 +1158,7 @@
         "ios": "inert",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated blur-value-not-derived (ios) + backdrop-collapses-8bit (web/android), joining the already-measured common/effectStyle__prominent row: sjui blur_converter.rb hardcodes `.background(.ultraThinMaterial)` for EVERY value and derives nothing from effectStyle — only Dark/Light/ExtraLight select a `.preferredColorScheme`, and on a host that is already light that selection is itself a no-op, so every spelling in this group photographs the same on ios. Over the fixture's flat backdrop the remaining material scrims quantise into the same 8-bit pixels. Closure: D's high-frequency backdrop fixture makes the values separable, and the spelling canon is open with E (same question as the prominent row). NOTE 2026-08-07: A's in-flight web re-measure already reports these fixtures ACTIVE on web (10000 px against the backdrop control); when that run is committed the recorded platform set changes and the ratchet returns the row for re-adjudication, which is the correct behaviour. Family: blur-value-not-derived.",
       "note": ""
     },
     {
@@ -1168,7 +1168,7 @@
         "ios": "inert",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated blur-value-not-derived (ios) + backdrop-collapses-8bit (web/android), joining the already-measured common/effectStyle__prominent row: sjui blur_converter.rb hardcodes `.background(.ultraThinMaterial)` for EVERY value and derives nothing from effectStyle — only Dark/Light/ExtraLight select a `.preferredColorScheme`, and on a host that is already light that selection is itself a no-op, so every spelling in this group photographs the same on ios. Over the fixture's flat backdrop the remaining material scrims quantise into the same 8-bit pixels. Closure: D's high-frequency backdrop fixture makes the values separable, and the spelling canon is open with E (same question as the prominent row). NOTE 2026-08-07: A's in-flight web re-measure already reports these fixtures ACTIVE on web (10000 px against the backdrop control); when that run is committed the recorded platform set changes and the ratchet returns the row for re-adjudication, which is the correct behaviour. Family: blur-value-not-derived.",
       "note": ""
     },
     {
@@ -1178,7 +1178,7 @@
         "ios": "inert",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated blur-value-not-derived (ios) + backdrop-collapses-8bit (web/android), joining the already-measured common/effectStyle__prominent row: sjui blur_converter.rb hardcodes `.background(.ultraThinMaterial)` for EVERY value and derives nothing from effectStyle — only Dark/Light/ExtraLight select a `.preferredColorScheme`, and on a host that is already light that selection is itself a no-op, so every spelling in this group photographs the same on ios. Over the fixture's flat backdrop the remaining material scrims quantise into the same 8-bit pixels. Closure: D's high-frequency backdrop fixture makes the values separable, and the spelling canon is open with E (same question as the prominent row). NOTE 2026-08-07: A's in-flight web re-measure already reports these fixtures ACTIVE on web (10000 px against the backdrop control); when that run is committed the recorded platform set changes and the ratchet returns the row for re-adjudication, which is the correct behaviour. Family: blur-value-not-derived.",
       "note": ""
     },
     {
