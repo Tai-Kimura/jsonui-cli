@@ -145,6 +145,10 @@ module KjuiTools
             # ScrollView paging: per-item snap on the existing Lazy list.
             snap_fling: ["import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior",
                          "import androidx.compose.foundation.lazy.rememberLazyListState"],
+            # ScrollView.defaultScrollAnchor without paging: the state alone.
+            lazy_list_state: "import androidx.compose.foundation.lazy.rememberLazyListState",
+            # The one-shot anchor scroll (suspend, item-agnostic).
+            scroll_by: "import androidx.compose.foundation.gestures.scrollBy",
             color_manager: "import com.kotlinjsonui.generated.ColorManager",
             grid_item_span: "import androidx.compose.foundation.lazy.grid.GridItemSpan",
             webview: ["import android.webkit.WebView",

@@ -747,6 +747,19 @@ module KjuiTools
         # Parse orientation for child layout
         orientation = json_data['orientation']
 
+        # `direction` reverses the children along the orientation axis — the
+        # same two values container_component honours (bottomToTop on a
+        # vertical stack, rightToLeft on a horizontal one; everything else is
+        # the natural order). This inline helper bypasses container_component,
+        # so SafeAreaView.direction was inert on this face
+        # (codegen_effect SafeAreaView.direction android).
+        case json_data['direction']
+        when 'bottomToTop'
+          children = children.reverse if orientation == 'vertical'
+        when 'rightToLeft'
+          children = children.reverse if orientation == 'horizontal'
+        end
+
         # Determine container type based on orientation
         # No orientation = Box (like ZStack in SwiftUI)
         container = case orientation

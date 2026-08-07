@@ -39,12 +39,28 @@ module KjuiTools
           # isPagingEnabled gives a full-size-children ScrollView. Without
           # paging the children share one item (plain scroll).
           paging = json_data['paging'] == true
+          # defaultScrollAnchor — where the scroll STARTS. The non-paging emit
+          # puts every child in ONE lazy item, so item indices cannot anchor;
+          # scrollBy is item-agnostic: a huge delta clamps at the end (bottom),
+          # and backing up half the consumed extent is the centre. One-shot on
+          # first composition, same contract as Collection's anchor.
+          anchor = json_data['defaultScrollAnchor'].to_s
+          anchor = nil unless %w[center bottom].include?(anchor)
           state_var = nil
           code = ''
-          if paging
-            required_imports&.add(:snap_fling)
+          if paging || anchor
+            required_imports&.add(:snap_fling) if paging
+            required_imports&.add(:lazy_list_state) unless paging
             state_var = "scrollPagingState#{json_data['id'].to_s.gsub(/[^A-Za-z0-9]/, '')}"
             code += indent("val #{state_var} = rememberLazyListState()", depth) + "\n"
+          end
+          if anchor
+            required_imports&.add(:launched_effect)
+            required_imports&.add(:scroll_by)
+            code += indent("LaunchedEffect(Unit) {", depth) + "\n"
+            code += indent("val consumed = #{state_var}.scrollBy(1e9f)", depth + 1) + "\n"
+            code += indent("#{state_var}.scrollBy(-consumed / 2f)", depth + 1) + "\n" if anchor == 'center'
+            code += indent("}", depth) + "\n"
           end
 
           if is_horizontal
@@ -57,6 +73,8 @@ module KjuiTools
           if paging
             code += "\n" + indent("state = #{state_var},", depth + 1)
             code += "\n" + indent("flingBehavior = rememberSnapFlingBehavior(lazyListState = #{state_var}),", depth + 1)
+          elsif anchor
+            code += "\n" + indent("state = #{state_var},", depth + 1)
           end
 
           # `contentInsetAdjustmentBehavior` — see ContentInsetHelper. UIKit
