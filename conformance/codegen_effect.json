@@ -23,6 +23,36 @@
       "note": "Same family as the declared-but-unimplemented spellings (B's ledger). F's dynamic fix (91a57bc) made the node survive the object face; it did not add style drawing. D's __styled fixtures stay: round 5 verifies node-survives + both faces render the same picture until styling lands."
     },
     {
+      "component": "Collection",
+      "attribute": "hideSeparator",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "E (SSoT) — contract, no implementation is owed on this face",
+      "reason": "Contract, not a gap. The collectionSeparators ruling (2026-08-07, raised by B) settles it: the ios probe path is CollectionStackView, not SwiftUI's List, and a container that draws no separators satisfies 'hide the separators' VACUOUSLY. 'Implement it' must not mean 'switch the container to a List' — an attribute that reshapes the thing it modifies is the defect family this wave exists to remove. The coverage row is runtime-only: the ios DYNAMIC path implements it; no codegen face does, by contract.",
+      "note": "Family: vacuous-on-this-container-shape."
+    },
+    {
+      "component": "Collection",
+      "attribute": "listStyle",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "D (fixture shape) — the List-path implementation landed in sjui ba5e6d1",
+      "reason": "NOT unread: sjui collection_converter.rb reads the declared vocabulary and emits `.listStyle(PlainListStyle/GroupedListStyle/InsetGroupedListStyle/SidebarListStyle)`, enumerated by the collectionSeparators ruling (2026-08-07). The probe cannot reach that line: its layout carries `sections`, which routes to CollectionStackView — a container that is NOT a SwiftUI List and therefore has no list chrome to pick. The ruling states the measurement consequence up front: 'the fixture must use a list-shaped Collection to observe this at all', and it forbids the other reading — an attribute must not reshape the container it modifies. The row leaves this ledger when the probe stands on a list-shaped Collection.",
+      "note": "Family: probe-shape-unreachable."
+    },
+    {
+      "component": "Image",
+      "attribute": "defaultImage",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "D (fixture shape) — the converter is correct",
+      "reason": "Structurally unreachable in the probe's layout, and the converter is right. image_converter.rb reads it as `if src … elsif defaultImage || errorImage || loadingImage …` — a FALLBACK, which by its own declaration applies only when no src resolves. The probe writes `src` AND `defaultImage` on the same node, so the fallback arm is dead by construction and no value of the attribute could change the emit. Same shape as the Image/src measurement blind spot already recorded elsewhere. The row leaves this ledger when the probe drops `src` from the base for this attribute.",
+      "note": "Family: probe-shape-unreachable."
+    },
+    {
       "component": "Label",
       "attribute": "strikethrough",
       "platform": "ios",
