@@ -260,9 +260,9 @@
     "left",
     "top"
    ],
-   "owner": "D (fixture design)",
-   "reason": "sjui maps both `left` and `top` to the same SwiftUI frame alignment family whose unspecified axis defaults to top/leading, so both values name the top-left corner of the free space. ios-only: run 6 measured android and web telling the pair apart under the same 60pt slack (their unspecified-axis defaults are not top/start). Whether ios SHOULD center the unspecified axis (as SwiftUI's own default alignment does) is a semantics question for the canon — if it ever rules that way, this row records a defect and the owner moves to B/F.",
-   "note": "Reason replaced 2026-08-06 at D's request (49-D-progress round 43) — the old 'on every platform' rationale died when run 6 distinguished the pair on android/web."
+   "owner": "canon (adjudicated) — was D (fixture design)",
+   "reason": "Adjudicated by the SSoT, 2026-08-07 (`d5af180`, plan 51-E): when a single `gravity` value names one axis, the OTHER axis falls to the container default already ruled in `gravityDefaults` (top | start) — not unset, not inherited. The argument is internal to the declaration: `common.gravity`'s enum is full of single-axis values and it declares a separate array type for naming both axes, so a single-axis value that left the other axis undefined would leave `gravity: \"left\"` with no defined rendering. In LTR that resolves both `left` and `top` to (start, top), so this pair is observationally identical BY CONTRACT. ios drawing them the same is the contract holding — not a fixture-design gap, and not a defect, which is why the owner is neither D nor B/F. The face that would now bear explaining is the other one: android and web told the pair apart under the same 60pt slack in run 6.",
+   "note": "Owner and reason replaced 2026-08-07 by D on E's ruling. The previous text held the row open pending a canon decision and named the two ways it could close; E closed it the way that makes the collapse correct. No 3PF measurement was requested or needed — there was nothing left for one to decide."
   },
   {
    "component": "common",
