@@ -8,7 +8,7 @@
   ],
   "counts": {
     "entries": 71,
-    "unreviewed": 71
+    "unreviewed": 1
   },
   "entries": [
     {
@@ -22,7 +22,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated non-discriminating-probe-value, NOT a platform gap: the fixture's own data section declares boundFontWeight as `class: \"Int\", defaultValue: 0` — 0 is not a font weight in any of the three type systems, so the binding resolves to a value no platform can turn into a weight, and the static sibling fontWeight__static is measured ACTIVE on all three. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Disposition: fixture work (owner D) — the generator should give a bound fontWeight a real weight (the SSoT types it string|number, e.g. 700 or \"bold\"); until it does, this row measures the probe, not the product. Family: non-discriminating-probe-value.",
       "note": ""
     },
     {
@@ -36,7 +36,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -63,7 +63,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -77,7 +77,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated non-visual-by-declaration: the SSoT declares CheckBox.value as type \"any\" with the description 'Associated value when checked' — it is the PAYLOAD the control reports when selected, not a property of how the box is drawn, and no platform can paint it. Both faces (true and false) are inert, which is what an attribute with no visual observable looks like. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Disposition: the fixture class is what should change (owner D / H) — an attribute that cannot be seen should not be sitting in a visual-diff queue. Family: non-visual-attribute.",
       "note": ""
     },
     {
@@ -91,7 +91,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated non-visual-by-declaration: the SSoT declares CheckBox.value as type \"any\" with the description 'Associated value when checked' — it is the PAYLOAD the control reports when selected, not a property of how the box is drawn, and no platform can paint it. Both faces (true and false) are inert, which is what an attribute with no visual observable looks like. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Disposition: the fixture class is what should change (owner D / H) — an attribute that cannot be seen should not be sitting in a visual-diff queue. Family: non-visual-attribute.",
       "note": ""
     },
     {
@@ -105,7 +105,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -117,7 +117,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. false is JSON definition order, which is the control's order. The SSoT declaration says iOS does not support reverseLayout at all, so the attribute is compose-scoped by design and the sibling reverseLayout__true is the measured face. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -130,7 +130,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated not-photographable-at-rest: a horizontal scroll indicator is overlay chrome that both iOS and the web host draw only DURING a scroll gesture and fade at rest, so a still capture of an idle scroll container shows the same picture whether the indicator is enabled or disabled — which is why BOTH faces of this attribute (true and false) are inert and neither can discriminate. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The measurement fix is the interactive probe (a capture taken mid-scroll), not a converter change. Family: scroll-chrome-at-rest.",
       "note": ""
     },
     {
@@ -143,7 +143,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated not-photographable-at-rest: a horizontal scroll indicator is overlay chrome that both iOS and the web host draw only DURING a scroll gesture and fade at rest, so a still capture of an idle scroll container shows the same picture whether the indicator is enabled or disabled — which is why BOTH faces of this attribute (true and false) are inert and neither can discriminate. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The measurement fix is the interactive probe (a capture taken mid-scroll), not a converter change. Family: scroll-chrome-at-rest.",
       "note": ""
     },
     {
@@ -157,7 +157,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -169,7 +169,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated doubly-unobservable: (1) highlightSrc is the image shown in the HIGHLIGHTED state, which a still capture of an untouched Image never enters, and (2) the generated fixture writes highlightSrc: \"conformance_sample\" — the SAME asset the control already has as src — so even the highlighted capture would be pixel-identical. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Disposition: fixture work (owner D) for the value, interactive probe for the state; neither is an ios implementation gap. Family: interaction-only.",
       "note": ""
     },
     {
@@ -181,7 +181,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. false means 'do not interpret src as an SF Symbol', i.e. the plain-asset path the control already takes; the sibling systemIcon__true is the face that changes the render. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -193,7 +193,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated fixture-shape, read from the converter: sjui_tools indicator_converter.rb:19-30 defaults hidesWhenStopped to TRUE (matching UIKit) and, for animating:false, emits EmptyView() when it hides and a zero-opacity spinner when it does not. So the control (stopped, hiding) and this fixture (stopped, not hiding) both paint NOTHING — the difference the attribute exists to make, quoting the converter's own comment, is 'whether the surrounding layout reflows', and this fixture has no sibling to be reflowed. Not an ios gap: the observable needs a fixture with a neighbour whose position moves (owner D). Family: reflow-only-observable.",
       "note": ""
     },
     {
@@ -207,7 +207,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -221,7 +221,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -235,7 +235,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -249,7 +249,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. The C2/presence-only finding this attribute carries in codegen_effect.json is about the STYLED OBJECT face; the ledger's own text records that the boolean face works on all three and draws the line, which is exactly why the true face is active and this false face is not. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -261,7 +261,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated fixture-value arithmetic, NOT a platform gap: the Label control's text is \"Sample\", which is ALREADY capitalized, so text-transform: capitalize is the identity function on this string. Measured on the web artifacts at HEAD: this fixture moves 0 px while the sibling textTransform__lowercase moves 523 px against the same control — the attribute is implemented and observable, the probe value simply has nothing to do. Disposition: fixture work (owner D) — give Label's conformance text a lower-case word and this face discriminates again; the same shape as the codegen probe's representative-value advisory. Family: non-discriminating-probe-value.",
       "note": ""
     },
     {
@@ -273,7 +273,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. 'none' is the CSS initial value of text-transform. Measured on the web artifacts at HEAD: textTransform__lowercase moves 523 px against the same control while none moves 0. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -287,7 +287,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. The C2/presence-only finding this attribute carries in codegen_effect.json is about the STYLED OBJECT face; the ledger's own text records that the boolean face works on all three and draws the line, which is exactly why the true face is active and this false face is not. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -301,7 +301,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated value-is-default via the binding's own default: the fixture's data section declares boundContentMode with defaultValue \"fit\", so this row measures the value 'fit' — and the STATIC siblings contentMode__fit and contentMode__aspectfit are themselves inert on all three platforms while every other value (fill, aspectFill, center, top, bottom, left, right) is active on all three. The binding mechanism is therefore innocent: it faithfully delivers a value whose rendering equals the platforms' default content mode. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Closure: point the binding default at a discriminating value (owner D). Family: value-is-default.",
       "note": ""
     },
     {
@@ -313,7 +313,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face, read from the converter: sjui_tools progress_converter.rb:80 acts only on `hidesWhenStopped == true` (it emits .opacity(progress > 0 ? 1 : 0)); the false face therefore emits exactly the control's text by construction, which is the correct reading of 'do not hide' for a bar that is visible by default. The discriminating face is true. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -325,7 +325,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. 'auto' is the CSS initial value of scroll-behavior, so the emitted class restates what the control already has. (The sibling 'smooth' is inert too, for the different reason recorded on its own row: an animation is not photographable at rest.) codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -337,7 +337,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated not-photographable-at-rest: scroll-behavior selects the ANIMATION used when a scroll is programmatically triggered; an unscrolled container at rest renders identically however it is set. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Closure is an interactive fixture that scrolls and captures mid-flight. Family: scroll-chrome-at-rest.",
       "note": ""
     },
     {
@@ -349,7 +349,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The SSoT declaration names 'inner' as the default in so many words, and the measurement agrees: on the web artifacts at HEAD scrollMode__window moves 84000 px against the same control while inner moves 0. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -362,7 +362,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated not-photographable-at-rest: a horizontal scroll indicator is overlay chrome that both iOS and the web host draw only DURING a scroll gesture and fade at rest, so a still capture of an idle scroll container shows the same picture whether the indicator is enabled or disabled — which is why BOTH faces of this attribute (true and false) are inert and neither can discriminate. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The measurement fix is the interactive probe (a capture taken mid-scroll), not a converter change. Family: scroll-chrome-at-rest.",
       "note": ""
     },
     {
@@ -375,7 +375,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated not-photographable-at-rest: a horizontal scroll indicator is overlay chrome that both iOS and the web host draw only DURING a scroll gesture and fade at rest, so a still capture of an idle scroll container shows the same picture whether the indicator is enabled or disabled — which is why BOTH faces of this attribute (true and false) are inert and neither can discriminate. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The measurement fix is the interactive probe (a capture taken mid-scroll), not a converter change. Family: scroll-chrome-at-rest.",
       "note": ""
     },
     {
@@ -387,7 +387,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. Measured on the web artifacts at HEAD: SelectBox/colorScheme__dark moves 108 px against the same control while light moves 0 — the declaration exists to let a dark background flip the native date-picker icon, so light is the state the control is already in. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -401,7 +401,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated selectbox-interactive: minimumDate/maximumDate bound the range the picker OFFERS; the closed select control photographed by the fixture shows the current selection, not the range, so it renders identically whatever the bounds are. Joins the family already carrying SelectBox/datePickerMode date/time/countdown. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling — and for the binding faces the fixture's own data section supplies a real date (2020-01-01 / 2030-12-31), so this is not a binding-default hole either. Promotion to an interactive fixture that opens the picker is the measurement fix. Family: selectbox-interactive.",
       "note": ""
     },
     {
@@ -415,7 +415,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated selectbox-interactive: minimumDate/maximumDate bound the range the picker OFFERS; the closed select control photographed by the fixture shows the current selection, not the range, so it renders identically whatever the bounds are. Joins the family already carrying SelectBox/datePickerMode date/time/countdown. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling — and for the binding faces the fixture's own data section supplies a real date (2020-01-01 / 2030-12-31), so this is not a binding-default hole either. Promotion to an interactive fixture that opens the picker is the measurement fix. Family: selectbox-interactive.",
       "note": ""
     },
     {
@@ -429,7 +429,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated selectbox-interactive: minimumDate/maximumDate bound the range the picker OFFERS; the closed select control photographed by the fixture shows the current selection, not the range, so it renders identically whatever the bounds are. Joins the family already carrying SelectBox/datePickerMode date/time/countdown. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling — and for the binding faces the fixture's own data section supplies a real date (2020-01-01 / 2030-12-31), so this is not a binding-default hole either. Promotion to an interactive fixture that opens the picker is the measurement fix. Family: selectbox-interactive.",
       "note": ""
     },
     {
@@ -443,7 +443,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated selectbox-interactive: minimumDate/maximumDate bound the range the picker OFFERS; the closed select control photographed by the fixture shows the current selection, not the range, so it renders identically whatever the bounds are. Joins the family already carrying SelectBox/datePickerMode date/time/countdown. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling — and for the binding faces the fixture's own data section supplies a real date (2020-01-01 / 2030-12-31), so this is not a binding-default hole either. Promotion to an interactive fixture that opens the picker is the measurement fix. Family: selectbox-interactive.",
       "note": ""
     },
     {
@@ -455,7 +455,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. Measured on the web artifacts at HEAD: SelectBox/multiple__true moves 1048 px against the same control while this false face moves 0 — single selection is the control's own state. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -467,7 +467,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "MEASURED GAP, not accepted — owner A (rjui/web). The control renders a real slider and the value is read: on the web artifacts at HEAD, Slider/value__static moves 4157 px against its control, while this fixture (value 0.5 with step 1) moves 0 px against the value-0.5 control. A native <input type=range step=1> snaps 0.5 to a step boundary and the thumb visibly moves, so either the emitted markup is not a stepped range input or step never reaches it. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling, so the spelling IS emitted — where it goes is A's measurement. The row leaves this ledger when step quantises the rendered thumb. Family: step-not-quantising.",
       "note": ""
     },
     {
@@ -481,7 +481,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -495,7 +495,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -507,7 +507,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. Read from the converter itself: kjui_tools/lib/compose/components/switch_component.rb:171 is `json_data['labelPosition'] || 'leading'`, so leading IS the default the control already composes; the discriminating face is 'trailing'. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -521,7 +521,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -533,7 +533,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. false is plain (non-obscured) text entry — what the control with the same text already shows. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -545,7 +545,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "MEASURED GAP, not accepted — owner A (rjui/web). The sibling dimension attribute proves the shape is measurable: on the web artifacts at HEAD, TextView/rows__static moves 444 px against its control while this cols fixture moves 0 px against the analogous no-width control. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling, so rjui emits cols and the rendered box does not change size — the plausible mechanism is that the width class emitted for width:wrapContent overrides the textarea's cols-derived intrinsic width, but that is A's measurement to confirm, not my conclusion. The row leaves this ledger when a cols value changes the rendered width. Family: cols-not-sized.",
       "note": ""
     },
     {
@@ -559,7 +559,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. true is the default state of a text area on all three platforms (the control renders an editable field), which is why the DISCRIMINATING face is editable__false — measured active on android and adjudicated in cross_effect.json this round. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -573,7 +573,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. Measured on the web artifacts at HEAD: TextView/flexible__true moves 10 px against the same control while this false face moves 0. With an explicit height:100 on the target, non-flexible is what the control already renders. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -585,7 +585,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated not-photographable-at-rest: text selection is an interaction state; a still capture of an untouched text area is identical whether selection is allowed or blocked (measured on the web artifacts at HEAD: both selectable faces move 0 px against the same control). codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Closure is an interactive fixture that drags a selection. Family: interaction-only.",
       "note": ""
     },
     {
@@ -597,7 +597,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. Text in a web text area is selectable by default, so true restates the control's state — and selection is an interaction that a still capture cannot photograph either way (see the selectable__false row). codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -609,7 +609,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. Measured on the web artifacts at HEAD: View/flexWrap__wrap moves 3200 px against the same control while nowrap moves 0 — nowrap is the CSS initial value the control already lays out. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -621,7 +621,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "MEASURED GAP, not accepted — owner F (SwiftJsonUI dynamic), with a codegen-side note for B. Read from the source this round: (1) the conformance ios lane renders through the DYNAMIC path, and SwiftJsonUI's DynamicViewContainer.swift:105-108 applies gradient only when rawData[\"gradient\"] casts to [String: Any] — a DICTIONARY — while the SSoT types View.gradient as an array and every fixture writes the array form, so the cast fails and the gradient is silently not applied at all for a plain View; gradientDirection has no read site in that file. (2) The UIKit path gates gradient on `v as? GradientView` (SJUIView.swift:205), so a plain View never gets it there either. (3) The codegen path DOES emit .background(LinearGradient(...)) (sjui_tools view_converter.rb:456 -> modifier_helper.rb:12-26), but ModifierBag::MODIFIER_ORDER places :background immediately before :gradient, so the fixture's opaque background:#DDDDDD is chained in FRONT of the gradient — B should confirm whether that ordering hides it on the codegen host too. SECOND, INDEPENDENT reason for this row: 'BottomToTop' has NO case arm — modifier_helper.rb:16-23 implements only 'Horizontal' and 'Oblique' and everything else falls through to the vertical emit, so this declared value currently emits exactly what the Vertical control emits. The SSoT declaration says these two reversed directions are deliberately NOT aliased to Horizontal/Vertical because folding them would reverse the gradient; that makes the missing arm an implementation gap, not a spelling question. The row leaves this ledger when a plain View with an array-form gradient renders the gradient on the ios dynamic host. Family: gradient-dynamic-array-form.",
       "note": ""
     },
     {
@@ -633,7 +633,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "MEASURED GAP, not accepted — owner F (SwiftJsonUI dynamic), with a codegen-side note for B. Read from the source this round: (1) the conformance ios lane renders through the DYNAMIC path, and SwiftJsonUI's DynamicViewContainer.swift:105-108 applies gradient only when rawData[\"gradient\"] casts to [String: Any] — a DICTIONARY — while the SSoT types View.gradient as an array and every fixture writes the array form, so the cast fails and the gradient is silently not applied at all for a plain View; gradientDirection has no read site in that file. (2) The UIKit path gates gradient on `v as? GradientView` (SJUIView.swift:205), so a plain View never gets it there either. (3) The codegen path DOES emit .background(LinearGradient(...)) (sjui_tools view_converter.rb:456 -> modifier_helper.rb:12-26), but ModifierBag::MODIFIER_ORDER places :background immediately before :gradient, so the fixture's opaque background:#DDDDDD is chained in FRONT of the gradient — B should confirm whether that ordering hides it on the codegen host too. This direction HAS its own case arm in the converter (modifier_helper.rb:16-23 matches 'Horizontal' literally), so once the gradient is applied at all this face should separate from the Vertical control. The row leaves this ledger when a plain View with an array-form gradient renders the gradient on the ios dynamic host. Family: gradient-dynamic-array-form.",
       "note": ""
     },
     {
@@ -645,7 +645,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "MEASURED GAP, not accepted — owner F (SwiftJsonUI dynamic), with a codegen-side note for B. Read from the source this round: (1) the conformance ios lane renders through the DYNAMIC path, and SwiftJsonUI's DynamicViewContainer.swift:105-108 applies gradient only when rawData[\"gradient\"] casts to [String: Any] — a DICTIONARY — while the SSoT types View.gradient as an array and every fixture writes the array form, so the cast fails and the gradient is silently not applied at all for a plain View; gradientDirection has no read site in that file. (2) The UIKit path gates gradient on `v as? GradientView` (SJUIView.swift:205), so a plain View never gets it there either. (3) The codegen path DOES emit .background(LinearGradient(...)) (sjui_tools view_converter.rb:456 -> modifier_helper.rb:12-26), but ModifierBag::MODIFIER_ORDER places :background immediately before :gradient, so the fixture's opaque background:#DDDDDD is chained in FRONT of the gradient — B should confirm whether that ordering hides it on the codegen host too. This direction HAS its own case arm in the converter (modifier_helper.rb:16-23 matches 'Oblique' literally), so once the gradient is applied at all this face should separate from the Vertical control. The row leaves this ledger when a plain View with an array-form gradient renders the gradient on the ios dynamic host. Family: gradient-dynamic-array-form.",
       "note": ""
     },
     {
@@ -657,7 +657,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "MEASURED GAP, not accepted — owner F (SwiftJsonUI dynamic), with a codegen-side note for B. Read from the source this round: (1) the conformance ios lane renders through the DYNAMIC path, and SwiftJsonUI's DynamicViewContainer.swift:105-108 applies gradient only when rawData[\"gradient\"] casts to [String: Any] — a DICTIONARY — while the SSoT types View.gradient as an array and every fixture writes the array form, so the cast fails and the gradient is silently not applied at all for a plain View; gradientDirection has no read site in that file. (2) The UIKit path gates gradient on `v as? GradientView` (SJUIView.swift:205), so a plain View never gets it there either. (3) The codegen path DOES emit .background(LinearGradient(...)) (sjui_tools view_converter.rb:456 -> modifier_helper.rb:12-26), but ModifierBag::MODIFIER_ORDER places :background immediately before :gradient, so the fixture's opaque background:#DDDDDD is chained in FRONT of the gradient — B should confirm whether that ordering hides it on the codegen host too. SECOND, INDEPENDENT reason for this row: 'RightToLeft' has NO case arm — modifier_helper.rb:16-23 implements only 'Horizontal' and 'Oblique' and everything else falls through to the vertical emit, so this declared value currently emits exactly what the Vertical control emits. The SSoT declaration says these two reversed directions are deliberately NOT aliased to Horizontal/Vertical because folding them would reverse the gradient; that makes the missing arm an implementation gap, not a spelling question. The row leaves this ledger when a plain View with an array-form gradient renders the gradient on the ios dynamic host. Family: gradient-dynamic-array-form.",
       "note": ""
     },
     {
@@ -669,7 +669,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "value-is-default",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated value-is-default: the SSoT declares View.gradientDirection default \"Vertical\" and the control for this fixture already carries the gradient, so writing the default direction restates it. Confirmed in the converter: sjui_tools modifier_helper.rb:16-23 has case arms only for 'Horizontal' and 'Oblique' and everything else — Vertical included — falls to the same top-to-bottom emit. Family: value-is-default.",
       "note": ""
     },
     {
@@ -681,7 +681,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "MEASURED GAP, not accepted — owner F (SwiftJsonUI dynamic), with a codegen-side note for B. Read from the source this round: (1) the conformance ios lane renders through the DYNAMIC path, and SwiftJsonUI's DynamicViewContainer.swift:105-108 applies gradient only when rawData[\"gradient\"] casts to [String: Any] — a DICTIONARY — while the SSoT types View.gradient as an array and every fixture writes the array form, so the cast fails and the gradient is silently not applied at all for a plain View; gradientDirection has no read site in that file. (2) The UIKit path gates gradient on `v as? GradientView` (SJUIView.swift:205), so a plain View never gets it there either. (3) The codegen path DOES emit .background(LinearGradient(...)) (sjui_tools view_converter.rb:456 -> modifier_helper.rb:12-26), but ModifierBag::MODIFIER_ORDER places :background immediately before :gradient, so the fixture's opaque background:#DDDDDD is chained in FRONT of the gradient — B should confirm whether that ordering hides it on the codegen host too. The row leaves this ledger when a plain View with an array-form gradient renders the gradient on the ios dynamic host. Family: gradient-dynamic-array-form.",
       "note": ""
     },
     {
@@ -695,7 +695,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The control for this fixture is __control/View__highlightBackground--FF0000: the companion the attribute_semantics highlight topic requires is already written on BOTH sides, so the only difference is highlighted:false — the not-highlighted state the control is already in. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -707,7 +707,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated non-visual-by-declaration: the SSoT declaration says sandbox is the iframe PERMISSION kill-switch and that the permission list is built from the other Web attributes — it governs what the embedded document may do, not how it is painted. The fixture embeds the static html \"<p>Sample</p>\", which renders identically with or without the sandbox attribute (measured 0 px on the web artifacts at HEAD for both faces). codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Disposition: the attribute has no visual observable at all — the fixture class is the thing to change (owner D / H), not a converter. Family: non-visual-attribute.",
       "note": ""
     },
     {
@@ -719,7 +719,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated non-visual-by-declaration: the SSoT declaration says sandbox is the iframe PERMISSION kill-switch and that the permission list is built from the other Web attributes — it governs what the embedded document may do, not how it is painted. The fixture embeds the static html \"<p>Sample</p>\", which renders identically with or without the sandbox attribute (measured 0 px on the web artifacts at HEAD for both faces). codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Disposition: the attribute has no visual observable at all — the fixture class is the thing to change (owner D / H), not a converter. Family: non-visual-attribute.",
       "note": ""
     },
     {
@@ -733,7 +733,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -747,7 +747,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -761,7 +761,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -775,7 +775,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -789,7 +789,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated companion-required, from the contract: attribute_semantics' border topic rules that borderWidth ALONE draws nothing (its styleAlone/widthAlone observables are why the codegen probe pairs borderWidth with borderColor + borderStyle before it will judge the emit). This fixture writes borderWidth against __control/View, which carries neither companion. The measurement agrees on all three border spellings: on the web artifacts at HEAD, borderWidth__static, borderColor__static and borderStyle__solid each move 0 px against that control. The binding face is not the problem — the fixture's data section supplies boundBorderWidth = 2. Closure: a companion-paired border fixture (owner D). Family: companion-required.",
       "note": ""
     },
     {
@@ -803,7 +803,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -817,7 +817,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The binding sibling common/centerInParent__binding is measured ACTIVE on android and web in cross_effect.json, so the attribute is honoured; false is the un-centered default that the control already renders. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -831,7 +831,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -843,7 +843,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated no-slack-at-this-shape: .frame(idealWidth:)/.frame(idealHeight:) only take effect when the parent offers a FLEXIBLE size proposal — SwiftUI resolves the ideal size against an unspecified proposal and ignores it under a fixed one. The fixture writes the attribute on a target already pinned to width:200 height:200, so the proposal is fixed and the ideal hint has nothing to answer. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Not an ios gap: the closure is a fixture whose target is size-flexible (owner D), the same construction as the maxWidth/maxHeight fill_clamp pair. Family: no-slack-at-this-shape.",
       "note": ""
     },
     {
@@ -855,7 +855,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated no-slack-at-this-shape: .frame(idealWidth:)/.frame(idealHeight:) only take effect when the parent offers a FLEXIBLE size proposal — SwiftUI resolves the ideal size against an unspecified proposal and ignores it under a fixed one. The fixture writes the attribute on a target already pinned to width:200 height:200, so the proposal is fixed and the ideal hint has nothing to answer. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Not an ios gap: the closure is a fixture whose target is size-flexible (owner D), the same construction as the maxWidth/maxHeight fill_clamp pair. Family: no-slack-at-this-shape.",
       "note": ""
     },
     {
@@ -869,7 +869,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated no-slack-at-this-shape, and the contract already names the shape that does have slack: attribute_semantics declares the observable for this attribute as common/{attr}__fill_clamp (a FILL dimension being clamped), and that fixture is measured ACTIVE — 54240 px for maxWidth and 38880 px for maxHeight on the web artifacts at HEAD. The queued fixture instead writes the attribute on a target whose width AND height are fixed at 200, so there is no flexible dimension for a maximum to clamp and every platform correctly renders the fixed size. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling (the same probe reports a false unread-spelling for these attributes WITHOUT --paired, which is why CI passes --paired). Not a platform gap: the discriminating fixtures exist and pass. Family: no-slack-at-this-shape.",
       "note": ""
     },
     {
@@ -883,7 +883,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated no-slack-at-this-shape, and the contract already names the shape that does have slack: attribute_semantics declares the observable for this attribute as common/{attr}__fill_clamp (a FILL dimension being clamped), and that fixture is measured ACTIVE — 54240 px for maxWidth and 38880 px for maxHeight on the web artifacts at HEAD. The queued fixture instead writes the attribute on a target whose width AND height are fixed at 200, so there is no flexible dimension for a maximum to clamp and every platform correctly renders the fixed size. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling (the same probe reports a false unread-spelling for these attributes WITHOUT --paired, which is why CI passes --paired). Not a platform gap: the discriminating fixtures exist and pass. Family: no-slack-at-this-shape.",
       "note": ""
     },
     {
@@ -897,7 +897,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated no-slack-at-this-shape, and the contract already names the shape that does have slack: attribute_semantics declares the observable for this attribute as common/{attr}__fill_clamp (a FILL dimension being clamped), and that fixture is measured ACTIVE — 54240 px for maxWidth and 38880 px for maxHeight on the web artifacts at HEAD. The queued fixture instead writes the attribute on a target whose width AND height are fixed at 200, so there is no flexible dimension for a maximum to clamp and every platform correctly renders the fixed size. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling (the same probe reports a false unread-spelling for these attributes WITHOUT --paired, which is why CI passes --paired). Not a platform gap: the discriminating fixtures exist and pass. Family: no-slack-at-this-shape.",
       "note": ""
     },
     {
@@ -911,7 +911,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated no-slack-at-this-shape, and the contract already names the shape that does have slack: attribute_semantics declares the observable for this attribute as common/{attr}__fill_clamp (a FILL dimension being clamped), and that fixture is measured ACTIVE — 54240 px for maxWidth and 38880 px for maxHeight on the web artifacts at HEAD. The queued fixture instead writes the attribute on a target whose width AND height are fixed at 200, so there is no flexible dimension for a maximum to clamp and every platform correctly renders the fixed size. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling (the same probe reports a false unread-spelling for these attributes WITHOUT --paired, which is why CI passes --paired). Not a platform gap: the discriminating fixtures exist and pass. Family: no-slack-at-this-shape.",
       "note": ""
     },
     {
@@ -925,7 +925,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated no-tintable-content-at-this-host: common.tintColor tints TEMPLATE content — a symbol, a control's accent, a template image — and the fixture's host is a plain View whose children are opaque colour boxes, so there is nothing on screen for a tint to reach. Measured on the web artifacts at HEAD: 0 px for both the static and the bound face, and the bound face's data section supplies a real colour (#FF0000), so this is not a binding hole. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Closure: host the fixture on a component that actually has template content (owner D). Family: no-tintable-content.",
       "note": ""
     },
     {
@@ -939,7 +939,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "adjudicated no-tintable-content-at-this-host: common.tintColor tints TEMPLATE content — a symbol, a control's accent, a template image — and the fixture's host is a plain View whose children are opaque colour boxes, so there is nothing on screen for a tint to reach. Measured on the web artifacts at HEAD: 0 px for both the static and the bound face, and the bound face's data section supplies a real colour (#FF0000), so this is not a binding hole. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Closure: host the fixture on a component that actually has template content (owner D). Family: no-tintable-content.",
       "note": ""
     }
   ]
