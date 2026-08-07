@@ -350,12 +350,41 @@ class OffFaceExclusionTest(unittest.TestCase):
             self.assertEqual(excluded, set())
             self.assertEqual(orphaned, ["C/a__false"])
 
-    def test_the_repository_derivation_matches_the_audited_canonical_set(self):
-        """51-E2 audited a 34-row set by hand; the device must agree exactly.
+    def test_the_committed_ledgers_derive_a_safe_exclusion(self):
+        """The safety properties, asserted from VERSION-CONTROLLED data only.
 
-        This is the check that keeps the rule honest: if a reason is reworded
-        and the sentinel stops matching, the derived set shrinks and this
-        fails rather than silently excluding less (or more).
+        The sibling test below and the canonical cross-check both used to
+        carry this, but the canonical set lives under `docs/`, which is
+        gitignored — so on CI and in any fresh clone that check skips and
+        asserts nothing. A skip reads exactly like a pass, which is the
+        "green because it measured nothing" failure this campaign is named
+        after, and it was in this lane's own test. The invariants that must
+        never break are pinned here, where the data always exists.
+        """
+        root = Path(__file__).resolve().parents[2]
+        conf = root / "conformance"
+        if not (conf / "inert_audit.json").is_file():
+            self.skipTest("no committed conformance dir")
+        manifest = json.loads((conf / "manifest.json").read_text(encoding="utf-8"))
+        excluded, held, orphaned = cd.off_face_exclusions(conf, manifest)
+
+        self.assertEqual(
+            orphaned, [], "excluding these would remove an attribute from measurement"
+        )
+        self.assertTrue(excluded, "the off-face class derived empty — sentinel drift?")
+        self.assertEqual(
+            held,
+            {"ScrollView/scrollBehavior__auto", "TextView/selectable__true"},
+            "the orchestrator's two holds are a consequence of the safety rule; "
+            "if this set moved, a sibling's active assertion changed",
+        )
+
+    def test_the_repository_derivation_matches_the_audited_canonical_set(self):
+        """Bonus cross-check against 51-E2's hand audit, when it is present.
+
+        Skips where the canonical set is absent (it lives under gitignored
+        `docs/`), so the safety properties are pinned by the test above
+        instead of by this one.
         """
         root = Path(__file__).resolve().parents[2]
         conf = root / "conformance"
