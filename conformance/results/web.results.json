@@ -1,6 +1,6 @@
 {
   "platform": "web",
-  "manifestHash": "55a48fa7e476b0a0a12843acd9ef8045e25510d9b1b4c5d21277184d4caa27d4",
+  "manifestHash": "26128fbb10863677258d0d3d2e1b0259d1dab9701776f398d4a005b0f21f44b0",
   "runner": {
     "name": "playwright",
     "version": "1.61.1"
@@ -49,10 +49,22 @@
       "screenshot": "artifacts/web/common_minWidth__static.png"
     },
     {
+      "id": "common/minWidth__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_minWidth__binding.png"
+    },
+    {
       "id": "common/maxWidth__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_maxWidth__static.png"
+    },
+    {
+      "id": "common/maxWidth__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_maxWidth__binding.png"
     },
     {
       "id": "common/minHeight__static",
@@ -61,10 +73,22 @@
       "screenshot": "artifacts/web/common_minHeight__static.png"
     },
     {
+      "id": "common/minHeight__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_minHeight__binding.png"
+    },
+    {
       "id": "common/maxHeight__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_maxHeight__static.png"
+    },
+    {
+      "id": "common/maxHeight__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_maxHeight__binding.png"
     },
     {
       "id": "common/widthWeight__static",
@@ -72,7 +96,17 @@
       "detail": "not applicable to web"
     },
     {
+      "id": "common/widthWeight__binding",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
       "id": "common/heightWeight__static",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "common/heightWeight__binding",
       "status": "skipped",
       "detail": "not applicable to web"
     },
@@ -113,10 +147,34 @@
       "screenshot": "artifacts/web/common_weight__static.png"
     },
     {
+      "id": "common/weight__as_string",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_weight__as_string.png"
+    },
+    {
+      "id": "common/weight__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_weight__binding.png"
+    },
+    {
+      "id": "common/weight__binding_as_string",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_weight__binding_as_string.png"
+    },
+    {
       "id": "common/background__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_background__static.png"
+    },
+    {
+      "id": "common/background__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_background__binding.png"
     },
     {
       "id": "common/tapBackground__static",
@@ -125,16 +183,34 @@
       "screenshot": "artifacts/web/common_tapBackground__static.png"
     },
     {
+      "id": "common/tapBackground__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_tapBackground__binding.png"
+    },
+    {
       "id": "common/highlightBackground__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_highlightBackground__static.png"
     },
     {
+      "id": "common/highlightBackground__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_highlightBackground__binding.png"
+    },
+    {
       "id": "common/disabledBackground__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_disabledBackground__static.png"
+    },
+    {
+      "id": "common/disabledBackground__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_disabledBackground__binding.png"
     },
     {
       "id": "common/defaultBackground__static",
@@ -148,16 +224,34 @@
       "screenshot": "artifacts/web/common_cornerRadius__static.png"
     },
     {
+      "id": "common/cornerRadius__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_cornerRadius__binding.png"
+    },
+    {
       "id": "common/borderWidth__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_borderWidth__static.png"
     },
     {
+      "id": "common/borderWidth__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_borderWidth__binding.png"
+    },
+    {
       "id": "common/borderColor__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_borderColor__static.png"
+    },
+    {
+      "id": "common/borderColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_borderColor__binding.png"
     },
     {
       "id": "common/borderStyle__solid",
@@ -178,10 +272,22 @@
       "screenshot": "artifacts/web/common_borderStyle__dotted.png"
     },
     {
-      "id": "common/alpha__static",
+      "id": "common/borderStyle__solid_with_border",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/common_alpha__static.png"
+      "screenshot": "artifacts/web/common_borderStyle__solid_with_border.png"
+    },
+    {
+      "id": "common/borderStyle__dashed_with_border",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_borderStyle__dashed_with_border.png"
+    },
+    {
+      "id": "common/borderStyle__dotted_with_border",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_borderStyle__dotted_with_border.png"
     },
     {
       "id": "common/opacity__static",
@@ -194,6 +300,12 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_opacity__alias_alpha.png"
+    },
+    {
+      "id": "common/opacity__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_opacity__binding.png"
     },
     {
       "id": "common/visibility__visible",
@@ -236,6 +348,11 @@
       "detail": ""
     },
     {
+      "id": "common/hidden__binding",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "common/hidden__binding_negation",
       "status": "pass",
       "detail": ""
@@ -245,6 +362,12 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_padding__static.png"
+    },
+    {
+      "id": "common/padding__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_padding__binding.png"
     },
     {
       "id": "common/paddings__static",
@@ -259,10 +382,22 @@
       "screenshot": "artifacts/web/common_paddingTop__static.png"
     },
     {
+      "id": "common/paddingTop__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_paddingTop__binding.png"
+    },
+    {
       "id": "common/paddingBottom__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_paddingBottom__static.png"
+    },
+    {
+      "id": "common/paddingBottom__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_paddingBottom__binding.png"
     },
     {
       "id": "common/paddingLeft__static",
@@ -271,10 +406,22 @@
       "screenshot": "artifacts/web/common_paddingLeft__static.png"
     },
     {
+      "id": "common/paddingLeft__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_paddingLeft__binding.png"
+    },
+    {
       "id": "common/paddingRight__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_paddingRight__static.png"
+    },
+    {
+      "id": "common/paddingRight__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_paddingRight__binding.png"
     },
     {
       "id": "common/paddingStart__static",
@@ -283,10 +430,22 @@
       "screenshot": "artifacts/web/common_paddingStart__static.png"
     },
     {
+      "id": "common/paddingStart__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_paddingStart__binding.png"
+    },
+    {
       "id": "common/paddingEnd__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_paddingEnd__static.png"
+    },
+    {
+      "id": "common/paddingEnd__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_paddingEnd__binding.png"
     },
     {
       "id": "common/rightPadding__static",
@@ -295,10 +454,22 @@
       "screenshot": "artifacts/web/common_rightPadding__static.png"
     },
     {
+      "id": "common/rightPadding__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_rightPadding__binding.png"
+    },
+    {
       "id": "common/leftPadding__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_leftPadding__static.png"
+    },
+    {
+      "id": "common/leftPadding__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_leftPadding__binding.png"
     },
     {
       "id": "common/topPadding__static",
@@ -307,10 +478,22 @@
       "screenshot": "artifacts/web/common_topPadding__static.png"
     },
     {
+      "id": "common/topPadding__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_topPadding__binding.png"
+    },
+    {
       "id": "common/bottomPadding__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_bottomPadding__static.png"
+    },
+    {
+      "id": "common/bottomPadding__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_bottomPadding__binding.png"
     },
     {
       "id": "common/minTopPadding__static",
@@ -377,10 +560,22 @@
       "screenshot": "artifacts/web/common_leftMargin__static.png"
     },
     {
+      "id": "common/leftMargin__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_leftMargin__binding.png"
+    },
+    {
       "id": "common/rightMargin__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_rightMargin__static.png"
+    },
+    {
+      "id": "common/rightMargin__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_rightMargin__binding.png"
     },
     {
       "id": "common/startMargin__static",
@@ -389,10 +584,22 @@
       "screenshot": "artifacts/web/common_startMargin__static.png"
     },
     {
+      "id": "common/startMargin__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_startMargin__binding.png"
+    },
+    {
       "id": "common/endMargin__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_endMargin__static.png"
+    },
+    {
+      "id": "common/endMargin__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_endMargin__binding.png"
     },
     {
       "id": "common/minTopMargin__static",
@@ -441,10 +648,34 @@
       "screenshot": "artifacts/web/common_centerInParent__true.png"
     },
     {
+      "id": "common/centerInParent__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_centerInParent__false.png"
+    },
+    {
+      "id": "common/centerInParent__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_centerInParent__binding.png"
+    },
+    {
       "id": "common/centerVertical__true",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_centerVertical__true.png"
+    },
+    {
+      "id": "common/centerVertical__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_centerVertical__false.png"
+    },
+    {
+      "id": "common/centerVertical__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_centerVertical__binding.png"
     },
     {
       "id": "common/centerHorizontal__true",
@@ -453,10 +684,34 @@
       "screenshot": "artifacts/web/common_centerHorizontal__true.png"
     },
     {
+      "id": "common/centerHorizontal__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_centerHorizontal__false.png"
+    },
+    {
+      "id": "common/centerHorizontal__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_centerHorizontal__binding.png"
+    },
+    {
       "id": "common/alignTop__true",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_alignTop__true.png"
+    },
+    {
+      "id": "common/alignTop__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_alignTop__false.png"
+    },
+    {
+      "id": "common/alignTop__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_alignTop__binding.png"
     },
     {
       "id": "common/alignBottom__true",
@@ -465,16 +720,52 @@
       "screenshot": "artifacts/web/common_alignBottom__true.png"
     },
     {
+      "id": "common/alignBottom__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_alignBottom__false.png"
+    },
+    {
+      "id": "common/alignBottom__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_alignBottom__binding.png"
+    },
+    {
       "id": "common/alignLeft__true",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_alignLeft__true.png"
     },
     {
+      "id": "common/alignLeft__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_alignLeft__false.png"
+    },
+    {
+      "id": "common/alignLeft__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_alignLeft__binding.png"
+    },
+    {
       "id": "common/alignRight__true",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_alignRight__true.png"
+    },
+    {
+      "id": "common/alignRight__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_alignRight__false.png"
+    },
+    {
+      "id": "common/alignRight__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_alignRight__binding.png"
     },
     {
       "id": "common/alignTopOfView__static",
@@ -554,6 +845,30 @@
       "screenshot": "artifacts/web/common_clipToBounds__true.png"
     },
     {
+      "id": "common/clipToBounds__true_overflow",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_clipToBounds__true_overflow.png"
+    },
+    {
+      "id": "common/clipToBounds__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_clipToBounds__false.png"
+    },
+    {
+      "id": "common/clipToBounds__false_overflow",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_clipToBounds__false_overflow.png"
+    },
+    {
+      "id": "common/clipToBounds__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_clipToBounds__binding.png"
+    },
+    {
       "id": "common/onclick__callback_fire",
       "status": "pass",
       "detail": ""
@@ -578,6 +893,12 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_tintColor__static.png"
+    },
+    {
+      "id": "common/tintColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_tintColor__binding.png"
     },
     {
       "id": "common/compressHorizontal__static",
@@ -605,14 +926,68 @@
       "detail": "not applicable to web"
     },
     {
+      "id": "common/wrapContent__false",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
       "id": "common/innerPadding__static",
       "status": "skipped",
       "detail": "not applicable to web"
     },
     {
-      "id": "common/effectStyle__static",
-      "status": "skipped",
-      "detail": "not applicable to web"
+      "id": "common/effectStyle__light",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_effectStyle__light.png"
+    },
+    {
+      "id": "common/effectStyle__dark",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_effectStyle__dark.png"
+    },
+    {
+      "id": "common/effectStyle__extralight",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_effectStyle__extralight.png"
+    },
+    {
+      "id": "common/effectStyle__regular",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_effectStyle__regular.png"
+    },
+    {
+      "id": "common/effectStyle__prominent",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_effectStyle__prominent.png"
+    },
+    {
+      "id": "common/effectStyle__ultrathin",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_effectStyle__ultrathin.png"
+    },
+    {
+      "id": "common/effectStyle__thin",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_effectStyle__thin.png"
+    },
+    {
+      "id": "common/effectStyle__thick",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_effectStyle__thick.png"
+    },
+    {
+      "id": "common/effectStyle__chrome",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_effectStyle__chrome.png"
     },
     {
       "id": "common/enabled__true",
@@ -621,6 +996,11 @@
     },
     {
       "id": "common/enabled__false",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/enabled__binding",
       "status": "pass",
       "detail": ""
     },
@@ -684,12 +1064,12 @@
       "detail": "not applicable to web"
     },
     {
-      "id": "common/alignment__topleading",
+      "id": "common/alignment__top",
       "status": "skipped",
       "detail": "not applicable to web"
     },
     {
-      "id": "common/alignment__top",
+      "id": "common/alignment__topleading",
       "status": "skipped",
       "detail": "not applicable to web"
     },
@@ -729,12 +1109,12 @@
       "detail": "not applicable to web"
     },
     {
-      "id": "common/distribution__fill",
+      "id": "common/distribution__fillequally",
       "status": "skipped",
       "detail": "not applicable to web"
     },
     {
-      "id": "common/distribution__fillequally",
+      "id": "common/distribution__fill",
       "status": "skipped",
       "detail": "not applicable to web"
     },
@@ -779,7 +1159,36 @@
       "detail": "not applicable to web"
     },
     {
+      "id": "common/offsetX__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_offsetX__static.png"
+    },
+    {
+      "id": "common/offsetX__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_offsetX__binding.png"
+    },
+    {
+      "id": "common/offsetY__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_offsetY__static.png"
+    },
+    {
+      "id": "common/offsetY__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_offsetY__binding.png"
+    },
+    {
       "id": "Label/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Label/text__binding",
       "status": "pass",
       "detail": ""
     },
@@ -872,10 +1281,22 @@
       "screenshot": "artifacts/web/Label_font__static.png"
     },
     {
+      "id": "Label/font__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_font__binding.png"
+    },
+    {
       "id": "Label/fontSize__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Label_fontSize__static.png"
+    },
+    {
+      "id": "Label/fontSize__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_fontSize__binding.png"
     },
     {
       "id": "Label/fontColor__static",
@@ -884,10 +1305,22 @@
       "screenshot": "artifacts/web/Label_fontColor__static.png"
     },
     {
+      "id": "Label/fontColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_fontColor__binding.png"
+    },
+    {
       "id": "Label/fontFamily__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Label_fontFamily__static.png"
+    },
+    {
+      "id": "Label/fontFamily__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_fontFamily__binding.png"
     },
     {
       "id": "Label/lineHeight__static",
@@ -926,6 +1359,18 @@
       "screenshot": "artifacts/web/Label_selected__true.png"
     },
     {
+      "id": "Label/selected__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_selected__false.png"
+    },
+    {
+      "id": "Label/selected__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_selected__binding.png"
+    },
+    {
       "id": "Label/textAlign__left",
       "status": "pass",
       "detail": "",
@@ -962,22 +1407,34 @@
       "screenshot": "artifacts/web/Label_textAlign__right_2.png"
     },
     {
+      "id": "Label/textAlign__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_textAlign__binding.png"
+    },
+    {
       "id": "Label/lines__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Label_lines__static.png"
     },
     {
-      "id": "Label/lineBreakMode__char",
+      "id": "Label/lines__binding",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/Label_lineBreakMode__char.png"
+      "screenshot": "artifacts/web/Label_lines__binding.png"
     },
     {
       "id": "Label/lineBreakMode__clip",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Label_lineBreakMode__clip.png"
+    },
+    {
+      "id": "Label/lineBreakMode__char",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_lineBreakMode__char.png"
     },
     {
       "id": "Label/lineBreakMode__word",
@@ -1010,10 +1467,22 @@
       "screenshot": "artifacts/web/Label_lineHeightMultiple__static.png"
     },
     {
+      "id": "Label/lineHeightMultiple__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_lineHeightMultiple__binding.png"
+    },
+    {
       "id": "Label/lineSpacing__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Label_lineSpacing__static.png"
+    },
+    {
+      "id": "Label/lineSpacing__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_lineSpacing__binding.png"
     },
     {
       "id": "Label/edgeInset__static",
@@ -1028,10 +1497,34 @@
       "screenshot": "artifacts/web/Label_underline__true.png"
     },
     {
+      "id": "Label/underline__styled",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_underline__styled.png"
+    },
+    {
+      "id": "Label/underline__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_underline__false.png"
+    },
+    {
       "id": "Label/strikethrough__true",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Label_strikethrough__true.png"
+    },
+    {
+      "id": "Label/strikethrough__styled",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_strikethrough__styled.png"
+    },
+    {
+      "id": "Label/strikethrough__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_strikethrough__false.png"
     },
     {
       "id": "Label/autoShrink__true",
@@ -1040,16 +1533,40 @@
       "screenshot": "artifacts/web/Label_autoShrink__true.png"
     },
     {
+      "id": "Label/autoShrink__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_autoShrink__false.png"
+    },
+    {
       "id": "Label/minimumScaleFactor__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Label_minimumScaleFactor__static.png"
     },
     {
+      "id": "Label/minimumScaleFactor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_minimumScaleFactor__binding.png"
+    },
+    {
       "id": "Label/linkable__true",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Label_linkable__true.png"
+    },
+    {
+      "id": "Label/linkable__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_linkable__false.png"
+    },
+    {
+      "id": "Label/linkable__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_linkable__binding.png"
     },
     {
       "id": "Label/textShadow__static",
@@ -1064,6 +1581,12 @@
       "screenshot": "artifacts/web/Label_hintColor__static.png"
     },
     {
+      "id": "Label/hintColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_hintColor__binding.png"
+    },
+    {
       "id": "Label/highlightAttributes__static",
       "status": "pass",
       "detail": "",
@@ -1076,13 +1599,65 @@
       "screenshot": "artifacts/web/Label_highlightColor__static.png"
     },
     {
+      "id": "Label/highlightColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_highlightColor__binding.png"
+    },
+    {
+      "id": "Label/partialAttributes__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_partialAttributes__static.png"
+    },
+    {
       "id": "Label/fontWeight__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Label_fontWeight__static.png"
     },
     {
+      "id": "Label/fontWeight__600",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_fontWeight__600.png"
+    },
+    {
+      "id": "Label/fontWeight__static_with_partial",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_fontWeight__static_with_partial.png"
+    },
+    {
+      "id": "Label/fontWeight__600_with_partial",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_fontWeight__600_with_partial.png"
+    },
+    {
+      "id": "Label/disabledFontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_disabledFontColor__static.png"
+    },
+    {
+      "id": "Label/disabledFontColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Label_disabledFontColor__binding.png"
+    },
+    {
       "id": "TextField/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "TextField/text__alias_value",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "TextField/text__binding",
       "status": "pass",
       "detail": ""
     },
@@ -1110,6 +1685,18 @@
       "screenshot": "artifacts/web/TextField_hintColor__static.png"
     },
     {
+      "id": "TextField/hintColor__alias_placeholderColor",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_hintColor__alias_placeholderColor.png"
+    },
+    {
+      "id": "TextField/hintColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_hintColor__binding.png"
+    },
+    {
       "id": "TextField/hintFont__static",
       "status": "pass",
       "detail": "",
@@ -1128,16 +1715,34 @@
       "screenshot": "artifacts/web/TextField_font__static.png"
     },
     {
+      "id": "TextField/font__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_font__binding.png"
+    },
+    {
       "id": "TextField/fontSize__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/TextField_fontSize__static.png"
     },
     {
+      "id": "TextField/fontSize__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_fontSize__binding.png"
+    },
+    {
       "id": "TextField/fontColor__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/TextField_fontColor__static.png"
+    },
+    {
+      "id": "TextField/fontColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_fontColor__binding.png"
     },
     {
       "id": "TextField/textAlign__left",
@@ -1272,7 +1877,37 @@
       "screenshot": "artifacts/web/TextField_input__decimal.png"
     },
     {
-      "id": "TextField/inputType__static",
+      "id": "TextField/inputType__text",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "TextField/inputType__number",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "TextField/inputType__numberdecimal",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "TextField/inputType__phone",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "TextField/inputType__email",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "TextField/inputType__password",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "TextField/inputType__multiline",
       "status": "skipped",
       "detail": "not applicable to web"
     },
@@ -1343,13 +1978,107 @@
       "screenshot": "artifacts/web/TextField_returnKeyType__google.png"
     },
     {
-      "id": "TextField/contentType__static",
+      "id": "TextField/contentType__username",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/TextField_contentType__static.png"
+      "screenshot": "artifacts/web/TextField_contentType__username.png"
+    },
+    {
+      "id": "TextField/contentType__password",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_contentType__password.png"
+    },
+    {
+      "id": "TextField/contentType__newpassword",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_contentType__newpassword.png"
+    },
+    {
+      "id": "TextField/contentType__onetimecode",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_contentType__onetimecode.png"
+    },
+    {
+      "id": "TextField/contentType__email",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_contentType__email.png"
+    },
+    {
+      "id": "TextField/contentType__name",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_contentType__name.png"
+    },
+    {
+      "id": "TextField/contentType__givenname",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_contentType__givenname.png"
+    },
+    {
+      "id": "TextField/contentType__familyname",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_contentType__familyname.png"
+    },
+    {
+      "id": "TextField/contentType__telephonenumber",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_contentType__telephonenumber.png"
+    },
+    {
+      "id": "TextField/contentType__streetaddress",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_contentType__streetaddress.png"
+    },
+    {
+      "id": "TextField/contentType__postalcode",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_contentType__postalcode.png"
+    },
+    {
+      "id": "TextField/contentType__country",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_contentType__country.png"
+    },
+    {
+      "id": "TextField/contentType__creditcardnumber",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_contentType__creditcardnumber.png"
+    },
+    {
+      "id": "TextField/contentType__url",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_contentType__url.png"
+    },
+    {
+      "id": "TextField/contentType__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_contentType__binding.png"
     },
     {
       "id": "TextField/secure__true",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "TextField/secure__false",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "TextField/secure__binding",
       "status": "skipped",
       "detail": "not applicable to web"
     },
@@ -1375,12 +2104,22 @@
       "detail": "not applicable to web"
     },
     {
+      "id": "TextField/hasContainer__false",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
       "id": "TextField/textVerticalAlign__static",
       "status": "skipped",
       "detail": "not applicable to web"
     },
     {
       "id": "TextField/applyLiquidGlass__true",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "TextField/applyLiquidGlass__false",
       "status": "skipped",
       "detail": "not applicable to web"
     },
@@ -1421,27 +2160,46 @@
       "detail": ""
     },
     {
-      "id": "TextField/autocapitalizationType__static",
+      "id": "TextField/autocapitalizationType__none",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/TextField_autocapitalizationType__static.png"
+      "screenshot": "artifacts/web/TextField_autocapitalizationType__none.png"
     },
     {
-      "id": "TextField/autocorrectionType__static",
+      "id": "TextField/autocapitalizationType__words",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/TextField_autocorrectionType__static.png"
+      "screenshot": "artifacts/web/TextField_autocapitalizationType__words.png"
     },
     {
-      "id": "TextField/spellCheckingType__static",
-      "status": "skipped",
-      "detail": "not applicable to web"
-    },
-    {
-      "id": "TextField/keyboardAppearance__static",
+      "id": "TextField/autocapitalizationType__sentences",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/TextField_keyboardAppearance__static.png"
+      "screenshot": "artifacts/web/TextField_autocapitalizationType__sentences.png"
+    },
+    {
+      "id": "TextField/autocapitalizationType__allcharacters",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_autocapitalizationType__allcharacters.png"
+    },
+    {
+      "id": "TextField/autocorrectionType__default",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_autocorrectionType__default.png"
+    },
+    {
+      "id": "TextField/autocorrectionType__yes",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_autocorrectionType__yes.png"
+    },
+    {
+      "id": "TextField/autocorrectionType__no",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_autocorrectionType__no.png"
     },
     {
       "id": "TextField/clearButtonMode__static",
@@ -1477,10 +2235,22 @@
       "screenshot": "artifacts/web/TextField_required__true.png"
     },
     {
+      "id": "TextField/required__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_required__false.png"
+    },
+    {
       "id": "TextField/fontFamily__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/TextField_fontFamily__static.png"
+    },
+    {
+      "id": "TextField/fontFamily__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_fontFamily__binding.png"
     },
     {
       "id": "TextField/disabledBackground__static",
@@ -1489,13 +2259,18 @@
       "screenshot": "artifacts/web/TextField_disabledBackground__static.png"
     },
     {
-      "id": "TextField/placeholderColor__static",
+      "id": "TextField/hintLineHeightMultiple__static",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/TextField_placeholderColor__static.png"
+      "screenshot": "artifacts/web/TextField_hintLineHeightMultiple__static.png"
     },
     {
       "id": "TextView/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "TextView/text__binding",
       "status": "pass",
       "detail": ""
     },
@@ -1523,6 +2298,12 @@
       "screenshot": "artifacts/web/TextView_hintColor__static.png"
     },
     {
+      "id": "TextView/hintColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_hintColor__binding.png"
+    },
+    {
       "id": "TextView/hintFont__static",
       "status": "pass",
       "detail": "",
@@ -1547,16 +2328,34 @@
       "screenshot": "artifacts/web/TextView_font__static.png"
     },
     {
+      "id": "TextView/font__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_font__binding.png"
+    },
+    {
       "id": "TextView/fontSize__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/TextView_fontSize__static.png"
     },
     {
+      "id": "TextView/fontSize__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_fontSize__binding.png"
+    },
+    {
       "id": "TextView/fontColor__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/TextView_fontColor__static.png"
+    },
+    {
+      "id": "TextView/fontColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_fontColor__binding.png"
     },
     {
       "id": "TextView/textAlign__left",
@@ -1605,6 +2404,12 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/TextView_flexible__true.png"
+    },
+    {
+      "id": "TextView/flexible__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_flexible__false.png"
     },
     {
       "id": "TextView/input__default",
@@ -1727,22 +2532,112 @@
       "screenshot": "artifacts/web/TextView_returnKeyType__google.png"
     },
     {
+      "id": "TextView/editable__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_editable__false.png"
+    },
+    {
       "id": "TextView/editable__true",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/TextView_editable__true.png"
     },
     {
-      "id": "TextView/lineBreakMode__static",
+      "id": "TextView/lineBreakMode__clip",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/TextView_lineBreakMode__static.png"
+      "screenshot": "artifacts/web/TextView_lineBreakMode__clip.png"
     },
     {
-      "id": "TextView/keyboardType__static",
+      "id": "TextView/lineBreakMode__char",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/TextView_keyboardType__static.png"
+      "screenshot": "artifacts/web/TextView_lineBreakMode__char.png"
+    },
+    {
+      "id": "TextView/lineBreakMode__word",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_lineBreakMode__word.png"
+    },
+    {
+      "id": "TextView/lineBreakMode__head",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_lineBreakMode__head.png"
+    },
+    {
+      "id": "TextView/lineBreakMode__middle",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_lineBreakMode__middle.png"
+    },
+    {
+      "id": "TextView/lineBreakMode__tail",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_lineBreakMode__tail.png"
+    },
+    {
+      "id": "TextView/keyboardType__default",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_keyboardType__default.png"
+    },
+    {
+      "id": "TextView/keyboardType__asciicapable",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_keyboardType__asciicapable.png"
+    },
+    {
+      "id": "TextView/keyboardType__number",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_keyboardType__number.png"
+    },
+    {
+      "id": "TextView/keyboardType__decimal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_keyboardType__decimal.png"
+    },
+    {
+      "id": "TextView/keyboardType__phone",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_keyboardType__phone.png"
+    },
+    {
+      "id": "TextView/keyboardType__email",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_keyboardType__email.png"
+    },
+    {
+      "id": "TextView/keyboardType__url",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_keyboardType__url.png"
+    },
+    {
+      "id": "TextView/keyboardType__websearch",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_keyboardType__websearch.png"
+    },
+    {
+      "id": "TextView/keyboardType__namephonepad",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_keyboardType__namephonepad.png"
+    },
+    {
+      "id": "TextView/keyboardType__twitter",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_keyboardType__twitter.png"
     },
     {
       "id": "TextView/onTextChange__callback_fire",
@@ -1768,6 +2663,18 @@
       "screenshot": "artifacts/web/TextView_required__true.png"
     },
     {
+      "id": "TextView/required__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_required__false.png"
+    },
+    {
+      "id": "TextView/selectable__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_selectable__false.png"
+    },
+    {
       "id": "TextView/selectable__true",
       "status": "pass",
       "detail": "",
@@ -1786,16 +2693,16 @@
       "screenshot": "artifacts/web/TextView_cols__static.png"
     },
     {
-      "id": "TextView/resize__none",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/TextView_resize__none.png"
-    },
-    {
       "id": "TextView/resize__both",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/TextView_resize__both.png"
+    },
+    {
+      "id": "TextView/resize__none",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_resize__none.png"
     },
     {
       "id": "TextView/resize__horizontal",
@@ -1816,6 +2723,12 @@
       "screenshot": "artifacts/web/TextView_fontFamily__static.png"
     },
     {
+      "id": "TextView/fontFamily__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_fontFamily__binding.png"
+    },
+    {
       "id": "TextView/disabledBackground__static",
       "status": "pass",
       "detail": "",
@@ -1829,6 +2742,11 @@
     },
     {
       "id": "Button/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Button/text__binding",
       "status": "pass",
       "detail": ""
     },
@@ -1856,10 +2774,22 @@
       "screenshot": "artifacts/web/Button_fontColor__static.png"
     },
     {
+      "id": "Button/fontColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Button_fontColor__binding.png"
+    },
+    {
       "id": "Button/disabledFontColor__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Button_disabledFontColor__static.png"
+    },
+    {
+      "id": "Button/disabledFontColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Button_disabledFontColor__binding.png"
     },
     {
       "id": "Button/highlightColor__static",
@@ -1874,10 +2804,10 @@
       "screenshot": "artifacts/web/Button_highlightColor__alias_hilightColor.png"
     },
     {
-      "id": "Button/hilightColor__static",
+      "id": "Button/highlightColor__binding",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/Button_hilightColor__static.png"
+      "screenshot": "artifacts/web/Button_highlightColor__binding.png"
     },
     {
       "id": "Button/tapBackground__static",
@@ -1896,6 +2826,12 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Button_image__static.png"
+    },
+    {
+      "id": "Button/image__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Button_image__binding.png"
     },
     {
       "id": "Button/textAlign__left",
@@ -1940,16 +2876,52 @@
       "screenshot": "artifacts/web/Button_fontWeight__static.png"
     },
     {
+      "id": "Button/fontWeight__600",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Button_fontWeight__600.png"
+    },
+    {
+      "id": "Button/fontWeight__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Button_fontWeight__binding.png"
+    },
+    {
+      "id": "Button/fontFamily__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Button_fontFamily__static.png"
+    },
+    {
+      "id": "Button/fontFamily__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Button_fontFamily__binding.png"
+    },
+    {
       "id": "Image/src__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Image_src__static.png"
     },
     {
+      "id": "Image/src__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Image_src__binding.png"
+    },
+    {
       "id": "Image/srcName__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Image_srcName__static.png"
+    },
+    {
+      "id": "Image/srcName__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Image_srcName__binding.png"
     },
     {
       "id": "Image/highlightSrc__static",
@@ -1962,16 +2934,16 @@
       "detail": "not applicable to web"
     },
     {
-      "id": "Image/contentMode__fit",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Image_contentMode__fit.png"
-    },
-    {
       "id": "Image/contentMode__fill",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Image_contentMode__fill.png"
+    },
+    {
+      "id": "Image/contentMode__fit",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Image_contentMode__fit.png"
     },
     {
       "id": "Image/contentMode__center",
@@ -2022,12 +2994,6 @@
       "screenshot": "artifacts/web/Image_contentMode__center_2.png"
     },
     {
-      "id": "Image/contentMode__scaletofill",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Image_contentMode__scaletofill.png"
-    },
-    {
       "id": "Image/contentMode__top_2",
       "status": "pass",
       "detail": "",
@@ -2052,12 +3018,18 @@
       "screenshot": "artifacts/web/Image_contentMode__right_2.png"
     },
     {
-      "id": "Image/renderingMode__original",
+      "id": "Image/contentMode__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Image_contentMode__binding.png"
+    },
+    {
+      "id": "Image/renderingMode__template",
       "status": "skipped",
       "detail": "not applicable to web"
     },
     {
-      "id": "Image/renderingMode__template",
+      "id": "Image/renderingMode__original",
       "status": "skipped",
       "detail": "not applicable to web"
     },
@@ -2093,6 +3065,17 @@
       "id": "Image/systemIcon__true",
       "status": "skipped",
       "detail": "not applicable to web"
+    },
+    {
+      "id": "Image/systemIcon__false",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "Image/defaultImage__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Image_defaultImage__static.png"
     },
     {
       "id": "NetworkImage/hint__static",
@@ -2183,6 +3166,12 @@
       "screenshot": "artifacts/web/NetworkImage_contentMode__center_2.png"
     },
     {
+      "id": "NetworkImage/contentMode__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/NetworkImage_contentMode__binding.png"
+    },
+    {
       "id": "NetworkImage/alt__static",
       "status": "pass",
       "detail": "",
@@ -2199,6 +3188,16 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/NetworkImage_loading__eager.png"
+    },
+    {
+      "id": "NetworkImage/renderingMode__original",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "NetworkImage/renderingMode__template",
+      "status": "skipped",
+      "detail": "not applicable to web"
     },
     {
       "id": "SelectBox/prompt__static",
@@ -2225,9 +3224,10 @@
       "screenshot": "artifacts/web/SelectBox_hintColor__static.png"
     },
     {
-      "id": "SelectBox/text__static",
-      "status": "skipped",
-      "detail": "not applicable to web"
+      "id": "SelectBox/hintColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SelectBox_hintColor__binding.png"
     },
     {
       "id": "SelectBox/items__static",
@@ -2236,16 +3236,16 @@
       "screenshot": "artifacts/web/SelectBox_items__static.png"
     },
     {
-      "id": "SelectBox/selectItemType__normal",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/SelectBox_selectItemType__normal.png"
-    },
-    {
       "id": "SelectBox/selectItemType__date",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/SelectBox_selectItemType__date.png"
+    },
+    {
+      "id": "SelectBox/selectItemType__normal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SelectBox_selectItemType__normal.png"
     },
     {
       "id": "SelectBox/selectedIndex__static",
@@ -2254,15 +3254,20 @@
       "screenshot": "artifacts/web/SelectBox_selectedIndex__static.png"
     },
     {
+      "id": "SelectBox/selectedIndex__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SelectBox_selectedIndex__binding.png"
+    },
+    {
       "id": "SelectBox/selectedItem__static",
       "status": "skipped",
       "detail": "not applicable to web"
     },
     {
-      "id": "SelectBox/datePickerMode__date",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/SelectBox_datePickerMode__date.png"
+      "id": "SelectBox/selectedItem__binding",
+      "status": "skipped",
+      "detail": "not applicable to web"
     },
     {
       "id": "SelectBox/datePickerMode__time",
@@ -2271,10 +3276,10 @@
       "screenshot": "artifacts/web/SelectBox_datePickerMode__time.png"
     },
     {
-      "id": "SelectBox/datePickerMode__datetime",
+      "id": "SelectBox/datePickerMode__date",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/SelectBox_datePickerMode__datetime.png"
+      "screenshot": "artifacts/web/SelectBox_datePickerMode__date.png"
     },
     {
       "id": "SelectBox/datePickerMode__dateandtime",
@@ -2287,6 +3292,12 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/SelectBox_datePickerMode__countdown.png"
+    },
+    {
+      "id": "SelectBox/datePickerStyle__graphical",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SelectBox_datePickerStyle__graphical.png"
     },
     {
       "id": "SelectBox/datePickerStyle__automatic",
@@ -2313,12 +3324,6 @@
       "screenshot": "artifacts/web/SelectBox_datePickerStyle__compact.png"
     },
     {
-      "id": "SelectBox/datePickerStyle__graphical",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/SelectBox_datePickerStyle__graphical.png"
-    },
-    {
       "id": "SelectBox/datePickerStyle__inline",
       "status": "pass",
       "detail": "",
@@ -2331,16 +3336,34 @@
       "screenshot": "artifacts/web/SelectBox_dateStringFormat__static.png"
     },
     {
+      "id": "SelectBox/dateStringFormat__alias_dateFormat",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SelectBox_dateStringFormat__alias_dateFormat.png"
+    },
+    {
       "id": "SelectBox/minimumDate__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/SelectBox_minimumDate__static.png"
     },
     {
+      "id": "SelectBox/minimumDate__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SelectBox_minimumDate__binding.png"
+    },
+    {
       "id": "SelectBox/maximumDate__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/SelectBox_maximumDate__static.png"
+    },
+    {
+      "id": "SelectBox/maximumDate__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SelectBox_maximumDate__binding.png"
     },
     {
       "id": "SelectBox/minuteInterval__1",
@@ -2477,6 +3500,12 @@
       "screenshot": "artifacts/web/SelectBox_multiple__true.png"
     },
     {
+      "id": "SelectBox/multiple__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SelectBox_multiple__false.png"
+    },
+    {
       "id": "SelectBox/size__static",
       "status": "pass",
       "detail": "",
@@ -2489,10 +3518,28 @@
       "screenshot": "artifacts/web/SelectBox_selectedValue__static.png"
     },
     {
+      "id": "SelectBox/selectedValue__three",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SelectBox_selectedValue__three.png"
+    },
+    {
+      "id": "SelectBox/selectedValue__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SelectBox_selectedValue__binding.png"
+    },
+    {
       "id": "Switch/isOn__true",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Switch_isOn__true.png"
+    },
+    {
+      "id": "Switch/isOn__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Switch_isOn__false.png"
     },
     {
       "id": "Switch/value__true",
@@ -2501,10 +3548,34 @@
       "screenshot": "artifacts/web/Switch_value__true.png"
     },
     {
+      "id": "Switch/value__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Switch_value__false.png"
+    },
+    {
+      "id": "Switch/value__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Switch_value__binding.png"
+    },
+    {
       "id": "Switch/checked__true",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Switch_checked__true.png"
+    },
+    {
+      "id": "Switch/checked__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Switch_checked__false.png"
+    },
+    {
+      "id": "Switch/checked__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Switch_checked__binding.png"
     },
     {
       "id": "Switch/enabled__true",
@@ -2517,10 +3588,21 @@
       "detail": ""
     },
     {
+      "id": "Switch/enabled__binding",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "Switch/tint__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Switch_tint__static.png"
+    },
+    {
+      "id": "Switch/tint__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Switch_tint__binding.png"
     },
     {
       "id": "Switch/tintColor__static",
@@ -2541,6 +3623,12 @@
       "screenshot": "artifacts/web/Switch_thumbTintColor__static.png"
     },
     {
+      "id": "Switch/thumbTintColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Switch_thumbTintColor__binding.png"
+    },
+    {
       "id": "Switch/offTintColor__static",
       "status": "skipped",
       "detail": "not applicable to web"
@@ -2551,12 +3639,12 @@
       "detail": ""
     },
     {
-      "id": "Switch/labelPosition__leading",
+      "id": "Switch/labelPosition__trailing",
       "status": "skipped",
       "detail": "not applicable to web"
     },
     {
-      "id": "Switch/labelPosition__trailing",
+      "id": "Switch/labelPosition__leading",
       "status": "skipped",
       "detail": "not applicable to web"
     },
@@ -2565,6 +3653,68 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Switch_trackTintColor__static.png"
+    },
+    {
+      "id": "Switch/fontColor__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Switch_fontColor__static.png"
+    },
+    {
+      "id": "Switch/fontColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Switch_fontColor__binding.png"
+    },
+    {
+      "id": "Switch/toggleStyle__switch",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "Switch/toggleStyle__button",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "Switch/toggleStyle__checkbox",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "Switch/toggleStyle__default",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "Switch/label__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Switch_label__static.png"
+    },
+    {
+      "id": "Switch/label__alias_text",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Switch_label__alias_text.png"
+    },
+    {
+      "id": "Switch/label__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Switch_label__binding.png"
+    },
+    {
+      "id": "Switch/fontSize__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Switch_fontSize__static.png"
+    },
+    {
+      "id": "Switch/fontSize__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Switch_fontSize__binding.png"
     },
     {
       "id": "Segment/items__static",
@@ -2579,10 +3729,28 @@
       "screenshot": "artifacts/web/Segment_selectedIndex__static.png"
     },
     {
+      "id": "Segment/selectedIndex__alias_selectedTabIndex",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Segment_selectedIndex__alias_selectedTabIndex.png"
+    },
+    {
+      "id": "Segment/selectedIndex__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Segment_selectedIndex__binding.png"
+    },
+    {
       "id": "Segment/tintColor__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Segment_tintColor__static.png"
+    },
+    {
+      "id": "Segment/tintColor__alias_selectedSegmentTintColor",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Segment_tintColor__alias_selectedSegmentTintColor.png"
     },
     {
       "id": "Segment/fontColor__static",
@@ -2614,16 +3782,21 @@
       "detail": "not applicable to web"
     },
     {
+      "id": "Segment/apportionsSegmentWidthsByContent__false",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
       "id": "Slider/value__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Slider_value__static.png"
     },
     {
-      "id": "Slider/minValue__static",
+      "id": "Slider/value__binding",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/Slider_minValue__static.png"
+      "screenshot": "artifacts/web/Slider_value__binding.png"
     },
     {
       "id": "Slider/minimum__static",
@@ -2644,10 +3817,10 @@
       "screenshot": "artifacts/web/Slider_minimum__alias_minValue.png"
     },
     {
-      "id": "Slider/maxValue__static",
+      "id": "Slider/minimum__binding",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/Slider_maxValue__static.png"
+      "screenshot": "artifacts/web/Slider_minimum__binding.png"
     },
     {
       "id": "Slider/maximum__static",
@@ -2666,6 +3839,12 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Slider_maximum__alias_maxValue.png"
+    },
+    {
+      "id": "Slider/maximum__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Slider_maximum__binding.png"
     },
     {
       "id": "Slider/tintColor__static",
@@ -2708,6 +3887,12 @@
       "screenshot": "artifacts/web/Progress_progress__static.png"
     },
     {
+      "id": "Progress/progress__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Progress_progress__binding.png"
+    },
+    {
       "id": "Progress/tintColor__static",
       "status": "pass",
       "detail": "",
@@ -2720,10 +3905,22 @@
       "screenshot": "artifacts/web/Progress_progressTintColor__static.png"
     },
     {
+      "id": "Progress/progressTintColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Progress_progressTintColor__binding.png"
+    },
+    {
       "id": "Progress/trackTintColor__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Progress_trackTintColor__static.png"
+    },
+    {
+      "id": "Progress/trackTintColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Progress_trackTintColor__binding.png"
     },
     {
       "id": "Progress/progressViewStyle__static",
@@ -2746,12 +3943,17 @@
       "detail": "not applicable to web"
     },
     {
-      "id": "Progress/indicatorStyle__medium",
+      "id": "Progress/hidesWhenStopped__false",
       "status": "skipped",
       "detail": "not applicable to web"
     },
     {
       "id": "Progress/indicatorStyle__large",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "Progress/indicatorStyle__medium",
       "status": "skipped",
       "detail": "not applicable to web"
     },
@@ -2773,16 +3975,16 @@
       "screenshot": "artifacts/web/View_orientation__vertical.png"
     },
     {
-      "id": "View/direction__toptobottom",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/View_direction__toptobottom.png"
-    },
-    {
       "id": "View/direction__bottomtotop",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/View_direction__bottomtotop.png"
+    },
+    {
+      "id": "View/direction__toptobottom",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/View_direction__toptobottom.png"
     },
     {
       "id": "View/direction__lefttoright",
@@ -2803,16 +4005,16 @@
       "screenshot": "artifacts/web/View_direction__none.png"
     },
     {
-      "id": "View/distribution__fill",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/View_distribution__fill.png"
-    },
-    {
       "id": "View/distribution__fillequally",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/View_distribution__fillequally.png"
+    },
+    {
+      "id": "View/distribution__fill",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/View_distribution__fill.png"
     },
     {
       "id": "View/distribution__equalspacing",
@@ -2833,12 +4035,38 @@
       "screenshot": "artifacts/web/View_spacing__static.png"
     },
     {
+      "id": "View/spacing__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/View_spacing__binding.png"
+    },
+    {
       "id": "View/gradient__static",
       "status": "skipped",
       "detail": "not applicable to web"
     },
     {
-      "id": "View/gradientDirection__static",
+      "id": "View/gradientDirection__horizontal",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "View/gradientDirection__vertical",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "View/gradientDirection__oblique",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "View/gradientDirection__righttoleft",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "View/gradientDirection__bottomtotop",
       "status": "skipped",
       "detail": "not applicable to web"
     },
@@ -2858,6 +4086,12 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/View_highlighted__true.png"
+    },
+    {
+      "id": "View/highlighted__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/View_highlighted__false.png"
     },
     {
       "id": "View/flexWrap__nowrap",
@@ -2884,6 +4118,12 @@
       "screenshot": "artifacts/web/View_draggable__true.png"
     },
     {
+      "id": "View/draggable__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/View_draggable__false.png"
+    },
+    {
       "id": "ScrollView/orientation__horizontal",
       "status": "pass",
       "detail": "",
@@ -2896,22 +4136,34 @@
       "screenshot": "artifacts/web/ScrollView_orientation__vertical.png"
     },
     {
-      "id": "ScrollView/scrollMode__inner",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/ScrollView_scrollMode__inner.png"
-    },
-    {
       "id": "ScrollView/scrollMode__window",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/ScrollView_scrollMode__window.png"
     },
     {
+      "id": "ScrollView/scrollMode__inner",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/ScrollView_scrollMode__inner.png"
+    },
+    {
+      "id": "ScrollView/showsHorizontalScrollIndicator__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/ScrollView_showsHorizontalScrollIndicator__false.png"
+    },
+    {
       "id": "ScrollView/showsHorizontalScrollIndicator__true",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/ScrollView_showsHorizontalScrollIndicator__true.png"
+    },
+    {
+      "id": "ScrollView/showsVerticalScrollIndicator__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/ScrollView_showsVerticalScrollIndicator__false.png"
     },
     {
       "id": "ScrollView/showsVerticalScrollIndicator__true",
@@ -2947,10 +4199,34 @@
       "screenshot": "artifacts/web/ScrollView_scrollBehavior__smooth.png"
     },
     {
-      "id": "Collection/lazy__lazy",
+      "id": "ScrollView/horizontalScroll__true",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/Collection_lazy__lazy.png"
+      "screenshot": "artifacts/web/ScrollView_horizontalScroll__true.png"
+    },
+    {
+      "id": "ScrollView/horizontalScroll__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/ScrollView_horizontalScroll__false.png"
+    },
+    {
+      "id": "ScrollView/defaultScrollAnchor__top",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/ScrollView_defaultScrollAnchor__top.png"
+    },
+    {
+      "id": "ScrollView/defaultScrollAnchor__center",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/ScrollView_defaultScrollAnchor__center.png"
+    },
+    {
+      "id": "ScrollView/defaultScrollAnchor__bottom",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/ScrollView_defaultScrollAnchor__bottom.png"
     },
     {
       "id": "Collection/lazy__eager",
@@ -2959,10 +4235,22 @@
       "screenshot": "artifacts/web/Collection_lazy__eager.png"
     },
     {
+      "id": "Collection/lazy__lazy",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_lazy__lazy.png"
+    },
+    {
       "id": "Collection/lazy__none",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Collection_lazy__none.png"
+    },
+    {
+      "id": "Collection/lazy__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_lazy__binding.png"
     },
     {
       "id": "Collection/columns__static",
@@ -2989,10 +4277,22 @@
       "screenshot": "artifacts/web/Collection_lineSpacing__static.png"
     },
     {
+      "id": "Collection/lineSpacing__alias_sectionSpacing",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_lineSpacing__alias_sectionSpacing.png"
+    },
+    {
       "id": "Collection/horizontalScroll__true",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Collection_horizontalScroll__true.png"
+    },
+    {
+      "id": "Collection/horizontalScroll__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_horizontalScroll__false.png"
     },
     {
       "id": "Collection/orientation__horizontal",
@@ -3007,40 +4307,22 @@
       "screenshot": "artifacts/web/Collection_orientation__vertical.png"
     },
     {
-      "id": "Collection/layout__vertical",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Collection_layout__vertical.png"
-    },
-    {
       "id": "Collection/layout__horizontal",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Collection_layout__horizontal.png"
     },
     {
+      "id": "Collection/layout__vertical",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_layout__vertical.png"
+    },
+    {
       "id": "Collection/layout__flow",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Collection_layout__flow.png"
-    },
-    {
-      "id": "Collection/layout__flow_2",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Collection_layout__flow_2.png"
-    },
-    {
-      "id": "Collection/layout__leftaligned",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Collection_layout__leftaligned.png"
-    },
-    {
-      "id": "Collection/layout__leftaligned_2",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Collection_layout__leftaligned_2.png"
     },
     {
       "id": "Collection/insets__static",
@@ -3053,6 +4335,12 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Collection_insetHorizontal__static.png"
+    },
+    {
+      "id": "Collection/insetHorizontal__static_horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_insetHorizontal__static_horizontal.png"
     },
     {
       "id": "Collection/insetVertical__static",
@@ -3071,10 +4359,22 @@
       "detail": "not applicable to web"
     },
     {
+      "id": "Collection/showsHorizontalScrollIndicator__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_showsHorizontalScrollIndicator__false.png"
+    },
+    {
       "id": "Collection/showsHorizontalScrollIndicator__true",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Collection_showsHorizontalScrollIndicator__true.png"
+    },
+    {
+      "id": "Collection/showsVerticalScrollIndicator__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_showsVerticalScrollIndicator__false.png"
     },
     {
       "id": "Collection/showsVerticalScrollIndicator__true",
@@ -3107,16 +4407,16 @@
       "screenshot": "artifacts/web/Collection_scrollAnchor__bottom.png"
     },
     {
-      "id": "Collection/defaultScrollAnchor__top",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Collection_defaultScrollAnchor__top.png"
-    },
-    {
       "id": "Collection/defaultScrollAnchor__center",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Collection_defaultScrollAnchor__center.png"
+    },
+    {
+      "id": "Collection/defaultScrollAnchor__top",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_defaultScrollAnchor__top.png"
     },
     {
       "id": "Collection/defaultScrollAnchor__bottom",
@@ -3130,9 +4430,62 @@
       "detail": "not applicable to web"
     },
     {
+      "id": "Collection/reverseLayout__false",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
       "id": "Collection/containerInset__static",
       "status": "skipped",
       "detail": "not applicable to web"
+    },
+    {
+      "id": "Collection/cellWidth__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_cellWidth__static.png"
+    },
+    {
+      "id": "Collection/cellHeight__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_cellHeight__static.png"
+    },
+    {
+      "id": "Collection/hideSeparator__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_hideSeparator__true.png"
+    },
+    {
+      "id": "Collection/hideSeparator__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_hideSeparator__false.png"
+    },
+    {
+      "id": "Collection/listStyle__plain",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_listStyle__plain.png"
+    },
+    {
+      "id": "Collection/listStyle__grouped",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_listStyle__grouped.png"
+    },
+    {
+      "id": "Collection/listStyle__insetgrouped",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_listStyle__insetgrouped.png"
+    },
+    {
+      "id": "Collection/listStyle__sidebar",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_listStyle__sidebar.png"
     },
     {
       "id": "Radio/label__static",
@@ -3141,7 +4494,18 @@
       "screenshot": "artifacts/web/Radio_label__static.png"
     },
     {
+      "id": "Radio/label__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Radio_label__binding.png"
+    },
+    {
       "id": "Radio/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Radio/text__binding",
       "status": "pass",
       "detail": ""
     },
@@ -3157,7 +4521,17 @@
       "detail": "not applicable to web"
     },
     {
+      "id": "Radio/icon__square",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
       "id": "Radio/selectedIcon__static",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "Radio/selectedIcon__checkmark-square-fill",
       "status": "skipped",
       "detail": "not applicable to web"
     },
@@ -3167,16 +4541,40 @@
       "detail": "not applicable to web"
     },
     {
-      "id": "Radio/selected_icon__static",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/Radio_selected_icon__static.png"
-    },
-    {
       "id": "Radio/checked__true",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Radio_checked__true.png"
+    },
+    {
+      "id": "Radio/checked__true_with_group",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Radio_checked__true_with_group.png"
+    },
+    {
+      "id": "Radio/checked__alias_isOn",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Radio_checked__alias_isOn.png"
+    },
+    {
+      "id": "Radio/checked__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Radio_checked__false.png"
+    },
+    {
+      "id": "Radio/checked__false_with_group",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Radio_checked__false_with_group.png"
+    },
+    {
+      "id": "Radio/checked__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Radio_checked__binding.png"
     },
     {
       "id": "Radio/value__static",
@@ -3191,10 +4589,22 @@
       "screenshot": "artifacts/web/Radio_font__static.png"
     },
     {
+      "id": "Radio/font__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Radio_font__binding.png"
+    },
+    {
       "id": "Radio/fontSize__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Radio_fontSize__static.png"
+    },
+    {
+      "id": "Radio/fontSize__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Radio_fontSize__binding.png"
     },
     {
       "id": "Radio/fontColor__static",
@@ -3203,10 +4613,22 @@
       "screenshot": "artifacts/web/Radio_fontColor__static.png"
     },
     {
+      "id": "Radio/fontColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Radio_fontColor__binding.png"
+    },
+    {
       "id": "Radio/spacing__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Radio_spacing__static.png"
+    },
+    {
+      "id": "Radio/spacing__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Radio_spacing__binding.png"
     },
     {
       "id": "Radio/checkedColor__static",
@@ -3235,13 +4657,36 @@
       "screenshot": "artifacts/web/Radio_selectedValue__static.png"
     },
     {
+      "id": "Radio/selectedValue__gamma",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Radio_selectedValue__gamma.png"
+    },
+    {
+      "id": "Radio/selectedValue__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Radio_selectedValue__binding.png"
+    },
+    {
       "id": "CheckBox/label__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/CheckBox_label__static.png"
     },
     {
+      "id": "CheckBox/label__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/CheckBox_label__binding.png"
+    },
+    {
       "id": "CheckBox/text__static",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "CheckBox/text__binding",
       "status": "pass",
       "detail": ""
     },
@@ -3252,10 +4697,28 @@
       "screenshot": "artifacts/web/CheckBox_isOn__true.png"
     },
     {
+      "id": "CheckBox/isOn__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/CheckBox_isOn__false.png"
+    },
+    {
       "id": "CheckBox/checked__true",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/CheckBox_checked__true.png"
+    },
+    {
+      "id": "CheckBox/checked__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/CheckBox_checked__false.png"
+    },
+    {
+      "id": "CheckBox/checked__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/CheckBox_checked__binding.png"
     },
     {
       "id": "CheckBox/icon__static",
@@ -3279,10 +4742,16 @@
       "detail": "not applicable to web"
     },
     {
-      "id": "CheckBox/value__static",
+      "id": "CheckBox/value__true",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/CheckBox_value__static.png"
+      "screenshot": "artifacts/web/CheckBox_value__true.png"
+    },
+    {
+      "id": "CheckBox/value__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/CheckBox_value__false.png"
     },
     {
       "id": "CheckBox/enabled__true",
@@ -3295,10 +4764,21 @@
       "detail": ""
     },
     {
+      "id": "CheckBox/enabled__binding",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "CheckBox/font__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/CheckBox_font__static.png"
+    },
+    {
+      "id": "CheckBox/font__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/CheckBox_font__binding.png"
     },
     {
       "id": "CheckBox/fontSize__static",
@@ -3307,10 +4787,22 @@
       "screenshot": "artifacts/web/CheckBox_fontSize__static.png"
     },
     {
+      "id": "CheckBox/fontSize__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/CheckBox_fontSize__binding.png"
+    },
+    {
       "id": "CheckBox/fontColor__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/CheckBox_fontColor__static.png"
+    },
+    {
+      "id": "CheckBox/fontColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/CheckBox_fontColor__binding.png"
     },
     {
       "id": "CheckBox/spacing__static",
@@ -3319,12 +4811,28 @@
       "screenshot": "artifacts/web/CheckBox_spacing__static.png"
     },
     {
+      "id": "CheckBox/spacing__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/CheckBox_spacing__binding.png"
+    },
+    {
       "id": "CheckBox/onValueChange__callback_fire",
       "status": "pass",
       "detail": ""
     },
     {
       "id": "CheckBox/checkedColor__static",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "CheckBox/checkedColor__alias_checkColor",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "CheckBox/checkedColor__alias_onTintColor",
       "status": "skipped",
       "detail": "not applicable to web"
     },
@@ -3344,7 +4852,29 @@
       "detail": "not applicable to web"
     },
     {
-      "id": "Indicator/indicatorStyle__medium",
+      "id": "CheckBox/fontWeight__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/CheckBox_fontWeight__static.png"
+    },
+    {
+      "id": "CheckBox/fontWeight__alias_fontStyle",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/CheckBox_fontWeight__alias_fontStyle.png"
+    },
+    {
+      "id": "Indicator/animating__false",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "Indicator/animating__true",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "Indicator/animating__binding",
       "status": "skipped",
       "detail": "not applicable to web"
     },
@@ -3354,7 +4884,27 @@
       "detail": "not applicable to web"
     },
     {
+      "id": "Indicator/indicatorStyle__medium",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
       "id": "Indicator/color__static",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "Indicator/color__alias_tint",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "Indicator/color__binding",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "Indicator/hidesWhenStopped__false",
       "status": "skipped",
       "detail": "not applicable to web"
     },
@@ -3370,16 +4920,22 @@
       "screenshot": "artifacts/web/GradientView_gradient__static.png"
     },
     {
-      "id": "GradientView/gradientDirection__vertical",
+      "id": "GradientView/gradient__alias_colors",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/GradientView_gradientDirection__vertical.png"
+      "screenshot": "artifacts/web/GradientView_gradient__alias_colors.png"
     },
     {
       "id": "GradientView/gradientDirection__horizontal",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/GradientView_gradientDirection__horizontal.png"
+    },
+    {
+      "id": "GradientView/gradientDirection__vertical",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/GradientView_gradientDirection__vertical.png"
     },
     {
       "id": "GradientView/gradientDirection__oblique",
@@ -3423,10 +4979,33 @@
       "detail": ""
     },
     {
+      "id": "IconLabel/text__binding",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "IconLabel/selected__true",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/IconLabel_selected__true.png"
+    },
+    {
+      "id": "IconLabel/selected__alias_isOn",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/IconLabel_selected__alias_isOn.png"
+    },
+    {
+      "id": "IconLabel/selected__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/IconLabel_selected__false.png"
+    },
+    {
+      "id": "IconLabel/selected__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/IconLabel_selected__binding.png"
     },
     {
       "id": "IconLabel/font__static",
@@ -3471,16 +5050,16 @@
       "screenshot": "artifacts/web/IconLabel_icon_off__static.png"
     },
     {
-      "id": "IconLabel/iconPosition__left",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/IconLabel_iconPosition__left.png"
-    },
-    {
       "id": "IconLabel/iconPosition__right",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/IconLabel_iconPosition__right.png"
+    },
+    {
+      "id": "IconLabel/iconPosition__left",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/IconLabel_iconPosition__left.png"
     },
     {
       "id": "IconLabel/iconPosition__top",
@@ -3501,16 +5080,28 @@
       "screenshot": "artifacts/web/IconLabel_iconMargin__static.png"
     },
     {
+      "id": "IconLabel/iconSize__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/IconLabel_iconSize__static.png"
+    },
+    {
       "id": "Web/html__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/Web_html__static.png"
     },
     {
-      "id": "Web/sandbox__static",
+      "id": "Web/sandbox__false",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/Web_sandbox__static.png"
+      "screenshot": "artifacts/web/Web_sandbox__false.png"
+    },
+    {
+      "id": "Web/sandbox__true",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Web_sandbox__true.png"
     },
     {
       "id": "Web/allow__static",
@@ -3537,6 +5128,59 @@
       "screenshot": "artifacts/web/SafeAreaView_safeAreaInsetPositions__static.png"
     },
     {
+      "id": "SafeAreaView/safeAreaInsetPositions__alias_edges",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SafeAreaView_safeAreaInsetPositions__alias_edges.png"
+    },
+    {
+      "id": "SafeAreaView/direction__toptobottom",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SafeAreaView_direction__toptobottom.png"
+    },
+    {
+      "id": "SafeAreaView/direction__bottomtotop",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SafeAreaView_direction__bottomtotop.png"
+    },
+    {
+      "id": "SafeAreaView/direction__lefttoright",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SafeAreaView_direction__lefttoright.png"
+    },
+    {
+      "id": "SafeAreaView/direction__righttoleft",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SafeAreaView_direction__righttoleft.png"
+    },
+    {
+      "id": "SafeAreaView/direction__none",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SafeAreaView_direction__none.png"
+    },
+    {
+      "id": "SafeAreaView/gradient__static",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "SafeAreaView/spacing__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SafeAreaView_spacing__static.png"
+    },
+    {
+      "id": "SafeAreaView/spacing__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/SafeAreaView_spacing__binding.png"
+    },
+    {
       "id": "TabView/selectedIndex__static",
       "status": "pass",
       "detail": "",
@@ -3547,6 +5191,12 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/TabView_selectedIndex__alias_selectedTabIndex.png"
+    },
+    {
+      "id": "TabView/selectedIndex__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TabView_selectedIndex__binding.png"
     },
     {
       "id": "TabView/tabs__static",
@@ -3561,10 +5211,22 @@
       "screenshot": "artifacts/web/TabView_tintColor__static.png"
     },
     {
+      "id": "TabView/tintColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TabView_tintColor__binding.png"
+    },
+    {
       "id": "TabView/unselectedColor__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/TabView_unselectedColor__static.png"
+    },
+    {
+      "id": "TabView/unselectedColor__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TabView_unselectedColor__binding.png"
     },
     {
       "id": "TabView/tabBarBackground__static",
@@ -3573,16 +5235,28 @@
       "screenshot": "artifacts/web/TabView_tabBarBackground__static.png"
     },
     {
+      "id": "TabView/tabBarBackground__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TabView_tabBarBackground__binding.png"
+    },
+    {
+      "id": "TabView/showLabels__false",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TabView_showLabels__false.png"
+    },
+    {
       "id": "TabView/showLabels__true",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/TabView_showLabels__true.png"
     },
     {
-      "id": "__control/Blur",
+      "id": "__control/Blur__root.backdrop-b5f80259",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/control_Blur.png"
+      "screenshot": "artifacts/web/control_Blur__root.backdrop-b5f80259.png"
     },
     {
       "id": "__control/Button",
@@ -3631,6 +5305,30 @@
       "screenshot": "artifacts/web/control_Collection__columns-2.png"
     },
     {
+      "id": "__control/Collection__no-sections",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Collection__no-sections.png"
+    },
+    {
+      "id": "__control/Collection__orientation-horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Collection__orientation-horizontal.png"
+    },
+    {
+      "id": "__control/Collection__scrollTo--scrollTarget",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Collection__scrollTo--scrollTarget.png"
+    },
+    {
+      "id": "__control/Collection__width-150",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Collection__width-150.png"
+    },
+    {
       "id": "__control/GradientView",
       "status": "pass",
       "detail": "",
@@ -3667,6 +5365,12 @@
       "screenshot": "artifacts/web/control_Image.png"
     },
     {
+      "id": "__control/Image__no-src",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Image__no-src.png"
+    },
+    {
       "id": "__control/Image__src-star",
       "status": "skipped",
       "detail": "not applicable to web"
@@ -3677,10 +5381,27 @@
       "detail": "not applicable to web"
     },
     {
+      "id": "__control/Indicator__animating-False",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
       "id": "__control/Label",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/control_Label.png"
+    },
+    {
+      "id": "__control/Label__autoShrink-True_height-40_text-1d8efd05",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Label__autoShrink-True_height-40_text-1d8efd05.png"
+    },
+    {
+      "id": "__control/Label__enabled-False",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Label__enabled-False.png"
     },
     {
       "id": "__control/Label__highlightAttributes-cb049517",
@@ -3689,16 +5410,22 @@
       "screenshot": "artifacts/web/control_Label__highlightAttributes-cb049517.png"
     },
     {
-      "id": "__control/Label__hint-Conformance-Hint_no-text",
+      "id": "__control/Label__hint-Conformance-Hint_hintAttributes--fontSize-12_no-text",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/control_Label__hint-Conformance-Hint_no-text.png"
+      "screenshot": "artifacts/web/control_Label__hint-Conformance-Hint_hintAttributes--fontSize-12_no-text.png"
     },
     {
-      "id": "__control/Label__no-text",
+      "id": "__control/Label__hintAttributes--fontSize-12_no-text",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/control_Label__no-text.png"
+      "screenshot": "artifacts/web/control_Label__hintAttributes--fontSize-12_no-text.png"
+    },
+    {
+      "id": "__control/Label__partialAttributes-5561bca6",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Label__partialAttributes-5561bca6.png"
     },
     {
       "id": "__control/Label__selected-True",
@@ -3713,10 +5440,38 @@
       "screenshot": "artifacts/web/control_Label__text-1d8efd05.png"
     },
     {
+      "id": "__control/Label__text-5ed92def",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Label__text-5ed92def.png"
+    },
+    {
+      "id": "__control/Label__text-sample-conformance-text",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Label__text-sample-conformance-text.png"
+    },
+    {
       "id": "__control/NetworkImage",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/control_NetworkImage.png"
+    },
+    {
+      "id": "__control/NetworkImage__no-defaultImage",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_NetworkImage__no-defaultImage.png"
+    },
+    {
+      "id": "__control/NetworkImage__no-defaultImage_url-87f5e17b",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "__control/NetworkImage__no-defaultImage_url-efd3e3a7",
+      "status": "skipped",
+      "detail": "not applicable to web"
     },
     {
       "id": "__control/Progress",
@@ -3738,9 +5493,20 @@
     },
     {
       "id": "__control/Radio__checked-True",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "__control/Radio__group-conformance-group",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/control_Radio__checked-True.png"
+      "screenshot": "artifacts/web/control_Radio__group-conformance-group.png"
+    },
+    {
+      "id": "__control/Radio__items--Alpha-Beta-Gamma",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Radio__items--Alpha-Beta-Gamma.png"
     },
     {
       "id": "__control/Radio__no-text",
@@ -3755,22 +5521,46 @@
       "screenshot": "artifacts/web/control_Radio__orientation-horizontal.png"
     },
     {
-      "id": "__control/Radio__value-sample",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/control_Radio__value-sample.png"
-    },
-    {
       "id": "__control/SafeAreaView",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/control_SafeAreaView.png"
     },
     {
+      "id": "__control/SafeAreaView__height-200_width-200",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_SafeAreaView__height-200_width-200.png"
+    },
+    {
+      "id": "__control/SafeAreaView__orientation-horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_SafeAreaView__orientation-horizontal.png"
+    },
+    {
+      "id": "__control/SafeAreaView__orientation-vertical",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_SafeAreaView__orientation-vertical.png"
+    },
+    {
       "id": "__control/ScrollView",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/control_ScrollView.png"
+    },
+    {
+      "id": "__control/ScrollView__child-50058fa9",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_ScrollView__child-50058fa9.png"
+    },
+    {
+      "id": "__control/ScrollView__orientation-horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_ScrollView__orientation-horizontal.png"
     },
     {
       "id": "__control/Segment",
@@ -3785,21 +5575,22 @@
       "screenshot": "artifacts/web/control_SelectBox.png"
     },
     {
-      "id": "__control/SelectBox__datePickerMode-time_selectItemType-Date",
+      "id": "__control/SelectBox__datePickerMode-date_selectItemType-Date",
       "status": "pass",
       "detail": "",
-      "screenshot": "artifacts/web/control_SelectBox__datePickerMode-time_selectItemType-Date.png"
+      "screenshot": "artifacts/web/control_SelectBox__datePickerMode-date_selectItemType-Date.png"
+    },
+    {
+      "id": "__control/SelectBox__prompt-Choose",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_SelectBox__prompt-Choose.png"
     },
     {
       "id": "__control/SelectBox__selectItemType-Date",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/control_SelectBox__selectItemType-Date.png"
-    },
-    {
-      "id": "__control/SelectBox__anchored",
-      "status": "skipped",
-      "detail": "not applicable to web"
     },
     {
       "id": "__control/Slider",
@@ -3826,6 +5617,11 @@
       "screenshot": "artifacts/web/control_Switch__isOn-True.png"
     },
     {
+      "id": "__control/Switch__labelAttributes--text-Sample",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
       "id": "__control/TabView",
       "status": "pass",
       "detail": "",
@@ -3848,12 +5644,6 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/control_TextField__no-hint.png"
-    },
-    {
-      "id": "__control/TextField__no-hint_placeholder-Conformance-Hint",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/web/control_TextField__no-hint_placeholder-Conformance-Hint.png"
     },
     {
       "id": "__control/TextField__text-Clear-me",
@@ -3879,10 +5669,28 @@
       "screenshot": "artifacts/web/control_TextView__enabled-False.png"
     },
     {
+      "id": "__control/TextView__hint-507236bd",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_TextView__hint-507236bd.png"
+    },
+    {
+      "id": "__control/TextView__no-height",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_TextView__no-height.png"
+    },
+    {
       "id": "__control/TextView__no-hint",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/control_TextView__no-hint.png"
+    },
+    {
+      "id": "__control/TextView__no-width",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_TextView__no-width.png"
     },
     {
       "id": "__control/TextView__text-Sample",
@@ -3897,10 +5705,75 @@
       "screenshot": "artifacts/web/control_View.png"
     },
     {
+      "id": "__control/View__borderColor--FF0000",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__borderColor--FF0000.png"
+    },
+    {
+      "id": "__control/View__borderColor--FF0000_borderWidth-2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__borderColor--FF0000_borderWidth-2.png"
+    },
+    {
+      "id": "__control/View__borderWidth-2",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__borderWidth-2.png"
+    },
+    {
+      "id": "__control/View__child-1954985b_orientation-horizontal_width-300",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__child-1954985b_orientation-horizontal_width-300.png"
+    },
+    {
+      "id": "__control/View__child-aec83a5f_no-orientation",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__child-aec83a5f_no-orientation.png"
+    },
+    {
+      "id": "__control/View__gradient--FF0000-0000FF",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "__control/View__height-wrapContent",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__height-wrapContent.png"
+    },
+    {
+      "id": "__control/View__height-wrapContent_orientation-horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__height-wrapContent_orientation-horizontal.png"
+    },
+    {
+      "id": "__control/View__highlightBackground--FF0000",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__highlightBackground--FF0000.png"
+    },
+    {
       "id": "__control/View__orientation-horizontal",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/control_View__orientation-horizontal.png"
+    },
+    {
+      "id": "__control/View__orientation-horizontal_width-300",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__orientation-horizontal_width-300.png"
+    },
+    {
+      "id": "__control/View__orientation-horizontal_width-wrapContent",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__orientation-horizontal_width-wrapContent.png"
     },
     {
       "id": "__control/View__orientation-vertical",
@@ -3909,10 +5782,56 @@
       "screenshot": "artifacts/web/control_View__orientation-vertical.png"
     },
     {
+      "id": "__control/View__root.backdrop-309d3595_root.orientation-horizontal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__root.backdrop-309d3595_root.orientation-horizontal.png"
+    },
+    {
+      "id": "__control/View__root.gravity-bottom",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__root.gravity-bottom.png"
+    },
+    {
+      "id": "__control/View__root.gravity-right",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__root.gravity-right.png"
+    },
+    {
+      "id": "__control/View__root.orientation-horizontal",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "__control/View__root.orientation-vertical",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "__control/View__width-wrapContent",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__width-wrapContent.png"
+    },
+    {
       "id": "__control/View__anchored",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/control_View__anchored.png"
+    },
+    {
+      "id": "__control/View__anchored__height-50_width-50",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__anchored__height-50_width-50.png"
+    },
+    {
+      "id": "__control/View__anchored__root.anchorLast-True",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_View__anchored__root.anchorLast-True.png"
     },
     {
       "id": "__control/Web",
@@ -4013,6 +5932,18 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_maxHeight__fill_clamp.png"
+    },
+    {
+      "id": "__control/Label__wrap-max",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/control_Label__wrap-max.png"
+    },
+    {
+      "id": "common/maxWidth__wrap",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/common_maxWidth__wrap.png"
     }
   ]
 }

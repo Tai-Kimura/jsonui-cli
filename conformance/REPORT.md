@@ -2,9 +2,9 @@
 
 # JsonUI Conformance Report
 
-- Manifest: `55a48fa7e476b0a0a12843acd9ef8045e25510d9b1b4c5d21277184d4caa27d4` (sha256)
-- Definitions: `df3c1cf50003de7c0fa572a8ea66ce0e10aee2eaf56e75441fb27ea3ab3eafd1` (sha256)
-- Fixtures: 700 (assertable: 29, visual: 576, interactive: 35) / skipped attributes: 154
+- Manifest: `26128fbb10863677258d0d3d2e1b0259d1dab9701776f398d4a005b0f21f44b0` (sha256)
+- Definitions: `be5fafd58187fc62d30b3e5f5c1270cac97338a1364b3f52084ecd235491627b` (sha256)
+- Fixtures: 1031 (assertable: 41, visual: 793, interactive: 35) / skipped attributes: 159
 
 Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
 
@@ -14,7 +14,7 @@ _No cross-platform mismatches._
 
 ## Interactive fixtures
 
-- Interactive fixtures: 35 · attributes promoted out of skip reasons: callback: 11 · still skipped: binding-only: 5, callback: 37
+- Interactive fixtures: 35 · attributes promoted out of skip reasons: callback: 11 · still skipped: binding-only: 5, callback: 34
 
 | Fixture | Case | Promoted from | android | ios | web | Detail |
 |---|---|---|---|---|---|---|
@@ -60,948 +60,9 @@ Screenshots are compared against `baselines/ci/<platform>.hashes.json` (render e
 
 | Platform | Baseline | Compared | Regressions | No baseline | Missing artifact |
 |---|---|---|---|---|---|
-| android | threshold 8 | 478 | ❌ 384 | 17 | 0 |
-| ios | threshold 8 | 510 | ❌ 510 | 17 | 2 |
-| web | threshold 8 | 507 | ❌ 24 | 1 | 0 |
-
-### android: regressions
-
-| Screenshot | Distance | Threshold |
-|---|---|---|
-| `common_height__wrapcontent.png` | 9 | 8 |
-| `common_height__static.png` | 9 | 8 |
-| `common_background__static.png` | 12 | 8 |
-| `common_tapBackground__static.png` | 36 | 8 |
-| `common_highlightBackground__static.png` | 36 | 8 |
-| `common_disabledBackground__static.png` | 36 | 8 |
-| `common_cornerRadius__static.png` | 11 | 8 |
-| `common_padding__static.png` | 34 | 8 |
-| `common_paddings__static.png` | 34 | 8 |
-| `common_paddingTop__static.png` | 27 | 8 |
-| `common_paddingBottom__static.png` | 22 | 8 |
-| `common_paddingLeft__static.png` | 23 | 8 |
-| `common_paddingRight__static.png` | 23 | 8 |
-| `common_paddingStart__static.png` | 23 | 8 |
-| `common_paddingEnd__static.png` | 23 | 8 |
-| `common_leftPadding__static.png` | 11 | 8 |
-| `common_topPadding__static.png` | 12 | 8 |
-| `common_margins__static.png` | 22 | 8 |
-| `common_topMargin__static.png` | 15 | 8 |
-| `common_leftMargin__static.png` | 11 | 8 |
-| `common_startMargin__static.png` | 11 | 8 |
-| `common_centerInParent__true.png` | 30 | 8 |
-| `common_centerVertical__true.png` | 17 | 8 |
-| `common_centerHorizontal__true.png` | 15 | 8 |
-| `common_alignBottom__true.png` | 13 | 8 |
-| `common_alignRight__true.png` | 9 | 8 |
-| `common_alignTopOfView__static.png` | 10 | 8 |
-| `common_alignBottomOfView__static.png` | 14 | 8 |
-| `common_alignRightOfView__static.png` | 17 | 8 |
-| `common_shadow__static.png` | 16 | 8 |
-| `common_clipToBounds__true.png` | 31 | 8 |
-| `common_gravity__top.png` | 22 | 8 |
-| `common_gravity__bottom.png` | 28 | 8 |
-| `common_gravity__centervertical.png` | 27 | 8 |
-| `common_gravity__left.png` | 22 | 8 |
-| `common_gravity__right.png` | 22 | 8 |
-| `common_gravity__centerhorizontal.png` | 22 | 8 |
-| `common_gravity__center.png` | 27 | 8 |
-| `common_alignment__top.png` | 16 | 8 |
-| `common_alignment__leading.png` | 9 | 8 |
-| `common_alignment__center.png` | 18 | 8 |
-| `common_alignment__trailing.png` | 9 | 8 |
-| `common_alignment__bottomleading.png` | 10 | 8 |
-| `common_alignment__bottom.png` | 19 | 8 |
-| `common_alignment__bottomtrailing.png` | 11 | 8 |
-| `common_distribution__fill.png` | 22 | 8 |
-| `common_distribution__fillequally.png` | 22 | 8 |
-| `common_distribution__equalspacing.png` | 22 | 8 |
-| `common_distribution__equalcentering.png` | 22 | 8 |
-| `Label_fontSize__static.png` | 9 | 8 |
-| `Label_textAlign__center.png` | 20 | 8 |
-| `Label_textAlign__right.png` | 18 | 8 |
-| `Label_textAlign__center_2.png` | 20 | 8 |
-| `Label_textAlign__right_2.png` | 18 | 8 |
-| `Label_lines__static.png` | 26 | 8 |
-| `Label_lineHeightMultiple__static.png` | 10 | 8 |
-| `Label_lineSpacing__static.png` | 10 | 8 |
-| `Label_edgeInset__static.png` | 14 | 8 |
-| `Label_autoShrink__true.png` | 53 | 8 |
-| `Label_minimumScaleFactor__static.png` | 53 | 8 |
-| `Label_linkable__true.png` | 10 | 8 |
-| `Label_textShadow__static.png` | 9 | 8 |
-| `Label_highlightAttributes__static.png` | 25 | 8 |
-| `TextField_hint__static.png` | 16 | 8 |
-| `TextField_placeholder__static.png` | 12 | 8 |
-| `TextField_hintColor__static.png` | 11 | 8 |
-| `TextField_hintFont__static.png` | 11 | 8 |
-| `TextField_font__static.png` | 11 | 8 |
-| `TextField_fontSize__static.png` | 13 | 8 |
-| `TextField_fontColor__static.png` | 11 | 8 |
-| `TextField_textAlign__left.png` | 11 | 8 |
-| `TextField_textAlign__center.png` | 11 | 8 |
-| `TextField_textAlign__right.png` | 11 | 8 |
-| `TextField_textAlign__left_2.png` | 11 | 8 |
-| `TextField_textAlign__center_2.png` | 11 | 8 |
-| `TextField_textAlign__right_2.png` | 11 | 8 |
-| `TextField_borderStyle__none.png` | 11 | 8 |
-| `TextField_borderStyle__line.png` | 23 | 8 |
-| `TextField_borderStyle__bezel.png` | 23 | 8 |
-| `TextField_borderStyle__roundedrect.png` | 23 | 8 |
-| `TextField_borderStyle__roundedrect_2.png` | 23 | 8 |
-| `TextField_borderStyle__line_2.png` | 23 | 8 |
-| `TextField_borderStyle__bezel_2.png` | 23 | 8 |
-| `TextField_input__default.png` | 11 | 8 |
-| `TextField_input__alphabet.png` | 11 | 8 |
-| `TextField_input__allphabet.png` | 11 | 8 |
-| `TextField_input__email.png` | 11 | 8 |
-| `TextField_input__number.png` | 11 | 8 |
-| `TextField_input__phone.png` | 11 | 8 |
-| `TextField_input__url.png` | 11 | 8 |
-| `TextField_input__password.png` | 11 | 8 |
-| `TextField_input__decimal.png` | 11 | 8 |
-| `TextField_inputType__static.png` | 11 | 8 |
-| `TextField_returnKeyType__done.png` | 11 | 8 |
-| `TextField_returnKeyType__go.png` | 11 | 8 |
-| `TextField_returnKeyType__next.png` | 11 | 8 |
-| `TextField_returnKeyType__return.png` | 11 | 8 |
-| `TextField_returnKeyType__search.png` | 11 | 8 |
-| `TextField_returnKeyType__send.png` | 11 | 8 |
-| `TextField_returnKeyType__continue.png` | 11 | 8 |
-| `TextField_returnKeyType__join.png` | 11 | 8 |
-| `TextField_returnKeyType__route.png` | 11 | 8 |
-| `TextField_returnKeyType__yahoo.png` | 11 | 8 |
-| `TextField_returnKeyType__google.png` | 11 | 8 |
-| `TextField_contentType__static.png` | 11 | 8 |
-| `TextField_textPaddingLeft__static.png` | 9 | 8 |
-| `TextField_tintColor__static.png` | 11 | 8 |
-| `TextField_autocapitalizationType__static.png` | 11 | 8 |
-| `TextField_autocorrectionType__static.png` | 11 | 8 |
-| `TextField_keyboardAppearance__static.png` | 11 | 8 |
-| `TextField_maxLength__static.png` | 11 | 8 |
-| `TextField_fontFamily__static.png` | 11 | 8 |
-| `TextField_placeholderColor__static.png` | 13 | 8 |
-| `TextView_hint__static.png` | 22 | 8 |
-| `TextView_placeholder__static.png` | 19 | 8 |
-| `TextView_hintColor__static.png` | 17 | 8 |
-| `TextView_hintFont__static.png` | 17 | 8 |
-| `TextView_hintFontSize__static.png` | 15 | 8 |
-| `TextView_hintLineHeightMultiple__static.png` | 18 | 8 |
-| `TextView_font__static.png` | 16 | 8 |
-| `TextView_fontSize__static.png` | 19 | 8 |
-| `TextView_fontColor__static.png` | 16 | 8 |
-| `TextView_textAlign__left.png` | 17 | 8 |
-| `TextView_textAlign__center.png` | 17 | 8 |
-| `TextView_textAlign__right.png` | 17 | 8 |
-| `TextView_textAlign__left_2.png` | 17 | 8 |
-| `TextView_textAlign__center_2.png` | 17 | 8 |
-| `TextView_textAlign__right_2.png` | 17 | 8 |
-| `TextView_containerInset__static.png` | 20 | 8 |
-| `TextView_flexible__true.png` | 17 | 8 |
-| `TextView_input__default.png` | 17 | 8 |
-| `TextView_input__alphabet.png` | 17 | 8 |
-| `TextView_input__allphabet.png` | 17 | 8 |
-| `TextView_input__email.png` | 17 | 8 |
-| `TextView_input__number.png` | 17 | 8 |
-| `TextView_input__phone.png` | 17 | 8 |
-| `TextView_input__url.png` | 17 | 8 |
-| `TextView_input__password.png` | 17 | 8 |
-| `TextView_input__decimal.png` | 17 | 8 |
-| `TextView_returnKeyType__done.png` | 17 | 8 |
-| `TextView_returnKeyType__go.png` | 17 | 8 |
-| `TextView_returnKeyType__next.png` | 17 | 8 |
-| `TextView_returnKeyType__return.png` | 17 | 8 |
-| `TextView_returnKeyType__search.png` | 17 | 8 |
-| `TextView_returnKeyType__send.png` | 17 | 8 |
-| `TextView_returnKeyType__continue.png` | 17 | 8 |
-| `TextView_returnKeyType__join.png` | 17 | 8 |
-| `TextView_returnKeyType__route.png` | 17 | 8 |
-| `TextView_returnKeyType__yahoo.png` | 17 | 8 |
-| `TextView_returnKeyType__google.png` | 17 | 8 |
-| `TextView_editable__true.png` | 17 | 8 |
-| `TextView_lineBreakMode__static.png` | 17 | 8 |
-| `TextView_keyboardType__static.png` | 17 | 8 |
-| `TextView_fontFamily__static.png` | 16 | 8 |
-| `TextView_edgeInset__static.png` | 17 | 8 |
-| `Button_font__static.png` | 38 | 8 |
-| `Button_fontSize__static.png` | 34 | 8 |
-| `Button_fontColor__static.png` | 26 | 8 |
-| `Button_disabledFontColor__static.png` | 29 | 8 |
-| `Button_highlightColor__static.png` | 36 | 8 |
-| `Button_highlightColor__alias_hilightColor.png` | 36 | 8 |
-| `Button_hilightColor__static.png` | 36 | 8 |
-| `Button_tapBackground__static.png` | 36 | 8 |
-| `Button_highlightBackground__static.png` | 36 | 8 |
-| `Button_image__static.png` | 35 | 8 |
-| `Button_textAlign__left.png` | 36 | 8 |
-| `Button_textAlign__center.png` | 36 | 8 |
-| `Button_textAlign__right.png` | 37 | 8 |
-| `Button_fontWeight__static.png` | 38 | 8 |
-| `Image_src__static.png` | 22 | 8 |
-| `Image_srcName__static.png` | 18 | 8 |
-| `Image_contentMode__fit.png` | 20 | 8 |
-| `Image_contentMode__fill.png` | 38 | 8 |
-| `Image_contentMode__center.png` | 19 | 8 |
-| `Image_contentMode__top.png` | 22 | 8 |
-| `Image_contentMode__bottom.png` | 22 | 8 |
-| `Image_contentMode__left.png` | 15 | 8 |
-| `Image_contentMode__right.png` | 22 | 8 |
-| `Image_contentMode__aspectfill.png` | 33 | 8 |
-| `Image_contentMode__aspectfit.png` | 20 | 8 |
-| `Image_contentMode__center_2.png` | 19 | 8 |
-| `Image_contentMode__scaletofill.png` | 38 | 8 |
-| `Image_contentMode__top_2.png` | 22 | 8 |
-| `Image_contentMode__bottom_2.png` | 22 | 8 |
-| `Image_contentMode__left_2.png` | 15 | 8 |
-| `Image_contentMode__right_2.png` | 22 | 8 |
-| `Image_renderingMode__original.png` | 20 | 8 |
-| `Image_renderingMode__template.png` | 12 | 8 |
-| `Image_loadingImage__static.png` | 20 | 8 |
-| `Image_errorImage__static.png` | 20 | 8 |
-| `NetworkImage_hint__static.png` | 20 | 8 |
-| `NetworkImage_placeholder__static.png` | 20 | 8 |
-| `NetworkImage_defaultImage__static.png` | 22 | 8 |
-| `NetworkImage_errorImage__static.png` | 20 | 8 |
-| `NetworkImage_loadingImage__static.png` | 20 | 8 |
-| `NetworkImage_contentMode__fit.png` | 20 | 8 |
-| `NetworkImage_contentMode__fill.png` | 38 | 8 |
-| `NetworkImage_contentMode__center.png` | 19 | 8 |
-| `NetworkImage_contentMode__top.png` | 22 | 8 |
-| `NetworkImage_contentMode__bottom.png` | 22 | 8 |
-| `NetworkImage_contentMode__left.png` | 15 | 8 |
-| `NetworkImage_contentMode__right.png` | 22 | 8 |
-| `NetworkImage_contentMode__aspectfill.png` | 33 | 8 |
-| `NetworkImage_contentMode__aspectfit.png` | 20 | 8 |
-| `NetworkImage_contentMode__center_2.png` | 19 | 8 |
-| `SelectBox_prompt__static.png` | 28 | 8 |
-| `SelectBox_hint__static.png` | 28 | 8 |
-| `SelectBox_placeholder__static.png` | 28 | 8 |
-| `SelectBox_hintColor__static.png` | 19 | 8 |
-| `SelectBox_items__static.png` | 19 | 8 |
-| `SelectBox_selectItemType__normal.png` | 19 | 8 |
-| `SelectBox_selectItemType__date.png` | 20 | 8 |
-| `SelectBox_selectedIndex__static.png` | 19 | 8 |
-| `SelectBox_datePickerMode__date.png` | 19 | 8 |
-| `SelectBox_datePickerMode__time.png` | 19 | 8 |
-| `SelectBox_datePickerMode__datetime.png` | 19 | 8 |
-| `SelectBox_datePickerMode__dateandtime.png` | 19 | 8 |
-| `SelectBox_datePickerMode__countdown.png` | 19 | 8 |
-| `SelectBox_datePickerStyle__automatic.png` | 20 | 8 |
-| `SelectBox_datePickerStyle__wheel.png` | 20 | 8 |
-| `SelectBox_datePickerStyle__wheels.png` | 20 | 8 |
-| `SelectBox_datePickerStyle__compact.png` | 20 | 8 |
-| `SelectBox_datePickerStyle__graphical.png` | 20 | 8 |
-| `SelectBox_datePickerStyle__inline.png` | 20 | 8 |
-| `SelectBox_dateStringFormat__static.png` | 20 | 8 |
-| `SelectBox_minimumDate__static.png` | 19 | 8 |
-| `SelectBox_maximumDate__static.png` | 19 | 8 |
-| `SelectBox_minuteInterval__1.png` | 21 | 8 |
-| `SelectBox_minuteInterval__2.png` | 21 | 8 |
-| `SelectBox_minuteInterval__3.png` | 21 | 8 |
-| `SelectBox_minuteInterval__4.png` | 21 | 8 |
-| `SelectBox_minuteInterval__5.png` | 21 | 8 |
-| `SelectBox_minuteInterval__6.png` | 21 | 8 |
-| `SelectBox_minuteInterval__10.png` | 21 | 8 |
-| `SelectBox_minuteInterval__12.png` | 21 | 8 |
-| `SelectBox_minuteInterval__15.png` | 21 | 8 |
-| `SelectBox_minuteInterval__20.png` | 21 | 8 |
-| `SelectBox_minuteInterval__30.png` | 21 | 8 |
-| `SelectBox_minuteInterval__static.png` | 21 | 8 |
-| `SelectBox_font__static.png` | 19 | 8 |
-| `SelectBox_fontSize__static.png` | 19 | 8 |
-| `SelectBox_fontColor__static.png` | 14 | 8 |
-| `SelectBox_labelAttributes__static.png` | 19 | 8 |
-| `SelectBox_selectedValue__static.png` | 27 | 8 |
-| `Switch_isOn__true.png` | 14 | 8 |
-| `Switch_value__true.png` | 14 | 8 |
-| `Switch_checked__true.png` | 14 | 8 |
-| `Switch_tint__static.png` | 14 | 8 |
-| `Switch_tintColor__static.png` | 14 | 8 |
-| `Switch_onTintColor__static.png` | 14 | 8 |
-| `Switch_thumbTintColor__static.png` | 13 | 8 |
-| `Switch_labelPosition__leading.png` | 13 | 8 |
-| `Switch_labelPosition__trailing.png` | 13 | 8 |
-| `Switch_trackTintColor__static.png` | 12 | 8 |
-| `Segment_items__static.png` | 37 | 8 |
-| `Segment_selectedIndex__static.png` | 44 | 8 |
-| `Segment_tintColor__static.png` | 42 | 8 |
-| `Slider_value__static.png` | 11 | 8 |
-| `Slider_minValue__static.png` | 11 | 8 |
-| `Slider_minimum__static.png` | 11 | 8 |
-| `Slider_minimum__alias_minimumValue.png` | 11 | 8 |
-| `Slider_minimum__alias_minValue.png` | 11 | 8 |
-| `Slider_maxValue__static.png` | 16 | 8 |
-| `Slider_maximum__static.png` | 16 | 8 |
-| `Slider_maximum__alias_maximumValue.png` | 16 | 8 |
-| `Slider_maximum__alias_maxValue.png` | 16 | 8 |
-| `Slider_tintColor__static.png` | 12 | 8 |
-| `Slider_progressTintColor__static.png` | 12 | 8 |
-| `Slider_trackTintColor__static.png` | 26 | 8 |
-| `Progress_progress__static.png` | 14 | 8 |
-| `Progress_tintColor__static.png` | 13 | 8 |
-| `Progress_progressTintColor__static.png` | 13 | 8 |
-| `Progress_trackTintColor__static.png` | 13 | 8 |
-| `View_orientation__horizontal.png` | 22 | 8 |
-| `View_distribution__fill.png` | 22 | 8 |
-| `View_distribution__fillequally.png` | 22 | 8 |
-| `View_distribution__equalspacing.png` | 22 | 8 |
-| `View_distribution__equalcentering.png` | 22 | 8 |
-| `View_spacing__static.png` | 21 | 8 |
-| `Collection_lazy__lazy.png` | 20 | 8 |
-| `Collection_lazy__eager.png` | 20 | 8 |
-| `Collection_lazy__none.png` | 20 | 8 |
-| `Collection_columns__static.png` | 25 | 8 |
-| `Collection_columnSpacing__static.png` | 29 | 8 |
-| `Collection_itemSpacing__static.png` | 21 | 8 |
-| `Collection_lineSpacing__static.png` | 21 | 8 |
-| `Collection_horizontalScroll__true.png` | 28 | 8 |
-| `Collection_orientation__horizontal.png` | 28 | 8 |
-| `Collection_orientation__vertical.png` | 20 | 8 |
-| `Collection_layout__vertical.png` | 20 | 8 |
-| `Collection_layout__horizontal.png` | 28 | 8 |
-| `Collection_layout__flow.png` | 28 | 8 |
-| `Collection_layout__flow_2.png` | 28 | 8 |
-| `Collection_layout__leftaligned.png` | 28 | 8 |
-| `Collection_layout__leftaligned_2.png` | 28 | 8 |
-| `Collection_insets__static.png` | 17 | 8 |
-| `Collection_insetHorizontal__static.png` | 14 | 8 |
-| `Collection_insetVertical__static.png` | 23 | 8 |
-| `Collection_scrollAnchor__top.png` | 20 | 8 |
-| `Collection_scrollAnchor__center.png` | 20 | 8 |
-| `Collection_scrollAnchor__bottom.png` | 20 | 8 |
-| `Collection_defaultScrollAnchor__top.png` | 20 | 8 |
-| `Collection_defaultScrollAnchor__center.png` | 20 | 8 |
-| `Collection_defaultScrollAnchor__bottom.png` | 20 | 8 |
-| `Collection_reverseLayout__true.png` | 21 | 8 |
-| `Radio_label__static.png` | 15 | 8 |
-| `Radio_group__static.png` | 20 | 8 |
-| `Radio_icon__static.png` | 20 | 8 |
-| `Radio_selectedIcon__static.png` | 21 | 8 |
-| `Radio_selectedIcon__alias_selected_icon.png` | 21 | 8 |
-| `Radio_selected_icon__static.png` | 21 | 8 |
-| `Radio_checked__true.png` | 22 | 8 |
-| `Radio_value__static.png` | 20 | 8 |
-| `Radio_font__static.png` | 21 | 8 |
-| `Radio_fontSize__static.png` | 19 | 8 |
-| `Radio_fontColor__static.png` | 18 | 8 |
-| `Radio_spacing__static.png` | 20 | 8 |
-| `Radio_checkedColor__static.png` | 21 | 8 |
-| `Radio_uncheckedColor__static.png` | 20 | 8 |
-| `Radio_iconSize__static.png` | 13 | 8 |
-| `Radio_iconColor__static.png` | 20 | 8 |
-| `Radio_selectedValue__static.png` | 20 | 8 |
-| `CheckBox_label__static.png` | 25 | 8 |
-| `CheckBox_isOn__true.png` | 23 | 8 |
-| `CheckBox_checked__true.png` | 23 | 8 |
-| `CheckBox_icon__static.png` | 14 | 8 |
-| `CheckBox_src__static.png` | 14 | 8 |
-| `CheckBox_selectedIcon__static.png` | 16 | 8 |
-| `CheckBox_selectedIcon__alias_onSrc.png` | 16 | 8 |
-| `CheckBox_value__static.png` | 21 | 8 |
-| `CheckBox_font__static.png` | 22 | 8 |
-| `CheckBox_fontSize__static.png` | 19 | 8 |
-| `CheckBox_fontColor__static.png` | 19 | 8 |
-| `CheckBox_spacing__static.png` | 21 | 8 |
-| `CheckBox_checkedColor__static.png` | 23 | 8 |
-| `CheckBox_uncheckedColor__static.png` | 21 | 8 |
-| `CheckBox_iconSize__static.png` | 15 | 8 |
-| `CheckBox_iconColor__static.png` | 23 | 8 |
-| `GradientView_gradientDirection__horizontal.png` | 14 | 8 |
-| `GradientView_gradientDirection__oblique.png` | 11 | 8 |
-| `IconLabel_selected__true.png` | 11 | 8 |
-| `IconLabel_fontSize__static.png` | 11 | 8 |
-| `IconLabel_icon_on__static.png` | 17 | 8 |
-| `IconLabel_icon_off__static.png` | 17 | 8 |
-| `IconLabel_iconPosition__left.png` | 17 | 8 |
-| `IconLabel_iconPosition__right.png` | 12 | 8 |
-| `IconLabel_iconPosition__top.png` | 21 | 8 |
-| `IconLabel_iconPosition__bottom.png` | 21 | 8 |
-| `IconLabel_iconMargin__static.png` | 13 | 8 |
-| `Web_html__static.png` | 17 | 8 |
-| `TabView_selectedIndex__static.png` | 32 | 8 |
-| `TabView_selectedIndex__alias_selectedTabIndex.png` | 32 | 8 |
-| `TabView_tabs__static.png` | 76 | 8 |
-| `TabView_tintColor__static.png` | 33 | 8 |
-| `TabView_unselectedColor__static.png` | 31 | 8 |
-| `TabView_tabBarBackground__static.png` | 42 | 8 |
-| `TabView_showLabels__true.png` | 31 | 8 |
-| `control_Button.png` | 36 | 8 |
-| `control_CheckBox.png` | 21 | 8 |
-| `control_CheckBox__checked-True.png` | 23 | 8 |
-| `control_CheckBox__checked-True_icon-conformance-sample.png` | 14 | 8 |
-| `control_CheckBox__orientation-horizontal.png` | 21 | 8 |
-| `control_Collection.png` | 20 | 8 |
-| `control_IconLabel__icon-off-conformance-sample.png` | 17 | 8 |
-| `control_Image.png` | 20 | 8 |
-| `control_NetworkImage.png` | 20 | 8 |
-| `control_Progress__progress-0.5.png` | 14 | 8 |
-| `control_Radio.png` | 20 | 8 |
-| `control_Radio__checked-True.png` | 22 | 8 |
-| `control_Radio__orientation-horizontal.png` | 20 | 8 |
-| `control_Segment.png` | 42 | 8 |
-| `control_SelectBox.png` | 19 | 8 |
-| `control_SelectBox__datePickerMode-time_selectItemType-Date.png` | 21 | 8 |
-| `control_SelectBox__selectItemType-Date.png` | 20 | 8 |
-| `control_Slider.png` | 11 | 8 |
-| `control_Slider__value-0.5.png` | 11 | 8 |
-| `control_Switch.png` | 13 | 8 |
-| `control_Switch__isOn-True.png` | 14 | 8 |
-| `control_TabView.png` | 31 | 8 |
-| `control_TextField.png` | 11 | 8 |
-| `control_TextField__text-Sample.png` | 11 | 8 |
-| `control_TextView.png` | 17 | 8 |
-| `control_TextView__text-Sample.png` | 16 | 8 |
-| `control_View__orientation-horizontal.png` | 22 | 8 |
-
-> android: 17 screenshot(s) without a baseline hash (not compared — NOT a pass): `Segment_fontColor__static.png`, `Segment_fontColor__alias_normalColor.png`, `Segment_selectedFontColor__static.png`, `Segment_selectedFontColor__alias_selectedColor.png`, `control_Button__enabled-False.png`, `control_Collection__columns-2.png`, `control_IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000.png`, `control_IconLabel__selected-True.png`, `control_Label__highlightAttributes-cb049517.png`, `control_Label__hint-Conformance-Hint_no-text.png` …
-
-### ios: regressions
-
-| Screenshot | Distance | Threshold |
-|---|---|---|
-| `common_width__matchparent.png` | 15 | 8 |
-| `common_width__wrapcontent.png` | 15 | 8 |
-| `common_width__static.png` | 15 | 8 |
-| `common_height__matchparent.png` | 19 | 8 |
-| `common_height__wrapcontent.png` | 15 | 8 |
-| `common_height__static.png` | 15 | 8 |
-| `common_minWidth__static.png` | 15 | 8 |
-| `common_maxWidth__static.png` | 15 | 8 |
-| `common_minHeight__static.png` | 15 | 8 |
-| `common_maxHeight__static.png` | 15 | 8 |
-| `common_weight__static.png` | 15 | 8 |
-| `common_background__static.png` | 15 | 8 |
-| `common_tapBackground__static.png` | 16 | 8 |
-| `common_highlightBackground__static.png` | 16 | 8 |
-| `common_disabledBackground__static.png` | 18 | 8 |
-| `common_cornerRadius__static.png` | 15 | 8 |
-| `common_borderWidth__static.png` | 15 | 8 |
-| `common_borderColor__static.png` | 15 | 8 |
-| `common_borderStyle__solid.png` | 15 | 8 |
-| `common_borderStyle__dashed.png` | 15 | 8 |
-| `common_borderStyle__dotted.png` | 15 | 8 |
-| `common_alpha__static.png` | 15 | 8 |
-| `common_opacity__static.png` | 15 | 8 |
-| `common_opacity__alias_alpha.png` | 15 | 8 |
-| `common_padding__static.png` | 15 | 8 |
-| `common_paddings__static.png` | 15 | 8 |
-| `common_paddingTop__static.png` | 15 | 8 |
-| `common_paddingBottom__static.png` | 15 | 8 |
-| `common_paddingLeft__static.png` | 15 | 8 |
-| `common_paddingRight__static.png` | 15 | 8 |
-| `common_paddingStart__static.png` | 15 | 8 |
-| `common_paddingEnd__static.png` | 15 | 8 |
-| `common_rightPadding__static.png` | 15 | 8 |
-| `common_leftPadding__static.png` | 15 | 8 |
-| `common_topPadding__static.png` | 15 | 8 |
-| `common_bottomPadding__static.png` | 15 | 8 |
-| `common_margins__static.png` | 15 | 8 |
-| `common_topMargin__static.png` | 15 | 8 |
-| `common_bottomMargin__static.png` | 15 | 8 |
-| `common_leftMargin__static.png` | 15 | 8 |
-| `common_rightMargin__static.png` | 15 | 8 |
-| `common_startMargin__static.png` | 15 | 8 |
-| `common_endMargin__static.png` | 15 | 8 |
-| `common_centerInParent__true.png` | 15 | 8 |
-| `common_centerVertical__true.png` | 139 | 8 |
-| `common_centerHorizontal__true.png` | 187 | 8 |
-| `common_alignTop__true.png` | 150 | 8 |
-| `common_alignBottom__true.png` | 144 | 8 |
-| `common_alignLeft__true.png` | 150 | 8 |
-| `common_alignRight__true.png` | 184 | 8 |
-| `common_alignTopOfView__static.png` | 123 | 8 |
-| `common_alignBottomOfView__static.png` | 161 | 8 |
-| `common_alignLeftOfView__static.png` | 57 | 8 |
-| `common_alignRightOfView__static.png` | 253 | 8 |
-| `common_alignTopView__static.png` | 150 | 8 |
-| `common_alignBottomView__static.png` | 122 | 8 |
-| `common_alignLeftView__static.png` | 150 | 8 |
-| `common_alignRightView__static.png` | 73 | 8 |
-| `common_alignCenterVerticalView__static.png` | 129 | 8 |
-| `common_alignCenterHorizontalView__static.png` | 151 | 8 |
-| `common_shadow__static.png` | 15 | 8 |
-| `common_clipToBounds__true.png` | 108 | 8 |
-| `common_tintColor__static.png` | 15 | 8 |
-| `common_indexBelow__static.png` | 15 | 8 |
-| `common_indexAbove__static.png` | 15 | 8 |
-| `common_gravity__top.png` | 15 | 8 |
-| `common_gravity__bottom.png` | 15 | 8 |
-| `common_gravity__centervertical.png` | 15 | 8 |
-| `common_gravity__left.png` | 15 | 8 |
-| `common_gravity__right.png` | 15 | 8 |
-| `common_gravity__centerhorizontal.png` | 15 | 8 |
-| `common_gravity__center.png` | 15 | 8 |
-| `common_alignment__topleading.png` | 15 | 8 |
-| `common_alignment__top.png` | 15 | 8 |
-| `common_alignment__toptrailing.png` | 15 | 8 |
-| `common_alignment__leading.png` | 15 | 8 |
-| `common_alignment__center.png` | 15 | 8 |
-| `common_alignment__trailing.png` | 15 | 8 |
-| `common_alignment__bottomleading.png` | 15 | 8 |
-| `common_alignment__bottom.png` | 15 | 8 |
-| `common_alignment__bottomtrailing.png` | 15 | 8 |
-| `common_distribution__fill.png` | 15 | 8 |
-| `common_distribution__fillequally.png` | 15 | 8 |
-| `common_distribution__equalspacing.png` | 15 | 8 |
-| `common_distribution__equalcentering.png` | 15 | 8 |
-| `common_minStartMargin__static.png` | 15 | 8 |
-| `common_maxStartMargin__static.png` | 15 | 8 |
-| `common_minEndMargin__static.png` | 15 | 8 |
-| `common_maxEndMargin__static.png` | 15 | 8 |
-| `common_idealWidth__static.png` | 15 | 8 |
-| `common_idealHeight__static.png` | 15 | 8 |
-| `Label_hint__static.png` | 32 | 8 |
-| `Label_placeholder__static.png` | 32 | 8 |
-| `Label_font__static.png` | 15 | 8 |
-| `Label_fontSize__static.png` | 15 | 8 |
-| `Label_fontColor__static.png` | 15 | 8 |
-| `Label_fontFamily__static.png` | 15 | 8 |
-| `Label_selected__true.png` | 20 | 8 |
-| `Label_textAlign__left.png` | 15 | 8 |
-| `Label_textAlign__center.png` | 15 | 8 |
-| `Label_textAlign__right.png` | 15 | 8 |
-| `Label_textAlign__left_2.png` | 15 | 8 |
-| `Label_textAlign__center_2.png` | 15 | 8 |
-| `Label_textAlign__right_2.png` | 15 | 8 |
-| `Label_lines__static.png` | 93 | 8 |
-| `Label_lineBreakMode__char.png` | 15 | 8 |
-| `Label_lineBreakMode__clip.png` | 15 | 8 |
-| `Label_lineBreakMode__word.png` | 15 | 8 |
-| `Label_lineBreakMode__head.png` | 15 | 8 |
-| `Label_lineBreakMode__middle.png` | 15 | 8 |
-| `Label_lineBreakMode__tail.png` | 15 | 8 |
-| `Label_lineHeightMultiple__static.png` | 15 | 8 |
-| `Label_lineSpacing__static.png` | 15 | 8 |
-| `Label_edgeInset__static.png` | 15 | 8 |
-| `Label_underline__true.png` | 15 | 8 |
-| `Label_strikethrough__true.png` | 15 | 8 |
-| `Label_autoShrink__true.png` | 15 | 8 |
-| `Label_minimumScaleFactor__static.png` | 15 | 8 |
-| `Label_linkable__true.png` | 15 | 8 |
-| `Label_textShadow__static.png` | 15 | 8 |
-| `Label_hintColor__static.png` | 32 | 8 |
-| `Label_highlightAttributes__static.png` | 15 | 8 |
-| `Label_highlightColor__static.png` | 15 | 8 |
-| `Label_fontWeight__static.png` | 15 | 8 |
-| `TextField_hint__static.png` | 15 | 8 |
-| `TextField_placeholder__static.png` | 31 | 8 |
-| `TextField_hintColor__static.png` | 15 | 8 |
-| `TextField_hintFont__static.png` | 15 | 8 |
-| `TextField_hintFontSize__static.png` | 15 | 8 |
-| `TextField_font__static.png` | 15 | 8 |
-| `TextField_fontSize__static.png` | 17 | 8 |
-| `TextField_fontColor__static.png` | 15 | 8 |
-| `TextField_textAlign__left.png` | 15 | 8 |
-| `TextField_textAlign__center.png` | 15 | 8 |
-| `TextField_textAlign__right.png` | 15 | 8 |
-| `TextField_textAlign__left_2.png` | 15 | 8 |
-| `TextField_textAlign__center_2.png` | 15 | 8 |
-| `TextField_textAlign__right_2.png` | 15 | 8 |
-| `TextField_borderStyle__none.png` | 15 | 8 |
-| `TextField_borderStyle__line.png` | 15 | 8 |
-| `TextField_borderStyle__bezel.png` | 15 | 8 |
-| `TextField_borderStyle__roundedrect.png` | 15 | 8 |
-| `TextField_borderStyle__roundedrect_2.png` | 15 | 8 |
-| `TextField_borderStyle__line_2.png` | 15 | 8 |
-| `TextField_borderStyle__bezel_2.png` | 15 | 8 |
-| `TextField_input__default.png` | 15 | 8 |
-| `TextField_input__alphabet.png` | 15 | 8 |
-| `TextField_input__allphabet.png` | 15 | 8 |
-| `TextField_input__email.png` | 15 | 8 |
-| `TextField_input__number.png` | 15 | 8 |
-| `TextField_input__phone.png` | 15 | 8 |
-| `TextField_input__url.png` | 15 | 8 |
-| `TextField_input__password.png` | 15 | 8 |
-| `TextField_input__decimal.png` | 15 | 8 |
-| `TextField_returnKeyType__done.png` | 15 | 8 |
-| `TextField_returnKeyType__go.png` | 15 | 8 |
-| `TextField_returnKeyType__next.png` | 15 | 8 |
-| `TextField_returnKeyType__return.png` | 15 | 8 |
-| `TextField_returnKeyType__search.png` | 15 | 8 |
-| `TextField_returnKeyType__send.png` | 15 | 8 |
-| `TextField_returnKeyType__continue.png` | 15 | 8 |
-| `TextField_returnKeyType__join.png` | 15 | 8 |
-| `TextField_returnKeyType__route.png` | 15 | 8 |
-| `TextField_returnKeyType__yahoo.png` | 15 | 8 |
-| `TextField_returnKeyType__google.png` | 15 | 8 |
-| `TextField_contentType__static.png` | 15 | 8 |
-| `TextField_secure__true.png` | 24 | 8 |
-| `TextField_fieldPadding__static.png` | 15 | 8 |
-| `TextField_textPaddingLeft__static.png` | 15 | 8 |
-| `TextField_accessoryBackground__static.png` | 15 | 8 |
-| `TextField_accessoryTextColor__static.png` | 15 | 8 |
-| `TextField_doneText__static.png` | 15 | 8 |
-| `TextField_tintColor__static.png` | 15 | 8 |
-| `TextField_autocapitalizationType__static.png` | 15 | 8 |
-| `TextField_autocorrectionType__static.png` | 15 | 8 |
-| `TextField_spellCheckingType__static.png` | 15 | 8 |
-| `TextField_keyboardAppearance__static.png` | 15 | 8 |
-| `TextField_clearButtonMode__static.png` | 15 | 8 |
-| `TextField_maxLength__static.png` | 15 | 8 |
-| `TextField_fontFamily__static.png` | 15 | 8 |
-| `TextField_placeholderColor__static.png` | 31 | 8 |
-| `TextView_hint__static.png` | 15 | 8 |
-| `TextView_placeholder__static.png` | 39 | 8 |
-| `TextView_hintColor__static.png` | 15 | 8 |
-| `TextView_hintFont__static.png` | 20 | 8 |
-| `TextView_hintFontSize__static.png` | 15 | 8 |
-| `TextView_hintLineHeightMultiple__static.png` | 15 | 8 |
-| `TextView_font__static.png` | 15 | 8 |
-| `TextView_fontSize__static.png` | 15 | 8 |
-| `TextView_fontColor__static.png` | 15 | 8 |
-| `TextView_textAlign__left.png` | 15 | 8 |
-| `TextView_textAlign__center.png` | 15 | 8 |
-| `TextView_textAlign__right.png` | 15 | 8 |
-| `TextView_textAlign__left_2.png` | 15 | 8 |
-| `TextView_textAlign__center_2.png` | 15 | 8 |
-| `TextView_textAlign__right_2.png` | 15 | 8 |
-| `TextView_containerInset__static.png` | 15 | 8 |
-| `TextView_flexible__true.png` | 15 | 8 |
-| `TextView_input__default.png` | 15 | 8 |
-| `TextView_input__alphabet.png` | 15 | 8 |
-| `TextView_input__allphabet.png` | 15 | 8 |
-| `TextView_input__email.png` | 15 | 8 |
-| `TextView_input__number.png` | 15 | 8 |
-| `TextView_input__phone.png` | 15 | 8 |
-| `TextView_input__url.png` | 15 | 8 |
-| `TextView_input__password.png` | 15 | 8 |
-| `TextView_input__decimal.png` | 15 | 8 |
-| `TextView_returnKeyType__done.png` | 15 | 8 |
-| `TextView_returnKeyType__go.png` | 15 | 8 |
-| `TextView_returnKeyType__next.png` | 15 | 8 |
-| `TextView_returnKeyType__return.png` | 15 | 8 |
-| `TextView_returnKeyType__search.png` | 15 | 8 |
-| `TextView_returnKeyType__send.png` | 15 | 8 |
-| `TextView_returnKeyType__continue.png` | 15 | 8 |
-| `TextView_returnKeyType__join.png` | 15 | 8 |
-| `TextView_returnKeyType__route.png` | 15 | 8 |
-| `TextView_returnKeyType__yahoo.png` | 15 | 8 |
-| `TextView_returnKeyType__google.png` | 15 | 8 |
-| `TextView_editable__true.png` | 15 | 8 |
-| `TextView_lineBreakMode__static.png` | 15 | 8 |
-| `TextView_keyboardType__static.png` | 15 | 8 |
-| `TextView_fontFamily__static.png` | 15 | 8 |
-| `TextView_edgeInset__static.png` | 23 | 8 |
-| `Button_font__static.png` | 15 | 8 |
-| `Button_fontSize__static.png` | 17 | 8 |
-| `Button_fontColor__static.png` | 17 | 8 |
-| `Button_disabledFontColor__static.png` | 48 | 8 |
-| `Button_highlightColor__static.png` | 16 | 8 |
-| `Button_highlightColor__alias_hilightColor.png` | 16 | 8 |
-| `Button_hilightColor__static.png` | 16 | 8 |
-| `Button_tapBackground__static.png` | 16 | 8 |
-| `Button_highlightBackground__static.png` | 16 | 8 |
-| `Button_image__static.png` | 16 | 8 |
-| `Button_textAlign__left.png` | 16 | 8 |
-| `Button_textAlign__center.png` | 16 | 8 |
-| `Button_textAlign__right.png` | 16 | 8 |
-| `Button_fontWeight__static.png` | 15 | 8 |
-| `Image_src__static.png` | 73 | 8 |
-| `Image_srcName__static.png` | 15 | 8 |
-| `Image_highlightSrc__static.png` | 15 | 8 |
-| `Image_contentMode__fit.png` | 15 | 8 |
-| `Image_contentMode__fill.png` | 15 | 8 |
-| `Image_contentMode__center.png` | 15 | 8 |
-| `Image_contentMode__top.png` | 15 | 8 |
-| `Image_contentMode__bottom.png` | 15 | 8 |
-| `Image_contentMode__left.png` | 15 | 8 |
-| `Image_contentMode__right.png` | 15 | 8 |
-| `Image_contentMode__aspectfill.png` | 15 | 8 |
-| `Image_contentMode__aspectfit.png` | 15 | 8 |
-| `Image_contentMode__center_2.png` | 15 | 8 |
-| `Image_contentMode__scaletofill.png` | 15 | 8 |
-| `Image_contentMode__top_2.png` | 15 | 8 |
-| `Image_contentMode__bottom_2.png` | 15 | 8 |
-| `Image_contentMode__left_2.png` | 15 | 8 |
-| `Image_contentMode__right_2.png` | 15 | 8 |
-| `Image_renderingMode__original.png` | 15 | 8 |
-| `Image_renderingMode__template.png` | 15 | 8 |
-| `Image_loadingImage__static.png` | 15 | 8 |
-| `Image_errorImage__static.png` | 15 | 8 |
-| `Image_systemIcon__true.png` | 15 | 8 |
-| `NetworkImage_hint__static.png` | 15 | 8 |
-| `NetworkImage_placeholder__static.png` | 15 | 8 |
-| `NetworkImage_defaultImage__static.png` | 73 | 8 |
-| `NetworkImage_errorImage__static.png` | 15 | 8 |
-| `NetworkImage_loadingImage__static.png` | 15 | 8 |
-| `NetworkImage_contentMode__fit.png` | 15 | 8 |
-| `NetworkImage_contentMode__fill.png` | 15 | 8 |
-| `NetworkImage_contentMode__center.png` | 15 | 8 |
-| `NetworkImage_contentMode__top.png` | 15 | 8 |
-| `NetworkImage_contentMode__bottom.png` | 15 | 8 |
-| `NetworkImage_contentMode__left.png` | 15 | 8 |
-| `NetworkImage_contentMode__right.png` | 15 | 8 |
-| `NetworkImage_contentMode__aspectfill.png` | 15 | 8 |
-| `NetworkImage_contentMode__aspectfit.png` | 15 | 8 |
-| `NetworkImage_contentMode__center_2.png` | 15 | 8 |
-| `SelectBox_prompt__static.png` | 19 | 8 |
-| `SelectBox_hint__static.png` | 19 | 8 |
-| `SelectBox_placeholder__static.png` | 19 | 8 |
-| `SelectBox_hintColor__static.png` | 19 | 8 |
-| `SelectBox_text__static.png` | 19 | 8 |
-| `SelectBox_items__static.png` | 19 | 8 |
-| `SelectBox_selectItemType__normal.png` | 19 | 8 |
-| `SelectBox_selectItemType__date.png` | 19 | 8 |
-| `SelectBox_selectedIndex__static.png` | 19 | 8 |
-| `SelectBox_datePickerMode__date.png` | 19 | 8 |
-| `SelectBox_datePickerMode__time.png` | 19 | 8 |
-| `SelectBox_datePickerMode__datetime.png` | 19 | 8 |
-| `SelectBox_datePickerMode__dateandtime.png` | 19 | 8 |
-| `SelectBox_datePickerMode__countdown.png` | 19 | 8 |
-| `SelectBox_datePickerStyle__automatic.png` | 19 | 8 |
-| `SelectBox_datePickerStyle__wheel.png` | 19 | 8 |
-| `SelectBox_datePickerStyle__wheels.png` | 19 | 8 |
-| `SelectBox_datePickerStyle__compact.png` | 19 | 8 |
-| `SelectBox_datePickerStyle__graphical.png` | 19 | 8 |
-| `SelectBox_datePickerStyle__inline.png` | 19 | 8 |
-| `SelectBox_dateStringFormat__static.png` | 19 | 8 |
-| `SelectBox_minimumDate__static.png` | 19 | 8 |
-| `SelectBox_maximumDate__static.png` | 19 | 8 |
-| `SelectBox_minuteInterval__1.png` | 19 | 8 |
-| `SelectBox_minuteInterval__2.png` | 19 | 8 |
-| `SelectBox_minuteInterval__3.png` | 19 | 8 |
-| `SelectBox_minuteInterval__4.png` | 19 | 8 |
-| `SelectBox_minuteInterval__5.png` | 19 | 8 |
-| `SelectBox_minuteInterval__6.png` | 19 | 8 |
-| `SelectBox_minuteInterval__10.png` | 19 | 8 |
-| `SelectBox_minuteInterval__12.png` | 19 | 8 |
-| `SelectBox_minuteInterval__15.png` | 19 | 8 |
-| `SelectBox_minuteInterval__20.png` | 19 | 8 |
-| `SelectBox_minuteInterval__30.png` | 19 | 8 |
-| `SelectBox_minuteInterval__static.png` | 19 | 8 |
-| `SelectBox_font__static.png` | 19 | 8 |
-| `SelectBox_fontSize__static.png` | 19 | 8 |
-| `SelectBox_fontColor__static.png` | 19 | 8 |
-| `SelectBox_labelAttributes__static.png` | 19 | 8 |
-| `SelectBox_selectedValue__static.png` | 17 | 8 |
-| `Switch_isOn__true.png` | 15 | 8 |
-| `Switch_value__true.png` | 15 | 8 |
-| `Switch_checked__true.png` | 15 | 8 |
-| `Switch_tint__static.png` | 15 | 8 |
-| `Switch_tintColor__static.png` | 15 | 8 |
-| `Switch_onTintColor__static.png` | 15 | 8 |
-| `Switch_thumbTintColor__static.png` | 15 | 8 |
-| `Switch_trackTintColor__static.png` | 15 | 8 |
-| `Segment_items__static.png` | 76 | 8 |
-| `Segment_selectedIndex__static.png` | 15 | 8 |
-| `Segment_tintColor__static.png` | 15 | 8 |
-| `Slider_value__static.png` | 18 | 8 |
-| `Slider_minValue__static.png` | 40 | 8 |
-| `Slider_minimum__static.png` | 40 | 8 |
-| `Slider_minimum__alias_minimumValue.png` | 40 | 8 |
-| `Slider_minimum__alias_minValue.png` | 40 | 8 |
-| `Slider_maxValue__static.png` | 35 | 8 |
-| `Slider_maximum__static.png` | 35 | 8 |
-| `Slider_maximum__alias_maximumValue.png` | 35 | 8 |
-| `Slider_maximum__alias_maxValue.png` | 35 | 8 |
-| `Slider_tintColor__static.png` | 15 | 8 |
-| `Slider_progressTintColor__static.png` | 40 | 8 |
-| `Slider_trackTintColor__static.png` | 40 | 8 |
-| `Progress_progress__static.png` | 17 | 8 |
-| `Progress_tintColor__static.png` | 15 | 8 |
-| `Progress_progressTintColor__static.png` | 15 | 8 |
-| `Progress_trackTintColor__static.png` | 17 | 8 |
-| `Progress_hidesWhenStopped__true.png` | 15 | 8 |
-| `Progress_indicatorStyle__medium.png` | 15 | 8 |
-| `Progress_indicatorStyle__large.png` | 16 | 8 |
-| `Progress_color__static.png` | 15 | 8 |
-| `View_orientation__horizontal.png` | 15 | 8 |
-| `View_orientation__vertical.png` | 15 | 8 |
-| `View_direction__toptobottom.png` | 15 | 8 |
-| `View_direction__bottomtotop.png` | 15 | 8 |
-| `View_direction__lefttoright.png` | 15 | 8 |
-| `View_direction__righttoleft.png` | 15 | 8 |
-| `View_direction__none.png` | 15 | 8 |
-| `View_distribution__fill.png` | 15 | 8 |
-| `View_distribution__fillequally.png` | 15 | 8 |
-| `View_distribution__equalspacing.png` | 15 | 8 |
-| `View_distribution__equalcentering.png` | 15 | 8 |
-| `View_spacing__static.png` | 15 | 8 |
-| `View_safeAreaInsetPositions__static.png` | 15 | 8 |
-| `View_highlighted__true.png` | 15 | 8 |
-| `ScrollView_orientation__horizontal.png` | 15 | 8 |
-| `ScrollView_orientation__vertical.png` | 15 | 8 |
-| `ScrollView_showsHorizontalScrollIndicator__true.png` | 15 | 8 |
-| `ScrollView_showsVerticalScrollIndicator__true.png` | 15 | 8 |
-| `Collection_lazy__lazy.png` | 15 | 8 |
-| `Collection_lazy__eager.png` | 15 | 8 |
-| `Collection_lazy__none.png` | 15 | 8 |
-| `Collection_columns__static.png` | 15 | 8 |
-| `Collection_columnSpacing__static.png` | 95 | 8 |
-| `Collection_itemSpacing__static.png` | 15 | 8 |
-| `Collection_lineSpacing__static.png` | 15 | 8 |
-| `Collection_horizontalScroll__true.png` | 15 | 8 |
-| `Collection_orientation__horizontal.png` | 15 | 8 |
-| `Collection_orientation__vertical.png` | 15 | 8 |
-| `Collection_layout__vertical.png` | 15 | 8 |
-| `Collection_layout__horizontal.png` | 15 | 8 |
-| `Collection_layout__flow.png` | 15 | 8 |
-| `Collection_layout__flow_2.png` | 15 | 8 |
-| `Collection_layout__leftaligned.png` | 15 | 8 |
-| `Collection_layout__leftaligned_2.png` | 15 | 8 |
-| `Collection_insets__static.png` | 15 | 8 |
-| `Collection_insetHorizontal__static.png` | 15 | 8 |
-| `Collection_insetVertical__static.png` | 15 | 8 |
-| `Collection_contentInsets__static.png` | 15 | 8 |
-| `Collection_itemWeight__static.png` | 15 | 8 |
-| `Collection_showsHorizontalScrollIndicator__true.png` | 15 | 8 |
-| `Collection_showsVerticalScrollIndicator__true.png` | 15 | 8 |
-| `Collection_scrollAnchor__top.png` | 15 | 8 |
-| `Collection_scrollAnchor__center.png` | 15 | 8 |
-| `Collection_scrollAnchor__bottom.png` | 15 | 8 |
-| `Collection_defaultScrollAnchor__top.png` | 15 | 8 |
-| `Collection_defaultScrollAnchor__center.png` | 15 | 8 |
-| `Collection_defaultScrollAnchor__bottom.png` | 15 | 8 |
-| `Collection_containerInset__static.png` | 15 | 8 |
-| `Radio_label__static.png` | 41 | 8 |
-| `Radio_group__static.png` | 15 | 8 |
-| `Radio_icon__static.png` | 15 | 8 |
-| `Radio_selectedIcon__static.png` | 15 | 8 |
-| `Radio_selectedIcon__alias_selected_icon.png` | 15 | 8 |
-| `Radio_selected_icon__static.png` | 15 | 8 |
-| `Radio_checked__true.png` | 15 | 8 |
-| `Radio_value__static.png` | 15 | 8 |
-| `Radio_font__static.png` | 15 | 8 |
-| `Radio_fontSize__static.png` | 15 | 8 |
-| `Radio_fontColor__static.png` | 15 | 8 |
-| `Radio_spacing__static.png` | 15 | 8 |
-| `Radio_checkedColor__static.png` | 15 | 8 |
-| `Radio_uncheckedColor__static.png` | 15 | 8 |
-| `Radio_iconSize__static.png` | 15 | 8 |
-| `Radio_iconColor__static.png` | 15 | 8 |
-| `Radio_selectedValue__static.png` | 15 | 8 |
-| `CheckBox_label__static.png` | 15 | 8 |
-| `CheckBox_isOn__true.png` | 15 | 8 |
-| `CheckBox_checked__true.png` | 15 | 8 |
-| `CheckBox_icon__static.png` | 15 | 8 |
-| `CheckBox_src__static.png` | 15 | 8 |
-| `CheckBox_selectedIcon__static.png` | 15 | 8 |
-| `CheckBox_selectedIcon__alias_onSrc.png` | 15 | 8 |
-| `CheckBox_value__static.png` | 15 | 8 |
-| `CheckBox_font__static.png` | 15 | 8 |
-| `CheckBox_fontSize__static.png` | 15 | 8 |
-| `CheckBox_fontColor__static.png` | 15 | 8 |
-| `CheckBox_spacing__static.png` | 15 | 8 |
-| `CheckBox_checkedColor__static.png` | 15 | 8 |
-| `CheckBox_uncheckedColor__static.png` | 15 | 8 |
-| `CheckBox_iconSize__static.png` | 15 | 8 |
-| `CheckBox_iconColor__static.png` | 23 | 8 |
-| `Indicator_indicatorStyle__medium.png` | 16 | 8 |
-| `Indicator_indicatorStyle__large.png` | 18 | 8 |
-| `Indicator_color__static.png` | 23 | 8 |
-| `Indicator_hidesWhenStopped__true.png` | 19 | 8 |
-| `GradientView_gradient__static.png` | 22 | 8 |
-| `GradientView_gradientDirection__vertical.png` | 20 | 8 |
-| `GradientView_gradientDirection__horizontal.png` | 24 | 8 |
-| `GradientView_gradientDirection__oblique.png` | 25 | 8 |
-| `GradientView_locations__static.png` | 20 | 8 |
-| `Blur_effectStyle__light.png` | 15 | 8 |
-| `Blur_effectStyle__dark.png` | 13 | 8 |
-| `Blur_effectStyle__extralight.png` | 15 | 8 |
-| `IconLabel_selected__true.png` | 38 | 8 |
-| `IconLabel_font__static.png` | 15 | 8 |
-| `IconLabel_fontSize__static.png` | 15 | 8 |
-| `IconLabel_fontColor__static.png` | 15 | 8 |
-| `IconLabel_textShadow__static.png` | 15 | 8 |
-| `IconLabel_selectedFontColor__static.png` | 15 | 8 |
-| `IconLabel_icon_on__static.png` | 15 | 8 |
-| `IconLabel_icon_off__static.png` | 15 | 8 |
-| `IconLabel_iconPosition__left.png` | 15 | 8 |
-| `IconLabel_iconPosition__right.png` | 15 | 8 |
-| `IconLabel_iconPosition__top.png` | 15 | 8 |
-| `IconLabel_iconPosition__bottom.png` | 15 | 8 |
-| `IconLabel_iconMargin__static.png` | 15 | 8 |
-| `Web_html__static.png` | 22 | 8 |
-| `SafeAreaView_orientation__horizontal.png` | 26 | 8 |
-| `SafeAreaView_orientation__vertical.png` | 26 | 8 |
-| `SafeAreaView_safeAreaInsetPositions__static.png` | 26 | 8 |
-| `TabView_selectedIndex__static.png` | 16 | 8 |
-| `TabView_selectedIndex__alias_selectedTabIndex.png` | 16 | 8 |
-| `TabView_tabs__static.png` | 106 | 8 |
-| `TabView_tintColor__static.png` | 15 | 8 |
-| `TabView_unselectedColor__static.png` | 15 | 8 |
-| `TabView_tabBarBackground__static.png` | 14 | 8 |
-| `TabView_showLabels__true.png` | 15 | 8 |
-| `control_Blur.png` | 15 | 8 |
-| `control_Button.png` | 16 | 8 |
-| `control_CheckBox.png` | 15 | 8 |
-| `control_CheckBox__checked-True.png` | 15 | 8 |
-| `control_CheckBox__checked-True_icon-conformance-sample.png` | 15 | 8 |
-| `control_CheckBox__orientation-horizontal.png` | 15 | 8 |
-| `control_Collection.png` | 15 | 8 |
-| `control_GradientView.png` | 20 | 8 |
-| `control_IconLabel.png` | 15 | 8 |
-| `control_IconLabel__icon-off-conformance-sample.png` | 15 | 8 |
-| `control_Image.png` | 15 | 8 |
-| `control_Image__src-star.png` | 15 | 8 |
-| `control_Indicator.png` | 16 | 8 |
-| `control_Label.png` | 15 | 8 |
-| `control_Label__selected-True.png` | 15 | 8 |
-| `control_NetworkImage.png` | 15 | 8 |
-| `control_Progress.png` | 15 | 8 |
-| `control_Progress__progress-0.5.png` | 17 | 8 |
-| `control_Radio.png` | 15 | 8 |
-| `control_Radio__checked-True.png` | 15 | 8 |
-| `control_Radio__orientation-horizontal.png` | 15 | 8 |
-| `control_SafeAreaView.png` | 26 | 8 |
-| `control_ScrollView.png` | 15 | 8 |
-| `control_Segment.png` | 15 | 8 |
-| `control_SelectBox.png` | 19 | 8 |
-| `control_SelectBox__datePickerMode-time_selectItemType-Date.png` | 19 | 8 |
-| `control_SelectBox__selectItemType-Date.png` | 19 | 8 |
-| `control_SelectBox__anchored.png` | 19 | 8 |
-| `control_Slider.png` | 15 | 8 |
-| `control_Slider__value-0.5.png` | 18 | 8 |
-| `control_Switch.png` | 15 | 8 |
-| `control_Switch__isOn-True.png` | 15 | 8 |
-| `control_TabView.png` | 15 | 8 |
-| `control_TextField.png` | 15 | 8 |
-| `control_TextField__text-Clear-me.png` | 15 | 8 |
-| `control_TextField__text-Sample.png` | 15 | 8 |
-| `control_TextView.png` | 15 | 8 |
-| `control_TextView__text-Sample.png` | 15 | 8 |
-| `control_View.png` | 15 | 8 |
-| `control_View__orientation-horizontal.png` | 15 | 8 |
-| `control_View__orientation-vertical.png` | 15 | 8 |
-| `control_View__anchored.png` | 15 | 8 |
-| `control_Web.png` | 15 | 8 |
-| `control_View__fill-w.png` | 15 | 8 |
-| `common_maxWidth__fill_clamp.png` | 15 | 8 |
-| `control_View__fill-h.png` | 23 | 8 |
-| `common_maxHeight__fill_clamp.png` | 15 | 8 |
-
-> ios: 17 screenshot(s) without a baseline hash (not compared — NOT a pass): `Segment_fontColor__static.png`, `Segment_fontColor__alias_normalColor.png`, `Segment_selectedFontColor__static.png`, `Segment_selectedFontColor__alias_selectedColor.png`, `control_Button__enabled-False.png`, `control_Collection__columns-2.png`, `control_IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000.png`, `control_IconLabel__selected-True.png`, `control_Label__highlightAttributes-cb049517.png`, `control_Label__hint-Conformance-Hint_no-text.png` …
-
-### web: regressions
-
-| Screenshot | Distance | Threshold |
-|---|---|---|
-| `Label_textAlign__right.png` | 9 | 8 |
-| `Label_textAlign__right_2.png` | 9 | 8 |
-| `Label_lines__static.png` | 56 | 8 |
-| `Label_lineBreakMode__head.png` | 9 | 8 |
-| `Button_textAlign__right.png` | 9 | 8 |
-| `Image_src__static.png` | 27 | 8 |
-| `NetworkImage_defaultImage__static.png` | 27 | 8 |
-| `SelectBox_hint__static.png` | 12 | 8 |
-| `SelectBox_placeholder__static.png` | 12 | 8 |
-| `SelectBox_selectItemType__date.png` | 14 | 8 |
-| `SelectBox_datePickerStyle__automatic.png` | 14 | 8 |
-| `SelectBox_datePickerStyle__wheel.png` | 14 | 8 |
-| `SelectBox_datePickerStyle__wheels.png` | 14 | 8 |
-| `SelectBox_datePickerStyle__compact.png` | 14 | 8 |
-| `SelectBox_datePickerStyle__graphical.png` | 14 | 8 |
-| `SelectBox_datePickerStyle__inline.png` | 14 | 8 |
-| `SelectBox_dateStringFormat__static.png` | 14 | 8 |
-| `Segment_items__static.png` | 63 | 8 |
-| `Collection_columnSpacing__static.png` | 9 | 8 |
-| `Radio_fontSize__static.png` | 9 | 8 |
-| `CheckBox_fontSize__static.png` | 9 | 8 |
-| `TabView_tabs__static.png` | 63 | 8 |
-| `control_Label__text-1d8efd05.png` | 57 | 8 |
-| `control_SelectBox__selectItemType-Date.png` | 14 | 8 |
-
-> web: 1 screenshot(s) without a baseline hash (not compared — NOT a pass): `control_Radio__no-text.png`
+| android | threshold 8 | 782 | 0 | 0 | 0 |
+| ios | threshold 8 | 828 | 0 | 0 | 0 |
+| web | threshold 8 | 784 | 0 | 0 | 0 |
 
 ## Attribute effect (fixture vs control)
 
@@ -1009,87 +70,108 @@ Each visual fixture is compared against its **control** — the same layout with
 
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
-| android | 397 | 230 | 167 | 0 | 0 |
-| ios | 426 | 248 | 178 | 0 | 0 |
-| web | 411 | 238 | 173 | 0 | 0 |
+| android | 550 | 435 | 115 | 0 | 0 |
+| ios | 592 | 456 | 136 | **11** | 0 |
+| web | 532 | 429 | 103 | **2** | 0 |
+
+**ios: 11 fixture(s) recorded as expected-to-differ now render identically to their control — the attribute stopped taking effect.**
+
+- `common/gravity__top`
+- `common/gravity__left`
+- `common/minEndMargin__static`
+- `common/maxEndMargin__static`
+- `TextView/flexible__true`
+- `Progress/indicatorStyle__large`
+- `Progress/indicatorStyle__medium`
+- `Collection/lazy__eager`
+- `Collection/lazy__binding`
+- `Indicator/indicatorStyle__medium`
+- `Indicator/hidesWhenStopped__true`
+
+**web: 2 fixture(s) recorded as expected-to-differ now render identically to their control — the attribute stopped taking effect.**
+
+- `Label/textTransform__lowercase`
+- `TextView/resize__none`
 
 ## Cross-platform attribute effect
 
 Pixel comparison across platforms is out of scope by design, but each platform's control-diff verdict — *did the attribute change the render?* — is platform-independent. A fixture whose activeness disagrees across the platforms its attribute is declared for is a semantic-drift suspect, and an SSoT-enumerated value that is inert on **every** platform is flagged uniformly-inert (default rendering, or dead everywhere). Only fixtures compared on **all** their in-scope platforms are judged; findings are accepted (with a reason) in `cross_effect.json` and enforced by `jui conformance gate --cross-effect`.
 
-- Compared on all in-scope platforms: 400 (consistent: 303, **diverging: 97**, **uniformly-inert declared values: 65**) · not compared everywhere: 0 · in scope on <2 platforms: 132
+- Compared on all in-scope platforms: 554 (consistent: 468, **diverging: 86**, **uniformly-inert declared values: 48**) · not compared everywhere: 22 · in scope on <2 platforms: 75
 
 | Fixture | android | ios | web |
 |---|---|---|---|
-| `Blur/effectStyle__extralight` | active | inert | inert |
-| `Blur/effectStyle__light` | active | inert | inert |
+| `Button/fontFamily__binding` | inert | inert | active |
+| `Button/fontFamily__static` | inert | inert | active |
+| `Button/fontWeight__binding` | inert | active | active |
+| `Button/textAlign__center` | active | inert | inert |
 | `Button/textAlign__left` | inert | inert | active |
 | `Button/textAlign__right` | active | inert | active |
+| `CheckBox/fontColor__binding` | active | inert | active |
+| `CheckBox/fontWeight__alias_fontStyle` | inert | active | active |
+| `CheckBox/fontWeight__static` | inert | active | active |
+| `Collection/cellHeight__static` | active | inert | inert |
 | `Collection/defaultScrollAnchor__bottom` | inert | active | inert |
 | `Collection/defaultScrollAnchor__center` | inert | active | inert |
-| `Collection/lazy__eager` | inert | active | inert |
 | `Collection/lazy__none` | inert | active | inert |
-| `IconLabel/selectedFontColor__static` | inert | inert | active |
-| `IconLabel/selected__true` | active | inert | active |
-| `Label/autoShrink__true` | active | inert | active |
-| `Label/edgeInset__static` | active | inert | active |
-| `Label/fontFamily__static` | inert | active | active |
+| `IconLabel/iconSize__static` | inert | inert | active |
+| `Label/autoShrink__true` | active | active | inert |
+| `Label/disabledFontColor__binding` | inert | active | active |
+| `Label/disabledFontColor__static` | inert | active | active |
+| `Label/lineBreakMode__char` | inert | inert | active |
+| `Label/lineBreakMode__clip` | inert | inert | active |
 | `Label/lineBreakMode__head` | inert | inert | active |
-| `Label/lineHeightMultiple__static` | active | inert | inert |
-| `Label/lineSpacing__static` | active | inert | inert |
-| `Label/linkable__true` | active | inert | inert |
-| `Label/minimumScaleFactor__static` | active | inert | inert |
+| `Label/lineBreakMode__middle` | inert | inert | active |
+| `Label/lineBreakMode__tail` | inert | inert | active |
+| `Label/textAlign__binding` | inert | active | inert |
 | `Label/textAlign__left` | inert | active | inert |
 | `Label/textAlign__left_2` | inert | active | inert |
-| `Radio/label__static` | inert | inert | active |
-| `Radio/selectedValue__static` | inert | inert | active |
-| `SafeAreaView/orientation__horizontal` | inert | active | inert |
-| `SafeAreaView/orientation__vertical` | inert | active | inert |
+| `NetworkImage/loadingImage__static` | inert | active | — |
+| `NetworkImage/placeholder__static` | inert | active | active |
+| `NetworkImage/renderingMode__template` | inert | active | — |
+| `Radio/fontColor__binding` | active | inert | active |
+| `SafeAreaView/direction__bottomtotop` | inert | inert | active |
+| `SafeAreaView/direction__righttoleft` | inert | inert | active |
+| `SafeAreaView/safeAreaInsetPositions__alias_edges` | inert | active | inert |
 | `SafeAreaView/safeAreaInsetPositions__static` | inert | active | inert |
-| `ScrollView/orientation__horizontal` | inert | active | inert |
+| `SafeAreaView/spacing__binding` | inert | active | active |
+| `SafeAreaView/spacing__static` | inert | active | active |
+| `ScrollView/defaultScrollAnchor__bottom` | inert | inert | active |
+| `ScrollView/defaultScrollAnchor__center` | inert | inert | active |
+| `SelectBox/datePickerMode__dateandtime` | inert | inert | active |
+| `SelectBox/datePickerMode__time` | active | inert | active |
 | `SelectBox/fontColor__static` | active | inert | active |
-| `SelectBox/fontSize__static` | inert | inert | active |
-| `SelectBox/font__static` | inert | inert | active |
-| `SelectBox/items__static` | inert | inert | active |
-| `SelectBox/labelAttributes__static` | inert | inert | active |
-| `SelectBox/selectItemType__date` | active | inert | active |
-| `SelectBox/selectedIndex__static` | inert | active | active |
-| `Slider/progressTintColor__static` | active | inert | active |
-| `Slider/trackTintColor__static` | active | inert | active |
+| `Slider/value__binding` | active | active | inert |
+| `Slider/value__static` | active | active | inert |
+| `Switch/fontColor__binding` | active | inert | inert |
+| `Switch/fontColor__static` | active | inert | inert |
+| `Switch/fontSize__binding` | active | inert | inert |
+| `Switch/fontSize__static` | active | inert | inert |
 | `Switch/trackTintColor__static` | active | inert | active |
 | `TabView/showLabels__true` | inert | active | inert |
+| `TabView/tintColor__binding` | active | inert | active |
 | `TextField/borderStyle__bezel` | active | inert | inert |
 | `TextField/borderStyle__bezel_2` | active | inert | inert |
 | `TextField/borderStyle__line` | active | inert | active |
 | `TextField/borderStyle__line_2` | active | inert | active |
 | `TextField/borderStyle__roundedrect` | active | active | inert |
 | `TextField/borderStyle__roundedrect_2` | active | active | inert |
-| `TextField/fontFamily__static` | inert | active | active |
-| `TextField/font__static` | inert | active | active |
-| `TextField/hintColor__static` | active | inert | active |
-| `TextField/hintFontSize__static` | active | inert | active |
-| `TextField/hintFont__static` | active | inert | active |
-| `TextField/placeholderColor__static` | active | inert | active |
+| `TextField/fontColor__binding` | active | inert | active |
 | `TextField/textAlign__center` | inert | active | active |
 | `TextField/textAlign__center_2` | inert | active | active |
 | `TextField/textAlign__right` | inert | active | active |
 | `TextField/textAlign__right_2` | inert | active | active |
-| `TextView/edgeInset__static` | inert | active | inert |
-| `TextView/flexible__true` | inert | active | active |
-| `TextView/fontFamily__static` | inert | inert | active |
-| `TextView/font__static` | inert | active | active |
-| `TextView/hintFont__static` | inert | active | active |
-| `TextView/hintLineHeightMultiple__static` | active | inert | active |
+| `TextView/editable__false` | active | inert | inert |
+| `TextView/flexible__true` | inert | inert | active |
+| `TextView/lineBreakMode__char` | inert | inert | active |
 | `TextView/textAlign__center` | inert | inert | active |
 | `TextView/textAlign__center_2` | inert | inert | active |
 | `TextView/textAlign__right` | inert | inert | active |
 | `TextView/textAlign__right_2` | inert | inert | active |
-| `common/alignBottom__true` | active | active | inert |
+| `View/highlighted__true` | active | inert | active |
+| `View/safeAreaInsetPositions__static` | inert | active | inert |
 | `common/alignLeftView__static` | inert | active | active |
-| `common/alignLeft__true` | inert | active | inert |
-| `common/alignRight__true` | active | active | inert |
-| `common/alignTopView__static` | inert | active | inert |
-| `common/alignTop__true` | inert | active | inert |
+| `common/alignTopView__static` | inert | active | active |
 | `common/alignment__bottom` | active | inert | — |
 | `common/alignment__bottomleading` | active | inert | — |
 | `common/alignment__bottomtrailing` | active | inert | — |
@@ -1098,33 +180,24 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `common/alignment__top` | active | inert | — |
 | `common/alignment__toptrailing` | active | inert | — |
 | `common/alignment__trailing` | active | inert | — |
-| `common/bottomMargin__static` | inert | active | inert |
-| `common/bottomPadding__static` | inert | active | inert |
-| `common/centerInParent__true` | active | inert | active |
-| `common/clipToBounds__true` | inert | active | active |
-| `common/disabledBackground__static` | active | active | inert |
-| `common/endMargin__static` | inert | active | inert |
-| `common/gravity__center` | active | inert | active |
-| `common/gravity__centerhorizontal` | inert | active | active |
-| `common/gravity__left` | inert | active | inert |
-| `common/gravity__right` | inert | active | active |
-| `common/gravity__top` | inert | active | inert |
-| `common/margins__static` | active | inert | active |
-| `common/paddingBottom__static` | inert | active | inert |
-| `common/paddingEnd__static` | active | active | inert |
-| `common/paddingRight__static` | active | active | inert |
-| `common/padding__static` | active | inert | active |
-| `common/paddings__static` | active | inert | active |
-| `common/rightMargin__static` | inert | active | inert |
-| `common/rightPadding__static` | inert | active | inert |
-| `common/weight__static` | inert | inert | active |
+| `common/clipToBounds__false` | active | inert | inert |
+| `common/clipToBounds__false_overflow` | active | inert | inert |
+| `common/effectStyle__regular` | active | inert | inert |
+| `common/maxHeight__binding` | inert | active | inert |
+| `common/maxHeight__static` | inert | active | inert |
+| `common/maxWidth__binding` | inert | active | inert |
+| `common/maxWidth__static` | inert | active | inert |
 
 Declared values inert on every in-scope platform (default rendering, or dead everywhere):
 
-- `Button/textAlign__center` (value `'Center'`)
 - `Collection/defaultScrollAnchor__top` (value `'top'`)
 - `Collection/layout__vertical` (value `'vertical'`)
+- `Collection/lazy__eager` (value `'eager'`)
 - `Collection/lazy__lazy` (value `'lazy'`)
+- `Collection/listStyle__grouped` (value `'grouped'`)
+- `Collection/listStyle__insetgrouped` (value `'insetGrouped'`)
+- `Collection/listStyle__plain` (value `'plain'`)
+- `Collection/listStyle__sidebar` (value `'sidebar'`)
 - `Collection/orientation__vertical` (value `'vertical'`)
 - `Collection/scrollAnchor__bottom` (value `'bottom'`)
 - `Collection/scrollAnchor__center` (value `'center'`)
@@ -1134,66 +207,45 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 - `Image/contentMode__aspectfit` (value `'AspectFit'`)
 - `Image/contentMode__fit` (value `'fit'`)
 - `Image/renderingMode__original` (value `'original'`)
-- `Label/lineBreakMode__char` (value `'Char'`)
-- `Label/lineBreakMode__clip` (value `'Clip'`)
-- `Label/lineBreakMode__middle` (value `'Middle'`)
-- `Label/lineBreakMode__tail` (value `'Tail'`)
 - `Label/lineBreakMode__word` (value `'Word'`)
 - `NetworkImage/contentMode__aspectfit` (value `'AspectFit'`)
 - `NetworkImage/contentMode__fit` (value `'fit'`)
+- `NetworkImage/renderingMode__original` (value `'original'`)
+- `SafeAreaView/direction__lefttoright` (value `'leftToRight'`)
+- `SafeAreaView/direction__none` (value `'none'`)
+- `SafeAreaView/direction__toptobottom` (value `'topToBottom'`)
+- `ScrollView/defaultScrollAnchor__top` (value `'top'`)
 - `ScrollView/orientation__vertical` (value `'vertical'`)
 - `SelectBox/datePickerMode__countdown` (value `'countDown'`)
 - `SelectBox/datePickerMode__date` (value `'date'`)
-- `SelectBox/datePickerMode__dateandtime` (value `'dateAndTime'`)
-- `SelectBox/datePickerMode__datetime` (value `'datetime'`)
-- `SelectBox/datePickerMode__time` (value `'time'`)
-- `SelectBox/datePickerStyle__automatic` (value `'automatic'`)
-- `SelectBox/datePickerStyle__compact` (value `'compact'`)
-- `SelectBox/datePickerStyle__graphical` (value `'graphical'`)
-- `SelectBox/datePickerStyle__inline` (value `'inline'`)
-- `SelectBox/datePickerStyle__wheel` (value `'wheel'`)
-- `SelectBox/datePickerStyle__wheels` (value `'wheels'`)
-- `SelectBox/minuteInterval__1` (value `1`)
-- `SelectBox/minuteInterval__10` (value `10`)
-- `SelectBox/minuteInterval__12` (value `12`)
-- `SelectBox/minuteInterval__15` (value `15`)
-- `SelectBox/minuteInterval__2` (value `2`)
-- `SelectBox/minuteInterval__20` (value `20`)
-- `SelectBox/minuteInterval__3` (value `3`)
-- `SelectBox/minuteInterval__30` (value `30`)
-- `SelectBox/minuteInterval__4` (value `4`)
-- `SelectBox/minuteInterval__5` (value `5`)
-- `SelectBox/minuteInterval__6` (value `6`)
-- `SelectBox/minuteInterval__static` (value `15`)
-- `SelectBox/selectItemType__normal` (value `'Normal'`)
 - `TextField/borderStyle__none` (value `'none'`)
 - `TextField/textAlign__left` (value `'Left'`)
 - `TextField/textAlign__left_2` (value `'left'`)
+- `TextView/lineBreakMode__clip` (value `'Clip'`)
+- `TextView/lineBreakMode__head` (value `'Head'`)
+- `TextView/lineBreakMode__middle` (value `'Middle'`)
+- `TextView/lineBreakMode__tail` (value `'Tail'`)
+- `TextView/lineBreakMode__word` (value `'Word'`)
 - `TextView/textAlign__left` (value `'Left'`)
 - `TextView/textAlign__left_2` (value `'left'`)
 - `View/direction__lefttoright` (value `'leftToRight'`)
 - `View/direction__none` (value `'none'`)
 - `View/direction__toptobottom` (value `'topToBottom'`)
-- `View/distribution__equalcentering` (value `'equalCentering'`)
-- `View/distribution__equalspacing` (value `'equalSpacing'`)
-- `View/distribution__fill` (value `'fill'`)
-- `View/distribution__fillequally` (value `'fillEqually'`)
 - `common/alignment__topleading` (value `'topLeading'`)
 - `common/borderStyle__dashed` (value `'dashed'`)
 - `common/borderStyle__dotted` (value `'dotted'`)
 - `common/borderStyle__solid` (value `'solid'`)
-- `common/distribution__equalcentering` (value `'equalCentering'`)
-- `common/distribution__equalspacing` (value `'equalSpacing'`)
-- `common/distribution__fill` (value `'fill'`)
-- `common/distribution__fillequally` (value `'fillEqually'`)
+- `common/borderStyle__solid_with_border` (value `'solid'`)
+- `common/gravity__left` (value `'left'`)
+- `common/gravity__top` (value `'top'`)
 
 ## Platforms
 
 | Platform | Runner | Results | pass | fail | error | skipped | Manifest |
 |---|---|---|---|---|---|---|---|
-| android | uiautomator 2.3.0 | 700 | 554 | 0 | 0 | 146 | current |
-| ios | xcuitest ios-18.6 | 700 | 586 | 0 | 0 | 114 | current |
-| web | playwright 1.61.1 | 700 | 567 | 0 | 0 | 133 | current |
+| android | uiautomator 2.3.0 | 1031 | 853 | 0 | 0 | 178 | current |
+| ios | xcuitest ios-26.2 | 1031 | 899 | 0 | 0 | 132 | current |
+| web | playwright 1.61.1 | 1031 | 855 | 0 | 0 | 176 | current |
 
 ## Matrix
 
@@ -1208,32 +260,51 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `height` | `wrapcontent` | visual | ✅ | ✅ | ✅ |
 | `height` | `static` | visual | ✅ | ✅ | ✅ |
 | `minWidth` | `static` | visual | ✅ | ✅ | ✅ |
+| `minWidth` | `binding` | visual | ✅ | ✅ | ✅ |
 | `maxWidth` | `static` | visual | ✅ | ✅ | ✅ |
+| `maxWidth` | `binding` | visual | ✅ | ✅ | ✅ |
 | `minHeight` | `static` | visual | ✅ | ✅ | ✅ |
+| `minHeight` | `binding` | visual | ✅ | ✅ | ✅ |
 | `maxHeight` | `static` | visual | ✅ | ✅ | ✅ |
-| `widthWeight` | `static` | visual | – | – | – |
-| `heightWeight` | `static` | visual | – | – | – |
-| `maxWidthWeight` | `static` | visual | – | – | – |
-| `maxHeightWeight` | `static` | visual | – | – | – |
-| `minWidthWeight` | `static` | visual | – | – | – |
-| `minHeightWeight` | `static` | visual | – | – | – |
-| `aspectWidth` | `static` | visual | – | – | – |
-| `aspectHeight` | `static` | visual | – | – | – |
+| `maxHeight` | `binding` | visual | ✅ | ✅ | ✅ |
+| `widthWeight` | `static` | visual | – | ✅ | – |
+| `widthWeight` | `binding` | visual | – | ✅ | – |
+| `heightWeight` | `static` | visual | ✅ | ✅ | – |
+| `heightWeight` | `binding` | visual | ✅ | ✅ | – |
+| `maxWidthWeight` | `static` | declaration-only | – | – | – |
+| `maxHeightWeight` | `static` | declaration-only | – | – | – |
+| `minWidthWeight` | `static` | declaration-only | – | – | – |
+| `minHeightWeight` | `static` | declaration-only | – | – | – |
+| `aspectWidth` | `static` | declaration-only | – | – | – |
+| `aspectHeight` | `static` | declaration-only | – | – | – |
 | `weight` | `static` | visual | ✅ | ✅ | ✅ |
+| `weight` | `as_string` | visual | ✅ | ✅ | ✅ |
+| `weight` | `binding` | visual | ✅ | ✅ | ✅ |
+| `weight` | `binding_as_string` | visual | ✅ | ✅ | ✅ |
 | `background` | `static` | visual | ✅ | ✅ | ✅ |
+| `background` | `binding` | visual | ✅ | ✅ | ✅ |
 | `tapBackground` | `static` | visual | ✅ | ✅ | ✅ |
+| `tapBackground` | `binding` | visual | ✅ | ✅ | ✅ |
 | `highlightBackground` | `static` | visual | ✅ | ✅ | ✅ |
+| `highlightBackground` | `binding` | visual | ✅ | ✅ | ✅ |
 | `disabledBackground` | `static` | visual | ✅ | ✅ | ✅ |
-| `defaultBackground` | `static` | visual | – | – | – |
+| `disabledBackground` | `binding` | visual | ✅ | ✅ | ✅ |
+| `defaultBackground` | `static` | declaration-only | – | – | – |
 | `cornerRadius` | `static` | visual | ✅ | ✅ | ✅ |
+| `cornerRadius` | `binding` | visual | ✅ | ✅ | ✅ |
 | `borderWidth` | `static` | visual | ✅ | ✅ | ✅ |
+| `borderWidth` | `binding` | visual | ✅ | ✅ | ✅ |
 | `borderColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `borderColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `borderStyle` | `solid` | visual | ✅ | ✅ | ✅ |
 | `borderStyle` | `dashed` | visual | ✅ | ✅ | ✅ |
 | `borderStyle` | `dotted` | visual | ✅ | ✅ | ✅ |
-| `alpha` | `static` | visual | ✅ | ✅ | ✅ |
+| `borderStyle` | `solid_with_border` | visual | ✅ | ✅ | ✅ |
+| `borderStyle` | `dashed_with_border` | visual | ✅ | ✅ | ✅ |
+| `borderStyle` | `dotted_with_border` | visual | ✅ | ✅ | ✅ |
 | `opacity` | `static` | visual | ✅ | ✅ | ✅ |
 | `opacity` (alias) | `alias_alpha` | visual | ✅ | ✅ | ✅ |
+| `opacity` | `binding` | visual | ✅ | ✅ | ✅ |
 | `visibility` | `visible` | assertable | ✅ | ✅ | ✅ |
 | `visibility` | `invisible` | assertable | ✅ | ✅ | ✅ |
 | `visibility` | `gone` | assertable | ✅ | ✅ | ✅ |
@@ -1242,49 +313,79 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `visibility` | `binding_gone` | interactive | ✅ | ✅ | ✅ |
 | `hidden` | `true` | assertable | ✅ | ✅ | ✅ |
 | `hidden` | `false` | assertable | ✅ | ✅ | ✅ |
+| `hidden` | `binding` | assertable | ✅ | ✅ | ✅ |
 | `hidden` | `binding_negation` | interactive | ✅ | ✅ | ✅ |
 | `padding` | `static` | visual | ✅ | ✅ | ✅ |
+| `padding` | `binding` | visual | ✅ | ✅ | ✅ |
 | `paddings` | `static` | visual | ✅ | ✅ | ✅ |
 | `paddingTop` | `static` | visual | ✅ | ✅ | ✅ |
+| `paddingTop` | `binding` | visual | ✅ | ✅ | ✅ |
 | `paddingBottom` | `static` | visual | ✅ | ✅ | ✅ |
+| `paddingBottom` | `binding` | visual | ✅ | ✅ | ✅ |
 | `paddingLeft` | `static` | visual | ✅ | ✅ | ✅ |
+| `paddingLeft` | `binding` | visual | ✅ | ✅ | ✅ |
 | `paddingRight` | `static` | visual | ✅ | ✅ | ✅ |
+| `paddingRight` | `binding` | visual | ✅ | ✅ | ✅ |
 | `paddingStart` | `static` | visual | ✅ | ✅ | ✅ |
+| `paddingStart` | `binding` | visual | ✅ | ✅ | ✅ |
 | `paddingEnd` | `static` | visual | ✅ | ✅ | ✅ |
+| `paddingEnd` | `binding` | visual | ✅ | ✅ | ✅ |
 | `rightPadding` | `static` | visual | ✅ | ✅ | ✅ |
+| `rightPadding` | `binding` | visual | ✅ | ✅ | ✅ |
 | `leftPadding` | `static` | visual | ✅ | ✅ | ✅ |
+| `leftPadding` | `binding` | visual | ✅ | ✅ | ✅ |
 | `topPadding` | `static` | visual | ✅ | ✅ | ✅ |
+| `topPadding` | `binding` | visual | ✅ | ✅ | ✅ |
 | `bottomPadding` | `static` | visual | ✅ | ✅ | ✅ |
-| `minTopPadding` | `static` | visual | – | – | – |
-| `minBottomPadding` | `static` | visual | – | – | – |
-| `minLeftPadding` | `static` | visual | – | – | – |
-| `minRightPadding` | `static` | visual | – | – | – |
-| `maxTopPadding` | `static` | visual | – | – | – |
-| `maxBottomPadding` | `static` | visual | – | – | – |
-| `maxLeftPadding` | `static` | visual | – | – | – |
-| `maxRightPadding` | `static` | visual | – | – | – |
+| `bottomPadding` | `binding` | visual | ✅ | ✅ | ✅ |
+| `minTopPadding` | `static` | declaration-only | – | – | – |
+| `minBottomPadding` | `static` | declaration-only | – | – | – |
+| `minLeftPadding` | `static` | declaration-only | – | – | – |
+| `minRightPadding` | `static` | declaration-only | – | – | – |
+| `maxTopPadding` | `static` | declaration-only | – | – | – |
+| `maxBottomPadding` | `static` | declaration-only | – | – | – |
+| `maxLeftPadding` | `static` | declaration-only | – | – | – |
+| `maxRightPadding` | `static` | declaration-only | – | – | – |
 | `margins` | `static` | visual | ✅ | ✅ | ✅ |
 | `topMargin` | `static` | visual | ✅ | ✅ | ✅ |
 | `bottomMargin` | `static` | visual | ✅ | ✅ | ✅ |
 | `leftMargin` | `static` | visual | ✅ | ✅ | ✅ |
+| `leftMargin` | `binding` | visual | ✅ | ✅ | ✅ |
 | `rightMargin` | `static` | visual | ✅ | ✅ | ✅ |
+| `rightMargin` | `binding` | visual | ✅ | ✅ | ✅ |
 | `startMargin` | `static` | visual | ✅ | ✅ | ✅ |
+| `startMargin` | `binding` | visual | ✅ | ✅ | ✅ |
 | `endMargin` | `static` | visual | ✅ | ✅ | ✅ |
-| `minTopMargin` | `static` | visual | – | – | – |
-| `minBottomMargin` | `static` | visual | – | – | – |
-| `minLeftMargin` | `static` | visual | – | – | – |
-| `minRightMargin` | `static` | visual | – | – | – |
-| `maxTopMargin` | `static` | visual | – | – | – |
-| `maxBottomMargin` | `static` | visual | – | – | – |
-| `maxLeftMargin` | `static` | visual | – | – | – |
-| `maxRightMargin` | `static` | visual | – | – | – |
+| `endMargin` | `binding` | visual | ✅ | ✅ | ✅ |
+| `minTopMargin` | `static` | declaration-only | – | – | – |
+| `minBottomMargin` | `static` | declaration-only | – | – | – |
+| `minLeftMargin` | `static` | declaration-only | – | – | – |
+| `minRightMargin` | `static` | declaration-only | – | – | – |
+| `maxTopMargin` | `static` | declaration-only | – | – | – |
+| `maxBottomMargin` | `static` | declaration-only | – | – | – |
+| `maxLeftMargin` | `static` | declaration-only | – | – | – |
+| `maxRightMargin` | `static` | declaration-only | – | – | – |
 | `centerInParent` | `true` | visual | ✅ | ✅ | ✅ |
+| `centerInParent` | `false` | visual | ✅ | ✅ | ✅ |
+| `centerInParent` | `binding` | visual | ✅ | ✅ | ✅ |
 | `centerVertical` | `true` | visual | ✅ | ✅ | ✅ |
+| `centerVertical` | `false` | visual | ✅ | ✅ | ✅ |
+| `centerVertical` | `binding` | visual | ✅ | ✅ | ✅ |
 | `centerHorizontal` | `true` | visual | ✅ | ✅ | ✅ |
+| `centerHorizontal` | `false` | visual | ✅ | ✅ | ✅ |
+| `centerHorizontal` | `binding` | visual | ✅ | ✅ | ✅ |
 | `alignTop` | `true` | visual | ✅ | ✅ | ✅ |
+| `alignTop` | `false` | visual | ✅ | ✅ | ✅ |
+| `alignTop` | `binding` | visual | ✅ | ✅ | ✅ |
 | `alignBottom` | `true` | visual | ✅ | ✅ | ✅ |
+| `alignBottom` | `false` | visual | ✅ | ✅ | ✅ |
+| `alignBottom` | `binding` | visual | ✅ | ✅ | ✅ |
 | `alignLeft` | `true` | visual | ✅ | ✅ | ✅ |
+| `alignLeft` | `false` | visual | ✅ | ✅ | ✅ |
+| `alignLeft` | `binding` | visual | ✅ | ✅ | ✅ |
 | `alignRight` | `true` | visual | ✅ | ✅ | ✅ |
+| `alignRight` | `false` | visual | ✅ | ✅ | ✅ |
+| `alignRight` | `binding` | visual | ✅ | ✅ | ✅ |
 | `alignTopOfView` | `static` | visual | ✅ | ✅ | ✅ |
 | `alignBottomOfView` | `static` | visual | ✅ | ✅ | ✅ |
 | `alignLeftOfView` | `static` | visual | ✅ | ✅ | ✅ |
@@ -1295,23 +396,38 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `alignRightView` | `static` | visual | ✅ | ✅ | ✅ |
 | `alignCenterVerticalView` | `static` | visual | ✅ | ✅ | ✅ |
 | `alignCenterHorizontalView` | `static` | visual | ✅ | ✅ | ✅ |
-| `toView` | `static` | visual | – | – | – |
+| `toView` | `static` | declaration-only | – | – | – |
 | `shadow` | `static` | visual | ✅ | ✅ | ✅ |
 | `clipToBounds` | `true` | visual | ✅ | ✅ | ✅ |
+| `clipToBounds` | `true_overflow` | visual | ✅ | ✅ | ✅ |
+| `clipToBounds` | `false` | visual | ✅ | ✅ | ✅ |
+| `clipToBounds` | `false_overflow` | visual | ✅ | ✅ | ✅ |
+| `clipToBounds` | `binding` | visual | ✅ | ✅ | ✅ |
 | `onclick` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `onClick` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `onLongPress` | `callback_fire` | interactive | ✅ | ✅ | – |
 | `onPan` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
-| `compressHorizontal` | `static` | visual | – | – | – |
-| `compressVertical` | `static` | visual | – | – | – |
-| `hugHorizontal` | `static` | visual | – | – | – |
-| `hugVertical` | `static` | visual | – | – | – |
-| `wrapContent` | `true` | visual | – | – | – |
-| `innerPadding` | `static` | visual | – | – | – |
-| `effectStyle` | `static` | visual | – | – | – |
+| `tintColor` | `binding` | visual | ✅ | ✅ | ✅ |
+| `compressHorizontal` | `static` | declaration-only | – | – | – |
+| `compressVertical` | `static` | declaration-only | – | – | – |
+| `hugHorizontal` | `static` | declaration-only | – | – | – |
+| `hugVertical` | `static` | declaration-only | – | – | – |
+| `wrapContent` | `true` | declaration-only | – | – | – |
+| `wrapContent` | `false` | declaration-only | – | – | – |
+| `innerPadding` | `static` | declaration-only | – | – | – |
+| `effectStyle` | `light` | visual | ✅ | ✅ | ✅ |
+| `effectStyle` | `dark` | visual | ✅ | ✅ | ✅ |
+| `effectStyle` | `extralight` | visual | ✅ | ✅ | ✅ |
+| `effectStyle` | `regular` | visual | ✅ | ✅ | ✅ |
+| `effectStyle` | `prominent` | visual | ✅ | ✅ | ✅ |
+| `effectStyle` | `ultrathin` | visual | ✅ | ✅ | ✅ |
+| `effectStyle` | `thin` | visual | ✅ | ✅ | ✅ |
+| `effectStyle` | `thick` | visual | ✅ | ✅ | ✅ |
+| `effectStyle` | `chrome` | visual | ✅ | ✅ | ✅ |
 | `enabled` | `true` | assertable | ✅ | ✅ | ✅ |
 | `enabled` | `false` | assertable | ✅ | ✅ | ✅ |
+| `enabled` | `binding` | assertable | ✅ | ✅ | ✅ |
 | `indexBelow` | `static` | visual | – | ✅ | ✅ |
 | `indexAbove` | `static` | visual | – | ✅ | ✅ |
 | `gravity` | `top` | visual | ✅ | ✅ | ✅ |
@@ -1322,8 +438,8 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `gravity` | `centerhorizontal` | visual | ✅ | ✅ | ✅ |
 | `gravity` | `center` | visual | ✅ | ✅ | ✅ |
 | `onAppear` | `callback_fire` | interactive | ✅ | ✅ | – |
-| `alignment` | `topleading` | visual | ✅ | ✅ | – |
 | `alignment` | `top` | visual | ✅ | ✅ | – |
+| `alignment` | `topleading` | visual | ✅ | ✅ | – |
 | `alignment` | `toptrailing` | visual | ✅ | ✅ | – |
 | `alignment` | `leading` | visual | ✅ | ✅ | – |
 | `alignment` | `center` | visual | ✅ | ✅ | – |
@@ -1331,8 +447,8 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `alignment` | `bottomleading` | visual | ✅ | ✅ | – |
 | `alignment` | `bottom` | visual | ✅ | ✅ | – |
 | `alignment` | `bottomtrailing` | visual | ✅ | ✅ | – |
-| `distribution` | `fill` | visual | ✅ | ✅ | – |
 | `distribution` | `fillequally` | visual | ✅ | ✅ | – |
+| `distribution` | `fill` | visual | ✅ | ✅ | – |
 | `distribution` | `equalspacing` | visual | ✅ | ✅ | – |
 | `distribution` | `equalcentering` | visual | ✅ | ✅ | – |
 | `minStartMargin` | `static` | visual | – | ✅ | – |
@@ -1341,12 +457,17 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `maxEndMargin` | `static` | visual | – | ✅ | – |
 | `idealWidth` | `static` | visual | – | ✅ | – |
 | `idealHeight` | `static` | visual | – | ✅ | – |
+| `offsetX` | `static` | visual | ✅ | ✅ | ✅ |
+| `offsetX` | `binding` | visual | ✅ | ✅ | ✅ |
+| `offsetY` | `static` | visual | ✅ | ✅ | ✅ |
+| `offsetY` | `binding` | visual | ✅ | ✅ | ✅ |
 
 ### Label
 
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `text` | `binding` | assertable | ✅ | ✅ | ✅ |
 | `text` | `binding_initial` | interactive | ✅ | ✅ | ✅ |
 | `text` | `binding_mixed` | interactive | ✅ | ✅ | ✅ |
 | `text` | `binding_dot_path` | interactive | ✅ | ✅ | ✅ |
@@ -1364,56 +485,89 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `hint` | `static` | visual | ✅ | ✅ | ✅ |
 | `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
 | `font` | `static` | visual | ✅ | ✅ | ✅ |
+| `font` | `binding` | visual | ✅ | ✅ | ✅ |
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontSize` | `binding` | visual | ✅ | ✅ | ✅ |
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `fontFamily` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontFamily` | `binding` | visual | ✅ | ✅ | ✅ |
 | `lineHeight` | `static` | visual | – | – | ✅ |
 | `textTransform` | `none` | visual | – | – | ✅ |
 | `textTransform` | `capitalize` | visual | – | – | ✅ |
 | `textTransform` | `uppercase` | visual | – | – | ✅ |
 | `textTransform` | `lowercase` | visual | – | – | ✅ |
 | `selected` | `true` | visual | ✅ | ✅ | ✅ |
+| `selected` | `false` | visual | ✅ | ✅ | ✅ |
+| `selected` | `binding` | visual | ✅ | ✅ | ✅ |
 | `textAlign` | `left` | visual | ✅ | ✅ | ✅ |
 | `textAlign` | `center` | visual | ✅ | ✅ | ✅ |
 | `textAlign` | `right` | visual | ✅ | ✅ | ✅ |
 | `textAlign` | `left_2` | visual | ✅ | ✅ | ✅ |
 | `textAlign` | `center_2` | visual | ✅ | ✅ | ✅ |
 | `textAlign` | `right_2` | visual | ✅ | ✅ | ✅ |
+| `textAlign` | `binding` | visual | ✅ | ✅ | ✅ |
 | `lines` | `static` | visual | ✅ | ✅ | ✅ |
-| `lineBreakMode` | `char` | visual | ✅ | ✅ | ✅ |
+| `lines` | `binding` | visual | ✅ | ✅ | ✅ |
 | `lineBreakMode` | `clip` | visual | ✅ | ✅ | ✅ |
+| `lineBreakMode` | `char` | visual | ✅ | ✅ | ✅ |
 | `lineBreakMode` | `word` | visual | ✅ | ✅ | ✅ |
 | `lineBreakMode` | `head` | visual | ✅ | ✅ | ✅ |
 | `lineBreakMode` | `middle` | visual | ✅ | ✅ | ✅ |
 | `lineBreakMode` | `tail` | visual | ✅ | ✅ | ✅ |
 | `lineHeightMultiple` | `static` | visual | ✅ | ✅ | ✅ |
+| `lineHeightMultiple` | `binding` | visual | ✅ | ✅ | ✅ |
 | `lineSpacing` | `static` | visual | ✅ | ✅ | ✅ |
+| `lineSpacing` | `binding` | visual | ✅ | ✅ | ✅ |
 | `edgeInset` | `static` | visual | ✅ | ✅ | ✅ |
 | `underline` | `true` | visual | ✅ | ✅ | ✅ |
+| `underline` | `styled` | visual | ✅ | ✅ | ✅ |
+| `underline` | `false` | visual | ✅ | ✅ | ✅ |
 | `strikethrough` | `true` | visual | ✅ | ✅ | ✅ |
+| `strikethrough` | `styled` | visual | ✅ | ✅ | ✅ |
+| `strikethrough` | `false` | visual | ✅ | ✅ | ✅ |
 | `autoShrink` | `true` | visual | ✅ | ✅ | ✅ |
+| `autoShrink` | `false` | visual | ✅ | ✅ | ✅ |
 | `minimumScaleFactor` | `static` | visual | ✅ | ✅ | ✅ |
+| `minimumScaleFactor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `linkable` | `true` | visual | ✅ | ✅ | ✅ |
+| `linkable` | `false` | visual | ✅ | ✅ | ✅ |
+| `linkable` | `binding` | visual | ✅ | ✅ | ✅ |
 | `textShadow` | `static` | visual | ✅ | ✅ | ✅ |
 | `hintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `highlightAttributes` | `static` | visual | ✅ | ✅ | ✅ |
 | `highlightColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `highlightColor` | `binding` | visual | ✅ | ✅ | ✅ |
+| `partialAttributes` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontWeight` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontWeight` | `600` | visual | ✅ | ✅ | ✅ |
+| `fontWeight` | `static_with_partial` | visual | ✅ | ✅ | ✅ |
+| `fontWeight` | `600_with_partial` | visual | ✅ | ✅ | ✅ |
+| `disabledFontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `disabledFontColor` | `binding` | visual | ✅ | ✅ | ✅ |
 
 ### TextField
 
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `text` (alias) | `alias_value` | assertable | ✅ | ✅ | ✅ |
+| `text` | `binding` | assertable | ✅ | ✅ | ✅ |
 | `text` | `binding_twoway` | interactive | ✅ | ✅ | ✅ |
 | `hint` | `static` | visual | ✅ | ✅ | ✅ |
 | `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
 | `hintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintColor` (alias) | `alias_placeholderColor` | visual | ✅ | ✅ | ✅ |
+| `hintColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `hintFont` | `static` | visual | ✅ | ✅ | ✅ |
 | `hintFontSize` | `static` | visual | ✅ | ✅ | ✅ |
 | `font` | `static` | visual | ✅ | ✅ | ✅ |
+| `font` | `binding` | visual | ✅ | ✅ | ✅ |
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontSize` | `binding` | visual | ✅ | ✅ | ✅ |
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `textAlign` | `left` | visual | ✅ | ✅ | ✅ |
 | `textAlign` | `center` | visual | ✅ | ✅ | ✅ |
 | `textAlign` | `right` | visual | ✅ | ✅ | ✅ |
@@ -1436,7 +590,13 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `input` | `url` | visual | ✅ | ✅ | ✅ |
 | `input` | `password` | visual | ✅ | ✅ | ✅ |
 | `input` | `decimal` | visual | ✅ | ✅ | ✅ |
-| `inputType` | `static` | visual | ✅ | – | – |
+| `inputType` | `text` | visual | ✅ | – | – |
+| `inputType` | `number` | visual | ✅ | – | – |
+| `inputType` | `numberdecimal` | visual | ✅ | – | – |
+| `inputType` | `phone` | visual | ✅ | – | – |
+| `inputType` | `email` | visual | ✅ | – | – |
+| `inputType` | `password` | visual | ✅ | – | – |
+| `inputType` | `multiline` | visual | ✅ | – | – |
 | `returnKeyType` | `done` | visual | ✅ | ✅ | ✅ |
 | `returnKeyType` | `go` | visual | ✅ | ✅ | ✅ |
 | `returnKeyType` | `next` | visual | ✅ | ✅ | ✅ |
@@ -1448,50 +608,78 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `returnKeyType` | `route` | visual | ✅ | ✅ | ✅ |
 | `returnKeyType` | `yahoo` | visual | ✅ | ✅ | ✅ |
 | `returnKeyType` | `google` | visual | ✅ | ✅ | ✅ |
-| `contentType` | `static` | visual | ✅ | ✅ | ✅ |
+| `contentType` | `username` | visual | ✅ | ✅ | ✅ |
+| `contentType` | `password` | visual | ✅ | ✅ | ✅ |
+| `contentType` | `newpassword` | visual | ✅ | ✅ | ✅ |
+| `contentType` | `onetimecode` | visual | ✅ | ✅ | ✅ |
+| `contentType` | `email` | visual | ✅ | ✅ | ✅ |
+| `contentType` | `name` | visual | ✅ | ✅ | ✅ |
+| `contentType` | `givenname` | visual | ✅ | ✅ | ✅ |
+| `contentType` | `familyname` | visual | ✅ | ✅ | ✅ |
+| `contentType` | `telephonenumber` | visual | ✅ | ✅ | ✅ |
+| `contentType` | `streetaddress` | visual | ✅ | ✅ | ✅ |
+| `contentType` | `postalcode` | visual | ✅ | ✅ | ✅ |
+| `contentType` | `country` | visual | ✅ | ✅ | ✅ |
+| `contentType` | `creditcardnumber` | visual | ✅ | ✅ | ✅ |
+| `contentType` | `url` | visual | ✅ | ✅ | ✅ |
+| `contentType` | `binding` | visual | ✅ | ✅ | ✅ |
 | `secure` | `true` | visual | – | ✅ | – |
+| `secure` | `false` | visual | – | ✅ | – |
+| `secure` | `binding` | visual | – | ✅ | – |
 | `fieldPadding` | `static` | visual | – | ✅ | – |
 | `textPaddingLeft` | `static` | visual | ✅ | ✅ | ✅ |
-| `textPaddingRight` | `static` | visual | – | – | – |
-| `hasContainer` | `true` | visual | – | – | – |
-| `textVerticalAlign` | `static` | visual | – | – | – |
-| `applyLiquidGlass` | `true` | visual | – | – | – |
-| `accessoryCornerRadius` | `static` | visual | – | – | – |
-| `glassEffectStyle` | `static` | visual | – | – | – |
-| `accessoryBackground` | `static` | visual | – | ✅ | – |
-| `accessoryTextColor` | `static` | visual | – | ✅ | – |
-| `doneText` | `static` | visual | – | ✅ | – |
+| `textPaddingRight` | `static` | declaration-only | – | – | – |
+| `hasContainer` | `true` | declaration-only | – | – | – |
+| `hasContainer` | `false` | declaration-only | – | – | – |
+| `textVerticalAlign` | `static` | declaration-only | – | – | – |
+| `applyLiquidGlass` | `true` | declaration-only | – | – | – |
+| `applyLiquidGlass` | `false` | declaration-only | – | – | – |
+| `accessoryCornerRadius` | `static` | declaration-only | – | – | – |
+| `glassEffectStyle` | `static` | declaration-only | – | – | – |
+| `accessoryBackground` | `static` | declaration-only | – | – | – |
+| `accessoryTextColor` | `static` | declaration-only | – | – | – |
+| `doneText` | `static` | declaration-only | – | – | – |
 | `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `onTextChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
-| `autocapitalizationType` | `static` | visual | ✅ | ✅ | ✅ |
-| `autocorrectionType` | `static` | visual | ✅ | ✅ | ✅ |
-| `spellCheckingType` | `static` | visual | – | ✅ | – |
-| `keyboardAppearance` | `static` | visual | ✅ | ✅ | ✅ |
+| `autocapitalizationType` | `none` | visual | ✅ | ✅ | ✅ |
+| `autocapitalizationType` | `words` | visual | ✅ | ✅ | ✅ |
+| `autocapitalizationType` | `sentences` | visual | ✅ | ✅ | ✅ |
+| `autocapitalizationType` | `allcharacters` | visual | ✅ | ✅ | ✅ |
+| `autocorrectionType` | `default` | visual | ✅ | ✅ | ✅ |
+| `autocorrectionType` | `yes` | visual | ✅ | ✅ | ✅ |
+| `autocorrectionType` | `no` | visual | ✅ | ✅ | ✅ |
 | `clearButtonMode` | `static` | visual | – | ✅ | – |
-| `leftViewMode` | `static` | visual | – | – | – |
-| `rightViewMode` | `static` | visual | – | – | – |
+| `leftViewMode` | `static` | declaration-only | – | – | – |
+| `rightViewMode` | `static` | declaration-only | – | – | – |
 | `maxLength` | `static` | visual | ✅ | ✅ | ✅ |
 | `pattern` | `static` | visual | – | – | ✅ |
 | `required` | `true` | visual | – | – | ✅ |
+| `required` | `false` | visual | – | – | ✅ |
 | `fontFamily` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontFamily` | `binding` | visual | ✅ | ✅ | ✅ |
 | `disabledBackground` | `static` | visual | – | – | ✅ |
-| `placeholderColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintLineHeightMultiple` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### TextView
 
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `text` | `binding` | assertable | ✅ | ✅ | ✅ |
 | `text` | `binding_twoway` | interactive | ✅ | ✅ | ✅ |
 | `hint` | `static` | visual | ✅ | ✅ | ✅ |
 | `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
 | `hintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `hintFont` | `static` | visual | ✅ | ✅ | ✅ |
 | `hintFontSize` | `static` | visual | ✅ | ✅ | ✅ |
 | `hintLineHeightMultiple` | `static` | visual | ✅ | ✅ | ✅ |
 | `font` | `static` | visual | ✅ | ✅ | ✅ |
+| `font` | `binding` | visual | ✅ | ✅ | ✅ |
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontSize` | `binding` | visual | ✅ | ✅ | ✅ |
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `textAlign` | `left` | visual | ✅ | ✅ | ✅ |
 | `textAlign` | `center` | visual | ✅ | ✅ | ✅ |
 | `textAlign` | `right` | visual | ✅ | ✅ | ✅ |
@@ -1500,6 +688,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `textAlign` | `right_2` | visual | ✅ | ✅ | ✅ |
 | `containerInset` | `static` | visual | ✅ | ✅ | ✅ |
 | `flexible` | `true` | visual | ✅ | ✅ | ✅ |
+| `flexible` | `false` | visual | ✅ | ✅ | ✅ |
 | `input` | `default` | visual | ✅ | ✅ | ✅ |
 | `input` | `alphabet` | visual | ✅ | ✅ | ✅ |
 | `input` | `allphabet` | visual | ✅ | ✅ | ✅ |
@@ -1520,21 +709,39 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `returnKeyType` | `route` | visual | ✅ | ✅ | ✅ |
 | `returnKeyType` | `yahoo` | visual | ✅ | ✅ | ✅ |
 | `returnKeyType` | `google` | visual | ✅ | ✅ | ✅ |
+| `editable` | `false` | visual | ✅ | ✅ | ✅ |
 | `editable` | `true` | visual | ✅ | ✅ | ✅ |
-| `lineBreakMode` | `static` | visual | ✅ | ✅ | ✅ |
-| `keyboardType` | `static` | visual | ✅ | ✅ | ✅ |
+| `lineBreakMode` | `clip` | visual | ✅ | ✅ | ✅ |
+| `lineBreakMode` | `char` | visual | ✅ | ✅ | ✅ |
+| `lineBreakMode` | `word` | visual | ✅ | ✅ | ✅ |
+| `lineBreakMode` | `head` | visual | ✅ | ✅ | ✅ |
+| `lineBreakMode` | `middle` | visual | ✅ | ✅ | ✅ |
+| `lineBreakMode` | `tail` | visual | ✅ | ✅ | ✅ |
+| `keyboardType` | `default` | visual | ✅ | ✅ | ✅ |
+| `keyboardType` | `asciicapable` | visual | ✅ | ✅ | ✅ |
+| `keyboardType` | `number` | visual | ✅ | ✅ | ✅ |
+| `keyboardType` | `decimal` | visual | ✅ | ✅ | ✅ |
+| `keyboardType` | `phone` | visual | ✅ | ✅ | ✅ |
+| `keyboardType` | `email` | visual | ✅ | ✅ | ✅ |
+| `keyboardType` | `url` | visual | ✅ | ✅ | ✅ |
+| `keyboardType` | `websearch` | visual | ✅ | ✅ | ✅ |
+| `keyboardType` | `namephonepad` | visual | ✅ | ✅ | ✅ |
+| `keyboardType` | `twitter` | visual | ✅ | ✅ | ✅ |
 | `onTextChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `maxLength` | `static` | visual | – | – | ✅ |
 | `pattern` | `static` | visual | – | – | ✅ |
 | `required` | `true` | visual | – | – | ✅ |
+| `required` | `false` | visual | – | – | ✅ |
+| `selectable` | `false` | visual | – | – | ✅ |
 | `selectable` | `true` | visual | – | – | ✅ |
 | `rows` | `static` | visual | – | – | ✅ |
 | `cols` | `static` | visual | – | – | ✅ |
-| `resize` | `none` | visual | – | – | ✅ |
 | `resize` | `both` | visual | – | – | ✅ |
+| `resize` | `none` | visual | – | – | ✅ |
 | `resize` | `horizontal` | visual | – | – | ✅ |
 | `resize` | `vertical` | visual | – | – | ✅ |
 | `fontFamily` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontFamily` | `binding` | visual | ✅ | ✅ | ✅ |
 | `disabledBackground` | `static` | visual | – | – | ✅ |
 | `edgeInset` | `static` | visual | ✅ | ✅ | ✅ |
 
@@ -1543,17 +750,21 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `text` | `binding` | assertable | ✅ | ✅ | ✅ |
 | `text` | `binding_initial` | interactive | ✅ | ✅ | ✅ |
 | `font` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `disabledFontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `disabledFontColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `highlightColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `highlightColor` (alias) | `alias_hilightColor` | visual | ✅ | ✅ | ✅ |
-| `hilightColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `highlightColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `tapBackground` | `static` | visual | ✅ | ✅ | ✅ |
 | `highlightBackground` | `static` | visual | ✅ | ✅ | ✅ |
 | `image` | `static` | visual | ✅ | ✅ | ✅ |
+| `image` | `binding` | visual | ✅ | ✅ | ✅ |
 | `textAlign` | `left` | visual | ✅ | ✅ | ✅ |
 | `textAlign` | `center` | visual | ✅ | ✅ | ✅ |
 | `textAlign` | `right` | visual | ✅ | ✅ | ✅ |
@@ -1561,17 +772,23 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `buttonType` | `submit` | visual | – | – | ✅ |
 | `buttonType` | `reset` | visual | – | – | ✅ |
 | `fontWeight` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontWeight` | `600` | visual | ✅ | ✅ | ✅ |
+| `fontWeight` | `binding` | visual | ✅ | ✅ | ✅ |
+| `fontFamily` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontFamily` | `binding` | visual | ✅ | ✅ | ✅ |
 
 ### Image
 
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `src` | `static` | visual | ✅ | ✅ | ✅ |
+| `src` | `binding` | visual | ✅ | ✅ | ✅ |
 | `srcName` | `static` | visual | ✅ | ✅ | ✅ |
+| `srcName` | `binding` | visual | ✅ | ✅ | ✅ |
 | `highlightSrc` | `static` | visual | – | ✅ | – |
-| `highlightSrcName` | `static` | visual | – | – | – |
-| `contentMode` | `fit` | visual | ✅ | ✅ | ✅ |
+| `highlightSrcName` | `static` | declaration-only | – | – | – |
 | `contentMode` | `fill` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `fit` | visual | ✅ | ✅ | ✅ |
 | `contentMode` | `center` | visual | ✅ | ✅ | ✅ |
 | `contentMode` | `top` | visual | ✅ | ✅ | ✅ |
 | `contentMode` | `bottom` | visual | ✅ | ✅ | ✅ |
@@ -1580,19 +797,21 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `contentMode` | `aspectfill` | visual | ✅ | ✅ | ✅ |
 | `contentMode` | `aspectfit` | visual | ✅ | ✅ | ✅ |
 | `contentMode` | `center_2` | visual | ✅ | ✅ | ✅ |
-| `contentMode` | `scaletofill` | visual | ✅ | ✅ | ✅ |
 | `contentMode` | `top_2` | visual | ✅ | ✅ | ✅ |
 | `contentMode` | `bottom_2` | visual | ✅ | ✅ | ✅ |
 | `contentMode` | `left_2` | visual | ✅ | ✅ | ✅ |
 | `contentMode` | `right_2` | visual | ✅ | ✅ | ✅ |
-| `renderingMode` | `original` | visual | ✅ | ✅ | – |
+| `contentMode` | `binding` | visual | ✅ | ✅ | ✅ |
 | `renderingMode` | `template` | visual | ✅ | ✅ | – |
+| `renderingMode` | `original` | visual | ✅ | ✅ | – |
 | `alt` | `static` | visual | – | – | ✅ |
 | `loading` | `lazy` | visual | – | – | ✅ |
 | `loading` | `eager` | visual | – | – | ✅ |
 | `loadingImage` | `static` | visual | ✅ | ✅ | – |
 | `errorImage` | `static` | visual | ✅ | ✅ | – |
 | `systemIcon` | `true` | visual | – | ✅ | – |
+| `systemIcon` | `false` | visual | – | ✅ | – |
+| `defaultImage` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### NetworkImage
 
@@ -1613,9 +832,12 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `contentMode` | `aspectfill` | visual | ✅ | ✅ | ✅ |
 | `contentMode` | `aspectfit` | visual | ✅ | ✅ | ✅ |
 | `contentMode` | `center_2` | visual | ✅ | ✅ | ✅ |
+| `contentMode` | `binding` | visual | ✅ | ✅ | ✅ |
 | `alt` | `static` | visual | – | – | ✅ |
 | `loading` | `lazy` | visual | – | – | ✅ |
 | `loading` | `eager` | visual | – | – | ✅ |
+| `renderingMode` | `original` | visual | ✅ | ✅ | – |
+| `renderingMode` | `template` | visual | ✅ | ✅ | – |
 
 ### SelectBox
 
@@ -1625,26 +847,30 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `hint` | `static` | visual | ✅ | ✅ | ✅ |
 | `placeholder` | `static` | visual | ✅ | ✅ | ✅ |
 | `hintColor` | `static` | visual | ✅ | ✅ | ✅ |
-| `text` | `static` | visual | – | ✅ | – |
+| `hintColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `items` | `static` | visual | ✅ | ✅ | ✅ |
-| `selectItemType` | `normal` | visual | ✅ | ✅ | ✅ |
 | `selectItemType` | `date` | visual | ✅ | ✅ | ✅ |
+| `selectItemType` | `normal` | visual | ✅ | ✅ | ✅ |
 | `selectedIndex` | `static` | visual | ✅ | ✅ | ✅ |
-| `selectedItem` | `static` | visual | – | – | – |
-| `datePickerMode` | `date` | visual | ✅ | ✅ | ✅ |
+| `selectedIndex` | `binding` | visual | ✅ | ✅ | ✅ |
+| `selectedItem` | `static` | visual | ✅ | ✅ | – |
+| `selectedItem` | `binding` | visual | ✅ | ✅ | – |
 | `datePickerMode` | `time` | visual | ✅ | ✅ | ✅ |
-| `datePickerMode` | `datetime` | visual | ✅ | ✅ | ✅ |
+| `datePickerMode` | `date` | visual | ✅ | ✅ | ✅ |
 | `datePickerMode` | `dateandtime` | visual | ✅ | ✅ | ✅ |
 | `datePickerMode` | `countdown` | visual | ✅ | ✅ | ✅ |
+| `datePickerStyle` | `graphical` | visual | ✅ | ✅ | ✅ |
 | `datePickerStyle` | `automatic` | visual | ✅ | ✅ | ✅ |
 | `datePickerStyle` | `wheel` | visual | ✅ | ✅ | ✅ |
 | `datePickerStyle` | `wheels` | visual | ✅ | ✅ | ✅ |
 | `datePickerStyle` | `compact` | visual | ✅ | ✅ | ✅ |
-| `datePickerStyle` | `graphical` | visual | ✅ | ✅ | ✅ |
 | `datePickerStyle` | `inline` | visual | ✅ | ✅ | ✅ |
 | `dateStringFormat` | `static` | visual | ✅ | ✅ | ✅ |
+| `dateStringFormat` (alias) | `alias_dateFormat` | visual | ✅ | ✅ | ✅ |
 | `minimumDate` | `static` | visual | ✅ | ✅ | ✅ |
+| `minimumDate` | `binding` | visual | ✅ | ✅ | ✅ |
 | `maximumDate` | `static` | visual | ✅ | ✅ | ✅ |
+| `maximumDate` | `binding` | visual | ✅ | ✅ | ✅ |
 | `minuteInterval` | `1` | visual | ✅ | ✅ | ✅ |
 | `minuteInterval` | `2` | visual | ✅ | ✅ | ✅ |
 | `minuteInterval` | `3` | visual | ✅ | ✅ | ✅ |
@@ -1661,34 +887,56 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `labelAttributes` | `static` | visual | ✅ | ✅ | ✅ |
-| `inView` | `static` | visual | – | – | – |
-| `referenceView` | `static` | visual | – | – | – |
+| `inView` | `static` | declaration-only | – | – | – |
+| `referenceView` | `static` | declaration-only | – | – | – |
 | `onValueChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `onValueChanged` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `colorScheme` | `light` | visual | – | – | ✅ |
 | `colorScheme` | `dark` | visual | – | – | ✅ |
 | `multiple` | `true` | visual | – | – | ✅ |
+| `multiple` | `false` | visual | – | – | ✅ |
 | `size` | `static` | visual | – | – | ✅ |
 | `selectedValue` | `static` | visual | ✅ | ✅ | ✅ |
+| `selectedValue` | `three` | visual | ✅ | ✅ | ✅ |
+| `selectedValue` | `binding` | visual | ✅ | ✅ | ✅ |
 
 ### Switch
 
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `isOn` | `true` | visual | ✅ | ✅ | ✅ |
+| `isOn` | `false` | visual | ✅ | ✅ | ✅ |
 | `value` | `true` | visual | ✅ | ✅ | ✅ |
+| `value` | `false` | visual | ✅ | ✅ | ✅ |
+| `value` | `binding` | visual | ✅ | ✅ | ✅ |
 | `checked` | `true` | visual | ✅ | ✅ | ✅ |
+| `checked` | `false` | visual | ✅ | ✅ | ✅ |
+| `checked` | `binding` | visual | ✅ | ✅ | ✅ |
 | `enabled` | `true` | assertable | ✅ | ✅ | ✅ |
 | `enabled` | `false` | assertable | ✅ | ✅ | ✅ |
+| `enabled` | `binding` | assertable | ✅ | ✅ | ✅ |
 | `tint` | `static` | visual | ✅ | ✅ | ✅ |
+| `tint` | `binding` | visual | ✅ | ✅ | ✅ |
 | `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `onTintColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `thumbTintColor` | `static` | visual | ✅ | ✅ | ✅ |
-| `offTintColor` | `static` | visual | – | – | – |
+| `thumbTintColor` | `binding` | visual | ✅ | ✅ | ✅ |
+| `offTintColor` | `static` | declaration-only | – | – | – |
 | `onValueChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
-| `labelPosition` | `leading` | visual | ✅ | – | – |
 | `labelPosition` | `trailing` | visual | ✅ | – | – |
+| `labelPosition` | `leading` | visual | ✅ | – | – |
 | `trackTintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `binding` | visual | ✅ | ✅ | ✅ |
+| `toggleStyle` | `switch` | visual | – | ✅ | – |
+| `toggleStyle` | `button` | visual | – | ✅ | – |
+| `toggleStyle` | `checkbox` | visual | – | ✅ | – |
+| `toggleStyle` | `default` | visual | – | ✅ | – |
+| `label` | `static` | visual | ✅ | ✅ | ✅ |
+| `label` (alias) | `alias_text` | visual | ✅ | ✅ | ✅ |
+| `label` | `binding` | visual | ✅ | ✅ | ✅ |
+| `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontSize` | `binding` | visual | ✅ | ✅ | ✅ |
 
 ### Segment
 
@@ -1696,29 +944,34 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 |---|---|---|---|---|---|
 | `items` | `static` | visual | ✅ | ✅ | ✅ |
 | `selectedIndex` | `static` | visual | ✅ | ✅ | ✅ |
+| `selectedIndex` (alias) | `alias_selectedTabIndex` | visual | ✅ | ✅ | ✅ |
+| `selectedIndex` | `binding` | visual | ✅ | ✅ | ✅ |
 | `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `tintColor` (alias) | `alias_selectedSegmentTintColor` | visual | ✅ | ✅ | ✅ |
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontColor` (alias) | `alias_normalColor` | visual | ✅ | ✅ | ✅ |
 | `selectedFontColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `selectedFontColor` (alias) | `alias_selectedColor` | visual | ✅ | ✅ | ✅ |
-| `apportionsSegmentWidthsByContent` | `true` | visual | – | – | – |
+| `apportionsSegmentWidthsByContent` | `true` | declaration-only | – | – | – |
+| `apportionsSegmentWidthsByContent` | `false` | declaration-only | – | – | – |
 
 ### Slider
 
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `value` | `static` | visual | ✅ | ✅ | ✅ |
-| `minValue` | `static` | visual | ✅ | ✅ | ✅ |
+| `value` | `binding` | visual | ✅ | ✅ | ✅ |
 | `minimum` | `static` | visual | ✅ | ✅ | ✅ |
 | `minimum` (alias) | `alias_minimumValue` | visual | ✅ | ✅ | ✅ |
 | `minimum` (alias) | `alias_minValue` | visual | ✅ | ✅ | ✅ |
-| `maxValue` | `static` | visual | ✅ | ✅ | ✅ |
+| `minimum` | `binding` | visual | ✅ | ✅ | ✅ |
 | `maximum` | `static` | visual | ✅ | ✅ | ✅ |
 | `maximum` (alias) | `alias_maximumValue` | visual | ✅ | ✅ | ✅ |
 | `maximum` (alias) | `alias_maxValue` | visual | ✅ | ✅ | ✅ |
+| `maximum` | `binding` | visual | ✅ | ✅ | ✅ |
 | `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
-| `minimumValueImage` | `static` | visual | – | – | – |
-| `maximumValueImage` | `static` | visual | – | – | – |
+| `minimumValueImage` | `static` | declaration-only | – | – | – |
+| `maximumValueImage` | `static` | declaration-only | – | – | – |
 | `step` | `static` | visual | – | – | ✅ |
 | `progressTintColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `trackTintColor` | `static` | visual | ✅ | ✅ | ✅ |
@@ -1728,15 +981,19 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `progress` | `static` | visual | ✅ | ✅ | ✅ |
+| `progress` | `binding` | visual | ✅ | ✅ | ✅ |
 | `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `progressTintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `progressTintColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `trackTintColor` | `static` | visual | ✅ | ✅ | ✅ |
-| `progressViewStyle` | `static` | visual | – | – | – |
-| `progressImage` | `static` | visual | – | – | – |
-| `trackImage` | `static` | visual | – | – | – |
+| `trackTintColor` | `binding` | visual | ✅ | ✅ | ✅ |
+| `progressViewStyle` | `static` | declaration-only | – | – | – |
+| `progressImage` | `static` | declaration-only | – | – | – |
+| `trackImage` | `static` | declaration-only | – | – | – |
 | `hidesWhenStopped` | `true` | visual | – | ✅ | – |
-| `indicatorStyle` | `medium` | visual | – | ✅ | – |
+| `hidesWhenStopped` | `false` | visual | – | ✅ | – |
 | `indicatorStyle` | `large` | visual | – | ✅ | – |
+| `indicatorStyle` | `medium` | visual | – | ✅ | – |
 | `color` | `static` | visual | – | ✅ | – |
 
 ### View
@@ -1745,25 +1002,32 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 |---|---|---|---|---|---|
 | `orientation` | `horizontal` | visual | ✅ | ✅ | ✅ |
 | `orientation` | `vertical` | visual | ✅ | ✅ | ✅ |
-| `direction` | `toptobottom` | visual | ✅ | ✅ | ✅ |
 | `direction` | `bottomtotop` | visual | ✅ | ✅ | ✅ |
+| `direction` | `toptobottom` | visual | ✅ | ✅ | ✅ |
 | `direction` | `lefttoright` | visual | ✅ | ✅ | ✅ |
 | `direction` | `righttoleft` | visual | ✅ | ✅ | ✅ |
 | `direction` | `none` | visual | ✅ | ✅ | ✅ |
-| `distribution` | `fill` | visual | ✅ | ✅ | ✅ |
 | `distribution` | `fillequally` | visual | ✅ | ✅ | ✅ |
+| `distribution` | `fill` | visual | ✅ | ✅ | ✅ |
 | `distribution` | `equalspacing` | visual | ✅ | ✅ | ✅ |
 | `distribution` | `equalcentering` | visual | ✅ | ✅ | ✅ |
 | `spacing` | `static` | visual | ✅ | ✅ | ✅ |
-| `gradient` | `static` | visual | – | – | – |
-| `gradientDirection` | `static` | visual | – | – | – |
-| `locations` | `static` | visual | – | – | – |
+| `spacing` | `binding` | visual | ✅ | ✅ | ✅ |
+| `gradient` | `static` | visual | – | ✅ | – |
+| `gradientDirection` | `horizontal` | visual | – | ✅ | – |
+| `gradientDirection` | `vertical` | visual | – | ✅ | – |
+| `gradientDirection` | `oblique` | visual | – | ✅ | – |
+| `gradientDirection` | `righttoleft` | visual | – | ✅ | – |
+| `gradientDirection` | `bottomtotop` | visual | – | ✅ | – |
+| `locations` | `static` | declaration-only | – | – | – |
 | `safeAreaInsetPositions` | `static` | visual | ✅ | ✅ | ✅ |
 | `highlighted` | `true` | visual | ✅ | ✅ | ✅ |
+| `highlighted` | `false` | visual | ✅ | ✅ | ✅ |
 | `flexWrap` | `nowrap` | visual | – | – | ✅ |
 | `flexWrap` | `wrap` | visual | – | – | ✅ |
 | `flexWrap` | `wrap-reverse` | visual | – | – | ✅ |
 | `draggable` | `true` | visual | – | – | ✅ |
+| `draggable` | `false` | visual | – | – | ✅ |
 
 ### ScrollView
 
@@ -1771,108 +1035,162 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 |---|---|---|---|---|---|
 | `orientation` | `horizontal` | visual | ✅ | ✅ | ✅ |
 | `orientation` | `vertical` | visual | ✅ | ✅ | ✅ |
-| `scrollMode` | `inner` | visual | – | – | ✅ |
 | `scrollMode` | `window` | visual | – | – | ✅ |
+| `scrollMode` | `inner` | visual | – | – | ✅ |
+| `showsHorizontalScrollIndicator` | `false` | visual | – | ✅ | ✅ |
 | `showsHorizontalScrollIndicator` | `true` | visual | – | ✅ | ✅ |
+| `showsVerticalScrollIndicator` | `false` | visual | – | ✅ | ✅ |
 | `showsVerticalScrollIndicator` | `true` | visual | – | ✅ | ✅ |
-| `contentSize` | `static` | visual | – | – | – |
-| `contentOffset` | `static` | visual | – | – | – |
-| `indicatorStyle` | `static` | visual | – | – | – |
+| `contentSize` | `static` | declaration-only | – | – | – |
+| `contentOffset` | `static` | declaration-only | – | – | – |
+| `indicatorStyle` | `static` | declaration-only | – | – | – |
 | `scrollBehavior` | `auto` | visual | – | – | ✅ |
 | `scrollBehavior` | `smooth` | visual | – | – | ✅ |
+| `horizontalScroll` | `true` | visual | ✅ | ✅ | ✅ |
+| `horizontalScroll` | `false` | visual | ✅ | ✅ | ✅ |
+| `defaultScrollAnchor` | `top` | visual | ✅ | ✅ | ✅ |
+| `defaultScrollAnchor` | `center` | visual | ✅ | ✅ | ✅ |
+| `defaultScrollAnchor` | `bottom` | visual | ✅ | ✅ | ✅ |
 
 ### Collection
 
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
-| `lazy` | `lazy` | visual | ✅ | ✅ | ✅ |
 | `lazy` | `eager` | visual | ✅ | ✅ | ✅ |
+| `lazy` | `lazy` | visual | ✅ | ✅ | ✅ |
 | `lazy` | `none` | visual | ✅ | ✅ | ✅ |
+| `lazy` | `binding` | visual | ✅ | ✅ | ✅ |
 | `columns` | `static` | visual | ✅ | ✅ | ✅ |
 | `columnSpacing` | `static` | visual | ✅ | ✅ | ✅ |
 | `itemSpacing` | `static` | visual | ✅ | ✅ | ✅ |
 | `lineSpacing` | `static` | visual | ✅ | ✅ | ✅ |
+| `lineSpacing` (alias) | `alias_sectionSpacing` | visual | ✅ | ✅ | ✅ |
 | `horizontalScroll` | `true` | visual | ✅ | ✅ | ✅ |
+| `horizontalScroll` | `false` | visual | ✅ | ✅ | ✅ |
 | `orientation` | `horizontal` | visual | ✅ | ✅ | ✅ |
 | `orientation` | `vertical` | visual | ✅ | ✅ | ✅ |
-| `layout` | `vertical` | visual | ✅ | ✅ | ✅ |
 | `layout` | `horizontal` | visual | ✅ | ✅ | ✅ |
+| `layout` | `vertical` | visual | ✅ | ✅ | ✅ |
 | `layout` | `flow` | visual | ✅ | ✅ | ✅ |
-| `layout` | `flow_2` | visual | ✅ | ✅ | ✅ |
-| `layout` | `leftaligned` | visual | ✅ | ✅ | ✅ |
-| `layout` | `leftaligned_2` | visual | ✅ | ✅ | ✅ |
 | `insets` | `static` | visual | ✅ | ✅ | ✅ |
 | `insetHorizontal` | `static` | visual | ✅ | ✅ | ✅ |
+| `insetHorizontal` | `static_horizontal` | visual | ✅ | ✅ | ✅ |
 | `insetVertical` | `static` | visual | ✅ | ✅ | ✅ |
 | `contentInsets` | `static` | visual | – | ✅ | – |
 | `itemWeight` | `static` | visual | – | ✅ | – |
+| `showsHorizontalScrollIndicator` | `false` | visual | – | ✅ | ✅ |
 | `showsHorizontalScrollIndicator` | `true` | visual | – | ✅ | ✅ |
+| `showsVerticalScrollIndicator` | `false` | visual | – | ✅ | ✅ |
 | `showsVerticalScrollIndicator` | `true` | visual | – | ✅ | ✅ |
 | `columnCount` | `static` | visual | – | – | ✅ |
 | `scrollAnchor` | `top` | visual | ✅ | ✅ | ✅ |
 | `scrollAnchor` | `center` | visual | ✅ | ✅ | ✅ |
 | `scrollAnchor` | `bottom` | visual | ✅ | ✅ | ✅ |
-| `defaultScrollAnchor` | `top` | visual | ✅ | ✅ | ✅ |
 | `defaultScrollAnchor` | `center` | visual | ✅ | ✅ | ✅ |
+| `defaultScrollAnchor` | `top` | visual | ✅ | ✅ | ✅ |
 | `defaultScrollAnchor` | `bottom` | visual | ✅ | ✅ | ✅ |
 | `reverseLayout` | `true` | visual | ✅ | – | – |
+| `reverseLayout` | `false` | visual | ✅ | – | – |
 | `containerInset` | `static` | visual | – | ✅ | – |
+| `cellWidth` | `static` | visual | ✅ | ✅ | ✅ |
+| `cellHeight` | `static` | visual | ✅ | ✅ | ✅ |
+| `hideSeparator` | `true` | visual | ✅ | ✅ | ✅ |
+| `hideSeparator` | `false` | visual | ✅ | ✅ | ✅ |
+| `listStyle` | `plain` | visual | ✅ | ✅ | ✅ |
+| `listStyle` | `grouped` | visual | ✅ | ✅ | ✅ |
+| `listStyle` | `insetgrouped` | visual | ✅ | ✅ | ✅ |
+| `listStyle` | `sidebar` | visual | ✅ | ✅ | ✅ |
 
 ### Radio
 
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `label` | `static` | visual | ✅ | ✅ | ✅ |
+| `label` | `binding` | visual | ✅ | ✅ | ✅ |
 | `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `text` | `binding` | assertable | ✅ | ✅ | ✅ |
 | `group` | `static` | visual | ✅ | ✅ | ✅ |
 | `icon` | `static` | visual | ✅ | ✅ | – |
+| `icon` | `square` | visual | ✅ | ✅ | – |
 | `selectedIcon` | `static` | visual | ✅ | ✅ | – |
+| `selectedIcon` | `checkmark-square-fill` | visual | ✅ | ✅ | – |
 | `selectedIcon` (alias) | `alias_selected_icon` | visual | ✅ | ✅ | – |
-| `selected_icon` | `static` | visual | ✅ | ✅ | ✅ |
 | `checked` | `true` | visual | ✅ | ✅ | ✅ |
+| `checked` | `true_with_group` | visual | ✅ | ✅ | ✅ |
+| `checked` (alias) | `alias_isOn` | visual | ✅ | ✅ | ✅ |
+| `checked` | `false` | visual | ✅ | ✅ | ✅ |
+| `checked` | `false_with_group` | visual | ✅ | ✅ | ✅ |
+| `checked` | `binding` | visual | ✅ | ✅ | ✅ |
 | `value` | `static` | visual | ✅ | ✅ | ✅ |
 | `font` | `static` | visual | ✅ | ✅ | ✅ |
+| `font` | `binding` | visual | ✅ | ✅ | ✅ |
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontSize` | `binding` | visual | ✅ | ✅ | ✅ |
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `spacing` | `static` | visual | ✅ | ✅ | ✅ |
+| `spacing` | `binding` | visual | ✅ | ✅ | ✅ |
 | `checkedColor` | `static` | visual | ✅ | ✅ | – |
 | `uncheckedColor` | `static` | visual | ✅ | ✅ | – |
 | `iconSize` | `static` | visual | ✅ | ✅ | – |
 | `iconColor` | `static` | visual | ✅ | ✅ | – |
 | `selectedValue` | `static` | visual | ✅ | ✅ | ✅ |
+| `selectedValue` | `gamma` | visual | ✅ | ✅ | ✅ |
+| `selectedValue` | `binding` | visual | ✅ | ✅ | ✅ |
 
 ### CheckBox
 
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `label` | `static` | visual | ✅ | ✅ | ✅ |
+| `label` | `binding` | visual | ✅ | ✅ | ✅ |
 | `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `text` | `binding` | assertable | ✅ | ✅ | ✅ |
 | `isOn` | `true` | visual | ✅ | ✅ | ✅ |
+| `isOn` | `false` | visual | ✅ | ✅ | ✅ |
 | `checked` | `true` | visual | ✅ | ✅ | ✅ |
+| `checked` | `false` | visual | ✅ | ✅ | ✅ |
+| `checked` | `binding` | visual | ✅ | ✅ | ✅ |
 | `icon` | `static` | visual | ✅ | ✅ | – |
 | `src` | `static` | visual | ✅ | ✅ | ✅ |
 | `selectedIcon` | `static` | visual | ✅ | ✅ | – |
 | `selectedIcon` (alias) | `alias_onSrc` | visual | ✅ | ✅ | – |
-| `value` | `static` | visual | ✅ | ✅ | ✅ |
+| `value` | `true` | visual | ✅ | ✅ | ✅ |
+| `value` | `false` | visual | ✅ | ✅ | ✅ |
 | `enabled` | `true` | assertable | ✅ | ✅ | ✅ |
 | `enabled` | `false` | assertable | ✅ | ✅ | ✅ |
+| `enabled` | `binding` | assertable | ✅ | ✅ | ✅ |
 | `font` | `static` | visual | ✅ | ✅ | ✅ |
+| `font` | `binding` | visual | ✅ | ✅ | ✅ |
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontSize` | `binding` | visual | ✅ | ✅ | ✅ |
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `spacing` | `static` | visual | ✅ | ✅ | ✅ |
+| `spacing` | `binding` | visual | ✅ | ✅ | ✅ |
 | `onValueChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `checkedColor` | `static` | visual | ✅ | ✅ | – |
+| `checkedColor` (alias) | `alias_checkColor` | visual | ✅ | ✅ | – |
+| `checkedColor` (alias) | `alias_onTintColor` | visual | ✅ | ✅ | – |
 | `uncheckedColor` | `static` | visual | ✅ | ✅ | – |
 | `iconSize` | `static` | visual | ✅ | ✅ | – |
 | `iconColor` | `static` | visual | ✅ | ✅ | – |
+| `fontWeight` | `static` | visual | ✅ | ✅ | ✅ |
+| `fontWeight` (alias) | `alias_fontStyle` | visual | ✅ | ✅ | ✅ |
 
 ### Indicator
 
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
-| `indicatorStyle` | `medium` | visual | – | ✅ | – |
+| `animating` | `false` | visual | ✅ | ✅ | – |
+| `animating` | `true` | visual | ✅ | ✅ | – |
+| `animating` | `binding` | visual | ✅ | ✅ | – |
 | `indicatorStyle` | `large` | visual | – | ✅ | – |
+| `indicatorStyle` | `medium` | visual | – | ✅ | – |
 | `color` | `static` | visual | – | ✅ | – |
+| `color` (alias) | `alias_tint` | visual | – | ✅ | – |
+| `color` | `binding` | visual | – | ✅ | – |
+| `hidesWhenStopped` | `false` | visual | – | ✅ | – |
 | `hidesWhenStopped` | `true` | visual | – | ✅ | – |
 
 ### GradientView
@@ -1880,8 +1198,9 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `gradient` | `static` | visual | ✅ | ✅ | ✅ |
-| `gradientDirection` | `vertical` | visual | ✅ | ✅ | ✅ |
+| `gradient` (alias) | `alias_colors` | visual | ✅ | ✅ | ✅ |
 | `gradientDirection` | `horizontal` | visual | ✅ | ✅ | ✅ |
+| `gradientDirection` | `vertical` | visual | ✅ | ✅ | ✅ |
 | `gradientDirection` | `oblique` | visual | ✅ | ✅ | ✅ |
 | `locations` | `static` | visual | ✅ | ✅ | ✅ |
 
@@ -1899,7 +1218,11 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `text` | `static` | assertable | ✅ | ✅ | ✅ |
+| `text` | `binding` | assertable | ✅ | ✅ | ✅ |
 | `selected` | `true` | visual | ✅ | ✅ | ✅ |
+| `selected` (alias) | `alias_isOn` | visual | ✅ | ✅ | ✅ |
+| `selected` | `false` | visual | ✅ | ✅ | ✅ |
+| `selected` | `binding` | visual | ✅ | ✅ | ✅ |
 | `font` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontColor` | `static` | visual | ✅ | ✅ | ✅ |
@@ -1907,18 +1230,20 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `selectedFontColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `icon_on` | `static` | visual | ✅ | ✅ | ✅ |
 | `icon_off` | `static` | visual | ✅ | ✅ | ✅ |
-| `iconPosition` | `left` | visual | ✅ | ✅ | ✅ |
 | `iconPosition` | `right` | visual | ✅ | ✅ | ✅ |
+| `iconPosition` | `left` | visual | ✅ | ✅ | ✅ |
 | `iconPosition` | `top` | visual | ✅ | ✅ | ✅ |
 | `iconPosition` | `bottom` | visual | ✅ | ✅ | ✅ |
 | `iconMargin` | `static` | visual | ✅ | ✅ | ✅ |
+| `iconSize` | `static` | visual | ✅ | ✅ | ✅ |
 
 ### Web
 
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
 | `html` | `static` | visual | ✅ | ✅ | ✅ |
-| `sandbox` | `static` | visual | – | – | ✅ |
+| `sandbox` | `false` | visual | – | – | ✅ |
+| `sandbox` | `true` | visual | – | – | ✅ |
 | `allow` | `static` | visual | – | – | ✅ |
 
 ### SafeAreaView
@@ -1928,6 +1253,15 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `orientation` | `horizontal` | visual | ✅ | ✅ | ✅ |
 | `orientation` | `vertical` | visual | ✅ | ✅ | ✅ |
 | `safeAreaInsetPositions` | `static` | visual | ✅ | ✅ | ✅ |
+| `safeAreaInsetPositions` (alias) | `alias_edges` | visual | ✅ | ✅ | ✅ |
+| `direction` | `toptobottom` | visual | ✅ | ✅ | ✅ |
+| `direction` | `bottomtotop` | visual | ✅ | ✅ | ✅ |
+| `direction` | `lefttoright` | visual | ✅ | ✅ | ✅ |
+| `direction` | `righttoleft` | visual | ✅ | ✅ | ✅ |
+| `direction` | `none` | visual | ✅ | ✅ | ✅ |
+| `gradient` | `static` | visual | – | ✅ | – |
+| `spacing` | `static` | visual | ✅ | ✅ | ✅ |
+| `spacing` | `binding` | visual | ✅ | ✅ | ✅ |
 
 ### TabView
 
@@ -1935,10 +1269,15 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 |---|---|---|---|---|---|
 | `selectedIndex` | `static` | visual | ✅ | ✅ | ✅ |
 | `selectedIndex` (alias) | `alias_selectedTabIndex` | visual | ✅ | ✅ | ✅ |
+| `selectedIndex` | `binding` | visual | ✅ | ✅ | ✅ |
 | `tabs` | `static` | visual | ✅ | ✅ | ✅ |
 | `tintColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `tintColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `unselectedColor` | `static` | visual | ✅ | ✅ | ✅ |
+| `unselectedColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `tabBarBackground` | `static` | visual | ✅ | ✅ | ✅ |
+| `tabBarBackground` | `binding` | visual | ✅ | ✅ | ✅ |
+| `showLabels` | `false` | visual | ✅ | ✅ | ✅ |
 | `showLabels` | `true` | visual | ✅ | ✅ | ✅ |
 
 ### __control
@@ -1954,13 +1293,19 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `None` | `CheckBox` | visual | ✅ | ✅ | ✅ |
 | `None` | `Collection` | visual | ✅ | ✅ | ✅ |
 | `None` | `Collection` | visual | ✅ | ✅ | ✅ |
+| `None` | `Collection` | visual | ✅ | ✅ | ✅ |
+| `None` | `Collection` | visual | ✅ | ✅ | ✅ |
+| `None` | `Collection` | visual | ✅ | ✅ | ✅ |
+| `None` | `Collection` | visual | ✅ | ✅ | ✅ |
 | `None` | `GradientView` | visual | ✅ | ✅ | ✅ |
 | `None` | `IconLabel` | visual | ✅ | ✅ | ✅ |
 | `None` | `IconLabel` | visual | ✅ | ✅ | ✅ |
 | `None` | `IconLabel` | visual | ✅ | ✅ | ✅ |
 | `None` | `IconLabel` | visual | ✅ | ✅ | ✅ |
 | `None` | `Image` | visual | ✅ | ✅ | ✅ |
+| `None` | `Image` | visual | ✅ | ✅ | ✅ |
 | `None` | `Image` | visual | – | ✅ | – |
+| `None` | `Indicator` | visual | ✅ | ✅ | – |
 | `None` | `Indicator` | visual | – | ✅ | – |
 | `None` | `Label` | visual | ✅ | ✅ | ✅ |
 | `None` | `Label` | visual | ✅ | ✅ | ✅ |
@@ -1968,40 +1313,76 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `None` | `Label` | visual | ✅ | ✅ | ✅ |
 | `None` | `Label` | visual | ✅ | ✅ | ✅ |
 | `None` | `Label` | visual | ✅ | ✅ | ✅ |
+| `None` | `Label` | visual | ✅ | ✅ | ✅ |
+| `None` | `Label` | visual | ✅ | ✅ | ✅ |
+| `None` | `Label` | visual | ✅ | ✅ | ✅ |
+| `None` | `Label` | visual | ✅ | ✅ | ✅ |
+| `None` | `Label` | visual | – | – | ✅ |
 | `None` | `NetworkImage` | visual | ✅ | ✅ | ✅ |
+| `None` | `NetworkImage` | visual | ✅ | ✅ | ✅ |
+| `None` | `NetworkImage` | visual | ✅ | ✅ | – |
+| `None` | `NetworkImage` | visual | ✅ | ✅ | – |
 | `None` | `Progress` | visual | ✅ | ✅ | ✅ |
 | `None` | `Progress` | visual | ✅ | ✅ | ✅ |
 | `None` | `Radio` | visual | ✅ | ✅ | ✅ |
+| `None` | `Radio` | visual | ✅ | ✅ | – |
 | `None` | `Radio` | visual | ✅ | ✅ | ✅ |
 | `None` | `Radio` | visual | ✅ | ✅ | ✅ |
 | `None` | `Radio` | visual | ✅ | ✅ | ✅ |
 | `None` | `Radio` | visual | ✅ | ✅ | ✅ |
 | `None` | `SafeAreaView` | visual | ✅ | ✅ | ✅ |
+| `None` | `SafeAreaView` | visual | ✅ | ✅ | ✅ |
+| `None` | `SafeAreaView` | visual | ✅ | ✅ | ✅ |
+| `None` | `SafeAreaView` | visual | ✅ | ✅ | ✅ |
 | `None` | `ScrollView` | visual | ✅ | ✅ | ✅ |
+| `None` | `ScrollView` | visual | ✅ | ✅ | ✅ |
+| `None` | `ScrollView` | visual | – | ✅ | ✅ |
 | `None` | `Segment` | visual | ✅ | ✅ | ✅ |
 | `None` | `SelectBox` | visual | ✅ | ✅ | ✅ |
 | `None` | `SelectBox` | visual | ✅ | ✅ | ✅ |
 | `None` | `SelectBox` | visual | ✅ | ✅ | ✅ |
-| `None` | `SelectBox` | visual | – | ✅ | – |
+| `None` | `SelectBox` | visual | ✅ | ✅ | ✅ |
 | `None` | `Slider` | visual | ✅ | ✅ | ✅ |
 | `None` | `Slider` | visual | ✅ | ✅ | ✅ |
 | `None` | `Switch` | visual | ✅ | ✅ | ✅ |
 | `None` | `Switch` | visual | ✅ | ✅ | ✅ |
+| `None` | `Switch` | visual | ✅ | – | – |
 | `None` | `TabView` | visual | ✅ | ✅ | ✅ |
 | `None` | `TextField` | visual | ✅ | ✅ | ✅ |
 | `None` | `TextField` | visual | – | – | ✅ |
-| `None` | `TextField` | visual | ✅ | ✅ | ✅ |
 | `None` | `TextField` | visual | ✅ | ✅ | ✅ |
 | `None` | `TextField` | visual | – | ✅ | – |
 | `None` | `TextField` | visual | ✅ | ✅ | ✅ |
 | `None` | `TextView` | visual | ✅ | ✅ | ✅ |
 | `None` | `TextView` | visual | – | – | ✅ |
 | `None` | `TextView` | visual | ✅ | ✅ | ✅ |
+| `None` | `TextView` | visual | – | – | ✅ |
+| `None` | `TextView` | visual | ✅ | ✅ | ✅ |
+| `None` | `TextView` | visual | – | – | ✅ |
 | `None` | `TextView` | visual | ✅ | ✅ | ✅ |
 | `None` | `View` | visual | ✅ | ✅ | ✅ |
 | `None` | `View` | visual | ✅ | ✅ | ✅ |
 | `None` | `View` | visual | ✅ | ✅ | ✅ |
 | `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | – | ✅ | – |
+| `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | – | ✅ | – |
+| `None` | `View` | visual | ✅ | ✅ | – |
+| `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | – | ✅ | ✅ |
 | `None` | `Web` | visual | ✅ | ✅ | ✅ |
 
 ### Embed
@@ -2052,6 +1433,18 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 |---|---|---|---|---|---|
 | `maxHeight` | `fill_clamp` | visual | ✅ | ✅ | ✅ |
 
+### __control
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `None` | `Label__wrap-max` | visual | ✅ | ✅ | ✅ |
+
+### common
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `maxWidth` | `wrap` | visual | ✅ | ✅ | ✅ |
+
 ## Skipped attributes
 
 | Component | Attribute | Reason |
@@ -2096,7 +1489,6 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | common | `confirmationDialog` | behavioral (no visual or assertable effect in v1) |
 | common | `widthRaw` | metadata (not rendered) |
 | common | `heightRaw` | metadata (not rendered) |
-| Label | `partialAttributes` | composite value (no representative static value in v1) |
 | Label | `hintAttributes` | composite value (no representative static value in v1) |
 | TextField | `hintAttributes` | composite value (no representative static value in v1) |
 | TextField | `caretAttributes` | composite value (no representative static value in v1) |
@@ -2130,6 +1522,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | EditText | `*` | component alias (fixtures live on the canonical section) |
 | Input | `*` | component alias (fixtures live on the canonical section) |
 | Button | `config` | metadata (not rendered) |
+| Button | `partialAttributes` | composite value (no representative static value in v1) |
 | Image | `canTap` | behavioral (no visual or assertable effect in v1) |
 | Image | `maxZoom` | behavioral (no visual or assertable effect in v1) |
 | Image | `minZoom` | behavioral (no visual or assertable effect in v1) |
@@ -2145,13 +1538,13 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | SelectBox | `includePromptWhenDataBinding` | behavioral (no visual or assertable effect in v1) |
 | Switch | `_alias` | definition metadata, not an attribute |
 | Switch | `_comment` | definition metadata, not an attribute |
-| Switch | `onToggle` | callback |
 | Switch | `labelAttributes` | composite value (no representative static value in v1) |
 | Toggle | `*` | component alias (fixtures live on the canonical section) |
 | Segment | `valueChange` | callback |
 | Segment | `momentary` | behavioral (no visual or assertable effect in v1) |
 | Segment | `onValueChange` | callback |
 | Slider | `onValueChange` | callback |
+| Slider | `range` | composite value (no representative static value in v1) |
 | View | `_comment` | definition metadata, not an attribute |
 | View | `child` | structural (child container attribute) |
 | View | `children` | structural (child container attribute) |
@@ -2192,18 +1585,23 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | Collection | `scrollEnabled` | behavioral (no visual or assertable effect in v1) |
 | Collection | `onItemAppear` | callback |
 | Collection | `currentPage` | binding-only |
-| Collection | `onPageChanged` | callback |
 | Collection | `onValueChange` | callback |
 | Radio | `onValueChange` | callback |
+| Radio | `items` | composite value (no representative static value in v1) |
 | CheckBox | `_alias` | definition metadata, not an attribute |
 | CheckBox | `_comment` | definition metadata, not an attribute |
 | Check | `*` | component alias (fixtures live on the canonical section) |
+| GradientView | `child` | structural (child container attribute) |
+| GradientView | `children` | structural (child container attribute) |
+| GradientView | `startPoint` | composite value (no representative static value in v1) |
+| GradientView | `endPoint` | composite value (no representative static value in v1) |
+| Blur | `child` | structural (child container attribute) |
+| Blur | `children` | structural (child container attribute) |
 | Web | `url` | network resource (v1 fixtures are offline) |
 | Web | `allowsBackForwardNavigationGestures` | behavioral (no visual or assertable effect in v1) |
 | Web | `allowsLinkPreview` | behavioral (no visual or assertable effect in v1) |
 | SafeAreaView | `child` | structural (child container attribute) |
 | SafeAreaView | `children` | structural (child container attribute) |
-| TabView | `onTabChange` | callback |
 | TabView | `onValueChange` | callback |
 | Embed | `_comment` | definition metadata, not an attribute |
 | Embed | `screen` | cross-file reference — attribute sweep skipped; semantic Embed fixtures (navigationMode/params + companion screens) are emitted bespoke by conformance.embed_fixtures |

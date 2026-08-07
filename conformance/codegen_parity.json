@@ -3,6 +3,456 @@
   "_comment": "Accepted dynamic≢codegen deviations, per screenshot, platform and render environment (a deviation measured against the local baselines says nothing about the CI renderer's). The codegen host's render of this screenshot does NOT match the committed dynamic baseline (status 'mismatch', with the measured distance) or was never produced (status 'missing'). Every entry needs a reason: fix the codegen and drop the entry, or justify the difference here. Unrecorded deviations fail `jui conformance gate --parity`; entries the measurement no longer supports are stale and must be pruned (re-run `jui conformance parity --update`). Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
   "entries": [
     {
+      "screenshot": "Collection_cellHeight__static.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 18,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Collection cell sizing/spacing differs between the paths on android. Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_lineSpacing__alias_sectionSpacing.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 18,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Collection cell sizing/spacing differs between the paths on android. Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "NetworkImage_renderingMode__template.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 13,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Template rendering tint differs between the paths on android. Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "SafeAreaView_spacing__binding.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 27,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Child spacing inside SafeAreaView differs between the paths on android. Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "SafeAreaView_spacing__static.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 27,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Child spacing inside SafeAreaView differs between the paths on android. Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Segment_selectedIndex__alias_selectedTabIndex.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 15,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Selected-segment chrome differs between the paths on android. Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Slider_minimum__alias_minValue.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 16,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The whole Slider family deviates including the control — the paths disagree on track/thumb geometry defaults (the Slider min/max default declaration landed on the dynamic side this wave). Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Slider_minimum__alias_minimumValue.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 16,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The whole Slider family deviates including the control — the paths disagree on track/thumb geometry defaults (the Slider min/max default declaration landed on the dynamic side this wave). Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Slider_minimum__binding.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 16,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The whole Slider family deviates including the control — the paths disagree on track/thumb geometry defaults (the Slider min/max default declaration landed on the dynamic side this wave). Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Slider_minimum__static.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 16,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The whole Slider family deviates including the control — the paths disagree on track/thumb geometry defaults (the Slider min/max default declaration landed on the dynamic side this wave). Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Slider_progressTintColor__static.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 23,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The whole Slider family deviates including the control — the paths disagree on track/thumb geometry defaults (the Slider min/max default declaration landed on the dynamic side this wave). Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Slider_tintColor__static.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 23,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The whole Slider family deviates including the control — the paths disagree on track/thumb geometry defaults (the Slider min/max default declaration landed on the dynamic side this wave). Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Slider_trackTintColor__static.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 14,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The whole Slider family deviates including the control — the paths disagree on track/thumb geometry defaults (the Slider min/max default declaration landed on the dynamic side this wave). Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Slider_value__binding.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 22,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The whole Slider family deviates including the control — the paths disagree on track/thumb geometry defaults (the Slider min/max default declaration landed on the dynamic side this wave). Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Slider_value__static.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 22,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The whole Slider family deviates including the control — the paths disagree on track/thumb geometry defaults (the Slider min/max default declaration landed on the dynamic side this wave). Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Switch_label__alias_text.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 22,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The label slot draws differently between the paths for this control. Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Switch_label__binding.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 22,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The label slot draws differently between the paths for this control. Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Switch_label__static.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 22,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The label slot draws differently between the paths for this control. Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "control_Slider__value-0.5.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 22,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The whole Slider family deviates including the control — the paths disagree on track/thumb geometry defaults (the Slider min/max default declaration landed on the dynamic side this wave). Owner C (kjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Blur_effectStyle__dark.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 106,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Every Blur/effectStyle value deviates INCLUDING the control, so the gap is structural to the blur emit, not per-value: dynamic and generated code build the backdrop through different construction. Convergence is a next-train item, owner F (sjui codegen).",
+      "note": ""
+    },
+    {
+      "screenshot": "Blur_effectStyle__extralight.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 31,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Every Blur/effectStyle value deviates INCLUDING the control, so the gap is structural to the blur emit, not per-value: dynamic and generated code build the backdrop through different construction. Convergence is a next-train item, owner F (sjui codegen).",
+      "note": ""
+    },
+    {
+      "screenshot": "Blur_effectStyle__light.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 43,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Every Blur/effectStyle value deviates INCLUDING the control, so the gap is structural to the blur emit, not per-value: dynamic and generated code build the backdrop through different construction. Convergence is a next-train item, owner F (sjui codegen).",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_cellHeight__static.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 41,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The ios codegen Collection path had NEVER compiled before the section_bounder fix in 0fa8bb5 — this is its first rendered comparison ever. List skeleton/cell sizing differs from dynamic. Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_cellWidth__static.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 50,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The ios codegen Collection path had NEVER compiled before the section_bounder fix in 0fa8bb5 — this is its first rendered comparison ever. List skeleton/cell sizing differs from dynamic. Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_listStyle__grouped.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 34,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The ios codegen Collection path had NEVER compiled before the section_bounder fix in 0fa8bb5 — this is its first rendered comparison ever. List skeleton/cell sizing differs from dynamic. Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_listStyle__insetgrouped.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 61,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The ios codegen Collection path had NEVER compiled before the section_bounder fix in 0fa8bb5 — this is its first rendered comparison ever. List skeleton/cell sizing differs from dynamic. Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_listStyle__plain.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 42,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The ios codegen Collection path had NEVER compiled before the section_bounder fix in 0fa8bb5 — this is its first rendered comparison ever. List skeleton/cell sizing differs from dynamic. Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Collection_listStyle__sidebar.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 61,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The ios codegen Collection path had NEVER compiled before the section_bounder fix in 0fa8bb5 — this is its first rendered comparison ever. List skeleton/cell sizing differs from dynamic. Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Radio_label__binding.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The label slot draws differently between the paths for this control. Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "SafeAreaView_gradient__static.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 207,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Gradient emit differs between the paths (SafeAreaView_gradient distance 207 is the extreme of the family). Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "ScrollView_defaultScrollAnchor__bottom.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 82,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The two paths disagree on where the initial viewport sits for a non-top anchor. Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "ScrollView_defaultScrollAnchor__center.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 96,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The two paths disagree on where the initial viewport sits for a non-top anchor. Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "Switch_label__binding.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 53,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The label slot draws differently between the paths for this control. Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "TextView_lineBreakMode__head.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 23,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Head/middle truncation renders differently between the paths on ios. Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "TextView_lineBreakMode__middle.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 12,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Head/middle truncation renders differently between the paths on ios. Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "View_gradientDirection__bottomtotop.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 18,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Gradient emit differs between the paths (SafeAreaView_gradient distance 207 is the extreme of the family). Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "View_gradientDirection__horizontal.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 23,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Gradient emit differs between the paths (SafeAreaView_gradient distance 207 is the extreme of the family). Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "View_gradientDirection__righttoleft.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 135,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Gradient emit differs between the paths (SafeAreaView_gradient distance 207 is the extreme of the family). Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "View_highlighted__true.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The highlighted-state overlay differs slightly between the paths. Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
+      "screenshot": "common_effectStyle__chrome.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 95,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Every Blur/effectStyle value deviates INCLUDING the control, so the gap is structural to the blur emit, not per-value: dynamic and generated code build the backdrop through different construction. Convergence is a next-train item, owner F (sjui codegen).",
+      "note": ""
+    },
+    {
+      "screenshot": "common_effectStyle__dark.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 106,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Every Blur/effectStyle value deviates INCLUDING the control, so the gap is structural to the blur emit, not per-value: dynamic and generated code build the backdrop through different construction. Convergence is a next-train item, owner F (sjui codegen).",
+      "note": ""
+    },
+    {
+      "screenshot": "common_effectStyle__extralight.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 31,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Every Blur/effectStyle value deviates INCLUDING the control, so the gap is structural to the blur emit, not per-value: dynamic and generated code build the backdrop through different construction. Convergence is a next-train item, owner F (sjui codegen).",
+      "note": ""
+    },
+    {
+      "screenshot": "common_effectStyle__light.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 43,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Every Blur/effectStyle value deviates INCLUDING the control, so the gap is structural to the blur emit, not per-value: dynamic and generated code build the backdrop through different construction. Convergence is a next-train item, owner F (sjui codegen).",
+      "note": ""
+    },
+    {
+      "screenshot": "common_effectStyle__prominent.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 127,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Every Blur/effectStyle value deviates INCLUDING the control, so the gap is structural to the blur emit, not per-value: dynamic and generated code build the backdrop through different construction. Convergence is a next-train item, owner F (sjui codegen).",
+      "note": ""
+    },
+    {
+      "screenshot": "common_effectStyle__regular.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 77,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Every Blur/effectStyle value deviates INCLUDING the control, so the gap is structural to the blur emit, not per-value: dynamic and generated code build the backdrop through different construction. Convergence is a next-train item, owner F (sjui codegen).",
+      "note": ""
+    },
+    {
+      "screenshot": "common_effectStyle__thick.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 120,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Every Blur/effectStyle value deviates INCLUDING the control, so the gap is structural to the blur emit, not per-value: dynamic and generated code build the backdrop through different construction. Convergence is a next-train item, owner F (sjui codegen).",
+      "note": ""
+    },
+    {
+      "screenshot": "common_effectStyle__thin.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 46,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Every Blur/effectStyle value deviates INCLUDING the control, so the gap is structural to the blur emit, not per-value: dynamic and generated code build the backdrop through different construction. Convergence is a next-train item, owner F (sjui codegen).",
+      "note": ""
+    },
+    {
+      "screenshot": "common_effectStyle__ultrathin.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 41,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Every Blur/effectStyle value deviates INCLUDING the control, so the gap is structural to the blur emit, not per-value: dynamic and generated code build the backdrop through different construction. Convergence is a next-train item, owner F (sjui codegen).",
+      "note": ""
+    },
+    {
+      "screenshot": "control_Blur__root.backdrop-b5f80259.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 77,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. Every Blur/effectStyle value deviates INCLUDING the control, so the gap is structural to the blur emit, not per-value: dynamic and generated code build the backdrop through different construction. Convergence is a next-train item, owner F (sjui codegen).",
+      "note": ""
+    },
+    {
+      "screenshot": "control_Collection__no-sections.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 42,
+      "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The ios codegen Collection path had NEVER compiled before the section_bounder fix in 0fa8bb5 — this is its first rendered comparison ever. List skeleton/cell sizing differs from dynamic. Owner F (sjui codegen), next train.",
+      "note": ""
+    },
+    {
       "screenshot": "TabView_selectedIndex__alias_selectedTabIndex.png",
       "platform": "android",
       "env": "local",

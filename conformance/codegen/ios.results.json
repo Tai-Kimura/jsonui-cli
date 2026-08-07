@@ -1,5 +1,5 @@
 {
-  "manifestHash" : "1d62ad8bd8b20b6129f005e865e481e2c17b01495f4b6d258baf88c7dee63e19",
+  "manifestHash" : "26128fbb10863677258d0d3d2e1b0259d1dab9701776f398d4a005b0f21f44b0",
   "platform" : "ios",
   "results" : [
     {
@@ -46,8 +46,20 @@
     },
     {
       "detail" : "",
+      "id" : "common/minWidth__binding",
+      "screenshot" : "artifacts/ios/common_minWidth__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/maxWidth__static",
       "screenshot" : "artifacts/ios/common_maxWidth__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/maxWidth__binding",
+      "screenshot" : "artifacts/ios/common_maxWidth__binding.png",
       "status" : "pass"
     },
     {
@@ -58,47 +70,73 @@
     },
     {
       "detail" : "",
+      "id" : "common/minHeight__binding",
+      "screenshot" : "artifacts/ios/common_minHeight__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/maxHeight__static",
       "screenshot" : "artifacts/ios/common_maxHeight__static.png",
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "",
+      "id" : "common/maxHeight__binding",
+      "screenshot" : "artifacts/ios/common_maxHeight__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/widthWeight__static",
-      "status" : "skipped"
+      "screenshot" : "artifacts/ios/common_widthWeight__static.png",
+      "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "",
+      "id" : "common/widthWeight__binding",
+      "screenshot" : "artifacts/ios/common_widthWeight__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/heightWeight__static",
-      "status" : "skipped"
+      "screenshot" : "artifacts/ios/common_heightWeight__static.png",
+      "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "",
+      "id" : "common/heightWeight__binding",
+      "screenshot" : "artifacts/ios/common_heightWeight__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/maxWidthWeight__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/maxHeightWeight__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/minWidthWeight__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/minHeightWeight__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/aspectWidth__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/aspectHeight__static",
       "status" : "skipped"
     },
@@ -110,8 +148,32 @@
     },
     {
       "detail" : "",
+      "id" : "common/weight__as_string",
+      "screenshot" : "artifacts/ios/common_weight__as_string.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/weight__binding",
+      "screenshot" : "artifacts/ios/common_weight__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/weight__binding_as_string",
+      "screenshot" : "artifacts/ios/common_weight__binding_as_string.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/background__static",
       "screenshot" : "artifacts/ios/common_background__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/background__binding",
+      "screenshot" : "artifacts/ios/common_background__binding.png",
       "status" : "pass"
     },
     {
@@ -122,8 +184,20 @@
     },
     {
       "detail" : "",
+      "id" : "common/tapBackground__binding",
+      "screenshot" : "artifacts/ios/common_tapBackground__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/highlightBackground__static",
       "screenshot" : "artifacts/ios/common_highlightBackground__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/highlightBackground__binding",
+      "screenshot" : "artifacts/ios/common_highlightBackground__binding.png",
       "status" : "pass"
     },
     {
@@ -133,7 +207,13 @@
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "",
+      "id" : "common/disabledBackground__binding",
+      "screenshot" : "artifacts/ios/common_disabledBackground__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/defaultBackground__static",
       "status" : "skipped"
     },
@@ -145,14 +225,32 @@
     },
     {
       "detail" : "",
+      "id" : "common/cornerRadius__binding",
+      "screenshot" : "artifacts/ios/common_cornerRadius__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/borderWidth__static",
       "screenshot" : "artifacts/ios/common_borderWidth__static.png",
       "status" : "pass"
     },
     {
       "detail" : "",
+      "id" : "common/borderWidth__binding",
+      "screenshot" : "artifacts/ios/common_borderWidth__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/borderColor__static",
       "screenshot" : "artifacts/ios/common_borderColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/borderColor__binding",
+      "screenshot" : "artifacts/ios/common_borderColor__binding.png",
       "status" : "pass"
     },
     {
@@ -175,8 +273,20 @@
     },
     {
       "detail" : "",
-      "id" : "common/alpha__static",
-      "screenshot" : "artifacts/ios/common_alpha__static.png",
+      "id" : "common/borderStyle__solid_with_border",
+      "screenshot" : "artifacts/ios/common_borderStyle__solid_with_border.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/borderStyle__dashed_with_border",
+      "screenshot" : "artifacts/ios/common_borderStyle__dashed_with_border.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/borderStyle__dotted_with_border",
+      "screenshot" : "artifacts/ios/common_borderStyle__dotted_with_border.png",
       "status" : "pass"
     },
     {
@@ -189,6 +299,12 @@
       "detail" : "",
       "id" : "common/opacity__alias_alpha",
       "screenshot" : "artifacts/ios/common_opacity__alias_alpha.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/opacity__binding",
+      "screenshot" : "artifacts/ios/common_opacity__binding.png",
       "status" : "pass"
     },
     {
@@ -232,6 +348,11 @@
       "status" : "skipped"
     },
     {
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
+      "id" : "common/hidden__binding",
+      "status" : "skipped"
+    },
+    {
       "detail" : "class interactive not hosted (codegen parity host is visual-only)",
       "id" : "common/hidden__binding_negation",
       "status" : "skipped"
@@ -240,6 +361,12 @@
       "detail" : "",
       "id" : "common/padding__static",
       "screenshot" : "artifacts/ios/common_padding__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/padding__binding",
+      "screenshot" : "artifacts/ios/common_padding__binding.png",
       "status" : "pass"
     },
     {
@@ -256,8 +383,20 @@
     },
     {
       "detail" : "",
+      "id" : "common/paddingTop__binding",
+      "screenshot" : "artifacts/ios/common_paddingTop__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/paddingBottom__static",
       "screenshot" : "artifacts/ios/common_paddingBottom__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/paddingBottom__binding",
+      "screenshot" : "artifacts/ios/common_paddingBottom__binding.png",
       "status" : "pass"
     },
     {
@@ -268,8 +407,20 @@
     },
     {
       "detail" : "",
+      "id" : "common/paddingLeft__binding",
+      "screenshot" : "artifacts/ios/common_paddingLeft__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/paddingRight__static",
       "screenshot" : "artifacts/ios/common_paddingRight__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/paddingRight__binding",
+      "screenshot" : "artifacts/ios/common_paddingRight__binding.png",
       "status" : "pass"
     },
     {
@@ -280,8 +431,20 @@
     },
     {
       "detail" : "",
+      "id" : "common/paddingStart__binding",
+      "screenshot" : "artifacts/ios/common_paddingStart__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/paddingEnd__static",
       "screenshot" : "artifacts/ios/common_paddingEnd__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/paddingEnd__binding",
+      "screenshot" : "artifacts/ios/common_paddingEnd__binding.png",
       "status" : "pass"
     },
     {
@@ -292,8 +455,20 @@
     },
     {
       "detail" : "",
+      "id" : "common/rightPadding__binding",
+      "screenshot" : "artifacts/ios/common_rightPadding__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/leftPadding__static",
       "screenshot" : "artifacts/ios/common_leftPadding__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/leftPadding__binding",
+      "screenshot" : "artifacts/ios/common_leftPadding__binding.png",
       "status" : "pass"
     },
     {
@@ -304,47 +479,59 @@
     },
     {
       "detail" : "",
+      "id" : "common/topPadding__binding",
+      "screenshot" : "artifacts/ios/common_topPadding__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/bottomPadding__static",
       "screenshot" : "artifacts/ios/common_bottomPadding__static.png",
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "",
+      "id" : "common/bottomPadding__binding",
+      "screenshot" : "artifacts/ios/common_bottomPadding__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/minTopPadding__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/minBottomPadding__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/minLeftPadding__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/minRightPadding__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/maxTopPadding__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/maxBottomPadding__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/maxLeftPadding__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/maxRightPadding__static",
       "status" : "skipped"
     },
@@ -374,8 +561,20 @@
     },
     {
       "detail" : "",
+      "id" : "common/leftMargin__binding",
+      "screenshot" : "artifacts/ios/common_leftMargin__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/rightMargin__static",
       "screenshot" : "artifacts/ios/common_rightMargin__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/rightMargin__binding",
+      "screenshot" : "artifacts/ios/common_rightMargin__binding.png",
       "status" : "pass"
     },
     {
@@ -386,47 +585,59 @@
     },
     {
       "detail" : "",
+      "id" : "common/startMargin__binding",
+      "screenshot" : "artifacts/ios/common_startMargin__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/endMargin__static",
       "screenshot" : "artifacts/ios/common_endMargin__static.png",
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "",
+      "id" : "common/endMargin__binding",
+      "screenshot" : "artifacts/ios/common_endMargin__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/minTopMargin__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/minBottomMargin__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/minLeftMargin__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/minRightMargin__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/maxTopMargin__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/maxBottomMargin__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/maxLeftMargin__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/maxRightMargin__static",
       "status" : "skipped"
     },
@@ -438,8 +649,32 @@
     },
     {
       "detail" : "",
+      "id" : "common/centerInParent__false",
+      "screenshot" : "artifacts/ios/common_centerInParent__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/centerInParent__binding",
+      "screenshot" : "artifacts/ios/common_centerInParent__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/centerVertical__true",
       "screenshot" : "artifacts/ios/common_centerVertical__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/centerVertical__false",
+      "screenshot" : "artifacts/ios/common_centerVertical__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/centerVertical__binding",
+      "screenshot" : "artifacts/ios/common_centerVertical__binding.png",
       "status" : "pass"
     },
     {
@@ -450,8 +685,32 @@
     },
     {
       "detail" : "",
+      "id" : "common/centerHorizontal__false",
+      "screenshot" : "artifacts/ios/common_centerHorizontal__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/centerHorizontal__binding",
+      "screenshot" : "artifacts/ios/common_centerHorizontal__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/alignTop__true",
       "screenshot" : "artifacts/ios/common_alignTop__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignTop__false",
+      "screenshot" : "artifacts/ios/common_alignTop__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignTop__binding",
+      "screenshot" : "artifacts/ios/common_alignTop__binding.png",
       "status" : "pass"
     },
     {
@@ -462,14 +721,50 @@
     },
     {
       "detail" : "",
+      "id" : "common/alignBottom__false",
+      "screenshot" : "artifacts/ios/common_alignBottom__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignBottom__binding",
+      "screenshot" : "artifacts/ios/common_alignBottom__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/alignLeft__true",
       "screenshot" : "artifacts/ios/common_alignLeft__true.png",
       "status" : "pass"
     },
     {
       "detail" : "",
+      "id" : "common/alignLeft__false",
+      "screenshot" : "artifacts/ios/common_alignLeft__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignLeft__binding",
+      "screenshot" : "artifacts/ios/common_alignLeft__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "common/alignRight__true",
       "screenshot" : "artifacts/ios/common_alignRight__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignRight__false",
+      "screenshot" : "artifacts/ios/common_alignRight__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/alignRight__binding",
+      "screenshot" : "artifacts/ios/common_alignRight__binding.png",
       "status" : "pass"
     },
     {
@@ -533,7 +828,7 @@
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/toView__static",
       "status" : "skipped"
     },
@@ -547,6 +842,30 @@
       "detail" : "",
       "id" : "common/clipToBounds__true",
       "screenshot" : "artifacts/ios/common_clipToBounds__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/clipToBounds__true_overflow",
+      "screenshot" : "artifacts/ios/common_clipToBounds__true_overflow.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/clipToBounds__false",
+      "screenshot" : "artifacts/ios/common_clipToBounds__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/clipToBounds__false_overflow",
+      "screenshot" : "artifacts/ios/common_clipToBounds__false_overflow.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/clipToBounds__binding",
+      "screenshot" : "artifacts/ios/common_clipToBounds__binding.png",
       "status" : "pass"
     },
     {
@@ -576,39 +895,99 @@
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "",
+      "id" : "common/tintColor__binding",
+      "screenshot" : "artifacts/ios/common_tintColor__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/compressHorizontal__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/compressVertical__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/hugHorizontal__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/hugVertical__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/wrapContent__true",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
+      "id" : "common/wrapContent__false",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "common/innerPadding__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
-      "id" : "common/effectStyle__static",
-      "status" : "skipped"
+      "detail" : "",
+      "id" : "common/effectStyle__light",
+      "screenshot" : "artifacts/ios/common_effectStyle__light.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/effectStyle__dark",
+      "screenshot" : "artifacts/ios/common_effectStyle__dark.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/effectStyle__extralight",
+      "screenshot" : "artifacts/ios/common_effectStyle__extralight.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/effectStyle__regular",
+      "screenshot" : "artifacts/ios/common_effectStyle__regular.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/effectStyle__prominent",
+      "screenshot" : "artifacts/ios/common_effectStyle__prominent.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/effectStyle__ultrathin",
+      "screenshot" : "artifacts/ios/common_effectStyle__ultrathin.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/effectStyle__thin",
+      "screenshot" : "artifacts/ios/common_effectStyle__thin.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/effectStyle__thick",
+      "screenshot" : "artifacts/ios/common_effectStyle__thick.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/effectStyle__chrome",
+      "screenshot" : "artifacts/ios/common_effectStyle__chrome.png",
+      "status" : "pass"
     },
     {
       "detail" : "class assertable not hosted (codegen parity host is visual-only)",
@@ -618,6 +997,11 @@
     {
       "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "common/enabled__false",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
+      "id" : "common/enabled__binding",
       "status" : "skipped"
     },
     {
@@ -681,14 +1065,14 @@
     },
     {
       "detail" : "",
-      "id" : "common/alignment__topleading",
-      "screenshot" : "artifacts/ios/common_alignment__topleading.png",
+      "id" : "common/alignment__top",
+      "screenshot" : "artifacts/ios/common_alignment__top.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "common/alignment__top",
-      "screenshot" : "artifacts/ios/common_alignment__top.png",
+      "id" : "common/alignment__topleading",
+      "screenshot" : "artifacts/ios/common_alignment__topleading.png",
       "status" : "pass"
     },
     {
@@ -735,14 +1119,14 @@
     },
     {
       "detail" : "",
-      "id" : "common/distribution__fill",
-      "screenshot" : "artifacts/ios/common_distribution__fill.png",
+      "id" : "common/distribution__fillequally",
+      "screenshot" : "artifacts/ios/common_distribution__fillequally.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "common/distribution__fillequally",
-      "screenshot" : "artifacts/ios/common_distribution__fillequally.png",
+      "id" : "common/distribution__fill",
+      "screenshot" : "artifacts/ios/common_distribution__fill.png",
       "status" : "pass"
     },
     {
@@ -794,8 +1178,37 @@
       "status" : "pass"
     },
     {
+      "detail" : "",
+      "id" : "common/offsetX__static",
+      "screenshot" : "artifacts/ios/common_offsetX__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/offsetX__binding",
+      "screenshot" : "artifacts/ios/common_offsetX__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/offsetY__static",
+      "screenshot" : "artifacts/ios/common_offsetY__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/offsetY__binding",
+      "screenshot" : "artifacts/ios/common_offsetY__binding.png",
+      "status" : "pass"
+    },
+    {
       "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "Label/text__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
+      "id" : "Label/text__binding",
       "status" : "skipped"
     },
     {
@@ -888,8 +1301,20 @@
     },
     {
       "detail" : "",
+      "id" : "Label/font__binding",
+      "screenshot" : "artifacts/ios/Label_font__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Label/fontSize__static",
       "screenshot" : "artifacts/ios/Label_fontSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/fontSize__binding",
+      "screenshot" : "artifacts/ios/Label_fontSize__binding.png",
       "status" : "pass"
     },
     {
@@ -900,8 +1325,20 @@
     },
     {
       "detail" : "",
+      "id" : "Label/fontColor__binding",
+      "screenshot" : "artifacts/ios/Label_fontColor__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Label/fontFamily__static",
       "screenshot" : "artifacts/ios/Label_fontFamily__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/fontFamily__binding",
+      "screenshot" : "artifacts/ios/Label_fontFamily__binding.png",
       "status" : "pass"
     },
     {
@@ -933,6 +1370,18 @@
       "detail" : "",
       "id" : "Label/selected__true",
       "screenshot" : "artifacts/ios/Label_selected__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/selected__false",
+      "screenshot" : "artifacts/ios/Label_selected__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/selected__binding",
+      "screenshot" : "artifacts/ios/Label_selected__binding.png",
       "status" : "pass"
     },
     {
@@ -973,20 +1422,32 @@
     },
     {
       "detail" : "",
+      "id" : "Label/textAlign__binding",
+      "screenshot" : "artifacts/ios/Label_textAlign__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Label/lines__static",
       "screenshot" : "artifacts/ios/Label_lines__static.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "Label/lineBreakMode__char",
-      "screenshot" : "artifacts/ios/Label_lineBreakMode__char.png",
+      "id" : "Label/lines__binding",
+      "screenshot" : "artifacts/ios/Label_lines__binding.png",
       "status" : "pass"
     },
     {
       "detail" : "",
       "id" : "Label/lineBreakMode__clip",
       "screenshot" : "artifacts/ios/Label_lineBreakMode__clip.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/lineBreakMode__char",
+      "screenshot" : "artifacts/ios/Label_lineBreakMode__char.png",
       "status" : "pass"
     },
     {
@@ -1021,8 +1482,20 @@
     },
     {
       "detail" : "",
+      "id" : "Label/lineHeightMultiple__binding",
+      "screenshot" : "artifacts/ios/Label_lineHeightMultiple__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Label/lineSpacing__static",
       "screenshot" : "artifacts/ios/Label_lineSpacing__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/lineSpacing__binding",
+      "screenshot" : "artifacts/ios/Label_lineSpacing__binding.png",
       "status" : "pass"
     },
     {
@@ -1039,8 +1512,32 @@
     },
     {
       "detail" : "",
+      "id" : "Label/underline__styled",
+      "screenshot" : "artifacts/ios/Label_underline__styled.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/underline__false",
+      "screenshot" : "artifacts/ios/Label_underline__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Label/strikethrough__true",
       "screenshot" : "artifacts/ios/Label_strikethrough__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/strikethrough__styled",
+      "screenshot" : "artifacts/ios/Label_strikethrough__styled.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/strikethrough__false",
+      "screenshot" : "artifacts/ios/Label_strikethrough__false.png",
       "status" : "pass"
     },
     {
@@ -1051,14 +1548,38 @@
     },
     {
       "detail" : "",
+      "id" : "Label/autoShrink__false",
+      "screenshot" : "artifacts/ios/Label_autoShrink__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Label/minimumScaleFactor__static",
       "screenshot" : "artifacts/ios/Label_minimumScaleFactor__static.png",
       "status" : "pass"
     },
     {
       "detail" : "",
+      "id" : "Label/minimumScaleFactor__binding",
+      "screenshot" : "artifacts/ios/Label_minimumScaleFactor__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Label/linkable__true",
       "screenshot" : "artifacts/ios/Label_linkable__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/linkable__false",
+      "screenshot" : "artifacts/ios/Label_linkable__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/linkable__binding",
+      "screenshot" : "artifacts/ios/Label_linkable__binding.png",
       "status" : "pass"
     },
     {
@@ -1075,6 +1596,12 @@
     },
     {
       "detail" : "",
+      "id" : "Label/hintColor__binding",
+      "screenshot" : "artifacts/ios/Label_hintColor__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Label/highlightAttributes__static",
       "screenshot" : "artifacts/ios/Label_highlightAttributes__static.png",
       "status" : "pass"
@@ -1087,13 +1614,65 @@
     },
     {
       "detail" : "",
+      "id" : "Label/highlightColor__binding",
+      "screenshot" : "artifacts/ios/Label_highlightColor__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/partialAttributes__static",
+      "screenshot" : "artifacts/ios/Label_partialAttributes__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Label/fontWeight__static",
       "screenshot" : "artifacts/ios/Label_fontWeight__static.png",
       "status" : "pass"
     },
     {
+      "detail" : "",
+      "id" : "Label/fontWeight__600",
+      "screenshot" : "artifacts/ios/Label_fontWeight__600.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/fontWeight__static_with_partial",
+      "screenshot" : "artifacts/ios/Label_fontWeight__static_with_partial.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/fontWeight__600_with_partial",
+      "screenshot" : "artifacts/ios/Label_fontWeight__600_with_partial.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/disabledFontColor__static",
+      "screenshot" : "artifacts/ios/Label_disabledFontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Label/disabledFontColor__binding",
+      "screenshot" : "artifacts/ios/Label_disabledFontColor__binding.png",
+      "status" : "pass"
+    },
+    {
       "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "TextField/text__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
+      "id" : "TextField/text__alias_value",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
+      "id" : "TextField/text__binding",
       "status" : "skipped"
     },
     {
@@ -1121,6 +1700,18 @@
     },
     {
       "detail" : "",
+      "id" : "TextField/hintColor__alias_placeholderColor",
+      "screenshot" : "artifacts/ios/TextField_hintColor__alias_placeholderColor.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/hintColor__binding",
+      "screenshot" : "artifacts/ios/TextField_hintColor__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "TextField/hintFont__static",
       "screenshot" : "artifacts/ios/TextField_hintFont__static.png",
       "status" : "pass"
@@ -1139,14 +1730,32 @@
     },
     {
       "detail" : "",
+      "id" : "TextField/font__binding",
+      "screenshot" : "artifacts/ios/TextField_font__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "TextField/fontSize__static",
       "screenshot" : "artifacts/ios/TextField_fontSize__static.png",
       "status" : "pass"
     },
     {
       "detail" : "",
+      "id" : "TextField/fontSize__binding",
+      "screenshot" : "artifacts/ios/TextField_fontSize__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "TextField/fontColor__static",
       "screenshot" : "artifacts/ios/TextField_fontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/fontColor__binding",
+      "screenshot" : "artifacts/ios/TextField_fontColor__binding.png",
       "status" : "pass"
     },
     {
@@ -1283,7 +1892,37 @@
     },
     {
       "detail" : "not applicable to ios",
-      "id" : "TextField/inputType__static",
+      "id" : "TextField/inputType__text",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextField/inputType__number",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextField/inputType__numberdecimal",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextField/inputType__phone",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextField/inputType__email",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextField/inputType__password",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextField/inputType__multiline",
       "status" : "skipped"
     },
     {
@@ -1354,14 +1993,110 @@
     },
     {
       "detail" : "",
-      "id" : "TextField/contentType__static",
-      "screenshot" : "artifacts/ios/TextField_contentType__static.png",
+      "id" : "TextField/contentType__username",
+      "screenshot" : "artifacts/ios/TextField_contentType__username.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/contentType__password",
+      "screenshot" : "artifacts/ios/TextField_contentType__password.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/contentType__newpassword",
+      "screenshot" : "artifacts/ios/TextField_contentType__newpassword.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/contentType__onetimecode",
+      "screenshot" : "artifacts/ios/TextField_contentType__onetimecode.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/contentType__email",
+      "screenshot" : "artifacts/ios/TextField_contentType__email.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/contentType__name",
+      "screenshot" : "artifacts/ios/TextField_contentType__name.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/contentType__givenname",
+      "screenshot" : "artifacts/ios/TextField_contentType__givenname.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/contentType__familyname",
+      "screenshot" : "artifacts/ios/TextField_contentType__familyname.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/contentType__telephonenumber",
+      "screenshot" : "artifacts/ios/TextField_contentType__telephonenumber.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/contentType__streetaddress",
+      "screenshot" : "artifacts/ios/TextField_contentType__streetaddress.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/contentType__postalcode",
+      "screenshot" : "artifacts/ios/TextField_contentType__postalcode.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/contentType__country",
+      "screenshot" : "artifacts/ios/TextField_contentType__country.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/contentType__creditcardnumber",
+      "screenshot" : "artifacts/ios/TextField_contentType__creditcardnumber.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/contentType__url",
+      "screenshot" : "artifacts/ios/TextField_contentType__url.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/contentType__binding",
+      "screenshot" : "artifacts/ios/TextField_contentType__binding.png",
       "status" : "pass"
     },
     {
       "detail" : "",
       "id" : "TextField/secure__true",
       "screenshot" : "artifacts/ios/TextField_secure__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/secure__false",
+      "screenshot" : "artifacts/ios/TextField_secure__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/secure__binding",
+      "screenshot" : "artifacts/ios/TextField_secure__binding.png",
       "status" : "pass"
     },
     {
@@ -1377,52 +2112,59 @@
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "TextField/textPaddingRight__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "TextField/hasContainer__true",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
+      "id" : "TextField/hasContainer__false",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "TextField/textVerticalAlign__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "TextField/applyLiquidGlass__true",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
+      "id" : "TextField/applyLiquidGlass__false",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "TextField/accessoryCornerRadius__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "TextField/glassEffectStyle__static",
       "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "TextField/accessoryBackground__static",
-      "screenshot" : "artifacts/ios/TextField_accessoryBackground__static.png",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "TextField/accessoryTextColor__static",
-      "screenshot" : "artifacts/ios/TextField_accessoryTextColor__static.png",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
-      "detail" : "",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "TextField/doneText__static",
-      "screenshot" : "artifacts/ios/TextField_doneText__static.png",
-      "status" : "pass"
+      "status" : "skipped"
     },
     {
       "detail" : "",
@@ -1437,26 +2179,44 @@
     },
     {
       "detail" : "",
-      "id" : "TextField/autocapitalizationType__static",
-      "screenshot" : "artifacts/ios/TextField_autocapitalizationType__static.png",
+      "id" : "TextField/autocapitalizationType__none",
+      "screenshot" : "artifacts/ios/TextField_autocapitalizationType__none.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "TextField/autocorrectionType__static",
-      "screenshot" : "artifacts/ios/TextField_autocorrectionType__static.png",
+      "id" : "TextField/autocapitalizationType__words",
+      "screenshot" : "artifacts/ios/TextField_autocapitalizationType__words.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "TextField/spellCheckingType__static",
-      "screenshot" : "artifacts/ios/TextField_spellCheckingType__static.png",
+      "id" : "TextField/autocapitalizationType__sentences",
+      "screenshot" : "artifacts/ios/TextField_autocapitalizationType__sentences.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "TextField/keyboardAppearance__static",
-      "screenshot" : "artifacts/ios/TextField_keyboardAppearance__static.png",
+      "id" : "TextField/autocapitalizationType__allcharacters",
+      "screenshot" : "artifacts/ios/TextField_autocapitalizationType__allcharacters.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/autocorrectionType__default",
+      "screenshot" : "artifacts/ios/TextField_autocorrectionType__default.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/autocorrectionType__yes",
+      "screenshot" : "artifacts/ios/TextField_autocorrectionType__yes.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/autocorrectionType__no",
+      "screenshot" : "artifacts/ios/TextField_autocorrectionType__no.png",
       "status" : "pass"
     },
     {
@@ -1466,12 +2226,12 @@
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "TextField/leftViewMode__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "TextField/rightViewMode__static",
       "status" : "skipped"
     },
@@ -1492,9 +2252,20 @@
       "status" : "skipped"
     },
     {
+      "detail" : "not applicable to ios",
+      "id" : "TextField/required__false",
+      "status" : "skipped"
+    },
+    {
       "detail" : "",
       "id" : "TextField/fontFamily__static",
       "screenshot" : "artifacts/ios/TextField_fontFamily__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/fontFamily__binding",
+      "screenshot" : "artifacts/ios/TextField_fontFamily__binding.png",
       "status" : "pass"
     },
     {
@@ -1504,13 +2275,18 @@
     },
     {
       "detail" : "",
-      "id" : "TextField/placeholderColor__static",
-      "screenshot" : "artifacts/ios/TextField_placeholderColor__static.png",
+      "id" : "TextField/hintLineHeightMultiple__static",
+      "screenshot" : "artifacts/ios/TextField_hintLineHeightMultiple__static.png",
       "status" : "pass"
     },
     {
       "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "TextView/text__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
+      "id" : "TextView/text__binding",
       "status" : "skipped"
     },
     {
@@ -1534,6 +2310,12 @@
       "detail" : "",
       "id" : "TextView/hintColor__static",
       "screenshot" : "artifacts/ios/TextView_hintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/hintColor__binding",
+      "screenshot" : "artifacts/ios/TextView_hintColor__binding.png",
       "status" : "pass"
     },
     {
@@ -1562,14 +2344,32 @@
     },
     {
       "detail" : "",
+      "id" : "TextView/font__binding",
+      "screenshot" : "artifacts/ios/TextView_font__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "TextView/fontSize__static",
       "screenshot" : "artifacts/ios/TextView_fontSize__static.png",
       "status" : "pass"
     },
     {
       "detail" : "",
+      "id" : "TextView/fontSize__binding",
+      "screenshot" : "artifacts/ios/TextView_fontSize__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "TextView/fontColor__static",
       "screenshot" : "artifacts/ios/TextView_fontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/fontColor__binding",
+      "screenshot" : "artifacts/ios/TextView_fontColor__binding.png",
       "status" : "pass"
     },
     {
@@ -1618,6 +2418,12 @@
       "detail" : "",
       "id" : "TextView/flexible__true",
       "screenshot" : "artifacts/ios/TextView_flexible__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/flexible__false",
+      "screenshot" : "artifacts/ios/TextView_flexible__false.png",
       "status" : "pass"
     },
     {
@@ -1742,20 +2548,110 @@
     },
     {
       "detail" : "",
+      "id" : "TextView/editable__false",
+      "screenshot" : "artifacts/ios/TextView_editable__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "TextView/editable__true",
       "screenshot" : "artifacts/ios/TextView_editable__true.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "TextView/lineBreakMode__static",
-      "screenshot" : "artifacts/ios/TextView_lineBreakMode__static.png",
+      "id" : "TextView/lineBreakMode__clip",
+      "screenshot" : "artifacts/ios/TextView_lineBreakMode__clip.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "TextView/keyboardType__static",
-      "screenshot" : "artifacts/ios/TextView_keyboardType__static.png",
+      "id" : "TextView/lineBreakMode__char",
+      "screenshot" : "artifacts/ios/TextView_lineBreakMode__char.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/lineBreakMode__word",
+      "screenshot" : "artifacts/ios/TextView_lineBreakMode__word.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/lineBreakMode__head",
+      "screenshot" : "artifacts/ios/TextView_lineBreakMode__head.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/lineBreakMode__middle",
+      "screenshot" : "artifacts/ios/TextView_lineBreakMode__middle.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/lineBreakMode__tail",
+      "screenshot" : "artifacts/ios/TextView_lineBreakMode__tail.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/keyboardType__default",
+      "screenshot" : "artifacts/ios/TextView_keyboardType__default.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/keyboardType__asciicapable",
+      "screenshot" : "artifacts/ios/TextView_keyboardType__asciicapable.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/keyboardType__number",
+      "screenshot" : "artifacts/ios/TextView_keyboardType__number.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/keyboardType__decimal",
+      "screenshot" : "artifacts/ios/TextView_keyboardType__decimal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/keyboardType__phone",
+      "screenshot" : "artifacts/ios/TextView_keyboardType__phone.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/keyboardType__email",
+      "screenshot" : "artifacts/ios/TextView_keyboardType__email.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/keyboardType__url",
+      "screenshot" : "artifacts/ios/TextView_keyboardType__url.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/keyboardType__websearch",
+      "screenshot" : "artifacts/ios/TextView_keyboardType__websearch.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/keyboardType__namephonepad",
+      "screenshot" : "artifacts/ios/TextView_keyboardType__namephonepad.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/keyboardType__twitter",
+      "screenshot" : "artifacts/ios/TextView_keyboardType__twitter.png",
       "status" : "pass"
     },
     {
@@ -1780,6 +2676,16 @@
     },
     {
       "detail" : "not applicable to ios",
+      "id" : "TextView/required__false",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "TextView/selectable__false",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
       "id" : "TextView/selectable__true",
       "status" : "skipped"
     },
@@ -1795,12 +2701,12 @@
     },
     {
       "detail" : "not applicable to ios",
-      "id" : "TextView/resize__none",
+      "id" : "TextView/resize__both",
       "status" : "skipped"
     },
     {
       "detail" : "not applicable to ios",
-      "id" : "TextView/resize__both",
+      "id" : "TextView/resize__none",
       "status" : "skipped"
     },
     {
@@ -1820,6 +2726,12 @@
       "status" : "pass"
     },
     {
+      "detail" : "",
+      "id" : "TextView/fontFamily__binding",
+      "screenshot" : "artifacts/ios/TextView_fontFamily__binding.png",
+      "status" : "pass"
+    },
+    {
       "detail" : "not applicable to ios",
       "id" : "TextView/disabledBackground__static",
       "status" : "skipped"
@@ -1833,6 +2745,11 @@
     {
       "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "Button/text__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
+      "id" : "Button/text__binding",
       "status" : "skipped"
     },
     {
@@ -1860,8 +2777,20 @@
     },
     {
       "detail" : "",
+      "id" : "Button/fontColor__binding",
+      "screenshot" : "artifacts/ios/Button_fontColor__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Button/disabledFontColor__static",
       "screenshot" : "artifacts/ios/Button_disabledFontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/disabledFontColor__binding",
+      "screenshot" : "artifacts/ios/Button_disabledFontColor__binding.png",
       "status" : "pass"
     },
     {
@@ -1878,8 +2807,8 @@
     },
     {
       "detail" : "",
-      "id" : "Button/hilightColor__static",
-      "screenshot" : "artifacts/ios/Button_hilightColor__static.png",
+      "id" : "Button/highlightColor__binding",
+      "screenshot" : "artifacts/ios/Button_highlightColor__binding.png",
       "status" : "pass"
     },
     {
@@ -1898,6 +2827,12 @@
       "detail" : "",
       "id" : "Button/image__static",
       "screenshot" : "artifacts/ios/Button_image__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/image__binding",
+      "screenshot" : "artifacts/ios/Button_image__binding.png",
       "status" : "pass"
     },
     {
@@ -1941,8 +2876,38 @@
     },
     {
       "detail" : "",
+      "id" : "Button/fontWeight__600",
+      "screenshot" : "artifacts/ios/Button_fontWeight__600.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/fontWeight__binding",
+      "screenshot" : "artifacts/ios/Button_fontWeight__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/fontFamily__static",
+      "screenshot" : "artifacts/ios/Button_fontFamily__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Button/fontFamily__binding",
+      "screenshot" : "artifacts/ios/Button_fontFamily__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Image/src__static",
       "screenshot" : "artifacts/ios/Image_src__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/src__binding",
+      "screenshot" : "artifacts/ios/Image_src__binding.png",
       "status" : "pass"
     },
     {
@@ -1953,25 +2918,31 @@
     },
     {
       "detail" : "",
+      "id" : "Image/srcName__binding",
+      "screenshot" : "artifacts/ios/Image_srcName__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Image/highlightSrc__static",
       "screenshot" : "artifacts/ios/Image_highlightSrc__static.png",
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "Image/highlightSrcName__static",
       "status" : "skipped"
     },
     {
       "detail" : "",
-      "id" : "Image/contentMode__fit",
-      "screenshot" : "artifacts/ios/Image_contentMode__fit.png",
+      "id" : "Image/contentMode__fill",
+      "screenshot" : "artifacts/ios/Image_contentMode__fill.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "Image/contentMode__fill",
-      "screenshot" : "artifacts/ios/Image_contentMode__fill.png",
+      "id" : "Image/contentMode__fit",
+      "screenshot" : "artifacts/ios/Image_contentMode__fit.png",
       "status" : "pass"
     },
     {
@@ -2024,12 +2995,6 @@
     },
     {
       "detail" : "",
-      "id" : "Image/contentMode__scaletofill",
-      "screenshot" : "artifacts/ios/Image_contentMode__scaletofill.png",
-      "status" : "pass"
-    },
-    {
-      "detail" : "",
       "id" : "Image/contentMode__top_2",
       "screenshot" : "artifacts/ios/Image_contentMode__top_2.png",
       "status" : "pass"
@@ -2054,14 +3019,20 @@
     },
     {
       "detail" : "",
-      "id" : "Image/renderingMode__original",
-      "screenshot" : "artifacts/ios/Image_renderingMode__original.png",
+      "id" : "Image/contentMode__binding",
+      "screenshot" : "artifacts/ios/Image_contentMode__binding.png",
       "status" : "pass"
     },
     {
       "detail" : "",
       "id" : "Image/renderingMode__template",
       "screenshot" : "artifacts/ios/Image_renderingMode__template.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/renderingMode__original",
+      "screenshot" : "artifacts/ios/Image_renderingMode__original.png",
       "status" : "pass"
     },
     {
@@ -2095,6 +3066,18 @@
       "detail" : "",
       "id" : "Image/systemIcon__true",
       "screenshot" : "artifacts/ios/Image_systemIcon__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/systemIcon__false",
+      "screenshot" : "artifacts/ios/Image_systemIcon__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Image/defaultImage__static",
+      "screenshot" : "artifacts/ios/Image_defaultImage__static.png",
       "status" : "pass"
     },
     {
@@ -2188,6 +3171,12 @@
       "status" : "pass"
     },
     {
+      "detail" : "",
+      "id" : "NetworkImage/contentMode__binding",
+      "screenshot" : "artifacts/ios/NetworkImage_contentMode__binding.png",
+      "status" : "pass"
+    },
+    {
       "detail" : "not applicable to ios",
       "id" : "NetworkImage/alt__static",
       "status" : "skipped"
@@ -2201,6 +3190,18 @@
       "detail" : "not applicable to ios",
       "id" : "NetworkImage/loading__eager",
       "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/renderingMode__original",
+      "screenshot" : "artifacts/ios/NetworkImage_renderingMode__original.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "NetworkImage/renderingMode__template",
+      "screenshot" : "artifacts/ios/NetworkImage_renderingMode__template.png",
+      "status" : "pass"
     },
     {
       "detail" : "",
@@ -2228,8 +3229,8 @@
     },
     {
       "detail" : "",
-      "id" : "SelectBox/text__static",
-      "screenshot" : "artifacts/ios/SelectBox_text__static.png",
+      "id" : "SelectBox/hintColor__binding",
+      "screenshot" : "artifacts/ios/SelectBox_hintColor__binding.png",
       "status" : "pass"
     },
     {
@@ -2240,14 +3241,14 @@
     },
     {
       "detail" : "",
-      "id" : "SelectBox/selectItemType__normal",
-      "screenshot" : "artifacts/ios/SelectBox_selectItemType__normal.png",
+      "id" : "SelectBox/selectItemType__date",
+      "screenshot" : "artifacts/ios/SelectBox_selectItemType__date.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "SelectBox/selectItemType__date",
-      "screenshot" : "artifacts/ios/SelectBox_selectItemType__date.png",
+      "id" : "SelectBox/selectItemType__normal",
+      "screenshot" : "artifacts/ios/SelectBox_selectItemType__normal.png",
       "status" : "pass"
     },
     {
@@ -2257,14 +3258,21 @@
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
-      "id" : "SelectBox/selectedItem__static",
-      "status" : "skipped"
+      "detail" : "",
+      "id" : "SelectBox/selectedIndex__binding",
+      "screenshot" : "artifacts/ios/SelectBox_selectedIndex__binding.png",
+      "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "SelectBox/datePickerMode__date",
-      "screenshot" : "artifacts/ios/SelectBox_datePickerMode__date.png",
+      "id" : "SelectBox/selectedItem__static",
+      "screenshot" : "artifacts/ios/SelectBox_selectedItem__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/selectedItem__binding",
+      "screenshot" : "artifacts/ios/SelectBox_selectedItem__binding.png",
       "status" : "pass"
     },
     {
@@ -2275,8 +3283,8 @@
     },
     {
       "detail" : "",
-      "id" : "SelectBox/datePickerMode__datetime",
-      "screenshot" : "artifacts/ios/SelectBox_datePickerMode__datetime.png",
+      "id" : "SelectBox/datePickerMode__date",
+      "screenshot" : "artifacts/ios/SelectBox_datePickerMode__date.png",
       "status" : "pass"
     },
     {
@@ -2289,6 +3297,12 @@
       "detail" : "",
       "id" : "SelectBox/datePickerMode__countdown",
       "screenshot" : "artifacts/ios/SelectBox_datePickerMode__countdown.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/datePickerStyle__graphical",
+      "screenshot" : "artifacts/ios/SelectBox_datePickerStyle__graphical.png",
       "status" : "pass"
     },
     {
@@ -2317,12 +3331,6 @@
     },
     {
       "detail" : "",
-      "id" : "SelectBox/datePickerStyle__graphical",
-      "screenshot" : "artifacts/ios/SelectBox_datePickerStyle__graphical.png",
-      "status" : "pass"
-    },
-    {
-      "detail" : "",
       "id" : "SelectBox/datePickerStyle__inline",
       "screenshot" : "artifacts/ios/SelectBox_datePickerStyle__inline.png",
       "status" : "pass"
@@ -2335,14 +3343,32 @@
     },
     {
       "detail" : "",
+      "id" : "SelectBox/dateStringFormat__alias_dateFormat",
+      "screenshot" : "artifacts/ios/SelectBox_dateStringFormat__alias_dateFormat.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "SelectBox/minimumDate__static",
       "screenshot" : "artifacts/ios/SelectBox_minimumDate__static.png",
       "status" : "pass"
     },
     {
       "detail" : "",
+      "id" : "SelectBox/minimumDate__binding",
+      "screenshot" : "artifacts/ios/SelectBox_minimumDate__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "SelectBox/maximumDate__static",
       "screenshot" : "artifacts/ios/SelectBox_maximumDate__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/maximumDate__binding",
+      "screenshot" : "artifacts/ios/SelectBox_maximumDate__binding.png",
       "status" : "pass"
     },
     {
@@ -2442,12 +3468,12 @@
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "SelectBox/inView__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "SelectBox/referenceView__static",
       "status" : "skipped"
     },
@@ -2478,6 +3504,11 @@
     },
     {
       "detail" : "not applicable to ios",
+      "id" : "SelectBox/multiple__false",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
       "id" : "SelectBox/size__static",
       "status" : "skipped"
     },
@@ -2489,8 +3520,26 @@
     },
     {
       "detail" : "",
+      "id" : "SelectBox/selectedValue__three",
+      "screenshot" : "artifacts/ios/SelectBox_selectedValue__three.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SelectBox/selectedValue__binding",
+      "screenshot" : "artifacts/ios/SelectBox_selectedValue__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Switch/isOn__true",
       "screenshot" : "artifacts/ios/Switch_isOn__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/isOn__false",
+      "screenshot" : "artifacts/ios/Switch_isOn__false.png",
       "status" : "pass"
     },
     {
@@ -2501,8 +3550,32 @@
     },
     {
       "detail" : "",
+      "id" : "Switch/value__false",
+      "screenshot" : "artifacts/ios/Switch_value__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/value__binding",
+      "screenshot" : "artifacts/ios/Switch_value__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Switch/checked__true",
       "screenshot" : "artifacts/ios/Switch_checked__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/checked__false",
+      "screenshot" : "artifacts/ios/Switch_checked__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/checked__binding",
+      "screenshot" : "artifacts/ios/Switch_checked__binding.png",
       "status" : "pass"
     },
     {
@@ -2516,9 +3589,20 @@
       "status" : "skipped"
     },
     {
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
+      "id" : "Switch/enabled__binding",
+      "status" : "skipped"
+    },
+    {
       "detail" : "",
       "id" : "Switch/tint__static",
       "screenshot" : "artifacts/ios/Switch_tint__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/tint__binding",
+      "screenshot" : "artifacts/ios/Switch_tint__binding.png",
       "status" : "pass"
     },
     {
@@ -2540,7 +3624,13 @@
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "",
+      "id" : "Switch/thumbTintColor__binding",
+      "screenshot" : "artifacts/ios/Switch_thumbTintColor__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "Switch/offTintColor__static",
       "status" : "skipped"
     },
@@ -2551,18 +3641,84 @@
     },
     {
       "detail" : "not applicable to ios",
-      "id" : "Switch/labelPosition__leading",
+      "id" : "Switch/labelPosition__trailing",
       "status" : "skipped"
     },
     {
       "detail" : "not applicable to ios",
-      "id" : "Switch/labelPosition__trailing",
+      "id" : "Switch/labelPosition__leading",
       "status" : "skipped"
     },
     {
       "detail" : "",
       "id" : "Switch/trackTintColor__static",
       "screenshot" : "artifacts/ios/Switch_trackTintColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/fontColor__static",
+      "screenshot" : "artifacts/ios/Switch_fontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/fontColor__binding",
+      "screenshot" : "artifacts/ios/Switch_fontColor__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/toggleStyle__switch",
+      "screenshot" : "artifacts/ios/Switch_toggleStyle__switch.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/toggleStyle__button",
+      "screenshot" : "artifacts/ios/Switch_toggleStyle__button.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/toggleStyle__checkbox",
+      "screenshot" : "artifacts/ios/Switch_toggleStyle__checkbox.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/toggleStyle__default",
+      "screenshot" : "artifacts/ios/Switch_toggleStyle__default.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/label__static",
+      "screenshot" : "artifacts/ios/Switch_label__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/label__alias_text",
+      "screenshot" : "artifacts/ios/Switch_label__alias_text.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/label__binding",
+      "screenshot" : "artifacts/ios/Switch_label__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/fontSize__static",
+      "screenshot" : "artifacts/ios/Switch_fontSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Switch/fontSize__binding",
+      "screenshot" : "artifacts/ios/Switch_fontSize__binding.png",
       "status" : "pass"
     },
     {
@@ -2579,25 +3735,60 @@
     },
     {
       "detail" : "",
+      "id" : "Segment/selectedIndex__alias_selectedTabIndex",
+      "screenshot" : "artifacts/ios/Segment_selectedIndex__alias_selectedTabIndex.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Segment/selectedIndex__binding",
+      "screenshot" : "artifacts/ios/Segment_selectedIndex__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Segment/tintColor__static",
       "screenshot" : "artifacts/ios/Segment_tintColor__static.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "Segment/normalColor__static",
-      "screenshot" : "artifacts/ios/Segment_normalColor__static.png",
+      "id" : "Segment/tintColor__alias_selectedSegmentTintColor",
+      "screenshot" : "artifacts/ios/Segment_tintColor__alias_selectedSegmentTintColor.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "Segment/selectedColor__static",
-      "screenshot" : "artifacts/ios/Segment_selectedColor__static.png",
+      "id" : "Segment/fontColor__static",
+      "screenshot" : "artifacts/ios/Segment_fontColor__static.png",
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "",
+      "id" : "Segment/fontColor__alias_normalColor",
+      "screenshot" : "artifacts/ios/Segment_fontColor__alias_normalColor.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Segment/selectedFontColor__static",
+      "screenshot" : "artifacts/ios/Segment_selectedFontColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Segment/selectedFontColor__alias_selectedColor",
+      "screenshot" : "artifacts/ios/Segment_selectedFontColor__alias_selectedColor.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "Segment/apportionsSegmentWidthsByContent__true",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
+      "id" : "Segment/apportionsSegmentWidthsByContent__false",
       "status" : "skipped"
     },
     {
@@ -2608,8 +3799,8 @@
     },
     {
       "detail" : "",
-      "id" : "Slider/minValue__static",
-      "screenshot" : "artifacts/ios/Slider_minValue__static.png",
+      "id" : "Slider/value__binding",
+      "screenshot" : "artifacts/ios/Slider_value__binding.png",
       "status" : "pass"
     },
     {
@@ -2632,8 +3823,8 @@
     },
     {
       "detail" : "",
-      "id" : "Slider/maxValue__static",
-      "screenshot" : "artifacts/ios/Slider_maxValue__static.png",
+      "id" : "Slider/minimum__binding",
+      "screenshot" : "artifacts/ios/Slider_minimum__binding.png",
       "status" : "pass"
     },
     {
@@ -2656,17 +3847,23 @@
     },
     {
       "detail" : "",
+      "id" : "Slider/maximum__binding",
+      "screenshot" : "artifacts/ios/Slider_maximum__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Slider/tintColor__static",
       "screenshot" : "artifacts/ios/Slider_tintColor__static.png",
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "Slider/minimumValueImage__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "Slider/maximumValueImage__static",
       "status" : "skipped"
     },
@@ -2695,6 +3892,12 @@
     },
     {
       "detail" : "",
+      "id" : "Progress/progress__binding",
+      "screenshot" : "artifacts/ios/Progress_progress__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Progress/tintColor__static",
       "screenshot" : "artifacts/ios/Progress_tintColor__static.png",
       "status" : "pass"
@@ -2707,22 +3910,34 @@
     },
     {
       "detail" : "",
+      "id" : "Progress/progressTintColor__binding",
+      "screenshot" : "artifacts/ios/Progress_progressTintColor__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Progress/trackTintColor__static",
       "screenshot" : "artifacts/ios/Progress_trackTintColor__static.png",
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "",
+      "id" : "Progress/trackTintColor__binding",
+      "screenshot" : "artifacts/ios/Progress_trackTintColor__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "Progress/progressViewStyle__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "Progress/progressImage__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "Progress/trackImage__static",
       "status" : "skipped"
     },
@@ -2734,14 +3949,20 @@
     },
     {
       "detail" : "",
-      "id" : "Progress/indicatorStyle__medium",
-      "screenshot" : "artifacts/ios/Progress_indicatorStyle__medium.png",
+      "id" : "Progress/hidesWhenStopped__false",
+      "screenshot" : "artifacts/ios/Progress_hidesWhenStopped__false.png",
       "status" : "pass"
     },
     {
       "detail" : "",
       "id" : "Progress/indicatorStyle__large",
       "screenshot" : "artifacts/ios/Progress_indicatorStyle__large.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Progress/indicatorStyle__medium",
+      "screenshot" : "artifacts/ios/Progress_indicatorStyle__medium.png",
       "status" : "pass"
     },
     {
@@ -2764,14 +3985,14 @@
     },
     {
       "detail" : "",
-      "id" : "View/direction__toptobottom",
-      "screenshot" : "artifacts/ios/View_direction__toptobottom.png",
+      "id" : "View/direction__bottomtotop",
+      "screenshot" : "artifacts/ios/View_direction__bottomtotop.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "View/direction__bottomtotop",
-      "screenshot" : "artifacts/ios/View_direction__bottomtotop.png",
+      "id" : "View/direction__toptobottom",
+      "screenshot" : "artifacts/ios/View_direction__toptobottom.png",
       "status" : "pass"
     },
     {
@@ -2794,14 +4015,14 @@
     },
     {
       "detail" : "",
-      "id" : "View/distribution__fill",
-      "screenshot" : "artifacts/ios/View_distribution__fill.png",
+      "id" : "View/distribution__fillequally",
+      "screenshot" : "artifacts/ios/View_distribution__fillequally.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "View/distribution__fillequally",
-      "screenshot" : "artifacts/ios/View_distribution__fillequally.png",
+      "id" : "View/distribution__fill",
+      "screenshot" : "artifacts/ios/View_distribution__fill.png",
       "status" : "pass"
     },
     {
@@ -2823,17 +4044,49 @@
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "",
+      "id" : "View/spacing__binding",
+      "screenshot" : "artifacts/ios/View_spacing__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "View/gradient__static",
-      "status" : "skipped"
+      "screenshot" : "artifacts/ios/View_gradient__static.png",
+      "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
-      "id" : "View/gradientDirection__static",
-      "status" : "skipped"
+      "detail" : "",
+      "id" : "View/gradientDirection__horizontal",
+      "screenshot" : "artifacts/ios/View_gradientDirection__horizontal.png",
+      "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "",
+      "id" : "View/gradientDirection__vertical",
+      "screenshot" : "artifacts/ios/View_gradientDirection__vertical.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/gradientDirection__oblique",
+      "screenshot" : "artifacts/ios/View_gradientDirection__oblique.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/gradientDirection__righttoleft",
+      "screenshot" : "artifacts/ios/View_gradientDirection__righttoleft.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/gradientDirection__bottomtotop",
+      "screenshot" : "artifacts/ios/View_gradientDirection__bottomtotop.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "View/locations__static",
       "status" : "skipped"
     },
@@ -2847,6 +4100,12 @@
       "detail" : "",
       "id" : "View/highlighted__true",
       "screenshot" : "artifacts/ios/View_highlighted__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "View/highlighted__false",
+      "screenshot" : "artifacts/ios/View_highlighted__false.png",
       "status" : "pass"
     },
     {
@@ -2870,6 +4129,11 @@
       "status" : "skipped"
     },
     {
+      "detail" : "not applicable to ios",
+      "id" : "View/draggable__false",
+      "status" : "skipped"
+    },
+    {
       "detail" : "",
       "id" : "ScrollView/orientation__horizontal",
       "screenshot" : "artifacts/ios/ScrollView_orientation__horizontal.png",
@@ -2883,13 +4147,19 @@
     },
     {
       "detail" : "not applicable to ios",
-      "id" : "ScrollView/scrollMode__inner",
+      "id" : "ScrollView/scrollMode__window",
       "status" : "skipped"
     },
     {
       "detail" : "not applicable to ios",
-      "id" : "ScrollView/scrollMode__window",
+      "id" : "ScrollView/scrollMode__inner",
       "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "ScrollView/showsHorizontalScrollIndicator__false",
+      "screenshot" : "artifacts/ios/ScrollView_showsHorizontalScrollIndicator__false.png",
+      "status" : "pass"
     },
     {
       "detail" : "",
@@ -2899,22 +4169,28 @@
     },
     {
       "detail" : "",
+      "id" : "ScrollView/showsVerticalScrollIndicator__false",
+      "screenshot" : "artifacts/ios/ScrollView_showsVerticalScrollIndicator__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "ScrollView/showsVerticalScrollIndicator__true",
       "screenshot" : "artifacts/ios/ScrollView_showsVerticalScrollIndicator__true.png",
       "status" : "pass"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "ScrollView/contentSize__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "ScrollView/contentOffset__static",
       "status" : "skipped"
     },
     {
-      "detail" : "mode uikit not hosted (SwiftUI dynamic host)",
+      "detail" : "class declaration-only not hosted (codegen parity host is visual-only)",
       "id" : "ScrollView/indicatorStyle__static",
       "status" : "skipped"
     },
@@ -2930,8 +4206,32 @@
     },
     {
       "detail" : "",
-      "id" : "Collection/lazy__lazy",
-      "screenshot" : "artifacts/ios/Collection_lazy__lazy.png",
+      "id" : "ScrollView/horizontalScroll__true",
+      "screenshot" : "artifacts/ios/ScrollView_horizontalScroll__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "ScrollView/horizontalScroll__false",
+      "screenshot" : "artifacts/ios/ScrollView_horizontalScroll__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "ScrollView/defaultScrollAnchor__top",
+      "screenshot" : "artifacts/ios/ScrollView_defaultScrollAnchor__top.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "ScrollView/defaultScrollAnchor__center",
+      "screenshot" : "artifacts/ios/ScrollView_defaultScrollAnchor__center.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "ScrollView/defaultScrollAnchor__bottom",
+      "screenshot" : "artifacts/ios/ScrollView_defaultScrollAnchor__bottom.png",
       "status" : "pass"
     },
     {
@@ -2942,8 +4242,20 @@
     },
     {
       "detail" : "",
+      "id" : "Collection/lazy__lazy",
+      "screenshot" : "artifacts/ios/Collection_lazy__lazy.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Collection/lazy__none",
       "screenshot" : "artifacts/ios/Collection_lazy__none.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/lazy__binding",
+      "screenshot" : "artifacts/ios/Collection_lazy__binding.png",
       "status" : "pass"
     },
     {
@@ -2972,8 +4284,20 @@
     },
     {
       "detail" : "",
+      "id" : "Collection/lineSpacing__alias_sectionSpacing",
+      "screenshot" : "artifacts/ios/Collection_lineSpacing__alias_sectionSpacing.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Collection/horizontalScroll__true",
       "screenshot" : "artifacts/ios/Collection_horizontalScroll__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/horizontalScroll__false",
+      "screenshot" : "artifacts/ios/Collection_horizontalScroll__false.png",
       "status" : "pass"
     },
     {
@@ -2990,38 +4314,20 @@
     },
     {
       "detail" : "",
-      "id" : "Collection/layout__vertical",
-      "screenshot" : "artifacts/ios/Collection_layout__vertical.png",
-      "status" : "pass"
-    },
-    {
-      "detail" : "",
       "id" : "Collection/layout__horizontal",
       "screenshot" : "artifacts/ios/Collection_layout__horizontal.png",
       "status" : "pass"
     },
     {
       "detail" : "",
+      "id" : "Collection/layout__vertical",
+      "screenshot" : "artifacts/ios/Collection_layout__vertical.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Collection/layout__flow",
       "screenshot" : "artifacts/ios/Collection_layout__flow.png",
-      "status" : "pass"
-    },
-    {
-      "detail" : "",
-      "id" : "Collection/layout__flow_2",
-      "screenshot" : "artifacts/ios/Collection_layout__flow_2.png",
-      "status" : "pass"
-    },
-    {
-      "detail" : "",
-      "id" : "Collection/layout__leftaligned",
-      "screenshot" : "artifacts/ios/Collection_layout__leftaligned.png",
-      "status" : "pass"
-    },
-    {
-      "detail" : "",
-      "id" : "Collection/layout__leftaligned_2",
-      "screenshot" : "artifacts/ios/Collection_layout__leftaligned_2.png",
       "status" : "pass"
     },
     {
@@ -3034,6 +4340,12 @@
       "detail" : "",
       "id" : "Collection/insetHorizontal__static",
       "screenshot" : "artifacts/ios/Collection_insetHorizontal__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/insetHorizontal__static_horizontal",
+      "screenshot" : "artifacts/ios/Collection_insetHorizontal__static_horizontal.png",
       "status" : "pass"
     },
     {
@@ -3056,8 +4368,20 @@
     },
     {
       "detail" : "",
+      "id" : "Collection/showsHorizontalScrollIndicator__false",
+      "screenshot" : "artifacts/ios/Collection_showsHorizontalScrollIndicator__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Collection/showsHorizontalScrollIndicator__true",
       "screenshot" : "artifacts/ios/Collection_showsHorizontalScrollIndicator__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/showsVerticalScrollIndicator__false",
+      "screenshot" : "artifacts/ios/Collection_showsVerticalScrollIndicator__false.png",
       "status" : "pass"
     },
     {
@@ -3091,14 +4415,14 @@
     },
     {
       "detail" : "",
-      "id" : "Collection/defaultScrollAnchor__top",
-      "screenshot" : "artifacts/ios/Collection_defaultScrollAnchor__top.png",
+      "id" : "Collection/defaultScrollAnchor__center",
+      "screenshot" : "artifacts/ios/Collection_defaultScrollAnchor__center.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "Collection/defaultScrollAnchor__center",
-      "screenshot" : "artifacts/ios/Collection_defaultScrollAnchor__center.png",
+      "id" : "Collection/defaultScrollAnchor__top",
+      "screenshot" : "artifacts/ios/Collection_defaultScrollAnchor__top.png",
       "status" : "pass"
     },
     {
@@ -3113,9 +4437,62 @@
       "status" : "skipped"
     },
     {
+      "detail" : "not applicable to ios",
+      "id" : "Collection/reverseLayout__false",
+      "status" : "skipped"
+    },
+    {
       "detail" : "",
       "id" : "Collection/containerInset__static",
       "screenshot" : "artifacts/ios/Collection_containerInset__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/cellWidth__static",
+      "screenshot" : "artifacts/ios/Collection_cellWidth__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/cellHeight__static",
+      "screenshot" : "artifacts/ios/Collection_cellHeight__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/hideSeparator__true",
+      "screenshot" : "artifacts/ios/Collection_hideSeparator__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/hideSeparator__false",
+      "screenshot" : "artifacts/ios/Collection_hideSeparator__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/listStyle__plain",
+      "screenshot" : "artifacts/ios/Collection_listStyle__plain.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/listStyle__grouped",
+      "screenshot" : "artifacts/ios/Collection_listStyle__grouped.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/listStyle__insetgrouped",
+      "screenshot" : "artifacts/ios/Collection_listStyle__insetgrouped.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/listStyle__sidebar",
+      "screenshot" : "artifacts/ios/Collection_listStyle__sidebar.png",
       "status" : "pass"
     },
     {
@@ -3125,8 +4502,19 @@
       "status" : "pass"
     },
     {
+      "detail" : "",
+      "id" : "Radio/label__binding",
+      "screenshot" : "artifacts/ios/Radio_label__binding.png",
+      "status" : "pass"
+    },
+    {
       "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "Radio/text__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
+      "id" : "Radio/text__binding",
       "status" : "skipped"
     },
     {
@@ -3143,8 +4531,20 @@
     },
     {
       "detail" : "",
+      "id" : "Radio/icon__square",
+      "screenshot" : "artifacts/ios/Radio_icon__square.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Radio/selectedIcon__static",
       "screenshot" : "artifacts/ios/Radio_selectedIcon__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/selectedIcon__checkmark-square-fill",
+      "screenshot" : "artifacts/ios/Radio_selectedIcon__checkmark-square-fill.png",
       "status" : "pass"
     },
     {
@@ -3155,14 +4555,38 @@
     },
     {
       "detail" : "",
-      "id" : "Radio/selected_icon__static",
-      "screenshot" : "artifacts/ios/Radio_selected_icon__static.png",
+      "id" : "Radio/checked__true",
+      "screenshot" : "artifacts/ios/Radio_checked__true.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "Radio/checked__true",
-      "screenshot" : "artifacts/ios/Radio_checked__true.png",
+      "id" : "Radio/checked__true_with_group",
+      "screenshot" : "artifacts/ios/Radio_checked__true_with_group.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/checked__alias_isOn",
+      "screenshot" : "artifacts/ios/Radio_checked__alias_isOn.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/checked__false",
+      "screenshot" : "artifacts/ios/Radio_checked__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/checked__false_with_group",
+      "screenshot" : "artifacts/ios/Radio_checked__false_with_group.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/checked__binding",
+      "screenshot" : "artifacts/ios/Radio_checked__binding.png",
       "status" : "pass"
     },
     {
@@ -3179,8 +4603,20 @@
     },
     {
       "detail" : "",
+      "id" : "Radio/font__binding",
+      "screenshot" : "artifacts/ios/Radio_font__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Radio/fontSize__static",
       "screenshot" : "artifacts/ios/Radio_fontSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/fontSize__binding",
+      "screenshot" : "artifacts/ios/Radio_fontSize__binding.png",
       "status" : "pass"
     },
     {
@@ -3191,8 +4627,20 @@
     },
     {
       "detail" : "",
+      "id" : "Radio/fontColor__binding",
+      "screenshot" : "artifacts/ios/Radio_fontColor__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Radio/spacing__static",
       "screenshot" : "artifacts/ios/Radio_spacing__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/spacing__binding",
+      "screenshot" : "artifacts/ios/Radio_spacing__binding.png",
       "status" : "pass"
     },
     {
@@ -3227,13 +4675,36 @@
     },
     {
       "detail" : "",
+      "id" : "Radio/selectedValue__gamma",
+      "screenshot" : "artifacts/ios/Radio_selectedValue__gamma.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Radio/selectedValue__binding",
+      "screenshot" : "artifacts/ios/Radio_selectedValue__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "CheckBox/label__static",
       "screenshot" : "artifacts/ios/CheckBox_label__static.png",
       "status" : "pass"
     },
     {
+      "detail" : "",
+      "id" : "CheckBox/label__binding",
+      "screenshot" : "artifacts/ios/CheckBox_label__binding.png",
+      "status" : "pass"
+    },
+    {
       "detail" : "class assertable not hosted (codegen parity host is visual-only)",
       "id" : "CheckBox/text__static",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
+      "id" : "CheckBox/text__binding",
       "status" : "skipped"
     },
     {
@@ -3244,8 +4715,26 @@
     },
     {
       "detail" : "",
+      "id" : "CheckBox/isOn__false",
+      "screenshot" : "artifacts/ios/CheckBox_isOn__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "CheckBox/checked__true",
       "screenshot" : "artifacts/ios/CheckBox_checked__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/checked__false",
+      "screenshot" : "artifacts/ios/CheckBox_checked__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/checked__binding",
+      "screenshot" : "artifacts/ios/CheckBox_checked__binding.png",
       "status" : "pass"
     },
     {
@@ -3274,8 +4763,14 @@
     },
     {
       "detail" : "",
-      "id" : "CheckBox/value__static",
-      "screenshot" : "artifacts/ios/CheckBox_value__static.png",
+      "id" : "CheckBox/value__true",
+      "screenshot" : "artifacts/ios/CheckBox_value__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/value__false",
+      "screenshot" : "artifacts/ios/CheckBox_value__false.png",
       "status" : "pass"
     },
     {
@@ -3289,9 +4784,20 @@
       "status" : "skipped"
     },
     {
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
+      "id" : "CheckBox/enabled__binding",
+      "status" : "skipped"
+    },
+    {
       "detail" : "",
       "id" : "CheckBox/font__static",
       "screenshot" : "artifacts/ios/CheckBox_font__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/font__binding",
+      "screenshot" : "artifacts/ios/CheckBox_font__binding.png",
       "status" : "pass"
     },
     {
@@ -3302,14 +4808,32 @@
     },
     {
       "detail" : "",
+      "id" : "CheckBox/fontSize__binding",
+      "screenshot" : "artifacts/ios/CheckBox_fontSize__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "CheckBox/fontColor__static",
       "screenshot" : "artifacts/ios/CheckBox_fontColor__static.png",
       "status" : "pass"
     },
     {
       "detail" : "",
+      "id" : "CheckBox/fontColor__binding",
+      "screenshot" : "artifacts/ios/CheckBox_fontColor__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "CheckBox/spacing__static",
       "screenshot" : "artifacts/ios/CheckBox_spacing__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/spacing__binding",
+      "screenshot" : "artifacts/ios/CheckBox_spacing__binding.png",
       "status" : "pass"
     },
     {
@@ -3321,6 +4845,18 @@
       "detail" : "",
       "id" : "CheckBox/checkedColor__static",
       "screenshot" : "artifacts/ios/CheckBox_checkedColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/checkedColor__alias_checkColor",
+      "screenshot" : "artifacts/ios/CheckBox_checkedColor__alias_checkColor.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/checkedColor__alias_onTintColor",
+      "screenshot" : "artifacts/ios/CheckBox_checkedColor__alias_onTintColor.png",
       "status" : "pass"
     },
     {
@@ -3343,8 +4879,32 @@
     },
     {
       "detail" : "",
-      "id" : "Indicator/indicatorStyle__medium",
-      "screenshot" : "artifacts/ios/Indicator_indicatorStyle__medium.png",
+      "id" : "CheckBox/fontWeight__static",
+      "screenshot" : "artifacts/ios/CheckBox_fontWeight__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "CheckBox/fontWeight__alias_fontStyle",
+      "screenshot" : "artifacts/ios/CheckBox_fontWeight__alias_fontStyle.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Indicator/animating__false",
+      "screenshot" : "artifacts/ios/Indicator_animating__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Indicator/animating__true",
+      "screenshot" : "artifacts/ios/Indicator_animating__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Indicator/animating__binding",
+      "screenshot" : "artifacts/ios/Indicator_animating__binding.png",
       "status" : "pass"
     },
     {
@@ -3355,8 +4915,32 @@
     },
     {
       "detail" : "",
+      "id" : "Indicator/indicatorStyle__medium",
+      "screenshot" : "artifacts/ios/Indicator_indicatorStyle__medium.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Indicator/color__static",
       "screenshot" : "artifacts/ios/Indicator_color__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Indicator/color__alias_tint",
+      "screenshot" : "artifacts/ios/Indicator_color__alias_tint.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Indicator/color__binding",
+      "screenshot" : "artifacts/ios/Indicator_color__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Indicator/hidesWhenStopped__false",
+      "screenshot" : "artifacts/ios/Indicator_hidesWhenStopped__false.png",
       "status" : "pass"
     },
     {
@@ -3373,14 +4957,20 @@
     },
     {
       "detail" : "",
-      "id" : "GradientView/gradientDirection__vertical",
-      "screenshot" : "artifacts/ios/GradientView_gradientDirection__vertical.png",
+      "id" : "GradientView/gradient__alias_colors",
+      "screenshot" : "artifacts/ios/GradientView_gradient__alias_colors.png",
       "status" : "pass"
     },
     {
       "detail" : "",
       "id" : "GradientView/gradientDirection__horizontal",
       "screenshot" : "artifacts/ios/GradientView_gradientDirection__horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "GradientView/gradientDirection__vertical",
+      "screenshot" : "artifacts/ios/GradientView_gradientDirection__vertical.png",
       "status" : "pass"
     },
     {
@@ -3424,9 +5014,32 @@
       "status" : "skipped"
     },
     {
+      "detail" : "class assertable not hosted (codegen parity host is visual-only)",
+      "id" : "IconLabel/text__binding",
+      "status" : "skipped"
+    },
+    {
       "detail" : "",
       "id" : "IconLabel/selected__true",
       "screenshot" : "artifacts/ios/IconLabel_selected__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "IconLabel/selected__alias_isOn",
+      "screenshot" : "artifacts/ios/IconLabel_selected__alias_isOn.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "IconLabel/selected__false",
+      "screenshot" : "artifacts/ios/IconLabel_selected__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "IconLabel/selected__binding",
+      "screenshot" : "artifacts/ios/IconLabel_selected__binding.png",
       "status" : "pass"
     },
     {
@@ -3473,14 +5086,14 @@
     },
     {
       "detail" : "",
-      "id" : "IconLabel/iconPosition__left",
-      "screenshot" : "artifacts/ios/IconLabel_iconPosition__left.png",
+      "id" : "IconLabel/iconPosition__right",
+      "screenshot" : "artifacts/ios/IconLabel_iconPosition__right.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "IconLabel/iconPosition__right",
-      "screenshot" : "artifacts/ios/IconLabel_iconPosition__right.png",
+      "id" : "IconLabel/iconPosition__left",
+      "screenshot" : "artifacts/ios/IconLabel_iconPosition__left.png",
       "status" : "pass"
     },
     {
@@ -3503,13 +5116,24 @@
     },
     {
       "detail" : "",
+      "id" : "IconLabel/iconSize__static",
+      "screenshot" : "artifacts/ios/IconLabel_iconSize__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "Web/html__static",
       "screenshot" : "artifacts/ios/Web_html__static.png",
       "status" : "pass"
     },
     {
       "detail" : "not applicable to ios",
-      "id" : "Web/sandbox__static",
+      "id" : "Web/sandbox__false",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "Web/sandbox__true",
       "status" : "skipped"
     },
     {
@@ -3537,6 +5161,60 @@
     },
     {
       "detail" : "",
+      "id" : "SafeAreaView/safeAreaInsetPositions__alias_edges",
+      "screenshot" : "artifacts/ios/SafeAreaView_safeAreaInsetPositions__alias_edges.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SafeAreaView/direction__toptobottom",
+      "screenshot" : "artifacts/ios/SafeAreaView_direction__toptobottom.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SafeAreaView/direction__bottomtotop",
+      "screenshot" : "artifacts/ios/SafeAreaView_direction__bottomtotop.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SafeAreaView/direction__lefttoright",
+      "screenshot" : "artifacts/ios/SafeAreaView_direction__lefttoright.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SafeAreaView/direction__righttoleft",
+      "screenshot" : "artifacts/ios/SafeAreaView_direction__righttoleft.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SafeAreaView/direction__none",
+      "screenshot" : "artifacts/ios/SafeAreaView_direction__none.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SafeAreaView/gradient__static",
+      "screenshot" : "artifacts/ios/SafeAreaView_gradient__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SafeAreaView/spacing__static",
+      "screenshot" : "artifacts/ios/SafeAreaView_spacing__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "SafeAreaView/spacing__binding",
+      "screenshot" : "artifacts/ios/SafeAreaView_spacing__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "TabView/selectedIndex__static",
       "screenshot" : "artifacts/ios/TabView_selectedIndex__static.png",
       "status" : "pass"
@@ -3545,6 +5223,12 @@
       "detail" : "",
       "id" : "TabView/selectedIndex__alias_selectedTabIndex",
       "screenshot" : "artifacts/ios/TabView_selectedIndex__alias_selectedTabIndex.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TabView/selectedIndex__binding",
+      "screenshot" : "artifacts/ios/TabView_selectedIndex__binding.png",
       "status" : "pass"
     },
     {
@@ -3561,8 +5245,20 @@
     },
     {
       "detail" : "",
+      "id" : "TabView/tintColor__binding",
+      "screenshot" : "artifacts/ios/TabView_tintColor__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "TabView/unselectedColor__static",
       "screenshot" : "artifacts/ios/TabView_unselectedColor__static.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TabView/unselectedColor__binding",
+      "screenshot" : "artifacts/ios/TabView_unselectedColor__binding.png",
       "status" : "pass"
     },
     {
@@ -3573,20 +5269,38 @@
     },
     {
       "detail" : "",
+      "id" : "TabView/tabBarBackground__binding",
+      "screenshot" : "artifacts/ios/TabView_tabBarBackground__binding.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TabView/showLabels__false",
+      "screenshot" : "artifacts/ios/TabView_showLabels__false.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "TabView/showLabels__true",
       "screenshot" : "artifacts/ios/TabView_showLabels__true.png",
       "status" : "pass"
     },
     {
       "detail" : "",
-      "id" : "__control/Blur",
-      "screenshot" : "artifacts/ios/control_Blur.png",
+      "id" : "__control/Blur__root.backdrop-b5f80259",
+      "screenshot" : "artifacts/ios/control_Blur__root.backdrop-b5f80259.png",
       "status" : "pass"
     },
     {
       "detail" : "",
       "id" : "__control/Button",
       "screenshot" : "artifacts/ios/control_Button.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Button__enabled-False",
+      "screenshot" : "artifacts/ios/control_Button__enabled-False.png",
       "status" : "pass"
     },
     {
@@ -3621,6 +5335,36 @@
     },
     {
       "detail" : "",
+      "id" : "__control/Collection__columns-2",
+      "screenshot" : "artifacts/ios/control_Collection__columns-2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Collection__no-sections",
+      "screenshot" : "artifacts/ios/control_Collection__no-sections.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Collection__orientation-horizontal",
+      "screenshot" : "artifacts/ios/control_Collection__orientation-horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Collection__scrollTo--scrollTarget",
+      "screenshot" : "artifacts/ios/control_Collection__scrollTo--scrollTarget.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Collection__width-150",
+      "screenshot" : "artifacts/ios/control_Collection__width-150.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/GradientView",
       "screenshot" : "artifacts/ios/control_GradientView.png",
       "status" : "pass"
@@ -3639,8 +5383,26 @@
     },
     {
       "detail" : "",
+      "id" : "__control/IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000",
+      "screenshot" : "artifacts/ios/control_IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/IconLabel__selected-True",
+      "screenshot" : "artifacts/ios/control_IconLabel__selected-True.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/Image",
       "screenshot" : "artifacts/ios/control_Image.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Image__no-src",
+      "screenshot" : "artifacts/ios/control_Image__no-src.png",
       "status" : "pass"
     },
     {
@@ -3657,8 +5419,50 @@
     },
     {
       "detail" : "",
+      "id" : "__control/Indicator__animating-False",
+      "screenshot" : "artifacts/ios/control_Indicator__animating-False.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/Label",
       "screenshot" : "artifacts/ios/control_Label.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Label__autoShrink-True_height-40_text-1d8efd05",
+      "screenshot" : "artifacts/ios/control_Label__autoShrink-True_height-40_text-1d8efd05.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Label__enabled-False",
+      "screenshot" : "artifacts/ios/control_Label__enabled-False.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Label__highlightAttributes-cb049517",
+      "screenshot" : "artifacts/ios/control_Label__highlightAttributes-cb049517.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Label__hint-Conformance-Hint_hintAttributes--fontSize-12_no-text",
+      "screenshot" : "artifacts/ios/control_Label__hint-Conformance-Hint_hintAttributes--fontSize-12_no-text.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Label__hintAttributes--fontSize-12_no-text",
+      "screenshot" : "artifacts/ios/control_Label__hintAttributes--fontSize-12_no-text.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Label__partialAttributes-5561bca6",
+      "screenshot" : "artifacts/ios/control_Label__partialAttributes-5561bca6.png",
       "status" : "pass"
     },
     {
@@ -3669,8 +5473,43 @@
     },
     {
       "detail" : "",
+      "id" : "__control/Label__text-1d8efd05",
+      "screenshot" : "artifacts/ios/control_Label__text-1d8efd05.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Label__text-5ed92def",
+      "screenshot" : "artifacts/ios/control_Label__text-5ed92def.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "__control/Label__text-sample-conformance-text",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
       "id" : "__control/NetworkImage",
       "screenshot" : "artifacts/ios/control_NetworkImage.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/NetworkImage__no-defaultImage",
+      "screenshot" : "artifacts/ios/control_NetworkImage__no-defaultImage.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/NetworkImage__no-defaultImage_url-87f5e17b",
+      "screenshot" : "artifacts/ios/control_NetworkImage__no-defaultImage_url-87f5e17b.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/NetworkImage__no-defaultImage_url-efd3e3a7",
+      "screenshot" : "artifacts/ios/control_NetworkImage__no-defaultImage_url-efd3e3a7.png",
       "status" : "pass"
     },
     {
@@ -3699,6 +5538,24 @@
     },
     {
       "detail" : "",
+      "id" : "__control/Radio__group-conformance-group",
+      "screenshot" : "artifacts/ios/control_Radio__group-conformance-group.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Radio__items--Alpha-Beta-Gamma",
+      "screenshot" : "artifacts/ios/control_Radio__items--Alpha-Beta-Gamma.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Radio__no-text",
+      "screenshot" : "artifacts/ios/control_Radio__no-text.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/Radio__orientation-horizontal",
       "screenshot" : "artifacts/ios/control_Radio__orientation-horizontal.png",
       "status" : "pass"
@@ -3711,8 +5568,38 @@
     },
     {
       "detail" : "",
+      "id" : "__control/SafeAreaView__height-200_width-200",
+      "screenshot" : "artifacts/ios/control_SafeAreaView__height-200_width-200.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/SafeAreaView__orientation-horizontal",
+      "screenshot" : "artifacts/ios/control_SafeAreaView__orientation-horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/SafeAreaView__orientation-vertical",
+      "screenshot" : "artifacts/ios/control_SafeAreaView__orientation-vertical.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/ScrollView",
       "screenshot" : "artifacts/ios/control_ScrollView.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/ScrollView__child-50058fa9",
+      "screenshot" : "artifacts/ios/control_ScrollView__child-50058fa9.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/ScrollView__orientation-horizontal",
+      "screenshot" : "artifacts/ios/control_ScrollView__orientation-horizontal.png",
       "status" : "pass"
     },
     {
@@ -3729,20 +5616,20 @@
     },
     {
       "detail" : "",
-      "id" : "__control/SelectBox__datePickerMode-time_selectItemType-Date",
-      "screenshot" : "artifacts/ios/control_SelectBox__datePickerMode-time_selectItemType-Date.png",
+      "id" : "__control/SelectBox__datePickerMode-date_selectItemType-Date",
+      "screenshot" : "artifacts/ios/control_SelectBox__datePickerMode-date_selectItemType-Date.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/SelectBox__prompt-Choose",
+      "screenshot" : "artifacts/ios/control_SelectBox__prompt-Choose.png",
       "status" : "pass"
     },
     {
       "detail" : "",
       "id" : "__control/SelectBox__selectItemType-Date",
       "screenshot" : "artifacts/ios/control_SelectBox__selectItemType-Date.png",
-      "status" : "pass"
-    },
-    {
-      "detail" : "",
-      "id" : "__control/SelectBox__anchored",
-      "screenshot" : "artifacts/ios/control_SelectBox__anchored.png",
       "status" : "pass"
     },
     {
@@ -3770,6 +5657,11 @@
       "status" : "pass"
     },
     {
+      "detail" : "not applicable to ios",
+      "id" : "__control/Switch__labelAttributes--text-Sample",
+      "status" : "skipped"
+    },
+    {
       "detail" : "",
       "id" : "__control/TabView",
       "screenshot" : "artifacts/ios/control_TabView.png",
@@ -3779,6 +5671,17 @@
       "detail" : "",
       "id" : "__control/TextField",
       "screenshot" : "artifacts/ios/control_TextField.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "__control/TextField__enabled-False",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/TextField__no-hint",
+      "screenshot" : "artifacts/ios/control_TextField__no-hint.png",
       "status" : "pass"
     },
     {
@@ -3800,6 +5703,33 @@
       "status" : "pass"
     },
     {
+      "detail" : "not applicable to ios",
+      "id" : "__control/TextView__enabled-False",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/TextView__hint-507236bd",
+      "screenshot" : "artifacts/ios/control_TextView__hint-507236bd.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "__control/TextView__no-height",
+      "status" : "skipped"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/TextView__no-hint",
+      "screenshot" : "artifacts/ios/control_TextView__no-hint.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "not applicable to ios",
+      "id" : "__control/TextView__no-width",
+      "status" : "skipped"
+    },
+    {
       "detail" : "",
       "id" : "__control/TextView__text-Sample",
       "screenshot" : "artifacts/ios/control_TextView__text-Sample.png",
@@ -3813,8 +5743,74 @@
     },
     {
       "detail" : "",
+      "id" : "__control/View__borderColor--FF0000",
+      "screenshot" : "artifacts/ios/control_View__borderColor--FF0000.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__borderColor--FF0000_borderWidth-2",
+      "screenshot" : "artifacts/ios/control_View__borderColor--FF0000_borderWidth-2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__borderWidth-2",
+      "screenshot" : "artifacts/ios/control_View__borderWidth-2.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__child-1954985b_orientation-horizontal_width-300",
+      "screenshot" : "artifacts/ios/control_View__child-1954985b_orientation-horizontal_width-300.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__child-aec83a5f_no-orientation",
+      "screenshot" : "artifacts/ios/control_View__child-aec83a5f_no-orientation.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__gradient--FF0000-0000FF",
+      "screenshot" : "artifacts/ios/control_View__gradient--FF0000-0000FF.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__height-wrapContent",
+      "screenshot" : "artifacts/ios/control_View__height-wrapContent.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__height-wrapContent_orientation-horizontal",
+      "screenshot" : "artifacts/ios/control_View__height-wrapContent_orientation-horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__highlightBackground--FF0000",
+      "screenshot" : "artifacts/ios/control_View__highlightBackground--FF0000.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/View__orientation-horizontal",
       "screenshot" : "artifacts/ios/control_View__orientation-horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__orientation-horizontal_width-300",
+      "screenshot" : "artifacts/ios/control_View__orientation-horizontal_width-300.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__orientation-horizontal_width-wrapContent",
+      "screenshot" : "artifacts/ios/control_View__orientation-horizontal_width-wrapContent.png",
       "status" : "pass"
     },
     {
@@ -3825,8 +5821,56 @@
     },
     {
       "detail" : "",
+      "id" : "__control/View__root.backdrop-309d3595_root.orientation-horizontal",
+      "screenshot" : "artifacts/ios/control_View__root.backdrop-309d3595_root.orientation-horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__root.gravity-bottom",
+      "screenshot" : "artifacts/ios/control_View__root.gravity-bottom.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__root.gravity-right",
+      "screenshot" : "artifacts/ios/control_View__root.gravity-right.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__root.orientation-horizontal",
+      "screenshot" : "artifacts/ios/control_View__root.orientation-horizontal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__root.orientation-vertical",
+      "screenshot" : "artifacts/ios/control_View__root.orientation-vertical.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__width-wrapContent",
+      "screenshot" : "artifacts/ios/control_View__width-wrapContent.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/View__anchored",
       "screenshot" : "artifacts/ios/control_View__anchored.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__anchored__height-50_width-50",
+      "screenshot" : "artifacts/ios/control_View__anchored__height-50_width-50.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/View__anchored__root.anchorLast-True",
+      "screenshot" : "artifacts/ios/control_View__anchored__root.anchorLast-True.png",
       "status" : "pass"
     },
     {
@@ -3928,10 +5972,22 @@
       "id" : "common/maxHeight__fill_clamp",
       "screenshot" : "artifacts/ios/common_maxHeight__fill_clamp.png",
       "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Label__wrap-max",
+      "screenshot" : "artifacts/ios/control_Label__wrap-max.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/maxWidth__wrap",
+      "screenshot" : "artifacts/ios/common_maxWidth__wrap.png",
+      "status" : "pass"
     }
   ],
   "runner" : {
     "name" : "xcuitest",
-    "version" : "ios-18.6"
+    "version" : "ios-26.2"
   }
 }
