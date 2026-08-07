@@ -569,3 +569,32 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
     end
   end
 end
+
+# offsetX / offsetY were interpolated into the transform as literals, so a
+# bound offset emitted `translate(@{x}px, 0px)` — a string CSS discards, i.e.
+# the element never moved. Same defect class plan 41 catalogued as
+# bound-literal-leak; the arithmetic belongs in the emitted expression.
+RSpec.describe RjuiTools::React::Converters::BaseConverter, 'bound offset' do
+  def style_for(attrs)
+    c = RjuiTools::React::Converters::ViewConverter.new(
+      { 'class' => 'View', 'id' => 'v' }.merge(attrs), { 'use_tailwind' => true }
+    )
+    c.send(:build_class_name)
+    c.send(:build_style_attr)
+  end
+
+  it 'emits a runtime expression for a bound offset' do
+    style = style_for('offsetX' => '@{dx}', 'offsetY' => '@{dy}')
+    expect(style).to include('transform: `translate(${data.dx}px, ${data.dy}px)`')
+    expect(style).not_to include('@{')
+  end
+
+  it 'keeps a static offset byte-identical' do
+    expect(style_for('offsetX' => 10, 'offsetY' => 20))
+      .to include("transform: 'translate(10px, 20px)'")
+  end
+
+  it 'mixes a bound axis with a static one' do
+    expect(style_for('offsetX' => '@{dx}')).to include('translate(${data.dx}px, ${0}px)')
+  end
+end

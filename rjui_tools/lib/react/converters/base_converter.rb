@@ -545,7 +545,18 @@ module RjuiTools
           if attributes['offsetX'] || attributes['offsetY']
             offset_x = attributes['offsetX'] || 0
             offset_y = attributes['offsetY'] || 0
-            @dynamic_styles['transform'] = "'translate(#{offset_x}px, #{offset_y}px)'"
+            # A bound offset used to be interpolated as a literal, so the style
+            # read `translate(@{x}px, 0px)` — a string CSS discards, i.e. the
+            # element never moved. The arithmetic belongs in the emitted
+            # expression, the same shape every other bound length takes.
+            x_expr = bound_value_expr(offset_x)
+            y_expr = bound_value_expr(offset_y)
+            @dynamic_styles['transform'] =
+              if x_expr || y_expr
+                "`translate(${#{x_expr || offset_x}}px, ${#{y_expr || offset_y}}px)`"
+              else
+                "'translate(#{offset_x}px, #{offset_y}px)'"
+              end
           end
 
           # Tint color (accent color for interactive elements)

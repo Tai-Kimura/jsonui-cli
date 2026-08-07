@@ -175,7 +175,21 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       tintColor
       value
     ],
-    'scroll_view_converter.rb' => %w[bounces contentInset contentInsetAdjustmentBehavior horizontalScroll maxZoom orientation paging scrollBehavior scrollEnabled scrollMode showsHorizontalScrollIndicator showsVerticalScrollIndicator],
+    'scroll_view_converter.rb' => %w[
+      bounces
+      contentInset
+      contentInsetAdjustmentBehavior
+      defaultScrollAnchor
+      horizontalScroll
+      maxZoom
+      orientation
+      paging
+      scrollBehavior
+      scrollEnabled
+      scrollMode
+      showsHorizontalScrollIndicator
+      showsVerticalScrollIndicator
+    ],
     'segment_converter.rb' => %w[
       backgroundColor
       enabled
@@ -194,7 +208,49 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'slider_converter.rb' => %w[enabled maximum maximumTrackTintColor minimum minimumTrackTintColor onValueChange progressTintColor range step tintColor trackTintColor value],
     'switch_converter.rb' => %w[checked enabled isOn label offTintColor onTintColor onValueChange text thumbTintColor tint tintColor trackTintColor value],
     'tab_view_converter.rb' => %w[background height onValueChange selectedIndex showLabels tabBarBackground tabs tintColor unselectedColor width],
-    'text_field_converter.rb' => %w[autoFocus autocapitalizationType autocorrectionType background becomeFirstResponder borderStyle borderWidth caretAttributes contentType cornerRadius disabledBackground editable enabled fontColor hint hintColor hintFont hintFontSize input maxLength name nextFocus onBeginEditing onBlur onChange onEndEditing onFocus onSubmit onTextChange padding pattern placeholder placeholderColor readOnly required returnKeyType secure shadow text textPaddingLeft],
+    'text_field_converter.rb' => %w[
+      autoFocus
+      autocapitalizationType
+      autocorrectionType
+      background
+      becomeFirstResponder
+      borderStyle
+      borderWidth
+      caretAttributes
+      contentType
+      cornerRadius
+      disabledBackground
+      editable
+      enabled
+      fontColor
+      hint
+      hintColor
+      hintFont
+      hintFontSize
+      hintLineHeightMultiple
+      input
+      maxLength
+      name
+      nextFocus
+      onBeginEditing
+      onBlur
+      onChange
+      onEndEditing
+      onFocus
+      onSubmit
+      onTextChange
+      padding
+      pattern
+      placeholder
+      placeholderColor
+      readOnly
+      required
+      returnKeyType
+      secure
+      shadow
+      text
+      textPaddingLeft
+    ],
     'text_view_converter.rb' => %w[
       autoFocus
       background

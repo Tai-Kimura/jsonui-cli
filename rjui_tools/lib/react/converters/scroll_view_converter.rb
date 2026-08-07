@@ -10,7 +10,7 @@ module RjuiTools
           class_name = build_class_name
           style_attr = build_style_attr
           children = convert_children(indent)
-          id_attr = build_id_attr
+          id_attr = "#{build_id_attr}#{build_scroll_ref_attr}"
           testid_attr = build_testid_attr
           tag_attr = build_tag_attr
 
@@ -29,6 +29,22 @@ module RjuiTools
         end
 
         protected
+
+        # `defaultScrollAnchor` says where the view STARTS, which no CSS
+        # property expresses — the scroll offset has to be written once on
+        # mount. The generator hoists the ref and the effect (the same
+        # `applyCollectionDefaultAnchor` helper a Collection uses: it takes any
+        # scrollable element), and this attaches the ref they address. A
+        # literal id is the contract between the two halves — MUST stay in sync
+        # with ReactGenerator::SCROLL_CONTAINER_TYPES.
+        def build_scroll_ref_attr
+          return '' unless attributes['defaultScrollAnchor']
+
+          id = extract_id
+          return '' unless id.is_a?(String) && !id.empty? && !id.include?('@{')
+
+          " ref={#{snake_to_camel_id(id)}Ref}"
+        end
 
         def build_class_name
           classes = [super]

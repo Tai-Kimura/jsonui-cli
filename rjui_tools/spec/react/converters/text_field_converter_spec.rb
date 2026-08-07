@@ -594,3 +594,21 @@ RSpec.describe RjuiTools::React::Converters::TextFieldConverter, 'nextFocus' do
     expect(field({})).not_to include('onKeyDown')
   end
 end
+
+# Declared for TextField as well as TextView (SSoT), and only TextView read it.
+# `::placeholder` is a pseudo-element, so the class variant is the only surface
+# that reaches it — the same one TextViewConverter uses.
+RSpec.describe RjuiTools::React::Converters::TextFieldConverter, 'hintLineHeightMultiple' do
+  def field(extra)
+    described_class.new({ 'class' => 'TextField', 'id' => 'email', 'hint' => 'Sample' }.merge(extra),
+                        { 'use_tailwind' => true }).convert(2)
+  end
+
+  it 'carries the placeholder line height' do
+    expect(field('hintLineHeightMultiple' => 3)).to include('placeholder:leading-[3]')
+  end
+
+  it 'emits nothing when it is not declared' do
+    expect(field({})).not_to include('placeholder:leading')
+  end
+end

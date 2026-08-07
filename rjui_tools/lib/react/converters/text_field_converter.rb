@@ -87,6 +87,12 @@ module RjuiTools
           if (hint_font_size = attributes['hintFontSize'])
             classes << "placeholder:[font-size:#{hint_font_size}px]"
           end
+          # Declared for TextField as well as TextView, and only TextView read
+          # it — the same pseudo-element reasoning applies, so it takes the
+          # same variant class TextViewConverter emits.
+          if (hint_leading = attributes['hintLineHeightMultiple'])
+            classes << "placeholder:leading-[#{hint_leading}]"
+          end
 
           # Disabled state
           if attributes['enabled'] == false || attributes['enabled'].is_a?(String)

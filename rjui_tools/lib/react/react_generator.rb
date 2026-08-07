@@ -784,6 +784,10 @@ module RjuiTools
           "[#{spec_literal}]), []);"
       end
 
+      #: Scroll containers that are not Collections. They get the anchor effect
+      #: only — MUST stay in sync with ScrollViewConverter#build_scroll_ref_attr.
+      SCROLL_CONTAINER_TYPES = %w[ScrollView Scroll].freeze
+
       # Collections declaring scroll control (scrollTo / defaultScrollAnchor /
       # currentPage / onItemAppear). Each one gets a hoisted ref plus the
       # effects below, matching the ref CollectionConverter attaches. MUST stay
@@ -794,16 +798,24 @@ module RjuiTools
 
         if json.is_a?(Hash)
           id = json['id']
-          if json['type'] == 'Collection' && id.is_a?(String) && !id.empty? && !id.include?('@{')
-            scroll_to = json['scrollTo']
+          # A ScrollView is a scroll container too, and `defaultScrollAnchor`
+          # is declared for it — the anchor helper takes any scrollable
+          # element, so it starts where the layout says without a second
+          # implementation. The other three are Collection-only (they address
+          # ITEMS; a ScrollView has none).
+          scrollable = json['type'] == 'Collection' ||
+                       (SCROLL_CONTAINER_TYPES.include?(json['type'].to_s) && json['defaultScrollAnchor'])
+          if scrollable && id.is_a?(String) && !id.empty? && !id.include?('@{')
+            collection = json['type'] == 'Collection'
+            scroll_to = collection ? json['scrollTo'] : nil
             default_anchor = json['defaultScrollAnchor']
-            current_page = json['currentPage']
-            on_item_appear = json['onItemAppear']
+            current_page = collection ? json['currentPage'] : nil
+            on_item_appear = collection ? json['onItemAppear'] : nil
             if scroll_to || default_anchor || current_page || on_item_appear
               layout = json['orientation'] || json['layout'] || json['scrollDirection'] || 'vertical'
               found << {
                 camel: snake_to_camel_id(id),
-                horizontal: layout.to_s.downcase == 'horizontal',
+                horizontal: layout.to_s.downcase == 'horizontal' || !!json['horizontalScroll'],
                 items: json['items'],
                 scroll_to: scroll_to,
                 scroll_anchor: json['scrollAnchor'],

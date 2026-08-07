@@ -565,3 +565,45 @@ RSpec.describe RjuiTools::React::ReactGenerator, 'autoShrink' do
     expect(out).not_to include('useRef<')
   end
 end
+
+# `defaultScrollAnchor` is declared for ScrollView as well as Collection, and
+# only Collection read it. Where a scroll view STARTS is not a CSS property —
+# the offset has to be written once on mount — so the ScrollView reuses the
+# Collection anchor helper (it takes any scrollable element).
+RSpec.describe RjuiTools::React::ReactGenerator, 'ScrollView defaultScrollAnchor' do
+  let(:generator) do
+    described_class.new({ 'use_tailwind' => true, 'typescript' => true,
+                          'layouts_directory' => '/tmp/x', 'generated_directory' => '/tmp/x/out' })
+  end
+
+  def screen(node)
+    generator.generate('AnchorScreen', { 'type' => 'View', 'child' => [node] })
+  end
+
+  it 'hoists the anchor effect for a ScrollView' do
+    out = screen({ 'type' => 'ScrollView', 'id' => 'feed', 'defaultScrollAnchor' => 'bottom',
+                   'child' => [{ 'type' => 'View', 'id' => 'c', 'height' => 600 }] })
+    expect(out).to include("import { applyCollectionDefaultAnchor } from '@/generated/collectionScroll';")
+    expect(out).to include("useEffect(() => { applyCollectionDefaultAnchor(feedRef.current, 'bottom', false); }, []);")
+    expect(out).to include('ref={feedRef}')
+  end
+
+  it 'reads the horizontal axis from horizontalScroll as well as orientation' do
+    out = screen({ 'type' => 'ScrollView', 'id' => 'feed', 'defaultScrollAnchor' => 'bottom',
+                   'horizontalScroll' => true })
+    expect(out).to include("applyCollectionDefaultAnchor(feedRef.current, 'bottom', true)")
+  end
+
+  # The item-addressing helpers are Collection-only: a ScrollView has no items.
+  it 'hoists nothing else for a ScrollView' do
+    out = screen({ 'type' => 'ScrollView', 'id' => 'feed', 'defaultScrollAnchor' => 'top',
+                   'scrollTo' => '@{index}', 'currentPage' => '@{page}' })
+    expect(out).not_to include('scrollCollectionToItem')
+    expect(out).not_to include('currentCollectionPage')
+  end
+
+  it 'hoists nothing for a ScrollView that does not declare an anchor' do
+    out = screen({ 'type' => 'ScrollView', 'id' => 'feed' })
+    expect(out).not_to include('applyCollectionDefaultAnchor')
+  end
+end
