@@ -15,12 +15,14 @@ RSpec.describe SjuiTools::SwiftUI::Views::BlurConverter do
     context 'with no children' do
       let(:component) { { 'type' => 'Blur' } }
 
-      it 'generates Color.clear as placeholder' do
+      it 'generates Color.clear as placeholder with the default effect' do
         converter = described_class.new(component)
         code = converter.convert
 
         expect(code).to include('Color.clear')
-        expect(code).to include('.background(.ultraThinMaterial)')
+        # An absent effectStyle rides through the library table, which
+        # defaults it to `regular` — same resolution as the dynamic path.
+        expect(code).to include('.jsonUIVisualEffect(nil)')
       end
     end
 
@@ -32,11 +34,11 @@ RSpec.describe SjuiTools::SwiftUI::Views::BlurConverter do
         }
       end
 
-      it 'applies ultraThinMaterial background' do
+      it 'ignores the style-file name and applies the default effect' do
         converter = described_class.new(component)
         code = converter.convert
 
-        expect(code).to include('.background(.ultraThinMaterial)')
+        expect(code).to include('.jsonUIVisualEffect(nil)')
       end
     end
 
@@ -52,11 +54,16 @@ RSpec.describe SjuiTools::SwiftUI::Views::BlurConverter do
         }
       end
 
-      it 'adds dark color scheme' do
+      it 'routes the declared value through the library table' do
         converter = described_class.new(component)
         code = converter.convert
 
-        expect(code).to include('.preferredColorScheme(.dark)')
+        # `jsonUIVisualEffect` resolves material + tint + colour scheme from
+        # the ONE `VisualEffectStyle` table the dynamic BlurConverter reads,
+        # so the two ios paths cannot answer differently. The old emit
+        # hardcoded `.ultraThinMaterial` for every value.
+        expect(code).to include('.jsonUIVisualEffect("Dark")')
+        expect(code).not_to include('.background(.ultraThinMaterial)')
       end
     end
 
@@ -68,20 +75,22 @@ RSpec.describe SjuiTools::SwiftUI::Views::BlurConverter do
         }
       end
 
-      it 'adds light color scheme' do
+      it 'routes the declared value through the library table' do
         converter = described_class.new(component)
         code = converter.convert
 
-        expect(code).to include('.preferredColorScheme(.light)')
+        expect(code).to include('.jsonUIVisualEffect("Light")')
       end
     end
 
     context 'with effectStyle ExtraLight' do
       let(:component) { { 'type' => 'Blur', 'effectStyle' => 'ExtraLight' } }
 
-      it 'is a light scheme, matching the Dynamic runtime' do
+      it 'passes the declared spelling through unnormalised' do
+        # Case/alias normalisation lives in VisualEffectStyle.from — the emit
+        # forwards the layout's spelling verbatim, like the dynamic path.
         expect(described_class.new(component).convert)
-          .to include('.preferredColorScheme(.light)')
+          .to include('.jsonUIVisualEffect("ExtraLight")')
       end
     end
 
@@ -91,7 +100,8 @@ RSpec.describe SjuiTools::SwiftUI::Views::BlurConverter do
       it 'does not treat the style file name as a blur appearance' do
         code = described_class.new(component).convert
 
-        expect(code).not_to include('.preferredColorScheme')
+        expect(code).to include('.jsonUIVisualEffect(nil)')
+        expect(code).not_to include('glass_panel')
       end
     end
 

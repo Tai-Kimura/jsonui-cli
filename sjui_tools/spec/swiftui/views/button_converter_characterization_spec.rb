@@ -3,7 +3,7 @@
 require 'swiftui/views/button_converter'
 
 # Characterization of ButtonConverter emit paths that button_converter_spec
-# does not exercise: partialAttributes, fontFamily binding, the legacy `font`
+# does not exercise: partialAttributes, fontFamily forwarding, the legacy `font`
 # weight spelling, and per-side padding assembly.
 RSpec.describe SjuiTools::SwiftUI::Views::ButtonConverter do
   before(:all) do
@@ -40,14 +40,20 @@ RSpec.describe SjuiTools::SwiftUI::Views::ButtonConverter do
       expect(code).to include('underline: true')
     end
 
-    it 'does not forward fontFamily (StateAwareButtonView has no such parameter)' do
-      # The ios Button face has not implemented fontFamily: the dynamic
-      # ButtonConverter never reads it and StateAwareButtonView's initializer
-      # has no parameter for it. The old pass-through was a compile error the
-      # first Button/fontFamily fixture exposed ("extra argument 'fontFamily'
-      # in call", codegen host). When the face lands in the library, this
-      # spec flips back to asserting the binding is forwarded.
-      expect(code).not_to include('fontFamily:')
+    it 'forwards a bound fontFamily as a read-only data access' do
+      # The ios Button face implements fontFamily: StateAwareButtonView takes
+      # the parameter and routes it through PartialAttributedText's FontSpec
+      # path (family + weight + size to Configuration.fontProvider). The
+      # parameter is String?, not Binding<String>, so the binding forwards as
+      # `data.` — never `$data.`.
+      expect(code).to include('fontFamily: data.fam,')
+      expect(code).not_to include('$data.fam')
+    end
+
+    it 'forwards a literal fontFamily as a quoted string' do
+      literal = convert('type' => 'Button', 'text' => 'F',
+                        'fontFamily' => 'Noto Sans JP')
+      expect(literal).to include('fontFamily: "Noto Sans JP",')
     end
 
     # `None` is the lineStyle enum's spelling for "no line"; the read site

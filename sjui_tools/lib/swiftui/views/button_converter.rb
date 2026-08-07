@@ -170,13 +170,18 @@ module SjuiTools
             elsif @component['font']
               add_line "fontWeight: \"#{@component['font']}\","
             end
-            # fontFamily is NOT forwarded: StateAwareButtonView takes no such
-            # parameter and the dynamic ButtonConverter does not read it
-            # either — the ios Button face has not implemented the attribute.
-            # Emitting the argument anyway was a compile error the first
-            # Button/fontFamily fixture exposed ("extra argument 'fontFamily'
-            # in call"). When the face lands (library + dynamic + here, all
-            # three together), restore the pass-through.
+            # fontFamily rides into StateAwareButtonView, which routes it
+            # through PartialAttributedText's FontSpec path (family + weight +
+            # size to Configuration.fontProvider) — the declared semantics.
+            # Read-only binding: the parameter is a String?, not a Binding.
+            if @component['fontFamily']
+              if is_binding?(@component['fontFamily'])
+                prop = extract_binding_property(@component['fontFamily'])
+                add_line "fontFamily: data.#{prop},"
+              else
+                add_line "fontFamily: \"#{@component['fontFamily']}\","
+              end
+            end
 
             # Color properties
             if @component['fontColor']
