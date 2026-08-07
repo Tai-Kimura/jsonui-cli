@@ -663,7 +663,8 @@
         "boolean",
         "binding"
       ],
-      "description": "Whether to clip content to bounds (binding supported)"
+      "description": "Whether to clip content to bounds (binding supported). Defaults to FALSE: content is not clipped unless the layout asks. A clipping default would silently destroy a child's `shadow` and would make `clipToBounds: true` inert on the platform that already clips. Full ruling in attribute_semantics.json -> clipToBounds; do not restate it in toolchain comments.",
+      "default": false
     },
     "onclick": {
       "type": [
@@ -856,7 +857,7 @@
           "systemChromeMaterial": "Chrome"
         },
         "default": "Regular",
-        "description": "Visual effect (blur) style. Measured across the three converters 2026-08-05: the UIKit trio Light/Dark/ExtraLight is what all three map (sjui blur_converter.rb:71, kjui blurview_component.rb:38, rjui blur_converter.rb:98), and web additionally maps the SwiftUI material names. Every converter downcases before matching, so the casing here is presentational. `Regular` is the fallback all three already use for an unrecognised or absent value, hence the declared default. Enumerated because it was declared as a bare string while Blur.effectStyle — the same concept on the component that owns it — carried the enum: the split let the common spelling reach the render stage unvalidated, which is what the codegen-effect gate reported once the mode audit put these fixtures back in scope."
+        "description": "Visual effect (blur) style. Measured across the three converters 2026-08-05: the UIKit trio Light/Dark/ExtraLight is what all three map (sjui blur_converter.rb:71, kjui blurview_component.rb:38, rjui blur_converter.rb:98), and web additionally maps the SwiftUI material names. Every converter downcases before matching, so the casing here is presentational. `Regular` is the fallback all three already use for an unrecognised or absent value, hence the declared default. Enumerated because it was declared as a bare string while Blur.effectStyle — the same concept on the component that owns it — carried the enum: the split let the common spelling reach the render stage unvalidated, which is what the codegen-effect gate reported once the mode audit put these fixtures back in scope. Declared on `common`, so it applies on all three platforms and not only on Blur; the ios material/tint table is pinned in attribute_semantics.json -> effectStyle, which is also where the system* valueAliases and the tint layer order are ruled."
       },
     "tag": {
       "type": [
@@ -1303,7 +1304,7 @@
     },
     "autoShrink": {
       "type": "boolean",
-      "description": "Enable auto-shrink"
+      "description": "Enable auto-shrink. Active only on a bounded axis (explicit size, matchParent, or a max bound) — a no-op under wrapContent, which grows to the content and leaves nothing to shrink into. Full ruling in attribute_semantics.json -> autoShrink."
     },
     "minimumScaleFactor": {
       "type": [
@@ -2721,7 +2722,7 @@
         "string",
         "binding"
       ],
-      "description": "Initial selected date (yyyy-MM-dd format, two-way binding)"
+      "description": "Initial selected date (yyyy-MM-dd format, two-way binding). No `default`: when it is absent no initial selection has been stated, and the closed face shows the prompt / hint / placeholder rather than today's date. Full ruling in attribute_semantics.json -> selectBoxDate."
     },
     "datePickerMode": {
       "type": "string",
@@ -4280,7 +4281,7 @@
     },
     "hidesWhenStopped": {
       "type": "boolean",
-      "description": "Hide when stopped",
+      "description": "Hide when stopped. Decides SPACE: `true` collapses the stopped indicator out of the layout, `false` keeps it drawn AND laid out. Full ruling in attribute_semantics.json -> indicatorStopped.",
       "platform": "swift",
       "mode": "swiftui"
     }

@@ -18,7 +18,7 @@ module JsonUI
         { name: 'animating', kind: :boolean, bindable: true }.freeze,
         # Indicator color - hex string or color name from colors.json (binding supported). `tint` folds here (sjui indicator_converter.rb:77 reads `color || tintColor || tint`).
         { name: 'color', kind: :string, bindable: true, aliases: ['tint'].freeze }.freeze,
-        # Hide when stopped
+        # Hide when stopped. Decides SPACE: `true` collapses the stopped indicator out of the layout, `false` keeps it drawn AND laid out. Full ruling in attribute_semantics.json -> indicatorStopped.
         { name: 'hidesWhenStopped', kind: :boolean }.freeze,
         # Indicator style
         { name: 'indicatorStyle', kind: :enum, values: ['medium', 'large'].freeze }.freeze,

@@ -14,7 +14,7 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
-        # Enable auto-shrink
+        # Enable auto-shrink. Active only on a bounded axis (explicit size, matchParent, or a max bound) — a no-op under wrapContent, which grows to the content and leaves nothing to shrink into. Full ruling in attribute_semantics.json -> autoShrink.
         { name: 'autoShrink', kind: :boolean }.freeze,
         # Font color when disabled - hex string or color name from colors.json (binding supported). Declared from the implementation, which already read it: sjui label_converter.rb:179-180 (plan 51-E).
         { name: 'disabledFontColor', kind: :string, bindable: true }.freeze,

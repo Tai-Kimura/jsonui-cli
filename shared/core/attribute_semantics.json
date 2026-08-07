@@ -50,12 +50,14 @@
     },
     "size": {
       "maxBoundsClampFill": "matchParent is clamped by maxWidth/maxHeight",
-      "ruling": "2026-08-03 user ruling (31 handoff): matchParent + maxWidth/maxHeight resolves to min(parent extent, bound) — the bound clamps the fill. Generated code is canonical (kjui emits the constraint before the fill since 847fb56); KJUI dynamic ordered fillMaxWidth before widthIn, ignoring the bound entirely — reordered in the 33 wave (bounds precede a fill, stay after an explicit size). The composite clamp fixtures below are the observable: a clamping platform renders visibly narrower/shorter than its filled control (active); ignoring the bound renders identically (inert). Companion precedence (2026-08-03 campaign adjudication): an EXPLICIT numeric dimension pins the constraints and its bound stays inert (kjui codegen 847fb56, ios 35efc2b, rjui skips max-* under an explicit size); bounds in turn clamp a FILL. Order: explicit > bounds > fill.",
+      "ruling": "2026-08-03 user ruling (31 handoff): matchParent + maxWidth/maxHeight resolves to min(parent extent, bound) — the bound clamps the fill. Generated code is canonical (kjui emits the constraint before the fill since 847fb56); KJUI dynamic ordered fillMaxWidth before widthIn, ignoring the bound entirely — reordered in the 33 wave (bounds precede a fill, stay after an explicit size). The composite clamp fixtures below are the observable: a clamping platform renders visibly narrower/shorter than its filled control (active); ignoring the bound renders identically (inert). Companion precedence (2026-08-03 campaign adjudication): an EXPLICIT numeric dimension pins the constraints and its bound stays inert (kjui codegen 847fb56, ios 35efc2b, rjui skips max-* under an explicit size); bounds in turn clamp a FILL. Order: explicit > bounds > fill. 2026-08-07 (plan 51-E), the wrap-bound family D asked for as the companion to maxBoundsClampFill. `width: wrapContent` says size to the content and `maxWidth` declares a MAXIMUM, not a target, so the two compose in only one way: the content sizes itself, the bound caps it, and content that would exceed the cap REFLOWS inside it rather than overflowing or stretching the box out to the bound. A short string under `maxWidth: 150` therefore stays narrow — the bound is not an ideal size, which is the half that only existed as a comment in sjui frame_helper.rb until now. ios already emits the canonical shape (`.frame(maxWidth: 150).fixedSize(horizontal: false, vertical: true)`), android `wrapContentWidth().widthIn(max=150)` and web `w-fit max-w-[150px]` agree. Note for fixture authors, from D's measurement: the generic maxWidth sweep cannot see this axis at all — a 40pt child in a 200pt box does not move by one pixel — so the observable needs REFLOWABLE text, which is why common/maxWidth__wrap is bespoke in bounds_fixtures.py.",
       "observable": {
         "common/maxWidth__fill_clamp": "uniformly-active",
-        "common/maxHeight__fill_clamp": "uniformly-active"
+        "common/maxHeight__fill_clamp": "uniformly-active",
+        "common/maxWidth__wrap": "uniformly-active"
       },
-      "explicitOverBounds": "an explicit numeric dimension wins over its min/max bound"
+      "explicitOverBounds": "an explicit numeric dimension wins over its min/max bound",
+      "wrapBoundReflow": "a wrapContent axis with a max bound reflows the content INSIDE the bound; the bound never becomes the ideal size"
     },
     "networkImage": {
       "noSrc": "defaultImage",
@@ -236,8 +238,9 @@
       "iosSwitchConstraint": "SwiftUI's Toggle has no paintable OFF-track surface; both ios paths degrade to .tint(), visible only while ON"
     },
     "fontProvider": {
-      "ruling": "Configuration.Font.fontProvider is the app's typeface-policy injection point, and the presence of `fontFamily` must NOT change whether it is consulted: every font resolution routes through the provider as FontSpec(family:, weight:, size:), family nil included. A path that bypasses the provider when family is absent makes the same attribute on the same screen pass or skip the app's policy depending on mode — the checked/unchecked shape this wave kept finding. The codegen path is the conforming side; SwiftJsonUI's dynamic path (DynamicDecodingHelper.fontFromComponent) is being aligned to it with a regression test (F, plan 49). A provider that ignores family nil sees no change; one that returns a custom face was silently falling back to the system font on dynamic — either way the contract converges on: the typeface does not depend on mode. Preserving a consumer's current look is not a reason to keep the bypass (canonical semantics win). 2026-08-06 ruling.",
-      "contract": "family presence must not gate provider consultation — every implementer, current or future, routes every FontSpec through fontProvider"
+      "ruling": "Configuration.Font.fontProvider is the app's typeface-policy injection point, and the presence of `fontFamily` must NOT change whether it is consulted: every font resolution routes through the provider as FontSpec(family:, weight:, size:), family nil included. A path that bypasses the provider when family is absent makes the same attribute on the same screen pass or skip the app's policy depending on mode — the checked/unchecked shape this wave kept finding. The codegen path is the conforming side; SwiftJsonUI's dynamic path (DynamicDecodingHelper.fontFromComponent) is being aligned to it with a regression test (F, plan 49). A provider that ignores family nil sees no change; one that returns a custom face was silently falling back to the system font on dynamic — either way the contract converges on: the typeface does not depend on mode. Preserving a consumer's current look is not a reason to keep the bypass (canonical semantics win). 2026-08-06 ruling. 2026-08-07 (plan 51-E), raised by G: android's codegen default provider (Configuration.defaultResolved) declares that it deliberately DISCARDS generic family names such as serif, while ios and web resolve them. The default provider must resolve them. `fontFamily` is declared as a family NAME with no enumeration and no carve-out, so a generic name is an ordinary value of the attribute, and every platform has real typefaces behind those names. The ruling above already fixed that a provider must always be CONSULTED; this fixes the other half — the DEFAULT provider must not silently narrow the attribute's value space. An app that wants to ignore generic families can still do it by injecting its own provider, which is what the injection point is for; the default is not the place to encode that policy, because it makes the same layout render a different typeface on android with nothing in the layout saying so. Owner: C (android codegen) and G (dynamic, in step).",
+      "contract": "family presence must not gate provider consultation — every implementer, current or future, routes every FontSpec through fontProvider",
+      "genericFamilies": "the default provider MUST resolve generic family names (serif, sans-serif, monospace, ...) — dropping them is not a policy decision the default gets to make"
     },
     "textDecoration": {
       "attributes": [
@@ -266,6 +269,86 @@
       ],
       "precedence": "gradient wins; background is the fallback fill, not a layer underneath it",
       "ruling": "2026-08-07 (plan 51-E), raised by B with both ios paths measured. `background` and `gradient` fill the SAME surface, and the SSoT declares no precedence between them. Ruled: a declared gradient WINS, and background is what fills the surface when no gradient is declared or the face cannot produce one. Two grounds, both internal. FIRST, `gradient` is the more specific statement about the fill — an array of stops against a single colour — and this SSoT has already ruled that a more specific request must never render less than the general one (see textDecoration, where the object face may not draw less than the boolean). SECOND, the alternative readings do not survive their own consequences: if background won, then declaring a gradient on a view that also has a background — the ordinary case — would make the gradient silently inert, which is precisely the ios defect B is holding open; and a LAYERED reading (background painted, gradient composited over it) would require an alpha/compositing model that neither declaration mentions, and would make `background` visible-but-covered, i.e. unobservable and untestable. One surface, one fill, most specific wins. MEASURED STATE 2026-08-07: ios currently renders a THIRD answer — the declared gradient is always invisible, on both the codegen and dynamic paths (B: MODIFIER_ORDER puts :background adjacent to :gradient for views with children, and a childless View becomes `Rectangle().fill(background)` and never reaches the order table at all). Both paths are B's and F's to close, together. The other two faces do not contradict this ruling because they do not implement this attribute pair: `View.gradient` is declared `platform: swift`, kjui reads `gradient` only in GradientView and in the FROZEN xml drawable path, and rjui expresses a gradient through the `background` string itself (CSS gradient syntax, base_converter.rb:180). GradientView is unaffected — there the gradient is the component's whole purpose.",
+      "observable": {}
+    },
+    "selectBoxDate": {
+      "attributes": [
+        "SelectBox.selectedDate",
+        "SelectBox.selectItemType",
+        "SelectBox.prompt"
+      ],
+      "closedFaceWithNoSelection": "the prompt / hint / placeholder — never a fabricated date",
+      "ruling": "2026-08-07 (plan 51-E), raised by F with B's measurement agreeing: with `selectItemType: Date` and no `selectedDate`, ios shows an empty closed face while android and web show the current date/time. IOS IS CANON. `selectedDate` declares NO `default`, and by this SSoT's convention that makes it a modifier rather than an attribute that brings a value into existence — its absence means no initial selection has been stated, not 'today'. SelectBox already declares prompt / hint / placeholder, which is the mechanism for \"nothing chosen yet\", so the closed face has something correct to show and does not need to invent one. Two consequences make the android/web behaviour actively wrong rather than merely different: it is unobservable (a caller cannot distinguish 'no selection' from 'the user picked today'), and `selectedDate` is declared two-way, so seeding it writes today's date back into the viewmodel on first render without the user ever opening the picker — a default that silently manufactures data. Owners: C (android) and A (web).",
+      "observable": {}
+    },
+    "clipToBounds": {
+      "default": false,
+      "ruling": "2026-08-07 (plan 51-E), from E2's measurement: web does not clip by default, android does. Declared `default: false`. Two internal grounds, neither a head count. FIRST, `shadow` is a common attribute and a clipping parent destroys a child's shadow; a default that silently disables another common attribute contradicts the declaration that offers it. SECOND, the SSoT gives this concept exactly one spelling, the opt-in `clipToBounds`, and on a platform that already clips, declaring `clipToBounds: true` is INERT — an attribute you cannot observe declaring. Making false the default is what gives the attribute something to say on every platform: absent means no clip, `true` means clip. android is the deviant and the change is C's and G's; as with gravity, the canon is not in doubt but the rollout wants a measurement, since every container in every android project goes through this default.",
+      "observable": {}
+    },
+    "indicatorStopped": {
+      "attributes": [
+        "Indicator.animating",
+        "Indicator.hidesWhenStopped"
+      ],
+      "falseFace": "the stopped indicator is BOTH drawn and laid out",
+      "trueFace": "the stopped indicator collapses out of the layout entirely",
+      "ruling": "2026-08-07 (plan 51-E), raised by F before implementing: on the false face ios codegen keeps an `opacity(0)` spinner while dynamic emits EmptyView. BOTH ARE WRONG, in different directions, and the declaration already says so — Indicator.animating states that hidesWhenStopped 'decides whether the stopped indicator keeps its space or collapses out of the layout'. So `true` collapses it and `false` keeps it, which makes dynamic's EmptyView an implementation of the TRUE face on the false branch. codegen gets the space right and the visibility wrong: an attribute named hidesWhenStopped set to false cannot hide anything, and opacity(0) is hiding. The false face is a stopped indicator that is drawn AND occupies its space. CONSISTENT WITH the Wave 2 effect ledger, which removed hidesWhenStopped as spinner phase noise: that note is about MEASURABILITY, not about the contract. Where a platform cannot render a genuinely stopped spinner the fixture stays phase-noisy and effect-excluded; the ledger entry stands and does not license drawing nothing.",
+      "observable": {}
+    },
+    "effectStyle": {
+      "attributes": [
+        "common.effectStyle"
+      ],
+      "scope": "all three platforms, and not only on Blur — the declaration is on `common`",
+      "spellingCanon": "the nine bare names are canonical; the five system* spellings are declared valueAliases and the normalizer folds them",
+      "iosMaterialTable": {
+        "ultraThin": {
+          "material": ".ultraThinMaterial"
+        },
+        "thin": {
+          "material": ".thinMaterial"
+        },
+        "regular": {
+          "material": ".regularMaterial"
+        },
+        "thick": {
+          "material": ".thickMaterial"
+        },
+        "chrome": {
+          "material": ".bar"
+        },
+        "light": {
+          "material": ".thinMaterial",
+          "tint": "white 0.25",
+          "colorScheme": ".light"
+        },
+        "extraLight": {
+          "material": ".ultraThinMaterial",
+          "tint": "white 0.45",
+          "colorScheme": ".light"
+        },
+        "dark": {
+          "material": ".regularMaterial",
+          "tint": "black 0.40",
+          "colorScheme": ".dark"
+        },
+        "prominent": {
+          "material": ".thickMaterial",
+          "tint": "white 0.20"
+        }
+      },
+      "tintLayer": "above the material, BELOW the content — a Blur's children must not be washed by the tint",
+      "ruling": "2026-08-07 (plan 51-E). Three questions at once, from B (scope), F (the ios table) and E2 (spelling). SCOPE: three platforms, and not only on Blur. The attribute is declared on `common`, android and web apply it there, and only ios restricts it — so ios is the deviant, not the declaration. This intersects the inert_audit single-platform-scope family: those rows are ios gaps, not evidence for narrowing the scope. SPELLING: the nine bare names are canonical and the five system* spellings are already declared as `valueAliases`, so the normalizer folds them and no implementation needs to know both sets. E2's seven connected rows follow that fold. IOS TABLE: pinned above, from F's implementation in VisualEffectStyle.swift, which is adopted as canon. SwiftUI offers only five Material steps against nine spellings, so a naive mapping would collapse prominent/thick, light/thin, extraLight/ultraThin and dark/regular into four identical pictures and MANUFACTURE value_discrimination collapsedPairs — the table separates the colliding spellings with a tint instead. The tint sits above the material and below the content, which is the layer order `.background(.ultraThinMaterial)` already meant. The table lives in the LIBRARY once and both ios paths call it (F's VisualEffectStyle, B replacing the hardcoded `.ultraThinMaterial` at blur_converter.rb:65 with an emit that calls it) — the same single-table shape kjui took for DistributionFillRow, because two paths growing their own copy always desync. NOT ASSERTED HERE: that the nine render as nine distinct pixel sets. F declined to claim distinctness unmeasured and that is right; `chrome` (.bar) and `thick` are the closest pair. If the next ios run reports a collapsedPair, the fix is a tint on chrome, not a retreat from the table.",
+      "observable": {}
+    },
+    "autoShrink": {
+      "attributes": [
+        "Label.autoShrink",
+        "Label.minimumScaleFactor"
+      ],
+      "requiresBoundedAxis": "autoShrink is a no-op on an unbounded axis — there is nothing to shrink into",
+      "ruling": "2026-08-07 (plan 51-E), raised by A: web shrinks only until the text fits its box, while ios applies the shrink even under wrapContent (an adjustsFontSizeToFitWidth-shaped reading). WEB IS CANON. Shrinking is defined relative to a constraint, and `width: wrapContent` is declared to mean size-to-content — an axis that grows to whatever the text needs and therefore presents nothing to shrink into. Under ios's reading `autoShrink` changes the picture on a box that was never too small, which makes minimumScaleFactor a font-size multiplier rather than a floor, and that is not what either attribute declares (`minimumScaleFactor` declares min 0 / max 1 as a FLOOR for the shrink). So: autoShrink is active only on a bounded axis (an explicit size, matchParent, or a max bound), and is a no-op under wrapContent. Owner: B and F (both ios halves). Not urgent — no lane is blocked on it — but it is a canon question with an answer, not a next-Wave ledger row.",
       "observable": {}
     }
   }
