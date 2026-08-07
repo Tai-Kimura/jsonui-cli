@@ -1559,6 +1559,13 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     "Label.lineHeightMultiple": {"text": LONG_TEXT},
     # Truncation modes only choose WHERE to cut once something is being cut.
     "Label.lineBreakMode": {"text": LONG_TEXT},
+    # The same rule, on the component whose body IS its hint. The TextView
+    # base carries `hint: "Sample"` — six characters in a 200x100 box, which
+    # cannot overflow, so all six truncation modes drew one picture. H
+    # measured the pair: Label's six values separate on an overflowing body
+    # while TextView's six collapse, which is the direct refutation of the
+    # "android has not implemented it" reading the collapse invited.
+    "TextView.lineBreakMode": {"hint": LONG_TEXT},
     # Shrink-to-fit needs an overflow to shrink out of; the floor needs the
     # shrinking to be happening before it can bound it.
     "Label.autoShrink": {"text": LONG_TEXT},

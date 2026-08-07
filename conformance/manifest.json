@@ -8,11 +8,11 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "3488b69715e13a22915b45f08437ccc7a78a77b31bcd59100f3f90c131ad3161",
+  "generatedFrom": "491ea63896603002314553287d50d54dc50fbc1e2c9b5a4ba374485cf52dfd81",
   "counts": {
-    "fixtures": 969,
+    "fixtures": 974,
     "assertable": 34,
-    "visual": 743,
+    "visual": 748,
     "interactive": 35,
     "control": 98,
     "declarationOnly": 59,
@@ -10214,8 +10214,8 @@
       "test": "fixtures/TextView/lineBreakMode__clip.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "TextView/lineBreakMode@TextView",
-      "control": "__control/TextView"
+      "peerGroup": "TextView/lineBreakMode@TextView__hint-507236bd",
+      "control": "__control/TextView__hint-507236bd"
     },
     {
       "id": "TextView/lineBreakMode__char",
@@ -10238,8 +10238,8 @@
       "test": "fixtures/TextView/lineBreakMode__char.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "TextView/lineBreakMode@TextView",
-      "control": "__control/TextView"
+      "peerGroup": "TextView/lineBreakMode@TextView__hint-507236bd",
+      "control": "__control/TextView__hint-507236bd"
     },
     {
       "id": "TextView/lineBreakMode__word",
@@ -10262,8 +10262,8 @@
       "test": "fixtures/TextView/lineBreakMode__word.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "TextView/lineBreakMode@TextView",
-      "control": "__control/TextView"
+      "peerGroup": "TextView/lineBreakMode@TextView__hint-507236bd",
+      "control": "__control/TextView__hint-507236bd"
     },
     {
       "id": "TextView/lineBreakMode__head",
@@ -10286,8 +10286,8 @@
       "test": "fixtures/TextView/lineBreakMode__head.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "TextView/lineBreakMode@TextView",
-      "control": "__control/TextView"
+      "peerGroup": "TextView/lineBreakMode@TextView__hint-507236bd",
+      "control": "__control/TextView__hint-507236bd"
     },
     {
       "id": "TextView/lineBreakMode__middle",
@@ -10310,8 +10310,8 @@
       "test": "fixtures/TextView/lineBreakMode__middle.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "TextView/lineBreakMode@TextView",
-      "control": "__control/TextView"
+      "peerGroup": "TextView/lineBreakMode@TextView__hint-507236bd",
+      "control": "__control/TextView__hint-507236bd"
     },
     {
       "id": "TextView/lineBreakMode__tail",
@@ -10334,8 +10334,8 @@
       "test": "fixtures/TextView/lineBreakMode__tail.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "TextView/lineBreakMode@TextView",
-      "control": "__control/TextView"
+      "peerGroup": "TextView/lineBreakMode@TextView__hint-507236bd",
+      "control": "__control/TextView__hint-507236bd"
     },
     {
       "id": "TextView/keyboardType__default",
@@ -14674,6 +14674,30 @@
       "control": "__control/Switch"
     },
     {
+      "id": "Switch/fontSize__static",
+      "component": "Switch",
+      "attribute": "fontSize",
+      "case": "static",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "fontSize",
+      "aliasOf": null,
+      "value": 20,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Switch/fontSize__static.layout.json",
+      "test": "fixtures/Switch/fontSize__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Switch"
+    },
+    {
       "id": "Segment/items__static",
       "component": "Segment",
       "attribute": "items",
@@ -17690,6 +17714,87 @@
       ]
     },
     {
+      "id": "Collection/hideSeparator__true",
+      "component": "Collection",
+      "attribute": "hideSeparator",
+      "case": "true",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "hideSeparator",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/hideSeparator__true.layout.json",
+      "test": "fixtures/Collection/hideSeparator__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Collection/hideSeparator@Collection",
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/hideSeparator__false",
+      "component": "Collection",
+      "attribute": "hideSeparator",
+      "case": "false",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "hideSeparator",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/hideSeparator__false.layout.json",
+      "test": "fixtures/Collection/hideSeparator__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Collection/hideSeparator@Collection",
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/listStyle__static",
+      "component": "Collection",
+      "attribute": "listStyle",
+      "case": "static",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "listStyle",
+      "aliasOf": null,
+      "value": "sample",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/listStyle__static.layout.json",
+      "test": "fixtures/Collection/listStyle__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
       "id": "Radio/label__static",
       "component": "Radio",
       "attribute": "label",
@@ -19715,6 +19820,30 @@
       "deprecated": null,
       "layout": "fixtures/IconLabel/selected__true.layout.json",
       "test": "fixtures/IconLabel/selected__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "IconLabel/selected@IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000",
+      "control": "__control/IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000"
+    },
+    {
+      "id": "IconLabel/selected__alias_isOn",
+      "component": "IconLabel",
+      "attribute": "selected",
+      "case": "alias_isOn",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": "isOn",
+      "aliasOf": "IconLabel/selected__true",
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/IconLabel/selected__alias_isOn.layout.json",
+      "test": "fixtures/IconLabel/selected__alias_isOn.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": "IconLabel/selected@IconLabel__icon-off-conformance-sample_icon-on-fdfeb736_selectedFontColor--FF0000",

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/IconLabel/selected__alias_isOn.layout.json"
+  },
+  "metadata": {
+    "name": "conformance IconLabel.selected (alias_isOn)",
+    "description": "Conformance fixture for 'selected' on IconLabel (section: IconLabel, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "IconLabel"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "selected__alias_isOn",
+      "description": "Conformance fixture for 'selected' on IconLabel (section: IconLabel, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "IconLabel_selected__alias_isOn"
+        }
+      ]
+    }
+  ]
+}
