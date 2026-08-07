@@ -27,6 +27,8 @@ module JsonUI
         { name: 'fontColor', kind: :string, bindable: true }.freeze,
         # Font size (binding supported)
         { name: 'fontSize', kind: :number, bindable: true }.freeze,
+        # Font weight (e.g., 'bold', 'semibold', '500', 600). Canonical name matches Label and Button; the legacy `fontStyle` spelling folds here. Declared from the implementation, which already read it: sjui checkbox_converter.rb:74-76, which reads `fontStyle` and emits `fontWeight:` (plan 51-E). [accepts: string | number]
+        { name: 'fontWeight', kind: :raw, aliases: ['fontStyle'].freeze }.freeze,
         # Icon name for unchecked state
         { name: 'icon', kind: :string }.freeze,
         # Icon tint color.

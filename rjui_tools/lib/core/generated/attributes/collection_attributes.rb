@@ -18,8 +18,12 @@ module JsonUI
         { name: 'autoChangeTrackingId', kind: :boolean }.freeze,
         # Cell class definitions
         { name: 'cellClasses', kind: :array }.freeze,
+        # Fixed height for every cell, in pt / dp / px. Applied to the cell view AFTER it is built, so it overrides whatever height the cell layout asked for; leave it out to let each cell size itself. Declared from the implementation, which already read it: sjui collection_converter.rb:260,286,318,402 (plan 51-E).
+        { name: 'cellHeight', kind: :number }.freeze,
         # Cell data property key to use as unique ID for ForEach identity. When set, scrollTo uses String type instead of Int.
         { name: 'cellIdProperty', kind: :string }.freeze,
+        # Fixed width for every cell, in pt / dp / px. Applied to the cell view AFTER it is built, so it overrides whatever width the cell layout asked for; leave it out to let each cell size itself. Declared from the implementation, which already read it: sjui collection_converter.rb:256,282,315,650 (plan 51-E).
+        { name: 'cellWidth', kind: :number }.freeze,
         # Number of columns for CSS grid
         { name: 'columnCount', kind: :number }.freeze,
         # Spacing between columns

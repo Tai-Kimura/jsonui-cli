@@ -24,6 +24,8 @@ module JsonUI
         { name: 'iconMargin', kind: :number }.freeze,
         # Icon position relative to text
         { name: 'iconPosition', kind: :enum, values: ['Left', 'Right', 'Top', 'Bottom'].freeze }.freeze,
+        # Icon size. A number sizes both edges; a two-element [width, height] sizes them separately (rjui icon_label_converter.rb:130-138 reads both, and its spec covers both). NOT the same shape as CheckBox.iconSize, which is a square glyph and takes a number only. sjui icon_label_converter.rb:50-51 interpolates the value straight into `iconSize:`, so the array form is web-only today — declared here because the attribute's value space is a property of the attribute, not of whichever face lags (plan 51-E). [accepts: number | array]
+        { name: 'iconSize', kind: :raw }.freeze,
         # Normal icon
         { name: 'icon_off', kind: :string }.freeze,
         # Selected icon

@@ -21,6 +21,8 @@ module JsonUI
         { name: 'canTap', kind: :boolean }.freeze,
         # Content mode (binding supported). ScaleToFill is a declared synonym of fill (the stretch — see attribute_semantics.json#semantics.image); the normalizer folds it, fixtures are generated for the canonical spelling only.
         { name: 'contentMode', kind: :enum, bindable: true, values: ['fit', 'fill', 'center', 'top', 'bottom', 'left', 'right', 'AspectFill', 'AspectFit', 'Center', 'ScaleToFill', 'Top', 'Bottom', 'Left', 'Right'].freeze }.freeze,
+        # Default image name. Declared from the implementation, which already read it: sjui image_converter.rb:36,42 (defaultImage || errorImage || loadingImage) (plan 51-E).
+        { name: 'defaultImage', kind: :string }.freeze,
         # Fallback image on load error.
         { name: 'errorImage', kind: :string }.freeze,
         # Image when highlighted (binding supported)

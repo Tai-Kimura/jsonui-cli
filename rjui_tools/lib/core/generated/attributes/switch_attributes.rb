@@ -19,8 +19,12 @@ module JsonUI
         { name: 'checked', kind: :boolean, bindable: true }.freeze,
         # Whether enabled (can be data binding)
         { name: 'enabled', kind: :boolean, bindable: true }.freeze,
+        # Text color - hex string or color name from colors.json (binding supported). Declared from the implementation, which already read it: sjui toggle_converter.rb:62-63,71-72 (plan 51-E).
+        { name: 'fontColor', kind: :string, bindable: true }.freeze,
         # Switch state (binding for two-way) [binding: two-way]
         { name: 'isOn', kind: :boolean, bindable: true }.freeze,
+        # Switch label (can be data binding). Same shape CheckBox and Radio already declare: `label` is the canonical row and `text` folds into it. Declared from the implementation, which already read it: sjui toggle_converter.rb:21 (text || label) (plan 51-E).
+        { name: 'label', kind: :string, bindable: true, aliases: ['text'].freeze }.freeze,
         # Label styling for Toggle
         { name: 'labelAttributes', kind: :object }.freeze,
         # Label position relative to the Switch.
@@ -37,6 +41,8 @@ module JsonUI
         { name: 'tint', kind: :string, bindable: true }.freeze,
         # Tint color - hex string or color name from colors.json (alias)
         { name: 'tintColor', kind: :string }.freeze,
+        # Which control shape the Switch is drawn as. A SwiftUI-only concept (the ToggleStyle protocol); an unrecognised value falls back to the platform default rather than erroring. Declared from the implementation, which already read it: sjui toggle_converter.rb:92-104 (plan 51-E).
+        { name: 'toggleStyle', kind: :enum, values: ['switch', 'button', 'checkbox', 'default'].freeze }.freeze,
         # Colour of the switch track - hex string or color name from colors.json. Deprecation retracted with the Slider pair; a SwiftUI Toggle is not limited to a unified tint any more than Progress is.
         { name: 'trackTintColor', kind: :string }.freeze,
         # Switch state alias (binding for two-way) [binding: two-way]

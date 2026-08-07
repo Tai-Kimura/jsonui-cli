@@ -28,6 +28,10 @@ module JsonUI
         { name: 'contentSize', kind: :array }.freeze,
         # Deceleration rate
         { name: 'decelerationRate', kind: :string }.freeze,
+        # Initial scroll position anchor (iOS 17+). Sets where the scroll view starts. Declared from the implementation, which already read it: sjui scrollview_converter.rb:207-215 (plan 51-E).
+        { name: 'defaultScrollAnchor', kind: :enum, values: ['top', 'center', 'bottom'].freeze }.freeze,
+        # Enable horizontal scroll. Declared from the implementation, which already read it: sjui scrollview_converter.rb:39 (plan 51-E).
+        { name: 'horizontalScroll', kind: :boolean }.freeze,
         # Scroll indicator style
         { name: 'indicatorStyle', kind: :string }.freeze,
         # Enable keyboard avoidance

@@ -18,10 +18,16 @@ module JsonUI
         { name: 'child', kind: :array }.freeze,
         # Child components (alias for child)
         { name: 'children', kind: :array }.freeze,
+        # Layout direction. Declared from the implementation, which already read it: sjui view_converter.rb:140 (SafeAreaView routes through the View converter) (plan 51-E).
+        { name: 'direction', kind: :enum, values: ['topToBottom', 'bottomToTop', 'leftToRight', 'rightToLeft', 'none'].freeze }.freeze,
+        # Gradient colors. Declared from the implementation, which already read it: sjui view_converter.rb:456 (plan 51-E).
+        { name: 'gradient', kind: :array }.freeze,
         # Stack orientation (default: zstack)
         { name: 'orientation', kind: :enum, values: ['horizontal', 'vertical'].freeze }.freeze,
         # Safe area edges. `edges` is an accepted alias spelling: the Compose SafeAreaView builder reads it (kjui compose_builder.rb:722 `json_data['edges'] || json_data['safeAreaInsetPositions']`) while no declaration named it, so iOS and web silently ignored a layout that used it. Declaring the alias normalizes it to the canonical spelling and makes it reach all three platforms.
         { name: 'safeAreaInsetPositions', kind: :array, aliases: ['edges'].freeze }.freeze,
+        # Space between children (binding supported). Declared from the implementation, which already read it: sjui view_converter.rb:181 (plan 51-E).
+        { name: 'spacing', kind: :number, bindable: true }.freeze,
       ].freeze
 
       # Returns a Hash keyed by canonical attribute name.

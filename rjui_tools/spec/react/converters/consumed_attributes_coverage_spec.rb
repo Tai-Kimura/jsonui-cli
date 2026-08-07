@@ -240,9 +240,9 @@ RSpec.describe 'Converter consumed-attribute coverage' do
   }.freeze
 
   UNDECLARED = {
-    'base_converter.rb' => %w[accessibilityLabel alt direction font fontColor fontFamily fontSize fontWeight insetHorizontal insets key offsetX offsetY orientation textAlign zIndex],
+    'base_converter.rb' => %w[accessibilityLabel alt direction font fontColor fontFamily fontSize fontWeight insetHorizontal insets key orientation textAlign zIndex],
     'blur_converter.rb' => %w[backgroundColor intensity],
-    'button_converter.rb' => %w[href partialAttributes],
+    'button_converter.rb' => %w[href],
     'circle_view_converter.rb' => %w[backgroundColor fillColor strokeColor strokeWidth],
     # onItemAppear left this list in 49-E: it was the SSoT's only `callback`-typed
     # attribute, which attr-codegen skips as "not extractable from JSON", so it
@@ -251,24 +251,24 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     # tightens by one.
     'collection_converter.rb' => %w[contentInset scrollDirection spacing],
     'embed_converter.rb' => %w[],
-    'gradient_view_converter.rb' => %w[angle direction endPoint gradientType orientation startPoint],
-    'icon_label_converter.rb' => %w[fontWeight icon iconOff iconOn iconSize iconTintColor spacing strikethrough underline],
-    'image_converter.rb' => %w[defaultImage url],
+    'gradient_view_converter.rb' => %w[angle direction gradientType orientation],
+    'icon_label_converter.rb' => %w[fontWeight icon iconOff iconOn iconTintColor spacing strikethrough underline],
+    'image_converter.rb' => %w[url],
     'include_converter.rb' => %w[],
     'indicator_converter.rb' => %w[halfSpinner size strokeWidth],
-    'label_converter.rb' => %w[disabledFontColor],
+    'label_converter.rb' => %w[],
     'network_image_converter.rb' => %w[circle circleImage imageUrl scaleType],
     'progress_converter.rb' => %w[barHeight maximumValue progressHeight trackColor value],
-    'radio_converter.rb' => %w[items],
-    'scroll_view_converter.rb' => %w[contentInset horizontalScroll],
+    'radio_converter.rb' => %w[],
+    'scroll_view_converter.rb' => %w[contentInset],
     'segment_converter.rb' => %w[backgroundColor fontSize],
     'select_box_converter.rb' => %w[onChange placeholderColor textAlign value],
-    'slider_converter.rb' => %w[maximumTrackTintColor minimumTrackTintColor range],
-    'switch_converter.rb' => %w[label text],
+    'slider_converter.rb' => %w[maximumTrackTintColor minimumTrackTintColor],
+    'switch_converter.rb' => %w[],
     'tab_view_converter.rb' => %w[],
     'text_field_converter.rb' => %w[autoFocus becomeFirstResponder editable name onChange readOnly],
     'text_view_converter.rb' => %w[autoFocus becomeFirstResponder lines name onChange placeholderColor readOnly],
-    'toggle_converter.rb' => %w[icon label selectedIcon spacing src text],
+    'toggle_converter.rb' => %w[icon selectedIcon spacing src],
     'view_converter.rb' => %w[],
     'web_converter.rb' => %w[accessibilityLabel allowCamera allowDownloads allowGeolocation allowMicrophone allowModals allowPopupsToEscapeSandbox allowsFullScreen allowsInlineMediaPlayback htmlContent javaScriptCanOpenWindowsAutomatically javaScriptEnabled lazyLoad loading scrollEnabled src title]
   }.freeze

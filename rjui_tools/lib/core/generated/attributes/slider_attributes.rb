@@ -27,6 +27,8 @@ module JsonUI
         { name: 'onValueChange', kind: :binding, aliases: ['onValueChanged'].freeze }.freeze,
         # Colour of the filled portion of the track - hex string or color name from colors.json. Was declared deprecated on swift ("SwiftUI Slider uses unified tint only"); retracted 2026-08-05 because Progress, also SwiftUI, maps the same attribute to .tint(). Unimplemented on the Slider path, not impossible.
         { name: 'progressTintColor', kind: :string }.freeze,
+        # Both bounds at once, as [minimum, maximum] — a shorthand for declaring `minimum` and `maximum` separately. It is NOT an alias: one spelling carries two values, so the normalizer cannot fold it. Read only when it is a two-element array; anything else leaves `minimum` / `maximum` to speak for themselves. Declared from the implementation, which already read it: sjui slider_converter.rb:16-19 (plan 51-E).
+        { name: 'range', kind: :array }.freeze,
         # Step increment value
         { name: 'step', kind: :number }.freeze,
         # Tint color - hex string or color name from colors.json

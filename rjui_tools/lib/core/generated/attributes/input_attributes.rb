@@ -66,6 +66,8 @@ module JsonUI
         { name: 'hintFont', kind: :string }.freeze,
         # Placeholder font size
         { name: 'hintFontSize', kind: :number }.freeze,
+        # Placeholder line height multiplier. Declared from the implementation, which already read it: sjui textfield_converter.rb:153 and textview_converter.rb:93,117 (EditText/Input follow via _alias_of) (plan 51-E).
+        { name: 'hintLineHeightMultiple', kind: :number }.freeze,
         # Input type (includes 'allphabet' typo for backward compatibility)
         { name: 'input', kind: :enum, values: ['default', 'alphabet', 'allphabet', 'email', 'number', 'phone', 'url', 'password', 'decimal'].freeze }.freeze,
         # Input type for Android (Android-only; `input` is the cross-platform attribute). Both the JsonUI spellings and the raw android:inputType names the frozen XML mapper passed through are accepted; the latter normalize to the former.

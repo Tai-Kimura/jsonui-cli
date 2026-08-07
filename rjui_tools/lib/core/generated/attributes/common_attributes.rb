@@ -207,6 +207,10 @@ module JsonUI
         { name: 'minWidth', kind: :number, bindable: true }.freeze,
         # Minimum width weight (binding supported)
         { name: 'minWidthWeight', kind: :number, bindable: true }.freeze,
+        # Horizontal offset applied after layout, in pt / dp / px. Moves the view without changing the space it occupies or the position of its siblings — the layout is computed first and the offset is a paint-time translation. Pairs with offsetY; either one alone implies 0 for the other. Declared from the implementation, which already read it: sjui base_view_converter.rb:498-501, which reads it on every component (plan 51-E).
+        { name: 'offsetX', kind: :number, bindable: true }.freeze,
+        # Vertical offset applied after layout, in pt / dp / px. Moves the view without changing the space it occupies or the position of its siblings — the layout is computed first and the offset is a paint-time translation. Pairs with offsetX; either one alone implies 0 for the other. Declared from the implementation, which already read it: sjui base_view_converter.rb:498-501, which reads it on every component (plan 51-E).
+        { name: 'offsetY', kind: :number, bindable: true }.freeze,
         # Lifecycle callback when view appears (SwiftUI/Compose only)
         { name: 'onAppear', kind: :string }.freeze,
         # Click handler (camelCase) - binding only (@{functionName})

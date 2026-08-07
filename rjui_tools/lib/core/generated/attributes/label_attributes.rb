@@ -16,6 +16,8 @@ module JsonUI
       ATTRS = [
         # Enable auto-shrink
         { name: 'autoShrink', kind: :boolean }.freeze,
+        # Font color when disabled - hex string or color name from colors.json (binding supported). Declared from the implementation, which already read it: sjui label_converter.rb:179-180 (plan 51-E).
+        { name: 'disabledFontColor', kind: :string, bindable: true }.freeze,
         # Edge insets as array or pipe-separated string. Applied on every platform including Compose, where it maps to .padding() (kjui text_component.rb / DynamicTextComponent.kt) - the former "Compose Text has no edgeInset" deprecation was contradicted by that implementation and was retracted 2026-08-05. [accepts: array | string]
         { name: 'edgeInset', kind: :raw }.freeze,
         # Font weight name (regular/medium/semibold/bold/...) or font name. Passed as the `weight` field of `FontSpec` to `Configuration.Font.fontProvider`. Can be a data binding.

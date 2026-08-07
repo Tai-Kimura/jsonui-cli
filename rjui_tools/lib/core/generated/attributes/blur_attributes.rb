@@ -17,6 +17,10 @@ module JsonUI
       ATTRS = [
         # Blur radius in px/dp. Android and Web only: both blur by radius, while UIKit/SwiftUI express the appearance as effectStyle (UIVisualEffectView has styles, not radii). Overrides the radius effectStyle resolves to.
         { name: 'blurRadius', kind: :number }.freeze,
+        # Child component(s). Declared from the implementation, which already read it: sjui blur_converter.rb:16 (plan 51-E).
+        { name: 'child', kind: :array }.freeze,
+        # Child components (alias for child). Declared from the implementation, which already read it: sjui blur_converter.rb:16 (child || children) (plan 51-E).
+        { name: 'children', kind: :array }.freeze,
         # Blur effect style
         { name: 'effectStyle', kind: :enum, values: ['Light', 'Dark', 'ExtraLight'].freeze }.freeze,
       ].freeze
