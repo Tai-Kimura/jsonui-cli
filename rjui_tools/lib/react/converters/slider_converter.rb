@@ -15,8 +15,13 @@ module RjuiTools
 
           # Canonical names are minimum/maximum; minimumValue/minValue and
           # maximumValue/maxValue are the definitions aliases.
+          #
+          # The declared defaults are 0 .. 1 (attribute_definitions Slider), and
+          # this defaulted to 100 — so `value: 0.5` meant HALF on ios and 0.5%
+          # here, from the same layout. The three platforms had each invented a
+          # ceiling because the SSoT declared none; it declares 1 now.
           min_value = attributes['minimum'] || 0
-          max_value = attributes['maximum'] || 100
+          max_value = attributes['maximum'] || 1
           step_value = attributes['step']
 
           # Handle range array format: [min, max]

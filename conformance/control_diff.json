@@ -1726,8 +1726,7 @@
       "fixture": "Slider/value__static",
       "platforms": [
         "android",
-        "ios",
-        "web"
+        "ios"
       ]
     },
     {

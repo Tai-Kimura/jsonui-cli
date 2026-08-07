@@ -110,7 +110,7 @@ RSpec.describe 'L1-normalized layout consumption' do
       jsx = described_class.new(
         { 'type' => 'Slider', 'minimumValue' => 5, 'maximumValue' => 50 }, l1_config
       ).convert
-      expect(jsx).to include('min={0} max={100}')
+      expect(jsx).to include('min={0} max={1}')
     end
 
     it 'accepts the onValueChanged alias on L0 only' do

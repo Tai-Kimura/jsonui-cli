@@ -17,8 +17,11 @@ RSpec.describe RjuiTools::React::Converters::SliderConverter do
         result = converter.convert
         expect(result).to include('<input')
         expect(result).to include('type="range"')
+        # Declared defaults (attribute_definitions Slider): the undeclared
+        # range is 0 .. 1, not 0 .. 100 — the ceiling each platform used to
+        # invent for itself.
         expect(result).to include('min={0}')
-        expect(result).to include('max={100}')
+        expect(result).to include('max={1}')
       end
     end
 
