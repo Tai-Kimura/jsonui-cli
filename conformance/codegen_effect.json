@@ -51,26 +51,6 @@
       "owner": "A (rjui) — probe value fix owned by D",
       "reason": "NOT an unread spelling. collection_converter.rb:149-151 reads it and every container branch acts on it: static `none` drops the overflow scroll classes (measured: CONTROL/lazy/eager byte-identical, none differs), and the bound form emits a runtime overflow override in all three branches. The C0 verdict is an artifact of the value plan: representative_value('Collection','lazy') is 'lazy' — the declared DEFAULT — so emit(v1) equals the control by construction, and the second value 'eager' also equals it because lazy-vs-eager is virtualization, which the plain `.map()` emit does not have. `none` is the only web-observable value and the probe never picks it.",
       "note": "Accepted degeneracy: web lazy≡eager (no virtualization to switch off). Probe fix: representative value `none` in rules.py (D's file, not touched here)."
-    },
-    {
-      "component": "Label",
-      "attribute": "strikethrough",
-      "platform": "web",
-      "check": "C2",
-      "class": "presence-only",
-      "owner": "E (SSoT) — recorded per 49 ruling; implementation is post-release work",
-      "reason": "Declared styled face unimplemented, scheduled post-release. The boolean face WORKS on all three platforms: presence is read and the line is drawn (the emit differs from the control). Only the object face's contents (lineStyle, color) are unread — `true` and a styled object emit byte-identical text. Do not read this row as 'strikethrough does not work'.",
-      "note": "Same family as the declared-but-unimplemented spellings (B's ledger). F's dynamic fix (91a57bc) made the node survive the object face; it did not add style drawing. D's __styled fixtures stay: round 5 verifies node-survives + both faces render the same picture until styling lands."
-    },
-    {
-      "component": "Label",
-      "attribute": "underline",
-      "platform": "web",
-      "check": "C2",
-      "class": "presence-only",
-      "owner": "E (SSoT) — recorded per 49 ruling; implementation is post-release work",
-      "reason": "Declared styled face unimplemented, scheduled post-release. The boolean face WORKS on all three platforms: presence is read and the line is drawn (the emit differs from the control). Only the object face's contents (lineStyle, color, lineOffset) are unread — `true` and a styled object emit byte-identical text. Do not read this row as 'underline does not work'.",
-      "note": "Same family as the declared-but-unimplemented spellings (B's ledger). F's dynamic fix (91a57bc) made the node survive the object face; it did not add style drawing. D's __styled fixtures stay: round 5 verifies node-survives + both faces render the same picture until styling lands."
     }
   ]
 }

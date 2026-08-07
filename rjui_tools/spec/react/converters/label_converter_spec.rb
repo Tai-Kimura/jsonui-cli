@@ -168,6 +168,60 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       end
     end
 
+    # The object face. Contract: attribute_semantics.json -> textDecoration.
+    # The presence test this replaces was `if attributes['underline']`, and a
+    # Hash is truthy in Ruby, so every object — including the one that means
+    # "draw nothing" — drew the same plain line.
+    context 'with a styled text decoration' do
+      def classes_for(attrs)
+        create_converter({ 'type' => 'Label', 'text' => 'Styled' }.merge(attrs)).send(:build_class_name)
+      end
+
+      it 'draws nothing for lineStyle None' do
+        expect(classes_for('underline' => { 'lineStyle' => 'None' })).not_to include('underline')
+        expect(classes_for('strikethrough' => { 'lineStyle' => 'None' })).not_to include('line-through')
+      end
+
+      it 'draws the plain line for an object that styles nothing' do
+        expect(classes_for('underline' => {})).to include('underline')
+      end
+
+      it 'maps each declared lineStyle' do
+        expect(classes_for('underline' => { 'lineStyle' => 'Single' })).to include('decoration-solid')
+        expect(classes_for('underline' => { 'lineStyle' => 'Double' })).to include('decoration-double')
+        expect(classes_for('underline' => { 'lineStyle' => 'Thick' })).to include('decoration-2')
+      end
+
+      it 'colours the line without touching the text colour' do
+        classes = classes_for('underline' => { 'color' => '#FF0000' })
+        expect(classes).to include('decoration-[#FF0000]')
+        expect(classes).not_to include('text-[#FF0000]')
+      end
+
+      it 'routes a bound colour through a custom property' do
+        converter = create_converter({ 'type' => 'Label', 'text' => 'Styled',
+                                       'underline' => { 'color' => '@{lineColor}' } })
+        expect(converter.send(:build_class_name)).to include('decoration-[var(--jui-underline-color)]')
+        expect(converter.send(:build_style_attr)).to include('--jui-underline-color')
+      end
+
+      # lineOffset is declared on underline only, and strikethrough must not
+      # invent one.
+      it 'applies lineOffset to underline and never to strikethrough' do
+        expect(classes_for('underline' => { 'lineOffset' => 3 })).to include('underline-offset-[3px]')
+        expect(classes_for('strikethrough' => { 'lineOffset' => 3 })).not_to include('underline-offset')
+      end
+
+      # Two utilities, one CSS property: as classes, whichever the stylesheet
+      # orders last would win and the other line would vanish.
+      it 'keeps both lines when a label asks for both' do
+        converter = create_converter({ 'type' => 'Label', 'text' => 'Both',
+                                       'underline' => true, 'strikethrough' => true })
+        converter.send(:build_class_name)
+        expect(converter.send(:build_style_attr)).to include("textDecorationLine: 'underline line-through'")
+      end
+    end
+
     context 'with onClick' do
       it 'adds cursor-pointer class' do
         converter = create_converter({

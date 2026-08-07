@@ -218,32 +218,8 @@
   },
   {
    "component": "Label",
-   "attribute": "underline",
-   "platform": "web",
-   "cases": [
-    "styled",
-    "true"
-   ],
-   "owner": "E (SSoT) — recorded per 49 ruling; implementation is post-release work",
-   "reason": "Declared styled face unimplemented, scheduled post-release — the fixture-side counterpart of the six C2/presence-only rows in codegen_effect.json (same family, B's ledger). The boolean face works: presence is read and the line is drawn; only the object face's contents (lineStyle, color, lineOffset) are unread, so {styled} and true draw the same picture BY CONSTRUCTION until styling lands. Do not read this row as 'underline does not work'. The row leaves this ledger when the styled renderer ships and the two pictures separate.",
-   "note": "android has no row for this pair on purpose: the pair was not compared there (not-both-active) because kjui's dynamic renderer drops the line entirely for the object face — styled renders byte-identical to the CONTROL, a run-5 finding reported to G. When android draws the plain line for the object face it will collapse into this same pair and need its own row until styling lands."
-  },
-  {
-   "component": "Label",
    "attribute": "strikethrough",
    "platform": "ios",
-   "cases": [
-    "styled",
-    "true"
-   ],
-   "owner": "E (SSoT) — recorded per 49 ruling; implementation is post-release work",
-   "reason": "Declared styled face unimplemented, scheduled post-release — the fixture-side counterpart of the six C2/presence-only rows in codegen_effect.json (same family, B's ledger). The boolean face works: presence is read and the line is drawn; only the object face's contents (lineStyle, color) are unread, so {styled} and true draw the same picture BY CONSTRUCTION until styling lands. Do not read this row as 'strikethrough does not work'. The row leaves this ledger when the styled renderer ships and the two pictures separate.",
-   "note": "android has no row for this pair on purpose: the pair was not compared there (not-both-active) because kjui's dynamic renderer drops the line entirely for the object face — styled renders byte-identical to the CONTROL, a run-5 finding reported to G. When android draws the plain line for the object face it will collapse into this same pair and need its own row until styling lands."
-  },
-  {
-   "component": "Label",
-   "attribute": "strikethrough",
-   "platform": "web",
    "cases": [
     "styled",
     "true"
