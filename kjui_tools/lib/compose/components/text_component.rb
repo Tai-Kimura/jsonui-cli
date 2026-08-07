@@ -121,6 +121,20 @@ module KjuiTools
           # itself do not evaluate the same string template twice.
           component_code += indent("val #{hint_var} = #{text}", depth) + "\n" if hint_var
 
+          # The object face's colour (the drawBehind seam): a face with a
+          # declared colour leaves the native decoration and is drawn by the
+          # shared styledTextLines device instead — TextDecoration cannot
+          # colour a line. Same contract as the dynamic mirror.
+          underline_line_color = decoration_color_expression(json_data['underline'], required_imports)
+          strikethrough_line_color = decoration_color_expression(json_data['strikethrough'], required_imports)
+          line_state_var = nil
+          if underline_line_color || strikethrough_line_color
+            required_imports&.add(:styled_text_lines)
+            required_imports&.add(:remember)
+            line_state_var = var_name.sub('resolved_', 'lineState_')
+            component_code += indent("val #{line_state_var} = remember { StyledLineState() }", depth) + "\n"
+          end
+
           component_code += indent("Text(", depth)
           text_expr = if hint_condition
                         "if (#{hint_condition}) #{Helpers::ResourceResolver.process_text(hint[:text], required_imports)} else #{hint_var}"
@@ -128,6 +142,9 @@ module KjuiTools
                         text
                       end
           component_code += "\n" + indent("text = #{text_expr},", depth + 1)
+          if line_state_var
+            component_code += "\n" + indent("onTextLayout = { #{line_state_var}.layout = it },", depth + 1)
+          end
 
           # Font color (official attribute).
           #
@@ -187,14 +204,16 @@ module KjuiTools
           component_code += "\n" + indent("fontSize = #{font_ref}.size ?: TextUnit.Unspecified,", depth + 1)
           component_code += "\n" + indent("fontStyle = #{font_ref}.style ?: FontStyle.Normal,", depth + 1)
 
-          # Text decoration (underline, strikethrough)
+          # Text decoration (underline, strikethrough). A colour-carrying
+          # object face is SUPPRESSED here — styledTextLines draws it, and the
+          # text-coloured native line would double the coloured one.
           text_decorations = []
-          if decoration_on?(json_data['underline'])
+          if decoration_on?(json_data['underline']) && underline_line_color.nil?
             required_imports&.add(:text_decoration)
             text_decorations << "TextDecoration.Underline"
           end
 
-          if decoration_on?(json_data['strikethrough'])
+          if decoration_on?(json_data['strikethrough']) && strikethrough_line_color.nil?
             required_imports&.add(:text_decoration)
             text_decorations << "TextDecoration.LineThrough"
           end
@@ -309,6 +328,21 @@ module KjuiTools
           end
           # padding/paddings for Label = internal padding (after background)
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+
+          if line_state_var
+            args = ["#{line_state_var}"]
+            args << "underlineColor = #{underline_line_color}" if underline_line_color
+            args << "strikethroughColor = #{strikethrough_line_color}" if strikethrough_line_color
+            modifiers << ".styledTextLines(#{args.join(', ')})"
+          end
+          # `lineOffset` is UIKit's baselineOffset — the text shifts within
+          # its layout box, the box itself stays (the ios face routes it to
+          # .baselineOffset; a whole-label translation is the Compose
+          # equivalent for the body face).
+          if (line_offset = decoration_line_offset(json_data['underline'])) && line_offset != 0
+            required_imports&.add(:graphics_layer)
+            modifiers << ".graphicsLayer { translationY = -#{line_offset}.dp.toPx() }"
+          end
 
           # Format modifiers
           if modifiers.any?
@@ -472,17 +506,32 @@ module KjuiTools
         # anyway, so the one value that means OFF behaved exactly like the three
         # that mean ON.
         #
-        # The object's other fields have no Compose expression at this layer:
-        # `TextDecoration` carries neither a colour nor a weight, so `color`,
-        # `lineOffset` and the Double/Thick distinction need a drawing seam in
-        # KotlinJsonUI rather than a different emit here. They stay unread until
-        # that lands (51-C progress, 2026-08-07); the codegen_effect ledger
-        # records the same residue as presence-only.
+        # The drawing seam landed 2026-08-08 (KotlinJsonUI styledTextLines):
+        # `color` and `lineOffset` now have an expression; only the
+        # Double/Thick distinction stays undistinguished — the same gap the
+        # ruling keeps open on every platform.
         def self.decoration_on?(value)
           return false if value.nil? || value == false
           return value['lineStyle'].to_s.casecmp('none') != 0 if value.is_a?(Hash) && value.key?('lineStyle')
 
           true
+        end
+
+        # The object face's declared `color` as a Compose Color expression —
+        # or nil for the boolean face / no colour / a face that draws no line.
+        def self.decoration_color_expression(value, required_imports)
+          return nil unless value.is_a?(Hash) && decoration_on?(value)
+          spelling = value['color']
+          return nil if spelling.nil? || spelling.to_s.empty?
+
+          Helpers::ResourceResolver.process_color(spelling, required_imports)
+        end
+
+        # The object face's underline-only `lineOffset`, or nil.
+        def self.decoration_line_offset(value)
+          return nil unless value.is_a?(Hash) && decoration_on?(value)
+
+          value['lineOffset']
         end
 
         # The declared textAlign spellings (Left/Right/Center) as Compose values.

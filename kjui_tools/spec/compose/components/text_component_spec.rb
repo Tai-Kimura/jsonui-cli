@@ -156,9 +156,29 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
         expect(described_class.generate(json_data, 0, required_imports))
           .to include('textDecoration = TextDecoration.Underline')
       end
+    end
+
+    it 'draws a colour-carrying object face through styledTextLines, not the native decoration' do
+      # The drawing seam landed 2026-08-08: TextDecoration cannot colour a
+      # line, so a declared colour suppresses the native decoration (the
+      # text-coloured line would double the coloured one) and the shared
+      # library device draws it from the captured TextLayoutResult.
       bare = { 'type' => 'Text', 'text' => 'Test', 'underline' => { 'color' => '#FF0000' } }
-      expect(described_class.generate(bare, 0, required_imports))
-        .to include('textDecoration = TextDecoration.Underline')
+      result = described_class.generate(bare, 0, required_imports)
+      expect(result).not_to include('textDecoration')
+      expect(result).to include('remember { StyledLineState() }')
+      expect(result).to include('onTextLayout = { lineState_')
+      expect(result).to match(/\.styledTextLines\(lineState_\w+, underlineColor = /)
+      expect(required_imports).to include(:styled_text_lines)
+    end
+
+    it 'shifts the text for an underline lineOffset (baselineOffset semantics)' do
+      json_data = { 'type' => 'Text', 'text' => 'Test',
+                    'underline' => { 'lineStyle' => 'Single', 'lineOffset' => 2 } }
+      result = described_class.generate(json_data, 0, required_imports)
+      # No colour: the native decoration stays; only the offset translates.
+      expect(result).to include('textDecoration = TextDecoration.Underline')
+      expect(result).to include('.graphicsLayer { translationY = -2.dp.toPx() }')
     end
 
     it 'generates text with text alignment' do
