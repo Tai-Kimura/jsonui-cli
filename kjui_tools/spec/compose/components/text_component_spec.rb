@@ -151,10 +151,18 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
     end
 
     it 'still draws for the other declared lineStyle values and for a bare object' do
-      %w[Single Double Thick].each do |style|
+      # Single keeps the native decoration; Double/Thick need the drawing
+      # seam (TextDecoration has one rule weight) and suppress the native
+      # line so it does not double the drawn one.
+      json_data = { 'type' => 'Text', 'text' => 'Test', 'underline' => { 'lineStyle' => 'Single' } }
+      expect(described_class.generate(json_data, 0, required_imports))
+        .to include('textDecoration = TextDecoration.Underline')
+
+      %w[Double Thick].each do |style|
         json_data = { 'type' => 'Text', 'text' => 'Test', 'underline' => { 'lineStyle' => style } }
-        expect(described_class.generate(json_data, 0, required_imports))
-          .to include('textDecoration = TextDecoration.Underline')
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).not_to include('textDecoration')
+        expect(result).to match(/underline = StyledLine\(color = .*style = "#{style.downcase}"\)/)
       end
     end
 
@@ -168,7 +176,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       expect(result).not_to include('textDecoration')
       expect(result).to include('remember { StyledLineState() }')
       expect(result).to include('onTextLayout = { lineState_')
-      expect(result).to match(/\.styledTextLines\(lineState_\w+, underlineColor = /)
+      expect(result).to match(/\.styledTextLines\(lineState_\w+, underline = StyledLine\(/)
       expect(required_imports).to include(:styled_text_lines)
     end
 

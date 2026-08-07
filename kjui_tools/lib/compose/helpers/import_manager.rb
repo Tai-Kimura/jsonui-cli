@@ -170,7 +170,8 @@ module KjuiTools
             # colour (text_component#decoration_color_expression): the native
             # TextDecoration cannot colour a line, so the shared library
             # device draws it from the captured TextLayoutResult.
-            styled_text_lines: ["import com.kotlinjsonui.components.StyledLineState",
+            styled_text_lines: ["import com.kotlinjsonui.components.StyledLine",
+                                "import com.kotlinjsonui.components.StyledLineState",
                                 "import com.kotlinjsonui.components.styledTextLines"],
             graphics_layer: "import androidx.compose.ui.graphics.graphicsLayer",
             LaunchedEffect: "import androidx.compose.runtime.LaunchedEffect",

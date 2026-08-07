@@ -125,8 +125,14 @@ module KjuiTools
           # declared colour leaves the native decoration and is drawn by the
           # shared styledTextLines device instead — TextDecoration cannot
           # colour a line. Same contract as the dynamic mirror.
-          underline_line_color = decoration_color_expression(json_data['underline'], required_imports)
-          strikethrough_line_color = decoration_color_expression(json_data['strikethrough'], required_imports)
+          # The effective text colour for a colour-less Double/Thick face.
+          decoration_fallback = if json_data['fontColor']
+                                  Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
+                                else
+                                  'androidx.compose.material3.LocalContentColor.current'
+                                end
+          underline_line_color = decoration_line_expression(json_data['underline'], required_imports, decoration_fallback)
+          strikethrough_line_color = decoration_line_expression(json_data['strikethrough'], required_imports, decoration_fallback)
           line_state_var = nil
           if underline_line_color || strikethrough_line_color
             required_imports&.add(:styled_text_lines)
@@ -331,8 +337,8 @@ module KjuiTools
 
           if line_state_var
             args = ["#{line_state_var}"]
-            args << "underlineColor = #{underline_line_color}" if underline_line_color
-            args << "strikethroughColor = #{strikethrough_line_color}" if strikethrough_line_color
+            args << "underline = #{underline_line_color}" if underline_line_color
+            args << "strikethrough = #{strikethrough_line_color}" if strikethrough_line_color
             modifiers << ".styledTextLines(#{args.join(', ')})"
           end
           # `lineOffset` is UIKit's baselineOffset — the text shifts within
@@ -517,14 +523,22 @@ module KjuiTools
           true
         end
 
-        # The object face's declared `color` as a Compose Color expression —
-        # or nil for the boolean face / no colour / a face that draws no line.
-        def self.decoration_color_expression(value, required_imports)
+        # The object face as a `StyledLine(...)` expression — or nil when the
+        # native decoration suffices (boolean face, colour-less Single). A
+        # declared `color` or a Double/Thick `lineStyle` needs the drawing
+        # seam; the colour falls back to `fallback_color_expr` (the effective
+        # text colour) when the face styles the line but not its colour.
+        def self.decoration_line_expression(value, required_imports, fallback_color_expr)
           return nil unless value.is_a?(Hash) && decoration_on?(value)
-          spelling = value['color']
-          return nil if spelling.nil? || spelling.to_s.empty?
 
-          Helpers::ResourceResolver.process_color(spelling, required_imports)
+          style = value['lineStyle'].to_s.downcase
+          style = 'single' unless %w[double thick].include?(style)
+          spelling = value['color']
+          has_color = !(spelling.nil? || spelling.to_s.empty?)
+          return nil if !has_color && style == 'single'
+
+          color = has_color ? Helpers::ResourceResolver.process_color(spelling, required_imports) : fallback_color_expr
+          "StyledLine(color = #{color}, style = \"#{style}\")"
         end
 
         # The object face's underline-only `lineOffset`, or nil.
