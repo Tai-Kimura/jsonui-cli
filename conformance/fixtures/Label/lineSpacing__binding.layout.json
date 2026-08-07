@@ -25,7 +25,7 @@
     {
       "name": "boundLineSpacing",
       "class": "Int",
-      "defaultValue": 8
+      "defaultValue": 16
     }
   ]
 }

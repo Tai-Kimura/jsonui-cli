@@ -13,12 +13,29 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "Label",
+      "type": "Collection",
       "id": "target",
       "width": 200,
-      "height": "wrapContent",
-      "text": "Sample text long enough to wrap onto several lines inside the two hundred point wide conformance hosts",
-      "autoShrink": true
+      "height": 200,
+      "background": "#DDDDDD",
+      "items": "@{items}"
+    }
+  ],
+  "data": [
+    {
+      "name": "items",
+      "class": "CollectionDataSource",
+      "defaultValue": [
+        {
+          "title": "Alpha"
+        },
+        {
+          "title": "Beta"
+        },
+        {
+          "title": "Gamma"
+        }
+      ]
     }
   ]
 }

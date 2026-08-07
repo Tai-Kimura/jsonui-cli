@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "be5fafd58187fc62d30b3e5f5c1270cac97338a1364b3f52084ecd235491627b",
   "counts": {
-    "fixtures": 1029,
+    "fixtures": 1031,
     "assertable": 41,
     "visual": 793,
     "interactive": 35,
-    "control": 101,
+    "control": 103,
     "declarationOnly": 59,
     "skipped": 159,
     "promoted": {
@@ -6234,7 +6234,7 @@
       "host": "Label",
       "writtenKey": "lineHeightMultiple",
       "aliasOf": null,
-      "value": 1.5,
+      "value": 1.8,
       "platforms": [
         "ios",
         "android",
@@ -6282,7 +6282,7 @@
       "host": "Label",
       "writtenKey": "lineSpacing",
       "aliasOf": null,
-      "value": 8,
+      "value": 16,
       "platforms": [
         "ios",
         "android",
@@ -6570,8 +6570,8 @@
       "test": "fixtures/Label/minimumScaleFactor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Label/minimumScaleFactor@Label__autoShrink-True_text-1d8efd05",
-      "control": "__control/Label__autoShrink-True_text-1d8efd05"
+      "peerGroup": "Label/minimumScaleFactor@Label__autoShrink-True_height-40_text-1d8efd05",
+      "control": "__control/Label__autoShrink-True_height-40_text-1d8efd05"
     },
     {
       "id": "Label/minimumScaleFactor__binding",
@@ -6594,8 +6594,8 @@
       "test": "fixtures/Label/minimumScaleFactor__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Label/minimumScaleFactor@Label__autoShrink-True_text-1d8efd05",
-      "control": "__control/Label__autoShrink-True_text-1d8efd05"
+      "peerGroup": "Label/minimumScaleFactor@Label__autoShrink-True_height-40_text-1d8efd05",
+      "control": "__control/Label__autoShrink-True_height-40_text-1d8efd05"
     },
     {
       "id": "Label/linkable__true",
@@ -11280,7 +11280,7 @@
       "host": "TextView",
       "writtenKey": "cols",
       "aliasOf": null,
-      "value": 20,
+      "value": 60,
       "platforms": [
         "web"
       ],
@@ -12853,7 +12853,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
-      "control": "__control/Image"
+      "control": "__control/Image__no-src"
     },
     {
       "id": "NetworkImage/hint__static",
@@ -16114,7 +16114,7 @@
       "host": "Slider",
       "writtenKey": "step",
       "aliasOf": null,
-      "value": 1,
+      "value": 0.25,
       "platforms": [
         "web"
       ],
@@ -17569,8 +17569,8 @@
       "test": "fixtures/ScrollView/defaultScrollAnchor__top.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "ScrollView/defaultScrollAnchor@ScrollView",
-      "control": "__control/ScrollView"
+      "peerGroup": "ScrollView/defaultScrollAnchor@ScrollView__child-50058fa9",
+      "control": "__control/ScrollView__child-50058fa9"
     },
     {
       "id": "ScrollView/defaultScrollAnchor__center",
@@ -17593,8 +17593,8 @@
       "test": "fixtures/ScrollView/defaultScrollAnchor__center.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "ScrollView/defaultScrollAnchor@ScrollView",
-      "control": "__control/ScrollView"
+      "peerGroup": "ScrollView/defaultScrollAnchor@ScrollView__child-50058fa9",
+      "control": "__control/ScrollView__child-50058fa9"
     },
     {
       "id": "ScrollView/defaultScrollAnchor__bottom",
@@ -17617,8 +17617,8 @@
       "test": "fixtures/ScrollView/defaultScrollAnchor__bottom.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "ScrollView/defaultScrollAnchor@ScrollView",
-      "control": "__control/ScrollView"
+      "peerGroup": "ScrollView/defaultScrollAnchor@ScrollView__child-50058fa9",
+      "control": "__control/ScrollView__child-50058fa9"
     },
     {
       "id": "Collection/lazy__eager",
@@ -17818,7 +17818,7 @@
       "host": "Collection",
       "writtenKey": "lineSpacing",
       "aliasOf": null,
-      "value": 8,
+      "value": 16,
       "platforms": [
         "ios",
         "android",
@@ -17845,7 +17845,7 @@
       "host": "Collection",
       "writtenKey": "sectionSpacing",
       "aliasOf": "Collection/lineSpacing__static",
-      "value": 8,
+      "value": 16,
       "platforms": [
         "ios",
         "android",
@@ -18720,8 +18720,8 @@
       "test": "fixtures/Collection/listStyle__plain.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Collection/listStyle@Collection",
-      "control": "__control/Collection",
+      "peerGroup": "Collection/listStyle@Collection__no-sections",
+      "control": "__control/Collection__no-sections",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]
@@ -18747,8 +18747,8 @@
       "test": "fixtures/Collection/listStyle__grouped.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Collection/listStyle@Collection",
-      "control": "__control/Collection",
+      "peerGroup": "Collection/listStyle@Collection__no-sections",
+      "control": "__control/Collection__no-sections",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]
@@ -18774,8 +18774,8 @@
       "test": "fixtures/Collection/listStyle__insetgrouped.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Collection/listStyle@Collection",
-      "control": "__control/Collection",
+      "peerGroup": "Collection/listStyle@Collection__no-sections",
+      "control": "__control/Collection__no-sections",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]
@@ -18801,8 +18801,8 @@
       "test": "fixtures/Collection/listStyle__sidebar.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Collection/listStyle@Collection",
-      "control": "__control/Collection",
+      "peerGroup": "Collection/listStyle@Collection__no-sections",
+      "control": "__control/Collection__no-sections",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]
@@ -22258,6 +22258,33 @@
       ]
     },
     {
+      "id": "__control/Collection__no-sections",
+      "component": "__control",
+      "attribute": null,
+      "case": "Collection",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Collection__no-sections.layout.json",
+      "test": "fixtures/__control/Collection__no-sections.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
       "id": "__control/Collection__orientation-horizontal",
       "component": "__control",
       "attribute": null,
@@ -22494,7 +22521,8 @@
       "value": null,
       "platforms": [
         "ios",
-        "android"
+        "android",
+        "web"
       ],
       "mode": null,
       "deprecated": null,
@@ -22597,7 +22625,7 @@
       "isControl": true
     },
     {
-      "id": "__control/Label__autoShrink-True_text-1d8efd05",
+      "id": "__control/Label__autoShrink-True_height-40_text-1d8efd05",
       "component": "__control",
       "attribute": null,
       "case": "Label",
@@ -22613,8 +22641,8 @@
       ],
       "mode": null,
       "deprecated": null,
-      "layout": "fixtures/__control/Label__autoShrink-True_text-1d8efd05.layout.json",
-      "test": "fixtures/__control/Label__autoShrink-True_text-1d8efd05.test.json",
+      "layout": "fixtures/__control/Label__autoShrink-True_height-40_text-1d8efd05.layout.json",
+      "test": "fixtures/__control/Label__autoShrink-True_height-40_text-1d8efd05.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -23234,6 +23262,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/ScrollView.layout.json",
       "test": "fixtures/__control/ScrollView.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/ScrollView__child-50058fa9",
+      "component": "__control",
+      "attribute": null,
+      "case": "ScrollView",
+      "class": "visual",
+      "host": "ScrollView",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/ScrollView__child-50058fa9.layout.json",
+      "test": "fixtures/__control/ScrollView__child-50058fa9.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

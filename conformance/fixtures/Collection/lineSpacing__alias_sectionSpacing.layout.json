@@ -24,7 +24,7 @@
         }
       ],
       "items": "@{items}",
-      "sectionSpacing": 8
+      "sectionSpacing": 16
     }
   ],
   "data": [

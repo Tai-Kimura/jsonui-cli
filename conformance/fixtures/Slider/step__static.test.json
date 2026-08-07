@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance Slider.step (static)",
-    "description": "Conformance fixture for 'step' on Slider (section: Slider, class: visual). Value under test: 1.",
+    "description": "Conformance fixture for 'step' on Slider (section: Slider, class: visual). Value under test: 0.25.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,7 +18,7 @@
   "cases": [
     {
       "name": "step__static",
-      "description": "Conformance fixture for 'step' on Slider (section: Slider, class: visual). Value under test: 1.",
+      "description": "Conformance fixture for 'step' on Slider (section: Slider, class: visual). Value under test: 0.25.",
       "steps": [
         {
           "action": "waitFor",

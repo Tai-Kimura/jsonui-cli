@@ -18,11 +18,6 @@
       "width": 200,
       "height": 200,
       "background": "#DDDDDD",
-      "sections": [
-        {
-          "cell": "conformance_cell"
-        }
-      ],
       "items": "@{items}",
       "listStyle": "sidebar"
     }

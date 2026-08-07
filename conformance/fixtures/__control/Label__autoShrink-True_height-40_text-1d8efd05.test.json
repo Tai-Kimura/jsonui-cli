@@ -1,7 +1,7 @@
 {
   "type": "screen",
   "source": {
-    "layout": "fixtures/__control/Label__autoShrink-True_text-1d8efd05.layout.json"
+    "layout": "fixtures/__control/Label__autoShrink-True_height-40_text-1d8efd05.layout.json"
   },
   "metadata": {
     "name": "conformance control Label",
@@ -15,7 +15,7 @@
   "platform": "all",
   "cases": [
     {
-      "name": "Label__autoShrink-True_text-1d8efd05",
+      "name": "Label__autoShrink-True_height-40_text-1d8efd05",
       "description": "Control for Label: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
       "steps": [
         {
@@ -24,7 +24,7 @@
         },
         {
           "action": "screenshot",
-          "name": "control_Label__autoShrink-True_text-1d8efd05"
+          "name": "control_Label__autoShrink-True_height-40_text-1d8efd05"
         }
       ]
     }

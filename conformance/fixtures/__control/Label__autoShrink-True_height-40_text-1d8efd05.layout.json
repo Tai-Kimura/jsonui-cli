@@ -18,8 +18,7 @@
       "width": 200,
       "height": 40,
       "text": "Sample text long enough to wrap onto several lines inside the two hundred point wide conformance hosts",
-      "autoShrink": true,
-      "minimumScaleFactor": 0.25
+      "autoShrink": true
     }
   ]
 }

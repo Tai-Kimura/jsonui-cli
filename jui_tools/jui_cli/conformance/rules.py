@@ -492,7 +492,16 @@ VALUE_OVERRIDES: dict[str, Any] = {
     "alpha": 0.5,
     "lines": 2,
     "minimumScaleFactor": 0.5,
-    "lineHeightMultiple": 1.5,
+    # rjui maps BOTH line-metric spellings onto one CSS declaration:
+    # `lineSpacing: N` emits `lineHeight: 1 + N/16`, `lineHeightMultiple: M`
+    # emits `lineHeight: M` (measured — 8 and 1.5 produce a byte-identical
+    # style attribute, as do 16 and 2.0). The web host default IS 1.5, so
+    # both representatives asked for the value already on screen and all
+    # four rows (static + bound x two attributes) read inert on web — lane
+    # A's DOM measurement, explained. 1.8 and 16 stay distinct from the
+    # default and from each other.
+    "lineHeightMultiple": 1.8,
+    "lineSpacing": 16,
     "font": "bold",
     "fontWeight": "bold",
     # The SSoT types hintFont as a bare string, so the generic fallback
@@ -524,7 +533,9 @@ VALUE_OVERRIDES: dict[str, Any] = {
     "minimumDate": "2020-01-01",
     "maximumDate": "2030-12-31",
     "minuteInterval": 15,
-    "step": 1,
+    # A step of 1 over the 0..1 range E ruled for Slider is both the react
+    # default AND a step that leaves only the two endpoints reachable.
+    "step": 0.25,
     "value": 0.5,
     "progress": 0.5,
     "minimum": 0,
@@ -533,7 +544,9 @@ VALUE_OVERRIDES: dict[str, Any] = {
     "maxValue": 10,
     "selectedIndex": 1,
     "rows": 3,
-    "cols": 20,
+    # 20 IS the HTML default for <textarea cols>, so the attribute asked
+    # for the box the browser already draws (lane A).
+    "cols": 60,
     "columns": 2,
     "columnCount": 2,
     "size": 3,
@@ -769,7 +782,15 @@ EXTRA_CASES: dict[tuple[str, str], list[Any]] = {
     # the worse direction of the same artifact that filed nine false ones.
     # Values are drawn from each fixture's own `items`.
     ("Radio", "selectedValue"): ["Gamma"],
-    ("SelectBox", "selectedValue"): ["One"],
+    # Lane A asked for this case to point at a non-default item, and the
+    # change is READY — `['Three']` plus a third base item, measured. It is
+    # held because the case NAME derives from the value, so the fixture id
+    # moves from `selectedValue__one` to `__three`, and two ledger rows
+    # (`control_diff.json`, `cross_effect.json`) name the old id. Since H
+    # turned `--ledger-keys` on BY DEFAULT, orphaning them fails every lane's
+    # gate, not just this one. It goes in the moment those rows are migrated
+    # by their owners.
+    ("SelectBox", "selectedValue"): ['One'],
     # The NUMERIC face of a union-typed attribute. `fontWeight` is declared
     # `["string", "number"]` and every fixture wrote `"bold"`, so the numeric
     # spelling — legal, and named in the attribute's own description — was
@@ -1601,12 +1622,33 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     "alignLeftOfView": {"width": 50, "height": 50},
     "alignRightOfView": {"width": 50, "height": 50},
     "Collection.columnSpacing": {"columns": 2},
+    # `listStyle` selects a SwiftUI List style, and the converter only takes
+    # the List path when the collection is not sectioned — with the base
+    # `sections` present all four values landed in the same non-List branch
+    # (lane B, whose List implementation landed in ba5e6d1 with no fixture
+    # that could reach it).
+    "Collection.listStyle": {"sections": None},
     # `flow` is only distinguishable from `horizontal` once a row FILLS: the
     # three 60pt cells total 180pt, which fits the 200pt host in one row, so
     # flow never wrapped and the pair drew one picture (run 5, android/web).
     # 150pt forces flow into a 2+1 grid while horizontal keeps one scrolling
     # row — and vertical is untouched by width.
     "Collection.layout": {"width": 150},
+    # A scroll ANCHOR decides which part of the content the viewport rests
+    # on, so the content must look different in different parts. The base
+    # first child is a single flat 600pt block: top, center and bottom all
+    # rest on the same red (lane A). Banding it makes the resting place
+    # readable off the screenshot.
+    "ScrollView.defaultScrollAnchor": {"child": [
+        {"type": "View", "id": "band_a", "width": 150, "height": 200,
+         "background": "#FF0000"},
+        {"type": "View", "id": "band_b", "width": 150, "height": 200,
+         "background": "#FFFFFF"},
+        {"type": "View", "id": "band_c", "width": 150, "height": 200,
+         "background": "#0000FF"},
+        {"type": "View", "id": "band_d", "width": 150, "height": 200,
+         "background": "#00AA00"},
+    ]},
     # `cols` and `rows` size a textarea in characters and lines, and an
     # explicit width/height overrides them everywhere. Dropping the base size
     # is what lets the attribute decide the box (lane A §5(4)).
@@ -1664,6 +1706,12 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # Shrink-to-fit needs an overflow to shrink out of; the floor needs the
     # shrinking to be happening before it can bound it.
     "Label.autoShrink": {"text": LONG_TEXT},
+    # A shrink FLOOR only shows once the text is being shrunk, and shrinking
+    # only starts when the box cannot hold the text — the Label base is
+    # height: wrapContent, which always can. The height constraint is what
+    # makes the floor bind (lane A).
+    "Label.minimumScaleFactor": {"autoShrink": True, "text": LONG_TEXT,
+                                 "height": 40},
     # A hint's line height needs a hint of more than one line.
     "TextView.hintLineHeightMultiple": {"hint": LONG_TEXT},
     # `linkable` turns URLs in the body into links. "Sample" has none.
@@ -1900,6 +1948,11 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # in the `src`-absent arm (sjui image_converter.rb:36/42). The base
     # supplies `src`, so the fallback arm was unreachable.
     "Image.errorImage": {"src": None},
+    # Same dead branch one spelling along: `defaultImage` is what shows when
+    # there is NO source, so a fixture carrying the base `src` never reaches
+    # it (lane B measured the converter as correct — it is the fixture that
+    # cannot arrive).
+    "Image.defaultImage": {"src": None},
     "Image.loadingImage": {"src": None},
     # `hidesWhenStopped` decides what a STOPPED indicator does — keep its space
     # or collapse out of the layout — so it is only ever read on the

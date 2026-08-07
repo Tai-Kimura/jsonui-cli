@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance TextView.cols (static)",
-    "description": "Conformance fixture for 'cols' on TextView (section: TextView, class: visual). Value under test: 20.",
+    "description": "Conformance fixture for 'cols' on TextView (section: TextView, class: visual). Value under test: 60.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,7 +18,7 @@
   "cases": [
     {
       "name": "cols__static",
-      "description": "Conformance fixture for 'cols' on TextView (section: TextView, class: visual). Value under test: 20.",
+      "description": "Conformance fixture for 'cols' on TextView (section: TextView, class: visual). Value under test: 60.",
       "steps": [
         {
           "action": "waitFor",

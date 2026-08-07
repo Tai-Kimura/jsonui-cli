@@ -21,23 +21,30 @@
       "child": [
         {
           "type": "View",
-          "id": "content",
+          "id": "band_a",
           "width": 150,
-          "height": 600,
+          "height": 200,
           "background": "#FF0000"
         },
         {
           "type": "View",
-          "id": "content_b",
+          "id": "band_b",
           "width": 150,
-          "height": 80,
+          "height": 200,
+          "background": "#FFFFFF"
+        },
+        {
+          "type": "View",
+          "id": "band_c",
+          "width": 150,
+          "height": 200,
           "background": "#0000FF"
         },
         {
           "type": "View",
-          "id": "content_c",
+          "id": "band_d",
           "width": 150,
-          "height": 80,
+          "height": 200,
           "background": "#00AA00"
         }
       ],
