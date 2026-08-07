@@ -706,8 +706,7 @@
       "fixture": "Label/autoShrink__true",
       "platforms": [
         "android",
-        "ios",
-        "web"
+        "ios"
       ]
     },
     {
@@ -821,7 +820,8 @@
       "fixture": "Label/hintColor__static",
       "platforms": [
         "android",
-        "ios"
+        "ios",
+        "web"
       ]
     },
     {
@@ -1528,14 +1528,16 @@
       "fixture": "SelectBox/hintColor__binding",
       "platforms": [
         "android",
-        "ios"
+        "ios",
+        "web"
       ]
     },
     {
       "fixture": "SelectBox/hintColor__static",
       "platforms": [
         "android",
-        "ios"
+        "ios",
+        "web"
       ]
     },
     {
@@ -2744,7 +2746,8 @@
       "fixture": "common/disabledBackground__static",
       "platforms": [
         "android",
-        "ios"
+        "ios",
+        "web"
       ]
     },
     {

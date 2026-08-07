@@ -501,3 +501,67 @@ RSpec.describe RjuiTools::React::ReactGenerator, 'relative positioning' do
     expect(out).not_to include('useRef<')
   end
 end
+
+# autoShrink / minimumScaleFactor. CSS can size text against the viewport but
+# never against the element's own box, so the fit is measured at runtime: the
+# converter attaches a ref and the generator hoists the effect that fits it.
+RSpec.describe RjuiTools::React::ReactGenerator, 'autoShrink' do
+  let(:generator) do
+    described_class.new({ 'use_tailwind' => true, 'typescript' => true,
+                          'layouts_directory' => '/tmp/x', 'generated_directory' => '/tmp/x/out' })
+  end
+
+  def screen(child, name: 'ShrinkScreen')
+    generator.generate(name, { 'type' => 'View', 'child' => [child] })
+  end
+
+  it 'hoists a ref and a fit effect per shrinking label' do
+    out = screen({ 'type' => 'Label', 'id' => 'title', 'text' => 'Long text',
+                   'autoShrink' => true, 'fontSize' => 16, 'minimumScaleFactor' => 0.25 })
+    expect(out).to include("import { applyAutoShrink } from '@/generated/autoShrink';")
+    expect(out).to include('const titleShrinkRef = useRef<HTMLElement | null>(null);')
+    expect(out).to include(
+      'useEffect(() => applyAutoShrink(titleShrinkRef.current, ' \
+      '{ fontSize: 16, minimumScaleFactor: 0.25 }), []);'
+    )
+    expect(out).to include('ref={titleShrinkRef}')
+  end
+
+  # A bound size or factor is the effect's dependency, so the text re-fits when
+  # the data moves. The old viewport clamp could not express this at all: it
+  # multiplied the two in Ruby and raised on a bound value.
+  it 'makes a bound factor a dependency' do
+    out = screen({ 'type' => 'Label', 'id' => 'title', 'text' => 'Long text',
+                   'autoShrink' => true, 'fontSize' => 16,
+                   'minimumScaleFactor' => '@{minScale}' })
+    expect(out).to include(
+      'useEffect(() => applyAutoShrink(titleShrinkRef.current, ' \
+      '{ fontSize: 16, minimumScaleFactor: data.minScale }), [data.minScale]);'
+    )
+  end
+
+  # `autoShrink: "@{flag}"` cannot be resolved at build time; the ref is
+  # attached and the helper decides at runtime whether anything overflows.
+  it 'hoists for a bound autoShrink flag' do
+    out = screen({ 'type' => 'Label', 'id' => 'title', 'text' => 'Long text',
+                   'autoShrink' => '@{shrink}' })
+    expect(out).to include('const titleShrinkRef = useRef<HTMLElement | null>(null);')
+  end
+
+  it 'hoists nothing for a label that does not declare it' do
+    out = screen({ 'type' => 'Label', 'id' => 'title', 'text' => 'Long text' })
+    expect(out).not_to include('applyAutoShrink')
+    expect(out).not_to include('ShrinkRef')
+  end
+
+  # A JS project emits .jsx, where the type parameter is a syntax error.
+  it 'omits the type parameter for a JavaScript project' do
+    js = described_class.new({ 'use_tailwind' => true, 'layouts_directory' => '/tmp/x',
+                               'generated_directory' => '/tmp/x/out' })
+    out = js.generate('ShrinkScreenJs', { 'type' => 'View', 'child' => [
+      { 'type' => 'Label', 'id' => 'title', 'text' => 'Long text', 'autoShrink' => true }
+    ] })
+    expect(out).to include('const titleShrinkRef = useRef(null);')
+    expect(out).not_to include('useRef<')
+  end
+end

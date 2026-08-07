@@ -99,6 +99,56 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
       end
     end
 
+    # An <option>'s own colour only reaches the dropdown popup; the CLOSED
+    # control paints the prompt in its own inherited colour. So a declared
+    # hintColor was invisible in the only state a non-interacting user sees —
+    # measured as an inert conformance fixture (51-A). The `:has` variant is
+    # the runtime condition in CSS, so the literal face needs no state.
+    context 'with hintColor on the closed control' do
+      it 'colours the closed control while the placeholder row is selected' do
+        converter = create_converter(
+          'class' => 'SelectBox', 'items' => ['A', 'B'],
+          'prompt' => 'Choose', 'hintColor' => '#FF0000'
+        )
+        result = converter.convert
+        expect(result).to include("[&:has(option:first-child:checked)]:text-[var(--jui-hint-color)]")
+        expect(result).to include("'--jui-hint-color'")
+      end
+
+      it 'accepts the placeholderColor alias' do
+        converter = create_converter(
+          'class' => 'SelectBox', 'items' => ['A', 'B'],
+          'prompt' => 'Choose', 'placeholderColor' => '#FF0000'
+        )
+        expect(converter.convert).to include('[&:has(option:first-child:checked)]:text-[var(--jui-hint-color)]')
+      end
+
+      it 'keeps the bound colour on the same custom property' do
+        converter = create_converter(
+          'class' => 'SelectBox', 'items' => ['A', 'B'],
+          'prompt' => 'Choose', 'hintColor' => '@{hintColor}'
+        )
+        result = converter.convert
+        expect(result).to include('[&:has(option:first-child:checked)]:text-[var(--jui-hint-color)]')
+        expect(result).to include('ColorManager.resolveColor(data.hintColor)')
+      end
+
+      # No placeholder row, nothing for the variant to match — and a list box
+      # has no closed state at all.
+      it 'emits nothing without a placeholder row' do
+        converter = create_converter('class' => 'SelectBox', 'items' => ['A', 'B'], 'hintColor' => '#FF0000')
+        expect(converter.convert).not_to include('option:first-child:checked')
+      end
+
+      it 'emits nothing for a multiple select' do
+        converter = create_converter(
+          'class' => 'SelectBox', 'items' => ['A', 'B'],
+          'prompt' => 'Choose', 'hintColor' => '#FF0000', 'multiple' => true
+        )
+        expect(converter.convert).not_to include('option:first-child:checked')
+      end
+    end
+
     context 'with selectedValue binding' do
       it 'generates value binding' do
         converter = create_converter({ 'class' => 'SelectBox', 'items' => ['A', 'B'], 'selectedValue' => '@{selected}' })

@@ -17,8 +17,7 @@
       "id": "target",
       "width": 200,
       "height": "wrapContent",
-      "text": "sample conformance text",
-      "textTransform": "uppercase"
+      "text": "sample conformance text"
     }
   ]
 }

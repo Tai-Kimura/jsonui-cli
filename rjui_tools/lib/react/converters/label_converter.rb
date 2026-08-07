@@ -9,7 +9,10 @@ module RjuiTools
         def convert(indent = 2)
           class_attr = build_class_attr
           style_attr = build_style_attr
-          id_attr = build_id_attr
+          # The autoShrink ref rides with the id attribute so every render
+          # shape below (plain / hint swap / linkable / partial) carries it —
+          # they all place `id_attr` on the element that holds the text.
+          id_attr = "#{build_id_attr}#{build_auto_shrink_ref_attr}"
           onclick_attr = build_onclick_attr
           testid_attr = build_testid_attr
           tag_attr = build_tag_attr
@@ -46,6 +49,21 @@ module RjuiTools
         end
 
         protected
+
+        # The ref the hoisted autoShrink effect writes through. A literal id is
+        # the contract between the two halves — MUST stay in sync with
+        # ReactGenerator#auto_shrink_ref_name / #extract_auto_shrink_targets.
+        # Without an id there is nothing to hoist, so the Label simply renders
+        # at its declared size.
+        def build_auto_shrink_ref_attr
+          shrink = attributes['autoShrink']
+          return '' if shrink.nil? || shrink == false || shrink == 'false'
+
+          id = extract_id
+          return '' unless id.is_a?(String) && !id.empty? && !id.include?('@{')
+
+          " ref={#{snake_to_camel_id(id)}ShrinkRef}"
+        end
 
         # The plain single-span label, with the hint swap when configured.
         #
@@ -503,29 +521,18 @@ module RjuiTools
             @dynamic_styles['whiteSpace'] = "'nowrap'" unless multiline_cap?
           end
 
-          # autoShrink - use CSS font-size clamp or viewport units
-          # This is a simplified version - full implementation would need JS
-          if attributes['autoShrink']
-            min_scale = attributes['minimumScaleFactor'] || 0.5
-            font_size = attributes['fontSize'] || 16
-            # `16 * "@{v}"` raises `String can't be coerced into Integer`, so a
-            # Label declaring autoShrink with either value bound did not fail
-            # to style — `jui build` ABORTED on it. Same shape as the
-            # `closest_padding` crash `static_spacing` was written for. The
-            # multiplication moves into the emitted expression.
-            scale_expr = bound_value_expr(min_scale)
-            size_expr = bound_value_expr(font_size)
-            if scale_expr || size_expr
-              size_js = size_expr || font_size
-              scale_js = scale_expr || min_scale
-              @dynamic_styles['fontSize'] =
-                "`min(${#{size_js}}px, max(${Math.round((#{size_js}) * (#{scale_js}))}px, 1vw))`"
-            else
-              min_size = (font_size * min_scale).round
-              # Use min() to allow shrinking but not below minimum
-              @dynamic_styles['fontSize'] = "'min(#{font_size}px, max(#{min_size}px, 1vw))'"
-            end
-          end
+          # autoShrink / minimumScaleFactor are fitted at runtime by the
+          # `@/generated/autoShrink` helper, which the generator hoists a ref
+          # and an effect for (ReactGenerator#auto_shrink_effect). Nothing is
+          # written into the style object here.
+          #
+          # It used to emit `min(<size>px, max(<size * factor>px, 1vw))`. That
+          # reads like a shrink and is not one: it sizes text against the
+          # VIEWPORT, which is unrelated to whether the text fits its box. A
+          # 16px Label rendered at 8px on a 375px-wide phone, and on anything
+          # wide enough the 1vw term outran both floors so minimumScaleFactor
+          # changed nothing at all (measured: fixture and control both computed
+          # 10.24px at a 1024px viewport, 0 differing px — plan 51-A).
 
           # One renderer for every converter (BaseConverter#style_attr_for):
           # the SPREAD sentinel and the `React.CSSProperties` assertion a

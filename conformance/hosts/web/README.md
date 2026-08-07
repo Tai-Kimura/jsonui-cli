@@ -50,8 +50,14 @@ Every path is overridable — flag, env var, or default:
   used by product apps), and emits:
   - `src/generated/fixtureRegistry.tsx` — fixture id → lazy React route
   - `src/generated/fixture-map.json` — runner metadata (codegen success)
-  - `src/generated/conformance-colors.css` — utilities for named colors
-    extracted by rjui into `Layouts/Resources/colors.json`
+  Named colors are NOT synthesized here: `rjui build` writes
+  `src/generated/theme.css` (the `@theme` block for the palette it extracted
+  into `Layouts/Resources/colors.json`, plus the utilities with no
+  Tailwind-core backing), and `src/index.css` imports it — the exact wiring
+  rjui prescribes to a consumer's `globals.css`. The host used to synthesize a
+  plain-CSS shim instead, and that shim resolved base utilities only: every
+  `var(--color-<key>)` emit and every variant form (`disabled:bg-<key>`)
+  measured inert for a reason that lived in the apparatus, not the converter.
 - Routing: single-page host; `/fixture/<Section>/<attr>__<case>` renders
   that fixture's generated component (see `src/main.tsx`). `/` lists all
   fixtures.

@@ -25,7 +25,7 @@
     {
       "name": "boundFontWeight",
       "class": "Int",
-      "defaultValue": 0
+      "defaultValue": 600
     }
   ]
 }

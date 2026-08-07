@@ -101,6 +101,16 @@ module RjuiTools
               "text-#{@select_hint_color}"
             end
 
+          # …with one exception: CSS can express "the placeholder row is the
+          # selected one" without any runtime state. Without this the CLOSED
+          # control — the only state a non-interacting user ever sees — paints
+          # the prompt in the inherited colour whatever hintColor said, because
+          # an <option>'s own colour reaches the dropdown popup and nothing
+          # else. Measured: the conformance select renders byte-identical to
+          # its control with hintColor declared (51-A).
+          closed_hint = closed_state_hint_class
+          classes << closed_hint if closed_hint
+
           # Disabled state. The binding form used to push a `${...}` into the
           # class list, which finalize_classes split on whitespace and, when no
           # value binding made the className a template literal, left inside a
@@ -215,6 +225,31 @@ module RjuiTools
           return "className=\"#{class_name}\"" if expressions.empty?
 
           "className={`#{class_name} #{expressions.join(' ')}`}"
+        end
+
+        # The closed control's own colour while the placeholder row is the
+        # selected one. `:has(option:first-child:checked)` is the runtime
+        # condition expressed in CSS — the placeholder row is always emitted
+        # first, and `:checked` follows the user's selection — so the literal
+        # face gets the same closed-state colour the bound face gets from its
+        # class swap. The colour rides the same custom property either way:
+        # a palette name resolves through ColorManager at runtime, which no
+        # `text-<name>` class could do for a bound value.
+        def closed_state_hint_class
+          return @closed_state_hint_class if defined?(@closed_state_hint_class)
+
+          @closed_state_hint_class =
+            if @declared_hint_color && placeholder_row?
+              dynamic_styles['--jui-hint-color'] = color_style_expr(@declared_hint_color)
+              "[&:has(option:first-child:checked)]:text-[var(--jui-hint-color)]"
+            end
+        end
+
+        # Is a placeholder row emitted at all? A list box has no closed state,
+        # so it never gets one (and the class would style the wrong thing).
+        def placeholder_row?
+          hint = attributes['prompt'] || attributes['hint'] || attributes['placeholder']
+          !!hint && !multiple_select?
         end
 
         # The placeholder <option>'s own colour. Emitted only when hintColor

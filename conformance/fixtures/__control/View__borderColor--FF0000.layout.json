@@ -62,15 +62,7 @@
           "height": 40,
           "background": "#00AAAA"
         }
-      ],
-      "borderWidth": "@{boundBorderWidth}"
-    }
-  ],
-  "data": [
-    {
-      "name": "boundBorderWidth",
-      "class": "Int",
-      "defaultValue": 2
+      ]
     }
   ]
 }

@@ -99,6 +99,13 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     ],
     'include_converter.rb' => %w[shared_data],
     'indicator_converter.rb' => %w[borderWidth color halfSpinner height size strokeWidth tintColor width],
+    # `minimumScaleFactor` is absent on purpose: the fit is measured at
+    # runtime, so ReactGenerator#extract_auto_shrink_targets reads the size and
+    # the factor off the layout JSON and hoists them into the effect. The
+    # converter still reads `autoShrink` — that is what decides whether the ref
+    # is attached at all. (The coverage ledger still sees the generator read:
+    # conformance/coverage.py scans all of rjui_tools/lib and treats
+    # non-converter files as serving every component.)
     'label_converter.rb' => %w[
       autoShrink
       disabledFontColor
@@ -120,7 +127,6 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       lineSpacing
       lines
       linkable
-      minimumScaleFactor
       onClick
       onclick
       partialAttributes

@@ -17,7 +17,7 @@
       "id": "target",
       "width": 200,
       "height": "wrapContent",
-      "text": "Sample",
+      "text": "sample conformance text",
       "textTransform": "capitalize"
     }
   ]

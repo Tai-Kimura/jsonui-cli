@@ -345,30 +345,44 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       end
     end
 
+    # The style object used to carry `min(<size>px, max(<size*factor>px, 1vw))`
+    # for autoShrink. That sizes text against the VIEWPORT, which says nothing
+    # about whether the text fits its box: a 16px Label rendered at 8px on a
+    # 375px-wide phone, and on a wide viewport the 1vw term outran both floors
+    # so minimumScaleFactor changed nothing (measured 0 differing px against
+    # the control — plan 51-A). The fit is measured at runtime now.
     context 'with autoShrink' do
-      it 'uses CSS min() for font scaling' do
+      it 'writes no font size into the style object' do
         converter = create_converter({
-          'type' => 'Label',
-          'text' => 'Test',
-          'autoShrink' => true,
-          'fontSize' => 20,
-          'minimumScaleFactor' => 0.5
+          'type' => 'Label', 'id' => 'shrinking', 'text' => 'Test',
+          'autoShrink' => true, 'fontSize' => 20, 'minimumScaleFactor' => 0.5
         })
         converter.send(:build_class_name)
-        result = converter.send(:build_style_attr)
-        expect(result).to include("fontSize: 'min(20px, max(10px, 1vw))'")
+        expect(converter.send(:build_style_attr)).not_to include('1vw')
       end
 
-      it 'uses default minimumScaleFactor of 0.5' do
+      it 'attaches the ref the hoisted fit effect writes through' do
         converter = create_converter({
-          'type' => 'Label',
-          'text' => 'Test',
-          'autoShrink' => true,
-          'fontSize' => 16
+          'type' => 'Label', 'id' => 'shrinking_label', 'text' => 'Test',
+          'autoShrink' => true, 'fontSize' => 20, 'minimumScaleFactor' => 0.25
         })
-        converter.send(:build_class_name)
-        result = converter.send(:build_style_attr)
-        expect(result).to include("fontSize: 'min(16px, max(8px, 1vw))'")
+        expect(converter.convert).to include('ref={shrinkingLabelShrinkRef}')
+      end
+
+      # A literal id is what ties the ref to the hoisted declaration, exactly
+      # as for the focus and collection-scroll helpers.
+      it 'attaches no ref without a literal id' do
+        converter = create_converter({
+          'type' => 'Label', 'text' => 'Test', 'autoShrink' => true
+        })
+        expect(converter.convert).not_to include('ShrinkRef')
+      end
+
+      it 'attaches no ref when autoShrink is off' do
+        converter = create_converter({
+          'type' => 'Label', 'id' => 'plain', 'text' => 'Test', 'autoShrink' => false
+        })
+        expect(converter.convert).not_to include('ShrinkRef')
       end
     end
   end

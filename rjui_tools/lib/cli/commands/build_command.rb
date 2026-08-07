@@ -70,6 +70,9 @@ module RjuiTools
           # Emit the relative-positioning helper (align*View / align*OfView)
           emit_relative_position_helper
 
+          # Emit the autoShrink helper (autoShrink / minimumScaleFactor)
+          emit_auto_shrink_helper
+
           # Emit the date-format helper (SelectBox dateStringFormat)
           emit_date_format_helper
 
@@ -1552,6 +1555,107 @@ module RjuiTools
                   if (anchor) observer.observe(anchor);
                 }
               }
+              return () => observer.disconnect();
+            }
+
+            #{marker_footer}
+          JS
+
+          File.write(path, content)
+          Core::Logger.success("Updated: #{path}")
+        end
+
+        # autoShrink / minimumScaleFactor — shrink the text until it fits the
+        # element's own box, never below `minimumScaleFactor` of the declared
+        # size. Same contract as UILabel.adjustsFontSizeToFitWidth and Compose
+        # autosizing.
+        #
+        # This has to measure: CSS can size text against the VIEWPORT
+        # (`vw`, `clamp`) but never against the element's own content box, and
+        # the two are unrelated. The converter used to emit
+        # `min(<size>px, max(<size * factor>px, 1vw))`, which reads like a
+        # shrink and is not one — on a 375px-wide viewport it renders a 16px
+        # Label at 8px whether or not anything overflows, and on a wide one the
+        # 1vw term outruns both floors so minimumScaleFactor changes nothing at
+        # all (measured: fixture and control both computed 10.24px at 1024px,
+        # 0 differing px — plan 51-A).
+        def emit_auto_shrink_helper
+          generated_dir = @config['generated_directory'] || 'src/generated'
+          FileUtils.mkdir_p(generated_dir)
+          is_ts = @config['typescript']
+          extension = is_ts ? 'ts' : 'js'
+          path = File.join(generated_dir, "autoShrink.#{extension}")
+
+          options_type = is_ts ? <<~TS : ''
+
+            export interface AutoShrinkOptions {
+              /** The size the element is declared with, in px. The ceiling. */
+              fontSize?: number;
+              /** Floor as a fraction of fontSize (iOS minimumScaleFactor). */
+              minimumScaleFactor?: number;
+            }
+          TS
+          el_param = is_ts ? ': HTMLElement | null | undefined' : ''
+          options_param = is_ts ? ': AutoShrinkOptions' : ''
+          cleanup_ret = is_ts ? ': () => void' : ''
+
+          marker_header = Core::GeneratedMarker.comment_header(
+            source: 'autoShrink (autoShrink / minimumScaleFactor helper)',
+            generator: 'rjui build'
+          )
+          marker_footer = Core::GeneratedMarker.comment_footer
+
+          content = <<~JS
+            #{marker_header}
+            // Shrinks an element's text until it fits its own box, down to
+            // `minimumScaleFactor` of the declared size. Re-runs on resize.
+            #{options_type}
+            function overflows(el#{is_ts ? ': HTMLElement' : ''}) {
+              // A box that grows with its content (height: fit-content, the
+              // wrapContent default) never reports vertical overflow — the
+              // honest answer there is "it fits", and nothing shrinks.
+              return el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
+            }
+
+            export function applyAutoShrink(
+              el#{el_param},
+              options#{options_param}
+            )#{cleanup_ret} {
+              if (!el) return () => {};
+
+              const declared = options.fontSize ?? parseFloat(getComputedStyle(el).fontSize) ?? 0;
+              if (!declared) return () => {};
+              // 0.5 when autoShrink is declared without a floor — the same
+              // fallback sjui's SwiftUI label converter uses, so the three
+              // platforms shrink to the same place. A factor at or above 1 is
+              // "do not shrink": the floor is the ceiling.
+              const factor = options.minimumScaleFactor ?? 0.5;
+              const floor = Math.max(1, declared * Math.min(factor, 1));
+
+              const fit = () => {
+                el.style.fontSize = declared + 'px';
+                if (floor >= declared || !overflows(el)) return;
+                // Bisect rather than step: a 4px search space converges in
+                // ~5 reflows instead of one per pixel.
+                let lo = floor;
+                let hi = declared;
+                for (let i = 0; i < 8 && hi - lo > 0.5; i++) {
+                  const mid = (lo + hi) / 2;
+                  el.style.fontSize = mid + 'px';
+                  if (overflows(el)) { hi = mid; } else { lo = mid; }
+                }
+                el.style.fontSize = lo + 'px';
+              };
+
+              fit();
+
+              if (typeof ResizeObserver === 'undefined') return () => {};
+              // Observing the element itself would feed its own writes back in;
+              // the box that decides whether the text fits is the parent's.
+              const parent = el.parentElement;
+              if (!parent) return () => {};
+              const observer = new ResizeObserver(() => fit());
+              observer.observe(parent);
               return () => observer.disconnect();
             }
 

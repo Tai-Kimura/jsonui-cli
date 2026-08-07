@@ -5,9 +5,13 @@
    files, so register the directory explicitly. */
 @source "./generated";
 
-/* Named-color utilities generated from Layouts/Resources/colors.json by
-   scripts/generate.mjs (bg-<key> / text-<key> / border-<key> / ...). */
-@import "./generated/conformance-colors.css";
+/* The palette rjui extracted into Layouts/Resources/colors.json, as the
+   `@theme` block + no-Tailwind-core-backing utilities that `rjui build`
+   emits. This single import is exactly what rjui instructs a consumer to add
+   to globals.css, so the host resolves named colors through the product path:
+   `bg-<key>` and its variants come from Tailwind, and `var(--color-<key>)`
+   resolves because @theme declares the custom property. */
+@import "./generated/theme.css";
 
 html,
 body,
@@ -16,14 +20,6 @@ body,
   margin: 0;
 }
 
-/* `showsHorizontalScrollIndicator:false` & friends emit `scrollbar-hide`,
-   which has no Tailwind-core backing (it is tailwind-scrollbar-hide plugin
-   vocabulary). Supply it here — the same contract rjui's generated theme.css
-   ships to consumers. */
-@utility scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-  &::-webkit-scrollbar {
-    display: none;
-  }
-}
+/* `scrollbar-hide` and the rest of the no-core-backing vocabulary arrive with
+   the generated theme.css imported above — the host must not hand-copy them,
+   or it stops measuring what a consumer gets. */

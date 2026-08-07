@@ -240,6 +240,7 @@ module RjuiTools
         focus_fields = extract_focus_fields(json)
         collection_scrolls = extract_collection_scrolls(json)
         relative_containers = extract_relative_containers(json)
+        auto_shrink_targets = extract_auto_shrink_targets(json)
         included_component_map = extract_included_components(json)  # { CompName => subdir_or_nil }
         included_components = included_component_map.keys
         extension_components = extract_extension_components(json)
@@ -274,14 +275,15 @@ module RjuiTools
         needs_focus = !focus_fields.empty?
         needs_collection_scroll = !collection_scrolls.empty?
         needs_relative_position = !relative_containers.empty?
+        needs_auto_shrink = !auto_shrink_targets.empty?
         needs_client = needs_state || uses_string_manager || uses_extensions || needs_landscape || needs_focus ||
-                       needs_collection_scroll || needs_relative_position || variants.any?
+                       needs_collection_scroll || needs_relative_position || needs_auto_shrink || variants.any?
         use_client = needs_client ? "\"use client\";\n\n" : ''
 
         # Build React import
         react_hooks = []
         react_hooks << 'useState' if needs_state
-        if needs_focus || needs_collection_scroll || needs_relative_position
+        if needs_focus || needs_collection_scroll || needs_relative_position || needs_auto_shrink
           react_hooks << 'useRef'
           react_hooks << 'useEffect'
         end
@@ -311,6 +313,11 @@ module RjuiTools
         # Sibling-relative positioning (align*View / align*OfView).
         relative_position_import = needs_relative_position ?
           "\nimport { applyRelativePositions } from '@/generated/relativePosition';" : ''
+
+        # autoShrink / minimumScaleFactor. CSS cannot size text against the
+        # element's own box, so the fit is measured at runtime.
+        auto_shrink_import = needs_auto_shrink ?
+          "\nimport { applyAutoShrink } from '@/generated/autoShrink';" : ''
         screen_marker_import = screen_id ? "\nimport { screenMarker } from '@/generated/screenMarker';" : ''
 
         # partialAttributes are applied at runtime against the resolved
@@ -470,6 +477,12 @@ module RjuiTools
           relative_position_declarations = "\n#{relative_position_declarations}\n"
         end
 
+        # autoShrink: a ref per shrinking element plus the effect that fits it.
+        # A bound size or factor becomes a dependency, so the text re-fits when
+        # the data changes.
+        auto_shrink_declarations = auto_shrink_targets.map { |t| auto_shrink_effect(t) }.join("\n")
+        auto_shrink_declarations = "\n#{auto_shrink_declarations}\n" unless auto_shrink_declarations.empty?
+
         # Generate landscape hook declaration
         landscape_declaration = needs_landscape ? "\n  #{ResponsiveHelper.landscape_hook_declaration}\n" : ''
 
@@ -542,10 +555,10 @@ module RjuiTools
 
         <<~JSX
           #{use_client}#{marker_header}
-          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{collection_scroll_import}#{relative_position_import}#{date_format_import}#{screen_marker_import}#{partial_text_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
+          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{collection_scroll_import}#{relative_position_import}#{auto_shrink_import}#{date_format_import}#{screen_marker_import}#{partial_text_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
 
           #{props_interface if @config['typescript']}
-          export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{collection_scroll_declarations}#{relative_position_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}
+          export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{collection_scroll_declarations}#{relative_position_declarations}#{auto_shrink_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}
             return (
           #{jsx_content}
             );
@@ -674,6 +687,89 @@ module RjuiTools
 
       def relative_position_ref_name(child_id)
         "#{snake_to_camel_id(child_id)}RelRef"
+      end
+
+      #: Types whose converter attaches the autoShrink ref. Text-bearing
+      #: elements only — shrinking a container has no meaning.
+      AUTO_SHRINK_TYPES = %w[Label Text].freeze
+
+      # Elements declaring autoShrink with a literal id — each gets a hoisted
+      # ref + fit effect, matching the ref LabelConverter attaches. A literal
+      # id is what ties the two together, the same contract the focus and
+      # collection-scroll helpers use.
+      def extract_auto_shrink_targets(json, found = [])
+        return found unless json.is_a?(Hash) || json.is_a?(Array)
+
+        if json.is_a?(Hash)
+          id = json['id']
+          if AUTO_SHRINK_TYPES.include?(json['type'].to_s) && truthy_attr?(json['autoShrink']) &&
+             id.is_a?(String) && !id.empty? && !id.include?('@{')
+            found << {
+              ref: auto_shrink_ref_name(id),
+              font_size: json['fontSize'],
+              min_scale: json['minimumScaleFactor']
+            }
+          end
+
+          child = json['child'] || json['children']
+          if child.is_a?(Array)
+            child.each { |c| extract_auto_shrink_targets(c, found) }
+          elsif child
+            extract_auto_shrink_targets(child, found)
+          end
+        else
+          json.each { |item| extract_auto_shrink_targets(item, found) }
+        end
+
+        found.uniq { |t| t[:ref] }
+      end
+
+      def auto_shrink_ref_name(id)
+        "#{snake_to_camel_id(id)}ShrinkRef"
+      end
+
+      # `autoShrink: "@{flag}"` cannot be resolved at build time, and a
+      # component that shrinks only when the data says so still needs the ref
+      # — the effect reads the same expression as its dependency.
+      def truthy_attr?(value)
+        return false if value.nil? || value == false || value == 'false'
+
+        true
+      end
+
+      def auto_shrink_effect(target)
+        element_type = @config['typescript'] ? '<HTMLElement | null>' : ''
+        options = []
+        deps = []
+        size = auto_shrink_operand(target[:font_size])
+        scale = auto_shrink_operand(target[:min_scale])
+        if size
+          options << "fontSize: #{size[:expr]}"
+          deps << size[:expr] if size[:bound]
+        end
+        if scale
+          options << "minimumScaleFactor: #{scale[:expr]}"
+          deps << scale[:expr] if scale[:bound]
+        end
+
+        "  const #{target[:ref]} = useRef#{element_type}(null);\n" \
+          "  useEffect(() => applyAutoShrink(#{target[:ref]}.current, " \
+          "{ #{options.join(', ')} }), [#{deps.join(', ')}]);"
+      end
+
+      # A number passes through; a binding becomes the data expression (and a
+      # dependency). Anything else is dropped — the helper falls back to the
+      # computed size, which is what an unreadable declaration deserves.
+      def auto_shrink_operand(value)
+        return nil if value.nil?
+        return { expr: value.to_s, bound: false } if value.is_a?(Numeric)
+
+        text = value.to_s
+        if (match = text.match(/\A@\{([A-Za-z_][A-Za-z0-9_.]*)\}\z/))
+          { expr: "data.#{match[1]}", bound: true }
+        elsif text.match?(/\A-?\d+(\.\d+)?\z/)
+          { expr: text, bound: false }
+        end
       end
 
       def relative_position_effect(container)

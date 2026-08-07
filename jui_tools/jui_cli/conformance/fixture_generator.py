@@ -187,7 +187,7 @@ def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> d
         base,
         bound=(
             rules.bound_data_entry(
-                plan.section, plan.attribute, plan.cases[0].value if plan.cases else None
+                plan.section, plan.attribute, rules.bound_seed_from(plan)
             )
             if case.name == rules.BOUND_CASE_SUFFIX
             else rules.bound_union_data_entry(plan.section, plan.attribute)

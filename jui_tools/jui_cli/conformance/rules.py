@@ -383,6 +383,15 @@ NON_OBSERVABLE_BY_SECTION: set[tuple[str, str]] = {
     ("SelectBox", "datePickerStyle"),
     ("SelectBox", "minuteInterval"),
     ("SelectBox", "dateStringFormat"),
+    # Adjudicated by E2 and measured there: neither has a face a capture can
+    # hold. `CheckBox.value` is the payload a checked box SUBMITS — the box
+    # draws its checked state from `isOn`/`checked`, and the value rides
+    # along unseen (same reasoning as `Radio.value` above, which is already
+    # here). `Web.sandbox` sets the iframe permission flags, which change
+    # what the frame may DO, never what it looks like — the sibling of
+    # `Web.allow`, also already here.
+    ("CheckBox", "value"),
+    ("Web", "sandbox"),
     # `("NetworkImage", "loadingImage")` used to live here, on the argument
     # that an in-flight image exists only for the length of a request and a
     # still capture has no duration — so the shutter opens either before the
@@ -580,6 +589,12 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     ("NetworkImage", "errorImage"): IMAGE_ALT_ASSET_NAME,
     # Selected-state icons swap against the base icon — same distinct-asset
     # rule as the NetworkImage state images.
+    # The Image base carries `src: conformance_sample`, so a highlightSrc
+    # naming the SAME asset is two spellings of one picture — the highlight
+    # state cannot be told from the resting one however correctly it is
+    # swapped. The alt asset is what makes the swap visible (lane E2).
+    ("Image", "highlightSrc"): IMAGE_ALT_ASSET_NAME,
+    ("Image", "highlightSrcName"): IMAGE_ALT_ASSET_NAME,
     ("CheckBox", "selectedIcon"): IMAGE_ALT_ASSET_NAME,
     ("Radio", "selectedIcon"): IMAGE_ALT_ASSET_NAME,
     ("Radio", "selected_icon"): IMAGE_ALT_ASSET_NAME,
@@ -1540,6 +1555,13 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # clamp a 200pt box, which is why only the floors were inert. The
     # matchParent-plus-ceiling case has its own bespoke fixtures
     # (conformance.bounds_fixtures).
+    # A border is summoned by the WIDTH+COLOUR pair: a width with no colour
+    # draws in the platform default (transparent on two of the three) and a
+    # colour with no width draws nothing at all. `borderStyle` already got
+    # its `with_border` variant for exactly this reason; these two had the
+    # same gap and no companion (lane E2).
+    "borderWidth": {"borderColor": "#FF0000"},
+    "borderColor": {"borderWidth": 2},
     "minWidth": {"width": "wrapContent"},
     "minHeight": {"height": "wrapContent"},
     # clipToBounds needs something to clip: the stacked base children fit
@@ -1557,6 +1579,11 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # Line metrics need a second line to sit between.
     "Label.lineSpacing": {"text": LONG_TEXT},
     "Label.lineHeightMultiple": {"text": LONG_TEXT},
+    # `capitalize` upper-cases the first letter of each word, and the shared
+    # base text is already "Sample" — so the transform was the identity map
+    # and the fixture drew its control. A lower-case body is what makes the
+    # transform do anything (lane E2's fixture-shaping queue).
+    "Label.textTransform": {"text": "sample conformance text"},
     # Truncation modes only choose WHERE to cut once something is being cut.
     "Label.lineBreakMode": {"text": LONG_TEXT},
     # The same rule, on the component whose body IS its hint. The TextView
@@ -2242,6 +2269,31 @@ def _fits(value: Any, cls: str) -> bool:
     if cls == "Double":
         return isinstance(value, (int, float)) and not isinstance(value, bool)
     return isinstance(value, str)
+
+
+def bound_seed_from(plan: "AttributePlan") -> Any:
+    """The literal a bound case should seed its data property with.
+
+    The representative case is the natural seed — the bound fixture then asks
+    for exactly what its literal twin asks for — but on a UNION-typed
+    attribute the representative may be spelled in the other member of the
+    union, and then it does not fit the declared data class and
+    :func:`bound_data_entry` falls back to the class's zero.
+
+    That is how `Button/fontWeight__binding` came to declare `Int 0`: the
+    representative is `"bold"`, the class is `Int`, and zero is not a weight
+    at all — the fixture asked the platform to render a value outside the
+    attribute's domain (lane E2's fixture-shaping queue). So the seed is the
+    first case whose value actually FITS the class, and only then the
+    representative.
+    """
+    cls = BOUND_CASE_CLASSES.get((plan.section, plan.attribute))
+    literals = [c for c in plan.cases if c.alias_of is None and c.name != BOUND_CASE_SUFFIX]
+    if cls is not None:
+        for case in literals:
+            if _fits(case.value, cls):
+                return case.value
+    return literals[0].value if literals else None
 
 
 def bound_data_entry(

@@ -211,12 +211,21 @@ class CompanionDerivationTest(unittest.TestCase):
 
 
 class CompanionApplicationTest(unittest.TestCase):
-    """Companions must reach BOTH sides, or the probe measures the companion."""
+    """Companions must reach BOTH sides, or the probe measures the companion.
 
-    DEFINITIONS = {"View": {"borderWidth": _defn(type=["number", "binding"])}}
+    The example attribute must be one with NO base companion of its own, or
+    `test_without_a_spec_no_companion_is_written` cannot tell the two sources
+    apart. It used `View.borderWidth`, which acquired a `borderColor` base
+    companion when the border fixtures were paired up (lane E2's shaping
+    queue) — the assertion then failed on the BASE companion while the spec
+    mechanism it is testing was working exactly as before. `View.opacity`
+    carries no base attributes, so it distinguishes them again.
+    """
+
+    DEFINITIONS = {"View": {"opacity": _defn(type=["number", "binding"])}}
     SPEC = comp.CompanionSpec(
         component="View",
-        attribute="borderWidth",
+        attribute="opacity",
         companions={"borderColor": "#FF0000"},
         source="test",
         kind="ATTRIBUTE_PAIR",
@@ -237,26 +246,26 @@ class CompanionApplicationTest(unittest.TestCase):
         self.assertNotIn("borderColor", targets["primary"])
 
     def test_the_companion_reaches_the_control_too(self):
-        targets = self._targets({("View", "borderWidth"): self.SPEC})
+        targets = self._targets({("View", "opacity"): self.SPEC})
         self.assertEqual(targets["control"].get("borderColor"), "#FF0000")
         self.assertEqual(targets["primary"].get("borderColor"), "#FF0000")
 
     def test_the_companion_reaches_the_bound_case(self):
-        targets = self._targets({("View", "borderWidth"): self.SPEC})
+        targets = self._targets({("View", "opacity"): self.SPEC})
         self.assertEqual(targets["bound"].get("borderColor"), "#FF0000")
-        self.assertEqual(targets["bound"].get("borderWidth"), ce.BOUND_VALUE)
+        self.assertEqual(targets["bound"].get("opacity"), ce.BOUND_VALUE)
 
     def test_the_control_still_does_not_carry_the_attribute_under_test(self):
-        targets = self._targets({("View", "borderWidth"): self.SPEC})
-        self.assertNotIn("borderWidth", targets["control"])
+        targets = self._targets({("View", "opacity"): self.SPEC})
+        self.assertNotIn("opacity", targets["control"])
 
     def test_the_applied_spec_is_recorded_for_the_report(self):
         table = ce.build_jobs(
             self.DEFINITIONS,
             platforms=("web",),
-            companion_specs={("View", "borderWidth"): self.SPEC},
+            companion_specs={("View", "opacity"): self.SPEC},
         )
-        self.assertEqual(list(table.paired), [("View", "borderWidth")])
+        self.assertEqual(list(table.paired), [("View", "opacity")])
 
     def test_an_unpaired_run_records_nothing(self):
         table = ce.build_jobs(self.DEFINITIONS, platforms=("web",))
