@@ -490,8 +490,8 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": "51-B corroboration (local ios artifacts, both lanes): datePickerMode time / date / countdown / dateandtime render pixel-identically on ios in the dynamic AND the codegen lane (0 differing px). sjui selectbox_converter.rb:79-86 maps `time` to `.time`, so the codegen is innocent and android/web activeness is their own closed-control chrome."
     },
     {
       "fixture": "SelectBox/datePickerStyle__automatic",
@@ -803,8 +803,8 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "codegen-innocent, library gap (ios): sjui emits the declared family as `fontName:` (textview_converter.rb:146-149) and the render does not move — measured 0 differing px against the control on BOTH ios lanes (dynamic and codegen, min_pixels=0), while Label and TextField carry the SAME `serif` value to a visible difference on ios (2092 px). TextViewWithPlaceholder never applies the name. This is NOT the font-availability family that covers Label/fontFamily__static: the family resolves on ios, it is this component that drops it. Owner: F (SwiftJsonUI). Family: textview-library-gap.",
+      "note": "Both faces (static and bound) are inert on ios, so there is no bound-drop signal here — the component ignores the family however it arrives."
     },
     {
       "fixture": "TextView/fontFamily__static",
@@ -813,7 +813,7 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "codegen-innocent, library gap (ios): sjui emits the declared family as `fontName:` (textview_converter.rb:146-149) and the render does not move — measured 0 differing px against the control on BOTH ios lanes (dynamic and codegen, min_pixels=0), while Label and TextField carry the SAME `serif` value to a visible difference on ios (2092 px). TextViewWithPlaceholder never applies the name. This is NOT the font-availability family that covers Label/fontFamily__static: the family resolves on ios, it is this component that drops it. Owner: F (SwiftJsonUI). Family: textview-library-gap.",
       "note": ""
     },
     {
@@ -823,7 +823,7 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "bound face only (ios): the STATIC face of the same attribute is active on ios — control_diff lists TextView/hintColor__static for ios and it measures 2272 differing px locally on both ios lanes — and only the bound face is inert, so this is a binding dropped on the ios DYNAMIC path, not an unread spelling. The codegen is innocent: color_helper.rb#get_swiftui_color routes `@{...}` through BindingExpression and emits the runtime colour lookup, and the paired codegen differential passes C1 for TextView.hintColor at HEAD. Same class as plan 36 (a bound value silently dropped while the static one works). Owner: F (SwiftJsonUI dynamic). Family: bound-face-dropped-dynamic.",
       "note": ""
     },
     {
@@ -1059,8 +1059,8 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+      "note": "51-B: the static sibling (common/centerInParent__true) is inert on ios too, so the bound face adds no bound-drop signal — the same geometry ruling, delivered through a binding. The paired codegen differential passes C1 for common.centerInParent at HEAD."
     },
     {
       "fixture": "common/centerInParent__true",
@@ -1098,7 +1098,7 @@
         "android": "active",
         "ios": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "contract-covered ruling filed under the wrong key: attribute_semantics.json#distribution.observable declares `View/distribution__fill` = {ios: inert, android: active, web: active} (2026-08-05 plan 49-E ruling — `fill` is SwiftUI's stack default, so ios has nothing to change). This fixture is the `common/` face of the same shape and measures the same way, but the observable names only the `View/` key, so it landed in the ledger instead of the contract. Owner: E — add the common/ face to the observable, at which point this row is stale and must be pruned in the same commit. Family: value-is-default.",
       "note": ""
     },
     {
@@ -1138,7 +1138,7 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "measured mechanism, NOT accepted — canon question open with E. sjui blur_converter.rb hardcodes `.background(.ultraThinMaterial)` for EVERY value and derives nothing from effectStyle; the value only selects a `.preferredColorScheme` for 3 of the 9 canonical spellings (Dark / Light / ExtraLight), and the other 6 (Prominent, Regular, UltraThin, Thin, Thick, Chrome) emit nothing at all — which is why they are inert. Measured on the local ios artifacts, both lanes: `dark` differs from its control by 3,084,926 px — the WHOLE screen, because `.preferredColorScheme` is a window-level environment override and not a 100x100 blur — while `light` and `extralight` differ by exactly 0. The SSoT declares 9 canonical values with default `Regular`, so ios renders 9 declared values as at most 2 pictures. Two rulings are needed BEFORE anyone implements: (a) what each declared value maps to in SwiftUI on ios, and (b) whether the existing skinIdioms observable (Blur/effectStyle__{light,extralight} = ios inert) survives that mapping — a fix contradicts it, and a contradicted contract is a failure no ledger reason excuses. Owner: E (canon) -> B (blur_converter) + F (dynamic Blur). The 7 sibling common/effectStyle__* rows in the 51 adjudication queue are the SAME mechanism and must move with this one. Family: effectstyle-unmapped-ios.",
       "note": ""
     },
     {
@@ -1228,8 +1228,8 @@
         "ios": "inert",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+      "note": "51-B: the static sibling (common/padding__static) is inert on ios too, so the bound face adds no bound-drop signal — the same geometry ruling, delivered through a binding. The paired codegen differential passes C1 for common.padding at HEAD."
     },
     {
       "fixture": "common/padding__static",
