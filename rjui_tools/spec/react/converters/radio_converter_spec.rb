@@ -74,6 +74,19 @@ RSpec.describe RjuiTools::React::Converters::RadioConverter do
         result = converter.convert
         expect(result).to include("accentColor: '#FF5500'")
       end
+
+      it 'resolves a palette token instead of emitting it as a colour' do
+        converter = create_converter({ 'class' => 'Radio', 'items' => ['A'], 'tintColor' => 'primary' })
+        result = converter.convert
+        expect(result).to include("accentColor: ColorManager.resolveColor('primary')")
+        expect(result).not_to include("accentColor: 'primary'")
+      end
+
+      it 'resolves the token on the single-radio path too' do
+        converter = create_converter({ 'class' => 'Radio', 'id' => 'solo', 'tintColor' => 'primary' })
+        result = converter.convert
+        expect(result).to include("accentColor: ColorManager.resolveColor('primary')")
+      end
     end
 
     context 'with enabled=false' do

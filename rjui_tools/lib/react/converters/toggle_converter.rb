@@ -167,7 +167,11 @@ module RjuiTools
           tint_color = attributes['onTintColor'] || attributes['tint'] || attributes['tintColor']
           return '' unless tint_color
 
-          " style={{ accentColor: '#{tint_color}' }}"
+          # color_style_expr, not raw interpolation: a colors.json token
+          # (`primary`) is not a CSS color, and `accent-color: primary` is an
+          # invalid declaration the browser drops whole — the attribute reads
+          # as consumed while rendering the UA default.
+          " style={{ accentColor: #{color_style_expr(tint_color)} }}"
         end
       end
     end

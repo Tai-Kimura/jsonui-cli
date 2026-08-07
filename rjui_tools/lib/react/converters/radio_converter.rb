@@ -63,7 +63,7 @@ module RjuiTools
           gap, gap_style = item_gap_parts
           items_jsx = items.map do |item|
             escaped_item = item.gsub('"', '&quot;')
-            input_style = tint_color ? " style={{ accentColor: '#{tint_color}' }}" : ''
+            input_style = tint_color ? " style={{ accentColor: #{color_style_expr(tint_color)} }}" : ''
             state_attrs = build_state_attrs(selected_binding, on_change, escaped_item)
             <<~JSX.chomp
               #{indent_str(indent + 2)}<label className="flex items-center #{gap} cursor-pointer"#{gap_style}>
@@ -98,7 +98,7 @@ module RjuiTools
           # literals.
           radio_value = attributes['value'] || extract_id || 'option'
           tint_color = attributes['tintColor']
-          input_style = tint_color ? " style={{ accentColor: '#{tint_color}' }}" : ''
+          input_style = tint_color ? " style={{ accentColor: #{color_style_expr(tint_color)} }}" : ''
 
           state_attrs = build_state_attrs(selected_binding, on_change, radio_value)
           state_attrs = checked_attr if state_attrs.empty?
