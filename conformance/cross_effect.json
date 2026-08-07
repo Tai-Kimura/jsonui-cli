@@ -39,8 +39,8 @@
         "ios": "active",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "android render-stage gap on the DYNAMIC renderer, codegen innocent — merged from the two lanes that measured it from opposite ends (51-C codegen face, 51-G dynamic root cause). C measured the codegen face clean (jui conformance codegen-effect --platform android passes CheckBox.font on C0/C1/C2, 276 probes, 0 fail) and confirmed the android host is the library-dynamic one (conformance-host/build.gradle.kts:73), so the inert verdict is a fact about dynamic. G found the mechanism: DynamicCheckBoxComponent.kt:251 fed rawString(a.font) into a weight-name `when`, and the bound face arrives as the literal \"@{expr}\", so only the static face ever matched. Fixed in KotlinJsonUI f3bdd90 via ResourceResolver.fontWeightFor(TypedAttrs.string(...)). Owner G. NEITHER LANE HAS RE-MEASURED ON DEVICE: 51-G claims the fix landed, not that the row is green, and 51-C's prediction is that the 3PF re-measure drops this row as stale. If it is still inert after that run, the fix did not reach the draw and the row comes back to G. Family: android-dynamic-binding-blind.",
+      "note": "Same family as Radio/font__binding — one converter shape in two components. If only one of the two rows drops on the re-measure, the other is an implementation miss, not a measurement fluke."
     },
     {
       "fixture": "Collection/defaultScrollAnchor__bottom",
@@ -172,8 +172,8 @@
         "ios": "active",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "android render-stage gap on the DYNAMIC renderer, codegen innocent — merged from the two lanes that measured it from opposite ends (51-C codegen face, 51-G dynamic root cause). NOT a binding gap — both faces were inert. DynamicTextComponent carried its own private resolveFontResource that only did the res/font lookup, while the shared ResourceResolver tries the generic families first; that is why the declared `serif` worked in TextView/TextField and not in Label. C measured the codegen face clean and confirmed the static sibling Label/fontFamily__static measures android inert / ios active / web active locally. G deleted the duplicate resolver in KotlinJsonUI f3bdd90. Owner G. NEITHER LANE HAS RE-MEASURED ON DEVICE: 51-G claims the fix landed, not that the row is green, and 51-C's prediction is that the 3PF re-measure drops this row as stale. If it is still inert after that run, the fix did not reach the draw and the row comes back to G. SEPARATE, STILL-OPEN QUESTION forwarded to E by G: the android CODEGEN path still drops generic families (Configuration.kt:169 sets family=null) — that is a canon question, not part of this row. Family: android-dynamic-private-resolver.",
+      "note": "The static sibling reproduces on the local artifacts, so the re-measure can check both faces at once rather than waiting for the bound face alone."
     },
     {
       "fixture": "Label/fontFamily__static",
@@ -192,8 +192,8 @@
         "ios": "active",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "android render-stage gap on the DYNAMIC renderer, codegen innocent — merged from the two lanes that measured it from opposite ends (51-C codegen face, 51-G dynamic root cause). The SSoT types Label.highlightColor as [\"string\",\"binding\"], but the highlight path ran the value through ColorParser.parseColorString, which is binding-BLIND (DynamicTextComponent.kt:130 -> :139), so the bound face fell back to the default colour while `highlightColor__static` is active on android too. C measured the codegen face clean; G fixed it in KotlinJsonUI f3bdd90 with parseColorStringWithBinding. Owner G. NEITHER LANE HAS RE-MEASURED ON DEVICE: 51-G claims the fix landed, not that the row is green, and 51-C's prediction is that the 3PF re-measure drops this row as stale. If it is still inert after that run, the fix did not reach the draw and the row comes back to G. Family: android-dynamic-binding-blind.",
+      "note": "Paired with Label/hintColor__binding: the same call site reached through the hintStyle bag (DynamicTextComponent.kt:87). The two rows drop as a set or stay as a set."
     },
     {
       "fixture": "Label/hintColor__binding",
@@ -202,8 +202,8 @@
         "ios": "active",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "android render-stage gap on the DYNAMIC renderer, codegen innocent — merged from the two lanes that measured it from opposite ends (51-C codegen face, 51-G dynamic root cause). Same defect and same call site as Label/highlightColor__binding, reached through the hintStyle bag (DynamicTextComponent.kt:87): a binding-blind colour parse on an attribute the SSoT declares as string|binding. C measured the codegen face clean; G fixed it in KotlinJsonUI f3bdd90. Owner G. NEITHER LANE HAS RE-MEASURED ON DEVICE: 51-G claims the fix landed, not that the row is green, and 51-C's prediction is that the 3PF re-measure drops this row as stale. If it is still inert after that run, the fix did not reach the draw and the row comes back to G. Family: android-dynamic-binding-blind.",
+      "note": "Paired with Label/highlightColor__binding."
     },
     {
       "fixture": "Label/hintColor__static",
@@ -389,8 +389,8 @@
         "ios": "active",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "android render-stage gap on the DYNAMIC renderer, codegen innocent — merged from the two lanes that measured it from opposite ends (51-C codegen face, 51-G dynamic root cause). The SSoT types Radio.checked as [\"boolean\",\"binding\"] and DynamicRadioComponent.kt:184 did `raw(a.checked) as? Boolean`, which is unsatisfiable for the bound face and dropped it silently (`Radio/checked__true` is active on android). C measured the codegen face clean; G fixed it in KotlinJsonUI f3bdd90 via TypedAttrs.boolean(a.checked, data). Owner G. NEITHER LANE HAS RE-MEASURED ON DEVICE: 51-G claims the fix landed, not that the row is green, and 51-C's prediction is that the 3PF re-measure drops this row as stale. If it is still inert after that run, the fix did not reach the draw and the row comes back to G. Family: android-dynamic-binding-blind.",
+      "note": "Independent of the Radio/checked__true_with_group dispute — different call site, different question."
     },
     {
       "fixture": "Radio/checked__true_with_group",
@@ -399,8 +399,8 @@
         "ios": "active",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "android inert is the DEFECT, ios/web active is correct — orchestrator provisional ruling 2026-08-07, applied here pending E's formal confirmation. 51-C originally ruled the opposite (that a declared `group` suppresses the seed, so android was right) and was pushed back: the SSoT's Radio.checked precedence is `bound selectedValue > literal selectedValue > checked` and carries NO group term — `group` only selects which key the choice is stored under, and the declaration says `checked` seeds the group's INITIAL selection while no choice has been made. 51-G read the declaration the same way and fixed android's dynamic path in KotlinJsonUI f3bdd90; 51-C then followed on the codegen side (7c52cc8), so both android paths now compute `groupState || (seed && nothing chosen yet)`. Owners C (codegen) + G (dynamic), both landed. The row drops when the 3PF re-measure finds android active. IF E'S FORMAL READING OVERTURNS THIS, the row and both implementations come back. Family: radio-group-seed-canon.",
+      "note": "Recorded because the retraction is the lesson: 51-C's original ruling rested on 'two of the three implementations agree, so they are right', which is a majority vote over usage. Semantics come from the SSoT declaration alone — the same trap the design-principles ledger names. 51-G's hold request and 51-C's own rewrite both point here."
     },
     {
       "fixture": "Radio/font__binding",
@@ -409,8 +409,8 @@
         "ios": "active",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "android render-stage gap on the DYNAMIC renderer, codegen innocent — merged from the two lanes that measured it from opposite ends (51-C codegen face, 51-G dynamic root cause). Identical shape to CheckBox/font__binding: DynamicRadioComponent.kt:449 matched a weight-name table against rawString, which returns \"@{expr}\" for the bound face. C measured the codegen face clean; G fixed it in KotlinJsonUI f3bdd90. Owner G. NEITHER LANE HAS RE-MEASURED ON DEVICE: 51-G claims the fix landed, not that the row is green, and 51-C's prediction is that the 3PF re-measure drops this row as stale. If it is still inert after that run, the fix did not reach the draw and the row comes back to G. Family: android-dynamic-binding-blind.",
+      "note": "Paired with CheckBox/font__binding — same族, same commit, they drop together or neither does."
     },
     {
       "fixture": "Radio/selectedValue__gamma",
@@ -682,8 +682,8 @@
         "android": "inert",
         "ios": "active"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "android render-stage gap on the DYNAMIC renderer, codegen innocent — merged from the two lanes that measured it from opposite ends (51-C codegen face, 51-G dynamic root cause). The SSoT types SelectBox.selectedItem as [\"string\",\"binding\"], so the static face must seed the selection too, but DynamicSelectBoxComponent.kt:93-105 read only the bound face as a data key and never seeded from a literal — so `selectedItem: \"Two\"` selected nothing and the closed box drew empty. The kjui codegen seeds from all three spellings (selectbox_component.rb:54-60), which is why C measured the codegen face clean. G fixed it in KotlinJsonUI f3bdd90. Owner G. NEITHER LANE HAS RE-MEASURED ON DEVICE: 51-G claims the fix landed, not that the row is green, and 51-C's prediction is that the 3PF re-measure drops this row as stale. If it is still inert after that run, the fix did not reach the draw and the row comes back to G. Family: android-dynamic-static-face-unread.",
+      "note": "Declared for ios/android only — web is out of scope for this attribute, which is why the platform map has two faces rather than three."
     },
     {
       "fixture": "SelectBox/selectedValue__one",
@@ -773,8 +773,8 @@
         "ios": "active",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "android render-stage gap on the DYNAMIC renderer, codegen innocent — merged from the two lanes that measured it from opposite ends (51-C codegen face, 51-G dynamic root cause). The inset machinery existed on the Compose TextView and only `containerInset` was wired to it, so the UIKit spelling `edgeInset` never reached contentPadding and the fixture drew the control. The codegen has read `containerInset || edgeInset` all along (textview_component.rb:325), which is why C measured the codegen face clean, and the SSoT declaration itself said 'Unimplemented on the Compose TextView path, not impossible.' G wired `a.containerInset ?: a.edgeInset` in KotlinJsonUI f3bdd90. Owner G. NEITHER LANE HAS RE-MEASURED ON DEVICE: 51-G claims the fix landed, not that the row is green, and 51-C's prediction is that the 3PF re-measure drops this row as stale. If it is still inert after that run, the fix did not reach the draw and the row comes back to G. Family: android-dynamic-spelling-unwired.",
+      "note": "One of only two rows in this bucket that reproduce on the local 2026-08-04 artifacts (with common/alignTopView__static) — the re-measure can be checked locally before the 3PF run."
     },
     {
       "fixture": "TextView/editable__false",
@@ -970,8 +970,8 @@
         "ios": "active",
         "web": "active"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "codegen-innocent, library gap (android): the sibling constraint reaches the emitted Compose and the render does not move. ios and web place it. Family: relative-position-container-mode.",
+      "note": "Joined to the alignLeftView row by 51-G: same mechanism, measured — the relative-position spellings are honoured by DynamicConstraintLayoutComponent, and this fixture's parent is a plain View (DynamicContainerComponent), where the spelling is only in the known set. 51-C measured the codegen half independently and agrees: the kjui codegen switches the parent to a ConstraintLayout when a child carries a relative-position spelling (compose_builder.rb#has_relative_positioning_in_children?, modifier_builder.rb:1148), so the family boundary is the same on both android paths. The gap is the whole family of 10 spellings (alignTop/Bottom/Left/RightView + alignTop/Bottom/Left/RightOfView + alignCenterVertical/HorizontalView), not this spelling alone. Owner: G, plan 51 — not expected to close in this train; if it does not, it carries to the next one with the owner named."
     },
     {
       "fixture": "common/alignment__bottom",
@@ -1098,8 +1098,8 @@
         "android": "active",
         "ios": "inert"
       },
-      "reason": "contract-covered ruling filed under the wrong key: attribute_semantics.json#distribution.observable declares `View/distribution__fill` = {ios: inert, android: active, web: active} (2026-08-05 plan 49-E ruling — `fill` is SwiftUI's stack default, so ios has nothing to change). This fixture is the `common/` face of the same shape and measures the same way, but the observable names only the `View/` key, so it landed in the ledger instead of the contract. Owner: E — add the common/ face to the observable, at which point this row is stale and must be pruned in the same commit. Family: value-is-default.",
-      "note": ""
+      "reason": "ios is OUTSTANDING against the canon, not correct-by-default — rewritten 2026-08-07 on the orchestrator's ruling after 51-F pushed back on the previous reason. The previous text said '`fill` is SwiftUI's stack default, so ios has nothing to change'; attribute_semantics.json#distribution does not say that. It maps fill.swiftui to `.frame(maxWidth/maxHeight: .infinity) on each child`, states that 'web landed first and is the reference implementation; ios (sjui view_converter.rb ...) and android ... are outstanding', and records from the re-measure that '`fill` stays inert on ios: with the child width gone the fixture can finally demonstrate it, and ios does not.' The default reading also mixes up two frameworks: filling is UIStackView's default, not SwiftUI's — a SwiftUI HStack does not grow its children. The `observable` block's {ios: inert} is the RECORD OF A MEASUREMENT, not an acceptance; the same ruling says the entry 'gets re-measured, not edited'. So this row stays, with the correct owner: F implemented the canon on the ios dynamic path (SwiftJsonUI 440c06a, childData channel so the frame lands inside each child's own modifier chain, explicitChildSizeWins honoured on the read side), and B owns the codegen half (sjui view_converter.rb still emits nothing for fill). The row drops when a 3PF run measures ios active — by measurement, not by edit. Family: distribution-size-half-outstanding.",
+      "note": "Rewritten by 51-E2 on the orchestrator's ruling; the pushback and the canon quotes are in 51-F-progress.md 要判断 1."
     },
     {
       "fixture": "common/effectStyle__chrome",
