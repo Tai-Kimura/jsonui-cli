@@ -438,3 +438,19 @@ def _clean_text(value: Any) -> str:
     # Defensive: never let a description terminate a block comment.
     text = text.replace("*/", "* /")
     return " ".join(text.split())
+
+
+def format_default(value: Any) -> str:
+    """A declared default rendered as the JSON it was actually written in.
+
+    `f"{value}"` renders Python's spelling, so a boolean default reached the
+    generated Ruby, Kotlin AND Swift doc comments as `True` — a word none of
+    those three languages spells that way. The declaration lives in JSON and
+    the comment documents the declaration, so JSON's spelling is the one that
+    is correct in every emitter rather than accidentally correct in none.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return "null"
+    return str(value)

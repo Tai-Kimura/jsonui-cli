@@ -25,7 +25,7 @@ public metadata contract.
 from __future__ import annotations
 
 from ...core.type_mapper import TypeMapper
-from .model import Attribute, AttrKind, AttrModel, Component, merged_alias_map
+from .model import Attribute, AttrKind, AttrModel, Component, format_default, merged_alias_map
 from .swift_emitter import (
     _pascal,
     _split_words,
@@ -521,7 +521,7 @@ def _doc_comment(attr: Attribute) -> str:
     if attr.required:
         notes.append("required")
     if attr.default is not None:
-        notes.append(f"default: {attr.default}")
+        notes.append(f"default: {format_default(attr.default)}")
     if attr.aliases:
         notes.append("aliases: " + ", ".join(attr.aliases))
     if attr.binding_direction:
