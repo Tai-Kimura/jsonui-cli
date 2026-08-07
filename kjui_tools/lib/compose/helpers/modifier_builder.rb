@@ -711,6 +711,36 @@ module KjuiTools
           { modifiers: modifiers, visibility_info: visibility_info }
         end
         
+        # `offsetX` / `offsetY` — moves the view without changing the space it
+        # occupies or where its siblings land.
+        #
+        # `absoluteOffset`, not `offset` and not `graphicsLayer`, is E's ruling
+        # (51-E f433580) and neither half is a style choice:
+        #
+        # - `graphicsLayer { translationX/Y }` translates at draw time and
+        #   leaves the touch target behind. `onClick`, `onLongPress` and
+        #   `canTap` are COMMON, so that draws the control in one place and
+        #   makes it tappable in another — one declaration silently breaking
+        #   another, the same reason clipToBounds does not default to clipping.
+        # - plain `Modifier.offset` mirrors under RTL. `offsetX` is spelled on
+        #   the X axis, and this SSoT already separates the absolute axis
+        #   vocabulary (leftMargin/rightMargin) from the RTL-aware one
+        #   (startMargin/endMargin), so the X spelling must not mirror.
+        #
+        # Emitted immediately after size and before alpha — agreed with G so
+        # both android paths use the same slot. Compose composes left-to-outside,
+        # so this is the only position that satisfies both constraints: outside
+        # background/shadow (or the background stays put while the content
+        # slides), and inside margins (or the siblings move after all).
+        def self.build_offset(json_data, required_imports = nil)
+          x = json_data['offsetX']
+          y = json_data['offsetY']
+          return [] if x.nil? && y.nil?
+
+          required_imports&.add(:absolute_offset)
+          [".absoluteOffset(x = #{BoundValue.dp(x || 0)}, y = #{BoundValue.dp(y || 0)})"]
+        end
+
         # Build alpha/opacity modifier separately (can be used independently of visibility)
         def self.build_alpha(json_data, required_imports = nil)
           modifiers = []

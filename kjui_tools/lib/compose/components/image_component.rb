@@ -82,6 +82,7 @@ module KjuiTools
           end
 
           # Padding (inner spacing) - applied after size
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))

@@ -66,6 +66,7 @@ module KjuiTools
           modifiers.concat(size_modifiers)
 
           # 4. Alpha/opacity - BEFORE background so alpha applies to background too
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
 
           # 4.5 Shadow — declared `shadow` never reached containers on the

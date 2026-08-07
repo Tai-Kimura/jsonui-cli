@@ -1419,4 +1419,43 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
       expect(described_class.build_weight({ 'heightWeight' => 2 }, nil)).to be_empty
     end
   end
+
+  # E's ruling (51-E f433580): absoluteOffset, not offset and not
+  # graphicsLayer. graphicsLayer translates at draw time and leaves the touch
+  # target behind, which silently breaks the COMMON onClick/canTap
+  # declarations; plain `offset` mirrors under RTL, and `offsetX` is an
+  # absolute-axis spelling like leftMargin.
+  describe '.build_offset' do
+    let(:imports) { Set.new }
+
+    it 'emits nothing when neither axis is declared' do
+      expect(described_class.build_offset({}, imports)).to be_empty
+      expect(imports).to be_empty
+    end
+
+    it 'fills the undeclared axis with zero rather than dropping the call' do
+      expect(described_class.build_offset({ 'offsetX' => 10 }, imports))
+        .to eq(['.absoluteOffset(x = 10.dp, y = 0.dp)'])
+      expect(imports).to include(:absolute_offset)
+    end
+
+    it 'carries both axes and a negative value' do
+      expect(described_class.build_offset({ 'offsetX' => 10, 'offsetY' => -5 }, imports))
+        .to eq(['.absoluteOffset(x = 10.dp, y = -5.dp)'])
+    end
+
+    # `["number", "binding"]` — a raw interpolation would put `@{v}.dp` in
+    # code position.
+    it 'keeps the bound face' do
+      out = described_class.build_offset({ 'offsetY' => '@{dy}' }, imports).join
+      expect(out).to include('y = (data.dy?.dp ?: 0.dp)')
+      expect(out).not_to include('@{')
+    end
+
+    # The RTL-aware variant would mirror an X spelling.
+    it 'never reaches for the mirroring variant' do
+      expect(described_class.build_offset({ 'offsetX' => 10 }, imports).join)
+        .not_to match(/\.offset\(|graphicsLayer/)
+    end
+  end
 end

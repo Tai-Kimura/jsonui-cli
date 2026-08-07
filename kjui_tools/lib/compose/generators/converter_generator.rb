@@ -154,6 +154,7 @@ module KjuiTools
                         # Build modifiers
                         modifiers = []
                         modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
+                        modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
                         modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
                         modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
                         modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))

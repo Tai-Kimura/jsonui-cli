@@ -88,6 +88,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           # onLongPress: Button's own inner .clickable consumes the down event
           # in the Main pass, so the detector must watch the Initial pass

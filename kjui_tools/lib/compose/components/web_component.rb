@@ -100,6 +100,7 @@ module KjuiTools
           else
             modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
           end
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))

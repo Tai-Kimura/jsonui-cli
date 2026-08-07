@@ -799,6 +799,7 @@ module KjuiTools
         size_modifiers = Helpers::ModifierBuilder.build_size(json_data, nil, @required_imports)
         size_modifiers << ".fillMaxWidth()" unless json_data['width']
         modifiers.concat(size_modifiers)
+        modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, @required_imports))
         modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, @required_imports))
 
         # Apply safe area padding based on edges (after background)
@@ -871,6 +872,7 @@ module KjuiTools
         size_modifiers << ".fillMaxWidth()" unless json_data['width']
         size_modifiers << ".fillMaxHeight()" unless json_data['height']
         modifiers.concat(size_modifiers)
+        modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, @required_imports))
         modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, @required_imports))
 
         # Apply safe area padding based on edges (after background)
@@ -942,6 +944,7 @@ module KjuiTools
         end
 
         modifiers.concat(Helpers::ModifierBuilder.build_size(child_data, nil, @required_imports))
+        modifiers.concat(Helpers::ModifierBuilder.build_offset(child_data, @required_imports))
 
         # Check if keyboard padding should be applied
         ignore_keyboard = child_data['ignoreKeyboard'] == true
@@ -985,6 +988,7 @@ module KjuiTools
         end
 
         modifiers.concat(Helpers::ModifierBuilder.build_size(child_data, nil, @required_imports))
+        modifiers.concat(Helpers::ModifierBuilder.build_offset(child_data, @required_imports))
         modifiers.concat(Helpers::ModifierBuilder.build_margins(child_data))
         modifiers.concat(Helpers::ModifierBuilder.build_background(child_data, @required_imports))
         modifiers.concat(Helpers::ModifierBuilder.build_padding(child_data))

@@ -231,6 +231,7 @@ module KjuiTools
               required_imports&.add(:alpha)
               box_modifiers << ".alpha(0f)"
             else
+              box_modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
               box_modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             end
             box_modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
@@ -290,6 +291,7 @@ module KjuiTools
               required_imports&.add(:alpha)
               modifiers << ".alpha(0f)"
             else
+              modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
               modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             end
             modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))

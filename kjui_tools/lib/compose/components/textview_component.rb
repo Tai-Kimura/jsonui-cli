@@ -233,6 +233,7 @@ module KjuiTools
               textfield_modifiers << ".height(120.dp)"
             end
 
+            textfield_modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
@@ -285,6 +286,7 @@ module KjuiTools
             end
 
             modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+            modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
