@@ -639,3 +639,90 @@ class InertAuditCountsTest(unittest.TestCase):
             "not (fixture, platform) pairs: one entry inert on two platforms "
             "counts once",
         )
+
+
+class AdjudicationBacklogRatchetTest(unittest.TestCase):
+    """The backlog of measured-but-unjudged findings may not grow.
+
+    The three older guards were measured on 2026-08-07 and only two of them
+    hold this line: a finding with no ledger row fails as unrecorded, and a
+    row the measurement no longer supports fails as stale — but an
+    ``--update`` folds a NEW finding in as a row whose reason is the
+    unreviewed marker, and ``cross_effect.check()`` counts that row as
+    accepted. That is how plan 33's "unreviewed 0" regrew to 126 rows after
+    the fixture expansion, with no bypass anywhere.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.conf = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _ledger(self, unreviewed, ruled=0):
+        entries = [
+            {"fixture": f"F/u__{i}", "reason": gate.UNREVIEWED_MARKER}
+            for i in range(unreviewed)
+        ] + [{"fixture": f"F/r__{i}", "reason": "ruled"} for i in range(ruled)]
+        (self.conf / "cross_effect.json").write_text(json.dumps({"entries": entries}))
+
+    def _ceiling(self, value):
+        (self.conf / RATCHET_FILENAME).write_text(
+            json.dumps({"unreviewed": {"cross_effect.json": value}})
+        )
+
+    def test_at_the_ceiling_is_green(self):
+        self._ledger(unreviewed=3)
+        self._ceiling(3)
+        problems, notices = gate.judge_adjudication_backlog(self.conf)
+        self.assertEqual(problems, [])
+        self.assertEqual(notices, [])
+
+    def test_one_row_over_the_ceiling_fails(self):
+        self._ledger(unreviewed=4)
+        self._ceiling(3)
+        problems, _ = gate.judge_adjudication_backlog(self.conf)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("4 unreviewed row(s) > ratchet ceiling 3", problems[0])
+
+    def test_burning_a_row_down_asks_for_the_ceiling_to_follow(self):
+        self._ledger(unreviewed=2, ruled=1)
+        self._ceiling(3)
+        problems, notices = gate.judge_adjudication_backlog(self.conf)
+        self.assertEqual(problems, [])
+        self.assertEqual(len(notices), 1)
+        self.assertIn("lower the ceiling", notices[0])
+
+    def test_a_ledger_with_no_ceiling_entry_must_be_clean(self):
+        """A fresh ledger starts strict, like a fresh render environment."""
+        self._ledger(unreviewed=1)
+        self._ceiling(0)
+        problems, _ = gate.judge_adjudication_backlog(self.conf)
+        self.assertEqual(len(problems), 1)
+
+    def test_the_marker_is_also_read_from_the_owner_field(self):
+        """value_discrimination / codegen_effect carry the verdict in `owner`."""
+        (self.conf / "value_discrimination.json").write_text(
+            json.dumps({"entries": [{"fixture": "F/a", "owner": gate.UNREVIEWED_MARKER}]})
+        )
+        problems, _ = gate.judge_adjudication_backlog(self.conf)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("value_discrimination.json", problems[0])
+
+    def test_the_committed_ceilings_match_the_committed_ledgers(self):
+        """The real tree, not a synthetic one: today's gate must be green.
+
+        Committing the ceilings at reality is the point — gating an
+        unconsumed queue makes red the normal color.
+        """
+        conf = Path(__file__).resolve().parents[2] / "conformance"
+        if not (conf / RATCHET_FILENAME).is_file():
+            self.skipTest("no committed conformance dir")
+        problems, _ = gate.judge_adjudication_backlog(conf)
+        self.assertEqual(
+            problems,
+            [],
+            "the committed unreviewed ceilings no longer match the committed "
+            "ledgers — rule on the new rows, or move the ceiling with a reason",
+        )

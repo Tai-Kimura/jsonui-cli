@@ -209,6 +209,10 @@ def evaluate(
 
     if ledger_keys:
         outcome.problems.extend(judge_ledger_keys(conformance_dir, semantics_path))
+        # Same class of check: pure ledger hygiene, no renders, no device.
+        problems, notices = judge_adjudication_backlog(conformance_dir)
+        outcome.problems.extend(problems)
+        outcome.notices.extend(notices)
 
     if visual and rendered_by:
         outcome.notices.extend(
@@ -341,6 +345,19 @@ FIXTURE_KEYED_LEDGERS = (
 #: Same, keyed by screenshot name instead (`a/b__c` -> `a_b__c.png`).
 SCREENSHOT_KEYED_LEDGERS = (("codegen_parity.json", "screenshot"),)
 
+#: Reason/owner marker an `--update` writes for a finding nobody has ruled
+#: on yet.
+UNREVIEWED_MARKER = "unreviewed-initial-measurement"
+
+#: Adjudication ledgers and the fields that carry the review verdict. A row
+#: whose verdict is still :data:`UNREVIEWED_MARKER` is measured but unjudged.
+ADJUDICATION_LEDGERS = (
+    ("cross_effect.json", ("reason",)),
+    ("inert_audit.json", ("reason",)),
+    ("value_discrimination.json", ("owner", "reason")),
+    ("codegen_effect.json", ("owner", "reason")),
+)
+
 
 def screenshot_name(fixture_id: str) -> str:
     """Fixture id -> the file the runners actually write.
@@ -360,6 +377,85 @@ def screenshot_name(fixture_id: str) -> str:
     if fixture_id.startswith("__"):
         fixture_id = fixture_id[2:]
     return fixture_id.replace("/", "_") + ".png"
+
+
+def judge_adjudication_backlog(
+    conformance_dir: Path,
+) -> tuple[list[str], list[str]]:
+    """Ratchet the count of measured-but-unjudged ledger rows.
+
+    Measured 2026-08-07, not assumed: the adjudication ledgers were already
+    ratcheted against a finding arriving with NO row (`check()` reports it
+    unrecorded and the gate fails) and against a row the measurement no
+    longer supports (stale, also fails). But `--update` folds a brand-new
+    finding in as a row whose reason is :data:`UNREVIEWED_MARKER`, and
+    `check()` counts that row as *accepted* — so the gate is green. That is
+    the whole path by which the backlog went from the "unreviewed 0" of plan
+    33 back to 126 rows after the fixture expansion: nobody bypassed
+    anything, the device simply had no opinion about a row that records a
+    finding and rules on nothing.
+
+    Ceilings are per ledger and do NOT nest by env: how many findings are
+    unjudged is a fact about the repository, not about a renderer.
+
+    The ceiling is committed at today's reality, so this cannot turn the
+    gate red on the day it lands — the lane discipline is that gating an
+    unconsumed queue makes red the normal color. What it does is make the
+    queue monotonically non-increasing: a new unreviewed row fails, and
+    burning rows down prints a notice to lower the ceiling.
+    """
+    conformance_dir = Path(conformance_dir)
+    ceilings = load_unreviewed_ceilings(conformance_dir)
+    problems: list[str] = []
+    notices: list[str] = []
+
+    for name, fields in ADJUDICATION_LEDGERS:
+        path = conformance_dir / name
+        if not path.is_file():
+            continue
+        entries = json.loads(path.read_text(encoding="utf-8")).get("entries", [])
+        count = sum(
+            1
+            for e in entries
+            if isinstance(e, dict)
+            and any(e.get(f) == UNREVIEWED_MARKER for f in fields)
+        )
+        ceiling = ceilings.get(name, 0)
+        if count > ceiling:
+            problems.append(
+                f"{name}: {count} unreviewed row(s) > ratchet ceiling {ceiling} — "
+                f"an `--update` recorded findings it did not rule on. Rule on them "
+                f"(replace the '{UNREVIEWED_MARKER}' verdict) or, if the ceiling is "
+                f"genuinely wrong, raise it in {RATCHET_FILENAME} with a comment "
+                f"saying why the backlog is allowed to grow"
+            )
+        elif count < ceiling:
+            notices.append(
+                f"{name}: {count} unreviewed row(s) < ceiling {ceiling} — "
+                f"lower the ceiling in {RATCHET_FILENAME} to hold the ground"
+            )
+    return problems, notices
+
+
+def load_unreviewed_ceilings(conformance_dir: Path) -> dict[str, int]:
+    """``{ledger filename: ceiling}``; a missing table means every ceiling is 0.
+
+    Read straight from the ratchet file rather than through
+    :func:`load_ratchet` / :func:`ratchet_for_env`: those resolve the
+    env-then-platform nesting the visual metrics need, and this metric has
+    neither axis.
+    """
+    path = Path(conformance_dir) / RATCHET_FILENAME
+    if not path.is_file():
+        return {}
+    table = json.loads(path.read_text(encoding="utf-8")).get("unreviewed", {})
+    if not isinstance(table, dict):
+        return {}
+    return {
+        name: int(ceiling)
+        for name, ceiling in table.items()
+        if isinstance(ceiling, (int, float)) and not isinstance(ceiling, bool)
+    }
 
 
 def judge_value_discrimination(
