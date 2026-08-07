@@ -569,6 +569,32 @@ def render_queue(result: InertAudit) -> str:
 #: deterministic, and the backlog is consumed by replacing the reason.
 UNREVIEWED = "unreviewed-initial-measurement"
 
+#: Optional ledger keys an ADJUDICATOR writes and the measurement preserves.
+#:
+#: ``family`` above is machine-computed every run by :func:`triage`, so a human
+#: ruling cannot live there — it would be overwritten by the next ``--update``.
+#: These two carry the ruling instead:
+#:
+#: ``adjudicatedFamily``   the family the ruling belongs to, as a slug. The
+#:                         same name the reason prose ends with, lifted out of
+#:                         the prose so a consumer never has to grep English.
+#: ``controlDiffExclusion``  set only where the ruling says the fixture must
+#:                         leave the control comparison (plan 51 b-2: the
+#:                         written value IS the attribute-absent state, so the
+#:                         comparison is structurally incapable of reporting
+#:                         anything). Its value names the family that justifies
+#:                         the exclusion; its ABSENCE means "still compared",
+#:                         which is what keeps a structurally-inert row that
+#:                         nothing else covers inside the measurement.
+#:
+#: Both are preserved exactly like ``reason``: kept while the recorded fact
+#: holds, dropped when the platform set changes, because a ruling written about
+#: a different fact must not survive it — least of all one that removes a
+#: fixture from measurement.
+ADJUDICATED_FAMILY_KEY = "adjudicatedFamily"
+CONTROL_DIFF_EXCLUSION_KEY = "controlDiffExclusion"
+PRESERVED_ADJUDICATION_KEYS = (ADJUDICATED_FAMILY_KEY, CONTROL_DIFF_EXCLUSION_KEY)
+
 LEDGER_FILENAME = "inert_audit.json"
 
 
@@ -627,7 +653,10 @@ def update_ledger(result: InertAudit, path) -> dict:
     """Write the ledger, preserving the reason of every entry still measured.
 
     An entry whose platform set changed returns to :data:`UNREVIEWED`: the
-    adjudication was written about a different fact.
+    adjudication was written about a different fact. The optional
+    :data:`PRESERVED_ADJUDICATION_KEYS` ride along on the same rule — kept
+    while the fact holds, dropped with the verdict when it does not, and
+    omitted entirely when the adjudicator never set them.
     """
     prior = load_ledger(path)
     entries = []
@@ -646,6 +675,12 @@ def update_ledger(result: InertAudit, path) -> dict:
                 "note": before.get("note", "") if holds else "",
             }
         )
+        if holds:
+            # Emitted only when the adjudicator set them, so an unruled row
+            # stays visibly unruled rather than carrying empty ceremony.
+            for key in PRESERVED_ADJUDICATION_KEYS:
+                if before.get(key):
+                    entries[-1][key] = before[key]
     doc = {
         "schemaVersion": SCHEMA_VERSION,
         "_comment": (
@@ -661,7 +696,14 @@ def update_ledger(result: InertAudit, path) -> dict:
             "reason with the adjudication, or by fixing the platform and "
             "letting the entry go stale. An entry whose platform set changes "
             "returns to the backlog, because the adjudication was written "
-            "about a different fact."
+            "about a different fact. Two optional keys carry the ruling in "
+            f"machine-readable form: '{ADJUDICATED_FAMILY_KEY}' is the family "
+            "slug the reason prose also names, and "
+            f"'{CONTROL_DIFF_EXCLUSION_KEY}' — present only where the ruling "
+            "removes the fixture from the control comparison — names the "
+            "family justifying that removal. Consumers key off those, never "
+            "off a sentinel inside the prose. Both are dropped when the "
+            "platform set changes, for the same reason the verdict is."
         ),
         "platforms": list(result.platforms),
         "counts": {

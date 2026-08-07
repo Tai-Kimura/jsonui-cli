@@ -21,6 +21,7 @@ NOT silently disappear.
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -644,3 +645,154 @@ class RealLedgerCountsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AdjudicationKeyTests(unittest.TestCase):
+    """The ruling must survive `--update`, and must die with its fact.
+
+    `family` is recomputed by triage on every run, so a human ruling written
+    there is silently overwritten. These two keys exist because a consumer
+    (plan 51 b-2's control-diff exclusion) was keying off a sentinel inside
+    the reason PROSE, which no serializer protects and no test can see break.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def _bake(self, manifest, verdicts):
+        path = ia.ledger_path(self.dir)
+        ia.update_ledger(_audit(manifest, verdicts), path)
+        return path
+
+    def test_the_keys_survive_an_update_that_remeasures_the_same_fact(self):
+        manifest = _manifest(_fixture("common/a__static"))
+        inert = _verdicts(**{p: {"common/a__static": "inert"} for p in ALL})
+        path = self._bake(manifest, inert)
+        doc = json.loads(path.read_text())
+        doc["entries"][0]["reason"] = "adjudicated. Family: off-face-equals-control."
+        doc["entries"][0][ia.ADJUDICATED_FAMILY_KEY] = "off-face-equals-control"
+        doc["entries"][0][ia.CONTROL_DIFF_EXCLUSION_KEY] = "off-face-equals-control"
+        path.write_text(json.dumps(doc))
+
+        ia.update_ledger(_audit(manifest, inert), path)
+
+        entry = ia.load_ledger(path)["common/a__static"]
+        self.assertEqual(entry[ia.ADJUDICATED_FAMILY_KEY], "off-face-equals-control")
+        self.assertEqual(
+            entry[ia.CONTROL_DIFF_EXCLUSION_KEY], "off-face-equals-control"
+        )
+
+    def test_the_keys_die_with_the_fact_they_were_written_about(self):
+        """An exclusion that outlived its measurement removes a LIVE fixture."""
+        manifest = _manifest(_fixture("common/a__static"))
+        path = self._bake(
+            manifest, _verdicts(**{p: {"common/a__static": "inert"} for p in ALL})
+        )
+        doc = json.loads(path.read_text())
+        doc["entries"][0][ia.ADJUDICATED_FAMILY_KEY] = "off-face-equals-control"
+        doc["entries"][0][ia.CONTROL_DIFF_EXCLUSION_KEY] = "off-face-equals-control"
+        path.write_text(json.dumps(doc))
+
+        ia.update_ledger(
+            _audit(
+                manifest,
+                _verdicts(
+                    ios={"common/a__static": "inert"},
+                    android={"common/a__static": "inert"},
+                    web={"common/a__static": "active"},
+                ),
+            ),
+            path,
+        )
+
+        entry = ia.load_ledger(path)["common/a__static"]
+        self.assertEqual(entry["reason"], ia.UNREVIEWED)
+        self.assertNotIn(ia.ADJUDICATED_FAMILY_KEY, entry)
+        self.assertNotIn(ia.CONTROL_DIFF_EXCLUSION_KEY, entry)
+
+    def test_an_unruled_row_carries_neither_key(self):
+        path = self._bake(
+            _manifest(_fixture("common/a__static")),
+            _verdicts(**{p: {"common/a__static": "inert"} for p in ALL}),
+        )
+        entry = ia.load_ledger(path)["common/a__static"]
+        self.assertNotIn(ia.ADJUDICATED_FAMILY_KEY, entry)
+        self.assertNotIn(ia.CONTROL_DIFF_EXCLUSION_KEY, entry)
+
+
+class RealLedgerExclusionTests(unittest.TestCase):
+    """Standing invariants for the control-diff exclusion set (plan 51 b-2).
+
+    Excluding a fixture from the control comparison is permanent removal from
+    measurement — the exact shape this campaign exists to catch. The one-time
+    audit that cleared the set is worth nothing next month, so it lives here.
+    """
+
+    @staticmethod
+    def _conformance():
+        return Path(__file__).resolve().parents[2] / "conformance"
+
+    @classmethod
+    def _ledger(cls):
+        return json.loads(
+            (cls._conformance() / "inert_audit.json").read_text(encoding="utf-8")
+        )
+
+    @classmethod
+    def _manifest(cls):
+        return json.loads(
+            (cls._conformance() / "manifest.json").read_text(encoding="utf-8")
+        )
+
+    def test_an_exclusion_never_stands_without_its_family(self):
+        for entry in self._ledger()["entries"]:
+            excluded = entry.get(ia.CONTROL_DIFF_EXCLUSION_KEY)
+            if not excluded:
+                continue
+            self.assertEqual(
+                excluded,
+                entry.get(ia.ADJUDICATED_FAMILY_KEY),
+                f"{entry['fixture']}: the exclusion names a family the row does not claim",
+            )
+
+    def test_the_family_key_agrees_with_the_family_the_prose_names(self):
+        """Two statements of one fact drift; the test is what keeps them one."""
+        for entry in self._ledger()["entries"]:
+            claimed = entry.get(ia.ADJUDICATED_FAMILY_KEY)
+            if not claimed:
+                continue
+            named = re.findall(r"Family: ([a-z0-9-]+)\.", entry.get("reason") or "")
+            self.assertTrue(
+                named and named[-1] == claimed,
+                f"{entry['fixture']}: key says {claimed!r}, prose says {named[-1:] or None}",
+            )
+
+    def test_no_excluded_fixture_is_its_attributes_last_one(self):
+        """ORPHANED must stay 0: excluding the only fixture for an attribute
+        takes that attribute out of the suite with nothing left to say so."""
+        ledger = self._ledger()
+        excluded = {
+            e["fixture"]
+            for e in ledger["entries"]
+            if e.get(ia.CONTROL_DIFF_EXCLUSION_KEY)
+        }
+        siblings: dict = {}
+        for entry in self._manifest()["fixtures"]:
+            if not entry.get("control") or entry.get("isControl"):
+                continue
+            siblings.setdefault(
+                (entry.get("component"), entry.get("attribute")), []
+            ).append(entry["id"])
+        orphaned = [
+            fixture
+            for fixture in sorted(excluded)
+            for key, ids in [
+                next(
+                    (k, v) for k, v in siblings.items() if fixture in v
+                )
+            ]
+            if not [i for i in ids if i not in excluded]
+        ]
+        self.assertEqual(orphaned, [], "attribute(s) left with no compared fixture")
