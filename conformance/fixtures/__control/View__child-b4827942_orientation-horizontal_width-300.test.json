@@ -1,7 +1,7 @@
 {
   "type": "screen",
   "source": {
-    "layout": "fixtures/__control/View__child-1954985b_orientation-horizontal_width-300.layout.json"
+    "layout": "fixtures/__control/View__child-b4827942_orientation-horizontal_width-300.layout.json"
   },
   "metadata": {
     "name": "conformance control View",
@@ -15,7 +15,7 @@
   "platform": "all",
   "cases": [
     {
-      "name": "View__child-1954985b_orientation-horizontal_width-300",
+      "name": "View__child-b4827942_orientation-horizontal_width-300",
       "description": "Control for View: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
       "steps": [
         {
@@ -24,7 +24,7 @@
         },
         {
           "action": "screenshot",
-          "name": "control_View__child-1954985b_orientation-horizontal_width-300"
+          "name": "control_View__child-b4827942_orientation-horizontal_width-300"
         }
       ]
     }

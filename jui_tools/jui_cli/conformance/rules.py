@@ -2222,8 +2222,23 @@ def variant_bases_for(section: str, attribute: str) -> dict[str, dict[str, Any]]
 #: row — so the fill children are Labels of different text lengths: `fill`
 #: consumes the axis while keeping their proportions, `fillEqually` flattens
 #: them to equal shares.
+#:
+#: Unequal TEXT alone turned out not to separate the pair on ios (51-orch
+#: value_discrimination rows, run 31160838024, measured WITH the A/BBBB/
+#: CCCCCCCC labels already in place): the canon ios mapping for `fill` is
+#: ".frame(maxWidth: .infinity) on each child", and an HStack divides its
+#: proposal EQUALLY among children of equal flexibility whatever their text —
+#: so `fill` and `fillEqually` draw the same thirds whenever every child is
+#: flexible. The discriminator the canon itself provides is
+#: `explicitChildSizeWins` (explicit > bounds > fill): `box_a` now declares
+#: its main-axis size, which `fill` must LEAVE ALONE (sjui
+#: apply_distribution_fill skips a declared axis; compose DistributionFillRow
+#: "explicit child size never grown") while `fillEqually` equalises every
+#: child regardless — 60/120/120 against equal thirds. The two flexible
+#: labels keep their unequal text, which is what separates the pair on
+#: android/web (content-proportional grow vs flex-1 equal shares).
 _FILL_CHILDREN = [
-    {"type": "Label", "id": "box_a", "text": "A", "background": "#FF0000"},
+    {"type": "View", "id": "box_a", "width": 60, "height": 40, "background": "#FF0000"},
     {"type": "Label", "id": "box_b", "text": "BBBB", "background": "#0000FF"},
     {"type": "Label", "id": "box_c", "text": "CCCCCCCC", "background": "#00AA00"},
 ]

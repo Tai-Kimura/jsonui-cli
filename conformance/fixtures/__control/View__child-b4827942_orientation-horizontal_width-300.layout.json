@@ -21,9 +21,10 @@
       "orientation": "horizontal",
       "child": [
         {
-          "type": "Label",
+          "type": "View",
           "id": "box_a",
-          "text": "A",
+          "width": 60,
+          "height": 40,
           "background": "#FF0000"
         },
         {

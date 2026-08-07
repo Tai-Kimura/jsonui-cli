@@ -4727,8 +4727,8 @@
       "test": "fixtures/common/distribution__fillequally.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/distribution@View__child-1954985b_orientation-horizontal_width-300",
-      "control": "__control/View__child-1954985b_orientation-horizontal_width-300"
+      "peerGroup": "common/distribution@View__child-b4827942_orientation-horizontal_width-300",
+      "control": "__control/View__child-b4827942_orientation-horizontal_width-300"
     },
     {
       "id": "common/distribution__fill",
@@ -4750,8 +4750,8 @@
       "test": "fixtures/common/distribution__fill.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/distribution@View__child-1954985b_orientation-horizontal_width-300",
-      "control": "__control/View__child-1954985b_orientation-horizontal_width-300"
+      "peerGroup": "common/distribution@View__child-b4827942_orientation-horizontal_width-300",
+      "control": "__control/View__child-b4827942_orientation-horizontal_width-300"
     },
     {
       "id": "common/distribution__equalspacing",
@@ -16712,8 +16712,8 @@
       "test": "fixtures/View/distribution__fillequally.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "View/distribution@View__child-1954985b_orientation-horizontal_width-300",
-      "control": "__control/View__child-1954985b_orientation-horizontal_width-300"
+      "peerGroup": "View/distribution@View__child-b4827942_orientation-horizontal_width-300",
+      "control": "__control/View__child-b4827942_orientation-horizontal_width-300"
     },
     {
       "id": "View/distribution__fill",
@@ -16740,8 +16740,8 @@
       "test": "fixtures/View/distribution__fill.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "View/distribution@View__child-1954985b_orientation-horizontal_width-300",
-      "control": "__control/View__child-1954985b_orientation-horizontal_width-300"
+      "peerGroup": "View/distribution@View__child-b4827942_orientation-horizontal_width-300",
+      "control": "__control/View__child-b4827942_orientation-horizontal_width-300"
     },
     {
       "id": "View/distribution__equalspacing",
@@ -23951,30 +23951,6 @@
       "isControl": true
     },
     {
-      "id": "__control/View__child-1954985b_orientation-horizontal_width-300",
-      "component": "__control",
-      "attribute": null,
-      "case": "View",
-      "class": "visual",
-      "host": "View",
-      "writtenKey": null,
-      "aliasOf": null,
-      "value": null,
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/__control/View__child-1954985b_orientation-horizontal_width-300.layout.json",
-      "test": "fixtures/__control/View__child-1954985b_orientation-horizontal_width-300.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": null,
-      "isControl": true
-    },
-    {
       "id": "__control/View__child-aec83a5f_no-orientation",
       "component": "__control",
       "attribute": null,
@@ -23993,6 +23969,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/View__child-aec83a5f_no-orientation.layout.json",
       "test": "fixtures/__control/View__child-aec83a5f_no-orientation.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/View__child-b4827942_orientation-horizontal_width-300",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__child-b4827942_orientation-horizontal_width-300.layout.json",
+      "test": "fixtures/__control/View__child-b4827942_orientation-horizontal_width-300.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
