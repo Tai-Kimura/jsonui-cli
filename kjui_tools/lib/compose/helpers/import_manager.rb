@@ -150,6 +150,10 @@ module KjuiTools
             # The one-shot anchor scroll (suspend, item-agnostic).
             scroll_by: "import androidx.compose.foundation.gestures.scrollBy",
             color_manager: "import com.kotlinjsonui.generated.ColorManager",
+            # Collection listStyle chrome — the shared library composable
+            # both paths render (CollectionCellChrome).
+            collection_cell_chrome: "import com.kotlinjsonui.components.CollectionCellChrome",
+            material_theme: "import androidx.compose.material3.MaterialTheme",
             grid_item_span: "import androidx.compose.foundation.lazy.grid.GridItemSpan",
             webview: ["import android.webkit.WebView",
                       "import android.webkit.WebViewClient",

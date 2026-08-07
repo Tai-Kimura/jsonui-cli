@@ -112,6 +112,19 @@ module KjuiTools
           json_data['items'].is_a?(String) && json_data['items'].match?(/@\{[^}]+\}/)
         end
 
+        # The listStyle chrome around one cell (51-E) — the generated code
+        # emits the SAME library composable the dynamic path renders
+        # (CollectionCellChrome). plain/unknown emit nothing; flow/paging
+        # routes stay plain, mirroring the dynamic scope.
+        def self.chrome_open(json_data, required_imports)
+          style = json_data['listStyle'].to_s
+          return nil unless %w[grouped insetgrouped sidebar].include?(style.downcase)
+
+          required_imports&.add(:collection_cell_chrome)
+          hide = json_data['hideSeparator'] == true
+          "CollectionCellChrome(style = \"#{style}\", hideSeparator = #{hide}) {"
+        end
+
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           # Registered here, before the routing: `generate` forks into the
           # grid emitter and the CollectionStack emitter, and the inset can
@@ -438,6 +451,25 @@ module KjuiTools
             end
           end
 
+          # Container-level listStyle chrome: an EMPTY collection must still
+          # discriminate the four values (the conformance probes carry no
+          # cells), the way an empty ios List still shows its style's
+          # background. Emitted after the declared background so the chrome
+          # surface reads as the list's inner chrome; the per-cell wrap
+          # handles populated lists.
+          chrome_style = json_data['listStyle'].to_s.downcase
+          if %w[grouped insetgrouped sidebar].include?(chrome_style)
+            required_imports&.add(:shape)
+            required_imports&.add(:material_theme)
+            if %w[insetgrouped sidebar].include?(chrome_style)
+              modifiers << ".padding(horizontal = 16.dp)"
+              corner = chrome_style == 'insetgrouped' ? 12 : 8
+              modifiers << ".clip(RoundedCornerShape(#{corner}.dp))"
+            end
+            surface = chrome_style == 'sidebar' ? 'surfaceContainerLow' : 'surfaceContainer'
+            modifiers << ".background(MaterialTheme.colorScheme.#{surface})"
+          end
+
           code += Helpers::ModifierBuilder.format(modifiers, depth)
 
           # Add state parameter if scrollTo or defaultScrollAnchor needs one
@@ -473,6 +505,9 @@ module KjuiTools
             end
             
             # Create cell view with data
+            if (nonsection_chrome = chrome_open(json_data, required_imports))
+              code += "\n" + indent(nonsection_chrome, depth + 2)
+            end
             code += "\n" + indent("when (val itemData = item) {", depth + 2)
             code += "\n" + indent("is #{cell_class_name}Data -> {", depth + 3)
             code += "\n" + indent("#{cell_class_name}View(", depth + 4)
@@ -526,6 +561,9 @@ module KjuiTools
             code += "\n" + indent("// Unsupported item type", depth + 4)
             code += "\n" + indent("}", depth + 3)
             code += "\n" + indent("}", depth + 2)
+            if chrome_open(json_data, nil)
+              code += "\n" + indent("}", depth + 2)
+            end
             code += "\n" + indent("}", depth + 1)
           else
             # Declaration-faithful (2026-08-02 ruling): no cell class
@@ -687,6 +725,9 @@ module KjuiTools
                 code += "\n" + indent("LaunchedEffect(currentCellData) {", depth + 5)
                 code += "\n" + indent("cellViewModel.updateData(currentCellData)", depth + 6)
                 code += "\n" + indent("}", depth + 5)
+                if (chrome = chrome_open(json_data, required_imports))
+                  code += "\n" + indent(chrome, depth + 5)
+                end
                 code += "\n" + indent("#{cell_class}View(", depth + 5)
                 code += "\n" + indent("viewModel = cellViewModel,", depth + 6)
                 # Add testTag for test automation (tapItem action)
@@ -697,6 +738,9 @@ module KjuiTools
                   code += "\n" + indent("modifier = Modifier", depth + 6)
                 end
                 code += "\n" + indent(")", depth + 5)
+                if chrome_open(json_data, nil)
+                  code += "\n" + indent("}", depth + 5)
+                end
                 code += "\n" + indent("}", depth + 4)
                 code += "\n" + indent("}", depth + 3)
                 code += "\n" + indent("}", depth + 2)
