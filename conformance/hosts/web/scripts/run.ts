@@ -312,6 +312,13 @@ async function main(): Promise<void> {
 
   async function worker(): Promise<void> {
     const context = await browser.newContext({ viewport: VIEWPORT });
+    // `pending.invalid` never completes and never fails
+    // (INTERACTIVE_HOST_CONTRACT.md §5): a route that neither fulfills nor
+    // continues stalls the request forever, so the LOADING face becomes the
+    // resting state instead of racing the shutter. Matched before anything
+    // else — without this the browser NXDOMAINs it like any `.invalid`
+    // name and the error face is photographed instead.
+    await context.route('**pending.invalid**', () => { /* hold forever */ });
     const page = await context.newPage();
     for (;;) {
       const index = cursor++;
