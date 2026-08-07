@@ -772,7 +772,15 @@ class EnumDefaultLiteralTests(unittest.TestCase):
         body = next(s for s in doc.schemas if s.name == "ReactionTypeBody")
         with tempfile.TemporaryDirectory() as tmp:
             src = _make_generator(Path(tmp)).generate_dto_source(body, doc)
-        self.assertIn("let reactionType: ReactionType? = ReactionType.favorite", src)
+        # The enum-case rendering survives, but as the decode fallback and
+        # memberwise parameter default — never a property initializer, which
+        # synthesized Decodable would silently refuse to decode.
+        self.assertIn(
+            "self.reactionType = try container.decodeIfPresent(ReactionType.self, forKey: .reactionType) ?? ReactionType.favorite",
+            src,
+        )
+        self.assertIn("reactionType: ReactionType? = ReactionType.favorite)", src)
+        self.assertNotIn("let reactionType: ReactionType? = ReactionType.favorite", src)
         self.assertNotIn('= "favorite"', src)
 
     def test_integer_enum_default_emits_case_reference(self):
@@ -795,7 +803,12 @@ class EnumDefaultLiteralTests(unittest.TestCase):
         alert = next(s for s in doc.schemas if s.name == "Alert")
         with tempfile.TemporaryDirectory() as tmp:
             src = _make_generator(Path(tmp)).generate_dto_source(alert, doc)
-        self.assertIn("let level: Severity? = Severity.medium", src)
+        self.assertIn(
+            "self.level = try container.decodeIfPresent(Severity.self, forKey: .level) ?? Severity.medium",
+            src,
+        )
+        self.assertIn("level: Severity? = Severity.medium)", src)
+        self.assertNotIn("let level: Severity? = Severity.medium", src)
 
     def test_default_not_in_enum_skipped(self):
         doc = parse_swagger(_doc({
@@ -833,7 +846,11 @@ class EnumDefaultLiteralTests(unittest.TestCase):
         body = doc.schemas[0]
         with tempfile.TemporaryDirectory() as tmp:
             src = _make_generator(Path(tmp)).generate_dto_source(body, doc)
-        self.assertIn('let message: String? = "hello"', src)
+        self.assertIn(
+            'self.message = try container.decodeIfPresent(String.self, forKey: .message) ?? "hello"',
+            src,
+        )
+        self.assertNotIn('let message: String? = "hello"', src)
 
 
 class WriteBehaviorTests(unittest.TestCase):
@@ -1151,6 +1168,68 @@ class FormatAwareMappingTests(unittest.TestCase):
             src = self._fmt_gen(Path(tmpdir)).generate_dto_source(doc.schemas[0], doc)
         self.assertIn("let at: Date\n", src)
         self.assertNotIn('= "2026-01-01T00:00:00Z"', src)
+
+
+class DefaultedFieldDecodeTests(unittest.TestCase):
+    """swagger ``default:`` means "value when the key is ABSENT".
+
+    The old emit was ``let type: String? = "chat"`` — Swift's synthesized
+    Decodable never decodes an initialized immutable property, so the wire
+    value was silently discarded and the field was frozen at its default
+    forever (android's ``val`` + kotlinx decoded the same declaration
+    correctly). A defaulted field now forces the custom-Codable path and
+    decodes as ``decodeIfPresent ?? default``.
+    """
+
+    DOC = {
+        "Conversation": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+                "id": {"type": "string"},
+                "type": {"type": "string", "default": "chat"},
+                "count": {"type": "integer", "default": 3},
+            },
+        },
+    }
+
+    def _src(self) -> str:
+        doc = parse_swagger(_doc(self.DOC), "test.json")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gen = _make_generator(Path(tmpdir))
+            return gen.generate_dto_source(doc.schemas[0], doc)
+
+    def test_no_frozen_initializer_on_the_stored_property(self):
+        src = self._src()
+        self.assertIn("let type: String?\n", src)
+        self.assertNotIn('let type: String? = "chat"', src)
+
+    def test_decodes_if_present_with_the_default_as_fallback(self):
+        src = self._src()
+        self.assertIn(
+            'self.type = try container.decodeIfPresent(String.self, forKey: .type) ?? "chat"',
+            src,
+        )
+        self.assertIn(
+            "self.count = try container.decodeIfPresent(Int.self, forKey: .count) ?? 3",
+            src,
+        )
+        # Non-defaulted required field keeps the strict decode.
+        self.assertIn(
+            "self.id = try container.decode(String.self, forKey: .id)", src
+        )
+
+    def test_memberwise_init_carries_the_default_and_stays_assignable(self):
+        src = self._src()
+        self.assertIn('type: String? = "chat"', src)
+        self.assertIn("count: Int? = 3", src)
+        self.assertIn("self.type = type", src)
+
+    def test_encode_covers_every_field(self):
+        src = self._src()
+        self.assertIn(
+            "try container.encodeIfPresent(self.type, forKey: .type)", src
+        )
 
 
 if __name__ == "__main__":

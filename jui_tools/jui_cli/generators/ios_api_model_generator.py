@@ -186,12 +186,38 @@ class IosApiModelGenerator:
         has_native_date = fmt and any(
             _ftype_has_native_date(f.type) for f in schema.fields
         )
-        needs_custom_codable = has_oneof or has_native_date
+        # A swagger ``default:`` is "the value when the key is absent" — the
+        # reading kotlinx.serialization implements. Swift's synthesized
+        # Decodable NEVER decodes an immutable property with an initializer
+        # (the compiler even warns), so ``let type: String? = "chat"`` froze
+        # the default and silently discarded every wire value on ios while
+        # android decoded it. Any defaulted field therefore forces the custom
+        # ``init(from:)`` path, where it decodes as decodeIfPresent ?? default
+        # and the property loses its initializer (a custom init cannot assign
+        # an initialized let anyway).
+        has_defaulted_field = any(
+            not f.type.is_one_of_ref
+            and _field_default_literal(
+                f, enum_names, enums_by_name, format_native=fmt
+            )
+            is not None
+            for f in schema.fields
+        )
+        needs_custom_codable = has_oneof or has_native_date or has_defaulted_field
 
-        # Stored properties (one per field).
+        # Stored properties (one per field). On the custom-Codable path the
+        # default literal moves into init(from:) / the memberwise init — a
+        # custom init cannot assign an initialized let, and the initializer
+        # form is precisely what made synthesized decoding skip the field.
         for f in schema.fields:
             body_lines.extend(
-                _dto_field_lines(f, enum_names, enums_by_name, format_native=fmt)
+                _dto_field_lines(
+                    f,
+                    enum_names,
+                    enums_by_name,
+                    format_native=fmt,
+                    emit_default_literal=not needs_custom_codable,
+                )
             )
 
         # Nested ``enum {Field}: Codable`` declarations — one per oneOf field.
@@ -206,7 +232,9 @@ class IosApiModelGenerator:
         # restore it for consumers who construct DTOs at call sites.
         if needs_custom_codable:
             body_lines.extend(
-                _emit_swift_memberwise_init(schema, enum_names, format_native=fmt)
+                _emit_swift_memberwise_init(
+                    schema, enum_names, enums_by_name, format_native=fmt
+                )
             )
 
         # Custom CodingKeys when at least one field is renamed, OR always when
@@ -492,6 +520,7 @@ def _dto_field_lines(
     enums_by_name: dict[str, EnumDef],
     *,
     format_native: bool = False,
+    emit_default_literal: bool = True,
 ) -> list[str]:
     """Lines emitted for one DTO stored property.
 
@@ -517,14 +546,31 @@ def _dto_field_lines(
             field.type, enum_names, format_native=format_native
         )
     name = _swift_property_name(field)
-    default = _swift_default_literal(
-        field, type_str, enums_by_name, format_native=format_native
-    )
     line = f"    let {name}: {type_str}"
-    if default is not None:
-        line += f" = {default}"
+    if emit_default_literal:
+        default = _swift_default_literal(
+            field, type_str, enums_by_name, format_native=format_native
+        )
+        if default is not None:
+            line += f" = {default}"
     out.append(line)
     return out
+
+
+def _field_default_literal(
+    field: FieldDef,
+    enum_names: set[str],
+    enums_by_name: dict[str, EnumDef],
+    *,
+    format_native: bool = False,
+) -> str | None:
+    """The field's Swift default literal, or None — type_str resolved here."""
+    type_str = _swift_type_with_enums(
+        field.type, enum_names, format_native=format_native
+    )
+    return _swift_default_literal(
+        field, type_str, enums_by_name, format_native=format_native
+    )
 
 
 def _swift_property_name(field: FieldDef) -> str:
@@ -854,6 +900,7 @@ def _emit_swift_oneof_nested_enum(field: FieldDef, one_of: OneOfRef) -> list[str
 def _emit_swift_memberwise_init(
     schema: SchemaDef,
     enum_names: set[str],
+    enums_by_name: dict[str, EnumDef] | None = None,
     *,
     format_native: bool = False,
 ) -> list[str]:
@@ -861,7 +908,11 @@ def _emit_swift_memberwise_init(
 
     Swift suppresses the auto-synthesized memberwise initializer once a
     custom ``init(from decoder:)`` is declared in the same type, so we
-    have to re-emit it manually.
+    have to re-emit it manually. A swagger ``default:`` becomes the
+    PARAMETER default here — call sites may omit it, and unlike the old
+    property-initializer form the field stays assignable (the frozen-let
+    emit excluded these fields from the memberwise init entirely, so a
+    request DTO with defaulted fields had no way to carry a real value).
     """
     params: list[str] = []
     for f in schema.fields:
@@ -872,7 +923,14 @@ def _emit_swift_memberwise_init(
             type_str = _swift_type_with_enums(
                 f.type, enum_names, format_native=format_native
             )
-        params.append(f"{name}: {type_str}")
+        param = f"{name}: {type_str}"
+        if enums_by_name is not None and not f.type.is_one_of_ref:
+            default = _swift_default_literal(
+                f, type_str, enums_by_name, format_native=format_native
+            )
+            if default is not None:
+                param += f" = {default}"
+        params.append(param)
     lines: list[str] = ["", f"    init({', '.join(params)}) {{"]
     for f in schema.fields:
         name = _swift_property_name(f)
@@ -931,7 +989,16 @@ def _emit_swift_custom_init_from_decoder(
             f.type, enum_names, format_native=format_native
         )
         bare = type_str.rstrip("?")
-        if f.type.nullable:
+        # swagger `default:` = the value when the key is ABSENT (the kotlinx
+        # reading) — decodeIfPresent ?? default, never a frozen initializer.
+        default = _swift_default_literal(
+            f, type_str, enums_by_name, format_native=format_native
+        )
+        if default is not None and default != "nil":
+            lines.append(
+                f"        self.{name} = try container.decodeIfPresent({bare}.self, forKey: .{name}) ?? {default}"
+            )
+        elif f.type.nullable:
             lines.append(
                 f"        self.{name} = try container.decodeIfPresent({bare}.self, forKey: .{name})"
             )
