@@ -29,8 +29,13 @@ module KjuiTools
           # Canonical minimum/maximum with alias fallbacks (skipped on
           # L1-normalized layouts); 'min'/'max' are undeclared legacy
           # spellings, always honored last.
+          # The undeclared range was 0..100 here, which the SSoT now contradicts:
+          # `minimum` declares `default: 0` and `maximum` declares `default: 1`,
+          # so an undeclared slider runs 0 .. 1 — the same unitless-track
+          # convention Progress.progress and opacity already carry. Only the
+          # DEFAULT moves; a layout that declares its own bounds is untouched.
           min_value = Core::Normalization.attr_lookup(json_data, 'minimum', 'minimumValue', 'minValue') || json_data['min'] || 0
-          max_value = Core::Normalization.attr_lookup(json_data, 'maximum', 'maximumValue', 'maxValue') || json_data['max'] || 100
+          max_value = Core::Normalization.attr_lookup(json_data, 'maximum', 'maximumValue', 'maxValue') || json_data['max'] || 1
           
           code = indent("Slider(", depth)
           code += "\n" + indent("value = #{value},", depth + 1)
@@ -73,11 +78,11 @@ module KjuiTools
           # `min|maxValue` (and their `minimum`/`maximum` aliases) are
           # `["number", "binding"]`; the raw `#{...}f` interpolation put
           # `@{v}f` in code position (plan 49 lane C, 4 entries).
-          # The fallbacks mirror the STATIC defaults just above (0 / 100). A
+          # The fallbacks mirror the STATIC defaults just above (0 / 1). A
           # bound maximum falling back to 0 would collapse the range onto the
           # minimum and leave the slider unusable — the same fallback-collides-
           # with-the-attribute's-unset-value hazard B found on Label.lines.
-          code += "\n" + indent("valueRange = #{Helpers::BoundValue.float(min_value, fallback: 0)}..#{Helpers::BoundValue.float(max_value, fallback: 100)},", depth + 1)
+          code += "\n" + indent("valueRange = #{Helpers::BoundValue.float(min_value, fallback: 0)}..#{Helpers::BoundValue.float(max_value, fallback: 1)},", depth + 1)
           
           # Steps
           if json_data['step'] && json_data['step'] > 0

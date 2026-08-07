@@ -55,10 +55,14 @@ RSpec.describe KjuiTools::Compose::Components::SliderComponent do
       expect(result).to include('onValueChange = { }')
     end
 
-    it 'generates Slider with default valueRange' do
+    # The undeclared range was 0..100, invented here rather than declared
+    # anywhere. The SSoT now says otherwise — `minimum` declares `default: 0`
+    # and `maximum` declares `default: 1`, the unitless-track convention
+    # Progress.progress and opacity already carry (51-E d75229b).
+    it 'runs an undeclared Slider over the declared default range' do
       json_data = { 'type' => 'Slider' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('valueRange = 0f..100f')
+      expect(result).to include('valueRange = 0f..1f')
     end
 
     it 'generates Slider with minimumValue and maximumValue' do
