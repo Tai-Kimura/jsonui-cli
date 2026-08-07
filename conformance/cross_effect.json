@@ -279,8 +279,8 @@
         "ios": "active",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "declared value equals the web default rendering: the web baseline is Tailwind preflight, which sets line-height 1.5, and both spellings land on exactly that at this fixture shape (lineHeightMultiple 1.5; lineSpacing 8 over fontSize 16 = (16+8)/16 = 1.5). Measured on the local web lane at 639a013: the emitted `style={{ lineHeight: 1.5 }}` computes to 24px AND the control computes to 24px — same 5 line boxes, same 120px box, 0 differing px. The converter is innocent and the ios/android activeness is their own ~1.2 default. Measurement fix: a value that is not 1.5x the font size discriminates on all three (owner: D). Family: value-is-default-web-leading.",
+      "note": "Bound face measured with the static face: both emit the same 1.5 and both compute 24px against a 24px control."
     },
     {
       "fixture": "Label/lineHeightMultiple__static",
@@ -289,7 +289,7 @@
         "ios": "active",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "declared value equals the web default rendering: the web baseline is Tailwind preflight, which sets line-height 1.5, and both spellings land on exactly that at this fixture shape (lineHeightMultiple 1.5; lineSpacing 8 over fontSize 16 = (16+8)/16 = 1.5). Measured on the local web lane at 639a013: the emitted `style={{ lineHeight: 1.5 }}` computes to 24px AND the control computes to 24px — same 5 line boxes, same 120px box, 0 differing px. The converter is innocent and the ios/android activeness is their own ~1.2 default. Measurement fix: a value that is not 1.5x the font size discriminates on all three (owner: D). Family: value-is-default-web-leading.",
       "note": ""
     },
     {
@@ -299,8 +299,8 @@
         "ios": "active",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "declared value equals the web default rendering: the web baseline is Tailwind preflight, which sets line-height 1.5, and both spellings land on exactly that at this fixture shape (lineHeightMultiple 1.5; lineSpacing 8 over fontSize 16 = (16+8)/16 = 1.5). Measured on the local web lane at 639a013: the emitted `style={{ lineHeight: 1.5 }}` computes to 24px AND the control computes to 24px — same 5 line boxes, same 120px box, 0 differing px. The converter is innocent and the ios/android activeness is their own ~1.2 default. Measurement fix: a value that is not 1.5x the font size discriminates on all three (owner: D). Family: value-is-default-web-leading.",
+      "note": "Bound face measured with the static face: both emit the same 1.5 and both compute 24px against a 24px control."
     },
     {
       "fixture": "Label/lineSpacing__static",
@@ -309,7 +309,7 @@
         "ios": "active",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "declared value equals the web default rendering: the web baseline is Tailwind preflight, which sets line-height 1.5, and both spellings land on exactly that at this fixture shape (lineHeightMultiple 1.5; lineSpacing 8 over fontSize 16 = (16+8)/16 = 1.5). Measured on the local web lane at 639a013: the emitted `style={{ lineHeight: 1.5 }}` computes to 24px AND the control computes to 24px — same 5 line boxes, same 120px box, 0 differing px. The converter is innocent and the ios/android activeness is their own ~1.2 default. Measurement fix: a value that is not 1.5x the font size discriminates on all three (owner: D). Family: value-is-default-web-leading.",
       "note": ""
     },
     {
@@ -319,8 +319,8 @@
         "ios": "active",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "fixed in this train (web), fixture cannot see it: rjui rendered autoShrink as a VIEWPORT-relative clamp — `font-size: min(<size>px, max(<size*factor>px, 1vw))` — which is not a fit-to-box shrink at all. At the conformance viewport (1024px, 1vw = 10.24px) the 1vw term outran both floors, so fixture (0.25 -> 4px) and control (default 0.5 -> 8px) both computed 10.24px, 0 differing px. The same emit was a product defect: a 16px Label rendered at 8px on a 375px-wide viewport. Replaced by a measured fit (`@/generated/autoShrink`, hoisted ref + effect); browser-probed on the shipped build — a bounded box shrinks 16px -> 9.5px with no declared floor and to the declared floor with one, and a Label without autoShrink in the same box does not move. THIS fixture stays inert on web because its shape (width 200, height wrapContent) never overflows, so a correct implementation has nothing to do — `Label/autoShrink__true` loses its web control_diff entry for the same reason. Measurement fix: a bounded-height shape discriminates on web (owner: D). Family: autoshrink-needs-bounded-shape.",
+      "note": "Bound face measured with the static face: the bound emit moved the factor into the effect's dependency list, so it re-fits when the data changes — the old clamp multiplied it in Ruby and raised on a bound value."
     },
     {
       "fixture": "Label/minimumScaleFactor__static",
@@ -329,7 +329,7 @@
         "ios": "active",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
+      "reason": "fixed in this train (web), fixture cannot see it: rjui rendered autoShrink as a VIEWPORT-relative clamp — `font-size: min(<size>px, max(<size*factor>px, 1vw))` — which is not a fit-to-box shrink at all. At the conformance viewport (1024px, 1vw = 10.24px) the 1vw term outran both floors, so fixture (0.25 -> 4px) and control (default 0.5 -> 8px) both computed 10.24px, 0 differing px. The same emit was a product defect: a 16px Label rendered at 8px on a 375px-wide viewport. Replaced by a measured fit (`@/generated/autoShrink`, hoisted ref + effect); browser-probed on the shipped build — a bounded box shrinks 16px -> 9.5px with no declared floor and to the declared floor with one, and a Label without autoShrink in the same box does not move. THIS fixture stays inert on web because its shape (width 200, height wrapContent) never overflows, so a correct implementation has nothing to do — `Label/autoShrink__true` loses its web control_diff entry for the same reason. Measurement fix: a bounded-height shape discriminates on web (owner: D). Family: autoshrink-needs-bounded-shape.",
       "note": ""
     },
     {
@@ -692,8 +692,8 @@
         "ios": "active",
         "web": "inert"
       },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "declared value equals the default rendering on web: the fixture selects 'One' and the control's own select already reports value 'One' — a <select> with no selected attribute selects its first option, and 'One' IS the first item. Measured on the local web lane: 0 differing px, and the DOM probe reads `select.value === 'One'` on the control. ios/android show their own initial-selection chrome. Measurement fix: the second item discriminates on all three (owner: D). Family: value-is-default.",
+      "note": "The sibling face SelectBox/selectedItem__static is a separate row (CG-android bucket) and is NOT this shape."
     },
     {
       "fixture": "TabView/showLabels__true",
