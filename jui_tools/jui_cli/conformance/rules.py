@@ -1944,6 +1944,35 @@ VARIANT_CASES: dict[tuple[str, str], dict[str, dict[str, Any]]] = {
     ("Collection", "insetHorizontal"): {
         "horizontal": {"orientation": "horizontal"},
     },
+    # The row-of-boxes base overflows the host in the FLOW direction, and G
+    # adjudicated the android collapse `compose-measure-constraint`: a Compose
+    # Row measures its children against the remaining width, so the ones that
+    # do not fit are measured to nothing rather than painted outside. Clip-on
+    # and clip-off compose the same picture because there is nothing outside.
+    #
+    # This variant states the overflow as a SIZE instead of a flow: one child
+    # declared larger than the box it sits in. Measured on all three — ios
+    # `.frame(width: 300)` and web `w-[300px] shrink-0` both overflow, so the
+    # clip has something to cut; kjui emits `Modifier.width(300.dp)`, which is
+    # enforce-incoming and therefore CLAMPS to the parent's 200 (it never
+    # emits `requiredWidth`/`requiredSize`, grep: zero hits in `kjui_tools/`).
+    #
+    # So the ledger's reason is one layer short of the mechanism: the pair is
+    # not un-measurable in Compose, it is un-measurable through kjui's choice
+    # of size modifier — and the same declaration overflows on the other two.
+    # This fixture is the form that says so. Prediction on the next 3PF run,
+    # registered before it is run: ACTIVE on ios and web, INERT on android,
+    # and the android half turns active with no fixture change on the day
+    # kjui honours an oversized explicit size. Owner of that half: C/G.
+    ("common", "clipToBounds"): {
+        "overflow": {
+            "orientation": None,
+            "child": [
+                {"type": "View", "id": "overflow_box", "width": 300,
+                 "height": 300, "background": "#FF0000"},
+            ],
+        },
+    },
 }
 
 #: A SECOND bound case for an attribute, declared under a different data class.
@@ -2772,18 +2801,43 @@ def plan_attribute(
     # stop firing the moment an attribute gained a non-boolean extra case —
     # adding `underline__styled` silently deleted `underline__false`, which is
     # exactly the dead-contract shape this rule exists to prevent.
+    #
+    # Count DISTINCT VALUES, not cases, for the same reason one step along. A
+    # variant repeats a case under a suffix WITH THE SAME VALUE, so counting
+    # cases made two spellings of `true` look like a complete domain and the
+    # rule fell silent again: `Radio/checked__false` has been absent from the
+    # manifest since `checked`'s `with_group` variant landed, deleted by the
+    # rule written to stop exactly that. The failure is invisible from the
+    # outside — a fixture that is not planned cannot fail — which is why the
+    # count has now been narrowed twice.
     bool_literals = [
         c for c in cases if c.alias_of is None and isinstance(c.value, bool)
     ]
-    if len(bool_literals) == 1:
+    bool_values = {c.value for c in bool_literals}
+    if len(bool_values) == 1:
+        seed = bool_literals[0]
+        missing = not seed.value
+        name = str(missing).lower()
         cases.append(
             CasePlan(
-                name=str(not bool_literals[0].value).lower(),
-                value=not bool_literals[0].value,
+                name=name,
+                value=missing,
                 written_key=attribute,
-                assertions=bool_literals[0].assertions,
+                assertions=seed.assertions,
             )
         )
+        # The synthesized value earns the same variants its twin has, or the
+        # variant family measures one half of the domain and the pair the
+        # variant exists to compare cannot be formed at all.
+        for suffix in variant_bases_for(section, attribute):
+            cases.append(
+                CasePlan(
+                    name=f"{name}_{suffix}",
+                    value=missing,
+                    written_key=attribute,
+                    assertions=seed.assertions,
+                )
+            )
 
     union = bound_union_case_for(section, attribute)
     if bound is not None:
