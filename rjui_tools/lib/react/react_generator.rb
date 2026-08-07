@@ -360,7 +360,16 @@ module RjuiTools
         # Determined early because the Data import shape depends on it:
         # data-consuming components also import the createXxxData factory
         # for the Partial-merge call convention (see props emission below).
-        uses_data = jsx_content.match?(/\bdata\./) || !focus_fields.empty? || !collection_scrolls.empty?
+        #
+        # The hoisted declarations count too — a bound autoShrink operand
+        # references `data.` from its effect, which is NOT in jsx_content, so
+        # scanning the JSX alone left `data` an optional prop with no merge and
+        # the effect read `data.x` off possibly-undefined (TS18048).
+        auto_shrink_reads_data = auto_shrink_targets.any? do |t|
+          "#{t[:font_size]}#{t[:min_scale]}".include?('@{')
+        end
+        uses_data = jsx_content.match?(/\bdata\./) || !focus_fields.empty? ||
+                    !collection_scrolls.empty? || auto_shrink_reads_data
 
         # Generate Data type import (for TypeScript)
         data_import = ''

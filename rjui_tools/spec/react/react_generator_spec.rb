@@ -607,3 +607,30 @@ RSpec.describe RjuiTools::React::ReactGenerator, 'ScrollView defaultScrollAnchor
     expect(out).not_to include('applyCollectionDefaultAnchor')
   end
 end
+
+# A bound autoShrink operand references `data.` from its HOISTED effect, which
+# is not in the JSX scan — so `uses_data` stayed false, `data` remained an
+# optional prop with no Partial-merge, and the effect read `data.x` off
+# possibly-undefined (TS18048 in an @generated file; 51-A urgent).
+RSpec.describe RjuiTools::React::ReactGenerator, 'autoShrink data merge' do
+  let(:generator) do
+    described_class.new({ 'use_tailwind' => true, 'typescript' => true,
+                          'layouts_directory' => '/tmp/x', 'generated_directory' => '/tmp/x/out' })
+  end
+
+  it 'merges data when an autoShrink operand is bound' do
+    out = generator.generate('ShrinkBound', { 'type' => 'View', 'child' => [
+      { 'type' => 'Label', 'id' => 'title', 'text' => 'Long text',
+        'autoShrink' => true, 'minimumScaleFactor' => '@{minScale}' }
+    ] })
+    expect(out).to include('const data: ShrinkBoundData = { ...createShrinkBoundData(), ...dataProp };')
+  end
+
+  it 'keeps a fully static autoShrink on the plain optional-data shape' do
+    out = generator.generate('ShrinkStatic', { 'type' => 'View', 'child' => [
+      { 'type' => 'Label', 'id' => 'title', 'text' => 'Long text',
+        'autoShrink' => true, 'fontSize' => 16, 'minimumScaleFactor' => 0.25 }
+    ] })
+    expect(out).not_to include('...createShrinkStaticData()')
+  end
+end

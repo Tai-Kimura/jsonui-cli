@@ -197,6 +197,22 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         expect(result).to include('value={data.val}')
         expect(result).not_to include('data.idx ?? -1')
       end
+
+      # The write-back is a NUMBER both ways: the value side resolves the item
+      # at the index, so reporting `e.target.value` (a string) contradicted
+      # the declared `(value: number) => void` handler.
+      it 'reports the selected INDEX back, not the option string' do
+        converter = create_converter({ 'class' => 'SelectBox', 'items' => %w[A B], 'selectedIndex' => '@{idx}' })
+        expect(converter.convert).to include('onChange={(e) => data.onIdxChange?.(e.target.selectedIndex)}')
+      end
+
+      # The placeholder row occupies DOM index 0, and picking it reports -1 —
+      # the same "nothing selected" the value side renders for.
+      it 'offsets the reported index past a placeholder row' do
+        converter = create_converter({ 'class' => 'SelectBox', 'items' => %w[A B],
+                                       'prompt' => 'Choose', 'selectedIndex' => '@{idx}' })
+        expect(converter.convert).to include('onChange={(e) => data.onIdxChange?.(e.target.selectedIndex - 1)}')
+      end
     end
 
     context 'with static default value' do

@@ -389,6 +389,22 @@ RSpec.describe RjuiTools::React::DataModelGenerator, 'canonical selection bindin
     expect(generator.send(:value_binding_handler_name, 'tab', b['tab'])).to eq('setTab')
   end
 
+  # The two converters already emitted these handlers into the JSX; nothing
+  # declared them, so every bound-selectedIndex SelectBox/TabView was TS2551
+  # in an @generated file the consumer cannot patch (51-A urgent).
+  it 'declares a SelectBox selectedIndex as a NUMBER with the on<Prop>Change convention' do
+    b = bindings_for({ 'type' => 'SelectBox', 'id' => 's', 'items' => %w[A B],
+                       'selectedIndex' => '@{pick}' })
+    expect(b['pick']).to include(type: 'number')
+    expect(generator.send(:value_binding_handler_name, 'pick', b['pick'])).to eq('onPickChange')
+  end
+
+  it 'declares a TabView selectedIndex as a NUMBER, reported back through set<Prop>' do
+    b = bindings_for({ 'type' => 'TabView', 'id' => 't', 'selectedIndex' => '@{tab}' })
+    expect(b['tab']).to include(type: 'number', handler: :setter)
+    expect(generator.send(:value_binding_handler_name, 'tab', b['tab'])).to eq('setTab')
+  end
+
   it 'keeps the on<Prop>Change convention for everything else' do
     b = bindings_for({ 'type' => 'SelectBox', 'id' => 's', 'selectedValue' => '@{choice}' })
     expect(generator.send(:value_binding_handler_name, 'choice', b['choice'])).to eq('onChoiceChange')

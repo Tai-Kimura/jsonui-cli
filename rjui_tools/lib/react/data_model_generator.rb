@@ -391,6 +391,17 @@ module RjuiTools
             if selected.is_a?(String) && selected.start_with?('@{') && selected.end_with?('}')
               bindings[selected[2...-1]] ||= { type: 'string', defaultValue: '""' }
             end
+
+            # `selectedIndex` is an INDEX, so it is a number, reported back
+            # through `on<Prop>Change` (SelectBox's convention, unlike
+            # Segment's setter). The converter already emitted that handler
+            # into the JSX; nothing declared it, so every bound-selectedIndex
+            # SelectBox was TS2551 in an @generated file (51-A urgent, plan D
+            # bound-fixture find).
+            sel_index = json_data['selectedIndex']
+            if sel_index.is_a?(String) && sel_index.start_with?('@{') && sel_index.end_with?('}')
+              bindings[sel_index[2...-1]] ||= { type: 'number', defaultValue: 0 }
+            end
           end
 
           # Radio — `selectedValue`, reported back through `set<Prop>`.
@@ -402,9 +413,13 @@ module RjuiTools
             end
           end
 
-          # Segment — `selectedIndex` is an INDEX, so it is a number, and it
-          # is reported back through `set<Prop>` like Radio.
-          if component_type == 'Segment'
+          # Segment / TabView — `selectedIndex` is an INDEX, so it is a
+          # number, and it is reported back through `set<Prop>` like Radio.
+          # TabView's converter always derived `set<Prop>` from the binding;
+          # only the fixed no-binding pair (selectedTabIndex /
+          # setSelectedTabIndex) was ever declared, so a BOUND selectedIndex
+          # was TS2551 (51-A urgent, plan D bound-fixture find).
+          if %w[Segment TabView].include?(component_type)
             selected = json_data['selectedIndex'] || json_data['selectedTabIndex']
             if selected.is_a?(String) && selected.start_with?('@{') && selected.end_with?('}')
               bindings[selected[2...-1]] ||=

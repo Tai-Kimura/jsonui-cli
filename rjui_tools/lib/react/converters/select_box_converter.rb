@@ -410,10 +410,23 @@ module RjuiTools
           end
 
           # Auto-generate onChange from value binding (two-way binding)
-          value_key = attributes['selectedValue'] || attributes['value'] || attributes['selectedIndex']
+          value_key = attributes['selectedValue'] || attributes['value']
+          index_key = attributes['selectedIndex'] unless value_key
+          value_key ||= index_key
           if value_key && has_binding?(value_key)
             property_name = value_key.match(/@\{(.+)\}/)[1]
             handler_name = "on#{property_name[0].upcase}#{property_name[1..]}Change"
+            # A selectedIndex binding is a NUMBER both ways: the value side
+            # resolves the item at the index (build_index_value_attr), so the
+            # write-back reports the index, not the option's string. The
+            # placeholder row occupies DOM index 0 when present, and picking it
+            # reports -1 — the same "nothing selected" the value side renders
+            # for. (Reporting `e.target.value` typed the handler's argument as
+            # a string, which the declared `(value: number) => void` rejects.)
+            if index_key
+              index_expr = placeholder_row? ? 'e.target.selectedIndex - 1' : 'e.target.selectedIndex'
+              return " onChange={(e) => data.#{handler_name}?.(#{index_expr})}"
+            end
             return " onChange={(e) => data.#{handler_name}?.(#{changed_value_expr})}"
           end
 
