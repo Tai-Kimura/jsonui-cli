@@ -13,35 +13,18 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "Collection",
+      "type": "Slider",
       "id": "target",
       "width": 200,
-      "height": 200,
-      "background": "#DDDDDD",
-      "sections": [
-        {
-          "cell": "conformance_cell"
-        }
-      ],
-      "items": "@{items}",
-      "listStyle": "sample"
+      "height": "wrapContent",
+      "value": "@{boundValue}"
     }
   ],
   "data": [
     {
-      "name": "items",
-      "class": "CollectionDataSource",
-      "defaultValue": [
-        {
-          "title": "Alpha"
-        },
-        {
-          "title": "Beta"
-        },
-        {
-          "title": "Gamma"
-        }
-      ]
+      "name": "boundValue",
+      "class": "Double",
+      "defaultValue": 0.5
     }
   ]
 }

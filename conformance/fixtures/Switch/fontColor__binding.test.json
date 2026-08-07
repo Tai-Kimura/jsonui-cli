@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Switch/fontColor__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Switch.fontColor (binding)",
+    "description": "Conformance fixture for 'fontColor' on Switch (section: Switch, class: visual). Value under test: \"@{boundFontColor}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Switch"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontColor__binding",
+      "description": "Conformance fixture for 'fontColor' on Switch (section: Switch, class: visual). Value under test: \"@{boundFontColor}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Switch_fontColor__binding"
+        }
+      ]
+    }
+  ]
+}

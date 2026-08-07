@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Segment/selectedIndex__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Segment.selectedIndex (binding)",
+    "description": "Conformance fixture for 'selectedIndex' on Segment (section: Segment, class: visual). Value under test: \"@{boundSelectedIndex}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Segment"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "selectedIndex__binding",
+      "description": "Conformance fixture for 'selectedIndex' on Segment (section: Segment, class: visual). Value under test: \"@{boundSelectedIndex}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Segment_selectedIndex__binding"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/disabledFontColor__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.disabledFontColor (binding)",
+    "description": "Conformance fixture for 'disabledFontColor' on Label (section: Label, class: visual). Value under test: \"@{boundDisabledFontColor}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "disabledFontColor__binding",
+      "description": "Conformance fixture for 'disabledFontColor' on Label (section: Label, class: visual). Value under test: \"@{boundDisabledFontColor}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_disabledFontColor__binding"
+        }
+      ]
+    }
+  ]
+}

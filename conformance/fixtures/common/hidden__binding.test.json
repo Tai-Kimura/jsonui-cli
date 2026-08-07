@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/hidden__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.hidden (binding)",
+    "description": "Conformance fixture for 'hidden' on View (section: common, class: assertable). Value under test: \"@{boundHidden}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "hidden__binding",
+      "description": "Conformance fixture for 'hidden' on View (section: common, class: assertable). Value under test: \"@{boundHidden}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "notVisible",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

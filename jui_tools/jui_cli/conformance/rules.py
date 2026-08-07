@@ -877,6 +877,74 @@ BOUND_CASE_CLASSES: dict[tuple[str, str], str] = {
     # copy of the asset under `hosts/web/public/images/`, the same trick the
     # host already uses at its public root for the `src` face.
     ('Image', 'srcName'): 'String',
+    # --- Wave 3, the 49 that this wave's own fixes touched ------------- #
+    #
+    # Lane G asked whether `Image.srcName` was one of a family, and the
+    # count says yes: 77 spellings declare `binding` and had no bound case
+    # (against 82 that did), so the bound face of most of the ecosystem was
+    # unguarded the same way srcName's was when it broke on device.
+    #
+    # Not all 77 land here. The orchestrator split them by whether THIS
+    # wave's converter work touched the spelling — those get their bound
+    # fixture now, as regression armour for the fix that just landed; pure
+    # new coverage waits for the next train so the adjudication stock does
+    # not re-inflate. The split is machine-derived (attribute quoted in an
+    # ADDED line of the wave's `*_tools/lib` diffs AND named in the commit
+    # message) and stable across three ways of asking: 60 / 60 / 56 / 52.
+    #
+    # Three of the 52 are held back for a class ruling, not forgotten:
+    # `SelectBox.items` is `array` and `common.width` / `common.height` are
+    # `number|enum|binding` — neither shape has a class that survives all
+    # three generators (the four-class vocabulary of 49-D §2.1).
+    ('Button', 'fontColor'): 'String',
+    ('Button', 'fontFamily'): 'String',
+    ('Button', 'image'): 'String',
+    ('Button', 'text'): 'String',
+    ('CheckBox', 'checked'): 'Boolean',
+    ('CheckBox', 'fontColor'): 'String',
+    ('IconLabel', 'selected'): 'Boolean',
+    ('Image', 'src'): 'String',
+    ('Indicator', 'animating'): 'Boolean',
+    ('Indicator', 'color'): 'String',
+    ('Label', 'disabledFontColor'): 'String',
+    ('Label', 'fontColor'): 'String',
+    ('Label', 'selected'): 'Boolean',
+    ('Label', 'text'): 'String',
+    ('Progress', 'progress'): 'Double',
+    ('Progress', 'progressTintColor'): 'String',
+    ('Progress', 'trackTintColor'): 'String',
+    ('Radio', 'fontColor'): 'String',
+    ('SafeAreaView', 'spacing'): 'Int',
+    ('Segment', 'selectedIndex'): 'Int',
+    ('SelectBox', 'selectedIndex'): 'Int',
+    ('SelectBox', 'selectedItem'): 'String',
+    ('Slider', 'value'): 'Double',
+    ('Switch', 'checked'): 'Boolean',
+    ('Switch', 'enabled'): 'Boolean',
+    ('Switch', 'fontColor'): 'String',
+    ('Switch', 'fontSize'): 'Int',
+    ('Switch', 'label'): 'String',
+    ('Switch', 'value'): 'Boolean',
+    ('TabView', 'selectedIndex'): 'Int',
+    ('TabView', 'tintColor'): 'String',
+    ('TabView', 'unselectedColor'): 'String',
+    ('TextField', 'fontColor'): 'String',
+    ('TextField', 'text'): 'String',
+    ('TextView', 'fontColor'): 'String',
+    ('TextView', 'text'): 'String',
+    ('common', 'background'): 'String',
+    ('common', 'borderColor'): 'String',
+    ('common', 'enabled'): 'Boolean',
+    ('common', 'endMargin'): 'Int',
+    ('common', 'heightWeight'): 'Int',
+    ('common', 'hidden'): 'Boolean',
+    ('common', 'leftMargin'): 'Int',
+    ('common', 'offsetX'): 'Int',
+    ('common', 'offsetY'): 'Int',
+    ('common', 'opacity'): 'Double',
+    ('common', 'rightMargin'): 'Int',
+    ('common', 'startMargin'): 'Int',
+    ('common', 'widthWeight'): 'Int',
     # --- Int (30) ---
     ('CheckBox', 'fontSize'): 'Int',
     ('CheckBox', 'spacing'): 'Int',

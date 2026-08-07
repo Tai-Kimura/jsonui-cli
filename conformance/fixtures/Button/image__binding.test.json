@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/image__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.image (binding)",
+    "description": "Conformance fixture for 'image' on Button (section: Button, class: visual). Value under test: \"@{boundImage}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "image__binding",
+      "description": "Conformance fixture for 'image' on Button (section: Button, class: visual). Value under test: \"@{boundImage}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_image__binding"
+        }
+      ]
+    }
+  ]
+}

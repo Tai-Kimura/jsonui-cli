@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/fontColor__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.fontColor (binding)",
+    "description": "Conformance fixture for 'fontColor' on Label (section: Label, class: visual). Value under test: \"@{boundFontColor}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontColor__binding",
+      "description": "Conformance fixture for 'fontColor' on Label (section: Label, class: visual). Value under test: \"@{boundFontColor}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_fontColor__binding"
+        }
+      ]
+    }
+  ]
+}

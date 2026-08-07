@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/selected__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.selected (binding)",
+    "description": "Conformance fixture for 'selected' on Label (section: Label, class: visual). Value under test: \"@{boundSelected}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "selected__binding",
+      "description": "Conformance fixture for 'selected' on Label (section: Label, class: visual). Value under test: \"@{boundSelected}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_selected__binding"
+        }
+      ]
+    }
+  ]
+}

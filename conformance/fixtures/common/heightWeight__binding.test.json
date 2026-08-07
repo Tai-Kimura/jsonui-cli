@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/heightWeight__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.heightWeight (binding)",
+    "description": "Conformance fixture for 'heightWeight' on View (section: common, class: visual). Value under test: \"@{boundHeightWeight}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "heightWeight__binding",
+      "description": "Conformance fixture for 'heightWeight' on View (section: common, class: visual). Value under test: \"@{boundHeightWeight}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_heightWeight__binding"
+        }
+      ]
+    }
+  ]
+}

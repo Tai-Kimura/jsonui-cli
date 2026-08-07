@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/listStyle__grouped.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.listStyle (grouped)",
+    "description": "Conformance fixture for 'listStyle' on Collection (section: Collection, class: visual). Value under test: \"grouped\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "listStyle__grouped",
+      "description": "Conformance fixture for 'listStyle' on Collection (section: Collection, class: visual). Value under test: \"grouped\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_listStyle__grouped"
+        }
+      ]
+    }
+  ]
+}

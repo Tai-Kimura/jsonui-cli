@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/rightMargin__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.rightMargin (binding)",
+    "description": "Conformance fixture for 'rightMargin' on View (section: common, class: visual). Value under test: \"@{boundRightMargin}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "rightMargin__binding",
+      "description": "Conformance fixture for 'rightMargin' on View (section: common, class: visual). Value under test: \"@{boundRightMargin}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_rightMargin__binding"
+        }
+      ]
+    }
+  ]
+}

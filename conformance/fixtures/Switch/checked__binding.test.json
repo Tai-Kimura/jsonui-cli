@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Switch/checked__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Switch.checked (binding)",
+    "description": "Conformance fixture for 'checked' on Switch (section: Switch, class: visual). Value under test: \"@{boundChecked}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Switch"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "checked__binding",
+      "description": "Conformance fixture for 'checked' on Switch (section: Switch, class: visual). Value under test: \"@{boundChecked}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Switch_checked__binding"
+        }
+      ]
+    }
+  ]
+}

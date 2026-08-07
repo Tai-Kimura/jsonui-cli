@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/offsetY__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.offsetY (binding)",
+    "description": "Conformance fixture for 'offsetY' on View (section: common, class: visual). Value under test: \"@{boundOffsetY}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "offsetY__binding",
+      "description": "Conformance fixture for 'offsetY' on View (section: common, class: visual). Value under test: \"@{boundOffsetY}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_offsetY__binding"
+        }
+      ]
+    }
+  ]
+}

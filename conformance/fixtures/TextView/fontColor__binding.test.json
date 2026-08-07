@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/fontColor__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.fontColor (binding)",
+    "description": "Conformance fixture for 'fontColor' on TextView (section: TextView, class: visual). Value under test: \"@{boundFontColor}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontColor__binding",
+      "description": "Conformance fixture for 'fontColor' on TextView (section: TextView, class: visual). Value under test: \"@{boundFontColor}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_fontColor__binding"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/text__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.text (binding)",
+    "description": "Conformance fixture for 'text' on Button (section: Button, class: assertable). Value under test: \"@{boundText}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "text__binding",
+      "description": "Conformance fixture for 'text' on Button (section: Button, class: assertable). Value under test: \"@{boundText}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        },
+        {
+          "assert": "text",
+          "id": "target",
+          "equals": "Conformance Text"
+        }
+      ]
+    }
+  ]
+}
