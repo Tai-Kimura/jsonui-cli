@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/underline__thick.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.underline (thick)",
+    "description": "Conformance fixture for 'underline' on Label (section: Label, class: visual). Value under test: {\"lineStyle\": \"Thick\"}.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "underline__thick",
+      "description": "Conformance fixture for 'underline' on Label (section: Label, class: visual). Value under test: {\"lineStyle\": \"Thick\"}.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_underline__thick"
+        }
+      ]
+    }
+  ]
+}

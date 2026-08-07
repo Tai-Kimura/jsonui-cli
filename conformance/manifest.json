@@ -10,9 +10,9 @@
   "schemaVersion": 2,
   "generatedFrom": "be5fafd58187fc62d30b3e5f5c1270cac97338a1364b3f52084ecd235491627b",
   "counts": {
-    "fixtures": 1031,
+    "fixtures": 1035,
     "assertable": 41,
-    "visual": 793,
+    "visual": 797,
     "interactive": 35,
     "control": 103,
     "declarationOnly": 59,
@@ -6403,6 +6403,58 @@
       "control": "__control/Label"
     },
     {
+      "id": "Label/underline__double",
+      "component": "Label",
+      "attribute": "underline",
+      "case": "double",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "underline",
+      "aliasOf": null,
+      "value": {
+        "lineStyle": "Double"
+      },
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/underline__double.layout.json",
+      "test": "fixtures/Label/underline__double.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Label/underline@Label",
+      "control": "__control/Label"
+    },
+    {
+      "id": "Label/underline__thick",
+      "component": "Label",
+      "attribute": "underline",
+      "case": "thick",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "underline",
+      "aliasOf": null,
+      "value": {
+        "lineStyle": "Thick"
+      },
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/underline__thick.layout.json",
+      "test": "fixtures/Label/underline__thick.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Label/underline@Label",
+      "control": "__control/Label"
+    },
+    {
       "id": "Label/underline__false",
       "component": "Label",
       "attribute": "underline",
@@ -6472,6 +6524,58 @@
       "deprecated": null,
       "layout": "fixtures/Label/strikethrough__styled.layout.json",
       "test": "fixtures/Label/strikethrough__styled.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Label/strikethrough@Label",
+      "control": "__control/Label"
+    },
+    {
+      "id": "Label/strikethrough__double",
+      "component": "Label",
+      "attribute": "strikethrough",
+      "case": "double",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "strikethrough",
+      "aliasOf": null,
+      "value": {
+        "lineStyle": "Double"
+      },
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/strikethrough__double.layout.json",
+      "test": "fixtures/Label/strikethrough__double.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Label/strikethrough@Label",
+      "control": "__control/Label"
+    },
+    {
+      "id": "Label/strikethrough__thick",
+      "component": "Label",
+      "attribute": "strikethrough",
+      "case": "thick",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "strikethrough",
+      "aliasOf": null,
+      "value": {
+        "lineStyle": "Thick"
+      },
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/strikethrough__thick.layout.json",
+      "test": "fixtures/Label/strikethrough__thick.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": "Label/strikethrough@Label",

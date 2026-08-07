@@ -818,9 +818,17 @@ EXTRA_CASES: dict[tuple[str, str], list[Any]] = {
     # all three emit and differ from control), so they ship rather than hold.
     ("Label", "underline"): [
         ("styled", {"color": "#FF0000", "lineStyle": "Single", "lineOffset": 2}),
+        # Double/Thick landed on all three faces 2026-08-08 (android
+        # StyledTextLines, ios the UILabel bridge, web decoration-double /
+        # decoration-2) — these probes are what measure them. No colour on
+        # purpose: the style axis alone must discriminate from `true`.
+        ("double", {"lineStyle": "Double"}),
+        ("thick", {"lineStyle": "Thick"}),
     ],
     ("Label", "strikethrough"): [
         ("styled", {"color": "#FF0000", "lineStyle": "Single"}),
+        ("double", {"lineStyle": "Double"}),
+        ("thick", {"lineStyle": "Thick"}),
     ],
     # The string spelling of a weight. "2" also differs from the numeric
     # case's 1, so the two faces are distinguishable from each other too.

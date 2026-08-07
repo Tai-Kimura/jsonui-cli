@@ -14,28 +14,10 @@
       "component": "Collection",
       "attribute": "hideSeparator",
       "platforms": [
-        "ios",
-        "android"
+        "ios"
       ],
       "reason": "runtime-only",
       "note": "ios dynamic implements it (SwiftJsonUI CollectionConverter.swift:662 / TableConverter.swift:46,49); no codegen face reads it. Not \"unimplemented\" — this scan only walks the Ruby codegen. attribute_semantics.json -> collectionSeparators (plan 51-E)."
-    },
-    {
-      "component": "Collection",
-      "attribute": "listStyle",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "Was runtime-only while no codegen face read it; B implemented the ios codegen face against the enum (collection_converter.rb LIST_STYLES), so android and web are now a genuine implementation gap. attribute_semantics.json -> collectionSeparators (plan 51-E)."
-    },
-    {
-      "component": "ScrollView",
-      "attribute": "defaultScrollAnchor",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
     },
     {
       "component": "ScrollView",
@@ -49,14 +31,6 @@
     {
       "component": "Slider",
       "attribute": "range",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "TextField",
-      "attribute": "hintLineHeightMultiple",
       "platforms": [
         "android"
       ],

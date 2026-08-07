@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/underline__double.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.underline (double)",
+    "description": "Conformance fixture for 'underline' on Label (section: Label, class: visual). Value under test: {\"lineStyle\": \"Double\"}.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "underline__double",
+      "description": "Conformance fixture for 'underline' on Label (section: Label, class: visual). Value under test: {\"lineStyle\": \"Double\"}.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_underline__double"
+        }
+      ]
+    }
+  ]
+}
