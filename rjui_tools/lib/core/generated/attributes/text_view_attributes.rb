@@ -39,7 +39,7 @@ module JsonUI
         { name: 'fontFamily', kind: :string, bindable: true }.freeze,
         # Font size (binding supported)
         { name: 'fontSize', kind: :number, bindable: true }.freeze,
-        # Hide placeholder when focused [default: True]
+        # Hide placeholder when focused [default: true]
         { name: 'hideOnFocused', kind: :boolean }.freeze,
         # Placeholder text (primary)
         { name: 'hint', kind: :string }.freeze,

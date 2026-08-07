@@ -19,7 +19,7 @@ module JsonUI
         { name: 'onValueChange', kind: :string, bindable: true, aliases: ['onTabChange', 'onPageChanged'].freeze }.freeze,
         # Currently selected tab index (binding for two-way) [binding: two-way]
         { name: 'selectedIndex', kind: :number, bindable: true, aliases: ['selectedTabIndex'].freeze }.freeze,
-        # Whether to show tab labels (default: true) [default: True]
+        # Whether to show tab labels (default: true) [default: true]
         { name: 'showLabels', kind: :boolean }.freeze,
         # Tab bar background color - hex string or color name from colors.json (binding supported)
         { name: 'tabBarBackground', kind: :string, bindable: true }.freeze,

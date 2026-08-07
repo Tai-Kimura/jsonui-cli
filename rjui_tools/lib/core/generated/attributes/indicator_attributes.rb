@@ -14,7 +14,7 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
-        # Whether the indicator is spinning. Defaults to true: an Indicator with nothing declared animates. `false` stops it, and hidesWhenStopped then decides whether the stopped indicator keeps its space or collapses out of the layout — which is why hidesWhenStopped is only ever read on this branch (sjui indicator_converter.rb:23, kjui indicator_component.rb:13). [default: True]
+        # Whether the indicator is spinning. Defaults to true: an Indicator with nothing declared animates. `false` stops it, and hidesWhenStopped then decides whether the stopped indicator keeps its space or collapses out of the layout — which is why hidesWhenStopped is only ever read on this branch (sjui indicator_converter.rb:23, kjui indicator_component.rb:13). [default: true]
         { name: 'animating', kind: :boolean, bindable: true }.freeze,
         # Indicator color - hex string or color name from colors.json (binding supported). `tint` folds here (sjui indicator_converter.rb:77 reads `color || tintColor || tint`).
         { name: 'color', kind: :string, bindable: true, aliases: ['tint'].freeze }.freeze,

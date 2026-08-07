@@ -79,7 +79,7 @@ module JsonUI
         { name: 'centerVertical', kind: :boolean, bindable: true }.freeze,
         # Custom CSS class name
         { name: 'className', kind: :string }.freeze,
-        # Whether to clip content to bounds (binding supported). Defaults to FALSE: content is not clipped unless the layout asks. A clipping default would silently destroy a child's `shadow` and would make `clipToBounds: true` inert on the platform that already clips. Full ruling in attribute_semantics.json -> clipToBounds; do not restate it in toolchain comments. [default: False]
+        # Whether to clip content to bounds (binding supported). Defaults to FALSE: content is not clipped unless the layout asks. A clipping default would silently destroy a child's `shadow` and would make `clipToBounds: true` inert on the platform that already clips. Full ruling in attribute_semantics.json -> clipToBounds; do not restate it in toolchain comments. [default: false]
         { name: 'clipToBounds', kind: :boolean, bindable: true }.freeze,
         # Horizontal compression resistance
         { name: 'compressHorizontal', kind: :string }.freeze,
