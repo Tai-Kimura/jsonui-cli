@@ -211,6 +211,19 @@ module SjuiTools
               content += "            } else if let doubleValue = value as? Double {\n"
               content += "                self.#{name} = CGFloat(doubleValue)\n"
               content += "            }\n"
+            when 'Color'
+              # Runtime String tokens/hex are legal Color-field values (the
+              # declared defaults are token strings) — `as? Color` alone
+              # silently dropped them while the dynamic path resolved them
+              # (a downstream app_detail, 2026-08-08). Token first, then hex via the
+              # shared configuration fallback.
+              content += "            if let typedValue = value as? Color {\n"
+              content += "                self.#{name} = typedValue\n"
+              content += "            } else if let spelling = value as? String,\n"
+              content += "                      let resolved = ColorManager.swiftui.color(for: spelling)\n"
+              content += "                          ?? SwiftJsonUIConfiguration.shared.getColor(for: spelling) {\n"
+              content += "                self.#{name} = resolved\n"
+              content += "            }\n"
             else
               # For custom types, try to cast directly
               content += "            if let typedValue = value as? #{class_type} {\n"

@@ -1451,7 +1451,11 @@ module KjuiTools
         when 'Image', 'Painter'
           "value as? Painter ?: updated.#{name}"
         when 'Color'
-          "(value as? Color) ?: (value as? ULong)?.let { Color(it) } ?: updated.#{name}"
+          # String tokens/hex are legal at runtime (token-string defaults are
+          # the declared vocabulary); ColorManager.compose.colorOrHex resolves
+          # them without a Context, so updateData stops silently dropping the
+          # value the dynamic path renders.
+          "(value as? Color) ?: (value as? ULong)?.let { Color(it) } ?: (value as? String)?.let { com.kotlinjsonui.generated.ColorManager.compose.colorOrHex(it) } ?: updated.#{name}"
         when 'CollectionDataSource'
           # Fully qualified like the Data-class emission (data_model_updater):
           # the generated ViewModel imports nothing from com.kotlinjsonui.data,

@@ -340,6 +340,17 @@ module KjuiTools
           lines << '            return ComposeColor(int)'
           lines << '        }'
           lines << ''
+          lines << '        /**'
+          lines << '         * Runtime coercion for Color-typed data fields: a palette token'
+          lines << '         * first, then a hex literal. The data contract declares Color'
+          lines << '         * fields with token-string defaults, so a runtime String IS a'
+          lines << '         * legal value — `as? Color` alone silently dropped it while the'
+          lines << '         * dynamic path resolved it (a downstream app_detail, 2026-08-08).'
+          lines << '         */'
+          lines << '        fun colorOrHex(value: String): ComposeColor? ='
+          lines << '            color(value) ?: try { ComposeColor(Color.parseColor(value)) }'
+          lines << '            catch (e: IllegalArgumentException) { null }'
+          lines << ''
           all_keys.each do |key|
             camel = snake_to_camel(key)
             lines << "        val #{camel}: ComposeColor? get() = color(\"#{key}\")"

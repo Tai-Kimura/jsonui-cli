@@ -89,6 +89,27 @@ RSpec.describe KjuiTools::Compose::DataModelUpdater do
         expect { updater.update_data_models }.not_to raise_error
       end
 
+      it 'coerces a runtime String on a Color field instead of dropping it' do
+        # The data contract declares Color fields with token-string defaults
+        # ("slate_300"), so a runtime String IS a legal value. `as? Color`
+        # alone silently kept the default while the dynamic path rendered the
+        # token — a downstream app_detail rows, 2026-08-08.
+        File.write(File.join(layouts_dir, 'row.json'), JSON.generate({
+          'type' => 'View',
+          'data' => [
+            { 'name' => 'accent', 'class' => 'Color', 'defaultValue' => '#CBD5E1' }
+          ]
+        }))
+
+        updater = described_class.new
+        updater.update_data_models
+        generated = File.read(File.join(data_dir, 'RowData.kt'))
+        expect(generated).to include('map["accent"] as? Color')
+        expect(generated).to include(
+          '(map["accent"] as? String)?.let { com.kotlinjsonui.generated.ColorManager.compose.colorOrHex(it) }'
+        )
+      end
+
       it 'handles data as hash format' do
         File.write(File.join(layouts_dir, 'simple.json'), JSON.generate({
           'type' => 'View',

@@ -243,7 +243,10 @@ module KjuiTools
             when 'Bool', 'Boolean'
               content += "map[\"#{name}\"] as? Boolean ?: #{from_map_fallback(prop, class_type, 'false')}"
             when 'Color'
-              content += "map[\"#{name}\"] as? Color ?: #{from_map_fallback(prop, class_type, 'Color.Unspecified')}"
+              # Runtime String tokens/hex are legal Color-field values (the
+              # declared defaults are token strings) — `as? Color` alone
+              # silently dropped them while the dynamic path resolved them.
+              content += "map[\"#{name}\"] as? Color ?: (map[\"#{name}\"] as? String)?.let { com.kotlinjsonui.generated.ColorManager.compose.colorOrHex(it) } ?: #{from_map_fallback(prop, class_type, 'Color.Unspecified')}"
             when 'CollectionDataSource'
               content += "com.kotlinjsonui.data.CollectionDataSource()"
             when /^List<.*>$/

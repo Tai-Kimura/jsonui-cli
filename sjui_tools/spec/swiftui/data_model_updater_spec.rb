@@ -178,6 +178,22 @@ RSpec.describe SjuiTools::SwiftUI::DataModelUpdater do
         expect(content).to include('if let stringValue = value as? String')
       end
 
+      it 'coerces a runtime String on a Color field instead of dropping it' do
+        # The data contract declares Color fields with token-string defaults
+        # ("slate_300"), so a runtime String IS a legal value. `as? Color`
+        # alone silently kept the default while the dynamic path rendered the
+        # token — a downstream app_detail rows, 2026-08-08.
+        properties = [
+          { 'name' => 'accent', 'class' => 'Color', 'defaultValue' => 'slate_300' }
+        ]
+
+        content = updater.send(:generate_data_content, 'Test', properties, [])
+
+        expect(content).to include('if let typedValue = value as? Color')
+        expect(content).to include('let resolved = ColorManager.swiftui.color(for: spelling)')
+        expect(content).to include('?? SwiftJsonUIConfiguration.shared.getColor(for: spelling)')
+      end
+
       it 'generates toDictionary function' do
         properties = [
           { 'name' => 'title', 'class' => 'String', 'defaultValue' => 'Test' }
