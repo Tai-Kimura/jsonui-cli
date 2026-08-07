@@ -139,6 +139,13 @@ class DiffResult:
     #: fixtures dropped from the comparison by the off-face rule — kept as a
     #: list, never a silent skip: a device that excludes says how many.
     excluded: list = field(default_factory=list)
+    #: visual fixtures with no control declared at all, because the attribute
+    #: is on `NON_OBSERVABLE_BY_SECTION` — a still capture cannot photograph
+    #: it (`TextField.tintColor` IS the caret, and an unfocused field has
+    #: none). Legitimate, recorded, and previously invisible: these never
+    #: entered the loop, so "compared" silently excluded them and each
+    #: rediscovery cost a lane an investigation.
+    not_compared_by_design: list = field(default_factory=list)
     error: str | None = None
 
     @property
@@ -370,10 +377,14 @@ def compare(
 
     for entry in manifest.get("fixtures", []):
         control_id = entry.get("control")
-        if not control_id or entry.get("isControl"):
+        if entry.get("isControl"):
             continue
         fid = entry["id"]
         if platform not in (entry.get("platforms") or []):
+            continue
+        if not control_id:
+            if entry.get("class") == "visual":
+                result.not_compared_by_design.append(fid)
             continue
         if fid in off_face:
             # Structurally incapable of differing from its control: the value

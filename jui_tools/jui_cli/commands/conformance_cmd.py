@@ -1522,6 +1522,12 @@ def _cmd_effect(args: argparse.Namespace) -> int:
             f"  off-face (value IS the control's state, structurally "
             f"uncomparable): {len(result.excluded)} excluded"
         )
+    if result.not_compared_by_design:
+        print(
+            f"  no control by design (a still capture cannot photograph it — "
+            f"see NON_OBSERVABLE_BY_SECTION): "
+            f"{len(result.not_compared_by_design)} not compared"
+        )
 
     path = cd.ledger_path(conformance_dir)
     if args.update:

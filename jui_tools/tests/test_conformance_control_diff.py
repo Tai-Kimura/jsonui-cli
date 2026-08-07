@@ -413,3 +413,59 @@ class OffFaceExclusionTest(unittest.TestCase):
                 any(s in active for s in survivors),
                 f"{fid}: {key} keeps fixtures but none is asserted active",
             )
+
+
+class NotComparedByDesignTest(unittest.TestCase):
+    """A visual fixture with no control never entered the loop at all.
+
+    142 of them in the repo, every one explained by NON_OBSERVABLE_BY_SECTION
+    — but `compared` counted them nowhere and said nothing, so each
+    rediscovery ("why is this fixture's comparison母数 zero?") cost a lane an
+    investigation. TextField.tintColor is the one that surfaced it: its tint
+    IS the caret, and an unfocused field has no caret.
+    """
+
+    def test_a_visual_fixture_without_a_control_is_named_not_skipped(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            conf = Path(tmp)
+            manifest = {
+                "fixtures": [
+                    {
+                        "id": "TextField/tintColor__static",
+                        "class": "visual",
+                        "platforms": ["web"],
+                        "control": None,
+                    }
+                ]
+            }
+            result = cd.compare(conf, "web", manifest, {"results": []})
+            self.assertEqual(result.not_compared_by_design, ["TextField/tintColor__static"])
+            self.assertEqual(result.active, [])
+            self.assertEqual(result.inert, [])
+
+    def test_every_uncontrolled_visual_fixture_in_the_repo_has_a_recorded_reason(self):
+        """Nothing may sit outside the comparison without a ledger entry."""
+        from jui_cli.conformance import rules
+
+        root = Path(__file__).resolve().parents[2]
+        manifest_path = root / "conformance" / "manifest.json"
+        if not manifest_path.is_file():
+            self.skipTest("no committed conformance dir")
+        fixtures = json.loads(manifest_path.read_text(encoding="utf-8"))["fixtures"]
+        unexplained = [
+            f["id"]
+            for f in fixtures
+            if f.get("class") == "visual"
+            and not f.get("control")
+            and not f.get("isControl")
+            and not rules.is_non_observable(f.get("component"), f.get("attribute"))
+        ]
+        self.assertEqual(
+            unexplained,
+            [],
+            "visual fixture(s) outside the control comparison with no recorded "
+            "reason — either give them a control or record why a still capture "
+            "cannot photograph them",
+        )
