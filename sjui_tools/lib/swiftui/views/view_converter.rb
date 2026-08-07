@@ -156,7 +156,19 @@ module SjuiTools
             # backgroundが設定されている場合はRectangleを使用（dividerなど）
             if @component['background']
               add_line "Rectangle()"
-              add_modifier_line ".fill(#{get_swiftui_color(@component['background'])})"
+              # A declared gradient fills the shape itself. Filling with the
+              # background colour instead left the gradient behind an opaque
+              # rectangle, i.e. invisible — the defect the `backgroundFill`
+              # ruling refuses to promote (one fill per surface, the more
+              # specific declaration wins). Without a gradient this is
+              # unchanged, and so is the gradient-only case below, which never
+              # reached this branch and already drew correctly.
+              if gradient_wins_over_background?
+                add_modifier_line ".fill(#{gradient_expression})"
+                @gradient_consumed_as_fill = true
+              else
+                add_modifier_line ".fill(#{get_swiftui_color(@component['background'])})"
+              end
               # Rectangleの場合はbackgroundを適用しない - register background to prevent apply_modifiers from adding it
               @modifier_bag.register(:background, "")
             elsif @component['width'] || @component['height']

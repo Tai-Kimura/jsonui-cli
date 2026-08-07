@@ -10,6 +10,17 @@ module SjuiTools
         private
 
         def apply_gradient
+          # The childless-Rectangle path may already have used the gradient as
+          # the shape's own fill; a second copy behind it is dead paint.
+          return if @gradient_consumed_as_fill
+
+          @modifier_bag.register(:gradient, ".background(#{gradient_expression})")
+        end
+
+        # The `LinearGradient(...)` on its own, so the childless-View path can
+        # `.fill()` a Rectangle with it instead of laying it behind an opaque
+        # one. See `gradient_wins_over_background?`.
+        def gradient_expression
           colors = @component['gradient'].map { |color| get_swiftui_color(color) }
           direction = @component['gradientDirection'] || 'Vertical'
 
@@ -22,7 +33,20 @@ module SjuiTools
             "startPoint: .top, endPoint: .bottom"
           end
 
-          @modifier_bag.register(:gradient, ".background(LinearGradient(colors: [#{colors.join(', ')}], #{gradient_type}))")
+          "LinearGradient(colors: [#{colors.join(', ')}], #{gradient_type})"
+        end
+
+        # `backgroundFill` (attribute_semantics.json, ruled 2026-08-07):
+        # ONE fill per surface, and the more specific declaration wins —
+        # `gradient` names a list of stops where `background` names one colour,
+        # so `background` is the FALLBACK, not a layer underneath.
+        #
+        # ios honoured neither reading: it drew the colour and left the
+        # declared gradient invisible on both emit paths, which is the defect
+        # the ruling refuses to promote into canon.
+        def gradient_wins_over_background?
+          g = @component['gradient']
+          g.is_a?(Array) && !g.empty?
         end
 
         def apply_safe_area_insets

@@ -325,6 +325,56 @@ RSpec.describe 'gravity unspecified axis (swiftui)' do
   end
 end
 
+# `backgroundFill` (semantics.backgroundFill, ruled 2026-08-07): ONE fill per
+# surface, and the more specific declaration wins — `gradient` names a list of
+# stops where `background` names one colour, so `background` is the FALLBACK,
+# not a layer underneath. ios honoured neither reading: BOTH emit paths drew
+# the colour and left the declared gradient invisible, by two different
+# mechanisms.
+RSpec.describe 'background vs gradient (swiftui)' do
+  before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+  after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+
+  GRADIENT = ['#00FF00', '#0000FF'].freeze
+
+  def view(attrs)
+    SjuiTools::SwiftUI::ConverterFactory.new.create_converter(
+      { 'type' => 'View', 'id' => 't', 'width' => 100, 'height' => 100 }.merge(attrs)
+    ).convert.to_s
+  end
+
+  def with_child(attrs)
+    view(attrs.merge('child' => [{ 'type' => 'Label', 'id' => 'c', 'text' => 'x' }]))
+  end
+
+  # Childless View: this path turns `background` into `Rectangle().fill(...)`,
+  # so it never reaches MODIFIER_ORDER at all — the gradient sat behind an
+  # opaque rectangle.
+  it 'fills the childless Rectangle with the gradient, not the colour' do
+    code = view('background' => '#FF0000', 'gradient' => GRADIENT)
+
+    expect(code).to include('.fill(LinearGradient(')
+    expect(code).not_to include('#FF0000')
+    # and not a second copy laid behind the fill it already is
+    expect(code).not_to include('.background(LinearGradient(')
+  end
+
+  # With children the colour and the gradient both reached the bag, adjacent in
+  # MODIFIER_ORDER, and SwiftUI lays the later `.background` further back.
+  it 'drops the fallback colour when a gradient is declared alongside it' do
+    code = with_child('background' => '#FF0000', 'gradient' => GRADIENT)
+
+    expect(code).to include('.background(LinearGradient(')
+    expect(code).not_to include('#FF0000')
+  end
+
+  it 'leaves both single-declaration cases exactly as they were' do
+    expect(view('background' => '#FF0000')).to include('.fill(SwiftJsonUIConfiguration')
+    expect(view('gradient' => GRADIENT)).to include('.background(LinearGradient(')
+    expect(with_child('background' => '#FF0000')).to include('.background(SwiftJsonUIConfiguration')
+  end
+end
+
 # Group-2 backlog closure (2026-07-31).
 RSpec.describe 'backlog closure group 2 (swiftui)' do
   before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }

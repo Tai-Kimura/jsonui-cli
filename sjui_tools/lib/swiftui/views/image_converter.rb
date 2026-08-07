@@ -119,13 +119,16 @@ module SjuiTools
 
           apply_pinch_zoom
 
-          # onSrcプロパティ（画像読み込み完了時のコールバック）
-          if @component['onSrc']
-            add_line "// onSrc: #{@component['onSrc']} - Image loaded callback"
-            method_name = extract_binding_property(@component['onSrc'])
-            indent_str = "    " * (@indent_level + 1)
-            @modifier_bag.append(:on_appear, ".onAppear {\n#{indent_str}// Call #{@component['onSrc']} when image appears\n#{indent_str}data.#{method_name}?()\n#{indent_str[0...-4]}}")
-          end
+          # `onSrc` used to be read here as an image-loaded CALLBACK. It is not
+          # one: the SSoT declares it as an alias of `CheckBox.selectedIcon`, a
+          # string icon path, and every implementation with a provenance reads
+          # it that way (kjui and rjui alias tables, SJUICheckBox's
+          # `onImagePath:`, the dynamic model's `let onSrc: String?`). The
+          # callback reading arrived with the initial commit carrying no
+          # rationale, spec or fixture, and it turned the declared value into
+          # `data.<icon_name>?()` — a call to a data method named after an
+          # asset. Removed per the 51-E ruling (SSoT unchanged; the alias was
+          # already declared).
 
           # onClick handler (canTap is optional, onClick alone is sufficient)
           if @component['onClick'] && is_binding?(@component['onClick'])

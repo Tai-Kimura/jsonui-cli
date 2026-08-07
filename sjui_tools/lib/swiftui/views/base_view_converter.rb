@@ -433,6 +433,14 @@ module SjuiTools
             # 無効状態の背景色
             color = get_swiftui_color(@component['disabledBackground'])
             @modifier_bag.register(:background, ".background(#{color})")
+          elsif gradient_wins_over_background?
+            # `backgroundFill` ruling (2026-08-07): one fill per surface and
+            # the more specific declaration wins, so a declared gradient makes
+            # `background` the fallback rather than a layer underneath it.
+            # Emitting both put `.background(colour)` immediately before
+            # `.background(gradient)` in MODIFIER_ORDER, and SwiftUI lays the
+            # later one further back — the declared gradient never showed.
+            @modifier_bag.register(:background, "")
           elsif @component['background'] && !@modifier_bag.key?(:background)
             bg_value = @component['background']
             if bg_value.is_a?(String) && bg_value.start_with?('@{')

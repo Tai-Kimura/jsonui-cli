@@ -234,21 +234,26 @@ RSpec.describe SjuiTools::SwiftUI::Views::ImageConverter do
       end
     end
 
-    context 'with onSrc callback' do
+    # `onSrc` is NOT an image-loaded callback. The SSoT declares it as an alias
+    # of `CheckBox.selectedIcon` — a string icon path — and every
+    # implementation with a provenance reads it that way. The callback reading
+    # here arrived with the initial commit carrying no rationale, spec or
+    # fixture, and turned the declared value into `data.<icon_name>?()`. The
+    # 51-E ruling removed the read; this pins that it stays removed.
+    context 'with onSrc' do
       let(:component) do
         {
           'type' => 'Image',
           'src' => 'photo',
-          'onSrc' => 'imageLoaded'
+          'onSrc' => 'star_on'
         }
       end
 
-      it 'adds onAppear callback' do
-        converter = described_class.new(component)
-        code = converter.convert
+      it 'does not invent a callback out of an icon name' do
+        code = described_class.new(component).convert
 
-        expect(code).to include('.onAppear')
-        expect(code).to include('data.imageLoaded?()')
+        expect(code).not_to include('data.star_on')
+        expect(code).not_to include('Image loaded callback')
       end
     end
 
