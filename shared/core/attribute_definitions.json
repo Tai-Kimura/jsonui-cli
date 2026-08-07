@@ -3205,22 +3205,24 @@
         "number",
         "binding"
       ],
-      "description": "Minimum value (binding supported). `minValue` / `minimumValue` are accepted alias spellings.",
+      "description": "Minimum value (binding supported). `minValue` / `minimumValue` are accepted alias spellings. Defaults to 0: with no bounds declared the range is 0 .. 1, this SSoT's convention for a unitless value on a track (compare Progress.progress and opacity, both declared min 0 / max 1). Full ruling in attribute_semantics.json -> sliderRange.",
       "aliases": [
         "minimumValue",
         "minValue"
-      ]
+      ],
+      "default": 0
     },
     "maximum": {
       "type": [
         "number",
         "binding"
       ],
-      "description": "Maximum value (binding supported). `maxValue` / `maximumValue` are accepted alias spellings.",
+      "description": "Maximum value (binding supported). `maxValue` / `maximumValue` are accepted alias spellings. Defaults to 1: with no bounds declared the range is 0 .. 1, this SSoT's convention for a unitless value on a track (compare Progress.progress and opacity, both declared min 0 / max 1). Full ruling in attribute_semantics.json -> sliderRange.",
       "aliases": [
         "maximumValue",
         "maxValue"
-      ]
+      ],
+      "default": 1
     },
     "tintColor": {
       "type": "string",

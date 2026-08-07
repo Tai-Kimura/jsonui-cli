@@ -15,11 +15,11 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
-        # Maximum value (binding supported). `maxValue` / `maximumValue` are accepted alias spellings.
+        # Maximum value (binding supported). `maxValue` / `maximumValue` are accepted alias spellings. Defaults to 1: with no bounds declared the range is 0 .. 1, this SSoT's convention for a unitless value on a track (compare Progress.progress and opacity, both declared min 0 / max 1). Full ruling in attribute_semantics.json -> sliderRange. [default: 1]
         { name: 'maximum', kind: :number, bindable: true, aliases: ['maximumValue', 'maxValue'].freeze }.freeze,
         # Image at maximum end
         { name: 'maximumValueImage', kind: :string }.freeze,
-        # Minimum value (binding supported). `minValue` / `minimumValue` are accepted alias spellings.
+        # Minimum value (binding supported). `minValue` / `minimumValue` are accepted alias spellings. Defaults to 0: with no bounds declared the range is 0 .. 1, this SSoT's convention for a unitless value on a track (compare Progress.progress and opacity, both declared min 0 / max 1). Full ruling in attribute_semantics.json -> sliderRange. [default: 0]
         { name: 'minimum', kind: :number, bindable: true, aliases: ['minimumValue', 'minValue'].freeze }.freeze,
         # Image at minimum end
         { name: 'minimumValueImage', kind: :string }.freeze,
