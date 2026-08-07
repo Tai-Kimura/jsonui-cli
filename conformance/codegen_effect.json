@@ -33,16 +33,6 @@
       "note": "Family: vacuous-on-this-container-shape."
     },
     {
-      "component": "Collection",
-      "attribute": "lazy",
-      "platform": "web",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "A (rjui) — probe value fix owned by D",
-      "reason": "NOT an unread spelling. collection_converter.rb:149-151 reads it and every container branch acts on it: static `none` drops the overflow scroll classes (measured: CONTROL/lazy/eager byte-identical, none differs), and the bound form emits a runtime overflow override in all three branches. The C0 verdict is an artifact of the value plan: representative_value('Collection','lazy') is 'lazy' — the declared DEFAULT — so emit(v1) equals the control by construction, and the second value 'eager' also equals it because lazy-vs-eager is virtualization, which the plain `.map()` emit does not have. `none` is the only web-observable value and the probe never picks it.",
-      "note": "Accepted degeneracy: web lazy≡eager (no virtualization to switch off). Probe fix: representative value `none` in rules.py (D's file, not touched here)."
-    },
-    {
       "component": "CheckBox",
       "attribute": "fontWeight",
       "platform": "android",
@@ -62,15 +52,6 @@
     },
     {
       "component": "Collection",
-      "attribute": "cellHeight",
-      "platform": "web",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "A (rjui) — implementation queue, coverage.json",
-      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
-    },
-    {
-      "component": "Collection",
       "attribute": "cellWidth",
       "platform": "android",
       "check": "C0",
@@ -80,29 +61,11 @@
     },
     {
       "component": "Collection",
-      "attribute": "cellWidth",
-      "platform": "web",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "A (rjui) — implementation queue, coverage.json",
-      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
-    },
-    {
-      "component": "Collection",
       "attribute": "listStyle",
       "platform": "android",
       "check": "C0",
       "class": "unread-spelling",
       "owner": "C (kjui codegen) — implementation queue, coverage.json",
-      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
-    },
-    {
-      "component": "Collection",
-      "attribute": "listStyle",
-      "platform": "web",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "A (rjui) — implementation queue, coverage.json",
       "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
     },
     {
@@ -194,24 +157,6 @@
       "class": "unread-spelling",
       "owner": "C (kjui codegen) — implementation queue, coverage.json",
       "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
-    },
-    {
-      "component": "Label",
-      "attribute": "minimumScaleFactor",
-      "platform": "web",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "A (rjui) — runtime-implemented, emit-invariant by design",
-      "reason": "The fit-to-box implementation (51-A, commit 6bffb03/80638a7 family) lives at RUNTIME in the web component: the emitted text does not change with the declared value by design, so C0/C1 fire on emit while the behaviour is implemented. Companion adjudication in cross_effect.json (fixture shape cannot observe the shrink without a height constraint; D reshaped in 170121d). Verify via render, not emit."
-    },
-    {
-      "component": "Label",
-      "attribute": "minimumScaleFactor",
-      "platform": "web",
-      "check": "C1",
-      "class": "bound-dropped",
-      "owner": "A (rjui) — runtime-implemented, emit-invariant by design",
-      "reason": "The fit-to-box implementation (51-A, commit 6bffb03/80638a7 family) lives at RUNTIME in the web component: the emitted text does not change with the declared value by design, so C0/C1 fire on emit while the behaviour is implemented. Companion adjudication in cross_effect.json (fixture shape cannot observe the shrink without a height constraint; D reshaped in 170121d). Verify via render, not emit."
     },
     {
       "component": "Button",

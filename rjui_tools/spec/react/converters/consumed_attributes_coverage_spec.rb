@@ -30,7 +30,9 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'collection_converter.rb' => %w[
       autoChangeTrackingId
       cellClasses
+      cellHeight
       cellIdProperty
+      cellWidth
       columnCount
       columnSpacing
       columns
@@ -40,6 +42,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       defaultScrollAnchor
       footerClasses
       headerClasses
+      hideSeparator
       horizontalScroll
       id
       insetVertical
@@ -48,6 +51,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       layout
       lazy
       lineSpacing
+      listStyle
       onItemAppear
       orientation
       paging

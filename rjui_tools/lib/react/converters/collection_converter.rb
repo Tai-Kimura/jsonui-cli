@@ -202,6 +202,10 @@ module RjuiTools
             # lineSpacing for vertical spacing between items
             spacing = attributes['lineSpacing'] || attributes['itemSpacing'] || attributes['spacing']
             classes << "gap-[#{spacing}px]" if spacing
+            # listStyle / hideSeparator — the List chrome, on the one branch
+            # that IS a list (sjui parity: TableConverter takes the List path
+            # only for the unsectioned single-column shape).
+            classes.concat(list_style_classes)
           else
             # Grid layout
             classes << 'grid'
@@ -225,6 +229,31 @@ module RjuiTools
             elsif col_gap
               classes << "gap-[#{col_gap}px]"
             end
+          end
+
+          # lazy vs eager, the rendering half. The scroll-container half above
+          # only distinguishes `none`; `lazy` and `eager` differ in whether
+          # off-screen CELLS are rendered, and the web's native spelling of
+          # that is `content-visibility` on the items — `auto` lets the
+          # browser skip off-screen rendering work (the virtualization the
+          # LazyVStack/LazyColumn faces get from their containers), `visible`
+          # renders everything eagerly. Only an EXPLICIT declaration is
+          # spelled out (same rule as Label's `textTransform: none`): the
+          # undeclared default keeps the browser default, so no existing
+          # layout changes shape by omission.
+          case lazy
+          when 'lazy'
+            classes << '[&>*]:[content-visibility:auto]'
+          when 'eager'
+            classes << '[&>*]:[content-visibility:visible]'
+          end
+          if lazy_expr
+            # The bound form switches at runtime. A class cannot, so the
+            # per-child arbitrary variant reads a custom property the style
+            # object writes — the same trick the Switch uses for its
+            # peer-checked track colour.
+            classes << '[&>*]:[content-visibility:var(--jui-lazy-cv,visible)]'
+            dynamic_styles['--jui-lazy-cv'] = "(#{lazy_expr} === 'lazy' ? 'auto' : 'visible')"
           end
 
           # paging: CSS scroll snapping is the web's page model, and it is what
@@ -267,6 +296,81 @@ module RjuiTools
 
 
           finalize_classes(classes)
+        end
+
+        #: listStyle -> the chrome that draws it. Enumerated from the SSoT
+        #: (plain / grouped / insetGrouped / sidebar, TableConverter's own
+        #: vocabulary); an unrecognised value falls back to plain, which is
+        #: the declared default. The greys are the iOS system list colours
+        #: (#C6C6C8 separator, #F2F2F7 grouped background) — the same
+        #: constants the chrome imitates.
+        LIST_STYLE_CHROME = {
+          'plain' => [].freeze,
+          'grouped' => %w[bg-[#F2F2F7]].freeze,
+          'insetgrouped' => %w[bg-[#F2F2F7] rounded-[10px] mx-[16px]].freeze,
+          'sidebar' => %w[bg-[#F2F2F7] rounded-[8px] px-[8px]].freeze
+        }.freeze
+
+        # The List chrome, or nothing when the collection never asked to be
+        # drawn as a list. DECLARATION-GATED on purpose: the web has no native
+        # List widget, so an undeclared collection keeps today's bare flex
+        # column and no existing layout gains separators by default. Declaring
+        # `listStyle` (any value, `plain` included) is what opts the
+        # collection into list chrome. Sectioned collections stay out — sjui
+        # takes the List path only when the collection is not sectioned, and
+        # the same gate keeps the two faces in agreement.
+        def list_style_classes
+          style = attributes['listStyle']
+          return [] unless style.is_a?(String) && !style.empty?
+          return [] if (attributes['sections'] || []).any?
+
+          chrome = LIST_STYLE_CHROME[style.downcase] || LIST_STYLE_CHROME['plain']
+          chrome + separator_classes
+        end
+
+        # The row separators the list draws — unless hideSeparator says not
+        # to. ORTHOGONAL to listStyle by contract (attribute_semantics ->
+        # collectionSeparators): this method answers only the separator
+        # question, list_style_classes only the chrome one. Outside a List
+        # context the container draws no separators, so hideSeparator is the
+        # ruled vacuous no-op there — nothing to remove.
+        def separator_classes
+          hide = attributes['hideSeparator']
+          return [] if hide == true || hide == 'true'
+
+          %w[divide-y divide-[#C6C6C8]]
+        end
+
+        # Fixed per-cell size (cellWidth / cellHeight), as the style attr for
+        # the sizing wrapper each cell renders into — or nil when neither is
+        # declared, in which case no wrapper is emitted at all and the DOM
+        # keeps its current shape. The canonical semantics (sjui, the
+        # declaring implementation) apply the size to the cell view AFTER it
+        # is built, overriding whatever the cell layout asked for; a fixed
+        # wrapper box that clips its content is the CSS spelling of that
+        # override. `shrink-0` keeps the fixed size honest inside the
+        # horizontal flex container.
+        def cell_size_style
+          height = cell_size_px(attributes['cellHeight'])
+          width = cell_size_px(attributes['cellWidth'])
+          return nil unless height || width
+
+          pairs = {}
+          pairs['width'] = "'#{width}px'" if width
+          pairs['height'] = "'#{height}px'" if height
+          style_attr_for(pairs)
+        end
+
+        # A number passes through; its numeric-string spelling takes the SAME
+        # path (plan 43's C3 rule — `"8"` and `8` are two spellings of one
+        # value and must emit one text). Anything else is not a size.
+        def cell_size_px(value)
+          return value if value.is_a?(Numeric)
+          if value.is_a?(String) && value.match?(/\A-?\d+(\.\d+)?\z/)
+            return value.include?('.') ? value.to_f : value.to_i
+          end
+
+          nil
         end
 
         private
@@ -334,7 +438,16 @@ module RjuiTools
             else
               lines << "#{indent_str(indent)}{#{source_expr}.map((cellData, cellIndex) => ("
             end
-            lines << "#{indent_str(indent + 2)}<#{cell_view} key={#{key_expr}}#{cell_item_id_attr('cellIndex')} data={cellData#{cell_cast}} />"
+            # cellWidth / cellHeight: the sizing wrapper is the map's outer
+            # element, so the React key moves onto it — a key inside the
+            # wrapper is a key React never sees.
+            if (cell_size = cell_size_style)
+              lines << "#{indent_str(indent + 2)}<div key={#{key_expr}} className=\"shrink-0 overflow-hidden\"#{cell_size}>"
+              lines << "#{indent_str(indent + 4)}<#{cell_view}#{cell_item_id_attr('cellIndex')} data={cellData#{cell_cast}} />"
+              lines << "#{indent_str(indent + 2)}</div>"
+            else
+              lines << "#{indent_str(indent + 2)}<#{cell_view} key={#{key_expr}}#{cell_item_id_attr('cellIndex')} data={cellData#{cell_cast}} />"
+            end
             lines << "#{indent_str(indent)}))}"
           elsif cell_view
             # Placeholder for static content
@@ -390,7 +503,15 @@ module RjuiTools
               # Add type annotation for TypeScript
               item_type = config['typescript'] ? ": #{cell_view}Data" : ''
               lines << "#{indent_str(indent)}{#{items_binding}?.map((item#{item_type}, index: number) => ("
-              lines << "#{indent_str(indent + 2)}<#{cell_view} key={index}#{cell_item_id_attr('index')} data={item} />"
+              # Same wrapper contract as the section path: the key rides the
+              # outermost element of the map.
+              if (cell_size = cell_size_style)
+                lines << "#{indent_str(indent + 2)}<div key={index} className=\"shrink-0 overflow-hidden\"#{cell_size}>"
+                lines << "#{indent_str(indent + 4)}<#{cell_view}#{cell_item_id_attr('index')} data={item} />"
+                lines << "#{indent_str(indent + 2)}</div>"
+              else
+                lines << "#{indent_str(indent + 2)}<#{cell_view} key={index}#{cell_item_id_attr('index')} data={item} />"
+              end
               lines << "#{indent_str(indent)}))}"
             else
               lines << "#{indent_str(indent)}{/* Add items prop to render cells */}"

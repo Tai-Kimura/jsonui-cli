@@ -37,13 +37,17 @@ def converter_class_for(type)
   dispatcher.send(:get_converter_class, type)
 end
 
-# Emission that never passes through a converter. rjui hoists two families to
-# file scope, walking the layout itself: the collection scroll effects and the
-# sibling-relative constraints. A probe that only calls converters reports
-# both as "nothing reads this spelling" — measured as 4 collection attributes
-# and the 10 align*View / align*OfView spellings, where the second family is
-# worse to miss because it does not look inert, it looks like every direction
-# emits the same thing.
+# Emission that never passes through a converter. rjui hoists three families
+# to file scope, walking the layout itself: the collection scroll effects, the
+# sibling-relative constraints, and the autoShrink fit effects. A probe that
+# only calls converters reports all of them as "nothing reads this spelling" —
+# measured as 4 collection attributes and the 10 align*View / align*OfView
+# spellings, where the relative-constraint family is worse to miss because it
+# does not look inert, it looks like every direction emits the same thing.
+# The autoShrink family is where `minimumScaleFactor` lives: the converter
+# only attaches the ref, and the value (static or bound) is emitted by the
+# hoisted `applyAutoShrink` effect — so without this walk the attribute read
+# C0/C1 as unread while the production emit carried it all along.
 #
 # The generator's own methods are called, not reimplemented: a second copy of
 # the walk would drift, and the point of the probe is to measure what
@@ -59,6 +63,8 @@ def hoisted(node)
   end
   containers = GENERATOR.send(:extract_relative_containers, node)
   parts.concat(containers.map { |c| GENERATOR.send(:relative_position_effect, c) })
+  shrink_targets = GENERATOR.send(:extract_auto_shrink_targets, node)
+  parts.concat(shrink_targets.map { |t| GENERATOR.send(:auto_shrink_effect, t) })
   parts.reject { |p| p.nil? || p.empty? }.join("\n")
 rescue StandardError, ScriptError
   # A hoist helper that raises must not take the converter's output with it:
