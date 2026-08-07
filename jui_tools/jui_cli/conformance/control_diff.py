@@ -136,11 +136,95 @@ class DiffResult:
     unmeasured: list = field(default_factory=list)
     #: fixtures whose control produced no screenshot (cannot be compared)
     no_control: list = field(default_factory=list)
+    #: fixtures dropped from the comparison by the off-face rule — kept as a
+    #: list, never a silent skip: a device that excludes says how many.
+    excluded: list = field(default_factory=list)
     error: str | None = None
 
     @property
     def ok(self) -> bool:
         return not self.regressions and self.error is None
+
+
+#: Sentinel a 51-E2 adjudication appends to an ``inert_audit`` reason to mark
+#: the off-face family. Prose is a poor key and this belongs in a field of its
+#: own — raised to E2/orch. Until then it is at least a DELIBERATE marker
+#: rather than incidental wording, and :func:`off_face_exclusions` reports the
+#: class size every run, so a phrasing drift surfaces as a changed number
+#: instead of a quietly smaller exclusion.
+OFF_FACE_FAMILY = "Family: off-face-equals-control."
+
+
+def off_face_exclusions(conformance_dir, manifest: dict) -> tuple[set, set, list]:
+    """``(excluded, held, orphaned)`` for the off-face rule — derived, not listed.
+
+    An off-face fixture writes the very state its control renders by omitting
+    the attribute, so the pair cannot differ however correctly the platform
+    implements it. Comparing them manufactures a permanent inert verdict that
+    no amount of implementation work can clear, which is why the orchestrator
+    ruled (b-2, 2026-08-07) that the fixtures stay and the COMPARISON drops
+    them.
+
+    Nothing here is hand-listed. The class is the ``inert_audit`` rows
+    carrying :data:`OFF_FACE_FAMILY`, and whether a member is safe to drop
+    follows from the ledgers:
+
+    - a sibling fixture for the same attribute stays in the comparison AND is
+      asserted active in ``control_diff.json`` -> **excluded** (the attribute
+      still has something reporting on it)
+    - siblings stay but none is asserted active anywhere -> **held** (dropping
+      it would leave the attribute with nothing that could ever report)
+    - no sibling at all -> **orphaned**, returned as a problem and NEVER
+      dropped. Excluding is permanent removal from measurement, which is the
+      exact failure this whole campaign exists to prevent.
+
+    Verified 2026-08-07 to reproduce E2's independently-audited canonical set
+    exactly: 32 excluded, 2 held (``ScrollView/scrollBehavior__auto`` and
+    ``TextView/selectable__true``), 0 orphaned, 0 disagreements. The two holds
+    are a CONSEQUENCE of the safety rule here, not a special case bolted on.
+    """
+    conformance_dir = Path(conformance_dir)
+    audit_path = conformance_dir / "inert_audit.json"
+    if not audit_path.is_file():
+        return set(), set(), []
+
+    entries = json.loads(audit_path.read_text(encoding="utf-8")).get("entries", [])
+    klass = {
+        e["fixture"]
+        for e in entries
+        if e.get("fixture") and OFF_FACE_FAMILY in (e.get("reason") or "")
+    }
+    if not klass:
+        return set(), set(), []
+
+    # Platform-agnostic, matching how the canonical set was audited: an
+    # attribute proven active on ANY platform still has a reporter.
+    asserted_active = load_ledger_all(ledger_path(conformance_dir)).keys()
+
+    by_attribute: dict = {}
+    for entry in manifest.get("fixtures", []):
+        key = (entry.get("component"), entry.get("attribute"))
+        if key[0] and key[1]:
+            by_attribute.setdefault(key, []).append(entry["id"])
+    of_fixture = {
+        entry["id"]: (entry.get("component"), entry.get("attribute"))
+        for entry in manifest.get("fixtures", [])
+    }
+
+    excluded, held, orphaned = set(), set(), []
+    for fid in sorted(klass):
+        siblings = [
+            s
+            for s in by_attribute.get(of_fixture.get(fid, (None, None)), [])
+            if s != fid and s not in klass
+        ]
+        if not siblings:
+            orphaned.append(fid)
+        elif any(s in asserted_active for s in siblings):
+            excluded.add(fid)
+        else:
+            held.add(fid)
+    return excluded, held, orphaned
 
 
 def load_ledger(path, platform: str | None = None) -> set:
@@ -272,6 +356,17 @@ def compare(
     _top, _bottom = ignore_bands(platform, env)
     expected = load_ledger(ledger_path(conformance_dir), platform)
     shots = _screenshot_names(results)
+    off_face, _held, orphaned = off_face_exclusions(conformance_dir, manifest)
+    if orphaned:
+        # Never drop these. An off-face fixture whose attribute has no other
+        # reporter would leave measurement entirely, and the whole point of
+        # the rule is that exclusion must not cost coverage.
+        result.error = (
+            f"off-face exclusion would orphan {len(orphaned)} attribute(s) — "
+            f"no sibling fixture is left to report on them: "
+            + ", ".join(sorted(orphaned)[:5])
+        )
+        return result
 
     for entry in manifest.get("fixtures", []):
         control_id = entry.get("control")
@@ -279,6 +374,11 @@ def compare(
             continue
         fid = entry["id"]
         if platform not in (entry.get("platforms") or []):
+            continue
+        if fid in off_face:
+            # Structurally incapable of differing from its control: the value
+            # written IS the state the control renders by omitting it.
+            result.excluded.append(fid)
             continue
 
         shot = shots.get(fid)

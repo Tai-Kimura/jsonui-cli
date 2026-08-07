@@ -1515,6 +1515,13 @@ def _cmd_effect(args: argparse.Namespace) -> int:
     print(f"  identical to control (no effect measured):   {len(result.inert)}")
     if result.no_control:
         print(f"  no usable control screenshot: {len(result.no_control)}")
+    if result.excluded:
+        # A device that excludes says how many, every run. A drop that stops
+        # being printed is a drop nobody re-derives.
+        print(
+            f"  off-face (value IS the control's state, structurally "
+            f"uncomparable): {len(result.excluded)} excluded"
+        )
 
     path = cd.ledger_path(conformance_dir)
     if args.update:

@@ -284,3 +284,132 @@ class IgnoreBottomTest(unittest.TestCase):
             a.save(pa)
             b.save(pb)
             self.assertEqual(diff_pixels(pa, pb, ignore_bottom=16), 1)
+
+
+class OffFaceExclusionTest(unittest.TestCase):
+    """The off-face rule: derived from the ledgers, never a hand list.
+
+    An off-face fixture writes the very state its control renders by omitting
+    the attribute, so the pair cannot differ however correctly the platform
+    implements it — comparing them manufactures a permanent inert verdict no
+    implementation work can clear. The orchestrator ruled (b-2) that the
+    fixtures stay and the comparison drops them.
+    """
+
+    def _tree(self, tmp, audit_rows, control_rows, fixtures):
+        conf = Path(tmp)
+        (conf / "inert_audit.json").write_text(json.dumps({"entries": audit_rows}))
+        (conf / "control_diff.json").write_text(json.dumps({"entries": control_rows}))
+        return conf, {"fixtures": fixtures}
+
+    @staticmethod
+    def _fx(fid, component, attribute):
+        return {"id": fid, "component": component, "attribute": attribute}
+
+    def test_a_member_whose_sibling_is_active_is_excluded(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            conf, man = self._tree(
+                tmp,
+                [{"fixture": "C/a__false", "reason": "x " + cd.OFF_FACE_FAMILY}],
+                [{"fixture": "C/a__true", "platforms": ["web"]}],
+                [self._fx("C/a__false", "C", "a"), self._fx("C/a__true", "C", "a")],
+            )
+            excluded, held, orphaned = cd.off_face_exclusions(conf, man)
+            self.assertEqual(excluded, {"C/a__false"})
+            self.assertEqual(held, set())
+            self.assertEqual(orphaned, [])
+
+    def test_a_member_with_no_active_sibling_is_held_not_dropped(self):
+        """Nothing else could ever report on the attribute — keep measuring it."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            conf, man = self._tree(
+                tmp,
+                [{"fixture": "C/a__false", "reason": "x " + cd.OFF_FACE_FAMILY}],
+                [],  # no sibling asserted active anywhere
+                [self._fx("C/a__false", "C", "a"), self._fx("C/a__true", "C", "a")],
+            )
+            excluded, held, orphaned = cd.off_face_exclusions(conf, man)
+            self.assertEqual(excluded, set())
+            self.assertEqual(held, {"C/a__false"})
+
+    def test_a_member_with_no_sibling_at_all_is_orphaned_and_never_dropped(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            conf, man = self._tree(
+                tmp,
+                [{"fixture": "C/a__false", "reason": "x " + cd.OFF_FACE_FAMILY}],
+                [],
+                [self._fx("C/a__false", "C", "a")],
+            )
+            excluded, held, orphaned = cd.off_face_exclusions(conf, man)
+            self.assertEqual(excluded, set())
+            self.assertEqual(orphaned, ["C/a__false"])
+
+    def test_the_repository_derivation_matches_the_audited_canonical_set(self):
+        """51-E2 audited a 34-row set by hand; the device must agree exactly.
+
+        This is the check that keeps the rule honest: if a reason is reworded
+        and the sentinel stops matching, the derived set shrinks and this
+        fails rather than silently excluding less (or more).
+        """
+        root = Path(__file__).resolve().parents[2]
+        conf = root / "conformance"
+        canonical = (
+            root
+            / "docs/plans/2026-08-01-ecosystem-hardening/report"
+            / "51-E2-off-face-exclusion-set.json"
+        )
+        if not canonical.is_file() or not conf.is_dir():
+            self.skipTest("no committed conformance dir / canonical set")
+        manifest = json.loads((conf / "manifest.json").read_text(encoding="utf-8"))
+        excluded, held, orphaned = cd.off_face_exclusions(conf, manifest)
+
+        entries = json.loads(canonical.read_text(encoding="utf-8"))["entries"]
+        self.assertEqual(
+            excluded, {e["fixture"] for e in entries if e["disposition"] == "exclude"}
+        )
+        self.assertEqual(
+            held,
+            {e["fixture"] for e in entries if e["disposition"] != "exclude"},
+            "the two holds are a consequence of the safety rule, not a special case",
+        )
+        self.assertEqual(orphaned, [], "orphaned must be zero before excluding")
+
+    def test_excluding_costs_no_attribute_its_coverage(self):
+        """The replacement verification the orchestrator asked for.
+
+        Dropping the class must leave every affected attribute with a sibling
+        still in the comparison AND asserted active — otherwise the exclusion
+        buys a quiet loss of measurement, which is the failure this campaign
+        exists to prevent.
+        """
+        root = Path(__file__).resolve().parents[2]
+        conf = root / "conformance"
+        if not conf.is_dir():
+            self.skipTest("no committed conformance dir")
+        manifest = json.loads((conf / "manifest.json").read_text(encoding="utf-8"))
+        excluded, _held, _orphaned = cd.off_face_exclusions(conf, manifest)
+        if not excluded:
+            self.skipTest("no off-face class recorded")
+
+        by_id = {f["id"]: f for f in manifest["fixtures"]}
+        active = set(cd.load_ledger_all(cd.ledger_path(conf)))
+        for fid in sorted(excluded):
+            key = (by_id[fid].get("component"), by_id[fid].get("attribute"))
+            survivors = [
+                f["id"]
+                for f in manifest["fixtures"]
+                if (f.get("component"), f.get("attribute")) == key
+                and f["id"] not in excluded
+                and not f.get("isControl")
+            ]
+            self.assertTrue(survivors, f"{fid}: exclusion leaves {key} unmeasured")
+            self.assertTrue(
+                any(s in active for s in survivors),
+                f"{fid}: {key} keeps fixtures but none is asserted active",
+            )
