@@ -181,7 +181,7 @@
         "string",
         "binding"
       ],
-      "description": "Background color - hex string (#RRGGBB or #RRGGBBAA) or color name from colors.json (can be data binding). `backgroundColor` folds here: the genuine layout reads of that spelling all chain with `background` (kjui blurview_component.rb:42 `background || backgroundColor`, kjui segment_component.rb:55 `backgroundColor || background`, rjui blur_converter.rb:58 and circle_view_converter.rb:55). Note the two kjui sites read the pair in OPPOSITE order, so a layout setting both drew two different colours until the normalizer began folding them — the same defect shape as CheckBox's accent chain (plan 51-E)."
+      "description": "Background color - hex string (#RRGGBB or #RRGGBBAA) or color name from colors.json (can be data binding). `backgroundColor` folds here: the genuine layout reads of that spelling all chain with `background` (kjui blurview_component.rb:42 `background || backgroundColor`, kjui segment_component.rb:55 `backgroundColor || background`, rjui blur_converter.rb:58 and circle_view_converter.rb:55). Note the two kjui sites read the pair in OPPOSITE order, so a layout setting both drew two different colours until the normalizer began folding them — the same defect shape as CheckBox's accent chain (plan 51-E). When a `gradient` is also declared on the same view, the GRADIENT wins and this is the fallback fill — not a layer underneath it. Full ruling in attribute_semantics.json -> backgroundFill; do not restate it in toolchain comments."
     },
     "tapBackground": {
       "type": [
@@ -3392,7 +3392,7 @@
     },
     "gradient": {
       "type": "array",
-      "description": "Gradient colors",
+      "description": "Gradient colors Wins over `background` when both are declared on the same view; see attribute_semantics.json -> backgroundFill.",
       "platform": "swift"
     },
     "gradientDirection": {
@@ -4288,7 +4288,7 @@
   "GradientView": {
     "gradient": {
       "type": "array",
-      "description": "Gradient colors. `colors` folds here (sjui gradient_view_converter.rb:52,66 read `colors || gradient`).",
+      "description": "Gradient colors. `colors` folds here (sjui gradient_view_converter.rb:52,66 read `colors || gradient`). On GradientView the gradient is the component's own fill, so the backgroundFill precedence question does not arise.",
       "aliases": [
         "colors"
       ]
