@@ -847,6 +847,20 @@ BOUND_CASE_CLASSES: dict[tuple[str, str], str] = {
     ('SelectBox', 'maximumDate'): 'String',
     ('SelectBox', 'minimumDate'): 'String',
     ('SelectBox', 'selectedValue'): 'String',
+    # The 10.14.2 on-device batch: `srcName: "@{heartFilterIconName}"` rendered
+    # nothing on the dynamic path, because the raw `"@{expr}"` was handed to
+    # `Image(_:)` unresolved while `src` / `highlightSrc` went through
+    # processText. The image family had NO bound case — not one pair of the
+    # eighty-four came from it — so the suite could not have seen it.
+    #
+    # Web note (owner A): the bound emit is `` `/images/${prop}` ``, and the
+    # extension cannot be resolved from a runtime value the way
+    # `resolve_image_extension` resolves a literal. No single seed spells an
+    # asset all three faces resolve — ios and android take the bare catalogue
+    # name, web needs the extension — so the web face needs an EXTENSIONLESS
+    # copy of the asset under `hosts/web/public/images/`, the same trick the
+    # host already uses at its public root for the `src` face.
+    ('Image', 'srcName'): 'String',
     # --- Int (30) ---
     ('CheckBox', 'fontSize'): 'Int',
     ('CheckBox', 'spacing'): 'Int',
@@ -1292,6 +1306,30 @@ BASE_ATTRS: dict[str, dict[str, Any]] = {
     "Web": {"html": "<p>Sample</p>", "width": 200, "height": 200},
 }
 
+def _striped_backdrop() -> list[dict[str, Any]]:
+    """A HIGH-FREQUENCY backdrop node, freshly built on each call.
+
+    Two separate families need something behind the target that is neither
+    flat nor white, and both need it for the same arithmetic reason (see the
+    `Blur.blurRadius` and `Blur.effectStyle` entries). Built by a function
+    rather than shared as a literal so the two entries cannot alias each
+    other's nested child list.
+    """
+    return [
+        {"type": "View", "id": "backdrop", "width": 100, "height": 100,
+         "background": "#FF0000", "orientation": "horizontal", "child": [
+             {"type": "View", "id": "stripe_a", "width": 20, "height": 100,
+              "background": "#FFFFFF"},
+             {"type": "View", "id": "stripe_b", "width": 20, "height": 100,
+              "background": "#0000FF"},
+             {"type": "View", "id": "stripe_c", "width": 20, "height": 100,
+              "background": "#FFFFFF"},
+             {"type": "View", "id": "stripe_d", "width": 20, "height": 100,
+              "background": "#00AA00"},
+         ]},
+    ]
+
+
 #: Extra base attributes for specific attributes, so the fixture gives the
 #: attribute under test something to act on.
 #:
@@ -1445,21 +1483,30 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # overlay — so an earlier sibling sits underneath the target. A flat colour
     # blurs to the same flat colour, which is why every radius rendered its
     # control; stripes give the blur something to smear.
-    "Blur.blurRadius": {
-        "root.backdrop": [
-            {"type": "View", "id": "backdrop", "width": 100, "height": 100,
-             "background": "#FF0000", "orientation": "horizontal", "child": [
-                 {"type": "View", "id": "stripe_a", "width": 20, "height": 100,
-                  "background": "#FFFFFF"},
-                 {"type": "View", "id": "stripe_b", "width": 20, "height": 100,
-                  "background": "#0000FF"},
-                 {"type": "View", "id": "stripe_c", "width": 20, "height": 100,
-                  "background": "#FFFFFF"},
-                 {"type": "View", "id": "stripe_d", "width": 20, "height": 100,
-                  "background": "#00AA00"},
-             ]},
-        ],
-    },
+    "Blur.blurRadius": {"root.backdrop": _striped_backdrop()},
+    # The same missing backdrop, one attribute along, and the arithmetic is
+    # exact rather than approximate. A material is a scrim PLUS a blur, and
+    # the two values the ledger records as collapsed differ in both:
+    #
+    #   prominent   White @ alpha 0.90, blur 12dp
+    #   thick       White @ alpha 0.85, blur 16dp
+    #
+    # (kjui `library-dynamic/.../helpers/EffectStyleTable.kt`; the codegen
+    # emits the same two alphas — measured, `.background(Color.White.copy(
+    # alpha = 0.9f))` vs `0.85f`.) Over the fixture's uniform light backdrop
+    # NEITHER term can show: white over white is white at every alpha, and
+    # blurring a flat field returns the flat field. The renders are not
+    # within a quantisation step of each other, they are IDENTICAL, which is
+    # what `diff_pixels` (min_pixels 0, any non-zero channel counts) reported.
+    #
+    # Against the stripes both terms become measurable, and the assertion
+    # stays away from the 8-bit floor the device declares it does not meter:
+    # over the #FF0000 field the two scrims differ by 0.05 * 255 ≈ 12.75
+    # levels on G and B — about thirteen quantisation steps, not a fraction of
+    # one — and the 12dp/16dp radii smear the stripe edges over different
+    # widths. Ledger row: value_discrimination `common.effectStyle` android
+    # prominent/thick, owner G, `backdrop-collapses-8bit`.
+    "Blur.effectStyle": {"root.backdrop": _striped_backdrop()},
     # The anchor goes LAST so the target starts underneath it and `indexAbove`
     # has somewhere to travel from. `indexBelow` needs no such thing — the
     # default order already puts the target on top, which is exactly why only
@@ -1881,6 +1928,21 @@ VARIANT_CASES: dict[tuple[str, str], dict[str, dict[str, Any]]] = {
                 {"range": [0, 3], "fontColor": "#FF0000"},
             ],
         },
+    },
+    # A HORIZONTAL collection carries `insetHorizontal` down a different
+    # channel: the stack view's `insetLeading` / `insetTrailing`, while the
+    # content-padding channel is fed only on the vertical axis
+    # (`include_horizontal: axis == :vertical`, sjui collection_converter
+    # 1831). The dynamic path fed both and the inset came out doubled — 28pt
+    # for a declared 14 — on device.
+    #
+    # Every inset fixture in the suite is orientation-less, i.e. vertical, so
+    # the doubled channel was never exercised: the visual baseline was 720/720
+    # through the whole batch. Measured before writing it down — on all three,
+    # the horizontal fixture differs from a horizontal control, and ios emits
+    # `insetLeading/insetTrailing` with no second padding line.
+    ("Collection", "insetHorizontal"): {
+        "horizontal": {"orientation": "horizontal"},
     },
 }
 

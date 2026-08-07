@@ -1,22 +1,39 @@
-"""maxBounds clamp-fill observability fixtures (33 track).
+"""Composite max-bound fixtures the generic per-attribute sweep cannot reach.
 
-The generic per-attribute sweep probes ``maxWidth`` / ``maxHeight`` on a
-FIXED-size target, which can never observe the ruling that matters:
-``matchParent`` + a max bound resolves to ``min(parent extent, bound)`` —
-the bound clamps the fill (canonical ``size.maxBoundsClampFill``,
-``shared/core/attribute_semantics.json``). KJUI dynamic ignored the bound
-entirely (fillMaxWidth before widthIn) and no fixture could see it.
+The sweep probes ``maxWidth`` / ``maxHeight`` on a target of FIXED size, so
+every ruling about how a bound interacts with a SIZING MODE is invisible to
+it. Two such rulings have now cost a released defect each, and this module
+holds one fixture family per ruling.
 
-This module emits one composite fixture per axis — a filling target WITH
+**clamp-fill** (33 track). ``matchParent`` + a max bound resolves to
+``min(parent extent, bound)`` — the bound clamps the fill (canonical
+``size.maxBoundsClampFill``, ``shared/core/attribute_semantics.json``). KJUI
+dynamic ignored the bound entirely (fillMaxWidth before widthIn) and no
+fixture could see it. One composite fixture per axis — a filling target WITH
 the bound — plus the matching filled controls WITHOUT it. A platform that
 clamps renders the target visibly smaller than its control (active); a
-platform that ignores the bound renders identically (inert). The contract
-asserts uniformly-active, so a regression fails the cross-effect gate.
+platform that ignores the bound renders identically (inert).
+
+**wrap-bound** (51 track). ``wrapContent`` + a max bound means the CONTENT
+reflows inside the bound; the bound does not become an ideal size. SwiftUI
+expresses that as ``.frame(maxWidth: N)`` with ``.fixedSize(horizontal:
+false, vertical: true)`` — horizontal fixing is applied when the axis wraps
+and has NO max (sjui ``frame_helper.rb`` 104-117). SwiftJsonUI's dynamic
+path had the condition inverted (it fixed the axis *because* a max was
+present, ``f8fc559``), so a wrapping bubble laid its text out at single-line
+ideal width and the text escaped the bubble on device.
+
+The sweep's own ``maxWidth`` fixtures are a 200pt box of 40pt children:
+fixing that axis changes nothing anyone can see, which is why the whole
+10.14.2 batch left the iOS visual baseline at 720/720. The defect is only
+observable on REFLOWING CONTENT, so this family's target is a Label of text
+long enough to wrap, and the control is the same Label without the bound.
 """
 from __future__ import annotations
 
 from typing import Any
 
+from . import rules
 from ..core.generated_marker import json_marker
 
 GENERATOR_NAME = "jui conformance generate"
@@ -27,6 +44,14 @@ _AXES = (
     ("width", "maxWidth", 120, "fill-w"),
     ("height", "maxHeight", 120, "fill-h"),
 )
+
+#: Case name of the wrap-bound family, and the bound it declares. 150pt is
+#: narrower than the text's single-line width by a wide margin, so a platform
+#: that lays the text out at its ideal width overflows the box visibly rather
+#: than by a hairline.
+_WRAP_CASE = "wrap"
+_WRAP_BOUND = 150
+_WRAP_SHAPE = "wrap-max"
 
 _PLATFORMS = ["ios", "android", "web"]
 
@@ -82,6 +107,36 @@ def _test(name: str, screenshot: str, description: str, layout_rel: str) -> dict
                 ],
             }
         ],
+    }
+
+
+def _wrap_target(bound: int | None) -> dict:
+    # The background is what makes the defect visible: the box is drawn at the
+    # bound, the text is drawn by the layout pass, and the failing mode puts
+    # the second outside the first. Without a background both renders are
+    # black text on white and the overflow reads as a line break moving.
+    target: dict[str, Any] = {
+        "type": "Label",
+        "id": "target",
+        "width": "wrapContent",
+        "height": "wrapContent",
+        "text": rules.LONG_TEXT,
+        "background": "#DDDDDD",
+        "fontColor": "#000000",
+    }
+    if bound is not None:
+        target["maxWidth"] = bound
+    return target
+
+
+def _wrap_layout(source_label: str, bound: int | None) -> dict:
+    return {
+        "_generated": _marker(source_label),
+        "type": "View",
+        "id": "root",
+        "width": "matchParent",
+        "height": "matchParent",
+        "child": [_wrap_target(bound)],
     }
 
 
@@ -161,5 +216,76 @@ def build_bounds_fixtures(source_label: str) -> tuple[list[tuple[str, dict]], li
             "promotedFrom": None,
             "control": control_id,
         })
+
+    # --- wrap-bound (51 track) -------------------------------------------- #
+    wrap_control_id = f"__control/Label__{_WRAP_SHAPE}"
+    wrap_control_stem = f"Label__{_WRAP_SHAPE}"
+    wrap_control_layout_rel = f"fixtures/__control/{wrap_control_stem}.layout.json"
+    wrap_control_test_rel = f"fixtures/__control/{wrap_control_stem}.test.json"
+    files.append((wrap_control_layout_rel, _wrap_layout(source_label, None)))
+    files.append((
+        wrap_control_test_rel,
+        _test(
+            wrap_control_stem,
+            f"control_{wrap_control_stem}",
+            "Control for the maxWidth wrap-bound fixture: the same wrapping "
+            "Label WITHOUT the bound.",
+            wrap_control_layout_rel,
+        ),
+    ))
+    entries.append({
+        "id": wrap_control_id,
+        "component": "__control",
+        "attribute": None,
+        "case": wrap_control_stem,
+        "class": "visual",
+        "host": "Label",
+        "writtenKey": None,
+        "aliasOf": None,
+        "value": None,
+        "platforms": list(_PLATFORMS),
+        "mode": None,
+        "deprecated": None,
+        "layout": wrap_control_layout_rel,
+        "test": wrap_control_test_rel,
+        "state": None,
+        "promotedFrom": None,
+        "control": None,
+        "isControl": True,
+    })
+
+    wrap_stem = f"maxWidth__{_WRAP_CASE}"
+    wrap_layout_rel = f"fixtures/common/{wrap_stem}.layout.json"
+    wrap_test_rel = f"fixtures/common/{wrap_stem}.test.json"
+    wrap_description = (
+        f"wrapContent width + maxWidth {_WRAP_BOUND} on reflowing text: the "
+        "bound reflows the CONTENT, it does not become an ideal size. A "
+        "platform that fixes the axis because the bound is present lays the "
+        "text out at single-line width and it escapes the box."
+    )
+    files.append((wrap_layout_rel, _wrap_layout(source_label, _WRAP_BOUND)))
+    files.append((
+        wrap_test_rel,
+        _test(wrap_stem, f"common_{wrap_stem}", wrap_description, wrap_layout_rel),
+    ))
+    entries.append({
+        "id": f"common/{wrap_stem}",
+        "component": "common",
+        "attribute": "maxWidth",
+        "case": _WRAP_CASE,
+        "class": "visual",
+        "host": "Label",
+        "writtenKey": "maxWidth",
+        "aliasOf": None,
+        "value": _WRAP_BOUND,
+        "platforms": list(_PLATFORMS),
+        "mode": None,
+        "deprecated": None,
+        "layout": wrap_layout_rel,
+        "test": wrap_test_rel,
+        "state": None,
+        "promotedFrom": None,
+        "control": wrap_control_id,
+    })
 
     return files, entries

@@ -1,0 +1,31 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/__control/Label__wrap-max.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label__wrap-max",
+    "description": "Control for the maxWidth wrap-bound fixture: the same wrapping Label WITHOUT the bound.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "Label__wrap-max",
+      "description": "Control for the maxWidth wrap-bound fixture: the same wrapping Label WITHOUT the bound.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "control_Label__wrap-max"
+        }
+      ]
+    }
+  ]
+}

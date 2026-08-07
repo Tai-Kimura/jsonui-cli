@@ -1,0 +1,31 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/maxWidth__wrap.layout.json"
+  },
+  "metadata": {
+    "name": "conformance maxWidth__wrap",
+    "description": "wrapContent width + maxWidth 150 on reflowing text: the bound reflows the CONTENT, it does not become an ideal size. A platform that fixes the axis because the bound is present lays the text out at single-line width and it escapes the box.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "maxWidth__wrap",
+      "description": "wrapContent width + maxWidth 150 on reflowing text: the bound reflows the CONTENT, it does not become an ideal size. A platform that fixes the axis because the bound is present lays the text out at single-line width and it escapes the box.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_maxWidth__wrap"
+        }
+      ]
+    }
+  ]
+}
