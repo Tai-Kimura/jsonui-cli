@@ -95,15 +95,17 @@ module SjuiTools
             add_modifier_line '.fixedSize(horizontal: true, vertical: false)'
           end
 
-          # toggleStyle
+          # toggleStyle — `checkbox` falls to the default branch:
+          # CheckboxToggleStyle exists only on macOS, so the dynamic
+          # ToggleConverter degrades it to DefaultToggleStyle on iOS and the
+          # generated code must land on the same rendering (emitting the
+          # macOS symbol fails the iOS compile outright).
           if @component['toggleStyle']
             case @component['toggleStyle']
             when 'switch'
               add_modifier_line ".toggleStyle(SwitchToggleStyle())"
             when 'button'
               add_modifier_line ".toggleStyle(ButtonToggleStyle())"
-            when 'checkbox'
-              add_modifier_line ".toggleStyle(CheckboxToggleStyle())"
             else
               add_modifier_line ".toggleStyle(DefaultToggleStyle())"
             end

@@ -40,8 +40,14 @@ RSpec.describe SjuiTools::SwiftUI::Views::ButtonConverter do
       expect(code).to include('underline: true')
     end
 
-    it 'binds fontFamily to data' do
-      expect(code).to include('fontFamily: data.fam,')
+    it 'does not forward fontFamily (StateAwareButtonView has no such parameter)' do
+      # The ios Button face has not implemented fontFamily: the dynamic
+      # ButtonConverter never reads it and StateAwareButtonView's initializer
+      # has no parameter for it. The old pass-through was a compile error the
+      # first Button/fontFamily fixture exposed ("extra argument 'fontFamily'
+      # in call", codegen host). When the face lands in the library, this
+      # spec flips back to asserting the binding is forwarded.
+      expect(code).not_to include('fontFamily:')
     end
 
     # `None` is the lineStyle enum's spelling for "no line"; the read site

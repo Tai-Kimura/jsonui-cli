@@ -104,6 +104,24 @@ RSpec.describe SjuiTools::SwiftUI::Views::ToggleConverter do
       end
     end
 
+    context 'with toggleStyle checkbox' do
+      let(:component) do
+        {
+          'type' => 'Toggle',
+          'isOn' => '@{isOn}',
+          'toggleStyle' => 'checkbox'
+        }
+      end
+
+      it 'degrades to DefaultToggleStyle (CheckboxToggleStyle is macOS-only)' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('.toggleStyle(DefaultToggleStyle())')
+        expect(code).not_to include('CheckboxToggleStyle')
+      end
+    end
+
     context 'with checked binding' do
       let(:component) do
         {

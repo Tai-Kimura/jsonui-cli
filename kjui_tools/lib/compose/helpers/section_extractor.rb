@@ -75,7 +75,9 @@ module KjuiTools
           code.each_line do |raw|
             line = raw.strip
             next if line.empty?
-            if provider_stack.none? && SCOPE_BOUND_MODIFIER_PREFIXES.any? { |m| line.include?(m) }
+            if provider_stack.none? &&
+               (SCOPE_BOUND_MODIFIER_PREFIXES.any? { |m| line.include?(m) } ||
+                SCOPE_BOUND_CALL_PREFIXES.any? { |m| line.include?(m) })
               return true
             end
             opens = line.count('{')
@@ -200,6 +202,17 @@ module KjuiTools
           .fillParentMaxHeight(
           .animateItemPlacement(
           .animateItem(
+        ].freeze
+
+        # Scope-bound COMPOSABLE CALLS, not modifiers: material3's
+        # NavigationBarItem is `fun RowScope.NavigationBarItem(...)` — lifting
+        # a tab item out of its NavigationBar content lambda strands the call
+        # without a receiver ("Unresolved reference", first hit by the bound
+        # TabView fixture, whose per-tab chunks are exactly section-sized).
+        # The trailing paren keeps `NavigationBarItemDefaults.colors(` from
+        # matching.
+        SCOPE_BOUND_CALL_PREFIXES = %w[
+          NavigationBarItem(
         ].freeze
 
         # Returns [new_body, [function_string, ...]]. When the body is shorter

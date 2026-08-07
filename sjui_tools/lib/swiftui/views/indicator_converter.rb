@@ -32,10 +32,17 @@ module SjuiTools
             # Animating is a binding
             variable = $1
             if hides_when_stopped
-              # Wrap in if condition based on binding
-              add_line "if data.#{to_camel_case(variable)} {"
+              # Wrap the binding condition in Group: an `if` is a statement,
+              # not a view, so the modifier chain the base converter appends
+              # (accessibilityIdentifier, frame, ...) cannot attach to it —
+              # same idiom as the secure-field branch (textfield_converter).
+              add_line "Group {"
               indent do
-                generate_progress_view
+                add_line "if data.#{to_camel_case(variable)} {"
+                indent do
+                  generate_progress_view
+                end
+                add_line "}"
               end
               add_line "}"
             else

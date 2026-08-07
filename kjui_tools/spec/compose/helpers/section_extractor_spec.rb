@@ -163,6 +163,61 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
       expect(fns.size).to be >= 4
     end
 
+    it 'does not lift a scope-bound composable call (NavigationBarItem needs RowScope)' do
+      # material3's NavigationBarItem is `fun RowScope.NavigationBarItem(...)`.
+      # The bound TabView emit puts one per tab inside NavigationBar's content
+      # lambda; lifting a tab chunk to a file-scope @Composable strands the
+      # call without its receiver ("Unresolved reference 'NavigationBarItem'",
+      # android-codegen suite, TabView/selectedIndex__binding).
+      item = <<~KOTLIN.chomp
+        NavigationBarItem(
+            selected = data.boundSelectedIndex == %d,
+            onClick = { viewModel.updateData(mapOf("boundSelectedIndex" to %d)) },
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.Circle,
+                    contentDescription = "Tab"
+                )
+            },
+            label = { Text("Tab") },
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.primary,
+                selectedTextColor = MaterialTheme.colorScheme.primary
+            )
+        )
+      KOTLIN
+      body = <<~KOTLIN
+        NavigationBar(
+        ) {
+        #{format(item, 0, 0).gsub(/^/, '    ')}
+        #{format(item, 1, 1).gsub(/^/, '    ')}
+        }
+      KOTLIN
+      new_body, fns = described_class.extract(body, **opts, line_threshold: 5)
+      expect(new_body.scan('NavigationBarItem(').size).to eq(2)
+      fns.each { |f| expect(f).not_to include('NavigationBarItem(') }
+    end
+
+    it 'still lifts a chunk whose NavigationBarItem sits under its own NavigationBar' do
+      # When the whole NavigationBar block is inside the chunk the receiver
+      # travels with it — the call-prefix guard must not freeze that case.
+      chunk = <<~KOTLIN
+        Column(modifier = Modifier.fillMaxSize()) {
+            NavigationBar(
+            ) {
+                NavigationBarItem(
+                    selected = true,
+                    onClick = { },
+                    icon = { Icon(imageVector = Icons.Filled.Circle, contentDescription = "t") }
+                )
+            }
+            Text(text = data.a)
+            Text(text = data.b)
+        }
+      KOTLIN
+      expect(described_class.scope_bound_needs_outer_receiver?(chunk)).to eq(false)
+    end
+
     # Regression: kjui-section-extractor-scope-bound-modifier-guard-incomplete.
     # `VisibilityWrapper(modifier = Modifier.weight(1f), ...)` puts `.weight(`
     # inline in a named-argument value on the OPENING line — not at the line

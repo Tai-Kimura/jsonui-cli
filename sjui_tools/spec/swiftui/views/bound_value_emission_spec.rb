@@ -318,6 +318,17 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       expect(convert(:IndicatorConverter, 'type' => 'Indicator', 'indicatorStyle' => 'large'))
         .to include('.scaleEffect(1.5)')
     end
+
+    it 'bound animating with hidesWhenStopped wraps the if in Group' do
+      # An `if` is a statement, not a view — the base converter's modifier
+      # chain (accessibilityIdentifier, frame, ...) cannot attach to it, and
+      # the bare emit failed the codegen-host compile outright
+      # (Indicator/animating__binding, "generic parameter could not be
+      # inferred" at the Group call site).
+      code = convert(:IndicatorConverter,
+                     'type' => 'Indicator', 'animating' => '@{boundAnimating}')
+      expect(code).to match(/Group \{\s*\n\s*if data\.boundAnimating \{/)
+    end
   end
 
   describe 'declarations the orchestrator routed back to this lane' do

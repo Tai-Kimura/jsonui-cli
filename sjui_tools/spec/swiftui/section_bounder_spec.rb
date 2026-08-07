@@ -268,6 +268,43 @@ RSpec.describe SjuiTools::SwiftUI::SectionBounder do
       expect(functions).to match(/AnyView\(section0(?:_\d+)+\(.*cellData: cellData.*\)\)/)
     end
 
+    it 'does not parameterize a name the segment itself binds via if-let' do
+      # The listStyle emit cuts at the `if let cellsData = ...` line. The
+      # binding lives INSIDE the extracted block — treating it as an outer
+      # visible binding produced a call site passing an argument that exists
+      # nowhere in the caller ("cannot find 'cellsData' in scope",
+      # Collection/listStyle__* / __control/Collection__no-sections).
+      inner = +''
+      6.times { |i| inner << ('    ' * i) + "VStack {\n" }
+      inner << ('    ' * 6) + "Text(\"\\(cellIndex)\")\n"
+      5.downto(0) { |i| inner << ('    ' * i) + "}\n" }
+      indented = inner.split("\n").map { |l| ('    ' * 4) + l }.join("\n")
+      body = <<~SWIFT
+        List {
+            ForEach(Array(data.items.sections.enumerated()), id: \\.offset) { sectionIndex, section in
+                if let cellsData = section.cells?.data, let viewName = section.cells?.viewName {
+                    ForEach(Array(cellsData.enumerated()), id: \\.offset) { cellIndex, cellData in
+        #{indented}
+                    }
+                }
+            }
+        }
+        .listStyle(PlainListStyle())
+      SWIFT
+      call, functions = bounder.bound(body)
+      fns = emitted_functions(functions)
+      holder = fns.find { |f| f[:text].include?('if let cellsData') }
+      next expect(fns).not_to be_empty if holder.nil? # no cut at the if-let line: nothing to leak
+      holder_name = holder[:text][/func (\w+)\(/, 1]
+      # The holder must not TAKE the name it binds itself...
+      expect(holder[:text]).not_to match(/func \w+\([^)]*cellsData:/)
+      # ...and its call site (in a sibling function, or `call` when the
+      # holder is the root section) must not PASS it.
+      call_site = "#{call}\n#{functions}"[/AnyView\(#{holder_name}\([^)]*\)\)/]
+      expect(call_site).not_to be_nil
+      expect(call_site).not_to include('cellsData')
+    end
+
     it 'detects references made only inside string interpolation' do
       # "\(cellData["title"] ?? "")" is a real reference even though string
       # stripping would hide it — the extracted function must take the param.

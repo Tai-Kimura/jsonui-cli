@@ -363,8 +363,14 @@ module SjuiTools
           stripped = info[:stripped]
 
           # Line-level let bindings join the innermost frame's bindings so
-          # later segments inside the same scope see them.
-          if (m = stripped.match(/\A(?:if\s+)?let\s+(\w+)\s*=/))
+          # later segments inside the same scope see them. Plain `let` ONLY:
+          # an `if let` binding lives inside the if-block, and classify_brace
+          # already binds it into that block's :scope frame — registering it
+          # here would leak it into the ENCLOSING frame, so a segment cut at
+          # the if-let line itself counts the name as outer-visible and the
+          # emitted call site passes an argument that exists nowhere
+          # ("cannot find 'cellsData' in scope", Collection/listStyle__*).
+          if (m = stripped.match(/\Alet\s+(\w+)\s*=/))
             name = m[1]
             target = stack.last
             target.bindings[name] = LOCAL_TYPES.fetch(name, :unknown) if target
@@ -435,8 +441,15 @@ module SjuiTools
         return [:imperative, {}] if first_word.nil?
         if first_word == 'if'
           bindings = {}
-          if (m = head.match(/\Aif\s+let\s+(\w+)\s*=/))
-            bindings[m[1]] = LOCAL_TYPES.fetch(m[1], :unknown)
+          if head.match?(/\Aif\s+let\s+\w+\s*=/)
+            # EVERY binder of a multi-clause `if let a = ..., let b = ... {`
+            # joins the block's scope frame. Registering only the first left
+            # later binders invisible: a cut inside the block referencing one
+            # would neither take it as a param nor be refused — it shipped
+            # unresolved. Unknown-typed names now refuse the cut instead.
+            head.scan(/\blet\s+(\w+)\s*=/) do |(name)|
+              bindings[name] = LOCAL_TYPES.fetch(name, :unknown)
+            end
           end
           return [:scope, bindings]
         end

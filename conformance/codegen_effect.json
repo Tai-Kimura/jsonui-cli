@@ -212,6 +212,24 @@
       "class": "bound-dropped",
       "owner": "A (rjui) — runtime-implemented, emit-invariant by design",
       "reason": "The fit-to-box implementation (51-A, commit 6bffb03/80638a7 family) lives at RUNTIME in the web component: the emitted text does not change with the declared value by design, so C0/C1 fire on emit while the behaviour is implemented. Companion adjudication in cross_effect.json (fixture shape cannot observe the shrink without a height constraint; D reshaped in 170121d). Verify via render, not emit."
+    },
+    {
+      "component": "Button",
+      "attribute": "fontFamily",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "F (sjui/SwiftJsonUI) — implementation queue, next train",
+      "reason": "The ios Button face has not implemented fontFamily: the dynamic ButtonConverter never reads it and StateAwareButtonView's initializer has no parameter for it. The codegen emit passed the argument anyway and had never compiled — the first Button/fontFamily fixture (51-D bound-fixture batch) failed the codegen host build ('extra argument in call'), so the emit was removed to restore codegen ≡ dynamic (both unread). Not a regression — the attribute never rendered on this face. When the face lands (library + dynamic + codegen together), this row goes stale and the gate says to remove it."
+    },
+    {
+      "component": "Button",
+      "attribute": "fontFamily",
+      "platform": "ios",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "F (sjui/SwiftJsonUI) — implementation queue, next train",
+      "reason": "The ios Button face has not implemented fontFamily: the dynamic ButtonConverter never reads it and StateAwareButtonView's initializer has no parameter for it. The codegen emit passed the argument anyway and had never compiled — the first Button/fontFamily fixture (51-D bound-fixture batch) failed the codegen host build ('extra argument in call'), so the emit was removed to restore codegen ≡ dynamic (both unread). Not a regression — the attribute never rendered on this face. When the face lands (library + dynamic + codegen together), this row goes stale and the gate says to remove it."
     }
   ]
 }
