@@ -107,7 +107,7 @@ module JsonUI
         { name: 'events', kind: :object }.freeze,
         # Frame configuration with width/height
         { name: 'frame', kind: :object }.freeze,
-        # Content gravity/alignment [accepts: string | array]
+        # Content gravity/alignment. A single value names ONE axis; the axis it does not name falls to the container default (top vertically, start horizontally), so in LTR `left` and `top` both resolve to (start, top) and render identically. Use the array form to name both axes. Full ruling in attribute_semantics.json -> gravityDefaults; do not restate it in toolchain comments. [accepts: string | array]
         { name: 'gravity', kind: :raw }.freeze,
         # Height (number, 'matchParent', 'wrapContent') - binding supported. Not required if weight is specified. [required]
         { name: 'height', kind: :dimension, bindable: true, keywords: ['matchParent', 'wrapContent'].freeze }.freeze,

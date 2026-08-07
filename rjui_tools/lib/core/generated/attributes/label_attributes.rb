@@ -60,7 +60,7 @@ module JsonUI
         { name: 'placeholder', kind: :string }.freeze,
         # Selected state (binding supported). Decides which attribute set is in force: while true the label renders with 'highlightAttributes' (or 'highlightColor'), otherwise with its base font and colour.
         { name: 'selected', kind: :boolean, bindable: true }.freeze,
-        # Strikethrough styling (boolean for simple, object for styled) [accepts: boolean | object]
+        # Strikethrough styling: boolean for a plain line, object to style it. Same contract as Label.underline, minus lineOffset, which strikethrough does not declare and must not invent. `lineStyle: "None"` draws nothing, exactly like `false`. Full ruling in attribute_semantics.json -> textDecoration; do not restate it in toolchain comments. [accepts: boolean | object]
         { name: 'strikethrough', kind: :raw }.freeze,
         # Text content (can be data binding, supports interpolation). PLAIN TEXT: markdown is not interpreted, so "[label](/path)", "**bold**" and backticks render literally, brackets and all. To emphasise or link part of the string, use partialAttributes ('range' plus font/color/underline, and 'onclick' for a tappable span). Rendering real markdown is out of scope for Label — write a custom component.
         { name: 'text', kind: :string, bindable: true }.freeze,
@@ -70,7 +70,7 @@ module JsonUI
         { name: 'textShadow', kind: :raw }.freeze,
         # Text transformation
         { name: 'textTransform', kind: :enum, values: ['none', 'capitalize', 'uppercase', 'lowercase'].freeze }.freeze,
-        # Underline styling (boolean for simple, object for styled) [accepts: boolean | object | array]
+        # Underline styling: boolean for a plain line, object to style it. The object face must never draw LESS than `true` does — a platform that cannot honour lineStyle or color still draws the plain Single line in the text colour. `lineStyle: "None"` is the one object value that draws nothing, exactly like `false`. Full ruling in attribute_semantics.json -> textDecoration; do not restate it in toolchain comments. [accepts: boolean | object | array]
         { name: 'underline', kind: :raw }.freeze,
       ].freeze
 

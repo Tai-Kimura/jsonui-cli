@@ -81,8 +81,9 @@
     },
     "gravityDefaults": {
       "defaultGravity": "top|start",
-      "ruling": "2026-08-03 campaign adjudication: the default content gravity is top|start on every container (CollectionStack pins Top; SafeAreaView spacer layouts anchor start). A platform centering by default is the deviant. No activeness observable — default-vs-default renders identically; the geometry probe closes it mechanically.",
-      "observable": {}
+      "ruling": "2026-08-03 campaign adjudication: the default content gravity is top|start on every container (CollectionStack pins Top; SafeAreaView spacer layouts anchor start). A platform centering by default is the deviant. No activeness observable — default-vs-default renders identically; the geometry probe closes it mechanically. 2026-08-07 (plan 51-E), Wave 2 carry-over: what happens to the axis a single-value gravity does NOT name. Ruled from the declaration alone, as the semantics rule requires, not from any platform's behaviour. common.gravity declares an enum of SINGLE-AXIS values (top, bottom, left, right, centerVertical, centerHorizontal) alongside an array type whose whole purpose is naming both axes at once. If a single-axis value left the other axis undefined, then `gravity: \"left\"` would have no defined rendering at all, and a declaration cannot leave its own enum values meaningless — so each axis resolves independently, and the axis that is not named takes the default already ruled above (top | start). It does NOT inherit the parent's gravity and it is not \"unset\". CONSEQUENCE, stated because it looks like a bug when measured: in LTR, `gravity: \"left\"` and `gravity: \"top\"` both resolve to (start, top) and are therefore observationally IDENTICAL. The Wave 2 note that ios draws `left` and `top` the same picture is the contract being honoured, not a defect; a fixture that expects those two to differ is testing something the SSoT never promised. Whether a given fixture can see the horizontal axis at all is a separate, real question — a child that fills the container's width makes it unobservable (D's lane).",
+      "observable": {},
+      "unspecifiedAxis": "falls to the container default for that axis (top vertically, start horizontally) — never \"unset\", never inherited from the parent"
     },
     "shadow": {
       "stringPipe": "five-field strict",
@@ -236,6 +237,25 @@
     "fontProvider": {
       "ruling": "Configuration.Font.fontProvider is the app's typeface-policy injection point, and the presence of `fontFamily` must NOT change whether it is consulted: every font resolution routes through the provider as FontSpec(family:, weight:, size:), family nil included. A path that bypasses the provider when family is absent makes the same attribute on the same screen pass or skip the app's policy depending on mode — the checked/unchecked shape this wave kept finding. The codegen path is the conforming side; SwiftJsonUI's dynamic path (DynamicDecodingHelper.fontFromComponent) is being aligned to it with a regression test (F, plan 49). A provider that ignores family nil sees no change; one that returns a custom face was silently falling back to the system font on dynamic — either way the contract converges on: the typeface does not depend on mode. Preserving a consumer's current look is not a reason to keep the bypass (canonical semantics win). 2026-08-06 ruling.",
       "contract": "family presence must not gate provider consultation — every implementer, current or future, routes every FontSpec through fontProvider"
+    },
+    "textDecoration": {
+      "attributes": [
+        "Label.underline",
+        "Label.strikethrough",
+        "partialAttributes[].underline"
+      ],
+      "faces": {
+        "boolean": "true draws the line; false draws nothing",
+        "object": "draws the line DESCRIBED by the object — never less than the boolean face draws",
+        "lineStyleNone": "lineStyle: \"None\" is the one object value that draws NOTHING; it is exactly equivalent to false"
+      },
+      "unstyledDefaults": {
+        "color": "the text's own colour — `color` declares no `default`, so it MODIFIES the line rather than bringing it into existence, and an absent colour means 'do not modify'",
+        "lineStyle": "Single",
+        "lineOffset": "no baseline adjustment; declared on underline only — strikethrough has no lineOffset and must not invent one"
+      },
+      "ruling": "2026-08-07 (plan 51-E §3), written so the implementation lanes have an expected value to match; presence was repaired in 10.14.1 and the STYLE content is what remains. The contract is derived from the declaration: underline/strikethrough declare boolean|object, and the object face's properties (lineStyle, color, lineOffset) carry no `default`, which by the SSoT's own convention makes them MODIFIERS of a line that the attribute's presence already brought into existence. Two consequences are load-bearing. FIRST, the object face must never render LESS than the boolean face: `underline: {...}` is a more specific request than `underline: true`, so a platform that cannot yet honour lineStyle or color must still draw the plain Single line in the text colour. Rendering nothing is always wrong. SECOND, `lineStyle: \"None\"` is the sole exception and means no line at all — identical output to `false`. MEASURED STATE, 2026-08-07, so nobody re-derives it: sjui text_style_helper.rb:130-135 (line_decoration?) and kjui text_component.rb:455 (decoration_on?) both implement exactly this None rule and then draw a plain line, ignoring colour and lineOffset. rjui label_converter.rb:371 is a bare truthiness test (`classes << 'underline' if attributes['underline']`), so on web a Hash is always truthy and `{lineStyle: \"None\"}` DRAWS A LINE — probed directly through the converter, not read: true / {Single} / {None} / {color:#FF0000} all emit the same `underline` class. That is a defect owned by A. kjui's DYNAMIC renderer drops the object face entirely (cross_effect Label/underline__styled, Label/strikethrough__styled: android inert, ios and web active), which violates the never-less-than-boolean rule and is owned by G. Double and Thick are declared but no face distinguishes them from Single today; they stay declared because the enum is the contract, and the gap belongs in the coverage ledger rather than being papered over by deleting the values.",
+      "observable": {}
     }
   }
 }

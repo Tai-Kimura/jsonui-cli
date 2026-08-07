@@ -950,7 +950,7 @@
         "centerHorizontal",
         "center"
       ],
-      "description": "Content gravity/alignment"
+      "description": "Content gravity/alignment. A single value names ONE axis; the axis it does not name falls to the container default (top vertically, start horizontally), so in LTR `left` and `top` both resolve to (start, top) and render identically. Use the array form to name both axes. Full ruling in attribute_semantics.json -> gravityDefaults; do not restate it in toolchain comments."
     },
     "onAppear": {
       "type": "string",
@@ -1256,7 +1256,7 @@
         "object",
         "array"
       ],
-      "description": "Underline styling (boolean for simple, object for styled)",
+      "description": "Underline styling: boolean for a plain line, object to style it. The object face must never draw LESS than `true` does — a platform that cannot honour lineStyle or color still draws the plain Single line in the text colour. `lineStyle: \"None\"` is the one object value that draws nothing, exactly like `false`. Full ruling in attribute_semantics.json -> textDecoration; do not restate it in toolchain comments.",
       "properties": {
         "lineStyle": {
           "type": "string",
@@ -1283,7 +1283,7 @@
         "boolean",
         "object"
       ],
-      "description": "Strikethrough styling (boolean for simple, object for styled)",
+      "description": "Strikethrough styling: boolean for a plain line, object to style it. Same contract as Label.underline, minus lineOffset, which strikethrough does not declare and must not invent. `lineStyle: \"None\"` draws nothing, exactly like `false`. Full ruling in attribute_semantics.json -> textDecoration; do not restate it in toolchain comments.",
       "properties": {
         "lineStyle": {
           "type": "string",
