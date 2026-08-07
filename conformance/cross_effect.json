@@ -830,43 +830,43 @@
       "fixture": "TextView/lineBreakMode__char",
       "verdict": "uniformly-inert",
       "declared": "Char",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "the fixture cannot discriminate — not a platform gap: the TextView probe carries hint \"Sample\" (6 chars) in a 200x100 box, so a line-break policy has nothing to fold, and every value renders the same picture on every platform whether or not it is implemented",
+      "note": "Adjudicated 2026-08-07 (51-H). Decisive comparison: Label/lineBreakMode__* carries an overflowing text and measures 5 of 6 values active in control_diff.json (char/clip/head/middle/tail; word is inert as the default) — same attribute, same three platforms. So inertness here is a property of the probe, not of the implementations. owner: D (51-D) — reshape the TextView lineBreakMode probe so its content overflows, as Label's already does. rules.py is D's occupied file; H does not touch it. This row self-prunes on the next `cross-effect --update` once the reshaped fixture measures active."
     },
     {
       "fixture": "TextView/lineBreakMode__clip",
       "verdict": "uniformly-inert",
       "declared": "Clip",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "the fixture cannot discriminate — not a platform gap: the TextView probe carries hint \"Sample\" (6 chars) in a 200x100 box, so a line-break policy has nothing to fold, and every value renders the same picture on every platform whether or not it is implemented",
+      "note": "Adjudicated 2026-08-07 (51-H). Decisive comparison: Label/lineBreakMode__* carries an overflowing text and measures 5 of 6 values active in control_diff.json (char/clip/head/middle/tail; word is inert as the default) — same attribute, same three platforms. So inertness here is a property of the probe, not of the implementations. owner: D (51-D) — reshape the TextView lineBreakMode probe so its content overflows, as Label's already does. rules.py is D's occupied file; H does not touch it. This row self-prunes on the next `cross-effect --update` once the reshaped fixture measures active."
     },
     {
       "fixture": "TextView/lineBreakMode__head",
       "verdict": "uniformly-inert",
       "declared": "Head",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "the fixture cannot discriminate — not a platform gap: the TextView probe carries hint \"Sample\" (6 chars) in a 200x100 box, so a line-break policy has nothing to fold, and every value renders the same picture on every platform whether or not it is implemented",
+      "note": "Adjudicated 2026-08-07 (51-H). Decisive comparison: Label/lineBreakMode__* carries an overflowing text and measures 5 of 6 values active in control_diff.json (char/clip/head/middle/tail; word is inert as the default) — same attribute, same three platforms. So inertness here is a property of the probe, not of the implementations. owner: D (51-D) — reshape the TextView lineBreakMode probe so its content overflows, as Label's already does. rules.py is D's occupied file; H does not touch it. This row self-prunes on the next `cross-effect --update` once the reshaped fixture measures active."
     },
     {
       "fixture": "TextView/lineBreakMode__middle",
       "verdict": "uniformly-inert",
       "declared": "Middle",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "the fixture cannot discriminate — not a platform gap: the TextView probe carries hint \"Sample\" (6 chars) in a 200x100 box, so a line-break policy has nothing to fold, and every value renders the same picture on every platform whether or not it is implemented",
+      "note": "Adjudicated 2026-08-07 (51-H). Decisive comparison: Label/lineBreakMode__* carries an overflowing text and measures 5 of 6 values active in control_diff.json (char/clip/head/middle/tail; word is inert as the default) — same attribute, same three platforms. So inertness here is a property of the probe, not of the implementations. owner: D (51-D) — reshape the TextView lineBreakMode probe so its content overflows, as Label's already does. rules.py is D's occupied file; H does not touch it. This row self-prunes on the next `cross-effect --update` once the reshaped fixture measures active."
     },
     {
       "fixture": "TextView/lineBreakMode__tail",
       "verdict": "uniformly-inert",
       "declared": "Tail",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "the fixture cannot discriminate — not a platform gap: the TextView probe carries hint \"Sample\" (6 chars) in a 200x100 box, so a line-break policy has nothing to fold, and every value renders the same picture on every platform whether or not it is implemented",
+      "note": "Adjudicated 2026-08-07 (51-H). Decisive comparison: Label/lineBreakMode__* carries an overflowing text and measures 5 of 6 values active in control_diff.json (char/clip/head/middle/tail; word is inert as the default) — same attribute, same three platforms. So inertness here is a property of the probe, not of the implementations. owner: D (51-D) — reshape the TextView lineBreakMode probe so its content overflows, as Label's already does. rules.py is D's occupied file; H does not touch it. This row self-prunes on the next `cross-effect --update` once the reshaped fixture measures active."
     },
     {
       "fixture": "TextView/lineBreakMode__word",
       "verdict": "uniformly-inert",
       "declared": "Word",
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
+      "reason": "the fixture cannot discriminate — not a platform gap: the TextView probe carries hint \"Sample\" (6 chars) in a 200x100 box, so a line-break policy has nothing to fold, and every value renders the same picture on every platform whether or not it is implemented",
+      "note": "Adjudicated 2026-08-07 (51-H). Decisive comparison: Label/lineBreakMode__* carries an overflowing text and measures 5 of 6 values active in control_diff.json (char/clip/head/middle/tail; word is inert as the default) — same attribute, same three platforms. So inertness here is a property of the probe, not of the implementations. owner: D (51-D) — reshape the TextView lineBreakMode probe so its content overflows, as Label's already does. rules.py is D's occupied file; H does not touch it. This row self-prunes on the next `cross-effect --update` once the reshaped fixture measures active."
     },
     {
       "fixture": "TextView/textAlign__center",

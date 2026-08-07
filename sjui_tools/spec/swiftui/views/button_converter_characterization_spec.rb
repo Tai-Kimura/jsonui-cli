@@ -43,6 +43,20 @@ RSpec.describe SjuiTools::SwiftUI::Views::ButtonConverter do
     it 'binds fontFamily to data' do
       expect(code).to include('fontFamily: data.fam,')
     end
+
+    # `None` is the lineStyle enum's spelling for "no line"; the read site
+    # tested the face for truthiness, and an object is truthy.
+    it 'draws no line for a partial whose lineStyle is None' do
+      styled = convert(
+        'type' => 'Button', 'text' => 'Tap',
+        'partialAttributes' => [
+          { 'range' => [0, 2], 'underline' => { 'lineStyle' => 'None' } }
+        ]
+      )
+
+      expect(styled).to include('PartialAttribute(')
+      expect(styled).not_to include('underline: true')
+    end
   end
 
   describe 'legacy font attribute' do

@@ -93,12 +93,12 @@ module SjuiTools
                     end
 
                     # Add underline
-                    if partial['underline']
+                    if line_decoration?(partial['underline'])
                       add_line "underline: true,"
                     end
 
                     # Add strikethrough
-                    if partial['strikethrough']
+                    if line_decoration?(partial['strikethrough'])
                       add_line "strikethrough: true,"
                     end
 
@@ -191,12 +191,12 @@ module SjuiTools
 
 
             # Add underline
-            if @component['underline']
+            if line_decoration?(@component['underline'])
               add_line "underline: true,"
             end
 
             # Add strikethrough
-            if @component['strikethrough']
+            if line_decoration?(@component['strikethrough'])
               add_line "strikethrough: true,"
             end
 

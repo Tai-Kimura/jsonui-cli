@@ -156,6 +156,35 @@ RSpec.describe SjuiTools::SwiftUI::Views::LabelConverter do
       end
     end
 
+    context 'with the styled (object) face' do
+      it 'draws the line for a styled face that names a line style' do
+        code = described_class.new(
+          'type' => 'Label',
+          'text' => 'Decorated',
+          'underline' => { 'lineStyle' => 'Single', 'color' => '#FF0000' },
+          'strikethrough' => { 'lineStyle' => 'Double' }
+        ).convert
+
+        expect(code).to include('underline: true')
+        expect(code).to include('strikethrough: true')
+      end
+
+      # `None` is the declared spelling for "no line" in the lineStyle enum.
+      # Every read site tested the face for truthiness, and an object is
+      # truthy, so this asked for the line it exists to suppress.
+      it 'draws no line for lineStyle None' do
+        code = described_class.new(
+          'type' => 'Label',
+          'text' => 'Plain',
+          'underline' => { 'lineStyle' => 'None' },
+          'strikethrough' => { 'lineStyle' => 'none' }
+        ).convert
+
+        expect(code).not_to include('underline: true')
+        expect(code).not_to include('strikethrough: true')
+      end
+    end
+
     context 'with autoShrink' do
       let(:component) do
         {
@@ -384,6 +413,20 @@ RSpec.describe SjuiTools::SwiftUI::Views::LabelConverter do
       converter = described_class.new(component)
       code = converter.convert
       expect(code).to include('PartialAttribute(')
+      expect(code).to include('underline: true')
+    end
+
+    it 'draws no line for a partial whose lineStyle is None' do
+      code = described_class.new(
+        'type' => 'Label',
+        'text' => 'Underlined Text',
+        'partialAttributes' => [
+          { 'underline' => { 'lineStyle' => 'None' }, 'range' => [0, 10] }
+        ]
+      ).convert
+
+      expect(code).to include('PartialAttribute(')
+      expect(code).not_to include('underline: true')
     end
   end
 

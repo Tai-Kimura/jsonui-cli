@@ -113,6 +113,27 @@ module SjuiTools
                      default: nil, type: 'UITextContentType')
         end
 
+        # Whether a declared `underline` / `strikethrough` face asks for a
+        # line to be drawn.
+        #
+        # Both are declared `boolean|object|array`, and the object face
+        # carries `lineStyle`, whose enum spells "no line" as `None`. Every
+        # read site tested the face for truthiness, so `{"lineStyle": "None"}`
+        # — an object, therefore truthy — asked for a line, which is the one
+        # thing that value cannot mean.
+        #
+        # The object face's CONTENTS (lineStyle, colour, lineOffset) are still
+        # unemitted on ios: `PartialAttributedText` takes `underline: Bool`,
+        # so there is nothing to hand them to yet. That is the
+        # C2/presence-only row in codegen_effect.json, and it lands when the
+        # library grows the styled parameters.
+        def line_decoration?(face)
+          return false if face.nil? || face == false
+          return face['lineStyle'].to_s.downcase != 'none' if face.is_a?(Hash)
+
+          true
+        end
+
         # The tool's token -> SwiftUI table, widened to every spelling the
         # SSoT declares for this component's attribute. A run-time table has
         # to know the ALIAS spellings, which the build-time normalizer would
