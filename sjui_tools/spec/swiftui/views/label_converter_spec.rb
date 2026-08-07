@@ -169,6 +169,42 @@ RSpec.describe SjuiTools::SwiftUI::Views::LabelConverter do
         expect(code).to include('strikethrough: true')
       end
 
+      # The object face's CONTENTS. Both faces used to emit the same bare
+      # `underline: true`, so a styled declaration and a plain `true` were
+      # byte-identical — the presence-only row in codegen_effect.json. The
+      # library grew the receiving parameters in SwiftJsonUI 0fc5231.
+      it 'carries lineStyle, colour and lineOffset into the decoration' do
+        code = described_class.new(
+          'type' => 'Label',
+          'text' => 'Decorated',
+          'underline' => { 'lineStyle' => 'Single', 'color' => '#FF0000', 'lineOffset' => 2 },
+          'strikethrough' => { 'lineStyle' => 'Thick' }
+        ).convert
+
+        expect(code).to include('underlineDecoration: TextDecoration(lineStyle: .single,')
+        expect(code).to include('lineOffset: 2)')
+        expect(code).to include('strikethroughDecoration: TextDecoration(lineStyle: .thick)')
+      end
+
+      # `lineOffset` is declared on underline only.
+      it 'does not invent a lineOffset for strikethrough' do
+        code = described_class.new(
+          'type' => 'Label', 'text' => 'x',
+          'strikethrough' => { 'lineStyle' => 'Single', 'lineOffset' => 9 }
+        ).convert
+
+        expect(code).to include('strikethroughDecoration: TextDecoration(lineStyle: .single)')
+      end
+
+      it 'leaves the boolean face without a decoration' do
+        code = described_class.new(
+          'type' => 'Label', 'text' => 'x', 'underline' => true, 'strikethrough' => true
+        ).convert
+
+        expect(code).to include('underline: true')
+        expect(code).not_to include('Decoration')
+      end
+
       # `None` is the declared spelling for "no line" in the lineStyle enum.
       # Every read site tested the face for truthiness, and an object is
       # truthy, so this asked for the line it exists to suppress.

@@ -200,6 +200,17 @@ module SjuiTools
               add_line "strikethrough: true,"
             end
 
+            # The object face's CONTENTS. Emitted after both booleans because
+            # Swift takes arguments in declaration order, and the library
+            # declares underline / strikethrough before their decorations.
+            if (decoration = text_decoration_expression(@component['underline']))
+              add_line "underlineDecoration: #{decoration},"
+            end
+
+            if (decoration = text_decoration_expression(@component['strikethrough'], line_offset: false))
+              add_line "strikethroughDecoration: #{decoration},"
+            end
+
             # Add lineSpacing. `.to_f` on a binding is 0.0, which is how a
             # bound lineSpacing froze to no spacing at all and a bound
             # lineHeightMultiple froze to (0 - 1) * fontSize — a NEGATIVE

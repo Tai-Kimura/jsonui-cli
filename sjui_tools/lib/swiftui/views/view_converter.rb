@@ -182,7 +182,14 @@ module SjuiTools
             # orientationが指定されていない場合はZStackを使用
 
             # 子要素のweightをチェック
-            has_weights = children.any? { |child|
+            # `fillEqually` is the SIZE half of distribution and the canon cell
+            # is "equal frames on each child" — which IS equal weights, so it
+            # routes through the weighted stack rather than the separator arm
+            # it used to share with `equalSpacing` (the GAP half). Both values
+            # emitting one between-children Spacer made them the same picture.
+            # F's dynamic half is SwiftJsonUI 4801af7, `implicitWeight`.
+            fills_equally = @component['distribution'].to_s.downcase == 'fillequally'
+            has_weights = fills_equally || children.any? { |child|
               weight_expression(child['weight'] || child['widthWeight'] || child['heightWeight']).first
             }
 
@@ -198,6 +205,9 @@ module SjuiTools
               weighted_children = []
               children.each do |child|
                 _applies, weight = weight_expression(child['weight'] || child['widthWeight'] || child['heightWeight'])
+                # `fillEqually` means equal frames, so a child that
+                # declares no weight of its own gets one.
+                weight = 1 if fills_equally && weight.to_s == '0'
                 weighted_children << { child: child, weight: weight }
               end
 
@@ -273,6 +283,10 @@ module SjuiTools
                 indent do
                   children.each_with_index do |child, index|
                     weighted, weight = weight_expression(child['weight'] || child['widthWeight'] || child['heightWeight'])
+                    if fills_equally && !weighted
+                      weighted = true
+                      weight = 1
+                    end
 
                     # 各子要素を(view: AnyView, weight: CGFloat)のタプルとして追加
                     add_line "("
@@ -396,7 +410,11 @@ module SjuiTools
                       when 'equalCentering'
                         add_line "Spacer(minLength: 0)"
                         add_line "Spacer(minLength: 0)"
-                      when 'fillEqually', 'equalSpacing'
+                      # `fillEqually` is NOT here any more: it is the SIZE
+                      # half and routes to the weighted stack. Emitting a
+                      # separator for it made it the same picture as
+                      # `equalSpacing`, which is the GAP half.
+                      when 'equalSpacing'
                         add_line "Spacer(minLength: 0)"
                       end
                     end

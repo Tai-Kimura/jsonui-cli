@@ -134,6 +134,36 @@ module SjuiTools
           true
         end
 
+        #: Declared `lineStyle` -> `TextDecoration.LineStyle`. `None` never
+        #: reaches here: `line_decoration?` already suppresses that face.
+        DECORATION_LINE_STYLES = {
+          'single' => '.single',
+          'double' => '.double',
+          'thick' => '.thick',
+        }.freeze
+
+        # The OBJECT face of `underline` / `strikethrough`, as a
+        # `TextDecoration(...)` literal — or nil for the boolean face, which
+        # keeps the plain line it always drew.
+        #
+        # Both faces used to emit the same bare `underline: true`, so a styled
+        # declaration and a plain `true` produced byte-identical text: the
+        # `presence-only` row in codegen_effect.json. The library grew the
+        # receiving parameters in SwiftJsonUI 0fc5231 and this fills them.
+        #
+        # `lineOffset` is underline-only — the declaration does not give
+        # `strikethrough` one, so the caller says which face it is asking for.
+        def text_decoration_expression(face, line_offset: true)
+          return nil unless face.is_a?(Hash)
+          return nil unless line_decoration?(face)
+
+          args = ["lineStyle: #{DECORATION_LINE_STYLES[face['lineStyle'].to_s.downcase] || '.single'}"]
+          args << "color: #{get_swiftui_color(face['color'])}" if face['color']
+          args << "lineOffset: #{face['lineOffset']}" if line_offset && face['lineOffset']
+
+          "TextDecoration(#{args.join(', ')})"
+        end
+
         # The tool's token -> SwiftUI table, widened to every spelling the
         # SSoT declares for this component's attribute. A run-time table has
         # to know the ALIAS spellings, which the build-time normalizer would

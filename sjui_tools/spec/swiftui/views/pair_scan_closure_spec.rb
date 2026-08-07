@@ -189,8 +189,17 @@ RSpec.describe 'distribution gap construction (swiftui)' do
     expect(stack('equalCentering', orientation: 'vertical').scan('Spacer(minLength: 0)').length).to eq(6)
   end
 
-  it 'fillEqually keeps its single separator (a SIZE value, untouched by the gap rule)' do
-    expect(stack('fillEqually').scan('Spacer(minLength: 0)').length).to eq(3)
+  # `fillEqually` used to share the separator arm with `equalSpacing`, which
+  # made the two values draw the same picture — a SIZE value spelled as a GAP.
+  # The canon cell is "equal frames on each child", i.e. equal weights, so it
+  # routes to the weighted stack and emits no separator of its own.
+  # F's dynamic half is SwiftJsonUI 4801af7 (`implicitWeight`).
+  it 'fillEqually gives equal weights, not a separator' do
+    code = stack('fillEqually')
+
+    expect(code).to include('weight: 1')
+    expect(code).not_to include('Spacer(minLength: 0)')
+    expect(code).not_to eq(stack('equalSpacing'))
   end
 
   # F's dynamic implementation (e8f99c7, measured): the TRAILING end unit
