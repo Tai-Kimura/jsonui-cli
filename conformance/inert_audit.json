@@ -193,7 +193,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "adjudicated fixture-shape, read from the converter: sjui_tools indicator_converter.rb:19-30 defaults hidesWhenStopped to TRUE (matching UIKit) and, for animating:false, emits EmptyView() when it hides and a zero-opacity spinner when it does not. So the control (stopped, hiding) and this fixture (stopped, not hiding) both paint NOTHING — the difference the attribute exists to make, quoting the converter's own comment, is 'whether the surrounding layout reflows', and this fixture has no sibling to be reflowed. Not an ios gap: the observable needs a fixture with a neighbour whose position moves (owner D). Family: reflow-only-observable.",
+      "reason": "adjudicated on the path the fixture actually renders through, AND a codegen/dynamic divergence worth F's attention. The ios conformance lane renders DYNAMIC, and SwiftJsonUI's IndicatorConverter.swift:33-34 returns EmptyView() whenever animating == false — it never reads hidesWhenStopped at all (no read site in that file). Control (stopped) and fixture (stopped, hidesWhenStopped:false) are therefore both empty and the inert verdict is structurally required. The CODEGEN path disagrees with that: sjui_tools indicator_converter.rb:19-30 defaults the attribute to true (matching UIKit) and, for the false face, keeps a zero-opacity spinner in the layout precisely so the surrounding layout still reflows — its own comment says that reflow is 'the whole reason the attribute exists'. So the two ios paths implement different rules for this spelling. Owner F: make the dynamic Indicator honour hidesWhenStopped:false the way codegen does. Even then this fixture cannot show it — the observable is a NEIGHBOUR being reflowed and the fixture has no neighbour (owner D). Family: reflow-only-observable.",
       "note": ""
     },
     {
@@ -313,7 +313,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
-      "reason": "adjudicated off-face, read from the converter: sjui_tools progress_converter.rb:80 acts only on `hidesWhenStopped == true` (it emits .opacity(progress > 0 ? 1 : 0)); the false face therefore emits exactly the control's text by construction, which is the correct reading of 'do not hide' for a bar that is visible by default. The discriminating face is true. Family: off-face-equals-control.",
+      "reason": "adjudicated off-face on BOTH ios paths: the dynamic renderer the fixture goes through (ProgressConverter.swift:92) and the codegen converter (progress_converter.rb:80) each act only on `hidesWhenStopped == true`, emitting .opacity(progress > 0 ? 1 : 0); the false face therefore produces exactly the control's output by construction, which is the correct reading of 'do not hide' for a bar that is visible by default. The discriminating face is true. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -507,7 +507,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
-      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. Read from the converter itself: kjui_tools/lib/compose/components/switch_component.rb:171 is `json_data['labelPosition'] || 'leading'`, so leading IS the default the control already composes; the discriminating face is 'trailing'. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and 'leading' is the default BOTH renderers fall back to — the android conformance lane runs the dynamic renderer (DynamicSwitchComponent.kt:214-215, `?: \"leading\"`) and the codegen converter agrees (kjui_tools switch_component.rb:171, `json_data['labelPosition'] || 'leading'`). Writing the default restates what the control already composes; the discriminating face is 'trailing'. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Family: off-face-equals-control.",
       "note": ""
     },
     {
@@ -669,7 +669,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "value-is-default",
-      "reason": "adjudicated value-is-default: the SSoT declares View.gradientDirection default \"Vertical\" and the control for this fixture already carries the gradient, so writing the default direction restates it. Confirmed in the converter: sjui_tools modifier_helper.rb:16-23 has case arms only for 'Horizontal' and 'Oblique' and everything else — Vertical included — falls to the same top-to-bottom emit. Family: value-is-default.",
+      "reason": "adjudicated value-is-default, and it stays inert on both ios paths for two independent reasons. (1) The SSoT declares View.gradientDirection default \"Vertical\" and this fixture's control already carries the gradient, so the fixture restates the default; the codegen converter confirms it (sjui_tools modifier_helper.rb:16-23 has arms only for 'Horizontal'/'Oblique' and everything else, Vertical included, falls to the same top-to-bottom emit). (2) The path the fixture actually renders through is DYNAMIC, where a plain View's gradient is not applied at all — DynamicViewContainer.swift:105-108 casts rawData[\"gradient\"] to [String: Any] while the SSoT types it as an array, and gradientDirection has no read site there. Reason (2) is the gap the sibling rows hand to F; this row would remain inert after F's fix, because Vertical is the default either way. Family: value-is-default.",
       "note": ""
     },
     {

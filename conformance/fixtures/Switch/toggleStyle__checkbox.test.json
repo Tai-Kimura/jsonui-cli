@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Switch/toggleStyle__checkbox.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Switch.toggleStyle (checkbox)",
+    "description": "Conformance fixture for 'toggleStyle' on Switch (section: Switch, class: visual). Value under test: \"checkbox\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Switch"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "toggleStyle__checkbox",
+      "description": "Conformance fixture for 'toggleStyle' on Switch (section: Switch, class: visual). Value under test: \"checkbox\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Switch_toggleStyle__checkbox"
+        }
+      ]
+    }
+  ]
+}

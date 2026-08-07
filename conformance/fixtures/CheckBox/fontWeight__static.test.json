@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/CheckBox/fontWeight__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance CheckBox.fontWeight (static)",
+    "description": "Conformance fixture for 'fontWeight' on CheckBox (section: CheckBox, class: visual). Value under test: \"bold\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "CheckBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontWeight__static",
+      "description": "Conformance fixture for 'fontWeight' on CheckBox (section: CheckBox, class: visual). Value under test: \"bold\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "CheckBox_fontWeight__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SafeAreaView/direction__bottomtotop.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SafeAreaView.direction (bottomtotop)",
+    "description": "Conformance fixture for 'direction' on SafeAreaView (section: SafeAreaView, class: visual). Value under test: \"bottomToTop\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SafeAreaView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "direction__bottomtotop",
+      "description": "Conformance fixture for 'direction' on SafeAreaView (section: SafeAreaView, class: visual). Value under test: \"bottomToTop\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SafeAreaView_direction__bottomtotop"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/cellHeight__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.cellHeight (static)",
+    "description": "Conformance fixture for 'cellHeight' on Collection (section: Collection, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "cellHeight__static",
+      "description": "Conformance fixture for 'cellHeight' on Collection (section: Collection, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_cellHeight__static"
+        }
+      ]
+    }
+  ]
+}

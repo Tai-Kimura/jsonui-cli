@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Switch/toggleStyle__switch.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Switch.toggleStyle (switch)",
+    "description": "Conformance fixture for 'toggleStyle' on Switch (section: Switch, class: visual). Value under test: \"switch\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Switch"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "toggleStyle__switch",
+      "description": "Conformance fixture for 'toggleStyle' on Switch (section: Switch, class: visual). Value under test: \"switch\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Switch_toggleStyle__switch"
+        }
+      ]
+    }
+  ]
+}

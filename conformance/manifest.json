@@ -8,15 +8,15 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "12f8097dd01729df8938a7699e628be6cce91d7a933eb6d68be3dcf3a6f697c5",
+  "generatedFrom": "1dc2686c41041a416ea369e36957dbb2d82667c757ed205ba7aec33fad00dfd1",
   "counts": {
-    "fixtures": 933,
+    "fixtures": 968,
     "assertable": 34,
-    "visual": 711,
+    "visual": 743,
     "interactive": 35,
-    "control": 94,
+    "control": 97,
     "declarationOnly": 59,
-    "skipped": 150,
+    "skipped": 159,
     "promoted": {
       "callback": 11
     }
@@ -4671,6 +4671,54 @@
       "control": "__control/View"
     },
     {
+      "id": "common/offsetX__static",
+      "component": "common",
+      "attribute": "offsetX",
+      "case": "static",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "offsetX",
+      "aliasOf": null,
+      "value": 8,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/offsetX__static.layout.json",
+      "test": "fixtures/common/offsetX__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/View"
+    },
+    {
+      "id": "common/offsetY__static",
+      "component": "common",
+      "attribute": "offsetY",
+      "case": "static",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "offsetY",
+      "aliasOf": null,
+      "value": 8,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/offsetY__static.layout.json",
+      "test": "fixtures/common/offsetY__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/View"
+    },
+    {
       "id": "Label/text__static",
       "component": "Label",
       "attribute": "text",
@@ -6525,6 +6573,30 @@
       "promotedFrom": null,
       "peerGroup": "Label/fontWeight@Label__partialAttributes-5561bca6",
       "control": "__control/Label__partialAttributes-5561bca6"
+    },
+    {
+      "id": "Label/disabledFontColor__static",
+      "component": "Label",
+      "attribute": "disabledFontColor",
+      "case": "static",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "disabledFontColor",
+      "aliasOf": null,
+      "value": "#FF0000",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/disabledFontColor__static.layout.json",
+      "test": "fixtures/Label/disabledFontColor__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__enabled-False"
     },
     {
       "id": "TextField/text__static",
@@ -9011,6 +9083,30 @@
       "control": "__control/TextField__enabled-False"
     },
     {
+      "id": "TextField/hintLineHeightMultiple__static",
+      "component": "TextField",
+      "attribute": "hintLineHeightMultiple",
+      "case": "static",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "hintLineHeightMultiple",
+      "aliasOf": null,
+      "value": 8,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/hintLineHeightMultiple__static.layout.json",
+      "test": "fixtures/TextField/hintLineHeightMultiple__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/TextField"
+    },
+    {
       "id": "TextView/text__static",
       "component": "TextView",
       "attribute": "text",
@@ -11413,6 +11509,30 @@
       "control": "__control/Button"
     },
     {
+      "id": "Button/fontFamily__static",
+      "component": "Button",
+      "attribute": "fontFamily",
+      "case": "static",
+      "class": "visual",
+      "host": "Button",
+      "writtenKey": "fontFamily",
+      "aliasOf": null,
+      "value": "serif",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Button/fontFamily__static.layout.json",
+      "test": "fixtures/Button/fontFamily__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Button"
+    },
+    {
       "id": "Image/src__static",
       "component": "Image",
       "attribute": "src",
@@ -12091,6 +12211,30 @@
       "control": "__control/Image__src-star"
     },
     {
+      "id": "Image/defaultImage__static",
+      "component": "Image",
+      "attribute": "defaultImage",
+      "case": "static",
+      "class": "visual",
+      "host": "Image",
+      "writtenKey": "defaultImage",
+      "aliasOf": null,
+      "value": "conformance_sample",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Image/defaultImage__static.layout.json",
+      "test": "fixtures/Image/defaultImage__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Image"
+    },
+    {
       "id": "NetworkImage/hint__static",
       "component": "NetworkImage",
       "attribute": "hint",
@@ -12537,6 +12681,52 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": null
+    },
+    {
+      "id": "NetworkImage/renderingMode__original",
+      "component": "NetworkImage",
+      "attribute": "renderingMode",
+      "case": "original",
+      "class": "visual",
+      "host": "NetworkImage",
+      "writtenKey": "renderingMode",
+      "aliasOf": null,
+      "value": "original",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/NetworkImage/renderingMode__original.layout.json",
+      "test": "fixtures/NetworkImage/renderingMode__original.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "NetworkImage/renderingMode@NetworkImage",
+      "control": "__control/NetworkImage"
+    },
+    {
+      "id": "NetworkImage/renderingMode__template",
+      "component": "NetworkImage",
+      "attribute": "renderingMode",
+      "case": "template",
+      "class": "visual",
+      "host": "NetworkImage",
+      "writtenKey": "renderingMode",
+      "aliasOf": null,
+      "value": "template",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/NetworkImage/renderingMode__template.layout.json",
+      "test": "fixtures/NetworkImage/renderingMode__template.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "NetworkImage/renderingMode@NetworkImage",
+      "control": "__control/NetworkImage"
     },
     {
       "id": "SelectBox/prompt__static",
@@ -14318,6 +14508,166 @@
       "deprecated": null,
       "layout": "fixtures/Switch/trackTintColor__static.layout.json",
       "test": "fixtures/Switch/trackTintColor__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Switch"
+    },
+    {
+      "id": "Switch/fontColor__static",
+      "component": "Switch",
+      "attribute": "fontColor",
+      "case": "static",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "fontColor",
+      "aliasOf": null,
+      "value": "#FF0000",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Switch/fontColor__static.layout.json",
+      "test": "fixtures/Switch/fontColor__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Switch"
+    },
+    {
+      "id": "Switch/toggleStyle__switch",
+      "component": "Switch",
+      "attribute": "toggleStyle",
+      "case": "switch",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "toggleStyle",
+      "aliasOf": null,
+      "value": "switch",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "swiftui",
+      "deprecated": null,
+      "layout": "fixtures/Switch/toggleStyle__switch.layout.json",
+      "test": "fixtures/Switch/toggleStyle__switch.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Switch/toggleStyle@Switch",
+      "control": "__control/Switch"
+    },
+    {
+      "id": "Switch/toggleStyle__button",
+      "component": "Switch",
+      "attribute": "toggleStyle",
+      "case": "button",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "toggleStyle",
+      "aliasOf": null,
+      "value": "button",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "swiftui",
+      "deprecated": null,
+      "layout": "fixtures/Switch/toggleStyle__button.layout.json",
+      "test": "fixtures/Switch/toggleStyle__button.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Switch/toggleStyle@Switch",
+      "control": "__control/Switch"
+    },
+    {
+      "id": "Switch/toggleStyle__checkbox",
+      "component": "Switch",
+      "attribute": "toggleStyle",
+      "case": "checkbox",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "toggleStyle",
+      "aliasOf": null,
+      "value": "checkbox",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "swiftui",
+      "deprecated": null,
+      "layout": "fixtures/Switch/toggleStyle__checkbox.layout.json",
+      "test": "fixtures/Switch/toggleStyle__checkbox.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Switch/toggleStyle@Switch",
+      "control": "__control/Switch"
+    },
+    {
+      "id": "Switch/toggleStyle__default",
+      "component": "Switch",
+      "attribute": "toggleStyle",
+      "case": "default",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "toggleStyle",
+      "aliasOf": null,
+      "value": "default",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "swiftui",
+      "deprecated": null,
+      "layout": "fixtures/Switch/toggleStyle__default.layout.json",
+      "test": "fixtures/Switch/toggleStyle__default.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Switch/toggleStyle@Switch",
+      "control": "__control/Switch"
+    },
+    {
+      "id": "Switch/label__static",
+      "component": "Switch",
+      "attribute": "label",
+      "case": "static",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "label",
+      "aliasOf": null,
+      "value": "sample",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Switch/label__static.layout.json",
+      "test": "fixtures/Switch/label__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Switch"
+    },
+    {
+      "id": "Switch/label__alias_text",
+      "component": "Switch",
+      "attribute": "label",
+      "case": "alias_text",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "text",
+      "aliasOf": "Switch/label__static",
+      "value": "sample",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Switch/label__alias_text.layout.json",
+      "test": "fixtures/Switch/label__alias_text.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
@@ -16195,6 +16545,126 @@
       "control": "__control/ScrollView"
     },
     {
+      "id": "ScrollView/horizontalScroll__true",
+      "component": "ScrollView",
+      "attribute": "horizontalScroll",
+      "case": "true",
+      "class": "visual",
+      "host": "ScrollView",
+      "writtenKey": "horizontalScroll",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/ScrollView/horizontalScroll__true.layout.json",
+      "test": "fixtures/ScrollView/horizontalScroll__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "ScrollView/horizontalScroll@ScrollView",
+      "control": "__control/ScrollView"
+    },
+    {
+      "id": "ScrollView/horizontalScroll__false",
+      "component": "ScrollView",
+      "attribute": "horizontalScroll",
+      "case": "false",
+      "class": "visual",
+      "host": "ScrollView",
+      "writtenKey": "horizontalScroll",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/ScrollView/horizontalScroll__false.layout.json",
+      "test": "fixtures/ScrollView/horizontalScroll__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "ScrollView/horizontalScroll@ScrollView",
+      "control": "__control/ScrollView"
+    },
+    {
+      "id": "ScrollView/defaultScrollAnchor__top",
+      "component": "ScrollView",
+      "attribute": "defaultScrollAnchor",
+      "case": "top",
+      "class": "visual",
+      "host": "ScrollView",
+      "writtenKey": "defaultScrollAnchor",
+      "aliasOf": null,
+      "value": "top",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/ScrollView/defaultScrollAnchor__top.layout.json",
+      "test": "fixtures/ScrollView/defaultScrollAnchor__top.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "ScrollView/defaultScrollAnchor@ScrollView",
+      "control": "__control/ScrollView"
+    },
+    {
+      "id": "ScrollView/defaultScrollAnchor__center",
+      "component": "ScrollView",
+      "attribute": "defaultScrollAnchor",
+      "case": "center",
+      "class": "visual",
+      "host": "ScrollView",
+      "writtenKey": "defaultScrollAnchor",
+      "aliasOf": null,
+      "value": "center",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/ScrollView/defaultScrollAnchor__center.layout.json",
+      "test": "fixtures/ScrollView/defaultScrollAnchor__center.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "ScrollView/defaultScrollAnchor@ScrollView",
+      "control": "__control/ScrollView"
+    },
+    {
+      "id": "ScrollView/defaultScrollAnchor__bottom",
+      "component": "ScrollView",
+      "attribute": "defaultScrollAnchor",
+      "case": "bottom",
+      "class": "visual",
+      "host": "ScrollView",
+      "writtenKey": "defaultScrollAnchor",
+      "aliasOf": null,
+      "value": "bottom",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/ScrollView/defaultScrollAnchor__bottom.layout.json",
+      "test": "fixtures/ScrollView/defaultScrollAnchor__bottom.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "ScrollView/defaultScrollAnchor@ScrollView",
+      "control": "__control/ScrollView"
+    },
+    {
       "id": "Collection/lazy__eager",
       "component": "Collection",
       "attribute": "lazy",
@@ -17157,6 +17627,60 @@
       "deprecated": null,
       "layout": "fixtures/Collection/containerInset__static.layout.json",
       "test": "fixtures/Collection/containerInset__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/cellWidth__static",
+      "component": "Collection",
+      "attribute": "cellWidth",
+      "case": "static",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "cellWidth",
+      "aliasOf": null,
+      "value": 8,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/cellWidth__static.layout.json",
+      "test": "fixtures/Collection/cellWidth__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/cellHeight__static",
+      "component": "Collection",
+      "attribute": "cellHeight",
+      "case": "static",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "cellHeight",
+      "aliasOf": null,
+      "value": 8,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/cellHeight__static.layout.json",
+      "test": "fixtures/Collection/cellHeight__static.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
@@ -18651,6 +19175,54 @@
       "control": "__control/CheckBox__checked-True"
     },
     {
+      "id": "CheckBox/fontWeight__static",
+      "component": "CheckBox",
+      "attribute": "fontWeight",
+      "case": "static",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": "fontWeight",
+      "aliasOf": null,
+      "value": "bold",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/fontWeight__static.layout.json",
+      "test": "fixtures/CheckBox/fontWeight__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/CheckBox"
+    },
+    {
+      "id": "CheckBox/fontWeight__alias_fontStyle",
+      "component": "CheckBox",
+      "attribute": "fontWeight",
+      "case": "alias_fontStyle",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": "fontStyle",
+      "aliasOf": "CheckBox/fontWeight__static",
+      "value": "bold",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/fontWeight__alias_fontStyle.layout.json",
+      "test": "fixtures/CheckBox/fontWeight__alias_fontStyle.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/CheckBox"
+    },
+    {
       "id": "Indicator/animating__false",
       "component": "Indicator",
       "attribute": "animating",
@@ -19468,6 +20040,30 @@
       "control": "__control/IconLabel__icon-off-conformance-sample"
     },
     {
+      "id": "IconLabel/iconSize__static",
+      "component": "IconLabel",
+      "attribute": "iconSize",
+      "case": "static",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": "iconSize",
+      "aliasOf": null,
+      "value": 8,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/IconLabel/iconSize__static.layout.json",
+      "test": "fixtures/IconLabel/iconSize__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/IconLabel"
+    },
+    {
       "id": "Web/html__static",
       "component": "Web",
       "attribute": "html",
@@ -19658,6 +20254,179 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": "__control/SafeAreaView__height-200_width-200"
+    },
+    {
+      "id": "SafeAreaView/direction__toptobottom",
+      "component": "SafeAreaView",
+      "attribute": "direction",
+      "case": "toptobottom",
+      "class": "visual",
+      "host": "SafeAreaView",
+      "writtenKey": "direction",
+      "aliasOf": null,
+      "value": "topToBottom",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SafeAreaView/direction__toptobottom.layout.json",
+      "test": "fixtures/SafeAreaView/direction__toptobottom.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "SafeAreaView/direction@SafeAreaView__orientation-vertical",
+      "control": "__control/SafeAreaView__orientation-vertical"
+    },
+    {
+      "id": "SafeAreaView/direction__bottomtotop",
+      "component": "SafeAreaView",
+      "attribute": "direction",
+      "case": "bottomtotop",
+      "class": "visual",
+      "host": "SafeAreaView",
+      "writtenKey": "direction",
+      "aliasOf": null,
+      "value": "bottomToTop",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SafeAreaView/direction__bottomtotop.layout.json",
+      "test": "fixtures/SafeAreaView/direction__bottomtotop.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "SafeAreaView/direction@SafeAreaView__orientation-vertical",
+      "control": "__control/SafeAreaView__orientation-vertical"
+    },
+    {
+      "id": "SafeAreaView/direction__lefttoright",
+      "component": "SafeAreaView",
+      "attribute": "direction",
+      "case": "lefttoright",
+      "class": "visual",
+      "host": "SafeAreaView",
+      "writtenKey": "direction",
+      "aliasOf": null,
+      "value": "leftToRight",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SafeAreaView/direction__lefttoright.layout.json",
+      "test": "fixtures/SafeAreaView/direction__lefttoright.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "SafeAreaView/direction@SafeAreaView__orientation-vertical",
+      "control": "__control/SafeAreaView__orientation-vertical"
+    },
+    {
+      "id": "SafeAreaView/direction__righttoleft",
+      "component": "SafeAreaView",
+      "attribute": "direction",
+      "case": "righttoleft",
+      "class": "visual",
+      "host": "SafeAreaView",
+      "writtenKey": "direction",
+      "aliasOf": null,
+      "value": "rightToLeft",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SafeAreaView/direction__righttoleft.layout.json",
+      "test": "fixtures/SafeAreaView/direction__righttoleft.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "SafeAreaView/direction@SafeAreaView__orientation-vertical",
+      "control": "__control/SafeAreaView__orientation-vertical"
+    },
+    {
+      "id": "SafeAreaView/direction__none",
+      "component": "SafeAreaView",
+      "attribute": "direction",
+      "case": "none",
+      "class": "visual",
+      "host": "SafeAreaView",
+      "writtenKey": "direction",
+      "aliasOf": null,
+      "value": "none",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SafeAreaView/direction__none.layout.json",
+      "test": "fixtures/SafeAreaView/direction__none.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "SafeAreaView/direction@SafeAreaView__orientation-vertical",
+      "control": "__control/SafeAreaView__orientation-vertical"
+    },
+    {
+      "id": "SafeAreaView/gradient__static",
+      "component": "SafeAreaView",
+      "attribute": "gradient",
+      "case": "static",
+      "class": "visual",
+      "host": "SafeAreaView",
+      "writtenKey": "gradient",
+      "aliasOf": null,
+      "value": [
+        "#FF0000",
+        "#0000FF"
+      ],
+      "platforms": [
+        "ios"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SafeAreaView/gradient__static.layout.json",
+      "test": "fixtures/SafeAreaView/gradient__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/SafeAreaView"
+    },
+    {
+      "id": "SafeAreaView/spacing__static",
+      "component": "SafeAreaView",
+      "attribute": "spacing",
+      "case": "static",
+      "class": "visual",
+      "host": "SafeAreaView",
+      "writtenKey": "spacing",
+      "aliasOf": null,
+      "value": 8,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": [
+        "swiftui",
+        "compose",
+        "react"
+      ],
+      "deprecated": null,
+      "layout": "fixtures/SafeAreaView/spacing__static.layout.json",
+      "test": "fixtures/SafeAreaView/spacing__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/SafeAreaView__orientation-horizontal"
     },
     {
       "id": "TabView/selectedIndex__static",
@@ -20469,6 +21238,30 @@
       "isControl": true
     },
     {
+      "id": "__control/Label__enabled-False",
+      "component": "__control",
+      "attribute": null,
+      "case": "Label",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Label__enabled-False.layout.json",
+      "test": "fixtures/__control/Label__enabled-False.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/Label__highlightAttributes-cb049517",
       "component": "__control",
       "attribute": null,
@@ -20941,6 +21734,54 @@
       "deprecated": null,
       "layout": "fixtures/__control/SafeAreaView__height-200_width-200.layout.json",
       "test": "fixtures/__control/SafeAreaView__height-200_width-200.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/SafeAreaView__orientation-horizontal",
+      "component": "__control",
+      "attribute": null,
+      "case": "SafeAreaView",
+      "class": "visual",
+      "host": "SafeAreaView",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/SafeAreaView__orientation-horizontal.layout.json",
+      "test": "fixtures/__control/SafeAreaView__orientation-horizontal.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/SafeAreaView__orientation-vertical",
+      "component": "__control",
+      "attribute": null,
+      "case": "SafeAreaView",
+      "class": "visual",
+      "host": "SafeAreaView",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/SafeAreaView__orientation-vertical.layout.json",
+      "test": "fixtures/__control/SafeAreaView__orientation-vertical.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -22965,6 +23806,11 @@
       "reason": "metadata (not rendered)"
     },
     {
+      "component": "Button",
+      "attribute": "partialAttributes",
+      "reason": "composite value (no representative static value in v1)"
+    },
+    {
       "component": "Image",
       "attribute": "canTap",
       "reason": "behavioral (no visual or assertable effect in v1)"
@@ -23068,6 +23914,11 @@
       "component": "Slider",
       "attribute": "onValueChange",
       "reason": "callback"
+    },
+    {
+      "component": "Slider",
+      "attribute": "range",
+      "reason": "composite value (no representative static value in v1)"
     },
     {
       "component": "View",
@@ -23280,6 +24131,11 @@
       "reason": "callback"
     },
     {
+      "component": "Radio",
+      "attribute": "items",
+      "reason": "composite value (no representative static value in v1)"
+    },
+    {
       "component": "CheckBox",
       "attribute": "_alias",
       "reason": "definition metadata, not an attribute"
@@ -23293,6 +24149,36 @@
       "component": "Check",
       "attribute": "*",
       "reason": "component alias (fixtures live on the canonical section)"
+    },
+    {
+      "component": "GradientView",
+      "attribute": "child",
+      "reason": "structural (child container attribute)"
+    },
+    {
+      "component": "GradientView",
+      "attribute": "children",
+      "reason": "structural (child container attribute)"
+    },
+    {
+      "component": "GradientView",
+      "attribute": "startPoint",
+      "reason": "composite value (no representative static value in v1)"
+    },
+    {
+      "component": "GradientView",
+      "attribute": "endPoint",
+      "reason": "composite value (no representative static value in v1)"
+    },
+    {
+      "component": "Blur",
+      "attribute": "child",
+      "reason": "structural (child container attribute)"
+    },
+    {
+      "component": "Blur",
+      "attribute": "children",
+      "reason": "structural (child container attribute)"
     },
     {
       "component": "Web",
