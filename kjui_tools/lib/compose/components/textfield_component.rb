@@ -337,6 +337,20 @@ module KjuiTools
               placeholder_code += ",\n" + indent("fontWeight = FontWeight.Bold", depth + 2)
             end
 
+            # hintLineHeightMultiple — Compose has no multiplier, so it
+            # resolves against the hint's own size (falling back to the
+            # field's, then M3 bodyLarge's 16), derived from LocalTextStyle so
+            # the M3 placeholder typography survives. Same emit as TextView's
+            # build_placeholder; the row was unread on this component
+            # (codegen_effect TextField.hintLineHeightMultiple android).
+            if (hint_multiple = json_data['hintLineHeightMultiple'])
+              required_imports&.add(:local_text_style)
+              hint_base = json_data['hintFontSize'] || json_data['fontSize'] || 16
+              line_height = (hint_base.to_f * hint_multiple.to_f)
+              formatted = line_height == line_height.to_i ? line_height.to_i : line_height
+              placeholder_code += ",\n" + indent("style = LocalTextStyle.current.copy(lineHeight = #{formatted}.sp)", depth + 2)
+            end
+
             placeholder_code += "\n" + indent(") }", depth + 1)
             code += "\n" + indent(placeholder_code, depth + 1) + ","
           end
