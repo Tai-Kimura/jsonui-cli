@@ -8,7 +8,7 @@
   ],
   "counts": {
     "entries": 71,
-    "unreviewed": 1
+    "unreviewed": 0
   },
   "entries": [
     {
@@ -49,7 +49,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "unreviewed-initial-measurement",
+      "reason": "MEASURED GAP on the paths this fixture actually renders through, not accepted — owner F (SwiftJsonUI dynamic) + G (KotlinJsonUI dynamic). This is a codegen/dynamic desync, and both sides of it were read this round. CODEGEN reads the spelling on both declared platforms: sjui_tools checkbox_converter.rb:58-59 emits `iconColor:` into the generated CheckBox, and kjui_tools checkbox_component.rb:227-231 maps it to Material's checkmarkColor (its own comment says 'for a Material Checkbox the icon is the tick'). That is why codegen-effect --paired at HEAD 2026-08-07 reports no defect here. DYNAMIC — the renderer the conformance suite photographs — reads it on NEITHER: SwiftJsonUI's CheckboxConverter.swift derives its tint from `checkedColor ?? checkColor ?? tintColor` and never consults iconColor (the field is decoded in DynamicComponent.swift:450 and dropped; the only iconColor read sites in Sources/ are RadioConverter's), and KotlinJsonUI's DynamicCheckBoxComponent.kt:363-378 builds CheckboxDefaults.colors from checkedColor/uncheckedColor only, with no checkmarkColor arm. The fixture writes iconColor on a CHECKED control, so the tick is drawn and there is something to tint — the inert verdict on both declared platforms is the missing dynamic read, not a fixture shape. Same spelling family as the CheckBox accent consolidation E owns this wave (checkColor / tintColor / onTintColor). The row leaves this ledger when a checked CheckBox with iconColor tints its tick on both dynamic renderers. Family: icon-tint-dynamic-desync.",
       "note": ""
     },
     {
