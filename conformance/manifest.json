@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "be5fafd58187fc62d30b3e5f5c1270cac97338a1364b3f52084ecd235491627b",
   "counts": {
-    "fixtures": 1060,
+    "fixtures": 1061,
     "assertable": 41,
     "visual": 803,
     "interactive": 35,
-    "control": 104,
+    "control": 105,
     "declarationOnly": 77,
     "skipped": 159,
     "promoted": {
@@ -15868,8 +15868,8 @@
       "test": "fixtures/Switch/fontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Switch/fontColor@Switch__labelAttributes--text-Sample",
-      "control": "__control/Switch__labelAttributes--text-Sample"
+      "peerGroup": "Switch/fontColor@Switch__label-Sample",
+      "control": "__control/Switch__label-Sample"
     },
     {
       "id": "Switch/fontColor__binding",
@@ -15892,8 +15892,8 @@
       "test": "fixtures/Switch/fontColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Switch/fontColor@Switch__labelAttributes--text-Sample",
-      "control": "__control/Switch__labelAttributes--text-Sample"
+      "peerGroup": "Switch/fontColor@Switch__label-Sample",
+      "control": "__control/Switch__label-Sample"
     },
     {
       "id": "Switch/toggleStyle__switch",
@@ -16076,8 +16076,8 @@
       "test": "fixtures/Switch/fontSize__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Switch/fontSize@Switch__labelAttributes--text-Sample",
-      "control": "__control/Switch__labelAttributes--text-Sample"
+      "peerGroup": "Switch/fontSize@Switch__label-Sample",
+      "control": "__control/Switch__label-Sample"
     },
     {
       "id": "Switch/fontSize__binding",
@@ -16100,8 +16100,8 @@
       "test": "fixtures/Switch/fontSize__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Switch/fontSize@Switch__labelAttributes--text-Sample",
-      "control": "__control/Switch__labelAttributes--text-Sample"
+      "peerGroup": "Switch/fontSize@Switch__label-Sample",
+      "control": "__control/Switch__label-Sample"
     },
     {
       "id": "Segment/items__static",
@@ -24203,7 +24203,7 @@
       "isControl": true
     },
     {
-      "id": "__control/Switch__labelAttributes--text-Sample",
+      "id": "__control/Switch__label-Sample",
       "component": "__control",
       "attribute": null,
       "case": "Switch",
@@ -24216,6 +24216,28 @@
         "ios",
         "android",
         "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Switch__label-Sample.layout.json",
+      "test": "fixtures/__control/Switch__label-Sample.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Switch__labelAttributes--text-Sample",
+      "component": "__control",
+      "attribute": null,
+      "case": "Switch",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "android"
       ],
       "mode": null,
       "deprecated": null,

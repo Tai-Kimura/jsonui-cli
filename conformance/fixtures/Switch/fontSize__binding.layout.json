@@ -17,9 +17,7 @@
       "id": "target",
       "width": "wrapContent",
       "height": "wrapContent",
-      "labelAttributes": {
-        "text": "Sample"
-      },
+      "label": "Sample",
       "fontSize": "@{boundFontSize}"
     }
   ],

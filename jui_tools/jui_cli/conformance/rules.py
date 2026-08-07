@@ -2026,9 +2026,11 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # was no label to place.
     "Switch.labelPosition": {"labelAttributes": {"text": "Sample"}},
     # The flat fontColor/fontSize style the LABEL — same no-label vacuity
-    # as labelPosition above.
-    "Switch.fontColor": {"labelAttributes": {"text": "Sample"}},
-    "Switch.fontSize": {"labelAttributes": {"text": "Sample"}},
+    # as labelPosition above. The flat `label` spelling, not the bag: the
+    # bag is not declared on every platform and the scope guard rejects a
+    # fixture using an attribute its platform does not declare.
+    "Switch.fontColor": {"label": "Sample"},
+    "Switch.fontSize": {"label": "Sample"},
     # SwiftUI has no maximum-length primitive, so sjui enforces maxLength by
     # truncating on change and writing BACK — which needs somewhere to write:
     # `return unless raw.is_a?(String) && is_binding?(raw)` on the text

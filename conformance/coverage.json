@@ -3,23 +3,6 @@
   "_comment": "Declared attributes no platform converter reads. Hand-maintained: close a gap by implementing it (then delete the entry) or by narrowing platform/mode in attribute_definitions.json. reason is one of: dynamic-key, legacy, platform-na, runtime-only, unimplemented.",
   "entries": [
     {
-      "component": "Collection",
-      "attribute": "cellWidth",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "Collection",
-      "attribute": "hideSeparator",
-      "platforms": [
-        "ios"
-      ],
-      "reason": "runtime-only",
-      "note": "ios dynamic implements it (SwiftJsonUI CollectionConverter.swift:662 / TableConverter.swift:46,49); no codegen face reads it. Not \"unimplemented\" — this scan only walks the Ruby codegen. attribute_semantics.json -> collectionSeparators (plan 51-E)."
-    },
-    {
       "component": "ScrollView",
       "attribute": "minZoom",
       "platforms": [
