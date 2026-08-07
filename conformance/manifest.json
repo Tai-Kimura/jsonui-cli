@@ -8,11 +8,11 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "72be1322e4500de51442b09ff28873b2366eb8fff5f27f1f6d591c995a58207e",
+  "generatedFrom": "12f8097dd01729df8938a7699e628be6cce91d7a933eb6d68be3dcf3a6f697c5",
   "counts": {
-    "fixtures": 923,
-    "assertable": 33,
-    "visual": 702,
+    "fixtures": 933,
+    "assertable": 34,
+    "visual": 711,
     "interactive": 35,
     "control": 94,
     "declarationOnly": 59,
@@ -6551,6 +6551,30 @@
       "control": null
     },
     {
+      "id": "TextField/text__alias_value",
+      "component": "TextField",
+      "attribute": "text",
+      "case": "alias_value",
+      "class": "assertable",
+      "host": "TextField",
+      "writtenKey": "value",
+      "aliasOf": "TextField/text__static",
+      "value": "Conformance Text",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/text__alias_value.layout.json",
+      "test": "fixtures/TextField/text__alias_value.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
       "id": "TextField/text__binding_twoway",
       "component": "TextField",
       "attribute": "text",
@@ -13022,6 +13046,30 @@
       "control": null
     },
     {
+      "id": "SelectBox/dateStringFormat__alias_dateFormat",
+      "component": "SelectBox",
+      "attribute": "dateStringFormat",
+      "case": "alias_dateFormat",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": "dateFormat",
+      "aliasOf": "SelectBox/dateStringFormat__static",
+      "value": "yyyy-MM-dd",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SelectBox/dateStringFormat__alias_dateFormat.layout.json",
+      "test": "fixtures/SelectBox/dateStringFormat__alias_dateFormat.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
       "id": "SelectBox/minimumDate__static",
       "component": "SelectBox",
       "attribute": "minimumDate",
@@ -14328,6 +14376,30 @@
       "control": "__control/Segment"
     },
     {
+      "id": "Segment/selectedIndex__alias_selectedTabIndex",
+      "component": "Segment",
+      "attribute": "selectedIndex",
+      "case": "alias_selectedTabIndex",
+      "class": "visual",
+      "host": "Segment",
+      "writtenKey": "selectedTabIndex",
+      "aliasOf": "Segment/selectedIndex__static",
+      "value": 1,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Segment/selectedIndex__alias_selectedTabIndex.layout.json",
+      "test": "fixtures/Segment/selectedIndex__alias_selectedTabIndex.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Segment"
+    },
+    {
       "id": "Segment/tintColor__static",
       "component": "Segment",
       "attribute": "tintColor",
@@ -14346,6 +14418,30 @@
       "deprecated": null,
       "layout": "fixtures/Segment/tintColor__static.layout.json",
       "test": "fixtures/Segment/tintColor__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Segment"
+    },
+    {
+      "id": "Segment/tintColor__alias_selectedSegmentTintColor",
+      "component": "Segment",
+      "attribute": "tintColor",
+      "case": "alias_selectedSegmentTintColor",
+      "class": "visual",
+      "host": "Segment",
+      "writtenKey": "selectedSegmentTintColor",
+      "aliasOf": "Segment/tintColor__static",
+      "value": "#FF0000",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Segment/tintColor__alias_selectedSegmentTintColor.layout.json",
+      "test": "fixtures/Segment/tintColor__alias_selectedSegmentTintColor.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
@@ -16315,6 +16411,33 @@
       ]
     },
     {
+      "id": "Collection/lineSpacing__alias_sectionSpacing",
+      "component": "Collection",
+      "attribute": "lineSpacing",
+      "case": "alias_sectionSpacing",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "sectionSpacing",
+      "aliasOf": "Collection/lineSpacing__static",
+      "value": 8,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/lineSpacing__alias_sectionSpacing.layout.json",
+      "test": "fixtures/Collection/lineSpacing__alias_sectionSpacing.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
       "id": "Collection/horizontalScroll__true",
       "component": "Collection",
       "attribute": "horizontalScroll",
@@ -17324,6 +17447,30 @@
       "promotedFrom": null,
       "peerGroup": "Radio/checked@Radio__group-conformance-group",
       "control": "__control/Radio__group-conformance-group"
+    },
+    {
+      "id": "Radio/checked__alias_isOn",
+      "component": "Radio",
+      "attribute": "checked",
+      "case": "alias_isOn",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": "isOn",
+      "aliasOf": "Radio/checked__true",
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Radio/checked__alias_isOn.layout.json",
+      "test": "fixtures/Radio/checked__alias_isOn.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Radio/checked@Radio",
+      "control": "__control/Radio"
     },
     {
       "id": "Radio/checked__false",
@@ -18389,6 +18536,52 @@
       "control": "__control/CheckBox__checked-True"
     },
     {
+      "id": "CheckBox/checkedColor__alias_checkColor",
+      "component": "CheckBox",
+      "attribute": "checkedColor",
+      "case": "alias_checkColor",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": "checkColor",
+      "aliasOf": "CheckBox/checkedColor__static",
+      "value": "#FF0000",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/checkedColor__alias_checkColor.layout.json",
+      "test": "fixtures/CheckBox/checkedColor__alias_checkColor.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/CheckBox__checked-True"
+    },
+    {
+      "id": "CheckBox/checkedColor__alias_onTintColor",
+      "component": "CheckBox",
+      "attribute": "checkedColor",
+      "case": "alias_onTintColor",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": "onTintColor",
+      "aliasOf": "CheckBox/checkedColor__static",
+      "value": "#FF0000",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/checkedColor__alias_onTintColor.layout.json",
+      "test": "fixtures/CheckBox/checkedColor__alias_onTintColor.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/CheckBox__checked-True"
+    },
+    {
       "id": "CheckBox/uncheckedColor__static",
       "component": "CheckBox",
       "attribute": "uncheckedColor",
@@ -18570,6 +18763,28 @@
       "control": "__control/Indicator"
     },
     {
+      "id": "Indicator/color__alias_tint",
+      "component": "Indicator",
+      "attribute": "color",
+      "case": "alias_tint",
+      "class": "visual",
+      "host": "Indicator",
+      "writtenKey": "tint",
+      "aliasOf": "Indicator/color__static",
+      "value": "#FF0000",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "swiftui",
+      "deprecated": null,
+      "layout": "fixtures/Indicator/color__alias_tint.layout.json",
+      "test": "fixtures/Indicator/color__alias_tint.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Indicator"
+    },
+    {
       "id": "Indicator/hidesWhenStopped__false",
       "component": "Indicator",
       "attribute": "hidesWhenStopped",
@@ -18635,6 +18850,33 @@
       "deprecated": null,
       "layout": "fixtures/GradientView/gradient__static.layout.json",
       "test": "fixtures/GradientView/gradient__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/GradientView"
+    },
+    {
+      "id": "GradientView/gradient__alias_colors",
+      "component": "GradientView",
+      "attribute": "gradient",
+      "case": "alias_colors",
+      "class": "visual",
+      "host": "GradientView",
+      "writtenKey": "colors",
+      "aliasOf": "GradientView/gradient__static",
+      "value": [
+        "#00AA00",
+        "#FFAA00"
+      ],
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/GradientView/gradient__alias_colors.layout.json",
+      "test": "fixtures/GradientView/gradient__alias_colors.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,

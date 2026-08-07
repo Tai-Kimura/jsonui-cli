@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/lineSpacing__alias_sectionSpacing.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.lineSpacing (alias_sectionSpacing)",
+    "description": "Conformance fixture for 'lineSpacing' on Collection (section: Collection, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "lineSpacing__alias_sectionSpacing",
+      "description": "Conformance fixture for 'lineSpacing' on Collection (section: Collection, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_lineSpacing__alias_sectionSpacing"
+        }
+      ]
+    }
+  ]
+}
