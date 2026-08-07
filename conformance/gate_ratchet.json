@@ -22,9 +22,7 @@
   },
   "no_baseline": {
     "_ci_android_comment": [
-      "ci/android = 1 is CheckBox_isOn__true.png, deliberately excluded from baselines/ci/android.hashes.json (2026-08-02, plan 25 Phase 0).",
-      "The screenshot is bistable across CI runs: the on-device fixture swap sometimes has not landed when the shot fires, capturing the PREVIOUS fixture's content (CheckBox/text__static, an assert-only fixture that takes no screenshot of its own) — measured identical state A in runs 30692120530/30704621712 (distance 0) vs correct state B in 30699392057 (distance 0 to checked__true's render). Every other android screenshot measured distance <= 3 across runs.",
-      "Root fix is host-side (confirm the swap landed before shooting, KotlinJsonUI conformance-host); when it lands, re-bake and return this ceiling to 0."
+      "ci/android returned to 0 on 2026-08-07: the Wave 2 bake (c3ad3bd) baked CheckBox_isOn__true.png from the run's own artifacts after the host determinism fixes, and run 31135850340 measured no_baseline 0 (gate notice). History of the bistable-swap exclusion: see git log of this row (2026-08-02, plan 25 Phase 0)."
     ],
     "local": {
       "android": 0,
@@ -32,7 +30,7 @@
       "web": 0
     },
     "ci": {
-      "android": 1,
+      "android": 0,
       "ios": 0,
       "web": 0
     }
