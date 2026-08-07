@@ -782,15 +782,15 @@ EXTRA_CASES: dict[tuple[str, str], list[Any]] = {
     # the worse direction of the same artifact that filed nine false ones.
     # Values are drawn from each fixture's own `items`.
     ("Radio", "selectedValue"): ["Gamma"],
-    # Lane A asked for this case to point at a non-default item, and the
-    # change is READY — `['Three']` plus a third base item, measured. It is
-    # held because the case NAME derives from the value, so the fixture id
-    # moves from `selectedValue__one` to `__three`, and two ledger rows
-    # (`control_diff.json`, `cross_effect.json`) name the old id. Since H
-    # turned `--ledger-keys` on BY DEFAULT, orphaning them fails every lane's
-    # gate, not just this one. It goes in the moment those rows are migrated
-    # by their owners.
-    ("SelectBox", "selectedValue"): ['One'],
+    # A `<select>` with nothing selected displays its FIRST option, so
+    # `defaultValue="One"` over a list that begins with One is a visual
+    # no-op — read straight off the emitted DOM, which is what made this the
+    # one web-inert row of the family. With only two base items the sole
+    # non-default choice was the representative's own value, so the second
+    # case had nowhere to point but at the default; a third item gives it
+    # somewhere. The cross_effect row commissioned exactly this fix and
+    # named D as its owner, so it leaves the ledger with the change.
+    ("SelectBox", "selectedValue"): ['Three'],
     # The NUMERIC face of a union-typed attribute. `fontWeight` is declared
     # `["string", "number"]` and every fixture wrote `"bold"`, so the numeric
     # spelling — legal, and named in the attribute's own description — was
@@ -1400,7 +1400,7 @@ BASE_ATTRS: dict[str, dict[str, Any]] = {
     "CheckBox": {"text": "Sample", "width": 200},
     "Check": {"text": "Sample", "width": 200},
     "Segment": {"items": ["One", "Two"], "width": 200},
-    "SelectBox": {"items": ["One", "Two"], "width": 200},
+    "SelectBox": {"items": ["One", "Two", "Three"], "width": 200},
     "Slider": {"width": 200},
     "Progress": {"width": 200},
     # Deliberately NOT square: the bundled asset is 96x96, so in a square box

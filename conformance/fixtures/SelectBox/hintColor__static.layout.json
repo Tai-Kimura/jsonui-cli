@@ -19,7 +19,8 @@
       "height": "wrapContent",
       "items": [
         "One",
-        "Two"
+        "Two",
+        "Three"
       ],
       "prompt": "Choose",
       "hintColor": "#FF0000"

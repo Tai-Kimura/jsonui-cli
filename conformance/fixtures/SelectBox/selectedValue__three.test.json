@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/selectedValue__three.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.selectedValue (three)",
+    "description": "Conformance fixture for 'selectedValue' on SelectBox (section: SelectBox, class: visual). Value under test: \"Three\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "selectedValue__three",
+      "description": "Conformance fixture for 'selectedValue' on SelectBox (section: SelectBox, class: visual). Value under test: \"Three\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_selectedValue__three"
+        }
+      ]
+    }
+  ]
+}

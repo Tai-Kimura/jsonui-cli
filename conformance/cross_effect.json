@@ -656,16 +656,6 @@
       "note": "Declared for ios/android only — web is out of scope for this attribute, which is why the platform map has two faces rather than three."
     },
     {
-      "fixture": "SelectBox/selectedValue__one",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "declared value equals the default rendering on web: the fixture selects 'One' and the control's own select already reports value 'One' — a <select> with no selected attribute selects its first option, and 'One' IS the first item. Measured on the local web lane: 0 differing px, and the DOM probe reads `select.value === 'One'` on the control. ios/android show their own initial-selection chrome. Measurement fix: the second item discriminates on all three (owner: D). Family: value-is-default.",
-      "note": "The sibling face SelectBox/selectedItem__static is a separate row (CG-android bucket) and is NOT this shape."
-    },
-    {
       "fixture": "TabView/showLabels__true",
       "platforms": {
         "android": "inert",

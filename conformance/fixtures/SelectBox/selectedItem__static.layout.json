@@ -19,7 +19,8 @@
       "height": "wrapContent",
       "items": [
         "One",
-        "Two"
+        "Two",
+        "Three"
       ],
       "selectedItem": "Two"
     }

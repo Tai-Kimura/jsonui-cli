@@ -1614,13 +1614,6 @@
       ]
     },
     {
-      "fixture": "SelectBox/selectedValue__one",
-      "platforms": [
-        "android",
-        "ios"
-      ]
-    },
-    {
       "fixture": "SelectBox/selectedValue__static",
       "platforms": [
         "android",

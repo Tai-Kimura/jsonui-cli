@@ -31,7 +31,8 @@
       "height": "wrapContent",
       "items": [
         "One",
-        "Two"
+        "Two",
+        "Three"
       ],
       "onValueChange": "@{conformanceFire}"
     },

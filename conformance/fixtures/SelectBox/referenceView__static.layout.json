@@ -28,7 +28,8 @@
       "height": "wrapContent",
       "items": [
         "One",
-        "Two"
+        "Two",
+        "Three"
       ],
       "referenceView": "anchor"
     }
