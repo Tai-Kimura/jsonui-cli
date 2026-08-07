@@ -177,4 +177,28 @@ RSpec.describe KjuiTools::Compose::Components::IconLabelComponent do
       expect(result).to include("Row(\n    horizontalArrangement")
     end
   end
+
+  # `iconSize` is declared ["number", "array"]: a number sizes both edges, a
+  # two-element [width, height] sizes them separately. Only the number face was
+  # handled, so the declared array reached the source as a Ruby literal —
+  # `Modifier.size([40, 20].dp)` is not Kotlin.
+  describe 'iconSize' do
+    it 'sizes both edges from a number' do
+      expect(generate('icon_off' => 'home', 'iconSize' => 40))
+        .to include('Modifier.size(40.dp)')
+    end
+
+    it 'sizes the edges separately from a [width, height] pair' do
+      expect(generate('icon_off' => 'home', 'iconSize' => [40, 20]))
+        .to include('Modifier.size(width = 40.dp, height = 20.dp)')
+    end
+
+    it 'never emits a Ruby array literal into the source' do
+      expect(generate('icon_off' => 'home', 'iconSize' => [40, 20])).not_to include('[40, 20]')
+    end
+
+    it 'falls back to the cross-platform default when undeclared' do
+      expect(generate('icon_off' => 'home')).to include('Modifier.size(24.dp)')
+    end
+  end
 end

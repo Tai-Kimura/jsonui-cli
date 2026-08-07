@@ -75,6 +75,23 @@ module KjuiTools
           code
         end
 
+        # `iconSize` is declared `["number", "array"]` — a number sizes both
+        # edges, a two-element `[width, height]` sizes them separately (rjui
+        # reads both). Only the number face was handled, so the declared array
+        # face reached the source as a Ruby literal — `Modifier.size([40, 20].dp)`
+        # is not Kotlin, which made the only two-axis spelling uncompilable.
+        # NOT the same shape as CheckBox.iconSize, which is number-only for a
+        # square glyph and must stay that way.
+        def self.icon_size_call(value)
+          if value.is_a?(Array) && value.length >= 2
+            return "size(width = #{value[0]}.dp, height = #{value[1]}.dp)"
+          end
+
+          # A one-element array still means "both edges", the same as a number.
+          scalar = value.is_a?(Array) ? value.first : value
+          "size(#{scalar || DEFAULT_ICON_SIZE}.dp)"
+        end
+
         # `iconMargin` is the declared row; `spacing` is the legacy spelling the
         # dynamic runtime reads.
         def self.icon_spacing(json_data)
@@ -117,11 +134,10 @@ module KjuiTools
               drawable(resting)
             end
 
-          size = json_data['iconSize'] || DEFAULT_ICON_SIZE
           code = indent("Image(", depth) + "\n"
           code += indent("painter = #{painter},", depth + 1) + "\n"
           code += indent("contentDescription = #{quote(json_data['contentDescription'] || '')},", depth + 1) + "\n"
-          code += indent("modifier = Modifier.size(#{size}.dp)", depth + 1)
+          code += indent("modifier = Modifier.#{icon_size_call(json_data['iconSize'])}", depth + 1)
           if (filter = icon_color_filter(json_data, condition, required_imports))
             required_imports&.add(:color_filter)
             code += ",\n" + indent("colorFilter = #{filter}", depth + 1)
