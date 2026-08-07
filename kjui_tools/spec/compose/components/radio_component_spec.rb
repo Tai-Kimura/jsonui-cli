@@ -362,19 +362,22 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
   end
 end
 
-# Plan 49 lane C, G's pushback. `checked` is the "Initial checked state" — a
-# SEED, not an override. Letting it win pinned `selected = true` on a radio a
-# group was driving, and the radio never switched again. rjui is canonical
-# (`state_attrs = checked_attr if state_attrs.empty?`, radio_converter.rb:104):
-# selectedValue > group > checked.
+# `checked` is the "Initial checked state" — a SEED, not an override. Letting
+# it win pinned `selected = true` on a radio a group was driving, and the radio
+# never switched again. The declared precedence (SSoT Radio.checked) is
+# `bound selectedValue > literal selectedValue > checked` and names no group
+# term: `group` picks WHICH key holds the selection, so it is not a rival to
+# the seed. What stops the pinning is the unset-group guard, and it guards the
+# grouped and lone arms alike — 51-C, mirroring the dynamic path (KotlinJsonUI
+# f3bdd90 DynamicRadioComponent#itemIsSelected).
 RSpec.describe KjuiTools::Compose::Components::RadioComponent do
   def selected_for(json)
     described_class.send(:radio_selected_expr, json, 'selectedRadiogroup', 'target')
   end
 
-  it 'lets a declared group drive the selection even when checked is set' do
+  it 'seeds a grouped radio until the group has chosen' do
     expect(selected_for('group' => 'g', 'checked' => true))
-      .to eq('data.selectedRadiogroup == "target"')
+      .to eq('data.selectedRadiogroup == "target" || data.selectedRadiogroup.isEmpty()')
   end
 
   it 'lets selectedValue win over checked' do
@@ -386,8 +389,17 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
   end
 
   it 'honours checked on a lone radio with no group and no selectedValue' do
-    expect(selected_for('checked' => true)).to eq('true')
-    expect(selected_for('checked' => '@{on}')).to eq('(data.on ?: false)')
+    expect(selected_for('checked' => true))
+      .to eq('data.selectedRadiogroup == "target" || data.selectedRadiogroup.isEmpty()')
+    expect(selected_for('checked' => '@{on}'))
+      .to eq('data.selectedRadiogroup == "target" || ((data.on ?: false) && data.selectedRadiogroup.isEmpty())')
+  end
+
+  # A statically-off seed contributes nothing, and `.isEmpty()` on a non-null
+  # String default is the codegen's "the group has not chosen" — `== null`
+  # would be a compiler-warned always-false against the generated property.
+  it 'adds nothing for a seed that is statically off' do
+    expect(selected_for('checked' => false)).to eq('data.selectedRadiogroup == "target"')
   end
 
   it 'compares against value when declared, falling back to the id' do

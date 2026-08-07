@@ -507,6 +507,23 @@ module KjuiTools
           # pinned `selected = true` on a radio that a group was driving — the
           # radio then never switched again. Plan 49 lane C, G's pushback:
           # three sources against one, and this was the one.
+          #
+          # The answer to the pinning was NOT to drop the seed when a group is
+          # named. The declared precedence is `bound selectedValue > literal
+          # selectedValue > checked` and carries no group term — `group` picks
+          # WHICH key holds the selection, it is not a rival to the seed. The
+          # unset-group guard is what stops the pinning, and it guards both
+          # arms alike: the seed shows until the group has chosen, then steps
+          # aside. Dropping it outright drew an unselected glyph on android
+          # where ios and web drew the seed (Radio/checked__true_with_group);
+          # this now matches the dynamic path (DynamicRadioComponent
+          # #itemIsSelected, KotlinJsonUI f3bdd90) expression for expression.
+          #
+          # "Unset" is `.isEmpty()`, not `== null`: the group property is
+          # generated as a non-null `String` defaulting to `""`
+          # (data_model_updater_core.rb), so a null test would be a
+          # compiler-warned always-false — and the gate wants zero warnings.
+          # The dynamic path reads a map with no key, hence its `== null`.
           token = Helpers::BoundValue.text(json_data['value'] || id)
           selected_value = json_data['selectedValue']
 
@@ -517,16 +534,20 @@ module KjuiTools
           end
 
           group_test = "data.#{selected_var} == #{token}"
-          # A declared group drives the selection, so the seed stays out of it.
-          return group_test if json_data['group']
           return group_test unless json_data.key?('checked')
 
-          # Lone radio, no group and no selectedValue: the seed is all there is.
-          case Helpers::BoundValue.bool(json_data['checked'])
-          when :on then 'true'
-          when :off then 'false'
-          else Helpers::BoundValue.bool(json_data['checked'])
-          end
+          seed = case Helpers::BoundValue.bool(json_data['checked'])
+                 when :on then 'true'
+                 when :off then 'false'
+                 else Helpers::BoundValue.bool(json_data['checked'])
+                 end
+          # A seed that is statically off adds nothing to the group state.
+          return group_test if seed == 'false'
+
+          unset = "data.#{selected_var}.isEmpty()"
+          return "#{group_test} || #{unset}" if seed == 'true'
+
+          "#{group_test} || (#{seed} && #{unset})"
         end
 
         # The declared icon/label gap, `["number", "binding"]`, default 8.
