@@ -13,13 +13,19 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "IconLabel",
+      "type": "Image",
       "id": "target",
-      "width": 200,
-      "height": "wrapContent",
-      "text": "Sample",
-      "icon_off": "conformance_sample",
-      "iconSize": 8
+      "width": 140,
+      "height": 80,
+      "src": "conformance_sample",
+      "highlightSrcName": "@{boundHighlightSrcName}"
+    }
+  ],
+  "data": [
+    {
+      "name": "boundHighlightSrcName",
+      "class": "String",
+      "defaultValue": "conformance_sample_alt"
     }
   ]
 }

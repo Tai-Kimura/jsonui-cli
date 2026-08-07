@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/innerPadding__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.innerPadding (binding)",
+    "description": "Conformance fixture for 'innerPadding' on View (section: common, class: declaration-only). Value under test: \"@{boundInnerPadding}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "innerPadding__binding",
+      "description": "Conformance fixture for 'innerPadding' on View (section: common, class: declaration-only). Value under test: \"@{boundInnerPadding}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/aspectWidth__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.aspectWidth (binding)",
+    "description": "Conformance fixture for 'aspectWidth' on View (section: common, class: declaration-only). Value under test: \"@{boundAspectWidth}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "aspectWidth__binding",
+      "description": "Conformance fixture for 'aspectWidth' on View (section: common, class: declaration-only). Value under test: \"@{boundAspectWidth}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

@@ -13,13 +13,18 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "IconLabel",
+      "type": "Switch",
       "id": "target",
-      "width": 200,
+      "width": "wrapContent",
       "height": "wrapContent",
-      "text": "Sample",
-      "icon_off": "conformance_sample",
-      "iconSize": 8
+      "offTintColor": "@{boundOffTintColor}"
+    }
+  ],
+  "data": [
+    {
+      "name": "boundOffTintColor",
+      "class": "String",
+      "defaultValue": "#FF0000"
     }
   ]
 }

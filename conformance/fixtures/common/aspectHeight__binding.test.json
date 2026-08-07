@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/aspectHeight__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.aspectHeight (binding)",
+    "description": "Conformance fixture for 'aspectHeight' on View (section: common, class: declaration-only). Value under test: \"@{boundAspectHeight}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "aspectHeight__binding",
+      "description": "Conformance fixture for 'aspectHeight' on View (section: common, class: declaration-only). Value under test: \"@{boundAspectHeight}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

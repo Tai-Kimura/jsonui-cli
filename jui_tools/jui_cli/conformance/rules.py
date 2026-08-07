@@ -973,6 +973,49 @@ BOUND_CASE_CLASSES: dict[tuple[str, str], str] = {
     ('common', 'opacity'): 'Double',
     ('common', 'rightMargin'): 'Int',
     ('common', 'startMargin'): 'Int',
+    # --- 2026-08-08, the rest of the 77 (no-carryover ruling) ----------- #
+    #
+    # The wave-3 split sent only the touched spellings; the standing order
+    # is now "no carryover", so the remaining VISUAL binding-capable
+    # spellings all get their bound case here. Callback rows are NOT
+    # missing — they live in the interactive channel (__callback_fire);
+    # the structural shapes (items/params/bind/tag/scrollTo) carry holds
+    # with their class ruling below.
+    ('CheckBox', 'isOn'): 'Boolean',
+    ('Switch', 'isOn'): 'Boolean',
+    ('Switch', 'offTintColor'): 'String',
+    ('Collection', 'columns'): 'Int',
+    ('Collection', 'currentPage'): 'Int',
+    ('Collection', 'scrollEnabled'): 'Boolean',
+    ('ScrollView', 'scrollEnabled'): 'Boolean',
+    ('ScrollView', 'maxZoom'): 'Double',
+    ('ScrollView', 'minZoom'): 'Double',
+    ('Image', 'highlightSrc'): 'String',
+    ('Image', 'highlightSrcName'): 'String',
+    ('NetworkImage', 'src'): 'String',
+    ('NetworkImage', 'url'): 'String',
+    ('Web', 'url'): 'String',
+    ('SelectBox', 'selectedDate'): 'String',
+    ('common', 'aspectHeight'): 'Int',
+    ('common', 'aspectWidth'): 'Int',
+    ('common', 'bottomMargin'): 'Int',
+    ('common', 'topMargin'): 'Int',
+    ('common', 'canTap'): 'Boolean',
+    ('common', 'defaultBackground'): 'String',
+    ('common', 'innerPadding'): 'Int',
+    ('common', 'maxBottomMargin'): 'Int',
+    ('common', 'maxLeftMargin'): 'Int',
+    ('common', 'maxRightMargin'): 'Int',
+    ('common', 'maxTopMargin'): 'Int',
+    ('common', 'minBottomMargin'): 'Int',
+    ('common', 'minLeftMargin'): 'Int',
+    ('common', 'minRightMargin'): 'Int',
+    ('common', 'minTopMargin'): 'Int',
+    ('common', 'maxHeightWeight'): 'Int',
+    ('common', 'maxWidthWeight'): 'Int',
+    ('common', 'minHeightWeight'): 'Int',
+    ('common', 'minWidthWeight'): 'Int',
+    ('common', 'userInteractionEnabled'): 'Boolean',
     ('common', 'widthWeight'): 'Int',
     # --- Int (30) ---
     ('CheckBox', 'fontSize'): 'Int',
@@ -1468,6 +1511,8 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     "TextField.fontFamily": {"text": "Sample"},
     # iconPosition/iconMargin need an ICON to position (base is text-only).
     "IconLabel.iconPosition": {"icon_off": IMAGE_ASSET_NAME},
+    # iconSize needs an ICON to size (same family).
+    "IconLabel.iconSize": {"icon_off": IMAGE_ASSET_NAME},
     "IconLabel.iconMargin": {"icon_off": IMAGE_ASSET_NAME},
     # Checked-state skins need the checked state to exist, and a BASE icon
     # distinct from the selected one — with a single asset the state swap
@@ -1636,6 +1681,11 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # (lane B, whose List implementation landed in ba5e6d1 with no fixture
     # that could reach it).
     "Collection.listStyle": {"sections": None},
+    # A separator to hide: without a chrome no face draws one (the
+    # declaration's own NO-OP contract), so the probe was vacuous on all
+    # three. grouped + the default sectioned cells give every face rows
+    # with separators. (2026-08-08, with the chrome implementations.)
+    "Collection.hideSeparator": {"listStyle": "grouped"},
     # `flow` is only distinguishable from `horizontal` once a row FILLS: the
     # three 60pt cells total 180pt, which fits the 200pt host in one row, so
     # flow never wrapped and the pair drew one picture (run 5, android/web).
@@ -1975,6 +2025,10 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # `labelAttributes.text`. Switch has no BASE_ATTRS entry at all, so there
     # was no label to place.
     "Switch.labelPosition": {"labelAttributes": {"text": "Sample"}},
+    # The flat fontColor/fontSize style the LABEL — same no-label vacuity
+    # as labelPosition above.
+    "Switch.fontColor": {"labelAttributes": {"text": "Sample"}},
+    "Switch.fontSize": {"labelAttributes": {"text": "Sample"}},
     # SwiftUI has no maximum-length primitive, so sjui enforces maxLength by
     # truncating on change and writing BACK — which needs somewhere to write:
     # `return unless raw.is_a?(String) && is_binding?(raw)` on the text

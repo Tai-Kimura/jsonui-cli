@@ -24,8 +24,7 @@
         }
       ],
       "items": "@{items}",
-      "listStyle": "grouped",
-      "hideSeparator": false
+      "listStyle": "grouped"
     }
   ],
   "data": [

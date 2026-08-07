@@ -24,8 +24,7 @@
         }
       ],
       "items": "@{items}",
-      "listStyle": "grouped",
-      "hideSeparator": false
+      "columns": "@{boundColumns}"
     }
   ],
   "data": [
@@ -43,6 +42,11 @@
           "title": "Gamma"
         }
       ]
+    },
+    {
+      "name": "boundColumns",
+      "class": "Int",
+      "defaultValue": 2
     }
   ]
 }

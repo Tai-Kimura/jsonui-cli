@@ -10,12 +10,12 @@
   "schemaVersion": 2,
   "generatedFrom": "be5fafd58187fc62d30b3e5f5c1270cac97338a1364b3f52084ecd235491627b",
   "counts": {
-    "fixtures": 1035,
+    "fixtures": 1060,
     "assertable": 41,
-    "visual": 797,
+    "visual": 803,
     "interactive": 35,
-    "control": 103,
-    "declarationOnly": 59,
+    "control": 104,
+    "declarationOnly": 77,
     "skipped": 159,
     "promoted": {
       "callback": 11
@@ -471,6 +471,28 @@
       "control": null
     },
     {
+      "id": "common/maxWidthWeight__binding",
+      "component": "common",
+      "attribute": "maxWidthWeight",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "View",
+      "writtenKey": "maxWidthWeight",
+      "aliasOf": null,
+      "value": "@{boundMaxWidthWeight}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/maxWidthWeight__binding.layout.json",
+      "test": "fixtures/common/maxWidthWeight__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
       "id": "common/maxHeightWeight__static",
       "component": "common",
       "attribute": "maxHeightWeight",
@@ -487,6 +509,28 @@
       "deprecated": null,
       "layout": "fixtures/common/maxHeightWeight__static.layout.json",
       "test": "fixtures/common/maxHeightWeight__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "common/maxHeightWeight__binding",
+      "component": "common",
+      "attribute": "maxHeightWeight",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "View",
+      "writtenKey": "maxHeightWeight",
+      "aliasOf": null,
+      "value": "@{boundMaxHeightWeight}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/maxHeightWeight__binding.layout.json",
+      "test": "fixtures/common/maxHeightWeight__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
@@ -515,6 +559,28 @@
       "control": null
     },
     {
+      "id": "common/minWidthWeight__binding",
+      "component": "common",
+      "attribute": "minWidthWeight",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "View",
+      "writtenKey": "minWidthWeight",
+      "aliasOf": null,
+      "value": "@{boundMinWidthWeight}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/minWidthWeight__binding.layout.json",
+      "test": "fixtures/common/minWidthWeight__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
       "id": "common/minHeightWeight__static",
       "component": "common",
       "attribute": "minHeightWeight",
@@ -531,6 +597,28 @@
       "deprecated": null,
       "layout": "fixtures/common/minHeightWeight__static.layout.json",
       "test": "fixtures/common/minHeightWeight__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "common/minHeightWeight__binding",
+      "component": "common",
+      "attribute": "minHeightWeight",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "View",
+      "writtenKey": "minHeightWeight",
+      "aliasOf": null,
+      "value": "@{boundMinHeightWeight}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/minHeightWeight__binding.layout.json",
+      "test": "fixtures/common/minHeightWeight__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
@@ -559,6 +647,28 @@
       "control": null
     },
     {
+      "id": "common/aspectWidth__binding",
+      "component": "common",
+      "attribute": "aspectWidth",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "View",
+      "writtenKey": "aspectWidth",
+      "aliasOf": null,
+      "value": "@{boundAspectWidth}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/aspectWidth__binding.layout.json",
+      "test": "fixtures/common/aspectWidth__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
       "id": "common/aspectHeight__static",
       "component": "common",
       "attribute": "aspectHeight",
@@ -575,6 +685,28 @@
       "deprecated": null,
       "layout": "fixtures/common/aspectHeight__static.layout.json",
       "test": "fixtures/common/aspectHeight__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "common/aspectHeight__binding",
+      "component": "common",
+      "attribute": "aspectHeight",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "View",
+      "writtenKey": "aspectHeight",
+      "aliasOf": null,
+      "value": "@{boundAspectHeight}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/aspectHeight__binding.layout.json",
+      "test": "fixtures/common/aspectHeight__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
@@ -885,6 +1017,28 @@
       "deprecated": null,
       "layout": "fixtures/common/defaultBackground__static.layout.json",
       "test": "fixtures/common/defaultBackground__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "common/defaultBackground__binding",
+      "component": "common",
+      "attribute": "defaultBackground",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "Button",
+      "writtenKey": "defaultBackground",
+      "aliasOf": null,
+      "value": "@{boundDefaultBackground}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/defaultBackground__binding.layout.json",
+      "test": "fixtures/common/defaultBackground__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
@@ -2295,7 +2449,31 @@
       "test": "fixtures/common/topMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": null,
+      "peerGroup": "common/topMargin@View",
+      "control": "__control/View"
+    },
+    {
+      "id": "common/topMargin__binding",
+      "component": "common",
+      "attribute": "topMargin",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "topMargin",
+      "aliasOf": null,
+      "value": "@{boundTopMargin}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/topMargin__binding.layout.json",
+      "test": "fixtures/common/topMargin__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "common/topMargin@View",
       "control": "__control/View"
     },
     {
@@ -2319,7 +2497,31 @@
       "test": "fixtures/common/bottomMargin__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": null,
+      "peerGroup": "common/bottomMargin@View__root.gravity-bottom",
+      "control": "__control/View__root.gravity-bottom"
+    },
+    {
+      "id": "common/bottomMargin__binding",
+      "component": "common",
+      "attribute": "bottomMargin",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "bottomMargin",
+      "aliasOf": null,
+      "value": "@{boundBottomMargin}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/bottomMargin__binding.layout.json",
+      "test": "fixtures/common/bottomMargin__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "common/bottomMargin@View__root.gravity-bottom",
       "control": "__control/View__root.gravity-bottom"
     },
     {
@@ -2537,6 +2739,28 @@
       "control": null
     },
     {
+      "id": "common/minTopMargin__binding",
+      "component": "common",
+      "attribute": "minTopMargin",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "View",
+      "writtenKey": "minTopMargin",
+      "aliasOf": null,
+      "value": "@{boundMinTopMargin}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/minTopMargin__binding.layout.json",
+      "test": "fixtures/common/minTopMargin__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
       "id": "common/minBottomMargin__static",
       "component": "common",
       "attribute": "minBottomMargin",
@@ -2553,6 +2777,28 @@
       "deprecated": null,
       "layout": "fixtures/common/minBottomMargin__static.layout.json",
       "test": "fixtures/common/minBottomMargin__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "common/minBottomMargin__binding",
+      "component": "common",
+      "attribute": "minBottomMargin",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "View",
+      "writtenKey": "minBottomMargin",
+      "aliasOf": null,
+      "value": "@{boundMinBottomMargin}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/minBottomMargin__binding.layout.json",
+      "test": "fixtures/common/minBottomMargin__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
@@ -2581,6 +2827,28 @@
       "control": null
     },
     {
+      "id": "common/minLeftMargin__binding",
+      "component": "common",
+      "attribute": "minLeftMargin",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "View",
+      "writtenKey": "minLeftMargin",
+      "aliasOf": null,
+      "value": "@{boundMinLeftMargin}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/minLeftMargin__binding.layout.json",
+      "test": "fixtures/common/minLeftMargin__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
       "id": "common/minRightMargin__static",
       "component": "common",
       "attribute": "minRightMargin",
@@ -2597,6 +2865,28 @@
       "deprecated": null,
       "layout": "fixtures/common/minRightMargin__static.layout.json",
       "test": "fixtures/common/minRightMargin__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "common/minRightMargin__binding",
+      "component": "common",
+      "attribute": "minRightMargin",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "View",
+      "writtenKey": "minRightMargin",
+      "aliasOf": null,
+      "value": "@{boundMinRightMargin}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/minRightMargin__binding.layout.json",
+      "test": "fixtures/common/minRightMargin__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
@@ -2625,6 +2915,28 @@
       "control": null
     },
     {
+      "id": "common/maxTopMargin__binding",
+      "component": "common",
+      "attribute": "maxTopMargin",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "View",
+      "writtenKey": "maxTopMargin",
+      "aliasOf": null,
+      "value": "@{boundMaxTopMargin}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/maxTopMargin__binding.layout.json",
+      "test": "fixtures/common/maxTopMargin__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
       "id": "common/maxBottomMargin__static",
       "component": "common",
       "attribute": "maxBottomMargin",
@@ -2641,6 +2953,28 @@
       "deprecated": null,
       "layout": "fixtures/common/maxBottomMargin__static.layout.json",
       "test": "fixtures/common/maxBottomMargin__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "common/maxBottomMargin__binding",
+      "component": "common",
+      "attribute": "maxBottomMargin",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "View",
+      "writtenKey": "maxBottomMargin",
+      "aliasOf": null,
+      "value": "@{boundMaxBottomMargin}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/maxBottomMargin__binding.layout.json",
+      "test": "fixtures/common/maxBottomMargin__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
@@ -2669,6 +3003,28 @@
       "control": null
     },
     {
+      "id": "common/maxLeftMargin__binding",
+      "component": "common",
+      "attribute": "maxLeftMargin",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "View",
+      "writtenKey": "maxLeftMargin",
+      "aliasOf": null,
+      "value": "@{boundMaxLeftMargin}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/maxLeftMargin__binding.layout.json",
+      "test": "fixtures/common/maxLeftMargin__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
       "id": "common/maxRightMargin__static",
       "component": "common",
       "attribute": "maxRightMargin",
@@ -2685,6 +3041,28 @@
       "deprecated": null,
       "layout": "fixtures/common/maxRightMargin__static.layout.json",
       "test": "fixtures/common/maxRightMargin__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "common/maxRightMargin__binding",
+      "component": "common",
+      "attribute": "maxRightMargin",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "View",
+      "writtenKey": "maxRightMargin",
+      "aliasOf": null,
+      "value": "@{boundMaxRightMargin}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/maxRightMargin__binding.layout.json",
+      "test": "fixtures/common/maxRightMargin__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
@@ -3952,6 +4330,28 @@
       "deprecated": null,
       "layout": "fixtures/common/innerPadding__static.layout.json",
       "test": "fixtures/common/innerPadding__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "common/innerPadding__binding",
+      "component": "common",
+      "attribute": "innerPadding",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "View",
+      "writtenKey": "innerPadding",
+      "aliasOf": null,
+      "value": "@{boundInnerPadding}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/common/innerPadding__binding.layout.json",
+      "test": "fixtures/common/innerPadding__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
@@ -12348,7 +12748,29 @@
       "test": "fixtures/Image/highlightSrc__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": null,
+      "peerGroup": "Image/highlightSrc@Image",
+      "control": "__control/Image"
+    },
+    {
+      "id": "Image/highlightSrc__binding",
+      "component": "Image",
+      "attribute": "highlightSrc",
+      "case": "binding",
+      "class": "visual",
+      "host": "Image",
+      "writtenKey": "highlightSrc",
+      "aliasOf": null,
+      "value": "@{boundHighlightSrc}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "swiftui",
+      "deprecated": null,
+      "layout": "fixtures/Image/highlightSrc__binding.layout.json",
+      "test": "fixtures/Image/highlightSrc__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Image/highlightSrc@Image",
       "control": "__control/Image"
     },
     {
@@ -12368,6 +12790,28 @@
       "deprecated": null,
       "layout": "fixtures/Image/highlightSrcName__static.layout.json",
       "test": "fixtures/Image/highlightSrcName__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "Image/highlightSrcName__binding",
+      "component": "Image",
+      "attribute": "highlightSrcName",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "Image",
+      "writtenKey": "highlightSrcName",
+      "aliasOf": null,
+      "value": "@{boundHighlightSrcName}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/Image/highlightSrcName__binding.layout.json",
+      "test": "fixtures/Image/highlightSrcName__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
@@ -14869,6 +15313,30 @@
       "control": "__control/Switch"
     },
     {
+      "id": "Switch/isOn__binding",
+      "component": "Switch",
+      "attribute": "isOn",
+      "case": "binding",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "isOn",
+      "aliasOf": null,
+      "value": "@{boundIsOn}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Switch/isOn__binding.layout.json",
+      "test": "fixtures/Switch/isOn__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Switch/isOn@Switch",
+      "control": "__control/Switch"
+    },
+    {
       "id": "Switch/value__true",
       "component": "Switch",
       "attribute": "value",
@@ -15251,6 +15719,28 @@
       "control": null
     },
     {
+      "id": "Switch/offTintColor__binding",
+      "component": "Switch",
+      "attribute": "offTintColor",
+      "case": "binding",
+      "class": "declaration-only",
+      "host": "Switch",
+      "writtenKey": "offTintColor",
+      "aliasOf": null,
+      "value": "@{boundOffTintColor}",
+      "platforms": [
+        "ios"
+      ],
+      "mode": "uikit",
+      "deprecated": null,
+      "layout": "fixtures/Switch/offTintColor__binding.layout.json",
+      "test": "fixtures/Switch/offTintColor__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
       "id": "Switch/onValueChange__callback_fire",
       "component": "Switch",
       "attribute": "onValueChange",
@@ -15378,8 +15868,8 @@
       "test": "fixtures/Switch/fontColor__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Switch/fontColor@Switch",
-      "control": "__control/Switch"
+      "peerGroup": "Switch/fontColor@Switch__labelAttributes--text-Sample",
+      "control": "__control/Switch__labelAttributes--text-Sample"
     },
     {
       "id": "Switch/fontColor__binding",
@@ -15402,8 +15892,8 @@
       "test": "fixtures/Switch/fontColor__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Switch/fontColor@Switch",
-      "control": "__control/Switch"
+      "peerGroup": "Switch/fontColor@Switch__labelAttributes--text-Sample",
+      "control": "__control/Switch__labelAttributes--text-Sample"
     },
     {
       "id": "Switch/toggleStyle__switch",
@@ -15586,8 +16076,8 @@
       "test": "fixtures/Switch/fontSize__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Switch/fontSize@Switch",
-      "control": "__control/Switch"
+      "peerGroup": "Switch/fontSize@Switch__labelAttributes--text-Sample",
+      "control": "__control/Switch__labelAttributes--text-Sample"
     },
     {
       "id": "Switch/fontSize__binding",
@@ -15610,8 +16100,8 @@
       "test": "fixtures/Switch/fontSize__binding.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Switch/fontSize@Switch",
-      "control": "__control/Switch"
+      "peerGroup": "Switch/fontSize@Switch__labelAttributes--text-Sample",
+      "control": "__control/Switch__labelAttributes--text-Sample"
     },
     {
       "id": "Segment/items__static",
@@ -17853,7 +18343,34 @@
       "test": "fixtures/Collection/columns__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": null,
+      "peerGroup": "Collection/columns@Collection",
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/columns__binding",
+      "component": "Collection",
+      "attribute": "columns",
+      "case": "binding",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "columns",
+      "aliasOf": null,
+      "value": "@{boundColumns}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/columns__binding.layout.json",
+      "test": "fixtures/Collection/columns__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Collection/columns@Collection",
       "control": "__control/Collection",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
@@ -18770,8 +19287,8 @@
       "test": "fixtures/Collection/hideSeparator__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Collection/hideSeparator@Collection",
-      "control": "__control/Collection",
+      "peerGroup": "Collection/hideSeparator@Collection__listStyle-grouped",
+      "control": "__control/Collection__listStyle-grouped",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]
@@ -18797,8 +19314,8 @@
       "test": "fixtures/Collection/hideSeparator__false.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Collection/hideSeparator@Collection",
-      "control": "__control/Collection",
+      "peerGroup": "Collection/hideSeparator@Collection__listStyle-grouped",
+      "control": "__control/Collection__listStyle-grouped",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]
@@ -19809,6 +20326,30 @@
       "deprecated": null,
       "layout": "fixtures/CheckBox/isOn__false.layout.json",
       "test": "fixtures/CheckBox/isOn__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "CheckBox/isOn@CheckBox",
+      "control": "__control/CheckBox"
+    },
+    {
+      "id": "CheckBox/isOn__binding",
+      "component": "CheckBox",
+      "attribute": "isOn",
+      "case": "binding",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": "isOn",
+      "aliasOf": null,
+      "value": "@{boundIsOn}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/isOn__binding.layout.json",
+      "test": "fixtures/CheckBox/isOn__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": "CheckBox/isOn@CheckBox",
@@ -21448,7 +21989,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
-      "control": "__control/IconLabel"
+      "control": "__control/IconLabel__icon-off-conformance-sample"
     },
     {
       "id": "Web/html__static",
@@ -22353,6 +22894,33 @@
       "deprecated": null,
       "layout": "fixtures/__control/Collection__columns-2.layout.json",
       "test": "fixtures/__control/Collection__columns-2.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "__control/Collection__listStyle-grouped",
+      "component": "__control",
+      "attribute": null,
+      "case": "Collection",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Collection__listStyle-grouped.layout.json",
+      "test": "fixtures/__control/Collection__listStyle-grouped.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -23645,7 +24213,9 @@
       "aliasOf": null,
       "value": null,
       "platforms": [
-        "android"
+        "ios",
+        "android",
+        "web"
       ],
       "mode": null,
       "deprecated": null,

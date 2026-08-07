@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/minTopMargin__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.minTopMargin (binding)",
+    "description": "Conformance fixture for 'minTopMargin' on View (section: common, class: declaration-only). Value under test: \"@{boundMinTopMargin}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "minTopMargin__binding",
+      "description": "Conformance fixture for 'minTopMargin' on View (section: common, class: declaration-only). Value under test: \"@{boundMinTopMargin}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

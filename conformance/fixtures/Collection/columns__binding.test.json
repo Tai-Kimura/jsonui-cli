@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/columns__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.columns (binding)",
+    "description": "Conformance fixture for 'columns' on Collection (section: Collection, class: visual). Value under test: \"@{boundColumns}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "columns__binding",
+      "description": "Conformance fixture for 'columns' on Collection (section: Collection, class: visual). Value under test: \"@{boundColumns}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_columns__binding"
+        }
+      ]
+    }
+  ]
+}

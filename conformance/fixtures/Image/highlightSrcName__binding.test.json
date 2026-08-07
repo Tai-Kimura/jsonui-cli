@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Image/highlightSrcName__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Image.highlightSrcName (binding)",
+    "description": "Conformance fixture for 'highlightSrcName' on Image (section: Image, class: declaration-only). Value under test: \"@{boundHighlightSrcName}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Image"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "highlightSrcName__binding",
+      "description": "Conformance fixture for 'highlightSrcName' on Image (section: Image, class: declaration-only). Value under test: \"@{boundHighlightSrcName}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

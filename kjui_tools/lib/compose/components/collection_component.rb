@@ -737,6 +737,16 @@ module KjuiTools
                 else
                   code += "\n" + indent("modifier = Modifier", depth + 6)
                 end
+                # cellWidth/cellHeight size every cell on the SECTIONED path
+                # too — the emit lived only on the non-sectioned items route,
+                # so the declared sizes were unread on the path the
+                # conformance fixtures actually take.
+                if json_data['cellWidth']
+                  code += "\n" + indent("    .requiredWidth(#{json_data['cellWidth']}.dp)", depth + 6)
+                end
+                if json_data['cellHeight']
+                  code += "\n" + indent("    .requiredHeight(#{json_data['cellHeight']}.dp)", depth + 6)
+                end
                 code += "\n" + indent(")", depth + 5)
                 if chrome_open(json_data, nil)
                   code += "\n" + indent("}", depth + 5)

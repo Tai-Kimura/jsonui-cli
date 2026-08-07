@@ -13,36 +13,19 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "Collection",
+      "type": "CheckBox",
       "id": "target",
       "width": 200,
-      "height": 200,
-      "background": "#DDDDDD",
-      "sections": [
-        {
-          "cell": "conformance_cell"
-        }
-      ],
-      "items": "@{items}",
-      "listStyle": "grouped",
-      "hideSeparator": false
+      "height": "wrapContent",
+      "text": "Sample",
+      "isOn": "@{boundIsOn}"
     }
   ],
   "data": [
     {
-      "name": "items",
-      "class": "CollectionDataSource",
-      "defaultValue": [
-        {
-          "title": "Alpha"
-        },
-        {
-          "title": "Beta"
-        },
-        {
-          "title": "Gamma"
-        }
-      ]
+      "name": "boundIsOn",
+      "class": "Boolean",
+      "defaultValue": true
     }
   ]
 }

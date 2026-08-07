@@ -3,26 +3,6 @@
   "_comment": "Accepted codegen-differential defects, per (component, attribute, platform, check). An entry means the converter demonstrably fails that judgement and the failure is accepted FOR A STATED REASON — not that it is fine. Unrecorded defects fail `jui conformance gate --codegen-effect`; entries the measurement no longer supports are stale and fail too, so fixing a defect forces its row out (the one-directional version lets a fixed row sit here forever, which is how the previous freeze ledgers rotted). Advisory classes (value-is-default, numeric-string-divergence) are re-derived every run and are deliberately absent. Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
   "entries": [
     {
-      "component": "Label",
-      "attribute": "strikethrough",
-      "platform": "android",
-      "check": "C2",
-      "class": "presence-only",
-      "owner": "E (SSoT) — recorded per 49 ruling; implementation is post-release work",
-      "reason": "Declared styled face unimplemented, scheduled post-release. The boolean face WORKS on all three platforms: presence is read and the line is drawn (the emit differs from the control). Only the object face's contents (lineStyle, color) are unread — `true` and a styled object emit byte-identical text. Do not read this row as 'strikethrough does not work'.",
-      "note": "Same family as the declared-but-unimplemented spellings (B's ledger). F's dynamic fix (91a57bc) made the node survive the object face; it did not add style drawing. D's __styled fixtures stay: round 5 verifies node-survives + both faces render the same picture until styling lands."
-    },
-    {
-      "component": "Label",
-      "attribute": "underline",
-      "platform": "android",
-      "check": "C2",
-      "class": "presence-only",
-      "owner": "E (SSoT) — recorded per 49 ruling; implementation is post-release work",
-      "reason": "Declared styled face unimplemented, scheduled post-release. The boolean face WORKS on all three platforms: presence is read and the line is drawn (the emit differs from the control). Only the object face's contents (lineStyle, color, lineOffset) are unread — `true` and a styled object emit byte-identical text. Do not read this row as 'underline does not work'.",
-      "note": "Same family as the declared-but-unimplemented spellings (B's ledger). F's dynamic fix (91a57bc) made the node survive the object face; it did not add style drawing. D's __styled fixtures stay: round 5 verifies node-survives + both faces render the same picture until styling lands."
-    },
-    {
       "component": "Collection",
       "attribute": "hideSeparator",
       "platform": "ios",
@@ -33,51 +13,6 @@
       "note": "Family: vacuous-on-this-container-shape."
     },
     {
-      "component": "CheckBox",
-      "attribute": "fontWeight",
-      "platform": "android",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "C (kjui codegen) — implementation queue, coverage.json",
-      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
-    },
-    {
-      "component": "Collection",
-      "attribute": "cellHeight",
-      "platform": "android",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "C (kjui codegen) — implementation queue, coverage.json",
-      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
-    },
-    {
-      "component": "Collection",
-      "attribute": "cellWidth",
-      "platform": "android",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "C (kjui codegen) — implementation queue, coverage.json",
-      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
-    },
-    {
-      "component": "Collection",
-      "attribute": "listStyle",
-      "platform": "android",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "C (kjui codegen) — implementation queue, coverage.json",
-      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
-    },
-    {
-      "component": "Collection",
-      "attribute": "hideSeparator",
-      "platform": "android",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "E ruling — vacuous outside List (see reason)",
-      "reason": "Ruled 2026-08-07 (51-E, asked by B): a container that is not a List has no separator to hide — the only separator emission on any face is the List path, and the probe layout does not reach it. Contract is a vacuous no-op outside List contexts; coverage marks the attribute runtime-only. Do not read this row as an implementation gap."
-    },
-    {
       "component": "Collection",
       "attribute": "hideSeparator",
       "platform": "web",
@@ -85,78 +20,6 @@
       "class": "unread-spelling",
       "owner": "E ruling — vacuous outside List (see reason)",
       "reason": "Ruled 2026-08-07 (51-E, asked by B): a container that is not a List has no separator to hide — the only separator emission on any face is the List path, and the probe layout does not reach it. Contract is a vacuous no-op outside List contexts; coverage marks the attribute runtime-only. Do not read this row as an implementation gap."
-    },
-    {
-      "component": "IconLabel",
-      "attribute": "iconSize",
-      "platform": "android",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "C (kjui codegen) — implementation queue, coverage.json",
-      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
-    },
-    {
-      "component": "SafeAreaView",
-      "attribute": "direction",
-      "platform": "android",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "C (kjui codegen) — implementation queue, coverage.json",
-      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
-    },
-    {
-      "component": "ScrollView",
-      "attribute": "defaultScrollAnchor",
-      "platform": "android",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "C (kjui codegen) — implementation queue, coverage.json (scope confirmed by 51-E)",
-      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
-    },
-    {
-      "component": "Switch",
-      "attribute": "fontColor",
-      "platform": "android",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "C (kjui codegen) — implementation queue, coverage.json",
-      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
-    },
-    {
-      "component": "Switch",
-      "attribute": "fontColor",
-      "platform": "android",
-      "check": "C1",
-      "class": "bound-dropped",
-      "owner": "C (kjui codegen) — implementation queue, coverage.json",
-      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
-    },
-    {
-      "component": "Switch",
-      "attribute": "fontSize",
-      "platform": "android",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "C (kjui codegen) — implementation queue, coverage.json",
-      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
-    },
-    {
-      "component": "Switch",
-      "attribute": "fontSize",
-      "platform": "android",
-      "check": "C1",
-      "class": "bound-dropped",
-      "owner": "C (kjui codegen) — implementation queue, coverage.json",
-      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
-    },
-    {
-      "component": "TextField",
-      "attribute": "hintLineHeightMultiple",
-      "platform": "android",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "C (kjui codegen) — implementation queue, coverage.json",
-      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
     }
   ]
 }

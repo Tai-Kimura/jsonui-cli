@@ -13,13 +13,18 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "IconLabel",
+      "type": "Switch",
       "id": "target",
-      "width": 200,
+      "width": "wrapContent",
       "height": "wrapContent",
-      "text": "Sample",
-      "icon_off": "conformance_sample",
-      "iconSize": 8
+      "isOn": "@{boundIsOn}"
+    }
+  ],
+  "data": [
+    {
+      "name": "boundIsOn",
+      "class": "Boolean",
+      "defaultValue": true
     }
   ]
 }
