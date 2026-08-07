@@ -10,9 +10,7 @@ Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
 
 ## Cross-platform mismatches
 
-| Fixture | Class | android | ios | web | Detail |
-|---|---|---|---|---|---|
-| `SelectBox/onValueChange__callback_fire` | interactive | ✅ | ⚠️ | ✅ | ios: action selectOption(target): Action 'selectOption' failed: Picker sheet did not appear within 5000ms |
+_No cross-platform mismatches._
 
 ## Interactive fixtures
 
@@ -48,7 +46,7 @@ Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
 | `TextView/text__binding_twoway` | `binding_twoway` | — | ✅ | ✅ | ✅ |  |
 | `TextView/onTextChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
 | `Button/text__binding_initial` | `binding_initial` | — | ✅ | ✅ | ✅ |  |
-| `SelectBox/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ⚠️ | ✅ | ios: action selectOption(target): Action 'selectOption' failed: Picker sheet did not appear within 5000ms |
+| `SelectBox/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
 | `SelectBox/onValueChanged__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
 | `Switch/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
 | `CheckBox/onValueChange__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
@@ -244,7 +242,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | Platform | Runner | Results | pass | fail | error | skipped | Manifest |
 |---|---|---|---|---|---|---|---|
 | android | uiautomator 2.3.0 | 1031 | 853 | 0 | 0 | 178 | current |
-| ios | xcuitest ios-26.2 | 1031 | 898 | 0 | 1 | 132 | current |
+| ios | xcuitest ios-26.2 | 1031 | 899 | 0 | 0 | 132 | current |
 | web | playwright 1.61.1 | 1031 | 855 | 0 | 0 | 176 | current |
 
 ## Matrix
@@ -889,7 +887,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `labelAttributes` | `static` | visual | ✅ | ✅ | ✅ |
 | `inView` | `static` | declaration-only | – | – | – |
 | `referenceView` | `static` | declaration-only | – | – | – |
-| `onValueChange` | `callback_fire` | interactive | ✅ | ⚠️ | ✅ |
+| `onValueChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `onValueChanged` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `colorScheme` | `light` | visual | – | – | ✅ |
 | `colorScheme` | `dark` | visual | – | – | ✅ |

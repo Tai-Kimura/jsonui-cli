@@ -255,24 +255,6 @@
       "note": ""
     },
     {
-      "screenshot": "Label_minimumScaleFactor__binding.png",
-      "platform": "ios",
-      "env": "ci",
-      "status": "mismatch",
-      "distance": 18,
-      "reason": "Adjudicated 2026-08-08 (gravity leaf-scope hotfix verification): the codegen side moved and the DYNAMIC side is the residual deviant. ae3b74f's container-scoped default made the leaf Label's fixed-size frame drop its injected .topLeading, so the shrunken text now sits centered in its 40pt box — measured against the android face, which draws the same shrunken line center-leaning in the same box, i.e. codegen CONVERGED. Dynamic's text branch (DynamicModifierHelper.frameAlignment, isTextComponent) still pins topLeading and is exempt from the container-scope guard. Converging the dynamic text branch moves many Label baselines at once — next-train work, owner F (SwiftJsonUI dynamic).",
-      "note": ""
-    },
-    {
-      "screenshot": "Label_minimumScaleFactor__static.png",
-      "platform": "ios",
-      "env": "ci",
-      "status": "mismatch",
-      "distance": 18,
-      "reason": "Adjudicated 2026-08-08 (gravity leaf-scope hotfix verification): the codegen side moved and the DYNAMIC side is the residual deviant. ae3b74f's container-scoped default made the leaf Label's fixed-size frame drop its injected .topLeading, so the shrunken text now sits centered in its 40pt box — measured against the android face, which draws the same shrunken line center-leaning in the same box, i.e. codegen CONVERGED. Dynamic's text branch (DynamicModifierHelper.frameAlignment, isTextComponent) still pins topLeading and is exempt from the container-scope guard. Converging the dynamic text branch moves many Label baselines at once — next-train work, owner F (SwiftJsonUI dynamic).",
-      "note": ""
-    },
-    {
       "screenshot": "Radio_label__binding.png",
       "platform": "ios",
       "env": "ci",
@@ -468,15 +450,6 @@
       "status": "mismatch",
       "distance": 42,
       "reason": "First ci-env parity measurement: the codegen suite first ran to completion this wave (the 0fa8bb5 compile fixes), so no prior ci row exists and this is not a regression. The ios codegen Collection path had NEVER compiled before the section_bounder fix in 0fa8bb5 — this is its first rendered comparison ever. List skeleton/cell sizing differs from dynamic. Owner F (sjui codegen), next train.",
-      "note": ""
-    },
-    {
-      "screenshot": "control_Label__autoShrink-True_height-40_text-1d8efd05.png",
-      "platform": "ios",
-      "env": "ci",
-      "status": "mismatch",
-      "distance": 48,
-      "reason": "Adjudicated 2026-08-08 (gravity leaf-scope hotfix verification): the codegen side moved and the DYNAMIC side is the residual deviant. ae3b74f's container-scoped default made the leaf Label's fixed-size frame drop its injected .topLeading, so the shrunken text now sits centered in its 40pt box — measured against the android face, which draws the same shrunken line center-leaning in the same box, i.e. codegen CONVERGED. Dynamic's text branch (DynamicModifierHelper.frameAlignment, isTextComponent) still pins topLeading and is exempt from the container-scope guard. Converging the dynamic text branch moves many Label baselines at once — next-train work, owner F (SwiftJsonUI dynamic).",
       "note": ""
     },
     {
