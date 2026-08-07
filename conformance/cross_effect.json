@@ -536,26 +536,6 @@
       "note": ""
     },
     {
-      "fixture": "SelectBox/hintColor__binding",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
-      "fixture": "SelectBox/hintColor__static",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
       "fixture": "SelectBox/items__static",
       "platforms": {
         "android": "inert",
