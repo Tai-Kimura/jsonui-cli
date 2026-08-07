@@ -370,6 +370,7 @@ module SjuiTools
                 indent do
                   children.each_with_index do |child, index|
                     if @converter_factory
+                      apply_distribution_fill(child, distribution, orientation)
                       render_child_element(child, orientation, index, 0, 0)
                     end
 
@@ -472,6 +473,34 @@ module SjuiTools
         end
 
         private
+
+        # `distribution: fill` — the SIZE half of distribution is carried to
+        # the CHILDREN, not spelled as a container arrangement. The canon cell
+        # (attribute_semantics.json semantics.distribution.perValueMapping
+        # .fill.swiftui) is ".frame(maxWidth/maxHeight: .infinity) on each
+        # child", and the ruling names ios outstanding on both faces: neither
+        # this converter nor the dynamic container read `fill` at all, so it
+        # fell through every arm and rendered the default. F's dynamic half is
+        # SwiftJsonUI 440c06a; this is the codegen one.
+        #
+        # Asking for the frame by setting the child's own main-axis size is
+        # how the weighted stack above already asks for the same thing, which
+        # puts the fill INSIDE the child's modifier chain (before its
+        # background) rather than in an outer wrapper the child floats in.
+        #
+        # Unlike the weighted main axis this does NOT override a declared
+        # size: `explicitChildSizeWins` puts distribution's size half at the
+        # bottom of the size topic's explicit > bounds > fill order, so only
+        # an undeclared axis grows.
+        def apply_distribution_fill(child, distribution, orientation)
+          return unless distribution.to_s.downcase == 'fill'
+          return unless orientation == 'horizontal' || orientation == 'vertical'
+
+          axis = orientation == 'horizontal' ? 'width' : 'height'
+          return unless child[axis].nil? || child[axis] == 'wrapContent'
+
+          child[axis] = 'matchParent'
+        end
 
         # Handle responsive container: generate a wrapper function call + children inline
         def convert_responsive_container(children)

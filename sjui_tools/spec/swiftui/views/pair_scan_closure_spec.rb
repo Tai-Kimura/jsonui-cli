@@ -218,6 +218,60 @@ RSpec.describe 'distribution gap construction (swiftui)' do
   end
 end
 
+# distribution SIZE values (semantics.distribution perValueMapping, ruling
+# 2026-08-05): the size half is carried to the CHILDREN, not spelled as a
+# container arrangement. ios read `fill` on NEITHER face — it fell through
+# every arm here and in the dynamic container, which is what
+# `common/distribution__fill` measured as ios-inert. F's dynamic half is
+# SwiftJsonUI 440c06a; these pin the codegen one.
+RSpec.describe 'distribution fill (swiftui)' do
+  before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+  after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+
+  def stack(orientation:, children:)
+    SjuiTools::SwiftUI::ConverterFactory.new.create_converter(
+      'type' => 'View', 'id' => 't', 'orientation' => orientation,
+      'width' => 300, 'height' => 200, 'distribution' => 'fill',
+      'child' => children
+    ).convert.to_s
+  end
+
+  it 'grows every undeclared child on the main axis' do
+    code = stack(orientation: 'horizontal',
+                 children: Array.new(3) { |i| { 'type' => 'View', 'id' => "c#{i}", 'height' => 40 } })
+
+    expect(code.scan('.frame(maxWidth: .infinity').length).to eq(3)
+  end
+
+  it 'grows the vertical main axis when that is the orientation' do
+    code = stack(orientation: 'vertical',
+                 children: Array.new(2) { |i| { 'type' => 'View', 'id' => "c#{i}", 'width' => 40 } })
+
+    expect(code.scan('.frame(maxHeight: .infinity').length).to eq(2)
+  end
+
+  # `explicitChildSizeWins`: distribution's size half sits at the BOTTOM of
+  # the size topic's explicit > bounds > fill order. Unlike the weighted main
+  # axis, fill must not overwrite a size the child declared for itself.
+  it 'leaves an explicitly sized child alone' do
+    code = stack(orientation: 'horizontal',
+                 children: [{ 'type' => 'View', 'id' => 'fixed', 'width' => 40, 'height' => 40 },
+                            { 'type' => 'View', 'id' => 'grows', 'height' => 40 }])
+
+    expect(code.scan('.frame(maxWidth: .infinity').length).to eq(1)
+    expect(code).to include('width: 40')
+  end
+
+  # fill is a SIZE value: the children consume the free space themselves.
+  # The gap construction belongs to equalSpacing/equalCentering.
+  it 'emits no spacers of its own' do
+    code = stack(orientation: 'horizontal',
+                 children: Array.new(3) { |i| { 'type' => 'View', 'id' => "c#{i}", 'height' => 40 } })
+
+    expect(code).not_to include('Spacer(minLength: 0)')
+  end
+end
+
 # Group-2 backlog closure (2026-07-31).
 RSpec.describe 'backlog closure group 2 (swiftui)' do
   before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
