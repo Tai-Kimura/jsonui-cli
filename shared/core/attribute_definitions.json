@@ -1487,8 +1487,11 @@
         "string",
         "binding"
       ],
-      "description": "Text content (binding for two-way)",
-      "binding_direction": "two-way"
+      "description": "Text content (binding for two-way). `value` folds here (sjui textfield_converter.rb:527 reads `text || value || bind`).",
+      "binding_direction": "two-way",
+      "aliases": [
+        "value"
+      ]
     },
     "hint": {
       "type": "string",
@@ -2433,7 +2436,10 @@
         "string",
         "binding"
       ],
-      "description": "Image URL (alias, can be data binding)"
+      "description": "Image URL (alias, can be data binding). `source` folds here (sjui network_image_converter.rb:14 reads `url || source || src`).",
+      "aliases": [
+        "source"
+      ]
     },
     "hint": {
       "type": "string",
@@ -2605,7 +2611,10 @@
     },
     "dateStringFormat": {
       "type": "string",
-      "description": "Date string format"
+      "description": "Date string format. `dateFormat` folds here (sjui selectbox_converter.rb:132 reads `dateFormat || dateStringFormat`).",
+      "aliases": [
+        "dateFormat"
+      ]
     },
     "minimumDate": {
       "type": [
@@ -2957,12 +2966,18 @@
         "number",
         "binding"
       ],
-      "description": "Initially selected index (binding for two-way)",
-      "binding_direction": "two-way"
+      "description": "Initially selected index (binding for two-way). `selectedTabIndex` folds here (sjui segment_converter.rb:16), matching the alias TabView already declares.",
+      "binding_direction": "two-way",
+      "aliases": [
+        "selectedTabIndex"
+      ]
     },
     "tintColor": {
       "type": "string",
-      "description": "Accent color of the SELECTED segment - a background fill on ios/web, the indicator on Compose. Hex string or color name from colors.json"
+      "description": "Accent color of the SELECTED segment - a background fill on ios/web, the indicator on Compose. Hex string or color name from colors.json. `selectedSegmentTintColor` folds here (sjui segment_converter.rb:128 reads `selectedSegmentTintColor || tintColor`).",
+      "aliases": [
+        "selectedSegmentTintColor"
+      ]
     },
     "fontColor": {
       "type": "string",
@@ -3505,7 +3520,10 @@
     },
     "lineSpacing": {
       "type": "number",
-      "description": "Spacing between rows"
+      "description": "Spacing between rows. `sectionSpacing` folds here (sjui collection_converter.rb:799,960 read `sectionSpacing || lineSpacing || 8`).",
+      "aliases": [
+        "sectionSpacing"
+      ]
     },
     "horizontalScroll": {
       "type": "boolean",
@@ -3774,7 +3792,10 @@
         "boolean",
         "binding"
       ],
-      "description": "Seeds the group's INITIAL selection — it is not the live state, and it is not two-way. The state a radio group carries is `selectedValue`; `checked` only says which option starts selected when nothing else has said. Precedence, and all three platforms implement it in this order: a BOUND `selectedValue` wins outright (the group's own two-way state), then a LITERAL `selectedValue` (a group-level statement naming the starting option), then this option's `checked`. So a radio group that binds selectedValue ignores `checked` entirely, which is what stops a seed from freezing a group that the user can no longer change. The bound form of `checked` seeds the glyph rather than the state, since a property initialiser cannot read the data map: it selects only while the group has made no choice yet (sjui radio_converter.rb:88-103, and the same rule in RadioConverter.swift). CONTRAST with CheckBox.checked and Switch.checked, which look identical and are not: those ARE the control's state and carry binding_direction two-way. A radio has no state of its own — the group does. Declared 2026-08-05 (plan 49-E) from the implementations; the previous description said only \"Initial checked state\", which was true and told nobody what happens when both are declared."
+      "description": "Seeds the group's INITIAL selection — it is not the live state, and it is not two-way. The state a radio group carries is `selectedValue`; `checked` only says which option starts selected when nothing else has said. Precedence, and all three platforms implement it in this order: a BOUND `selectedValue` wins outright (the group's own two-way state), then a LITERAL `selectedValue` (a group-level statement naming the starting option), then this option's `checked`. So a radio group that binds selectedValue ignores `checked` entirely, which is what stops a seed from freezing a group that the user can no longer change. The bound form of `checked` seeds the glyph rather than the state, since a property initialiser cannot read the data map: it selects only while the group has made no choice yet (sjui radio_converter.rb:88-103, and the same rule in RadioConverter.swift). CONTRAST with CheckBox.checked and Switch.checked, which look identical and are not: those ARE the control's state and carry binding_direction two-way. A radio has no state of its own — the group does. Declared 2026-08-05 (plan 49-E) from the implementations; the previous description said only \"Initial checked state\", which was true and told nobody what happens when both are declared. `isOn` folds here (sjui radio_converter.rb:88,102 read both the literal and the bound form as `checked || isOn`).",
+      "aliases": [
+        "isOn"
+      ]
     },
     "value": {
       "type": "any",
@@ -3949,14 +3970,22 @@
     },
     "onValueChange": {
       "type": "binding",
-      "description": "Value change handler - binding only (@{functionName})"
+      "description": "Value change handler - binding only (@{functionName}). Legacy handler spellings fold here (sjui checkbox_converter.rb:122 reads `onValueChange || onClick || action || onValueChanged`; `onClick` stays common).",
+      "aliases": [
+        "action",
+        "onValueChanged"
+      ]
     },
     "checkedColor": {
       "type": "color",
-      "description": "Color when checked.",
+      "description": "Color when checked. Legacy accent spellings fold here (sjui checkbox_converter.rb:98 and kjui checkbox_component.rb:211 both read the same four spellings for this one colour). `tintColor` is deliberately NOT in the alias list: it is already declared on `common`, and an alias that is also a declared row is a silent no-op (test_no_alias_is_cancelled_by_a_declaration_of_its_own_name). On a CheckBox the common tint IS the checked colour - that is what both converters implement - so it needs no alias row. Declaring the other two also settles a live divergence: ios reads `checkedColor` first, android reads `checkColor` first, so a layout setting both drew two different colours until the normalizer began folding them (plan 51-E).",
       "platform": [
         "swift",
         "kotlin"
+      ],
+      "aliases": [
+        "checkColor",
+        "onTintColor"
       ]
     },
     "uncheckedColor": {
@@ -4016,9 +4045,12 @@
         "string",
         "binding"
       ],
-      "description": "Indicator color - hex string or color name from colors.json (binding supported)",
+      "description": "Indicator color - hex string or color name from colors.json (binding supported). `tint` folds here (sjui indicator_converter.rb:77 reads `color || tintColor || tint`).",
       "platform": "swift",
-      "mode": "swiftui"
+      "mode": "swiftui",
+      "aliases": [
+        "tint"
+      ]
     },
     "hidesWhenStopped": {
       "type": "boolean",
@@ -4030,7 +4062,10 @@
   "GradientView": {
     "gradient": {
       "type": "array",
-      "description": "Gradient colors"
+      "description": "Gradient colors. `colors` folds here (sjui gradient_view_converter.rb:52,66 read `colors || gradient`).",
+      "aliases": [
+        "colors"
+      ]
     },
     "gradientDirection": {
       "type": "string",

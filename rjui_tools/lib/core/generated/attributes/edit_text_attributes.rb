@@ -118,8 +118,8 @@ module JsonUI
         { name: 'rightViewMode', kind: :string }.freeze,
         # Secure text entry for passwords (can be data binding)
         { name: 'secure', kind: :boolean, bindable: true }.freeze,
-        # Text content (binding for two-way) [binding: two-way]
-        { name: 'text', kind: :string, bindable: true }.freeze,
+        # Text content (binding for two-way). `value` folds here (sjui textfield_converter.rb:527 reads `text || value || bind`). [binding: two-way]
+        { name: 'text', kind: :string, bindable: true, aliases: ['value'].freeze }.freeze,
         # Text alignment
         { name: 'textAlign', kind: :enum, values: ['Left', 'Center', 'Right', 'left', 'center', 'right'].freeze }.freeze,
         # Text padding left

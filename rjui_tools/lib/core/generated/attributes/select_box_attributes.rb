@@ -24,8 +24,8 @@ module JsonUI
         { name: 'datePickerMode', kind: :enum, values: ['date', 'time', 'datetime', 'dateAndTime', 'countDown'].freeze }.freeze,
         # Date picker style
         { name: 'datePickerStyle', kind: :enum, values: ['automatic', 'wheel', 'wheels', 'compact', 'graphical', 'inline'].freeze }.freeze,
-        # Date string format
-        { name: 'dateStringFormat', kind: :string }.freeze,
+        # Date string format. `dateFormat` folds here (sjui selectbox_converter.rb:132 reads `dateFormat || dateStringFormat`).
+        { name: 'dateStringFormat', kind: :string, aliases: ['dateFormat'].freeze }.freeze,
         # Divider styling attributes
         { name: 'dividerAttributes', kind: :object }.freeze,
         # Font name

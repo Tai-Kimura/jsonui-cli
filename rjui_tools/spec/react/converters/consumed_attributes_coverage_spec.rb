@@ -251,7 +251,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     # tightens by one.
     'collection_converter.rb' => %w[contentInset scrollDirection spacing],
     'embed_converter.rb' => %w[],
-    'gradient_view_converter.rb' => %w[angle colors direction endPoint gradientType orientation startPoint],
+    'gradient_view_converter.rb' => %w[angle direction endPoint gradientType orientation startPoint],
     'icon_label_converter.rb' => %w[fontWeight icon iconOff iconOn iconSize iconTintColor spacing strikethrough underline],
     'image_converter.rb' => %w[defaultImage url],
     'include_converter.rb' => %w[],
@@ -261,7 +261,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'progress_converter.rb' => %w[barHeight maximumValue progressHeight trackColor value],
     'radio_converter.rb' => %w[items],
     'scroll_view_converter.rb' => %w[contentInset horizontalScroll],
-    'segment_converter.rb' => %w[backgroundColor fontSize selectedTabIndex],
+    'segment_converter.rb' => %w[backgroundColor fontSize],
     'select_box_converter.rb' => %w[onChange placeholderColor textAlign value],
     'slider_converter.rb' => %w[maximumTrackTintColor minimumTrackTintColor range],
     'switch_converter.rb' => %w[label text],

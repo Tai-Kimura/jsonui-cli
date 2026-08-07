@@ -27,10 +27,10 @@ module JsonUI
         { name: 'onValueChange', kind: :binding }.freeze,
         # Label color of the selected segment, falling back to fontColor - hex string or color name from colors.json
         { name: 'selectedFontColor', kind: :string, aliases: ['selectedColor'].freeze }.freeze,
-        # Initially selected index (binding for two-way) [binding: two-way]
-        { name: 'selectedIndex', kind: :number, bindable: true }.freeze,
-        # Accent color of the SELECTED segment - a background fill on ios/web, the indicator on Compose. Hex string or color name from colors.json
-        { name: 'tintColor', kind: :string }.freeze,
+        # Initially selected index (binding for two-way). `selectedTabIndex` folds here (sjui segment_converter.rb:16), matching the alias TabView already declares. [binding: two-way]
+        { name: 'selectedIndex', kind: :number, bindable: true, aliases: ['selectedTabIndex'].freeze }.freeze,
+        # Accent color of the SELECTED segment - a background fill on ios/web, the indicator on Compose. Hex string or color name from colors.json. `selectedSegmentTintColor` folds here (sjui segment_converter.rb:128 reads `selectedSegmentTintColor || tintColor`).
+        { name: 'tintColor', kind: :string, aliases: ['selectedSegmentTintColor'].freeze }.freeze,
         # Value change event
         { name: 'valueChange', kind: :string }.freeze,
       ].freeze

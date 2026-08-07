@@ -14,8 +14,8 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
-        # Gradient colors
-        { name: 'gradient', kind: :array }.freeze,
+        # Gradient colors. `colors` folds here (sjui gradient_view_converter.rb:52,66 read `colors || gradient`).
+        { name: 'gradient', kind: :array, aliases: ['colors'].freeze }.freeze,
         # Gradient direction
         { name: 'gradientDirection', kind: :enum, values: ['Vertical', 'Horizontal', 'Oblique'].freeze }.freeze,
         # Color stop locations (0.0-1.0)
