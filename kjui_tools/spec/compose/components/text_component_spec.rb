@@ -107,6 +107,32 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       expect(result).to include('TextDecoration.combine')
     end
 
+    # `lineStyle` enumerates "None", which is the declaration's own way of
+    # saying "no line". The truthy test drew one for every object face alike,
+    # so the one value that means OFF behaved like the three that mean ON.
+    it 'draws no underline when the object face declares lineStyle None' do
+      json_data = { 'type' => 'Text', 'text' => 'Test', 'underline' => { 'lineStyle' => 'None' } }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).not_to include('textDecoration')
+      expect(required_imports).not_to include(:text_decoration)
+    end
+
+    it 'draws no strikethrough when the object face declares lineStyle None' do
+      json_data = { 'type' => 'Text', 'text' => 'Test', 'strikethrough' => { 'lineStyle' => 'None' } }
+      expect(described_class.generate(json_data, 0, required_imports)).not_to include('textDecoration')
+    end
+
+    it 'still draws for the other declared lineStyle values and for a bare object' do
+      %w[Single Double Thick].each do |style|
+        json_data = { 'type' => 'Text', 'text' => 'Test', 'underline' => { 'lineStyle' => style } }
+        expect(described_class.generate(json_data, 0, required_imports))
+          .to include('textDecoration = TextDecoration.Underline')
+      end
+      bare = { 'type' => 'Text', 'text' => 'Test', 'underline' => { 'color' => '#FF0000' } }
+      expect(described_class.generate(bare, 0, required_imports))
+        .to include('textDecoration = TextDecoration.Underline')
+    end
+
     it 'generates text with text alignment' do
       json_data = { 'type' => 'Text', 'text' => 'Test', 'textAlign' => 'center' }
       result = described_class.generate(json_data, 0, required_imports)
@@ -496,6 +522,35 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('strikethrough = true')
+    end
+
+    # Inside `partialAttributes` the SSoT declares `underline` as an OBJECT and
+    # nothing else, so the only spec-conformant spelling used to reach the
+    # source as a Ruby Hash — `underline = {"lineStyle"=>"Single"}` is not
+    # Kotlin, and every generated file carrying one failed to compile.
+    it 'folds the declared object face of a partial underline to the API flag' do
+      json_data = {
+        'type' => 'Text',
+        'text' => 'Hello World',
+        'partialAttributes' => [
+          { 'range' => [0, 5],
+            'underline' => { 'lineStyle' => 'Single', 'color' => '#FF0000', 'lineOffset' => 2 } }
+        ]
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('underline = true')
+      expect(result).not_to include('=>')
+    end
+
+    it 'draws no line for a partial underline declared lineStyle None' do
+      json_data = {
+        'type' => 'Text',
+        'text' => 'Hello World',
+        'partialAttributes' => [
+          { 'range' => [0, 5], 'underline' => { 'lineStyle' => 'None' } }
+        ]
+      }
+      expect(described_class.generate(json_data, 0, required_imports)).not_to include('underline =')
     end
 
     it 'handles multiple partial attributes' do

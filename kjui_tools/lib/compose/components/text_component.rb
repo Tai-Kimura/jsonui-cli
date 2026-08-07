@@ -178,12 +178,12 @@ module KjuiTools
 
           # Text decoration (underline, strikethrough)
           text_decorations = []
-          if json_data['underline']
+          if decoration_on?(json_data['underline'])
             required_imports&.add(:text_decoration)
             text_decorations << "TextDecoration.Underline"
           end
 
-          if json_data['strikethrough']
+          if decoration_on?(json_data['strikethrough'])
             required_imports&.add(:text_decoration)
             text_decorations << "TextDecoration.LineThrough"
           end
@@ -452,6 +452,27 @@ module KjuiTools
           result.empty? ? nil : result
         end
 
+        # Whether a declared `underline` / `strikethrough` draws a line.
+        #
+        # Both are declared boolean-or-object on a Label and object-only inside
+        # `partialAttributes`, and the object's `lineStyle` enumerates "None" —
+        # the declaration's own way of saying "no line". A truthy test drew one
+        # anyway, so the one value that means OFF behaved exactly like the three
+        # that mean ON.
+        #
+        # The object's other fields have no Compose expression at this layer:
+        # `TextDecoration` carries neither a colour nor a weight, so `color`,
+        # `lineOffset` and the Double/Thick distinction need a drawing seam in
+        # KotlinJsonUI rather than a different emit here. They stay unread until
+        # that lands (51-C progress, 2026-08-07); the codegen_effect ledger
+        # records the same residue as presence-only.
+        def self.decoration_on?(value)
+          return false if value.nil? || value == false
+          return value['lineStyle'].to_s.casecmp('none') != 0 if value.is_a?(Hash) && value.key?('lineStyle')
+
+          true
+        end
+
         # The declared textAlign spellings (Left/Right/Center) as Compose values.
         # `textAlign` is `["string", "binding"]`, and the `case` below could
         # never match a `"@{...}"`, so a bound alignment froze to the component
@@ -700,11 +721,17 @@ module KjuiTools
             if attr['background']
               code += "\n" + indent("background = \"#{attr['background']}\",", depth + 3)
             end
-            if attr['underline']
-              code += "\n" + indent("underline = #{attr['underline']},", depth + 3)
+            # `PartialAttribute` takes Booleans, and inside `partialAttributes`
+            # the SSoT declares `underline` as an OBJECT and nothing else — so
+            # the only spec-conformant spelling was interpolated straight into
+            # the source as a Ruby Hash (`underline = {"lineStyle"=>"Single"}`),
+            # which is not Kotlin. Fold both faces down to the flag the API
+            # takes; `lineStyle: "None"` folds to no line at all.
+            if decoration_on?(attr['underline'])
+              code += "\n" + indent("underline = true,", depth + 3)
             end
-            if attr['strikethrough']
-              code += "\n" + indent("strikethrough = #{attr['strikethrough']},", depth + 3)
+            if decoration_on?(attr['strikethrough'])
+              code += "\n" + indent("strikethrough = true,", depth + 3)
             end
             # Handle click events for partial attributes
             # onclick (lowercase) -> selector format (string only)
