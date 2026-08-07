@@ -162,6 +162,33 @@ module SjuiTools
           if is_flow
             # Flow layout - items wrap naturally based on content size
             generate_flow_layout(has_sections)
+          elsif columns == 1 && !is_horizontal && has_sections && @component['listStyle']
+            # Sectioned vertical collection WITH list chrome: `listStyle` is
+            # what opts a collection into list-ness (the web face words the
+            # same gate the same way, and the android chrome already applies
+            # on its sectioned lazy path — the three faces agree on the WIDER
+            # gate, 2026-08-08). SwiftUI's List holds Sections natively, so
+            # the F4 section content renders inside a List instead of
+            # CollectionStackView; a chrome-less sectioned collection keeps
+            # the CollectionStackView branch below unchanged.
+            generate_scroll_reader_open
+            hide_separators = [true, 'true'].include?(@component['hideSeparator'])
+            add_line "List {"
+            indent do
+              # listRowSeparator styles ROWS, not the List — a Group forwards
+              # the modifier to every row it contains.
+              add_line "Group {" if hide_separators
+              maybe_indent(hide_separators) do
+                generate_collection_content_sections_vertical
+              end
+              if hide_separators
+                add_line "}"
+                add_modifier_line ".listRowSeparator(.hidden)"
+              end
+            end
+            add_line "}"
+            add_modifier_line ".listStyle(#{list_style_to_swiftui})"
+            generate_scroll_reader_close
           elsif columns == 1 && !is_horizontal && has_sections
             # Section-based vertical collection — delegate outer container
             # (ScrollView + LazyVStack/VStack/none) to SwiftJsonUI's
@@ -200,7 +227,17 @@ module SjuiTools
                   add_line "}"
                 end
               else
-                generate_collection_content(cell_class_name, id)
+                hide_rows = [true, 'true'].include?(@component['hideSeparator'])
+                add_line "Group {" if hide_rows
+                maybe_indent(hide_rows) do
+                  generate_collection_content(cell_class_name, id)
+                end
+                if hide_rows
+                  add_line "}"
+                  # hideSeparator finally has a List to act on here — the row
+                  # was C0 (unread) on this face until 2026-08-08.
+                  add_modifier_line ".listRowSeparator(.hidden)"
+                end
 
                 # Footer without header
                 if footer_class_name
@@ -1373,6 +1410,16 @@ module SjuiTools
         end
 
         # Generate vertical section-based collection content using LazyVStack
+        # Conditionally indent a block — the Group wrappers above read better
+        # than duplicated branches.
+        def maybe_indent(condition, &block)
+          if condition
+            indent(&block)
+          else
+            block.call
+          end
+        end
+
         def generate_collection_content_sections_vertical
           property_name = extract_property_name(@component['items'])
           return unless property_name

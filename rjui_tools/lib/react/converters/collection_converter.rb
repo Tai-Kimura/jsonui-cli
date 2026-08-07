@@ -316,13 +316,14 @@ module RjuiTools
         # List widget, so an undeclared collection keeps today's bare flex
         # column and no existing layout gains separators by default. Declaring
         # `listStyle` (any value, `plain` included) is what opts the
-        # collection into list chrome. Sectioned collections stay out — sjui
-        # takes the List path only when the collection is not sectioned, and
-        # the same gate keeps the two faces in agreement.
+        # collection into list chrome. Sectioned single-column collections
+        # come along too (2026-08-08): SwiftUI's List holds Sections
+        # natively, the android chrome already applies on its sectioned lazy
+        # path, and the ios face now takes the sectioned List path — the
+        # three faces agree on the WIDER gate, not the old unsectioned one.
         def list_style_classes
           style = attributes['listStyle']
           return [] unless style.is_a?(String) && !style.empty?
-          return [] if (attributes['sections'] || []).any?
 
           chrome = LIST_STYLE_CHROME[style.downcase] || LIST_STYLE_CHROME['plain']
           chrome + separator_classes

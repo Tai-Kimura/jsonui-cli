@@ -1,25 +1,5 @@
 {
   "schemaVersion": 1,
   "_comment": "Accepted codegen-differential defects, per (component, attribute, platform, check). An entry means the converter demonstrably fails that judgement and the failure is accepted FOR A STATED REASON — not that it is fine. Unrecorded defects fail `jui conformance gate --codegen-effect`; entries the measurement no longer supports are stale and fail too, so fixing a defect forces its row out (the one-directional version lets a fixed row sit here forever, which is how the previous freeze ledgers rotted). Advisory classes (value-is-default, numeric-string-divergence) are re-derived every run and are deliberately absent. Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
-  "entries": [
-    {
-      "component": "Collection",
-      "attribute": "hideSeparator",
-      "platform": "ios",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "E (SSoT) — contract, no implementation is owed on this face",
-      "reason": "Contract, not a gap. The collectionSeparators ruling (2026-08-07, raised by B) settles it: the ios probe path is CollectionStackView, not SwiftUI's List, and a container that draws no separators satisfies 'hide the separators' VACUOUSLY. 'Implement it' must not mean 'switch the container to a List' — an attribute that reshapes the thing it modifies is the defect family this wave exists to remove. The coverage row is runtime-only: the ios DYNAMIC path implements it; no codegen face does, by contract.",
-      "note": "Family: vacuous-on-this-container-shape."
-    },
-    {
-      "component": "Collection",
-      "attribute": "hideSeparator",
-      "platform": "web",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "E ruling — vacuous outside List (see reason)",
-      "reason": "Ruled 2026-08-07 (51-E, asked by B): a container that is not a List has no separator to hide — the only separator emission on any face is the List path, and the probe layout does not reach it. Contract is a vacuous no-op outside List contexts; coverage marks the attribute runtime-only. Do not read this row as an implementation gap."
-    }
-  ]
+  "entries": []
 }

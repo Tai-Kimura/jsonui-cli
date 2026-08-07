@@ -1565,6 +1565,12 @@ module KjuiTools
               out += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellIndex}_\${viewModel.hashCode()}\")", depth + 3)
             end
             out += "\n" + indent("LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }", depth + 3)
+            # The CollectionStack route is the one the sectioned single-column
+            # fixtures take — the chrome and the declared cell sizes must
+            # apply HERE, not only on the grid route (C0 until 2026-08-08).
+            if (stack_chrome = chrome_open(json_data, required_imports))
+              out += "\n" + indent(stack_chrome, depth + 3)
+            end
             out += "\n" + indent("#{cell_class}View(", depth + 3)
             out += "\n" + indent("viewModel = cellViewModel,", depth + 4)
             collection_id = json_data['id']
@@ -1574,7 +1580,16 @@ module KjuiTools
             else
               out += "\n" + indent("modifier = Modifier", depth + 4)
             end
+            if json_data['cellWidth']
+              out += "\n" + indent("    .requiredWidth(#{json_data['cellWidth']}.dp)", depth + 4)
+            end
+            if json_data['cellHeight']
+              out += "\n" + indent("    .requiredHeight(#{json_data['cellHeight']}.dp)", depth + 4)
+            end
             out += "\n" + indent(")", depth + 3)
+            if chrome_open(json_data, nil)
+              out += "\n" + indent("}", depth + 3)
+            end
             out += "\n" + indent("}", depth + 2)
             out += "\n" + indent("}", depth + 1)
 
@@ -1654,6 +1669,12 @@ module KjuiTools
               out += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellIndex}_\${viewModel.hashCode()}\")", depth + 3)
             end
             out += "\n" + indent("LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }", depth + 3)
+            # The CollectionStack route is the one the sectioned single-column
+            # fixtures take — the chrome and the declared cell sizes must
+            # apply HERE, not only on the grid route (C0 until 2026-08-08).
+            if (stack_chrome = chrome_open(json_data, required_imports))
+              out += "\n" + indent(stack_chrome, depth + 3)
+            end
             out += "\n" + indent("#{cell_class}View(", depth + 3)
             out += "\n" + indent("viewModel = cellViewModel,", depth + 4)
             collection_id = json_data['id']
@@ -1663,7 +1684,16 @@ module KjuiTools
             else
               out += "\n" + indent("modifier = Modifier", depth + 4)
             end
+            if json_data['cellWidth']
+              out += "\n" + indent("    .requiredWidth(#{json_data['cellWidth']}.dp)", depth + 4)
+            end
+            if json_data['cellHeight']
+              out += "\n" + indent("    .requiredHeight(#{json_data['cellHeight']}.dp)", depth + 4)
+            end
             out += "\n" + indent(")", depth + 3)
+            if chrome_open(json_data, nil)
+              out += "\n" + indent("}", depth + 3)
+            end
             out += "\n" + indent("}", depth + 2)
             out += "\n" + indent("}", depth + 1)
 
