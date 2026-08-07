@@ -474,17 +474,19 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
     # double-emit because the entry that replaced the array happened to carry
     # the same text as one of the entries it destroyed. The other axis still
     # went missing.
-    # The trailing `alignment:` is the container default an omitted `gravity`
-    # now resolves to (gravityDefaults.omittedEntirely). It is not what this
-    # example is about — both axes surviving in one frame call is.
+    # A childless View gets no alignment argument (the gravityDefaults
+    # container default only applies to nodes with children — a leaf's
+    # own-frame content is the Center channel Compose also defaults to).
+    # Either way it is not what this example is about — both axes surviving
+    # in one frame call is.
     it 'a bound width keeps the static height (and the reverse)' do
       code = convert(:ViewConverter, 'type' => 'View', 'id' => 't',
                      'width' => '@{n}', 'height' => 100)
-      expect(code).to include('.frame(width: CGFloat(data.n ?? 0), height: 100,')
+      expect(code).to include('.frame(width: CGFloat(data.n ?? 0), height: 100)')
 
       code = convert(:ViewConverter, 'type' => 'View', 'id' => 't',
                      'width' => 100, 'height' => '@{n}')
-      expect(code).to include('.frame(width: 100, height: CGFloat(data.n ?? 0),')
+      expect(code).to include('.frame(width: 100, height: CGFloat(data.n ?? 0))')
     end
 
     it 'a bound Label fontSize reaches the font modifier as a CGFloat' do

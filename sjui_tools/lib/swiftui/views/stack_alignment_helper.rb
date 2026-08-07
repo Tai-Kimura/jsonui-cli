@@ -208,13 +208,23 @@ module SjuiTools
             
             if children_with_align.any?
               alignment = get_zstack_alignment_for_child(children_with_align.first)
-              alignment || '.topLeading'
+              alignment || zstack_default_alignment
             else
-              '.topLeading'
+              zstack_default_alignment
             end
           else
-            '.topLeading'
+            zstack_default_alignment
           end
+        end
+
+        # The ZStack IS the container: its alignment is the declared content
+        # gravity (kjui emits Box(contentAlignment:) from the same
+        # declaration). The literal .topLeading this replaces predates the
+        # gravity read, so `gravity: "center"` on a ZStack View had no
+        # rendering at all on ios. An omitted gravity falls to the canon
+        # default (top|start) through the same read.
+        def zstack_default_alignment
+          gravity_to_frame_alignment || '.topLeading'
         end
       end
     end

@@ -291,4 +291,35 @@ RSpec.describe SjuiTools::SwiftUI::Views::FrameHelper do
       end
     end
   end
+
+  describe '#gravity_to_frame_alignment (gravityDefaults scope)' do
+    # The canon says "on every CONTAINER". A leaf's own-frame content — a
+    # fit image's bitmap, a custom component's internals — is the channel
+    # Compose centres by default (Image/extension alignment), so the omitted
+    # form must NOT inject topLeading there: doing so pinned every fit photo
+    # to the top-left on ios only (a downstream client app+bar field report).
+    context 'omitted gravity on a leaf (no children)' do
+      let(:component) { { 'type' => 'NetworkImage', 'width' => 'matchParent', 'height' => 'matchParent' } }
+
+      it 'returns nil so the own-frame content stays on the Center channel' do
+        expect(helper_class.new(component).gravity_to_frame_alignment).to be_nil
+      end
+    end
+
+    context 'omitted gravity on a container (has children)' do
+      let(:component) { { 'type' => 'View', 'child' => [{ 'type' => 'Label', 'text' => 'a' }] } }
+
+      it 'falls to the canon default top|start' do
+        expect(helper_class.new(component).gravity_to_frame_alignment).to eq('.topLeading')
+      end
+    end
+
+    context 'declared gravity on a leaf' do
+      let(:component) { { 'type' => 'NetworkImage', 'gravity' => 'center' } }
+
+      it 'still applies — only the DEFAULT injection is container-scoped' do
+        expect(helper_class.new(component).gravity_to_frame_alignment).to eq('.center')
+      end
+    end
+  end
 end

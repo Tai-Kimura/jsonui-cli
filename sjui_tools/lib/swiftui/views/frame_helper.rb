@@ -278,7 +278,18 @@ module SjuiTools
           # 2026-08-03 ruling named ("a platform centering by default is the
           # deviant"). The axis defaults below already do the right thing; the
           # early return was what stopped them being reached.
+          #
+          # SCOPE: the canon says "on every CONTAINER". A leaf's own-frame
+          # content — a fit image's bitmap, a custom component's internals —
+          # is a different channel, and there the platform truth is Center
+          # (Compose's Image/extension alignment default, which kjui never
+          # overrides). Injecting the container default on leaves pinned
+          # every fit photo to the top-left on ios only — the exact
+          # divergence the ruling set out to close. A DECLARED gravity still
+          # applies to any node.
           gravities = if gravity.nil?
+                        return nil unless container_content_node?
+
                         []
                       elsif gravity.is_a?(Array)
                         gravity.map { |g| g.to_s.strip.downcase }
@@ -315,6 +326,15 @@ module SjuiTools
             %w[bottom trailing] => '.bottomTrailing'
           }
           map[[v, h]]
+        end
+
+        # True for a node whose content the codegen itself lays out — the
+        # nodes the gravityDefaults canon means by "container". A childless
+        # node's own-frame alignment is its content channel (fit bitmap,
+        # custom-component internals), which is not this ruling's subject.
+        def container_content_node?
+          children = @component['child'] || @component['children']
+          children.is_a?(Array) ? children.any? : !children.nil?
         end
 
         # Label/Text用: textAlignとgravityを組み合わせてframe alignmentを決定

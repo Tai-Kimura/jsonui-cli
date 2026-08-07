@@ -1,10 +1,15 @@
 # frozen_string_literal: true
 
 require 'swiftui/views/stack_alignment_helper'
+require 'swiftui/views/frame_helper'
 
 RSpec.describe SjuiTools::SwiftUI::Views::StackAlignmentHelper do
   let(:helper_class) do
     Class.new do
+      # FrameHelper rides along as it does in every real converter:
+      # zstack_default_alignment reads the declared gravity through
+      # FrameHelper#gravity_to_frame_alignment.
+      include SjuiTools::SwiftUI::Views::FrameHelper
       include SjuiTools::SwiftUI::Views::StackAlignmentHelper
 
       attr_accessor :component
@@ -278,6 +283,24 @@ RSpec.describe SjuiTools::SwiftUI::Views::StackAlignmentHelper do
       it 'defaults to .topLeading' do
         helper = helper_class.new(component)
         expect(helper.get_zstack_alignment).to eq('.topLeading')
+      end
+    end
+
+    context 'with declared gravity' do
+      # The ZStack is the container: its alignment IS the declared content
+      # gravity, the same declaration kjui feeds Box(contentAlignment:). The
+      # old literal .topLeading gave `gravity: "center"` no rendering at all
+      # on ios (downstream hero_section field report).
+      let(:component) do
+        {
+          'gravity' => 'center',
+          'child' => [{ 'type' => 'NetworkImage', 'width' => 'matchParent', 'height' => 'matchParent' }]
+        }
+      end
+
+      it 'reflects the declaration' do
+        helper = helper_class.new(component)
+        expect(helper.get_zstack_alignment).to eq('.center')
       end
     end
   end
