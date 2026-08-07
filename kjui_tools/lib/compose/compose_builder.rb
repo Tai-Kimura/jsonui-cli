@@ -770,6 +770,19 @@ module KjuiTools
 
         code += "\n\n" + indent("#{container}(", depth)
 
+        # `spacing` is declared on SafeAreaView (51-E) and this inline helper
+        # never read it, so a spaced safe-area column packed its children.
+        # Same emit the container converter uses for a plain View, including
+        # the bound face — `spacing` is `["number", "binding"]` and a raw
+        # interpolation would put `@{v}.dp` in code position. A Box has no
+        # arrangement to name, so orientation gates it exactly as it does there.
+        if json_data['spacing'] && %w[Row Column].include?(container)
+          @required_imports&.add(:arrangement)
+          spacing_dp = Helpers::BoundValue.dp(json_data['spacing'])
+          arrangement = container == 'Column' ? 'verticalArrangement' : 'horizontalArrangement'
+          code += "\n" + indent("#{arrangement} = Arrangement.spacedBy(#{spacing_dp}),", depth + 1)
+        end
+
         # Build modifiers
         # Background must come BEFORE systemBarsPadding so it extends to screen edges
         #

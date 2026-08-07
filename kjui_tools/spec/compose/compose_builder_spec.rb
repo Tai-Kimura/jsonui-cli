@@ -741,6 +741,37 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
           expect(result).to include('.fillMaxWidth()')
         end
 
+        # `spacing` is declared on SafeAreaView (51-E) and this inline helper
+        # never read it — the same compose_builder.rb-inline-helper trap as the
+        # size/testTag repair above, on a different attribute.
+        it 'SafeAreaView spaces a vertical stack by the declared spacing' do
+          json = { 'type' => 'SafeAreaView', 'orientation' => 'vertical', 'spacing' => 12 }
+          expect(builder.send(:generate_component, json))
+            .to include('verticalArrangement = Arrangement.spacedBy(12.dp)')
+        end
+
+        it 'SafeAreaView spaces a horizontal stack on the other axis' do
+          json = { 'type' => 'SafeAreaView', 'orientation' => 'horizontal', 'spacing' => 12 }
+          expect(builder.send(:generate_component, json))
+            .to include('horizontalArrangement = Arrangement.spacedBy(12.dp)')
+        end
+
+        # `spacing` is ["number", "binding"]; a raw interpolation would put
+        # `@{v}.dp` in code position.
+        it 'SafeAreaView keeps the bound face of spacing' do
+          json = { 'type' => 'SafeAreaView', 'orientation' => 'vertical', 'spacing' => '@{gap}' }
+          result = builder.send(:generate_component, json)
+          expect(result).to include('Arrangement.spacedBy((data.gap?.dp ?: 0.dp))')
+          expect(result).not_to include('@{')
+        end
+
+        # A Box has no arrangement to name, so an unoriented SafeAreaView emits
+        # none rather than an argument its composable does not take.
+        it 'SafeAreaView emits no arrangement without an orientation' do
+          json = { 'type' => 'SafeAreaView', 'spacing' => 12 }
+          expect(builder.send(:generate_component, json)).not_to include('Arrangement.spacedBy')
+        end
+
         it 'non-root SafeAreaView falls back to `modifier = Modifier` (regression guard)' do
           json = { 'type' => 'SafeAreaView', 'orientation' => 'vertical' }
           result = builder.send(:generate_component, json)
