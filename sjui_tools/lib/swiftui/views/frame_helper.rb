@@ -268,9 +268,19 @@ module SjuiTools
         # gravityからSwiftUI frame alignmentを取得
         def gravity_to_frame_alignment
           gravity = @component['gravity']
-          return nil unless gravity
 
-          gravities = if gravity.is_a?(Array)
+          # An OMITTED gravity is not "no alignment": `gravityDefaults`
+          # (ruled 2026-08-07) says the container default is top | start, and
+          # `omittedEntirely` states it for this case explicitly — if a partial
+          # gravity fills its unnamed axis with the default, an absent one
+          # fills both. Returning nil here dropped the argument entirely and
+          # left SwiftUI's own `.center`, which is the deviation the
+          # 2026-08-03 ruling named ("a platform centering by default is the
+          # deviant"). The axis defaults below already do the right thing; the
+          # early return was what stopped them being reached.
+          gravities = if gravity.nil?
+                        []
+                      elsif gravity.is_a?(Array)
                         gravity.map { |g| g.to_s.strip.downcase }
                       else
                         gravity.to_s.split('|').map { |g| g.strip.downcase }

@@ -210,7 +210,7 @@ module SjuiTools
               end
             end
             add_line "}"
-            add_modifier_line ".listStyle(PlainListStyle())"
+            add_modifier_line ".listStyle(#{list_style_to_swiftui})"
           elsif is_horizontal && @component['paging']
             # Horizontal paging collection - use TabView with page style
             generate_paging_horizontal
@@ -578,6 +578,32 @@ module SjuiTools
         end
 
         private
+
+        #: Declared `listStyle` -> SwiftUI list chrome. Enumerated by the
+        #: `collectionSeparators` ruling (2026-08-07) from the only
+        #: implementation that reads it, SwiftJsonUI's
+        #: TableConverter.applyListStyle.
+        LIST_STYLES = {
+          'plain' => 'PlainListStyle()',
+          'grouped' => 'GroupedListStyle()',
+          'insetgrouped' => 'InsetGroupedListStyle()',
+          'sidebar' => 'SidebarListStyle()',
+        }.freeze
+
+        # This line hardcoded `PlainListStyle()` and never read the attribute,
+        # which is why a declared `listStyle` was inert on the codegen face.
+        # The ruling is explicit that the hardcoding could not be replaced
+        # before the vocabulary existed — a bare string could be neither
+        # validated nor discriminated. It exists now.
+        #
+        # `plain` is the declared default and the declared fallback for an
+        # unrecognised value, so both land on the same arm.
+        #
+        # ORTHOGONAL to `hideSeparator`: this picks the chrome, that hides the
+        # separators, and neither overrides the other.
+        def list_style_to_swiftui
+          LIST_STYLES[@component['listStyle'].to_s.downcase] || LIST_STYLES['plain']
+        end
 
         # Non-lazy path: no ScrollView, no Lazy* containers. The Collection is
         # expected to live inside an already-scrollable parent. Sticky headers

@@ -375,6 +375,43 @@ RSpec.describe 'background vs gradient (swiftui)' do
   end
 end
 
+# `Collection.listStyle` (semantics.collectionSeparators, ruled 2026-08-07).
+# The converter hardcoded `PlainListStyle()` and never read the attribute, so a
+# declared listStyle was inert on the codegen face. The ruling is explicit that
+# the hardcoding could not be replaced before the vocabulary existed — a bare
+# string can be neither validated nor discriminated — and it enumerates the
+# four values from the only implementation that reads it.
+RSpec.describe 'Collection listStyle (swiftui)' do
+  before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+  after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+
+  # The List path: lazy, single column, vertical, no sections.
+  def list(style)
+    component = { 'type' => 'Collection', 'id' => 't', 'width' => 200, 'height' => 200,
+                  'cellClasses' => ['conformance_cell'], 'items' => '@{items}' }
+    component['listStyle'] = style unless style.nil?
+    SjuiTools::SwiftUI::ConverterFactory.new.create_converter(component).convert.to_s
+  end
+
+  {
+    'plain' => 'PlainListStyle()',
+    'grouped' => 'GroupedListStyle()',
+    'insetGrouped' => 'InsetGroupedListStyle()',
+    'sidebar' => 'SidebarListStyle()',
+  }.each do |declared, swiftui|
+    it "maps #{declared} to #{swiftui}" do
+      expect(list(declared)).to include(".listStyle(#{swiftui})")
+    end
+  end
+
+  # Both are `plain` by declaration: it is the default AND the stated fallback
+  # for an unrecognised value.
+  it 'falls back to plain when absent or unrecognised' do
+    expect(list(nil)).to include('.listStyle(PlainListStyle())')
+    expect(list('bogus')).to include('.listStyle(PlainListStyle())')
+  end
+end
+
 # Group-2 backlog closure (2026-07-31).
 RSpec.describe 'backlog closure group 2 (swiftui)' do
   before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
