@@ -272,6 +272,59 @@ RSpec.describe 'distribution fill (swiftui)' do
   end
 end
 
+# gravity's unspecified axis (semantics.gravityDefaults, ruled 2026-08-07).
+#
+# The ruling is deliberately UNOBSERVABLE — "No activeness observable —
+# default-vs-default renders identically" — so no fixture can hold it and the
+# emit is the only place it can be machine-checked. It says a single-axis
+# gravity leaves the other axis at the container default (top | start), never
+# unset and never inherited, and it states the consequence up front: in LTR
+# `left` and `top` both resolve to (start, top) and are therefore identical.
+# The Wave 2 note that ios draws them the same picture is the contract being
+# honoured; a fixture expecting them to differ tests a promise the SSoT never
+# made.
+RSpec.describe 'gravity unspecified axis (swiftui)' do
+  before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+  after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+
+  def stack(gravity, orientation: 'horizontal')
+    component = { 'type' => 'View', 'id' => 't', 'orientation' => orientation,
+                  'width' => 'matchParent', 'height' => 'matchParent',
+                  'child' => [{ 'type' => 'View', 'id' => 'c', 'width' => 40, 'height' => 40 }] }
+    component['gravity'] = gravity unless gravity.nil?
+    SjuiTools::SwiftUI::ConverterFactory.new.create_converter(component).convert.to_s
+  end
+
+  it 'resolves each axis independently — a named axis does not disturb the other' do
+    # `left` names only the horizontal axis; the vertical one takes `top`.
+    expect(stack('left')).to eq(stack('left|top'))
+    # `top` names only the vertical axis; the horizontal one takes `start`.
+    expect(stack('top')).to eq(stack('left|top'))
+  end
+
+  it 'makes left and top observationally identical in LTR, as the ruling states' do
+    expect(stack('left')).to eq(stack('top'))
+    expect(stack('left', orientation: 'vertical')).to eq(stack('top', orientation: 'vertical'))
+  end
+
+  # The ruling promises a RESOLVED GRAVITY per axis, not a byte-identical
+  # emit, and absent gravity currently reaches the same packing by a different
+  # route: the spacer construction is identical, but the outer `.frame` omits
+  # its `alignment:` argument, so it falls to SwiftUI's `.center` where the
+  # three named forms all say `.topLeading`. Recorded in 51-B-progress rather
+  # than "fixed" here — every gravity-less view in every project emits through
+  # this line, so changing it is a measured question, not a spec edit.
+  it 'reaches the same packing when gravity is absent entirely' do
+    expect(stack(nil).scan('Spacer(minLength: 0)').length)
+      .to eq(stack('left|top').scan('Spacer(minLength: 0)').length)
+  end
+
+  it 'does not treat the unnamed axis as unset — bottom still leaves start alone' do
+    expect(stack('bottom')).to eq(stack('left|bottom'))
+    expect(stack('right')).to eq(stack('right|top'))
+  end
+end
+
 # Group-2 backlog closure (2026-07-31).
 RSpec.describe 'backlog closure group 2 (swiftui)' do
   before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
