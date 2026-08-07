@@ -157,24 +157,6 @@
       "class": "unread-spelling",
       "owner": "C (kjui codegen) — implementation queue, coverage.json",
       "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
-    },
-    {
-      "component": "Button",
-      "attribute": "fontFamily",
-      "platform": "ios",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "F (sjui/SwiftJsonUI) — implementation queue, next train",
-      "reason": "The ios Button face has not implemented fontFamily: the dynamic ButtonConverter never reads it and StateAwareButtonView's initializer has no parameter for it. The codegen emit passed the argument anyway and had never compiled — the first Button/fontFamily fixture (51-D bound-fixture batch) failed the codegen host build ('extra argument in call'), so the emit was removed to restore codegen ≡ dynamic (both unread). Not a regression — the attribute never rendered on this face. When the face lands (library + dynamic + codegen together), this row goes stale and the gate says to remove it."
-    },
-    {
-      "component": "Button",
-      "attribute": "fontFamily",
-      "platform": "ios",
-      "check": "C1",
-      "class": "bound-dropped",
-      "owner": "F (sjui/SwiftJsonUI) — implementation queue, next train",
-      "reason": "The ios Button face has not implemented fontFamily: the dynamic ButtonConverter never reads it and StateAwareButtonView's initializer has no parameter for it. The codegen emit passed the argument anyway and had never compiled — the first Button/fontFamily fixture (51-D bound-fixture batch) failed the codegen host build ('extra argument in call'), so the emit was removed to restore codegen ≡ dynamic (both unread). Not a regression — the attribute never rendered on this face. When the face lands (library + dynamic + codegen together), this row goes stale and the gate says to remove it."
     }
   ]
 }
