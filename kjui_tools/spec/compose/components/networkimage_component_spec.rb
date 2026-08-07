@@ -128,4 +128,28 @@ RSpec.describe KjuiTools::Compose::Components::NetworkImageComponent, 'headers' 
     expect(image('headers' => { 'X-Token' => 'a$b"c' }))
       .to include(%q{.add("X-Token", "a\$b\"c")})
   end
+
+  # `renderingMode` is declared for swift and kotlin and only Image read it.
+  # AsyncImage takes the same colorFilter, and the resolver is CALLED rather
+  # than copied — a private duplicate of a shared helper is the bug shape that
+  # made Label.fontFamily inert on android.
+  it 'tints a template NetworkImage with the current content colour' do
+    expect(image('renderingMode' => 'template'))
+      .to include('colorFilter = ColorFilter.tint(LocalContentColor.current)')
+  end
+
+  it 'tints a template NetworkImage with a declared tintColor' do
+    expect(image('renderingMode' => 'template', 'tintColor' => '#FF0000'))
+      .to include('colorFilter = ColorFilter.tint(Color(')
+  end
+
+  # `original` says "keep the asset's own colours", so it suppresses the tint.
+  it 'emits no colour filter for renderingMode original' do
+    expect(image('renderingMode' => 'original', 'tintColor' => '#FF0000'))
+      .not_to include('colorFilter')
+  end
+
+  it 'emits no colour filter when neither is declared' do
+    expect(image({})).not_to include('colorFilter')
+  end
 end

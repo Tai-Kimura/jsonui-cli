@@ -67,6 +67,16 @@ module KjuiTools
             code += "\n" + indent("placeholder = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(placeholder)}),", depth + 1)
           end
 
+          # renderingMode — declared for swift and kotlin, and only Image read
+          # it. `AsyncImage` takes the same `colorFilter` an `Image` does, so
+          # this CALLS the Image converter's resolver rather than growing a
+          # second copy: a private duplicate of a shared helper is what made
+          # Label.fontFamily inert on android while TextView and TextField
+          # worked (KotlinJsonUI f3bdd90).
+          if (filter = ImageComponent.rendering_color_filter(json_data, required_imports))
+            code += "\n" + indent("colorFilter = #{filter},", depth + 1)
+          end
+
           # Build modifiers
           # Compose Modifier order (top to bottom = outer to inner):
           # 1. margins (outer spacing)
