@@ -412,6 +412,56 @@ RSpec.describe 'Collection listStyle (swiftui)' do
   end
 end
 
+# `Collection.cellWidth` / `cellHeight` — "Fixed width/height for EVERY cell"
+# (attribute_definitions). Sixteen call sites render a cell and they had grown
+# four dialects of the frame: some applied both, some only the height plus a
+# grid fill, and SEVEN applied nothing — so whether a declared cell size was
+# honoured depended on which container shape the layout selected. The
+# conformance probe's shape landed on a do-nothing site, which is how it
+# measured the spelling unread while four sites plainly read it.
+#
+# These run across the shapes that route differently, so the dialects cannot
+# quietly diverge again.
+RSpec.describe 'Collection cell sizing (swiftui)' do
+  before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+  after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+
+  SHAPES = {
+    'sections + bound items' => { 'sections' => [{ 'cell' => 'conformance_cell' }], 'items' => '@{items}' },
+    'list (no sections)' => { 'cellClasses' => ['conformance_cell'], 'items' => '@{items}' },
+    'grid, columns 2' => { 'columns' => 2, 'sections' => [{ 'cell' => 'conformance_cell' }], 'items' => '@{items}' },
+    'horizontal' => { 'orientation' => 'horizontal', 'sections' => [{ 'cell' => 'conformance_cell' }], 'items' => '@{items}' },
+    'non-lazy' => { 'lazy' => false, 'sections' => [{ 'cell' => 'conformance_cell' }], 'items' => '@{items}' },
+  }.freeze
+
+  def collection(shape, extra = {})
+    SjuiTools::SwiftUI::ConverterFactory.new.create_converter(
+      { 'type' => 'Collection', 'id' => 't', 'width' => 200, 'height' => 200 }
+        .merge(SHAPES.fetch(shape)).merge(extra)
+    ).convert.to_s
+  end
+
+  SHAPES.each_key do |shape|
+    it "honours a declared cell size on the #{shape} shape" do
+      expect(collection(shape, 'cellWidth' => 37)).to include('.frame(width: 37)')
+      expect(collection(shape, 'cellHeight' => 41)).to include('.frame(height: 41)')
+    end
+
+    # Two values must not emit the same text — that is the C2 judgement the
+    # codegen differential makes, spelled as a unit test.
+    it "discriminates two cell widths on the #{shape} shape" do
+      expect(collection(shape, 'cellWidth' => 8)).not_to eq(collection(shape, 'cellWidth' => 17))
+    end
+  end
+
+  # The grid column governs the width until a cellWidth is declared, and then
+  # the declaration wins: "overrides whatever width the cell layout asked for".
+  it 'lets a declared cellWidth override the grid fill' do
+    expect(collection('grid, columns 2')).to include('.frame(maxWidth: .infinity)')
+    expect(collection('grid, columns 2', 'cellWidth' => 37)).to include('.frame(width: 37)')
+  end
+end
+
 # Group-2 backlog closure (2026-07-31).
 RSpec.describe 'backlog closure group 2 (swiftui)' do
   before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }

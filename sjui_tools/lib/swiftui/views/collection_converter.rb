@@ -251,15 +251,7 @@ module SjuiTools
                             add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                             generate_cell_identity(vars[:index_var])
 
-                            # Only apply cellWidth/cellHeight if explicitly specified
-                            # The cell view itself should define its own size
-                            if @component['cellWidth']
-                              add_modifier_line ".frame(width: #{@component['cellWidth']})"
-                            end
-
-                            if @component['cellHeight']
-                              add_modifier_line ".frame(height: #{@component['cellHeight']})"
-                            end
+                            apply_cell_frame
 
                             # Add accessibilityIdentifier for test automation (tapItem action)
                             if @component['id']
@@ -279,13 +271,7 @@ module SjuiTools
                         add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                         generate_cell_identity(vars[:index_var])
 
-                        if @component['cellWidth']
-                          add_modifier_line ".frame(width: #{@component['cellWidth']})"
-                        end
-
-                        if @component['cellHeight']
-                          add_modifier_line ".frame(height: #{@component['cellHeight']})"
-                        end
+                        apply_cell_frame
 
                         # Add accessibilityIdentifier for test automation (tapItem action)
                         if @component['id']
@@ -312,12 +298,7 @@ module SjuiTools
                         indent do
                           add_line "#{cell_class_name}(data: #{vars[:data_var]})"
                           generate_cell_identity(vars[:index_var])
-                          if @component['cellWidth']
-                            add_modifier_line ".frame(width: #{@component['cellWidth']})"
-                          end
-                          if @component['cellHeight']
-                            add_modifier_line ".frame(height: #{@component['cellHeight']})"
-                          end
+                          apply_cell_frame
                           # Add accessibilityIdentifier for test automation (tapItem action)
                           if @component['id']
                             add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
@@ -399,11 +380,7 @@ module SjuiTools
                               add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                               generate_cell_identity(vars[:index_var])
 
-                              if @component['cellHeight']
-                                add_modifier_line ".frame(height: #{@component['cellHeight']})"
-                              end
-
-                              add_modifier_line ".frame(maxWidth: .infinity)"
+                              apply_cell_frame(grid: true)
 
                               # Add accessibilityIdentifier for test automation (tapItem action)
                               if @component['id']
@@ -579,6 +556,41 @@ module SjuiTools
 
         private
 
+        # The cell's own frame, in ONE place.
+        #
+        # Sixteen call sites render a cell, and they had grown three dialects
+        # of this: six applied cellWidth + cellHeight, three applied cellHeight
+        # and a grid `maxWidth`, and SEVEN applied nothing at all. Which
+        # dialect a layout got depended on which container shape it happened to
+        # select, so `cellWidth` was honoured or silently dropped by accident
+        # of routing — the conformance probe's shape (sections + bound items)
+        # lands on a do-nothing site, which is why it measured the spelling
+        # unread while four call sites plainly read it.
+        #
+        # The declaration settles what they should all do: "Fixed width for
+        # EVERY cell […] applied to the cell view AFTER it is built, so it
+        # overrides whatever width the cell layout asked for".
+        #
+        # `grid:` keeps the one legitimate difference. In a LazyVGrid the
+        # column governs the width, so a cell with no declared cellWidth fills
+        # its column — but a declared one still overrides it, per "overrides
+        # whatever width the cell layout asked for". Emission order inside each
+        # dialect is unchanged: `.frame` wraps, so reordering these would move
+        # pixels.
+        def apply_cell_frame(grid: false)
+          if grid
+            add_modifier_line ".frame(height: #{@component['cellHeight']})" if @component['cellHeight']
+            if @component['cellWidth']
+              add_modifier_line ".frame(width: #{@component['cellWidth']})"
+            else
+              add_modifier_line ".frame(maxWidth: .infinity)"
+            end
+          else
+            add_modifier_line ".frame(width: #{@component['cellWidth']})" if @component['cellWidth']
+            add_modifier_line ".frame(height: #{@component['cellHeight']})" if @component['cellHeight']
+          end
+        end
+
         #: Declared `listStyle` -> SwiftUI list chrome. Enumerated by the
         #: `collectionSeparators` ruling (2026-08-07) from the only
         #: implementation that reads it, SwiftJsonUI's
@@ -673,12 +685,7 @@ module SjuiTools
                     indent do
                       add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                       generate_cell_identity(vars[:index_var])
-                      if @component['cellWidth']
-                        add_modifier_line ".frame(width: #{@component['cellWidth']})"
-                      end
-                      if @component['cellHeight']
-                        add_modifier_line ".frame(height: #{@component['cellHeight']})"
-                      end
+                      apply_cell_frame
                       if @component['id']
                         add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
                       end
@@ -703,12 +710,7 @@ module SjuiTools
                   indent do
                     add_line "#{cell_class_name}(data: #{vars[:data_var]})"
                     generate_cell_identity(vars[:index_var])
-                    if @component['cellWidth']
-                      add_modifier_line ".frame(width: #{@component['cellWidth']})"
-                    end
-                    if @component['cellHeight']
-                      add_modifier_line ".frame(height: #{@component['cellHeight']})"
-                    end
+                    apply_cell_frame
                     if @component['id']
                       add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
                     end
@@ -769,10 +771,7 @@ module SjuiTools
                           indent do
                             add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                             generate_cell_identity(vars[:index_var])
-                            if @component['cellHeight']
-                              add_modifier_line ".frame(height: #{@component['cellHeight']})"
-                            end
-                            add_modifier_line ".frame(maxWidth: .infinity)"
+                            apply_cell_frame(grid: true)
                             if @component['id']
                               add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
                             end
@@ -850,6 +849,7 @@ module SjuiTools
                         indent do
                           add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                           generate_cell_identity(vars[:index_var])
+                          apply_cell_frame
                           if @component['id']
                             add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
                           end
@@ -880,6 +880,7 @@ module SjuiTools
                     indent do
                       add_line "#{cell_class_name}(data: #{vars[:data_var]})"
                       generate_cell_identity(vars[:index_var])
+                      apply_cell_frame
                       if @component['id']
                         add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
                       end
@@ -935,6 +936,7 @@ module SjuiTools
                     indent do
                       add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                       generate_cell_identity(vars[:index_var])
+                      apply_cell_frame
                       if spacing > 0
                         add_modifier_line ".padding(.horizontal, #{spacing / 2.0})"
                       end
@@ -1017,6 +1019,7 @@ module SjuiTools
                       indent do
                         add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                         generate_cell_identity(vars[:index_var])
+                        apply_cell_frame
                         if @component['id']
                           add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
                         end
@@ -1047,6 +1050,7 @@ module SjuiTools
                     indent do
                       add_line "#{cell_class_name}(data: #{vars[:data_var]})"
                       generate_cell_identity(vars[:index_var])
+                      apply_cell_frame
                       if @component['id']
                         add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
                       end
@@ -1410,6 +1414,7 @@ module SjuiTools
                   indent do
                     add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                     generate_cell_identity(vars[:index_var])
+                    apply_cell_frame
                     # Add accessibilityIdentifier for test automation (tapItem action)
                     if @component['id']
                       add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
@@ -1483,6 +1488,7 @@ module SjuiTools
                       indent do
                         add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                         generate_cell_identity(vars[:index_var])
+                        apply_cell_frame
                         # Add accessibilityIdentifier for test automation (tapItem action)
                         if @component['id']
                           add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
@@ -1525,13 +1531,7 @@ module SjuiTools
                         add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                         generate_cell_identity(vars[:index_var])
 
-                        if @component['cellHeight']
-                          add_modifier_line ".frame(height: #{@component['cellHeight']})"
-                        end
-
-                        if columns_is_multi?
-                          add_modifier_line ".frame(maxWidth: .infinity)"
-                        end
+                        apply_cell_frame(grid: columns_is_multi?)
 
                         # Add accessibilityIdentifier for test automation (tapItem action)
                         if @component['id']
@@ -1579,15 +1579,7 @@ module SjuiTools
                 add_line "// TODO: Implement dynamic view instantiation based on viewName"
                 add_line "Text(\"\\(viewName): \\(cellIndex)\")"
 
-                # Cell-specific modifiers
-                if @component['cellHeight']
-                  add_modifier_line ".frame(height: #{@component['cellHeight']})"
-                end
-
-                # For grid layouts, ensure cells expand to fill width
-                if columns_is_multi?
-                  add_modifier_line ".frame(maxWidth: .infinity)"
-                end
+                apply_cell_frame(grid: columns_is_multi?)
               end
               add_line "}"
             end
@@ -1639,13 +1631,7 @@ module SjuiTools
               add_line "#{cell_class_name}(data: #{vars[:data_var]})"
               generate_cell_identity(vars[:index_var])
 
-              if @component['cellHeight']
-                add_modifier_line ".frame(height: #{@component['cellHeight']})"
-              end
-
-              if columns_is_multi?
-                add_modifier_line ".frame(maxWidth: .infinity)"
-              end
+              apply_cell_frame(grid: columns_is_multi?)
 
               # Add accessibilityIdentifier for test automation (tapItem action)
               if @component['id']
