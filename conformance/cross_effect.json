@@ -206,16 +206,6 @@
       "note": "Paired with Label/highlightColor__binding."
     },
     {
-      "fixture": "Label/hintColor__static",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "unreviewed-initial-measurement",
-      "note": ""
-    },
-    {
       "fixture": "Label/lineBreakMode__char",
       "platforms": {
         "android": "inert",
@@ -1080,16 +1070,6 @@
         "web": "inert"
       },
       "reason": "adjudicated compose-measure-constraint (joins the value_discrimination row owned by G, fixture-side follow-up owned by D) AND an SSoT canon question raised with E: measured on web at HEAD, clipToBounds__true moves 1600 px while __false moves 0 — not clipping is the web and ios default, so writing false changes nothing there, whereas Compose clips by default and false is a real change. common.clipToBounds declares no `default` in the SSoT, so the ledger is recording a platform-implicit default that differs across the three. E: declare the canon default. D: the placed-overflow fixture makes the pair measurable. Family: compose-measure-constraint.",
-      "note": ""
-    },
-    {
-      "fixture": "common/disabledBackground__static",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated host-shim limitation (web), NOT a converter defect: the emitted class is `disabled:bg-<name>`, and the conformance host resolves palette names through a GENERATED plain-CSS shim (`.bg-dark_red { … }`) that carries no variants — so the base utility renders and the `disabled:` variant has nothing to resolve to. A consumer whose globals.css registers the colours in `@theme` gets the variant from Tailwind itself. Re-measure if the host stops needing the shim. Family: host-shim-variant-gap.",
       "note": ""
     },
     {

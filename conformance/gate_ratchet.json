@@ -16,9 +16,10 @@
       "Every lane that burns rows down LOWERS its ledger's ceiling in the same commit as the ruling. 0 across the board is the finish line for the external audit's remaining condition.",
       "inert_audit.json lowered 71 -> 0 by 51-E2 (2026-08-07) in the same commit as the last ruling: the ledger's 71 rows are all adjudicated and the ledger is that lane's exclusive bucket, so the floor holds with no other lane underneath it. cross_effect.json is deliberately NOT clamped in the same breath even though it measures 10 < 41: its remainder belongs to the A and C/G lanes, which are mid-run, and a ceiling committed under an in-flight `--update` fires on the lane that is doing the work rather than on a silent regrowth. The orchestrator lowers it once those lanes land.",
       "cross_effect.json lowered 41 -> 10 by 51-E2 (2026-08-07) in the commit that applied the C+G merged rows for the CG-android bucket. The remainder is the A lane's web bucket; orch takes it to 0 when those land.",
-      "cross_effect.json lowered 10 -> 3 by 51-E2 (2026-08-07) with the A lane's 7 replacement rows. The remaining rows are A's three hintColor findings, which A asks to PRUNE rather than rule — that prune is held until A's web implementation is on main, because removing a row the current measurement still supports makes the finding unrecorded and fails the gate. Orch takes the ceiling to 0 with that prune."
+      "cross_effect.json lowered 10 -> 3 by 51-E2 (2026-08-07) with the A lane's 7 replacement rows. The remaining rows are A's three hintColor findings, which A asks to PRUNE rather than rule — that prune is held until A's web implementation is on main, because removing a row the current measurement still supports makes the finding unrecorded and fails the gate. Orch takes the ceiling to 0 with that prune.",
+      "cross_effect.json lowered 3 -> 2 by 51-E2 (2026-08-07) with the two A-lane prunes the current measurement supports. The two SelectBox/hintColor rows stay: A measured them active in a worktree, but the artifacts in this repo still diff 0 px, so pruning them would make a finding the gate can still see unrecorded."
     ],
-    "cross_effect.json": 3,
+    "cross_effect.json": 2,
     "inert_audit.json": 0,
     "value_discrimination.json": 0,
     "codegen_effect.json": 0
