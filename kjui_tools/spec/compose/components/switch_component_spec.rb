@@ -163,5 +163,50 @@ RSpec.describe KjuiTools::Compose::Components::SwitchComponent do
       expect(code.index('Text(')).to be < code.index('Switch(')
     end
   end
+
+  # `label` is the canonical row on Switch, with `text` as its declared alias,
+  # and `fontColor` / `fontSize` are declared flat too (51-E). Only the
+  # `labelAttributes` bag was ever read, so a Switch declaring a plain `label`
+  # drew the control and dropped the text.
+  describe 'the flat label spellings' do
+    def plain(extra)
+      described_class.generate({ 'type' => 'Switch' }.merge(extra), 0, Set.new, nil)
+    end
+
+    it 'draws a label declared with the canonical spelling' do
+      expect(plain('label' => 'Wi-Fi')).to include('text = "Wi-Fi"')
+    end
+
+    it 'draws a label declared with the text alias' do
+      expect(plain('text' => 'Wi-Fi')).to include('text = "Wi-Fi"')
+    end
+
+    # ["string", "binding"] — the old string literal put `@{...}` on screen.
+    it 'resolves a bound label instead of printing the expression' do
+      out = plain('label' => '@{name}')
+      expect(out).to include('${data.name')
+      expect(out).not_to include('@{')
+    end
+
+    it 'styles the flat label with the flat fontColor and fontSize' do
+      out = plain('label' => 'Wi-Fi', 'fontColor' => '#FF0000', 'fontSize' => 18)
+      expect(out).to include('#FF0000')
+      expect(out).to include('fontSize = 18.sp')
+    end
+
+    # The nested bag outranks the flat spelling, the precedence the dynamic
+    # path settled on (KotlinJsonUI 8ed8a16).
+    it 'lets the bag outrank the flat spellings' do
+      out = plain('label' => 'Flat', 'fontColor' => '#FF0000',
+                  'labelAttributes' => { 'text' => 'Bag', 'fontColor' => '#00FF00' })
+      expect(out).to include('text = "Bag"')
+      expect(out).to include('#00FF00')
+      expect(out).not_to include('#FF0000')
+    end
+
+    it 'still draws no label when none is declared' do
+      expect(plain({})).not_to include('Text(')
+    end
+  end
   end
 end

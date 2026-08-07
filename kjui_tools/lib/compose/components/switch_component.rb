@@ -2,6 +2,7 @@
 
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../helpers/bound_value'
 
 module KjuiTools
   module Compose
@@ -28,7 +29,12 @@ module KjuiTools
             'false'
           end
 
-          has_label = json_data['labelAttributes']
+          # A Switch draws a label when it declares one, and `labelAttributes`
+          # is not the only way to declare it: `label` is the canonical row
+          # (with `text` as its declared alias), the same shape CheckBox and
+          # Radio already carry. Only the bag opened this branch, so a Switch
+          # with a plain `label` drew the control and dropped the text.
+          has_label = json_data['labelAttributes'] || label_text_of(json_data)
 
           if has_label
             generate_with_label(json_data, depth, required_imports, parent_type, checked)
@@ -142,8 +148,6 @@ module KjuiTools
         end
 
         def self.generate_with_label(json_data, depth, required_imports, parent_type, checked)
-          label_attrs = json_data['labelAttributes']
-
           # Row container for label + switch
           code = indent("Row(", depth)
           code += "\n" + indent("verticalAlignment = Alignment.CenterVertically,", depth + 1)
@@ -169,7 +173,7 @@ module KjuiTools
           # attribute was read by nobody: the Compose codegen ignored it while
           # the Dynamic runtime honoured it (DynamicToggleComponent). Built as a
           # separate string so it can be placed either side.
-          label_code = build_label_code(label_attrs, depth, required_imports)
+          label_code = build_label_code(json_data, depth, required_imports)
           label_position = (json_data['labelPosition'] || 'leading').to_s.downcase
           code += label_code unless label_position == 'trailing'
 
@@ -256,23 +260,47 @@ module KjuiTools
           code
         end
 
+        # The label's TEXT: the bag's own `text` outranks the flat spelling,
+        # and `label` is the canonical flat row with `text` as its declared
+        # alias. Same precedence the dynamic path settled on (a nested bag
+        # outranks the flat spelling, KotlinJsonUI 8ed8a16).
+        def self.label_text_of(json_data)
+          bag = json_data['labelAttributes']
+          (bag.is_a?(Hash) ? bag['text'] : nil) || json_data['label'] || json_data['text']
+        end
+
+        # One styling row: the bag wins where it declares, the flat spelling
+        # answers where it does not. The flat `fontColor` / `fontSize` are
+        # declared on Switch itself (51-E) and only the bag was ever read.
+        def self.label_style_of(json_data, key)
+          bag = json_data['labelAttributes']
+          (bag.is_a?(Hash) ? bag[key] : nil) || json_data[key]
+        end
+
         # The label Text block, as a string, so generate_with_label can put it
         # before or after the Switch depending on labelPosition.
-        def self.build_label_code(label_attrs, depth, required_imports)
+        def self.build_label_code(json_data, depth, required_imports)
           out = "\n" + indent("Text(", depth + 1)
-          out += "\n" + indent("text = \"#{label_attrs['text'] || ''}\",", depth + 2)
+          # `label` is `["string", "binding"]`; the old string literal put the
+          # characters `@{...}` on screen, which is the bug CheckBox already
+          # fixed for the same spelling.
+          out += "\n" + indent("text = #{Helpers::BoundValue.text(label_text_of(json_data) || '')},", depth + 2)
 
-          if label_attrs['fontSize']
-            out += "\n" + indent("fontSize = #{label_attrs['fontSize']}.sp,", depth + 2)
+          font_size = label_style_of(json_data, 'fontSize')
+          if font_size
+            required_imports&.add(:text_unit) if Helpers::BoundValue.bound?(font_size)
+            out += "\n" + indent("fontSize = #{Helpers::BoundValue.sp(font_size, null_expr: 'TextUnit.Unspecified')},", depth + 2)
           end
 
-          if label_attrs['fontColor']
-            font_color = Helpers::ResourceResolver.process_color(label_attrs['fontColor'], required_imports)
-            out += "\n" + indent("color = #{font_color},", depth + 2)
+          font_color = label_style_of(json_data, 'fontColor')
+          if font_color
+            resolved = Helpers::ResourceResolver.process_color(font_color, required_imports)
+            out += "\n" + indent("color = #{resolved},", depth + 2)
           end
 
-          if label_attrs['font']
-            font_weight = label_attrs['font'].downcase == 'bold' ? 'FontWeight.Bold' : 'FontWeight.Normal'
+          font = label_style_of(json_data, 'font')
+          if font
+            font_weight = font.to_s.downcase == 'bold' ? 'FontWeight.Bold' : 'FontWeight.Normal'
             out += "\n" + indent("fontWeight = #{font_weight},", depth + 2)
           end
 

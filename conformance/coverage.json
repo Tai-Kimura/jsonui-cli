@@ -66,14 +66,6 @@
       "reason": "unimplemented"
     },
     {
-      "component": "Switch",
-      "attribute": "label",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
       "component": "TextField",
       "attribute": "hintLineHeightMultiple",
       "platforms": [
