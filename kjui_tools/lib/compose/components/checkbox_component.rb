@@ -130,8 +130,11 @@ module KjuiTools
               text_params << "color = #{font_color}"
             end
 
-            if json_data['font']
-              text_params << "fontWeight = #{Helpers::FontSpecHelper.weight_expression(json_data['font'])}"
+            # `fontWeight` (declared 51-E) outranks the legacy `font` weight
+            # spelling — only `font` was read, so a declared fontWeight was
+            # inert on this face (codegen_effect CheckBox.fontWeight android).
+            if (weight_spelling = json_data['fontWeight'] || json_data['font'])
+              text_params << "fontWeight = #{Helpers::FontSpecHelper.weight_expression(weight_spelling)}"
             end
 
             if text_params.size == 1
