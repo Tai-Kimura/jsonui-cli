@@ -45,6 +45,34 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       expect(result).to include('#FF0000')
     end
 
+    # ios is canonical (label_converter.rb: `enabled == false &&
+    # disabledFontColor`), and Button already had the rule through Material's
+    # disabledContentColor — only Label was left out. 51-E's declaration is
+    # what made the gap sayable.
+    it 'uses disabledFontColor as the font colour while statically disabled' do
+      json_data = { 'type' => 'Text', 'text' => 'Test', 'enabled' => false,
+                    'fontColor' => '#00FF00', 'disabledFontColor' => '#FF0000' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('#FF0000')
+      expect(result).not_to include('#00FF00')
+    end
+
+    it 'keeps the bound face of disabledFontColor' do
+      json_data = { 'type' => 'Text', 'text' => 'Test', 'enabled' => false,
+                    'disabledFontColor' => '@{errColor}' }
+      expect(described_class.generate(json_data, 0, required_imports))
+        .to include('color = data.errColor')
+    end
+
+    # `enabled` is what selects the set: without it, the base colour stands.
+    it 'leaves fontColor alone when the label is not disabled' do
+      json_data = { 'type' => 'Text', 'text' => 'Test',
+                    'fontColor' => '#00FF00', 'disabledFontColor' => '#FF0000' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('#00FF00')
+      expect(result).not_to include('#FF0000')
+    end
+
     it 'generates text with bold font weight via fontWeight' do
       json_data = { 'type' => 'Text', 'text' => 'Test', 'fontWeight' => 'bold' }
       result = described_class.generate(json_data, 0, required_imports)

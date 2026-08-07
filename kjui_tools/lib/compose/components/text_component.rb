@@ -129,10 +129,21 @@ module KjuiTools
                       end
           component_code += "\n" + indent("text = #{text_expr},", depth + 1)
 
-          # Font color (official attribute)
-          base_color = if json_data['fontColor']
-                         Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
-                       end
+          # Font color (official attribute).
+          #
+          # `disabledFontColor` replaces it while the label is statically
+          # disabled — ios is canonical here (label_converter.rb: `if enabled
+          # == false && disabledFontColor`) and Button already had the same
+          # rule through Material's disabledContentColor. Only Label was left
+          # out, which is what 51-E's declaration made sayable. STATIC only:
+          # `enabled` is what selects the set, and a bound one cannot be
+          # resolved at emit time — the colour itself may still be bound.
+          disabled_color = if json_data['enabled'] == false && json_data['disabledFontColor']
+                             Helpers::ResourceResolver.process_color(json_data['disabledFontColor'], required_imports)
+                           end
+          base_color = disabled_color || if json_data['fontColor']
+                                           Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
+                                         end
           highlight_color = if highlight && highlight_condition && highlight[:font_color]
                               Helpers::ResourceResolver.process_color(highlight[:font_color], required_imports)
                             end
