@@ -30,8 +30,8 @@ module JsonUI
         { name: 'icon_off', kind: :string }.freeze,
         # Selected icon
         { name: 'icon_on', kind: :string }.freeze,
-        # Selected state (binding supported). Chooses icon_on over icon_off and selectedFontColor over fontColor, so every platform declaring those needs this too.
-        { name: 'selected', kind: :boolean, bindable: true }.freeze,
+        # Selected state (binding supported). Chooses icon_on over icon_off and selectedFontColor over fontColor, so every platform declaring those needs this too. `isOn` folds here — the legacy spelling for the same state. IconLabelConverter.swift:145-151 says so in as many words ("Pre-SSoT layouts that spelled it `isOn` keep working") and reads it out of rawData because no typed slot existed; sjui icon_label_converter.rb:130 reads the canonical `selected` (plan 51-E).
+        { name: 'selected', kind: :boolean, bindable: true, aliases: ['isOn'].freeze }.freeze,
         # Selected text color - hex string or color name from colors.json
         { name: 'selectedFontColor', kind: :string }.freeze,
         # Label text (can be data binding)

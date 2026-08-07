@@ -71,7 +71,18 @@ module SjuiTools
               add_line "fontSize: #{bound_number(@component['fontSize']) || @component['fontSize']},"
             end
 
-            if @component['fontStyle']
+            # `fontWeight` is the DECLARED spelling and nothing here read it —
+            # the cascade below only knew `fontStyle` and the `font`-means-
+            # weight shorthand, so a canonical declaration rendered regular.
+            # It is the specific spelling and wins, the way `fontFamily` won
+            # over `font` in the TextView converter. Bound and numeric faces
+            # go through the same arbiters the other converters use.
+            if (bound_weight = swift_weight_expr(@component['fontWeight'], default: nil))
+              add_line "fontWeight: #{bound_weight},"
+            elsif @component['fontWeight'] &&
+                  (weight = font_weight_to_swiftui(@component['fontWeight']))
+              add_line "fontWeight: #{weight},"
+            elsif @component['fontStyle']
               weight = get_font_weight(@component['fontStyle'])
               add_line "fontWeight: .#{weight}," if weight
             elsif (bound_weight = swift_weight_expr(@component['font'], default: nil))

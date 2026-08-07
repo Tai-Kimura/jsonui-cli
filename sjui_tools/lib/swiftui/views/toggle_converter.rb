@@ -43,9 +43,16 @@ module SjuiTools
           # Toggle
           add_line "Toggle(isOn: #{state_binding}) {"
           indent do
-            # Escape double quotes in text for Swift string literal
-            escaped_text = text.gsub('"', '\\"')
-            add_line "Text(\"#{escaped_text}\")"
+            # A bound label used to be escaped into the literal, which
+            # compiles and then prints the characters `@{name}` on screen.
+            # The declared binding face needs the expression, not the quotes.
+            if (bound_label = bound_string(text))
+              add_line "Text(#{bound_label})"
+            else
+              # Escape double quotes in text for Swift string literal
+              escaped_text = text.gsub('"', '\\"')
+              add_line "Text(\"#{escaped_text}\")"
+            end
 
             # labelAttributes の処理
             if @component['labelAttributes']

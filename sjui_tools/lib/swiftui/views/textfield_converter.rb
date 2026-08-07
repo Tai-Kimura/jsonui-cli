@@ -365,12 +365,10 @@ module SjuiTools
             @modifier_bag.register(:clip_to_bounds, ".clipped()")
           end
 
-          # Apply offset
-          if @component['offsetX'] || @component['offsetY']
-            offset_x = @component['offsetX'] || 0
-            offset_y = @component['offsetY'] || 0
-            @modifier_bag.register(:offset, ".offset(x: #{offset_x}, y: #{offset_y})")
-          end
+          # Apply offset (shared with the base converter — see
+          # `register_offset_modifier`; the copy here dropped bindings into
+          # code position)
+          register_offset_modifier
 
           # Apply hidden state — visibility:"invisible" shorthand: keep
           # layout space, hide drawing + accessibility (never collapse)

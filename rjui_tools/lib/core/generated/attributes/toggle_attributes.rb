@@ -22,6 +22,8 @@ module JsonUI
         { name: 'enabled', kind: :boolean, bindable: true }.freeze,
         # Text color - hex string or color name from colors.json (binding supported). Declared from the implementation, which already read it: sjui toggle_converter.rb:62-63,71-72 (plan 51-E).
         { name: 'fontColor', kind: :string, bindable: true }.freeze,
+        # Font size (binding supported). Declared from the implementation, which already read it: sjui toggle_converter.rb hands the whole component to the shared apply_font_modifiers helper, so the size was honoured with no declaration behind it (plan 51-E).
+        { name: 'fontSize', kind: :number, bindable: true }.freeze,
         # Switch state (binding for two-way) [binding: two-way]
         { name: 'isOn', kind: :boolean, bindable: true }.freeze,
         # Switch label (can be data binding). Same shape CheckBox and Radio already declare: `label` is the canonical row and `text` folds into it. Declared from the implementation, which already read it: sjui toggle_converter.rb:21 (text || label) (plan 51-E).

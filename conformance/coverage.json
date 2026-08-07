@@ -20,10 +20,22 @@
       "reason": "unimplemented"
     },
     {
-      "component": "Label",
-      "attribute": "disabledFontColor",
+      "component": "Collection",
+      "attribute": "hideSeparator",
       "platforms": [
-        "android"
+        "ios",
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented"
+    },
+    {
+      "component": "Collection",
+      "attribute": "listStyle",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
       ],
       "reason": "unimplemented"
     },

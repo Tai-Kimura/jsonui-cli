@@ -495,11 +495,7 @@ module SjuiTools
           end
 
           # オフセット（offsetX, offsetY）
-          if @component['offsetX'] || @component['offsetY']
-            offset_x = @component['offsetX'] || 0
-            offset_y = @component['offsetY'] || 0
-            @modifier_bag.register(:offset, ".offset(x: #{offset_x}, y: #{offset_y})")
-          end
+          register_offset_modifier
 
           # 表示/非表示 — hidden は visibility:"invisible" のブールショートハンド:
           # レイアウトスペースは保持したまま描画とアクセシビリティのみ消す
@@ -927,6 +923,31 @@ module SjuiTools
         end
 
         private
+
+        # `.offset(x:y:)` from the declared offsetX / offsetY.
+        #
+        # Both are declared with a binding face, and the emit interpolated the
+        # raw JSON value into CODE position: `@{dx}` arrived in the generated
+        # source verbatim, which is not a wrong program but not a program at
+        # all — the build dies on it. `bound_number` is the arbiter that was
+        # already resolving the same union everywhere else.
+        #
+        # One home, because this had grown a second copy in the TextField
+        # converter and a vocabulary that exists twice drifts (plan 40).
+        def register_offset_modifier
+          return unless @component['offsetX'] || @component['offsetY']
+
+          x = offset_component('offsetX')
+          y = offset_component('offsetY')
+          @modifier_bag.register(:offset, ".offset(x: #{x}, y: #{y})")
+        end
+
+        def offset_component(key)
+          value = @component[key]
+          return 0 if value.nil?
+
+          bound_number(value) || value
+        end
 
         # Categorize a binding modifier string into the correct bag key
         def categorize_binding_modifier(modifier)

@@ -181,7 +181,7 @@
         "string",
         "binding"
       ],
-      "description": "Background color - hex string (#RRGGBB or #RRGGBBAA) or color name from colors.json (can be data binding)"
+      "description": "Background color - hex string (#RRGGBB or #RRGGBBAA) or color name from colors.json (can be data binding). `backgroundColor` folds here: the genuine layout reads of that spelling all chain with `background` (kjui blurview_component.rb:42 `background || backgroundColor`, kjui segment_component.rb:55 `backgroundColor || background`, rjui blur_converter.rb:58 and circle_view_converter.rb:55). Note the two kjui sites read the pair in OPPOSITE order, so a layout setting both drew two different colours until the normalizer began folding them — the same defect shape as CheckBox's accent chain (plan 51-E)."
     },
     "tapBackground": {
       "type": [
@@ -3118,6 +3118,13 @@
       "aliases": [
         "text"
       ]
+    },
+    "fontSize": {
+      "type": [
+        "number",
+        "binding"
+      ],
+      "description": "Font size (binding supported). Declared from the implementation, which already read it: sjui toggle_converter.rb hands the whole component to the shared apply_font_modifiers helper, so the size was honoured with no declaration behind it (plan 51-E)."
     }
   },
   "Toggle": {
@@ -3940,6 +3947,14 @@
     "cellHeight": {
       "type": "number",
       "description": "Fixed height for every cell, in pt / dp / px. Applied to the cell view AFTER it is built, so it overrides whatever height the cell layout asked for; leave it out to let each cell size itself. Declared from the implementation, which already read it: sjui collection_converter.rb:260,286,318,402 (plan 51-E)."
+    },
+    "hideSeparator": {
+      "type": "boolean",
+      "description": "Hide the row separators a list draws between cells. Declared from the implementation, which already read it: SwiftJsonUI CollectionConverter.swift:662 and TableConverter.swift:46. NOTE the asymmetry this exposes — no CODEGEN face reads it on any platform, so the same layout hides separators under ios dynamic and keeps them under `jui build`; the coverage ledger carries the gap (plan 51-E)."
+    },
+    "listStyle": {
+      "type": "string",
+      "description": "Which list chrome the collection is drawn with. Declared from the implementation, which already read it: SwiftJsonUI TableConverter.swift:49. Same asymmetry as hideSeparator — sjui collection_converter.rb:213 hardcodes PlainListStyle instead of reading the attribute, so codegen ignores what dynamic honours; the coverage ledger carries the gap (plan 51-E)."
     }
   },
   "Radio": {
@@ -4380,7 +4395,10 @@
         "boolean",
         "binding"
       ],
-      "description": "Selected state (binding supported). Chooses icon_on over icon_off and selectedFontColor over fontColor, so every platform declaring those needs this too."
+      "description": "Selected state (binding supported). Chooses icon_on over icon_off and selectedFontColor over fontColor, so every platform declaring those needs this too. `isOn` folds here — the legacy spelling for the same state. IconLabelConverter.swift:145-151 says so in as many words (\"Pre-SSoT layouts that spelled it `isOn` keep working\") and reads it out of rawData because no typed slot existed; sjui icon_label_converter.rb:130 reads the canonical `selected` (plan 51-E).",
+      "aliases": [
+        "isOn"
+      ]
     },
     "font": {
       "type": "string",
