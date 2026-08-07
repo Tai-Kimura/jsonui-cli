@@ -89,27 +89,31 @@ module RjuiTools
           # `placeholder-@{v}`. `::placeholder` is a pseudo-element that no
           # inline declaration can reach, so the binding rides a custom
           # property the arbitrary value reads back.
-          if attributes['hintColor'] || attributes['placeholderColor']
-            color = attributes['hintColor'] || attributes['placeholderColor']
-            classes << (bound_state_color_class(color, custom_property: '--jui-hint-color', prefix: 'placeholder') ||
-                        TailwindMapper.map_color(color, 'placeholder'))
-          elsif attributes['hintAttributes'] && attributes['hintAttributes']['fontColor']
-            classes << TailwindMapper.map_color(
-              attributes['hintAttributes']['fontColor'], 'placeholder'
-            )
+          # `hintAttributes` carries the same spellings in a nested object and
+          # the nested keys win: a bag scoped to the hint is the more specific
+          # statement (the cascade every other reader takes — rjui
+          # label_converter, sjui textview_converter, kjui textview_component).
+          # This reader had it backwards for fontColor and did not read the
+          # bag's other keys at all.
+          hint_bag = attributes['hintAttributes'].is_a?(Hash) ? attributes['hintAttributes'] : {}
+          hint_color = hint_bag['fontColor'] || attributes['hintColor'] || attributes['placeholderColor']
+          if hint_color
+            classes << (bound_state_color_class(hint_color, custom_property: '--jui-hint-color', prefix: 'placeholder') ||
+                        TailwindMapper.map_color(hint_color, 'placeholder'))
           end
 
           # Placeholder typography, through the `placeholder:` variant so it
           # targets ::placeholder rather than the textarea's own text.
-          if attributes['hintFontSize']
-            classes << "placeholder:text-[#{attributes['hintFontSize'].to_i}px]"
+          hint_font_size = hint_bag['fontSize'] || attributes['hintFontSize']
+          if hint_font_size
+            classes << "placeholder:text-[#{hint_font_size.to_i}px]"
           end
-          if attributes['hintFont']
-            hint_font = TailwindMapper.map_font(attributes['hintFont'])
+          if (hint_font_name = hint_bag['font'] || attributes['hintFont'])
+            hint_font = TailwindMapper.map_font(hint_font_name)
             classes << "placeholder:#{hint_font}" if hint_font && !hint_font.empty?
           end
-          if attributes['hintLineHeightMultiple']
-            classes << "placeholder:leading-[#{attributes['hintLineHeightMultiple']}]"
+          if (hint_leading = hint_bag['lineHeightMultiple'] || attributes['hintLineHeightMultiple'])
+            classes << "placeholder:leading-[#{hint_leading}]"
           end
 
           # hideOnFocused defaults to true: the hint goes away when the field is

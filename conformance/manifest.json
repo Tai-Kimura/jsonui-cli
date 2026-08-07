@@ -8,15 +8,15 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "be5fafd58187fc62d30b3e5f5c1270cac97338a1364b3f52084ecd235491627b",
+  "generatedFrom": "1565216371b36804d0ee90bf630dc23ef3a0b61a222a1bfa716ec5e62c16081f",
   "counts": {
-    "fixtures": 1063,
+    "fixtures": 1067,
     "assertable": 41,
-    "visual": 803,
+    "visual": 806,
     "interactive": 37,
-    "control": 105,
+    "control": 106,
     "declarationOnly": 77,
-    "skipped": 159,
+    "skipped": 156,
     "promoted": {
       "callback": 11
     }
@@ -7456,6 +7456,35 @@
       "control": "__control/Label"
     },
     {
+      "id": "Label/hintAttributes__static",
+      "component": "Label",
+      "attribute": "hintAttributes",
+      "case": "static",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "hintAttributes",
+      "aliasOf": null,
+      "value": {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000",
+        "lineHeightMultiple": 1.5
+      },
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/hintAttributes__static.layout.json",
+      "test": "fixtures/Label/hintAttributes__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__hint-Conformance-Hint_no-text"
+    },
+    {
       "id": "Label/fontWeight__static",
       "component": "Label",
       "attribute": "fontWeight",
@@ -7865,6 +7894,33 @@
       "deprecated": null,
       "layout": "fixtures/TextField/hintFontSize__static.layout.json",
       "test": "fixtures/TextField/hintFontSize__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/TextField"
+    },
+    {
+      "id": "TextField/hintAttributes__static",
+      "component": "TextField",
+      "attribute": "hintAttributes",
+      "case": "static",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "hintAttributes",
+      "aliasOf": null,
+      "value": {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000",
+        "lineHeightMultiple": 1.5
+      },
+      "platforms": [
+        "ios"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/hintAttributes__static.layout.json",
+      "test": "fixtures/TextField/hintAttributes__static.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
@@ -10401,6 +10457,35 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": "__control/TextView__hint-507236bd"
+    },
+    {
+      "id": "TextView/hintAttributes__static",
+      "component": "TextView",
+      "attribute": "hintAttributes",
+      "case": "static",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "hintAttributes",
+      "aliasOf": null,
+      "value": {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000",
+        "lineHeightMultiple": 1.5
+      },
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/hintAttributes__static.layout.json",
+      "test": "fixtures/TextView/hintAttributes__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/TextView"
     },
     {
       "id": "TextView/font__static",
@@ -23485,6 +23570,30 @@
       "isControl": true
     },
     {
+      "id": "__control/Label__hint-Conformance-Hint_no-text",
+      "component": "__control",
+      "attribute": null,
+      "case": "Label",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Label__hint-Conformance-Hint_no-text.layout.json",
+      "test": "fixtures/__control/Label__hint-Conformance-Hint_no-text.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/Label__hintAttributes--fontSize-12_no-text",
       "component": "__control",
       "attribute": null,
@@ -25957,16 +26066,6 @@
       "reason": "metadata (not rendered)"
     },
     {
-      "component": "Label",
-      "attribute": "hintAttributes",
-      "reason": "composite value (no representative static value in v1)"
-    },
-    {
-      "component": "TextField",
-      "attribute": "hintAttributes",
-      "reason": "composite value (no representative static value in v1)"
-    },
-    {
       "component": "TextField",
       "attribute": "caretAttributes",
       "reason": "composite value (no representative static value in v1)"
@@ -26050,11 +26149,6 @@
       "component": "TextField",
       "attribute": "hideOnFocused",
       "reason": "behavioral (no visual or assertable effect in v1)"
-    },
-    {
-      "component": "TextView",
-      "attribute": "hintAttributes",
-      "reason": "composite value (no representative static value in v1)"
     },
     {
       "component": "TextView",

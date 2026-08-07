@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/hintAttributes__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.hintAttributes (static)",
+    "description": "Conformance fixture for 'hintAttributes' on TextView (section: TextView, class: visual). Value under test: {\"font\": \"bold\", \"fontSize\": 24, \"fontColor\": \"#FF0000\", \"lineHeightMultiple\": 1.5}.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "hintAttributes__static",
+      "description": "Conformance fixture for 'hintAttributes' on TextView (section: TextView, class: visual). Value under test: {\"font\": \"bold\", \"fontSize\": 24, \"fontColor\": \"#FF0000\", \"lineHeightMultiple\": 1.5}.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_hintAttributes__static"
+        }
+      ]
+    }
+  ]
+}

@@ -683,6 +683,31 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
         "fontColor": "#FF0000",
         "textAlign": "Center",
     },
+    # Skipped as "composite value" until the properties hole was filled: the
+    # declarations on TextField/TextView were bare objects, so the bag's own
+    # keys existed only in the readers. The declared four (font / fontSize /
+    # fontColor / lineHeightMultiple) now have fixtures asserting the
+    # nested-wins cascade the description pins down. fontColor + fontSize are
+    # the pixel-movers on every face; the bag deliberately carries all four so
+    # a reader that drops one key still fails the screenshot.
+    ("Label", "hintAttributes"): {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000",
+        "lineHeightMultiple": 1.5,
+    },
+    ("TextField", "hintAttributes"): {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000",
+        "lineHeightMultiple": 1.5,
+    },
+    ("TextView", "hintAttributes"): {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000",
+        "lineHeightMultiple": 1.5,
+    },
     # --- plan 49-D round (2026-08-05): values outside the attribute's own
     # --- domain, which no converter can read however correctly it is written.
     #
@@ -1568,6 +1593,11 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
         "hint": HINT_TEXT,
         "hintAttributes": {"fontSize": 12},
     },
+    # Same shape for the bag itself: the hint must be the thing rendering, and
+    # the bag under test is the second half of the BOTH-keys contract, so no
+    # extra hintAttributes base is needed (or wanted — it would collide with
+    # the value under test).
+    "Label.hintAttributes": {"text": None, "hint": HINT_TEXT},
     # minimumScaleFactor is the FLOOR of the auto-shrink, read only inside
     # `if attributes['autoShrink']` (rjui label_converter.rb:450). Without the
     # switch there is no shrinking for a floor to bound.
