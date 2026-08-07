@@ -34,26 +34,6 @@
     },
     {
       "component": "Collection",
-      "attribute": "listStyle",
-      "platform": "ios",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "D (fixture shape) — the List-path implementation landed in sjui ba5e6d1",
-      "reason": "NOT unread: sjui collection_converter.rb reads the declared vocabulary and emits `.listStyle(PlainListStyle/GroupedListStyle/InsetGroupedListStyle/SidebarListStyle)`, enumerated by the collectionSeparators ruling (2026-08-07). The probe cannot reach that line: its layout carries `sections`, which routes to CollectionStackView — a container that is NOT a SwiftUI List and therefore has no list chrome to pick. The ruling states the measurement consequence up front: 'the fixture must use a list-shaped Collection to observe this at all', and it forbids the other reading — an attribute must not reshape the container it modifies. The row leaves this ledger when the probe stands on a list-shaped Collection.",
-      "note": "Family: probe-shape-unreachable."
-    },
-    {
-      "component": "Image",
-      "attribute": "defaultImage",
-      "platform": "ios",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "D (fixture shape) — the converter is correct",
-      "reason": "Structurally unreachable in the probe's layout, and the converter is right. image_converter.rb reads it as `if src … elsif defaultImage || errorImage || loadingImage …` — a FALLBACK, which by its own declaration applies only when no src resolves. The probe writes `src` AND `defaultImage` on the same node, so the fallback arm is dead by construction and no value of the attribute could change the emit. Same shape as the Image/src measurement blind spot already recorded elsewhere. The row leaves this ledger when the probe drops `src` from the base for this attribute.",
-      "note": "Family: probe-shape-unreachable."
-    },
-    {
-      "component": "Collection",
       "attribute": "lazy",
       "platform": "web",
       "check": "C0",
@@ -61,6 +41,177 @@
       "owner": "A (rjui) — probe value fix owned by D",
       "reason": "NOT an unread spelling. collection_converter.rb:149-151 reads it and every container branch acts on it: static `none` drops the overflow scroll classes (measured: CONTROL/lazy/eager byte-identical, none differs), and the bound form emits a runtime overflow override in all three branches. The C0 verdict is an artifact of the value plan: representative_value('Collection','lazy') is 'lazy' — the declared DEFAULT — so emit(v1) equals the control by construction, and the second value 'eager' also equals it because lazy-vs-eager is virtualization, which the plain `.map()` emit does not have. `none` is the only web-observable value and the probe never picks it.",
       "note": "Accepted degeneracy: web lazy≡eager (no virtualization to switch off). Probe fix: representative value `none` in rules.py (D's file, not touched here)."
+    },
+    {
+      "component": "CheckBox",
+      "attribute": "fontWeight",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "C (kjui codegen) — implementation queue, coverage.json",
+      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
+    },
+    {
+      "component": "Collection",
+      "attribute": "cellHeight",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "C (kjui codegen) — implementation queue, coverage.json",
+      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
+    },
+    {
+      "component": "Collection",
+      "attribute": "cellHeight",
+      "platform": "web",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "A (rjui) — implementation queue, coverage.json",
+      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
+    },
+    {
+      "component": "Collection",
+      "attribute": "cellWidth",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "C (kjui codegen) — implementation queue, coverage.json",
+      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
+    },
+    {
+      "component": "Collection",
+      "attribute": "cellWidth",
+      "platform": "web",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "A (rjui) — implementation queue, coverage.json",
+      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
+    },
+    {
+      "component": "Collection",
+      "attribute": "listStyle",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "C (kjui codegen) — implementation queue, coverage.json",
+      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
+    },
+    {
+      "component": "Collection",
+      "attribute": "listStyle",
+      "platform": "web",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "A (rjui) — implementation queue, coverage.json",
+      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
+    },
+    {
+      "component": "Collection",
+      "attribute": "hideSeparator",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "E ruling — vacuous outside List (see reason)",
+      "reason": "Ruled 2026-08-07 (51-E, asked by B): a container that is not a List has no separator to hide — the only separator emission on any face is the List path, and the probe layout does not reach it. Contract is a vacuous no-op outside List contexts; coverage marks the attribute runtime-only. Do not read this row as an implementation gap."
+    },
+    {
+      "component": "Collection",
+      "attribute": "hideSeparator",
+      "platform": "web",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "E ruling — vacuous outside List (see reason)",
+      "reason": "Ruled 2026-08-07 (51-E, asked by B): a container that is not a List has no separator to hide — the only separator emission on any face is the List path, and the probe layout does not reach it. Contract is a vacuous no-op outside List contexts; coverage marks the attribute runtime-only. Do not read this row as an implementation gap."
+    },
+    {
+      "component": "IconLabel",
+      "attribute": "iconSize",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "C (kjui codegen) — implementation queue, coverage.json",
+      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
+    },
+    {
+      "component": "SafeAreaView",
+      "attribute": "direction",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "C (kjui codegen) — implementation queue, coverage.json",
+      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
+    },
+    {
+      "component": "ScrollView",
+      "attribute": "defaultScrollAnchor",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "C (kjui codegen) — implementation queue, coverage.json (scope confirmed by 51-E)",
+      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
+    },
+    {
+      "component": "Switch",
+      "attribute": "fontColor",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "C (kjui codegen) — implementation queue, coverage.json",
+      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
+    },
+    {
+      "component": "Switch",
+      "attribute": "fontColor",
+      "platform": "android",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "C (kjui codegen) — implementation queue, coverage.json",
+      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
+    },
+    {
+      "component": "Switch",
+      "attribute": "fontSize",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "C (kjui codegen) — implementation queue, coverage.json",
+      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
+    },
+    {
+      "component": "Switch",
+      "attribute": "fontSize",
+      "platform": "android",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "C (kjui codegen) — implementation queue, coverage.json",
+      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
+    },
+    {
+      "component": "TextField",
+      "attribute": "hintLineHeightMultiple",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "C (kjui codegen) — implementation queue, coverage.json",
+      "reason": "Declared 2026-08-07 (51-E canonical/scope batch): the spelling entered the probe surface when the declaration landed, and this face has not implemented the read. Not a regression — the attribute never worked on this face; the declaration made the gap measurable. The implementation queue row lives in conformance/coverage.json under the same owner; when the face lands, this row goes stale and the gate says to remove it (that is the designed lifecycle, not a leak)."
+    },
+    {
+      "component": "Label",
+      "attribute": "minimumScaleFactor",
+      "platform": "web",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "A (rjui) — runtime-implemented, emit-invariant by design",
+      "reason": "The fit-to-box implementation (51-A, commit 6bffb03/80638a7 family) lives at RUNTIME in the web component: the emitted text does not change with the declared value by design, so C0/C1 fire on emit while the behaviour is implemented. Companion adjudication in cross_effect.json (fixture shape cannot observe the shrink without a height constraint; D reshaped in 170121d). Verify via render, not emit."
+    },
+    {
+      "component": "Label",
+      "attribute": "minimumScaleFactor",
+      "platform": "web",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "A (rjui) — runtime-implemented, emit-invariant by design",
+      "reason": "The fit-to-box implementation (51-A, commit 6bffb03/80638a7 family) lives at RUNTIME in the web component: the emitted text does not change with the declared value by design, so C0/C1 fire on emit while the behaviour is implemented. Companion adjudication in cross_effect.json (fixture shape cannot observe the shrink without a height constraint; D reshaped in 170121d). Verify via render, not emit."
     }
   ]
 }
