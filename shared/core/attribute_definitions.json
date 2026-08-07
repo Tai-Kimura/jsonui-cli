@@ -1117,14 +1117,14 @@
         "number",
         "binding"
       ],
-      "description": "Horizontal offset applied after layout, in pt / dp / px. Moves the view without changing the space it occupies or the position of its siblings — the layout is computed first and the offset is a paint-time translation. Pairs with offsetY; either one alone implies 0 for the other. Declared from the implementation, which already read it: sjui base_view_converter.rb:498-501, which reads it on every component (plan 51-E)."
+      "description": "Horizontal offset applied after layout, in pt / dp / px. Measurement and sibling placement are unchanged — the layout is computed first and the offset moves only this view. Its INTERACTIVE region moves with it: an offset control is tappable where it is drawn, which is what rules out a draw-only translation. Absolute, not RTL-mirroring, like leftMargin/rightMargin rather than startMargin/endMargin. Pairs with offsetY; either one alone implies 0 for the other. Full ruling (including the android primitive) in attribute_semantics.json -> offset."
     },
     "offsetY": {
       "type": [
         "number",
         "binding"
       ],
-      "description": "Vertical offset applied after layout, in pt / dp / px. Moves the view without changing the space it occupies or the position of its siblings — the layout is computed first and the offset is a paint-time translation. Pairs with offsetX; either one alone implies 0 for the other. Declared from the implementation, which already read it: sjui base_view_converter.rb:498-501, which reads it on every component (plan 51-E)."
+      "description": "Vertical offset applied after layout, in pt / dp / px. Measurement and sibling placement are unchanged — the layout is computed first and the offset moves only this view. Its INTERACTIVE region moves with it: an offset control is tappable where it is drawn, which is what rules out a draw-only translation. Absolute, not RTL-mirroring, like leftMargin/rightMargin rather than startMargin/endMargin. Pairs with offsetX; either one alone implies 0 for the other. Full ruling (including the android primitive) in attribute_semantics.json -> offset."
     }
   },
   "Label": {
