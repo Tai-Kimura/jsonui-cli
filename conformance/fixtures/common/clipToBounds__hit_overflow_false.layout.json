@@ -1,0 +1,72 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "root",
+  "width": "matchParent",
+  "height": "matchParent",
+  "orientation": "vertical",
+  "data": [
+    {
+      "name": "conformanceResult",
+      "class": "String",
+      "defaultValue": "ready"
+    },
+    {
+      "name": "conformanceFireOver",
+      "class": "() -> Void"
+    },
+    {
+      "name": "conformanceFireUnder",
+      "class": "() -> Void"
+    }
+  ],
+  "child": [
+    {
+      "type": "View",
+      "id": "target",
+      "width": 200,
+      "height": 300,
+      "background": "#DDDDDD",
+      "child": [
+        {
+          "type": "Button",
+          "id": "under_button",
+          "width": 200,
+          "height": 100,
+          "topMargin": 100,
+          "text": "under",
+          "onClick": "@{conformanceFireUnder}"
+        },
+        {
+          "type": "View",
+          "id": "clip_box",
+          "width": 200,
+          "height": 100,
+          "clipToBounds": false,
+          "child": [
+            {
+              "type": "Button",
+              "id": "over_button",
+              "width": 200,
+              "height": 300,
+              "text": "over",
+              "onClick": "@{conformanceFireOver}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Label",
+      "id": "mirror",
+      "text": "@{conformanceResult}"
+    }
+  ]
+}

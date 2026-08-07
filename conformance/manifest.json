@@ -10,10 +10,10 @@
   "schemaVersion": 2,
   "generatedFrom": "be5fafd58187fc62d30b3e5f5c1270cac97338a1364b3f52084ecd235491627b",
   "counts": {
-    "fixtures": 1061,
+    "fixtures": 1063,
     "assertable": 41,
     "visual": 803,
-    "interactive": 35,
+    "interactive": 37,
     "control": 105,
     "declarationOnly": 77,
     "skipped": 159,
@@ -3977,6 +3977,98 @@
       "promotedFrom": null,
       "peerGroup": "common/clipToBounds@View__orientation-horizontal",
       "control": "__control/View__orientation-horizontal"
+    },
+    {
+      "id": "common/clipToBounds__hit_overflow_true",
+      "component": "common",
+      "attribute": "clipToBounds",
+      "case": "hit_overflow_true",
+      "class": "interactive",
+      "host": "View",
+      "writtenKey": "width",
+      "aliasOf": null,
+      "value": 200,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/clipToBounds__hit_overflow_true.layout.json",
+      "test": "fixtures/common/clipToBounds__hit_overflow_true.test.json",
+      "state": {
+        "vars": [
+          {
+            "name": "conformanceResult",
+            "class": "String",
+            "defaultValue": "ready"
+          }
+        ],
+        "handlers": [
+          {
+            "name": "conformanceFireOver",
+            "set": {
+              "var": "conformanceResult",
+              "value": "over"
+            }
+          },
+          {
+            "name": "conformanceFireUnder",
+            "set": {
+              "var": "conformanceResult",
+              "value": "under"
+            }
+          }
+        ]
+      },
+      "promotedFrom": null
+    },
+    {
+      "id": "common/clipToBounds__hit_overflow_false",
+      "component": "common",
+      "attribute": "clipToBounds",
+      "case": "hit_overflow_false",
+      "class": "interactive",
+      "host": "View",
+      "writtenKey": "width",
+      "aliasOf": null,
+      "value": 200,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/clipToBounds__hit_overflow_false.layout.json",
+      "test": "fixtures/common/clipToBounds__hit_overflow_false.test.json",
+      "state": {
+        "vars": [
+          {
+            "name": "conformanceResult",
+            "class": "String",
+            "defaultValue": "ready"
+          }
+        ],
+        "handlers": [
+          {
+            "name": "conformanceFireOver",
+            "set": {
+              "var": "conformanceResult",
+              "value": "over"
+            }
+          },
+          {
+            "name": "conformanceFireUnder",
+            "set": {
+              "var": "conformanceResult",
+              "value": "under"
+            }
+          }
+        ]
+      },
+      "promotedFrom": null
     },
     {
       "id": "common/onclick__callback_fire",

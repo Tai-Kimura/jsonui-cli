@@ -481,6 +481,79 @@ def _visibility_sweep() -> tuple[InteractiveSpec, ...]:
 #: listed; everything else keeps its v1 skip reason. Selector-format
 #: attributes (``onclick``/``onAppear`` — typed ``string``) are written as a
 #: bare handler name; binding-typed attributes use ``@{...}``.
+def _overflow_hit_specs() -> tuple[InteractiveSpec, ...]:
+    """Overflow hit-testing follows CLIPPING (attribute_semantics ->
+    offset.overflowHitTesting: "clipping removes the overflow from hit
+    testing as well as from drawing").
+
+    The target is a no-orientation wrapper (frame overlay semantics): the
+    under button sits at the overflow zone via topMargin, and the clipped
+    box is the LATER child so its overflowing button paints and hit-tests
+    on top exactly when clipping lets it — sibling order is the z-order on
+    every platform, so no z spelling (android declares none) is needed.
+
+    Each fixture taps an ALWAYS-valid target so no driver actionability
+    check can turn the negative case into an action error; the
+    discrimination lives across the pair, and the MIRROR value is the
+    measurement.
+    """
+    over_fire = "conformanceFireOver"
+    under_fire = "conformanceFireUnder"
+    handlers = (
+        StateHandler(over_fire, RESULT_VAR, "over", HANDLER_VOID),
+        StateHandler(under_fire, RESULT_VAR, "under", HANDLER_VOID),
+    )
+    def target_attrs(clip: bool) -> tuple[tuple[str, Any], ...]:
+        return (
+            ("width", 200),
+            ("height", 300),
+            ("child", [
+                {
+                    "type": "Button",
+                    "id": "under_button",
+                    "width": 200,
+                    "height": 100,
+                    "topMargin": 100,
+                    "text": "under",
+                    "onClick": f"@{{{under_fire}}}",
+                },
+                {
+                    "type": "View",
+                    "id": "clip_box",
+                    "width": 200,
+                    "height": 100,
+                    "clipToBounds": clip,
+                    "child": [{
+                        "type": "Button",
+                        "id": "over_button",
+                        "width": 200,
+                        "height": 300,
+                        "text": "over",
+                        "onClick": f"@{{{over_fire}}}",
+                    }],
+                },
+            ]),
+        )
+    def spec(case: str, clip: bool, tap_id: str, expect: str) -> InteractiveSpec:
+        return InteractiveSpec(
+            case=case,
+            host="View",
+            target_attrs=target_attrs(clip),
+            vars=_RESULT_STATE,
+            handlers=handlers,
+            steps=(
+                _text_equals(MIRROR_ID, RESULT_BEFORE),
+                {"action": "tap", "id": tap_id},
+                _text_equals(MIRROR_ID, expect),
+            ),
+            mirror_var=RESULT_VAR,
+        )
+    return (
+        spec("hit_overflow_true", True, "under_button", "under"),
+        spec("hit_overflow_false", False, "over_button", "over"),
+    )
+
+
 INTERACTIVE_SPECS: dict[tuple[str, str], tuple[InteractiveSpec, ...]] = {
     # --- binding fixtures on already-testable attributes (not promotions) --- #
     ("Label", "text"): (_binding_initial("Label"),) + _BINDING_SEMANTICS_TEXT,
@@ -489,6 +562,7 @@ INTERACTIVE_SPECS: dict[tuple[str, str], tuple[InteractiveSpec, ...]] = {
     ("TextView", "text"): (_binding_twoway("TextView"),),
     ("common", "visibility"): _visibility_sweep(),
     ("common", "hidden"): (_negation_hidden(),),
+    ("common", "clipToBounds"): _overflow_hit_specs(),
     # --- promotions out of `untestable: callback` --- #
     ("common", "onclick"): (_callback_fire("Button", "onclick", FIRE_HANDLER, _tap_target()),),
     ("common", "onClick"): (_callback_fire("Button", "onClick", _FIRE_BINDING, _tap_target()),),
