@@ -52,7 +52,14 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
   onError,
 }) => {
   const [imageUrl, setImageUrl] = useState<string | null>(defaultImage || placeholder || null);
-  const [loading, setLoading] = useState(true);
+  // Seeded from `src`, not `true`. Nothing is loading when there is no URL to
+  // load, and the effect that would correct it runs only AFTER the first
+  // paint — so a no-src view painted the loading state once before settling:
+  // with a placeholder it showed the placeholder over defaultImage (the exact
+  // inversion of the canonical noSrc chain), and without one it flashed the
+  // pulsing grey box. Both were recorded by a MutationObserver probe on the
+  // shipped build, invisible to a settled screenshot (plan 51-A, #19).
+  const [loading, setLoading] = useState(!!src);
   const [error, setError] = useState(false);
 
   useEffect(() => {
