@@ -46,9 +46,18 @@ module SjuiTools
               add_line "iconPosition: .left,"
             end
             
-            # iconSize
-            if @component['iconSize']
-              add_line "iconSize: #{@component['iconSize']},"
+            # iconSize — declared number|array: a number sizes both edges,
+            # a two-element [width, height] sizes them separately. The raw
+            # interpolation put a Ruby array literal into Swift for the array
+            # face (`iconSize: [40, 20],` does not compile); the axes go to
+            # the dedicated parameters instead.
+            if (icon_size = @component['iconSize'])
+              if icon_size.is_a?(Array)
+                add_line "iconWidth: #{icon_size[0]}," if icon_size[0]
+                add_line "iconHeight: #{icon_size[1] || icon_size[0]}," if icon_size[0]
+              else
+                add_line "iconSize: #{icon_size},"
+              end
             end
             
             # iconMargin
