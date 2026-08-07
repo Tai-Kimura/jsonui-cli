@@ -3,6 +3,10 @@
 require_relative '../helpers/content_scale_helper'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+# The renderingMode -> ColorFilter mapping lives on the Image converter and is
+# called from here. The full suite happened to load it first, so the missing
+# require only showed up running this file alone.
+require_relative 'image_component'
 
 module KjuiTools
   module Compose
@@ -69,11 +73,23 @@ module KjuiTools
 
           # renderingMode — declared for swift and kotlin, and only Image read
           # it. `AsyncImage` takes the same `colorFilter` an `Image` does, so
-          # this CALLS the Image converter's resolver rather than growing a
-          # second copy: a private duplicate of a shared helper is what made
-          # Label.fontFamily inert on android while TextView and TextField
-          # worked (KotlinJsonUI f3bdd90).
-          if (filter = ImageComponent.rendering_color_filter(json_data, required_imports))
+          # the mapping from mode + tint to a filter stays in the Image
+          # converter rather than growing a second copy: a private duplicate of
+          # a shared helper is what made Label.fontFamily inert on android
+          # while TextView and TextField worked (KotlinJsonUI f3bdd90).
+          #
+          # The spellings are read HERE and handed over explicitly, rather than
+          # passing the whole node. Two reasons, both found by the coverage
+          # scan refusing to see the first version: a declared attribute that
+          # only a sibling component reads is invisible to a per-component
+          # source scan and reads as unimplemented, and passing the node whole
+          # also carried Image's `iconColor` read — a spelling declared on
+          # neither Image nor common — onto NetworkImage.
+          rendering = {
+            'renderingMode' => json_data['renderingMode'],
+            'tintColor' => json_data['tintColor']
+          }
+          if (filter = ImageComponent.rendering_color_filter(rendering, required_imports))
             code += "\n" + indent("colorFilter = #{filter},", depth + 1)
           end
 

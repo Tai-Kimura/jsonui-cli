@@ -41,14 +41,6 @@
       "note": "Was runtime-only while no codegen face read it; B implemented the ios codegen face against the enum (collection_converter.rb LIST_STYLES), so android and web are now a genuine implementation gap. attribute_semantics.json -> collectionSeparators (plan 51-E)."
     },
     {
-      "component": "NetworkImage",
-      "attribute": "renderingMode",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
       "component": "ScrollView",
       "attribute": "defaultScrollAnchor",
       "platforms": [
@@ -97,22 +89,6 @@
       ],
       "reason": "legacy",
       "note": "UIKit-only KVC binding (SJUIViewCreator sets view.binding / bindingSet). The last Ruby reader was sjui's table_converter.rb, folded into the Collection route when 49-E ruled Table is a Collection — so this became unread by that ruling, not by anything failing. The declaration says it is superseded by `@{...}` in the attribute value itself; the UIKit runtime still honours it for layouts that predate that, which is why it is not deleted. Reason `legacy` rather than `unimplemented`: nothing is missing."
-    },
-    {
-      "component": "common",
-      "attribute": "offsetX",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
-    },
-    {
-      "component": "common",
-      "attribute": "offsetY",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented"
     }
   ]
 }
