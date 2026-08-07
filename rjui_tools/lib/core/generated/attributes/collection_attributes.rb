@@ -44,7 +44,7 @@ module JsonUI
         { name: 'footerClasses', kind: :array }.freeze,
         # Header class definitions
         { name: 'headerClasses', kind: :array }.freeze,
-        # Hide the row separators a list draws between cells. Declared from the implementation, which already read it: SwiftJsonUI CollectionConverter.swift:662 and TableConverter.swift:46. NOTE the asymmetry this exposes — no CODEGEN face reads it on any platform, so the same layout hides separators under ios dynamic and keeps them under `jui build`; the coverage ledger carries the gap (plan 51-E).
+        # Hide the row separators a list draws between cells. A NO-OP where the container draws no separators (a grid-shaped Collection has none) — that is the contract, not an unimplemented gap, and it does not license switching the container to a List. No CODEGEN face reads it, so the coverage row is runtime-only. Full ruling in attribute_semantics.json -> collectionSeparators.
         { name: 'hideSeparator', kind: :boolean }.freeze,
         # Enable horizontal scroll
         { name: 'horizontalScroll', kind: :boolean }.freeze,
@@ -68,8 +68,8 @@ module JsonUI
         { name: 'lazy', kind: :enum, bindable: true, values: ['lazy', 'eager', 'none'].freeze }.freeze,
         # Spacing between rows. `sectionSpacing` folds here (sjui collection_converter.rb:799,960 read `sectionSpacing || lineSpacing || 8`).
         { name: 'lineSpacing', kind: :number, aliases: ['sectionSpacing'].freeze }.freeze,
-        # Which list chrome the collection is drawn with. Declared from the implementation, which already read it: SwiftJsonUI TableConverter.swift:49. Same asymmetry as hideSeparator — sjui collection_converter.rb:213 hardcodes PlainListStyle instead of reading the attribute, so codegen ignores what dynamic honours; the coverage ledger carries the gap (plan 51-E).
-        { name: 'listStyle', kind: :string }.freeze,
+        # Which list chrome the collection is drawn with. Enumerated from the only implementation that reads it (SwiftJsonUI TableConverter.applyListStyle); an unrecognised value falls back to plain. ORTHOGONAL to hideSeparator — that one hides the separators, this one picks the chrome, and neither overrides the other. No CODEGEN face reads it, so the coverage row is runtime-only: sjui collection_converter.rb:213 hardcodes PlainListStyle instead. Full ruling in attribute_semantics.json -> collectionSeparators. [default: plain]
+        { name: 'listStyle', kind: :enum, values: ['plain', 'grouped', 'insetGrouped', 'sidebar'].freeze }.freeze,
         # Called with the cell index (Int) when a cell appears on screen. Use for pagination by checking index against total count in ViewModel. Declared `binding` because that is what a layout actually carries: the author writes `@{handlerName}`, a STRING, and every reader matches it as one (kjui collection_component.rb:364 `json_data['onItemAppear'].match(/@\{([^}]+)\}/)`, and the binding validators infer `((Int) -> Unit)?` from that spelling). It was `type: "callback"` — the only callback-typed attribute in the whole SSoT — and attr-codegen skips that type as "function-valued, not extractable from JSON". True of a function; not true of the `@{...}` string a JSON layout can hold, so the attribute had no row in any generated table and no platform could read it typed (2026-08-05, plan 49-E, raised by A).
         { name: 'onItemAppear', kind: :string, bindable: true }.freeze,
         # Collection page/selection change handler. Canonical; prefer over onPageChanged. [binding: one-way]

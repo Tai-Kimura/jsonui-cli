@@ -3951,11 +3951,18 @@
     },
     "hideSeparator": {
       "type": "boolean",
-      "description": "Hide the row separators a list draws between cells. Declared from the implementation, which already read it: SwiftJsonUI CollectionConverter.swift:662 and TableConverter.swift:46. NOTE the asymmetry this exposes — no CODEGEN face reads it on any platform, so the same layout hides separators under ios dynamic and keeps them under `jui build`; the coverage ledger carries the gap (plan 51-E)."
+      "description": "Hide the row separators a list draws between cells. A NO-OP where the container draws no separators (a grid-shaped Collection has none) — that is the contract, not an unimplemented gap, and it does not license switching the container to a List. No CODEGEN face reads it, so the coverage row is runtime-only. Full ruling in attribute_semantics.json -> collectionSeparators."
     },
     "listStyle": {
       "type": "string",
-      "description": "Which list chrome the collection is drawn with. Declared from the implementation, which already read it: SwiftJsonUI TableConverter.swift:49. Same asymmetry as hideSeparator — sjui collection_converter.rb:213 hardcodes PlainListStyle instead of reading the attribute, so codegen ignores what dynamic honours; the coverage ledger carries the gap (plan 51-E)."
+      "enum": [
+        "plain",
+        "grouped",
+        "insetGrouped",
+        "sidebar"
+      ],
+      "default": "plain",
+      "description": "Which list chrome the collection is drawn with. Enumerated from the only implementation that reads it (SwiftJsonUI TableConverter.applyListStyle); an unrecognised value falls back to plain. ORTHOGONAL to hideSeparator — that one hides the separators, this one picks the chrome, and neither overrides the other. No CODEGEN face reads it, so the coverage row is runtime-only: sjui collection_converter.rb:213 hardcodes PlainListStyle instead. Full ruling in attribute_semantics.json -> collectionSeparators."
     }
   },
   "Radio": {
