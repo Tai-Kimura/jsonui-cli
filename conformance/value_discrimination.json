@@ -212,8 +212,8 @@
     "false",
     "true"
    ],
-   "owner": "G (kjui) — adjudicated; fixture-side follow-up owned by D",
-   "reason": "compose-measure-constraint: in Compose the fixture's child cannot paint outside its measured bounds in this fixture shape, so clip-on and clip-off compose the same picture — there is nothing to clip. The pair becomes measurable only when a child actually overflows its parent (D's placed-overflow fixture); until then the collapse is structural, not a defect.",
+   "owner": "orch (fixed 2026-08-08) — row retires at the wave-end bake",
+   "reason": "Defect row, android: measured in run 31160838024 artifacts, the 300dp overflow child renders 200dp (=parent) in BOTH fixtures — byte-identical PNGs. Root cause re-diagnosed 2026-08-08: NOT a clipping wrapper — Modifier.width/height COERCE an over-constrained child to the parent size, so the child could never overflow and the false face was unexpressible at the measurement layer. Fixed the same day (requiredWidth/requiredHeight on the generic size emit, both paths — declared size wins, the canonical ruling ios/web already obey). This row goes stale at the next android measurement and prunes with the wave-end bake.",
    "note": "G's adjudication relayed 2026-08-06 (run 31080217407 triage); row leaves the ledger when D's overflow fixture lands and the values separate."
   },
   {
@@ -304,8 +304,8 @@
     "false_overflow",
     "true_overflow"
    ],
-   "owner": "G/C (kjui dynamic) — next train",
-   "reason": "Defect row, android dynamic chain: measured in run 31160838024 artifacts, the red 300dp overflow child renders 200dp (=parent, density 2.0: 400px) in BOTH fixtures — byte-identical PNGs. Something in the dynamic parent chain clips unconditionally, so `false` cannot show overflow and the pair cannot differ. The declared default (false = not clipped) is unexpressed on this face. ios and web discriminate. Owner G/C (kjui dynamic), next train — suspect a clipping wrapper (Surface/shape) in the host chain, not resolveClipToBounds."
+   "owner": "orch (fixed 2026-08-08) — row retires at the wave-end bake",
+   "reason": "Defect row, android: measured in run 31160838024 artifacts, the 300dp overflow child renders 200dp (=parent) in BOTH fixtures — byte-identical PNGs. Root cause re-diagnosed 2026-08-08: NOT a clipping wrapper — Modifier.width/height COERCE an over-constrained child to the parent size, so the child could never overflow and the false face was unexpressible at the measurement layer. Fixed the same day (requiredWidth/requiredHeight on the generic size emit, both paths — declared size wins, the canonical ruling ios/web already obey). This row goes stale at the next android measurement and prunes with the wave-end bake."
   },
   {
    "component": "Blur",
