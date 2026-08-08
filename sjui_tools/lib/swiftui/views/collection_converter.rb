@@ -202,7 +202,8 @@ module SjuiTools
             add_line "}"
             generate_scroll_reader_close
           elsif columns == 1 && !is_horizontal && !has_sections &&
-                cell_class_name.nil? && header_class_name.nil? && footer_class_name.nil?
+                cell_class_name.nil? && header_class_name.nil? && footer_class_name.nil? &&
+                @component['listStyle'].nil?
             # Nothing renderable: no declared sections and no cell class to
             # draw the items with. Every other face — web, android (both
             # pipelines) and ios dynamic — renders only the collection's own
@@ -211,6 +212,11 @@ module SjuiTools
             # (control_Collection__no-sections parity d=42, run 31202080745).
             # Same declaration-faithful stance as the 2026-08-02 bare-
             # Collection ruling: undeclared content is not invented.
+            # A declared listStyle keeps the List: the chrome belongs to the
+            # CONTAINER on every face (web's list_style_classes, android's
+            # container-level chrome), so an empty chromed List is the
+            # cross-face picture — and short-circuiting it made the spelling
+            # unread on this face (C0, ci run 31234713735).
             add_line "// Nothing renderable — nothing rendered (declaration-faithful)"
             add_line "Color.clear"
           elsif columns == 1 && !is_horizontal
