@@ -745,9 +745,19 @@ module SjuiTools
                       else
                         return
                       end
-          @modifier_bag.append(
-            :component_specific,
-            ".background(#{condition} ? #{get_swiftui_color(highlight_bg)} : Color.clear)"
+          # The swap REPLACES the background in its own slot. Appending it to
+          # :component_specific put the `.background` BEFORE `.frame(w, h)`,
+          # so the highlight painted only the children's bounds while the
+          # ordinary background painted the declared frame on top of the
+          # order (View_highlighted__true parity, run 31202080745 — a 40pt
+          # highlight patch inside a 200pt grey box). UIKit swaps the whole
+          # view's backgroundColor (SJUIView:187); registering :background
+          # wins over the unconditional registration and keeps the slot's
+          # position after frame_size.
+          else_color = @component['background'] ? get_swiftui_color(@component['background']) : 'Color.clear'
+          @modifier_bag.register(
+            :background,
+            ".background(#{condition} ? #{get_swiftui_color(highlight_bg)} : #{else_color})"
           )
         end
 

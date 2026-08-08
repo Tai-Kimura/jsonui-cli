@@ -147,8 +147,17 @@ module SjuiTools
               end
             end
 
-            # Check if text matches just the key (without file prefix)
-            if file_strings.key?(text)
+            # Check if text matches just the key (without file prefix) — but
+            # ONLY within sections this layout owns. The prefixed form above
+            # names its section explicitly, so a foreign hit is a deliberate
+            # reference; a BARE key hitting a foreign section is a collision,
+            # not a reference. A literal data default of "sample" resolved to
+            # another fixture's key "sample" (value "Sample") this way and the
+            # codegen face drew the wrong string while every other face drew
+            # the literal (Radio/Switch label__binding parity, run
+            # 31202080745).
+            own = StringManagerHelper.current_namespaces || []
+            if own.include?(file_name) && file_strings.key?(text)
               struct_name = snake_to_pascal(file_name)
               method_name = snake_to_camel(text)
               return "StringManager.#{struct_name}.#{method_name}()"

@@ -24,9 +24,19 @@ module SjuiTools
           colors = @component['gradient'].map { |color| get_swiftui_color(color) }
           direction = @component['gradientDirection'] || 'Vertical'
 
+          # RightToLeft / BottomToTop are REVERSED directions, not aliases —
+          # the declared enum keeps them distinct (valueAliases folds only
+          # LeftToRight/TopToBottom/Diagonal onto the base three). They fell
+          # into the vertical default here, so both reversed fixtures drew the
+          # same top→bottom picture (parity run 31202080745, distances 135/18
+          # against the dynamic renders, which resolve them correctly).
           gradient_type = case direction
           when 'Horizontal'
             "startPoint: .leading, endPoint: .trailing"
+          when 'RightToLeft'
+            "startPoint: .trailing, endPoint: .leading"
+          when 'BottomToTop'
+            "startPoint: .bottom, endPoint: .top"
           when 'Oblique'
             "startPoint: .topLeading, endPoint: .bottomTrailing"
           else

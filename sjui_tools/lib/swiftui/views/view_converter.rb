@@ -206,8 +206,17 @@ module SjuiTools
               children.each do |child|
                 _applies, weight = weight_expression(child['weight'] || child['widthWeight'] || child['heightWeight'])
                 # `fillEqually` means equal frames, so a child that
-                # declares no weight of its own gets one.
-                weight = 1 if fills_equally && weight.to_s == '0'
+                # declares no weight of its own gets one — UNLESS it declares
+                # its own main-axis size: explicit child size wins over the
+                # size half of distribution (canon childSizePrecedence,
+                # 2026-08-05; the dynamic half's `explicitChildSizeWins`
+                # reads the same way). Handing the sized child a weight too
+                # forced every child to 1/n and drew the declared 60 as 100
+                # (View_distribution__fillequally parity d=106, run
+                # 31202080745 — the dynamic render was the correct one).
+                axis = orientation == 'horizontal' ? 'width' : 'height'
+                declares_axis_size = child[axis] && child[axis] != 'wrapContent'
+                weight = 1 if fills_equally && weight.to_s == '0' && !declares_axis_size
                 weighted_children << { child: child, weight: weight }
               end
 
