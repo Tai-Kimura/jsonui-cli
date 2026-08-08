@@ -253,7 +253,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
     it 'generates text with lineHeightMultiple' do
       json_data = { 'type' => 'Text', 'text' => 'Test', 'fontSize' => 14, 'lineHeightMultiple' => 1.5 }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('style = TextStyle')
+      expect(result).to include('style = LocalTextStyle.current.copy')
       expect(result).to include('lineHeight')
     end
 
@@ -690,7 +690,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
     it 'generates text with textShadow' do
       json_data = { 'type' => 'Text', 'text' => 'Test', 'textShadow' => true }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('style = TextStyle')
+      expect(result).to include('style = LocalTextStyle.current.copy')
       expect(result).to include('shadow = Shadow')
       expect(required_imports).to include(:shadow_style)
     end

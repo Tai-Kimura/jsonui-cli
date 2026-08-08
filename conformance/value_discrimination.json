@@ -283,6 +283,39 @@
       ],
       "owner": "A (rjui/web host)",
       "reason": "Platform vocabulary collapse, web: ExtraLight and Light resolve to the same backdrop recipe in the web host's effect table — the 8-step material vocabulary maps onto fewer distinguishable backdrop-filter/scrim combinations than ios has materials. Same class as android's pruned prominent/thick row (backdrop-collapses-8bit). Deliberate degradation, owner A (rjui/web host); a fixture cannot fix a vocabulary wider than the medium."
+    },
+    {
+      "component": "Collection",
+      "attribute": "listStyle",
+      "platform": "ios",
+      "cases": [
+        "grouped",
+        "insetgrouped"
+      ],
+      "owner": "orch (wave 4, 2026-08-09)",
+      "reason": "Fixture shape, ios only: the section-less listStyle fixtures render a chromed EMPTY List (declaration-faithful — no invented rows), and SwiftUI's grouped/insetGrouped/sidebar chromes are indistinguishable on an empty 200pt list (the inset and corner treatments only manifest around content). The sectioned fixtures (Collection_hideSeparator family, listStyle grouped base) discriminate where rows exist; android and web draw the container-level chrome distinctly and measure apart on the same values."
+    },
+    {
+      "component": "Collection",
+      "attribute": "listStyle",
+      "platform": "ios",
+      "cases": [
+        "grouped",
+        "sidebar"
+      ],
+      "owner": "orch (wave 4, 2026-08-09)",
+      "reason": "Fixture shape, ios only: the section-less listStyle fixtures render a chromed EMPTY List (declaration-faithful — no invented rows), and SwiftUI's grouped/insetGrouped/sidebar chromes are indistinguishable on an empty 200pt list (the inset and corner treatments only manifest around content). The sectioned fixtures (Collection_hideSeparator family, listStyle grouped base) discriminate where rows exist; android and web draw the container-level chrome distinctly and measure apart on the same values."
+    },
+    {
+      "component": "Collection",
+      "attribute": "listStyle",
+      "platform": "ios",
+      "cases": [
+        "insetgrouped",
+        "sidebar"
+      ],
+      "owner": "orch (wave 4, 2026-08-09)",
+      "reason": "Fixture shape, ios only: the section-less listStyle fixtures render a chromed EMPTY List (declaration-faithful — no invented rows), and SwiftUI's grouped/insetGrouped/sidebar chromes are indistinguishable on an empty 200pt list (the inset and corner treatments only manifest around content). The sectioned fixtures (Collection_hideSeparator family, listStyle grouped base) discriminate where rows exist; android and web draw the container-level chrome distinctly and measure apart on the same values."
     }
   ]
 }

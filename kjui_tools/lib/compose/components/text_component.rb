@@ -267,6 +267,29 @@ module KjuiTools
                              required_imports&.add(:text_unit)
                              "lineHeight = if (#{highlight_condition}) #{highlight_line_height}.sp else TextUnit.Unspecified"
                            end
+          elsif hint && hint_condition && hint[:line_height_multiple]
+            # The hint bag's lineHeightMultiple resolves against the hint's
+            # own font size, the same cascade the dynamic face applies —
+            # hint_overrides collected it but nothing consumed it, so the
+            # codegen hint kept the default leading while dynamic drew 1.5
+            # (Label_hintAttributes__static android parity d=17, run
+            # 31258615705).
+            required_imports&.add(:text_style)
+            hint_size = (hint.dig(:font_attrs, 'fontSize') || json_data['fontSize'] || 14).to_f
+            hint_line_height = (hint_size * hint[:line_height_multiple].to_f)
+            hint_base_line_height = if json_data['lineHeightMultiple']
+                                      (json_data['fontSize'] || 14).to_f * json_data['lineHeightMultiple'].to_f
+                                    elsif json_data['lineSpacing']
+                                      (json_data['fontSize'] || 14).to_f + json_data['lineSpacing'].to_f
+                                    elsif json_data['fontSize']
+                                      (json_data['fontSize'].to_f * 1.3).round(1)
+                                    end
+            style_parts << if hint_base_line_height
+                             "lineHeight = (if (#{hint_condition}) #{hint_line_height} else #{hint_base_line_height}).sp"
+                           else
+                             required_imports&.add(:text_unit)
+                             "lineHeight = if (#{hint_condition}) #{hint_line_height}.sp else TextUnit.Unspecified"
+                           end
           elsif json_data['lineHeightMultiple']
             required_imports&.add(:text_style)
             # Line height multiplier - apply to font size.
@@ -286,8 +309,14 @@ module KjuiTools
           end
 
           if style_parts.any?
-            required_imports&.add(:text_style)
-            component_code += "\n" + indent("style = TextStyle(#{style_parts.join(', ')}),", depth + 1)
+            # LocalTextStyle.current.copy, never a bare TextStyle(): the bare
+            # one discards the Material defaults (letterSpacing 0.5sp among
+            # them), and the dynamic face derives from the current style —
+            # the bare emit measured ~8dp narrower and re-wrapped
+            # (Label lineHeightMultiple/lineSpacing parity d=49/58, run
+            # 31258615705, after the dynamic half's 4fc122b).
+            required_imports&.add(:local_text_style)
+            component_code += "\n" + indent("style = LocalTextStyle.current.copy(#{style_parts.join(', ')}),", depth + 1)
           end
 
           # Build modifiers
@@ -689,8 +718,9 @@ module KjuiTools
           end
 
           if style_parts.any?
-            required_imports&.add(:text_style)
-            code += "\n" + indent("style = TextStyle(#{style_parts.join(', ')}),", depth + 1)
+            # Same theme-preserving base as the main Label emit.
+            required_imports&.add(:local_text_style)
+            code += "\n" + indent("style = LocalTextStyle.current.copy(#{style_parts.join(', ')}),", depth + 1)
           end
 
           # Build modifiers
@@ -866,8 +896,9 @@ module KjuiTools
           end
 
           if style_parts.any?
-            required_imports&.add(:text_style)
-            code += ",\n" + indent("style = TextStyle(#{style_parts.join(', ')})", depth + 1)
+            # Same theme-preserving base as the main Label emit.
+            required_imports&.add(:local_text_style)
+            code += ",\n" + indent("style = LocalTextStyle.current.copy(#{style_parts.join(', ')})", depth + 1)
           end
 
           code += "\n" + indent(")", depth)
