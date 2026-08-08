@@ -293,8 +293,22 @@ module SjuiTools
                   children.each_with_index do |child, index|
                     weighted, weight = weight_expression(child['weight'] || child['widthWeight'] || child['heightWeight'])
                     if fills_equally && !weighted
-                      weighted = true
-                      weight = 1
+                      # Explicit child size wins over the size half of
+                      # distribution (canon childSizePrecedence, 2026-08-05;
+                      # the dynamic half's `explicitChildSizeWins` reads the
+                      # same way): a child declaring its own main-axis size
+                      # keeps it and takes no implicit weight. THIS loop is
+                      # the emitting one — it also rewrites child['width'] to
+                      # matchParent for weighted children, which is how the
+                      # declared 60 vanished entirely and drew as 100
+                      # (View_distribution__fillequally parity d=106, runs
+                      # 31202080745/31234163967).
+                      axis = orientation == 'horizontal' ? 'width' : 'height'
+                      declares_axis_size = child[axis] && child[axis] != 'wrapContent'
+                      unless declares_axis_size
+                        weighted = true
+                        weight = 1
+                      end
                     end
 
                     # 各子要素を(view: AnyView, weight: CGFloat)のタプルとして追加

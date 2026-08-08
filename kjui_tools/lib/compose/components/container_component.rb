@@ -241,6 +241,15 @@ module KjuiTools
             next if child['weight'] || child['heightWeight'] || child['widthWeight']
 
             child[axis_weight] = 1
+            # Distribution-injected, not author-declared: an AUTHOR weight
+            # owns its axis (the slot wins over a declared size — canonical
+            # weight ruling, common_weight__static), but a weight the
+            # CONTAINER injected must not override the child's declared size
+            # (childSizePrecedence). build_size reads this marker to keep the
+            # declared size start-aligned inside the slot, exactly what the
+            # dynamic component renders (its Box wrapper takes the weight,
+            # the child draws its own size at topStart).
+            child['__distributionWeight'] = true
             # The share is a slot; the child has to occupy it or the picture is
             # the child's intrinsic size sitting in an empty slot. The dynamic
             # component does exactly this (`injectFillSize`), and only when the

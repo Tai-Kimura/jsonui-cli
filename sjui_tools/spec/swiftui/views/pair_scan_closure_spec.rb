@@ -195,11 +195,21 @@ RSpec.describe 'distribution gap construction (swiftui)' do
   # routes to the weighted stack and emits no separator of its own.
   # F's dynamic half is SwiftJsonUI 4801af7 (`implicitWeight`).
   it 'fillEqually gives equal weights, not a separator' do
+    # The shared helper's children declare a main-axis size, and explicit
+    # child size wins over the size half of distribution
+    # (childSizePrecedence) — so THEY keep weight 0. A child without a
+    # declared main-axis size takes the implicit weight.
     code = stack('fillEqually')
-
-    expect(code).to include('weight: 1')
     expect(code).not_to include('Spacer(minLength: 0)')
     expect(code).not_to eq(stack('equalSpacing'))
+
+    unsized = SjuiTools::SwiftUI::ConverterFactory.new.create_converter(
+      'type' => 'View', 'id' => 't', 'orientation' => 'horizontal',
+      'width' => 'matchParent', 'height' => 'matchParent',
+      'distribution' => 'fillEqually',
+      'child' => Array.new(3) { |i| { 'type' => 'View', 'id' => "c#{i}", 'height' => 40 } }
+    ).convert.to_s
+    expect(unsized).to include('weight: 1')
   end
 
   # F's dynamic implementation (e8f99c7, measured): the TRAILING end unit

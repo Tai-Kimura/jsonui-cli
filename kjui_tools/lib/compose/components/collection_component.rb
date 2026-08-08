@@ -125,6 +125,25 @@ module KjuiTools
           "CollectionCellChrome(style = \"#{style}\", hideSeparator = #{hide}) {"
         end
 
+        # The declared cell size lives on a WRAPPER Box, not on the cell's own
+        # modifier chain: the cell root's requiredSize reports its own size to
+        # the modifiers INSIDE the chain, so a clip placed after a call-site
+        # .width() clips at the root's size, not the slot's, and the overflow
+        # stayed visible (Collection_cellWidth__static d=30, runs
+        # 31202080745/31234163967 — only the screen edge clipped it). A Box
+        # measures the cell, sizes ITSELF to the declared cell frame, and
+        # clips at its own bounds; the child anchors topStart — the web
+        # picture (8px sliver, leading edge).
+        def self.cell_size_box_open(json_data, required_imports)
+          return nil unless json_data['cellWidth'] || json_data['cellHeight']
+
+          required_imports&.add(:shape)
+          mods = []
+          mods << ".width(#{json_data['cellWidth']}.dp)" if json_data['cellWidth']
+          mods << ".height(#{json_data['cellHeight']}.dp)" if json_data['cellHeight']
+          "Box(modifier = Modifier#{mods.join}.clipToBounds()) {"
+        end
+
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           # Registered here, before the routing: `generate` forks into the
           # grid emitter and the CollectionStack emitter, and the inset can
@@ -733,6 +752,9 @@ module KjuiTools
                 if (chrome = chrome_open(json_data, required_imports))
                   code += "\n" + indent(chrome, depth + 5)
                 end
+                if (cell_box = cell_size_box_open(json_data, required_imports))
+                  code += "\n" + indent(cell_box, depth + 5)
+                end
                 code += "\n" + indent("#{cell_class}View(", depth + 5)
                 code += "\n" + indent("viewModel = cellViewModel,", depth + 6)
                 # Add testTag for test automation (tapItem action)
@@ -742,23 +764,10 @@ module KjuiTools
                 else
                   code += "\n" + indent("modifier = Modifier", depth + 6)
                 end
-                # cellWidth/cellHeight size every cell on the SECTIONED path
-                # too — the emit lived only on the non-sectioned items route,
-                # so the declared sizes were unread on the path the
-                # conformance fixtures actually take.
-                if json_data['cellWidth']
-                  code += "\n" + indent("    .width(#{json_data['cellWidth']}.dp)", depth + 6)
-                end
-                if json_data['cellHeight']
-                  code += "\n" + indent("    .height(#{json_data['cellHeight']}.dp)", depth + 6)
-                end
-                if json_data['cellWidth'] || json_data['cellHeight']
-                  # Same anchored-and-clipped picture as the CollectionStack
-                  # route below (web canon; requiredSize centres overflow).
-                  required_imports&.add(:shape)
-                  code += "\n" + indent("    .clipToBounds()", depth + 6)
-                end
                 code += "\n" + indent(")", depth + 5)
+                if cell_size_box_open(json_data, nil)
+                  code += "\n" + indent("}", depth + 5)
+                end
                 if chrome_open(json_data, nil)
                   code += "\n" + indent("}", depth + 5)
                 end
@@ -1348,6 +1357,25 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          # Container-level listStyle chrome, same recipe as the grid route:
+          # the dynamic component paints it on every route, so the
+          # CollectionStack face leaving it off drew the declared box's own
+          # background below the cells while dynamic drew the chrome surface
+          # (Collection_hideSeparator/control listStyle-grouped, d=10, runs
+          # 31202080745/31234163967). Emitted after the declared background —
+          # the chrome is the list's inner surface.
+          chrome_style = json_data['listStyle'].to_s.downcase
+          if %w[grouped insetgrouped sidebar].include?(chrome_style)
+            required_imports&.add(:shape)
+            required_imports&.add(:material_theme)
+            if %w[insetgrouped sidebar].include?(chrome_style)
+              modifiers << ".padding(horizontal = 16.dp)"
+              corner = chrome_style == 'insetgrouped' ? 12 : 8
+              modifiers << ".clip(RoundedCornerShape(#{corner}.dp))"
+            end
+            surface = chrome_style == 'sidebar' ? 'surfaceContainerLow' : 'surfaceContainer'
+            modifiers << ".background(MaterialTheme.colorScheme.#{surface})"
+          end
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
@@ -1582,6 +1610,9 @@ module KjuiTools
             if (stack_chrome = chrome_open(json_data, required_imports))
               out += "\n" + indent(stack_chrome, depth + 3)
             end
+            if (cell_box = cell_size_box_open(json_data, required_imports))
+              out += "\n" + indent(cell_box, depth + 3)
+            end
             out += "\n" + indent("#{cell_class}View(", depth + 3)
             out += "\n" + indent("viewModel = cellViewModel,", depth + 4)
             collection_id = json_data['id']
@@ -1591,24 +1622,10 @@ module KjuiTools
             else
               out += "\n" + indent("modifier = Modifier", depth + 4)
             end
-            # width/clipToBounds, not requiredWidth: a declared cell size can
-            # UNDER-fit the cell's content, and the canonical picture (web,
-            # and the ios frame alignment) anchors the cell at its leading
-            # edge and HIDES the overflow — requiredSize centres it and lets
-            # the content spill (Collection_cellWidth__static parity d=30,
-            # run 31202080745). Lane constraints are loose here, so width
-            # binds exactly.
-            if json_data['cellWidth']
-              out += "\n" + indent("    .width(#{json_data['cellWidth']}.dp)", depth + 4)
-            end
-            if json_data['cellHeight']
-              out += "\n" + indent("    .height(#{json_data['cellHeight']}.dp)", depth + 4)
-            end
-            if json_data['cellWidth'] || json_data['cellHeight']
-              required_imports&.add(:shape)
-              out += "\n" + indent("    .clipToBounds()", depth + 4)
-            end
             out += "\n" + indent(")", depth + 3)
+            if cell_size_box_open(json_data, nil)
+              out += "\n" + indent("}", depth + 3)
+            end
             if chrome_open(json_data, nil)
               out += "\n" + indent("}", depth + 3)
             end
@@ -1697,6 +1714,9 @@ module KjuiTools
             if (stack_chrome = chrome_open(json_data, required_imports))
               out += "\n" + indent(stack_chrome, depth + 3)
             end
+            if (cell_box = cell_size_box_open(json_data, required_imports))
+              out += "\n" + indent(cell_box, depth + 3)
+            end
             out += "\n" + indent("#{cell_class}View(", depth + 3)
             out += "\n" + indent("viewModel = cellViewModel,", depth + 4)
             collection_id = json_data['id']
@@ -1706,24 +1726,10 @@ module KjuiTools
             else
               out += "\n" + indent("modifier = Modifier", depth + 4)
             end
-            # width/clipToBounds, not requiredWidth: a declared cell size can
-            # UNDER-fit the cell's content, and the canonical picture (web,
-            # and the ios frame alignment) anchors the cell at its leading
-            # edge and HIDES the overflow — requiredSize centres it and lets
-            # the content spill (Collection_cellWidth__static parity d=30,
-            # run 31202080745). Lane constraints are loose here, so width
-            # binds exactly.
-            if json_data['cellWidth']
-              out += "\n" + indent("    .width(#{json_data['cellWidth']}.dp)", depth + 4)
-            end
-            if json_data['cellHeight']
-              out += "\n" + indent("    .height(#{json_data['cellHeight']}.dp)", depth + 4)
-            end
-            if json_data['cellWidth'] || json_data['cellHeight']
-              required_imports&.add(:shape)
-              out += "\n" + indent("    .clipToBounds()", depth + 4)
-            end
             out += "\n" + indent(")", depth + 3)
+            if cell_size_box_open(json_data, nil)
+              out += "\n" + indent("}", depth + 3)
+            end
             if chrome_open(json_data, nil)
               out += "\n" + indent("}", depth + 3)
             end

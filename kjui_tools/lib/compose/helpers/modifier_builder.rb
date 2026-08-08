@@ -381,11 +381,20 @@ module KjuiTools
             elsif json_data['maxWidth']
               ".widthIn(max = #{BoundValue.dp(json_data['maxWidth'], null_expr: 'Dp.Infinity')})"
             end
-          explicit_width = json_data['width'] &&
-                           json_data['width'] != 'matchParent' &&
-                           json_data['width'] != 'wrapContent' &&
+          # A DISTRIBUTION-injected weight does not own the axis the way an
+          # author weight does: the declared size stays, start-aligned inside
+          # the slot (childSizePrecedence; the dynamic Box wrapper draws the
+          # same picture). wrapContentWidth resets the slot's exact
+          # constraints so the size after it can bind.
+          numeric_width = json_data['width'] &&
+                          json_data['width'] != 'matchParent' &&
+                          json_data['width'] != 'wrapContent'
+          distribution_sized_width = numeric_width &&
+                                     weight_axis == :width &&
+                                     json_data['__distributionWeight']
+          explicit_width = numeric_width &&
                            !(json_data['weight'] && json_data['width'] == 0) &&
-                           weight_axis != :width
+                           (weight_axis != :width || distribution_sized_width)
           wrap_width = json_data['width'] == 'wrapContent'
           modifiers << width_constraint if width_constraint && !explicit_width && !wrap_width
 
@@ -394,6 +403,14 @@ module KjuiTools
             modifiers << ".fillMaxWidth()"
           elsif wrap_width
             modifiers << ".wrapContentWidth()"
+            modifiers << width_constraint if width_constraint
+          elsif distribution_sized_width
+            # Inside a distribution slot: reset the slot's exact constraints,
+            # anchor at the start, and bind the declared size — the dynamic
+            # component's Box-wrapper picture (View_distribution__fillequally
+            # android parity d=15, run 31234163967).
+            modifiers << ".wrapContentWidth(align = Alignment.Start, unbounded = false)"
+            modifiers << ".width(#{process_dimension(json_data['width'])})"
             modifiers << width_constraint if width_constraint
           elsif explicit_width
             # requiredWidth/requiredHeight, not width/height: a declared size
@@ -462,11 +479,15 @@ module KjuiTools
             elsif json_data['maxHeight']
               ".heightIn(max = #{BoundValue.dp(json_data['maxHeight'], null_expr: 'Dp.Infinity')})"
             end
-          explicit_height = json_data['height'] &&
-                            json_data['height'] != 'matchParent' &&
-                            json_data['height'] != 'wrapContent' &&
+          numeric_height = json_data['height'] &&
+                           json_data['height'] != 'matchParent' &&
+                           json_data['height'] != 'wrapContent'
+          distribution_sized_height = numeric_height &&
+                                      weight_axis == :height &&
+                                      json_data['__distributionWeight']
+          explicit_height = numeric_height &&
                             !(json_data['heightWeight'] && json_data['height'] == 0) &&
-                            weight_axis != :height
+                            (weight_axis != :height || distribution_sized_height)
           # Same three cases as the width axis: constraint before a fill,
           # after a wrap (which discards the incoming minimum), after an
           # explicit height.
@@ -480,6 +501,11 @@ module KjuiTools
             fills_height = true
           elsif wrap_height
             modifiers << ".wrapContentHeight()"
+            modifiers << height_constraint if height_constraint
+          elsif distribution_sized_height
+            # Same slot picture as the width axis: reset, anchor top, bind.
+            modifiers << ".wrapContentHeight(align = Alignment.Top, unbounded = false)"
+            modifiers << ".height(#{process_dimension(json_data['height'])})"
             modifiers << height_constraint if height_constraint
           elsif explicit_height
             modifiers << ".requiredHeight(#{process_dimension(json_data['height'])})"
