@@ -452,8 +452,8 @@ RSpec.describe 'Collection cell sizing (swiftui)' do
 
   SHAPES.each_key do |shape|
     it "honours a declared cell size on the #{shape} shape" do
-      expect(collection(shape, 'cellWidth' => 37)).to include('.frame(width: 37)')
-      expect(collection(shape, 'cellHeight' => 41)).to include('.frame(height: 41)')
+      expect(collection(shape, 'cellWidth' => 37)).to include('.frame(width: 37, alignment: .topLeading)')
+      expect(collection(shape, 'cellHeight' => 41)).to include('.frame(height: 41, alignment: .topLeading)')
     end
 
     # Two values must not emit the same text — that is the C2 judgement the
@@ -467,7 +467,7 @@ RSpec.describe 'Collection cell sizing (swiftui)' do
   # the declaration wins: "overrides whatever width the cell layout asked for".
   it 'lets a declared cellWidth override the grid fill' do
     expect(collection('grid, columns 2')).to include('.frame(maxWidth: .infinity)')
-    expect(collection('grid, columns 2', 'cellWidth' => 37)).to include('.frame(width: 37)')
+    expect(collection('grid, columns 2', 'cellWidth' => 37)).to include('.frame(width: 37, alignment: .topLeading)')
   end
 end
 

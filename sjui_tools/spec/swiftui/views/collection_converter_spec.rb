@@ -73,19 +73,27 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       it 'renders no placeholder items' do
         # The old fallbacks emitted a 10-item "Item \(index)" ForEach in
         # three places — undeclared behavior, removed with the bare-Collection
-        # ruling (parity family F4).
+        # ruling (parity family F4). Since run 31234163967 the bare shape
+        # short-circuits to Color.clear before any List exists — the other
+        # three faces render only the collection's own box.
         code = described_class.new({ 'type' => 'Collection' }).convert
         expect(code).not_to include('Item \\(index)')
         expect(code).not_to include('ForEach(0..<10')
+        expect(code).not_to include('List {')
         expect(code).to include('nothing rendered (declaration-faithful)')
+        expect(code).to include('Color.clear')
       end
     end
 
     context 'with single column collection' do
       let(:component) do
+        # A cellClasses entry keeps this on the legacy List path — a fully
+        # bare Collection now short-circuits to Color.clear (nothing
+        # renderable, declaration-faithful).
         {
           'type' => 'Collection',
-          'columns' => 1
+          'columns' => 1,
+          'cellClasses' => ['Cell']
         }
       end
 
@@ -365,7 +373,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         converter = described_class.new(component)
         code = converter.convert
 
-        expect(code).to include('.frame(height: 100)')
+        expect(code).to include('.frame(height: 100, alignment: .topLeading)')
       end
     end
 
@@ -478,7 +486,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         converter = described_class.new(component)
         code = converter.convert
 
-        expect(code).to include('.frame(width: 200)')
+        expect(code).to include('.frame(width: 200, alignment: .topLeading)')
       end
     end
 

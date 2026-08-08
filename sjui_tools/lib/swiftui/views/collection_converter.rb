@@ -209,6 +209,9 @@ module SjuiTools
             # box; this path fell into the legacy List below and drew a white
             # List holding a placeholder Text per item
             # (control_Collection__no-sections parity d=42, run 31202080745).
+            # Same declaration-faithful stance as the 2026-08-02 bare-
+            # Collection ruling: undeclared content is not invented.
+            add_line "// Nothing renderable — nothing rendered (declaration-faithful)"
             add_line "Color.clear"
           elsif columns == 1 && !is_horizontal
             # Legacy single column vertical without sections - use List

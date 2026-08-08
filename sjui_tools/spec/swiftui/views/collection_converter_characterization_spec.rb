@@ -96,7 +96,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).to include('let section = data.items.sections[1]')
       expect(code).to include('ACellView(data: cellData).equatable()')
       expect(code).to include('BCellView(data: cellData).equatable()')
-      expect(code).to include('.frame(height: 44)')
+      expect(code).to include('.frame(height: 44, alignment: .topLeading)')
       expect(code).to include('.accessibilityIdentifier("twosec_item_\\(cellIndex)")')
     end
   end
@@ -134,7 +134,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).to include('ForEach(Array(dataSource.sections.enumerated()), id: \\.offset) { sectionIndex, section in')
       expect(code).to include('// TODO: Implement dynamic view instantiation based on viewName')
       expect(code).to include('Text("\\(viewName): \\(cellIndex)")')
-      expect(code).to include('.frame(height: 40)')
+      expect(code).to include('.frame(height: 40, alignment: .topLeading)')
     end
 
     it 'accesses a non-optional property directly' do
@@ -234,7 +234,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).to include('if let footerData = section.footer?.data {')
       expect(code).to include('GFootView(data: footerData)')
       expect(code).to include('GCellView(data: cellData).equatable()')
-      expect(code).to include('.frame(height: 30)')
+      expect(code).to include('.frame(height: 30, alignment: .topLeading)')
     end
 
     it 'grid with two sections and a non-optional property: per-index count guards' do
