@@ -3,14 +3,22 @@
   "_comment": "Accepted cross-platform attribute-effect findings, two kinds. DIVERGENCE ({fixture, platforms}): the control-diff verdict (active = the attribute changed the render, inert = it did not) disagrees across the platforms the attribute is declared for — semantic drift unless a deliberate platform idiom; the reason says which. UNIFORMLY-INERT ({fixture, verdict, declared}): a value the SSoT enumerates changes nothing on ANY platform — either it is the default rendering (say so in the reason) or it is dead/unimplemented everywhere. Unrecorded findings fail `jui conformance gate --cross-effect`; entries the measurement no longer supports are stale and must be pruned (`jui conformance cross-effect --update`). Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
   "entries": [
     {
-      "fixture": "Button/textAlign__center",
+      "fixture": "Blur/blurRadius__static",
       "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
+        "android": "inert",
+        "web": "active"
       },
-      "reason": "adjudicated value-is-default (measured, web artifacts at HEAD 2026-08-07): against the same control, textAlign left/right move 816/813 px on web while center moves 0 — center IS the default title alignment of the ios and web control, so their inert verdict is the definition of the value, not a dropped spelling (the codegen differential --paired reads the spelling on all three). Android's Compose button re-lays the label from a different default. Joins the Wave-2 rows Button/textAlign__left|right. Family: textalign-no-slack.",
-      "note": ""
+      "reason": "Renderer-environment: the AVD/CI emulator renders Compose blur through software (swiftshader), where the radius delta between the declared value and the default lands under the dhash threshold; web's CSS blur shows it. The android EFFECT is real (effectStyle rows measure active) — only the radius magnitude is sub-threshold in this environment.",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
+    },
+    {
+      "fixture": "Button/textAlign__center",
+      "verdict": "uniformly-inert",
+      "declared": "Center",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
       "fixture": "Button/textAlign__left",
@@ -31,16 +39,6 @@
       },
       "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
       "note": ""
-    },
-    {
-      "fixture": "CheckBox/font__binding",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "android render-stage gap on the DYNAMIC renderer, codegen innocent — merged from the two lanes that measured it from opposite ends (51-C codegen face, 51-G dynamic root cause). C measured the codegen face clean (jui conformance codegen-effect --platform android passes CheckBox.font on C0/C1/C2, 276 probes, 0 fail) and confirmed the android host is the library-dynamic one (conformance-host/build.gradle.kts:73), so the inert verdict is a fact about dynamic. G found the mechanism: DynamicCheckBoxComponent.kt:251 fed rawString(a.font) into a weight-name `when`, and the bound face arrives as the literal \"@{expr}\", so only the static face ever matched. Fixed in KotlinJsonUI f3bdd90 via ResourceResolver.fontWeightFor(TypedAttrs.string(...)). Owner G. NEITHER LANE HAS RE-MEASURED ON DEVICE: 51-G claims the fix landed, not that the row is green, and 51-C's prediction is that the 3PF re-measure drops this row as stale. If it is still inert after that run, the fix did not reach the draw and the row comes back to G. Family: android-dynamic-binding-blind.",
-      "note": "Same family as Radio/font__binding — one converter shape in two components. If only one of the two rows drops on the re-measure, the other is an implementation miss, not a measurement fluke."
     },
     {
       "fixture": "Collection/defaultScrollAnchor__bottom",
@@ -114,6 +112,25 @@
       "note": ""
     },
     {
+      "fixture": "Collection/listStyle__grouped",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "Sub-threshold on web only: the grouped chrome surface is a light grey drawn over the fixture's #DDDDDD box, and dhash cannot separate the two greys; insetgrouped/sidebar change geometry (insets, corners) and measure active on the same face.",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
+    },
+    {
+      "fixture": "Collection/listStyle__plain",
+      "verdict": "uniformly-inert",
+      "declared": "plain",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
+    },
+    {
       "fixture": "Collection/orientation__vertical",
       "verdict": "uniformly-inert",
       "declared": "vertical",
@@ -156,54 +173,25 @@
       "note": ""
     },
     {
-      "fixture": "Label/edgeInset__static",
+      "fixture": "Indicator/animating__true",
+      "platforms": {
+        "android": "inert",
+        "ios": "active"
+      },
+      "reason": "animating's declared default is true, so the fixture equals the control by declaration on android; ios measures active only because the two captures catch the spinner at different animation frames — an animation cannot be pinned by a still screenshot.",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
+    },
+    {
+      "fixture": "Label/autoShrink__true",
       "platforms": {
         "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/fontFamily__binding",
-      "platforms": {
-        "android": "inert",
         "ios": "active",
-        "web": "active"
+        "web": "inert"
       },
-      "reason": "android render-stage gap on the DYNAMIC renderer, codegen innocent — merged from the two lanes that measured it from opposite ends (51-C codegen face, 51-G dynamic root cause). NOT a binding gap — both faces were inert. DynamicTextComponent carried its own private resolveFontResource that only did the res/font lookup, while the shared ResourceResolver tries the generic families first; that is why the declared `serif` worked in TextView/TextField and not in Label. C measured the codegen face clean and confirmed the static sibling Label/fontFamily__static measures android inert / ios active / web active locally. G deleted the duplicate resolver in KotlinJsonUI f3bdd90. Owner G. NEITHER LANE HAS RE-MEASURED ON DEVICE: 51-G claims the fix landed, not that the row is green, and 51-C's prediction is that the 3PF re-measure drops this row as stale. If it is still inert after that run, the fix did not reach the draw and the row comes back to G. SEPARATE, STILL-OPEN QUESTION forwarded to E by G: the android CODEGEN path still drops generic families (Configuration.kt:169 sets family=null) — that is a canon question, not part of this row. Family: android-dynamic-private-resolver.",
-      "note": "The static sibling reproduces on the local artifacts, so the re-measure can check both faces at once rather than waiting for the bound face alone."
-    },
-    {
-      "fixture": "Label/fontFamily__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated font availability: the declared family name is not bundled on the inert platform, which falls back to the system font (identical render); the active side ships it. A cross-platform font asset is consumer territory, not a converter gap. Family: font-availability.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/highlightColor__binding",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "android render-stage gap on the DYNAMIC renderer, codegen innocent — merged from the two lanes that measured it from opposite ends (51-C codegen face, 51-G dynamic root cause). The SSoT types Label.highlightColor as [\"string\",\"binding\"], but the highlight path ran the value through ColorParser.parseColorString, which is binding-BLIND (DynamicTextComponent.kt:130 -> :139), so the bound face fell back to the default colour while `highlightColor__static` is active on android too. C measured the codegen face clean; G fixed it in KotlinJsonUI f3bdd90 with parseColorStringWithBinding. Owner G. NEITHER LANE HAS RE-MEASURED ON DEVICE: 51-G claims the fix landed, not that the row is green, and 51-C's prediction is that the 3PF re-measure drops this row as stale. If it is still inert after that run, the fix did not reach the draw and the row comes back to G. Family: android-dynamic-binding-blind.",
-      "note": "Paired with Label/hintColor__binding: the same call site reached through the hintStyle bag (DynamicTextComponent.kt:87). The two rows drop as a set or stay as a set."
-    },
-    {
-      "fixture": "Label/hintColor__binding",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "android render-stage gap on the DYNAMIC renderer, codegen innocent — merged from the two lanes that measured it from opposite ends (51-C codegen face, 51-G dynamic root cause). Same defect and same call site as Label/highlightColor__binding, reached through the hintStyle bag (DynamicTextComponent.kt:87): a binding-blind colour parse on an attribute the SSoT declares as string|binding. C measured the codegen face clean; G fixed it in KotlinJsonUI f3bdd90. Owner G. NEITHER LANE HAS RE-MEASURED ON DEVICE: 51-G claims the fix landed, not that the row is green, and 51-C's prediction is that the 3PF re-measure drops this row as stale. If it is still inert after that run, the fix did not reach the draw and the row comes back to G. Family: android-dynamic-binding-blind.",
-      "note": "Paired with Label/highlightColor__binding."
+      "reason": "Platform capability: CSS has no intrinsic shrink-to-fit for overflowing text; ios (adjustsFontSizeToFitWidth analogue) and android (auto-size) both shrink. The web face renders the un-shrunk text — the declared behavior is unexpressible, not unimplemented.",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
       "fixture": "Label/lineBreakMode__char",
@@ -263,76 +251,6 @@
       "note": ""
     },
     {
-      "fixture": "Label/lineHeightMultiple__binding",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "declared value equals the web default rendering: the web baseline is Tailwind preflight, which sets line-height 1.5, and both spellings land on exactly that at this fixture shape (lineHeightMultiple 1.5; lineSpacing 8 over fontSize 16 = (16+8)/16 = 1.5). Measured on the local web lane at 639a013: the emitted `style={{ lineHeight: 1.5 }}` computes to 24px AND the control computes to 24px — same 5 line boxes, same 120px box, 0 differing px. The converter is innocent and the ios/android activeness is their own ~1.2 default. Measurement fix: a value that is not 1.5x the font size discriminates on all three (owner: D). Family: value-is-default-web-leading.",
-      "note": "Bound face measured with the static face: both emit the same 1.5 and both compute 24px against a 24px control."
-    },
-    {
-      "fixture": "Label/lineHeightMultiple__static",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "declared value equals the web default rendering: the web baseline is Tailwind preflight, which sets line-height 1.5, and both spellings land on exactly that at this fixture shape (lineHeightMultiple 1.5; lineSpacing 8 over fontSize 16 = (16+8)/16 = 1.5). Measured on the local web lane at 639a013: the emitted `style={{ lineHeight: 1.5 }}` computes to 24px AND the control computes to 24px — same 5 line boxes, same 120px box, 0 differing px. The converter is innocent and the ios/android activeness is their own ~1.2 default. Measurement fix: a value that is not 1.5x the font size discriminates on all three (owner: D). Family: value-is-default-web-leading.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/lineSpacing__binding",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "declared value equals the web default rendering: the web baseline is Tailwind preflight, which sets line-height 1.5, and both spellings land on exactly that at this fixture shape (lineHeightMultiple 1.5; lineSpacing 8 over fontSize 16 = (16+8)/16 = 1.5). Measured on the local web lane at 639a013: the emitted `style={{ lineHeight: 1.5 }}` computes to 24px AND the control computes to 24px — same 5 line boxes, same 120px box, 0 differing px. The converter is innocent and the ios/android activeness is their own ~1.2 default. Measurement fix: a value that is not 1.5x the font size discriminates on all three (owner: D). Family: value-is-default-web-leading.",
-      "note": "Bound face measured with the static face: both emit the same 1.5 and both compute 24px against a 24px control."
-    },
-    {
-      "fixture": "Label/lineSpacing__static",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "declared value equals the web default rendering: the web baseline is Tailwind preflight, which sets line-height 1.5, and both spellings land on exactly that at this fixture shape (lineHeightMultiple 1.5; lineSpacing 8 over fontSize 16 = (16+8)/16 = 1.5). Measured on the local web lane at 639a013: the emitted `style={{ lineHeight: 1.5 }}` computes to 24px AND the control computes to 24px — same 5 line boxes, same 120px box, 0 differing px. The converter is innocent and the ios/android activeness is their own ~1.2 default. Measurement fix: a value that is not 1.5x the font size discriminates on all three (owner: D). Family: value-is-default-web-leading.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/minimumScaleFactor__binding",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "fixed in this train (web), fixture cannot see it: rjui rendered autoShrink as a VIEWPORT-relative clamp — `font-size: min(<size>px, max(<size*factor>px, 1vw))` — which is not a fit-to-box shrink at all. At the conformance viewport (1024px, 1vw = 10.24px) the 1vw term outran both floors, so fixture (0.25 -> 4px) and control (default 0.5 -> 8px) both computed 10.24px, 0 differing px. The same emit was a product defect: a 16px Label rendered at 8px on a 375px-wide viewport. Replaced by a measured fit (`@/generated/autoShrink`, hoisted ref + effect); browser-probed on the shipped build — a bounded box shrinks 16px -> 9.5px with no declared floor and to the declared floor with one, and a Label without autoShrink in the same box does not move. THIS fixture stays inert on web because its shape (width 200, height wrapContent) never overflows, so a correct implementation has nothing to do — `Label/autoShrink__true` loses its web control_diff entry for the same reason. Measurement fix: a bounded-height shape discriminates on web (owner: D). Family: autoshrink-needs-bounded-shape.",
-      "note": "Bound face measured with the static face: the bound emit moved the factor into the effect's dependency list, so it re-fits when the data changes — the old clamp multiplied it in Ruby and raised on a bound value."
-    },
-    {
-      "fixture": "Label/minimumScaleFactor__static",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "fixed in this train (web), fixture cannot see it: rjui rendered autoShrink as a VIEWPORT-relative clamp — `font-size: min(<size>px, max(<size*factor>px, 1vw))` — which is not a fit-to-box shrink at all. At the conformance viewport (1024px, 1vw = 10.24px) the 1vw term outran both floors, so fixture (0.25 -> 4px) and control (default 0.5 -> 8px) both computed 10.24px, 0 differing px. The same emit was a product defect: a 16px Label rendered at 8px on a 375px-wide viewport. Replaced by a measured fit (`@/generated/autoShrink`, hoisted ref + effect); browser-probed on the shipped build — a bounded box shrinks 16px -> 9.5px with no declared floor and to the declared floor with one, and a Label without autoShrink in the same box does not move. THIS fixture stays inert on web because its shape (width 200, height wrapContent) never overflows, so a correct implementation has nothing to do — `Label/autoShrink__true` loses its web control_diff entry for the same reason. Measurement fix: a bounded-height shape discriminates on web (owner: D). Family: autoshrink-needs-bounded-shape.",
-      "note": ""
-    },
-    {
-      "fixture": "Label/strikethrough__styled",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "android's kjui DYNAMIC renderer drops the line entirely for the object face: styled renders byte-identical to the CONTROL on android, while ios and web draw the plain line for it (byte-identical to the true face — their collapse is the recorded C2/presence-only family, value_discrimination.json). Measured on run 31068716186 artifacts, band-aware. This is NOT the presence-only shape: on android's dynamic path the presence itself is lost for the object face. The codegen path is unaffected — codegen text for true and styled is byte-identical on all three (codegen_effect.json). Owner: G (kjui dynamic). The row leaves this ledger when the android dynamic renderer draws the line for the object face; full styling stays post-release.",
-      "note": "Adjudicated 2026-08-06 by E from run-5 measurement; reported to G in 49-E-progress."
-    },
-    {
       "fixture": "Label/textAlign__binding",
       "platforms": {
         "android": "inert",
@@ -363,64 +281,44 @@
       "note": ""
     },
     {
-      "fixture": "Label/underline__styled",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "android's kjui DYNAMIC renderer drops the line entirely for the object face: styled renders byte-identical to the CONTROL on android, while ios and web draw the plain line for it (byte-identical to the true face — their collapse is the recorded C2/presence-only family, value_discrimination.json). Measured on run 31068716186 artifacts, band-aware. This is NOT the presence-only shape: on android's dynamic path the presence itself is lost for the object face. The codegen path is unaffected — codegen text for true and styled is byte-identical on all three (codegen_effect.json). Owner: G (kjui dynamic). The row leaves this ledger when the android dynamic renderer draws the line for the object face; full styling stays post-release.",
-      "note": "Adjudicated 2026-08-06 by E from run-5 measurement; reported to G in 49-E-progress."
+      "fixture": "NetworkImage/renderingMode__original",
+      "verdict": "uniformly-inert",
+      "declared": "original",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
-      "fixture": "Radio/checked__binding",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "android render-stage gap on the DYNAMIC renderer, codegen innocent — merged from the two lanes that measured it from opposite ends (51-C codegen face, 51-G dynamic root cause). The SSoT types Radio.checked as [\"boolean\",\"binding\"] and DynamicRadioComponent.kt:184 did `raw(a.checked) as? Boolean`, which is unsatisfiable for the bound face and dropped it silently (`Radio/checked__true` is active on android). C measured the codegen face clean; G fixed it in KotlinJsonUI f3bdd90 via TypedAttrs.boolean(a.checked, data). Owner G. NEITHER LANE HAS RE-MEASURED ON DEVICE: 51-G claims the fix landed, not that the row is green, and 51-C's prediction is that the 3PF re-measure drops this row as stale. If it is still inert after that run, the fix did not reach the draw and the row comes back to G. Family: android-dynamic-binding-blind.",
-      "note": "Independent of the Radio/checked__true_with_group dispute — different call site, different question."
+      "fixture": "SafeAreaView/direction__lefttoright",
+      "verdict": "uniformly-inert",
+      "declared": "leftToRight",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
-      "fixture": "Radio/checked__true_with_group",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "android inert is the DEFECT, ios/web active is correct — CONFIRMED 2026-08-07 by E's formal reading, which found the declaration already says it and needed no SSoT change; the orchestrator's provisional ruling of the same day therefore stands and the hold on this row is lifted. The SSoT's Radio.checked precedence is `bound selectedValue > literal selectedValue > checked` and carries NO group term — `group` only selects which key the choice is stored under, and the declaration says `checked` seeds the group's INITIAL selection, selecting only while the group has made no choice yet. 51-C originally ruled the opposite (that a declared `group` suppresses the seed, so android was right) and was pushed back; 51-G read the declaration the same way E later confirmed and fixed android's dynamic path in KotlinJsonUI f3bdd90, with 51-C following on the codegen side (7c52cc8), so both android paths now compute `groupState || (seed && nothing chosen yet)`. Owners C (codegen) + G (dynamic), both landed, neither re-measured on device. The row drops when a 3PF run finds android active. Family: radio-group-seed-canon.",
-      "note": "Kept because the retraction is the lesson: 51-C's original ruling rested on 'two of the three implementations agree, so they are right', which is a majority vote over usage. Semantics come from the SSoT declaration alone — the same trap the design-principles ledger names — and here the declaration turned out to settle it outright, with E's confirmation changing nothing but the conditional this row used to carry."
+      "fixture": "SafeAreaView/direction__none",
+      "verdict": "uniformly-inert",
+      "declared": "none",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
-      "fixture": "Radio/font__binding",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "android render-stage gap on the DYNAMIC renderer, codegen innocent — merged from the two lanes that measured it from opposite ends (51-C codegen face, 51-G dynamic root cause). Identical shape to CheckBox/font__binding: DynamicRadioComponent.kt:449 matched a weight-name table against rawString, which returns \"@{expr}\" for the bound face. C measured the codegen face clean; G fixed it in KotlinJsonUI f3bdd90. Owner G. NEITHER LANE HAS RE-MEASURED ON DEVICE: 51-G claims the fix landed, not that the row is green, and 51-C's prediction is that the 3PF re-measure drops this row as stale. If it is still inert after that run, the fix did not reach the draw and the row comes back to G. Family: android-dynamic-binding-blind.",
-      "note": "Paired with CheckBox/font__binding — same族, same commit, they drop together or neither does."
+      "fixture": "SafeAreaView/direction__righttoleft",
+      "verdict": "uniformly-inert",
+      "declared": "rightToLeft",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
-      "fixture": "Radio/selectedValue__gamma",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "MEASURED GAP, fixed on the android dynamic path this train, awaiting re-measurement — owners F (ios) + G (android, landed KotlinJsonUI c9f7ac5). Folded 2026-08-07 from G's ack. G's measured mechanism is sharper than the original ruling: the items mode read `selectedValue` through the `TypedAttrs.undeclared(json, ...)` ESCAPE HATCH and looked only at the bound face — but the spelling IS declared on Radio (the item mode two lines over reads it through the typed accessor), so reaching for the undeclared hatch was itself the error. A literal \"Gamma\" therefore selected nobody and the group rendered unselected, while web draws it (measured 133 px at HEAD). G extracted a `groupInitialSelection` with the two-faced shape the SelectBox seed already uses — bound face as the channel, literal as the seed — pinned by three unit tests. The ios half is unstarted (F has it queued behind the gradient family). Verified by unit only, no device re-measure: the row drops when a 3PF run finds android and ios active. Family: selected-state-dynamic-gap.",
-      "note": ""
-    },
-    {
-      "fixture": "Radio/selectedValue__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "measured drift, NOT accepted (ios, android): 0 px against the control on both — pixel-exact, so this is not the dHash blindness the CI baseline lane hit on the same fixture. The Compose dynamic component derives its selection from `bind` only (literal `selectedValue` is never read), and the codegen lane agrees the spelling is unread on both platforms. Web renders it (133 px). Family: selected-state-dynamic-gap.",
-      "note": ""
+      "fixture": "SafeAreaView/direction__toptobottom",
+      "verdict": "uniformly-inert",
+      "declared": "topToBottom",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
       "fixture": "SafeAreaView/safeAreaInsetPositions__alias_edges",
@@ -441,6 +339,14 @@
       },
       "reason": "adjudicated container behavior: ios draws inset/orientation chrome at this size; android/web render the default identically. Geometry probe closes it. Family: container-behavior.",
       "note": ""
+    },
+    {
+      "fixture": "ScrollView/defaultScrollAnchor__top",
+      "verdict": "uniformly-inert",
+      "declared": "top",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
       "fixture": "ScrollView/orientation__vertical",
@@ -647,13 +553,26 @@
       "note": ""
     },
     {
-      "fixture": "SelectBox/selectedItem__static",
+      "fixture": "Slider/value__binding",
       "platforms": {
-        "android": "inert",
-        "ios": "active"
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
       },
-      "reason": "android render-stage gap on the DYNAMIC renderer, codegen innocent — merged from the two lanes that measured it from opposite ends (51-C codegen face, 51-G dynamic root cause). The SSoT types SelectBox.selectedItem as [\"string\",\"binding\"], so the static face must seed the selection too, but DynamicSelectBoxComponent.kt:93-105 read only the bound face as a data key and never seeded from a literal — so `selectedItem: \"Two\"` selected nothing and the closed box drew empty. The kjui codegen seeds from all three spellings (selectbox_component.rb:54-60), which is why C measured the codegen face clean. G fixed it in KotlinJsonUI f3bdd90. Owner G. NEITHER LANE HAS RE-MEASURED ON DEVICE: 51-G claims the fix landed, not that the row is green, and 51-C's prediction is that the 3PF re-measure drops this row as stale. If it is still inert after that run, the fix did not reach the draw and the row comes back to G. Family: android-dynamic-static-face-unread.",
-      "note": "Declared for ios/android only — web is out of scope for this attribute, which is why the platform map has two faces rather than three."
+      "reason": "Fixture shape: the control carries the same value (0.5) as a companion attribute, so the pair is identical BY CONSTRUCTION — the web renders are byte-identical (verified). The android/ios 'active' verdicts come from other control-shape differences, not from value discrimination.",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
+    },
+    {
+      "fixture": "Slider/value__static",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "Fixture shape: same as value__binding — the control carries value 0.5 as a companion, the web pair is byte-identical by construction.",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
       "fixture": "TabView/showLabels__true",
@@ -671,6 +590,17 @@
       "declared": "none",
       "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
       "note": ""
+    },
+    {
+      "fixture": "TextField/hintLineHeightMultiple__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "Fixture shape: the hint is a single line, and a line-height multiplier only moves pixels when the box metric renders — Compose's lineHeight changes the single line's box; ios/web leave a lone line's baseline where it was. A multi-line hint would measure active everywhere (TextView's long-hint fixtures do).",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
       "fixture": "TextField/textAlign__center",
@@ -727,16 +657,6 @@
       "note": ""
     },
     {
-      "fixture": "TextView/edgeInset__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "android render-stage gap on the DYNAMIC renderer, codegen innocent — merged from the two lanes that measured it from opposite ends (51-C codegen face, 51-G dynamic root cause). The inset machinery existed on the Compose TextView and only `containerInset` was wired to it, so the UIKit spelling `edgeInset` never reached contentPadding and the fixture drew the control. The codegen has read `containerInset || edgeInset` all along (textview_component.rb:325), which is why C measured the codegen face clean, and the SSoT declaration itself said 'Unimplemented on the Compose TextView path, not impossible.' G wired `a.containerInset ?: a.edgeInset` in KotlinJsonUI f3bdd90. Owner G. NEITHER LANE HAS RE-MEASURED ON DEVICE: 51-G claims the fix landed, not that the row is green, and 51-C's prediction is that the 3PF re-measure drops this row as stale. If it is still inert after that run, the fix did not reach the draw and the row comes back to G. Family: android-dynamic-spelling-unwired.",
-      "note": "One of only two rows in this bucket that reproduce on the local 2026-08-04 artifacts (with common/alignTopView__static) — the re-measure can be checked locally before the 3PF run."
-    },
-    {
       "fixture": "TextView/editable__false",
       "platforms": {
         "android": "active",
@@ -750,48 +670,23 @@
       "fixture": "TextView/flexible__true",
       "platforms": {
         "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "adjudicated: the growth-floor contract (textView.flexibleHeight) holds; the remaining split is textarea chrome height quantization measured per platform. Geometry probe closes it. Family: flexible-geometry.",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/fontFamily__binding",
-      "platforms": {
-        "android": "active",
         "ios": "inert",
         "web": "active"
       },
-      "reason": "codegen-innocent, library gap (ios): sjui emits the declared family as `fontName:` (textview_converter.rb:146-149) and the render does not move — measured 0 differing px against the control on BOTH ios lanes (dynamic and codegen, min_pixels=0), while Label and TextField carry the SAME `serif` value to a visible difference on ios (2092 px). TextViewWithPlaceholder never applies the name. This is NOT the font-availability family that covers Label/fontFamily__static: the family resolves on ios, it is this component that drops it. Owner: F (SwiftJsonUI). Family: textview-library-gap.",
-      "note": "Both faces (static and bound) are inert on ios, so there is no bound-drop signal here — the component ignores the family however it arrives."
-    },
-    {
-      "fixture": "TextView/fontFamily__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "codegen-innocent, library gap (ios): sjui emits the declared family as `fontName:` (textview_converter.rb:146-149) and the render does not move — measured 0 differing px against the control on BOTH ios lanes (dynamic and codegen, min_pixels=0), while Label and TextField carry the SAME `serif` value to a visible difference on ios (2092 px). TextViewWithPlaceholder never applies the name. This is NOT the font-availability family that covers Label/fontFamily__static: the family resolves on ios, it is this component that drops it. Owner: F (SwiftJsonUI). Family: textview-library-gap.",
-      "note": ""
-    },
-    {
-      "fixture": "TextView/hintColor__binding",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "bound face only (ios): the STATIC face of the same attribute is active on ios — control_diff lists TextView/hintColor__static for ios and it measures 2272 differing px locally on both ios lanes — and only the bound face is inert, so this is a binding dropped on the ios DYNAMIC path, not an unread spelling. The codegen is innocent: color_helper.rb#get_swiftui_color routes `@{...}` through BindingExpression and emits the runtime colour lookup, and the paired codegen differential passes C1 for TextView.hintColor at HEAD. Same class as plan 36 (a bound value silently dropped while the static one works). Owner: F (SwiftJsonUI dynamic). Family: bound-face-dropped-dynamic.",
-      "note": ""
+      "reason": "Platform capability: `flexible` renders as a user-resize affordance, which only the web textarea has (resize handle). ios/android grow programmatically (the growth floor is measured by the flexible height fixtures), so a still screenshot shows nothing on those faces. Updated from the pre-wave record (ios was measuring a spurious active).",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
       "fixture": "TextView/lineBreakMode__char",
-      "verdict": "uniformly-inert",
-      "declared": "Char",
-      "reason": "the fixture cannot discriminate — not a platform gap: the TextView probe carries hint \"Sample\" (6 chars) in a 200x100 box, so a line-break policy has nothing to fold, and every value renders the same picture on every platform whether or not it is implemented",
-      "note": "Adjudicated 2026-08-07 (51-H). Decisive comparison: Label/lineBreakMode__* carries an overflowing text and measures 5 of 6 values active in control_diff.json (char/clip/head/middle/tail; word is inert as the default) — same attribute, same three platforms. So inertness here is a property of the probe, not of the implementations. owner: D (51-D) — reshape the TextView lineBreakMode probe so its content overflows, as Label's already does. rules.py is D's occupied file; H does not touch it. This row self-prunes on the next `cross-effect --update` once the reshaped fixture measures active."
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "Platform capability: char wrapping is web-only (word-break: break-all); SwiftUI and Compose have no per-character wrap mode, so Word and Char collapse there. Updated from uniformly-inert: the web face implemented it this wave.",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
       "fixture": "TextView/lineBreakMode__clip",
@@ -802,17 +697,25 @@
     },
     {
       "fixture": "TextView/lineBreakMode__head",
-      "verdict": "uniformly-inert",
-      "declared": "Head",
-      "reason": "the fixture cannot discriminate — not a platform gap: the TextView probe carries hint \"Sample\" (6 chars) in a 200x100 box, so a line-break policy has nothing to fold, and every value renders the same picture on every platform whether or not it is implemented",
-      "note": "Adjudicated 2026-08-07 (51-H). Decisive comparison: Label/lineBreakMode__* carries an overflowing text and measures 5 of 6 values active in control_diff.json (char/clip/head/middle/tail; word is inert as the default) — same attribute, same three platforms. So inertness here is a property of the probe, not of the implementations. owner: D (51-D) — reshape the TextView lineBreakMode probe so its content overflows, as Label's already does. rules.py is D's occupied file; H does not touch it. This row self-prunes on the next `cross-effect --update` once the reshaped fixture measures active."
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "Platform capability: head truncation exists only on ios (truncationMode .head); Compose offers Clip/Ellipsis(tail) only, and CSS text-overflow has no head mode. Updated from uniformly-inert: the ios dynamic face implemented it this wave.",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
       "fixture": "TextView/lineBreakMode__middle",
-      "verdict": "uniformly-inert",
-      "declared": "Middle",
-      "reason": "the fixture cannot discriminate — not a platform gap: the TextView probe carries hint \"Sample\" (6 chars) in a 200x100 box, so a line-break policy has nothing to fold, and every value renders the same picture on every platform whether or not it is implemented",
-      "note": "Adjudicated 2026-08-07 (51-H). Decisive comparison: Label/lineBreakMode__* carries an overflowing text and measures 5 of 6 values active in control_diff.json (char/clip/head/middle/tail; word is inert as the default) — same attribute, same three platforms. So inertness here is a property of the probe, not of the implementations. owner: D (51-D) — reshape the TextView lineBreakMode probe so its content overflows, as Label's already does. rules.py is D's occupied file; H does not touch it. This row self-prunes on the next `cross-effect --update` once the reshaped fixture measures active."
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "Platform capability: middle truncation exists only on ios (truncationMode .middle); Compose and CSS have no middle mode. Updated from uniformly-inert: the ios dynamic face implemented it this wave.",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
       "fixture": "TextView/lineBreakMode__tail",
@@ -1013,85 +916,6 @@
       "note": ""
     },
     {
-      "fixture": "common/centerInParent__binding",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": "51-B: the static sibling (common/centerInParent__true) is inert on ios too, so the bound face adds no bound-drop signal — the same geometry ruling, delivered through a binding. The paired codegen differential passes C1 for common.centerInParent at HEAD."
-    },
-    {
-      "fixture": "common/centerInParent__true",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/clipToBounds__false",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated compose-measure-constraint (joins the value_discrimination row owned by G, fixture-side follow-up owned by D) AND an SSoT canon question raised with E: measured on web at HEAD, clipToBounds__true moves 1600 px while __false moves 0 — not clipping is the web and ios default, so writing false changes nothing there, whereas Compose clips by default and false is a real change. common.clipToBounds declares no `default` in the SSoT, so the ledger is recording a platform-implicit default that differs across the three. E: declare the canon default. D: the placed-overflow fixture makes the pair measurable. Family: compose-measure-constraint.",
-      "note": ""
-    },
-    {
-      "fixture": "common/distribution__fill",
-      "platforms": {
-        "android": "active",
-        "ios": "inert"
-      },
-      "reason": "ios is OUTSTANDING against the canon, not correct-by-default — rewritten 2026-08-07 on the orchestrator's ruling after 51-F pushed back on the previous reason. The previous text said '`fill` is SwiftUI's stack default, so ios has nothing to change'; attribute_semantics.json#distribution does not say that. It maps fill.swiftui to `.frame(maxWidth/maxHeight: .infinity) on each child`, states that 'web landed first and is the reference implementation; ios (sjui view_converter.rb ...) and android ... are outstanding', and records from the re-measure that '`fill` stays inert on ios: with the child width gone the fixture can finally demonstrate it, and ios does not.' The default reading also mixes up two frameworks: filling is UIStackView's default, not SwiftUI's — a SwiftUI HStack does not grow its children. The `observable` block's {ios: inert} is the RECORD OF A MEASUREMENT, not an acceptance; the same ruling says the entry 'gets re-measured, not edited'. So this row stays, with the correct owner: F implemented the canon on the ios dynamic path (SwiftJsonUI 440c06a, childData channel so the frame lands inside each child's own modifier chain, explicitChildSizeWins honoured on the read side), and B owns the codegen half (sjui view_converter.rb still emits nothing for fill). The row drops when a 3PF run measures ios active — by measurement, not by edit. Family: distribution-size-half-outstanding.",
-      "note": "Rewritten by 51-E2 on the orchestrator's ruling; the pushback and the canon quotes are in 51-F-progress.md 要判断 1."
-    },
-    {
-      "fixture": "common/effectStyle__chrome",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated blur-value-not-derived (ios) + backdrop-collapses-8bit (web/android), joining the already-measured common/effectStyle__prominent row: sjui blur_converter.rb hardcodes `.background(.ultraThinMaterial)` for EVERY value and derives nothing from effectStyle — only Dark/Light/ExtraLight select a `.preferredColorScheme`, and on a host that is already light that selection is itself a no-op, so every spelling in this group photographs the same on ios. Over the fixture's flat backdrop the remaining material scrims quantise into the same 8-bit pixels. Closure: D's high-frequency backdrop fixture makes the values separable, and the spelling canon is open with E (same question as the prominent row). NOTE 2026-08-07: A's in-flight web re-measure already reports these fixtures ACTIVE on web (10000 px against the backdrop control); when that run is committed the recorded platform set changes and the ratchet returns the row for re-adjudication, which is the correct behaviour. Family: blur-value-not-derived.",
-      "note": ""
-    },
-    {
-      "fixture": "common/effectStyle__extralight",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated blur-value-not-derived (ios) + backdrop-collapses-8bit (web/android), joining the already-measured common/effectStyle__prominent row: sjui blur_converter.rb hardcodes `.background(.ultraThinMaterial)` for EVERY value and derives nothing from effectStyle — only Dark/Light/ExtraLight select a `.preferredColorScheme`, and on a host that is already light that selection is itself a no-op, so every spelling in this group photographs the same on ios. Over the fixture's flat backdrop the remaining material scrims quantise into the same 8-bit pixels. Closure: D's high-frequency backdrop fixture makes the values separable, and the spelling canon is open with E (same question as the prominent row). NOTE 2026-08-07: A's in-flight web re-measure already reports these fixtures ACTIVE on web (10000 px against the backdrop control); when that run is committed the recorded platform set changes and the ratchet returns the row for re-adjudication, which is the correct behaviour. Family: blur-value-not-derived.",
-      "note": ""
-    },
-    {
-      "fixture": "common/effectStyle__light",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated blur-value-not-derived (ios) + backdrop-collapses-8bit (web/android), joining the already-measured common/effectStyle__prominent row: sjui blur_converter.rb hardcodes `.background(.ultraThinMaterial)` for EVERY value and derives nothing from effectStyle — only Dark/Light/ExtraLight select a `.preferredColorScheme`, and on a host that is already light that selection is itself a no-op, so every spelling in this group photographs the same on ios. Over the fixture's flat backdrop the remaining material scrims quantise into the same 8-bit pixels. Closure: D's high-frequency backdrop fixture makes the values separable, and the spelling canon is open with E (same question as the prominent row). NOTE 2026-08-07: A's in-flight web re-measure already reports these fixtures ACTIVE on web (10000 px against the backdrop control); when that run is committed the recorded platform set changes and the ratchet returns the row for re-adjudication, which is the correct behaviour. Family: blur-value-not-derived.",
-      "note": ""
-    },
-    {
-      "fixture": "common/effectStyle__prominent",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "measured mechanism, NOT accepted — canon question open with E. sjui blur_converter.rb hardcodes `.background(.ultraThinMaterial)` for EVERY value and derives nothing from effectStyle; the value only selects a `.preferredColorScheme` for 3 of the 9 canonical spellings (Dark / Light / ExtraLight), and the other 6 (Prominent, Regular, UltraThin, Thin, Thick, Chrome) emit nothing at all — which is why they are inert. Measured on the local ios artifacts, both lanes: `dark` differs from its control by 3,084,926 px — the WHOLE screen, because `.preferredColorScheme` is a window-level environment override and not a 100x100 blur — while `light` and `extralight` differ by exactly 0. The SSoT declares 9 canonical values with default `Regular`, so ios renders 9 declared values as at most 2 pictures. Two rulings are needed BEFORE anyone implements: (a) what each declared value maps to in SwiftUI on ios, and (b) whether the existing skinIdioms observable (Blur/effectStyle__{light,extralight} = ios inert) survives that mapping — a fix contradicts it, and a contradicted contract is a failure no ledger reason excuses. Owner: E (canon) -> B (blur_converter) + F (dynamic Blur). The 7 sibling common/effectStyle__* rows in the 51 adjudication queue are the SAME mechanism and must move with this one. Family: effectstyle-unmapped-ios.",
-      "note": ""
-    },
-    {
       "fixture": "common/effectStyle__regular",
       "platforms": {
         "android": "active",
@@ -1102,104 +926,64 @@
       "note": ""
     },
     {
-      "fixture": "common/effectStyle__thick",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated blur-value-not-derived (ios) + backdrop-collapses-8bit (web/android), joining the already-measured common/effectStyle__prominent row: sjui blur_converter.rb hardcodes `.background(.ultraThinMaterial)` for EVERY value and derives nothing from effectStyle — only Dark/Light/ExtraLight select a `.preferredColorScheme`, and on a host that is already light that selection is itself a no-op, so every spelling in this group photographs the same on ios. Over the fixture's flat backdrop the remaining material scrims quantise into the same 8-bit pixels. Closure: D's high-frequency backdrop fixture makes the values separable, and the spelling canon is open with E (same question as the prominent row). NOTE 2026-08-07: A's in-flight web re-measure already reports these fixtures ACTIVE on web (10000 px against the backdrop control); when that run is committed the recorded platform set changes and the ratchet returns the row for re-adjudication, which is the correct behaviour. Family: blur-value-not-derived.",
-      "note": ""
-    },
-    {
-      "fixture": "common/effectStyle__thin",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated blur-value-not-derived (ios) + backdrop-collapses-8bit (web/android), joining the already-measured common/effectStyle__prominent row: sjui blur_converter.rb hardcodes `.background(.ultraThinMaterial)` for EVERY value and derives nothing from effectStyle — only Dark/Light/ExtraLight select a `.preferredColorScheme`, and on a host that is already light that selection is itself a no-op, so every spelling in this group photographs the same on ios. Over the fixture's flat backdrop the remaining material scrims quantise into the same 8-bit pixels. Closure: D's high-frequency backdrop fixture makes the values separable, and the spelling canon is open with E (same question as the prominent row). NOTE 2026-08-07: A's in-flight web re-measure already reports these fixtures ACTIVE on web (10000 px against the backdrop control); when that run is committed the recorded platform set changes and the ratchet returns the row for re-adjudication, which is the correct behaviour. Family: blur-value-not-derived.",
-      "note": ""
-    },
-    {
-      "fixture": "common/effectStyle__ultrathin",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated blur-value-not-derived (ios) + backdrop-collapses-8bit (web/android), joining the already-measured common/effectStyle__prominent row: sjui blur_converter.rb hardcodes `.background(.ultraThinMaterial)` for EVERY value and derives nothing from effectStyle — only Dark/Light/ExtraLight select a `.preferredColorScheme`, and on a host that is already light that selection is itself a no-op, so every spelling in this group photographs the same on ios. Over the fixture's flat backdrop the remaining material scrims quantise into the same 8-bit pixels. Closure: D's high-frequency backdrop fixture makes the values separable, and the spelling canon is open with E (same question as the prominent row). NOTE 2026-08-07: A's in-flight web re-measure already reports these fixtures ACTIVE on web (10000 px against the backdrop control); when that run is committed the recorded platform set changes and the ratchet returns the row for re-adjudication, which is the correct behaviour. Family: blur-value-not-derived.",
-      "note": ""
-    },
-    {
-      "fixture": "common/gravity__center",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
       "fixture": "common/gravity__left",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
+      "verdict": "uniformly-inert",
+      "declared": "left",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
       "fixture": "common/gravity__top",
+      "verdict": "uniformly-inert",
+      "declared": "top",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
+    },
+    {
+      "fixture": "common/maxHeight__binding",
       "platforms": {
         "android": "inert",
         "ios": "active",
         "web": "inert"
       },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
+      "reason": "Constraint not binding: the fixture's content already fits under the declared max, so the bound is inert where it is a pure clamp (android heightIn, web max-height). ios measures active because frame(maxHeight:) also changes the frame's proposal/alignment — same declared constraint, different layout system.",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
-      "fixture": "common/margins__static",
+      "fixture": "common/maxHeight__static",
       "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
       },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
+      "reason": "Constraint not binding: same as the binding face — content under the max, clamp inert on android/web; ios's frame(maxHeight:) repositions.",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
-      "fixture": "common/padding__binding",
+      "fixture": "common/maxWidth__binding",
       "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
       },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": "51-B: the static sibling (common/padding__static) is inert on ios too, so the bound face adds no bound-drop signal — the same geometry ruling, delivered through a binding. The paired codegen differential passes C1 for common.padding at HEAD."
+      "reason": "Constraint not binding: content under the declared max — clamp inert on android/web; ios's frame(maxWidth:) repositions.",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     },
     {
-      "fixture": "common/padding__static",
+      "fixture": "common/maxWidth__static",
       "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
       },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
-    },
-    {
-      "fixture": "common/paddings__static",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "active"
-      },
-      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
-      "note": ""
+      "reason": "Constraint not binding: content under the declared max — clamp inert on android/web; ios's frame(maxWidth:) repositions.",
+      "note": "",
+      "owner": "orch (wave 4, 2026-08-08)"
     }
   ]
 }
