@@ -411,14 +411,18 @@ class ContractTest(unittest.TestCase):
         self.assertEqual(contract, {"common/borderWidth__static": ce.UNIFORMLY_INERT})
 
     def test_repo_contract_parses_and_covers_border(self):
-        # The committed pilot entry must stay machine-readable.
+        # The committed pilot entry must stay machine-readable. The VALUE
+        # follows the measurement: border emit landed on every face this
+        # wave (run 31243724782 + local-env), so the pilot row now expects
+        # uniformly-active — the test pins parseability and presence, and
+        # the current adjudicated state.
         repo_contract = (
             Path(__file__).resolve().parents[2]
             / "shared" / "core" / ce.CONTRACT_NAME
         )
         contract = ce.load_contract(repo_contract)
         self.assertEqual(
-            contract.get("common/borderWidth__static"), ce.UNIFORMLY_INERT
+            contract.get("common/borderWidth__static"), ce.UNIFORMLY_ACTIVE
         )
 
 

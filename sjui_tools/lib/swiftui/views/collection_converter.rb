@@ -202,8 +202,7 @@ module SjuiTools
             add_line "}"
             generate_scroll_reader_close
           elsif columns == 1 && !is_horizontal && !has_sections &&
-                cell_class_name.nil? && header_class_name.nil? && footer_class_name.nil? &&
-                @component['listStyle'].nil?
+                cell_class_name.nil? && header_class_name.nil? && footer_class_name.nil?
             # Nothing renderable: no declared sections and no cell class to
             # draw the items with. Every other face — web, android (both
             # pipelines) and ios dynamic — renders only the collection's own
@@ -212,13 +211,22 @@ module SjuiTools
             # (control_Collection__no-sections parity d=42, run 31202080745).
             # Same declaration-faithful stance as the 2026-08-02 bare-
             # Collection ruling: undeclared content is not invented.
-            # A declared listStyle keeps the List: the chrome belongs to the
+            # A declared listStyle keeps a List — the chrome belongs to the
             # CONTAINER on every face (web's list_style_classes, android's
-            # container-level chrome), so an empty chromed List is the
-            # cross-face picture — and short-circuiting it made the spelling
-            # unread on this face (C0, ci run 31234713735).
-            add_line "// Nothing renderable — nothing rendered (declaration-faithful)"
-            add_line "Color.clear"
+            # container-level chrome), and short-circuiting it made the
+            # spelling unread on this face (C0, ci run 31234713735) — but an
+            # EMPTY one: the legacy path's placeholder rows are invented
+            # content (the white ':0 :1 :2' rows on run 31243724782's
+            # ios-codegen renders). The dynamic face draws the same chromed
+            # empty List.
+            if @component['listStyle']
+              add_line "List {"
+              add_line "}"
+              add_modifier_line ".listStyle(#{list_style_to_swiftui})"
+            else
+              add_line "// Nothing renderable — nothing rendered (declaration-faithful)"
+              add_line "Color.clear"
+            end
           elsif columns == 1 && !is_horizontal
             # Legacy single column vertical without sections - use List
             add_line "List {"
