@@ -495,10 +495,13 @@ module RjuiTools
           o = orientation.to_s.downcase
           return 'flex-col-reverse' if o == 'vertical' && d == 'bottomtotop'
           return 'flex-row-reverse' if o == 'horizontal' && d == 'righttoleft'
-          # RTL on a vertical column mirrors the inline axis: children anchor
-          # to the trailing edge (matches the ios render — 33 cross-effect:
-          # web/android ignored rightToLeft on columns).
-          return 'items-end' if o == 'vertical' && d == 'righttoleft'
+          # No other combination moves anything: the reverse value must agree
+          # with the orientation ("a vertical stack honours bottomToTop, a
+          # horizontal one rightToLeft"). The old items-end arm anchored a
+          # vertical column's children to the trailing edge for rightToLeft —
+          # measured against the axis-gated faces it was the ONE platform
+          # moving pixels (SafeAreaView/direction__righttoleft, run
+          # 31243724782 cross-effect: android and ios correctly inert).
 
           ''
         end
