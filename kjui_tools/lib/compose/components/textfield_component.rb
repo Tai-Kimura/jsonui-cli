@@ -246,7 +246,7 @@ module KjuiTools
 
             # TextField modifier (size, padding goes to contentPadding)
             textfield_modifiers = []
-            textfield_modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
+            textfield_modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
             # When the outer Box uses `Modifier.weight(N)` to claim a Row /
             # Column slot, the slot's measured size is bounded only on the
             # *outer* (Box) modifier. The inner BasicTextField inside the
@@ -285,7 +285,7 @@ module KjuiTools
             modifiers = []
             modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
             if is_hidden
               required_imports&.add(:alpha)

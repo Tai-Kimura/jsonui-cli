@@ -73,12 +73,12 @@ module KjuiTools
             elsif w.is_a?(Numeric) && h.is_a?(Numeric)
               modifiers << ".size(#{w}.dp, #{h}.dp)"
             else
-              modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
+              modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
             end
           elsif json_data['size']
             modifiers << ".size(#{json_data['size']}.dp)"
           else
-            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           end
 
           # Padding (inner spacing) - applied after size

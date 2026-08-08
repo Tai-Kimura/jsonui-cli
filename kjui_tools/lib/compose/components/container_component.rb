@@ -61,7 +61,7 @@ module KjuiTools
           end
 
           # 3. Size (total element size)
-          size_modifiers = Helpers::ModifierBuilder.build_size(json_data, nil, required_imports)
+          size_modifiers = Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports)
           Helpers::ModifierBuilder.adjust_for_intrinsic_size!(size_modifiers, json_data, children, layout, required_imports, parent_type)
           modifiers.concat(size_modifiers)
 

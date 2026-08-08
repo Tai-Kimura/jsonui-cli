@@ -294,8 +294,32 @@ module KjuiTools
           modifiers.insert(wrap_idx, fill)
         end
 
+        # Which axis a `.weight(..)` emitted by build_weight will OWN for this
+        # node, or nil. The weight slot defines that axis: web and the dynamic
+        # runtime both let the slot win over a declared size (measured on
+        # common_weight__static, run 31202080745), so build_size must not emit
+        # a requiredWidth/requiredHeight there — Compose would draw the
+        # declared box centered inside the slot instead of filling it.
+        # Mirrors build_weight's selection exactly (heightWeight wins over the
+        # shorthand in a Column; bound weights emit a runtime conditional and
+        # suppress statically, same as the slot they may claim).
+        def self.weighted_axis(json_data, parent_orientation)
+          return nil unless %w[Row Column].include?(parent_orientation)
+
+          weight = if parent_orientation == 'Column' && json_data['heightWeight']
+                     json_data['heightWeight']
+                   else
+                     json_data['weight']
+                   end
+          return nil unless weight
+          return nil unless BoundValue.bound?(weight) || weight.to_f > 0
+
+          parent_orientation == 'Row' ? :width : :height
+        end
+
         def self.build_size(json_data, parent_type = nil, required_imports = nil)
           modifiers = []
+          weight_axis = weighted_axis(json_data, parent_type)
 
           # Handle 'frame' attribute - object with width/height
           # frame: { width: 100, height: 50 }
@@ -360,7 +384,8 @@ module KjuiTools
           explicit_width = json_data['width'] &&
                            json_data['width'] != 'matchParent' &&
                            json_data['width'] != 'wrapContent' &&
-                           !(json_data['weight'] && json_data['width'] == 0)
+                           !(json_data['weight'] && json_data['width'] == 0) &&
+                           weight_axis != :width
           wrap_width = json_data['width'] == 'wrapContent'
           modifiers << width_constraint if width_constraint && !explicit_width && !wrap_width
 
@@ -440,7 +465,8 @@ module KjuiTools
           explicit_height = json_data['height'] &&
                             json_data['height'] != 'matchParent' &&
                             json_data['height'] != 'wrapContent' &&
-                            !(json_data['heightWeight'] && json_data['height'] == 0)
+                            !(json_data['heightWeight'] && json_data['height'] == 0) &&
+                            weight_axis != :height
           # Same three cases as the width axis: constraint before a fill,
           # after a wrap (which discards the incoming minimum), after an
           # explicit height.

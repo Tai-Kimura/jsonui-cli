@@ -357,12 +357,12 @@ module KjuiTools
 
           if !is_horizontal && width_value == 'wrapContent'
             modified_json = json_data.merge('width' => 'matchParent')
-            modifiers.concat(Helpers::ModifierBuilder.build_size(modified_json, nil, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(modified_json, parent_type, required_imports))
           elsif is_horizontal && height_value == 'wrapContent'
             modified_json = json_data.merge('height' => 'matchParent')
-            modifiers.concat(Helpers::ModifierBuilder.build_size(modified_json, nil, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(modified_json, parent_type, required_imports))
           else
-            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           end
 
           # 3. Alpha + Background (clip + background)
@@ -809,7 +809,7 @@ module KjuiTools
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
@@ -945,7 +945,7 @@ module KjuiTools
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
@@ -1044,7 +1044,7 @@ module KjuiTools
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
@@ -1166,7 +1166,7 @@ module KjuiTools
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
@@ -1327,12 +1327,12 @@ module KjuiTools
           # bounded cross-axis size. Promote wrapContent → matchParent for safety.
           if !is_horizontal && width_value == 'wrapContent'
             modified = json_data.merge('width' => 'matchParent')
-            modifiers.concat(Helpers::ModifierBuilder.build_size(modified, nil, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(modified, parent_type, required_imports))
           elsif is_horizontal && height_value == 'wrapContent'
             modified = json_data.merge('height' => 'matchParent')
-            modifiers.concat(Helpers::ModifierBuilder.build_size(modified, nil, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(modified, parent_type, required_imports))
           else
-            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           end
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))

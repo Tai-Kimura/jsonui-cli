@@ -208,7 +208,7 @@ module KjuiTools
             if json_data['width'] == 'matchParent' || !json_data['width']
               textfield_modifiers << ".fillMaxWidth()"
             else
-              textfield_modifiers.concat(Helpers::ModifierBuilder.build_size(size_source, nil, required_imports))
+              textfield_modifiers.concat(Helpers::ModifierBuilder.build_size(size_source, parent_type, required_imports))
             end
 
             # Height for multi-line
@@ -261,7 +261,7 @@ module KjuiTools
             if json_data['width'] == 'matchParent' || !json_data['width']
               modifiers << ".fillMaxWidth()"
             else
-              modifiers.concat(Helpers::ModifierBuilder.build_size(size_source, nil, required_imports))
+              modifiers.concat(Helpers::ModifierBuilder.build_size(size_source, parent_type, required_imports))
             end
 
             # Height for multi-line

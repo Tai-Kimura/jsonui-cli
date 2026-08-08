@@ -111,7 +111,7 @@ module KjuiTools
           if json_data['size']
             modifiers << ".size(#{json_data['size']}.dp)"
           else
-            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           end
 
           # clip/background (after size, before padding)
