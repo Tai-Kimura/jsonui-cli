@@ -291,7 +291,12 @@ module KjuiTools
           # lineSpacing: vertical spacing between rows (minimumLineSpacing in iOS)
           # columnSpacing: horizontal spacing between columns (minimumInteritemSpacing in iOS)
           # itemSpacing/spacing: uniform spacing (fallback)
-          line_spacing = json_data['lineSpacing'] || json_data['itemSpacing'] || json_data['spacing']
+          # `sectionSpacing` is the declared alias of lineSpacing (the dynamic
+          # table folds it; sjui reads both spellings) — this path read only
+          # the canonical one, so the alias fixture measured a parity gap
+          # against the dynamic render (d=18, run 31202080745). Canonical
+          # spelling wins when both are written.
+          line_spacing = json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || json_data['spacing']
           column_spacing = json_data['columnSpacing'] || json_data['itemSpacing'] || json_data['spacing']
 
           if line_spacing || column_spacing
@@ -742,10 +747,16 @@ module KjuiTools
                 # so the declared sizes were unread on the path the
                 # conformance fixtures actually take.
                 if json_data['cellWidth']
-                  code += "\n" + indent("    .requiredWidth(#{json_data['cellWidth']}.dp)", depth + 6)
+                  code += "\n" + indent("    .width(#{json_data['cellWidth']}.dp)", depth + 6)
                 end
                 if json_data['cellHeight']
-                  code += "\n" + indent("    .requiredHeight(#{json_data['cellHeight']}.dp)", depth + 6)
+                  code += "\n" + indent("    .height(#{json_data['cellHeight']}.dp)", depth + 6)
+                end
+                if json_data['cellWidth'] || json_data['cellHeight']
+                  # Same anchored-and-clipped picture as the CollectionStack
+                  # route below (web canon; requiredSize centres overflow).
+                  required_imports&.add(:shape)
+                  code += "\n" + indent("    .clipToBounds()", depth + 6)
                 end
                 code += "\n" + indent(")", depth + 5)
                 if chrome_open(json_data, nil)
@@ -928,7 +939,7 @@ module KjuiTools
           # renderer falls back to 0f, and the silent 8 here was the parity
           # residue on Collection/layout__flow_2 after the enum fix.
           h_spacing = json_data['columnSpacing'] || json_data['itemSpacing'] || json_data['spacing'] || 0
-          v_spacing = json_data['lineSpacing'] || json_data['itemSpacing'] || json_data['spacing'] || 0
+          v_spacing = json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || json_data['spacing'] || 0
 
           # Flow alignment
           flow_alignment = json_data['flowAlignment'] || 'leading'
@@ -1053,7 +1064,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
           # Spacing
-          line_spacing = json_data['lineSpacing'] || json_data['itemSpacing'] || json_data['spacing']
+          line_spacing = json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || json_data['spacing']
 
           code = indent("Column(", depth)
           code += Helpers::ModifierBuilder.format(modifiers, depth)
@@ -1291,9 +1302,9 @@ module KjuiTools
           # LazyHorizontalGrid path (line ~150) already accepts `lineSpacing`
           # as the horizontal-spacing source; CollectionStack must match.
           spacing_value = if is_horizontal
-                           json_data['itemSpacing'] || json_data['columnSpacing'] || json_data['lineSpacing'] || json_data['spacing']
+                           json_data['itemSpacing'] || json_data['columnSpacing'] || json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['spacing']
                          else
-                           json_data['lineSpacing'] || json_data['itemSpacing'] || json_data['spacing']
+                           json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || json_data['spacing']
                          end
 
           # userScrollEnabled (binding aware)
@@ -1580,11 +1591,22 @@ module KjuiTools
             else
               out += "\n" + indent("modifier = Modifier", depth + 4)
             end
+            # width/clipToBounds, not requiredWidth: a declared cell size can
+            # UNDER-fit the cell's content, and the canonical picture (web,
+            # and the ios frame alignment) anchors the cell at its leading
+            # edge and HIDES the overflow — requiredSize centres it and lets
+            # the content spill (Collection_cellWidth__static parity d=30,
+            # run 31202080745). Lane constraints are loose here, so width
+            # binds exactly.
             if json_data['cellWidth']
-              out += "\n" + indent("    .requiredWidth(#{json_data['cellWidth']}.dp)", depth + 4)
+              out += "\n" + indent("    .width(#{json_data['cellWidth']}.dp)", depth + 4)
             end
             if json_data['cellHeight']
-              out += "\n" + indent("    .requiredHeight(#{json_data['cellHeight']}.dp)", depth + 4)
+              out += "\n" + indent("    .height(#{json_data['cellHeight']}.dp)", depth + 4)
+            end
+            if json_data['cellWidth'] || json_data['cellHeight']
+              required_imports&.add(:shape)
+              out += "\n" + indent("    .clipToBounds()", depth + 4)
             end
             out += "\n" + indent(")", depth + 3)
             if chrome_open(json_data, nil)
@@ -1684,11 +1706,22 @@ module KjuiTools
             else
               out += "\n" + indent("modifier = Modifier", depth + 4)
             end
+            # width/clipToBounds, not requiredWidth: a declared cell size can
+            # UNDER-fit the cell's content, and the canonical picture (web,
+            # and the ios frame alignment) anchors the cell at its leading
+            # edge and HIDES the overflow — requiredSize centres it and lets
+            # the content spill (Collection_cellWidth__static parity d=30,
+            # run 31202080745). Lane constraints are loose here, so width
+            # binds exactly.
             if json_data['cellWidth']
-              out += "\n" + indent("    .requiredWidth(#{json_data['cellWidth']}.dp)", depth + 4)
+              out += "\n" + indent("    .width(#{json_data['cellWidth']}.dp)", depth + 4)
             end
             if json_data['cellHeight']
-              out += "\n" + indent("    .requiredHeight(#{json_data['cellHeight']}.dp)", depth + 4)
+              out += "\n" + indent("    .height(#{json_data['cellHeight']}.dp)", depth + 4)
+            end
+            if json_data['cellWidth'] || json_data['cellHeight']
+              required_imports&.add(:shape)
+              out += "\n" + indent("    .clipToBounds()", depth + 4)
             end
             out += "\n" + indent(")", depth + 3)
             if chrome_open(json_data, nil)

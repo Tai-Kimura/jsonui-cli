@@ -201,6 +201,15 @@ module SjuiTools
             end
             add_line "}"
             generate_scroll_reader_close
+          elsif columns == 1 && !is_horizontal && !has_sections &&
+                cell_class_name.nil? && header_class_name.nil? && footer_class_name.nil?
+            # Nothing renderable: no declared sections and no cell class to
+            # draw the items with. Every other face — web, android (both
+            # pipelines) and ios dynamic — renders only the collection's own
+            # box; this path fell into the legacy List below and drew a white
+            # List holding a placeholder Text per item
+            # (control_Collection__no-sections parity d=42, run 31202080745).
+            add_line "Color.clear"
           elsif columns == 1 && !is_horizontal
             # Legacy single column vertical without sections - use List
             add_line "List {"
@@ -614,18 +623,36 @@ module SjuiTools
         # whatever width the cell layout asked for". Emission order inside each
         # dialect is unchanged: `.frame` wraps, so reordering these would move
         # pixels.
+        # `alignment: .topLeading` + `.clipped()`: a declared cell size can
+        # UNDER-fit the cell's content, and SwiftUI's default .center frame
+        # let the overflow spill symmetrically — the cell drew shifted half
+        # out of its lane (Collection_cellWidth__static parity d=50, run
+        # 31202080745). Web anchors the cell at its leading edge and hides
+        # the overflow; the frame here reads the same way.
         def apply_cell_frame(grid: false)
+          clipped = false
           if grid
-            add_modifier_line ".frame(height: #{@component['cellHeight']})" if @component['cellHeight']
+            if @component['cellHeight']
+              add_modifier_line ".frame(height: #{@component['cellHeight']}, alignment: .topLeading)"
+              clipped = true
+            end
             if @component['cellWidth']
-              add_modifier_line ".frame(width: #{@component['cellWidth']})"
+              add_modifier_line ".frame(width: #{@component['cellWidth']}, alignment: .topLeading)"
+              clipped = true
             else
               add_modifier_line ".frame(maxWidth: .infinity)"
             end
           else
-            add_modifier_line ".frame(width: #{@component['cellWidth']})" if @component['cellWidth']
-            add_modifier_line ".frame(height: #{@component['cellHeight']})" if @component['cellHeight']
+            if @component['cellWidth']
+              add_modifier_line ".frame(width: #{@component['cellWidth']}, alignment: .topLeading)"
+              clipped = true
+            end
+            if @component['cellHeight']
+              add_modifier_line ".frame(height: #{@component['cellHeight']}, alignment: .topLeading)"
+              clipped = true
+            end
           end
+          add_modifier_line ".clipped()" if clipped
         end
 
         #: Declared `listStyle` -> SwiftUI list chrome. Enumerated by the

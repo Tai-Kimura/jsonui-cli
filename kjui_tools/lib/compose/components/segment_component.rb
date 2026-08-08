@@ -9,7 +9,17 @@ module KjuiTools
       class SegmentComponent
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           required_imports&.add(:segment)
-          
+
+          # `selectedTabIndex` is the declared alias of selectedIndex (the
+          # dynamic table folds it; TabView declares the same alias). Folding
+          # it once here reaches every read site below — the alias fixture
+          # measured a parity gap against the dynamic render because only the
+          # canonical spelling was read (d=15, run 31202080745). Canonical
+          # wins when both are written.
+          if json_data['selectedTabIndex'] && !json_data['selectedIndex']
+            json_data = json_data.merge('selectedIndex' => json_data['selectedTabIndex'])
+          end
+
           # Segment uses 'selectedIndex' or 'bind' for selected index
           # Track if the selected index is dynamic (from data binding) or static
           is_dynamic_index = false
