@@ -63,7 +63,7 @@ Screenshots are compared against `baselines/local/<platform>.hashes.json` (rende
 | Platform | Baseline | Compared | Regressions | No baseline | Missing artifact |
 |---|---|---|---|---|---|
 | android | threshold 8 | 796 | 0 | 0 | 0 |
-| ios | threshold 8 | 844 | 0 | 0 | 1 |
+| ios | threshold 8 | 844 | 0 | 0 | 0 |
 | web | threshold 8 | 798 | 0 | 0 | 1 |
 
 ## Attribute effect (fixture vs control)
@@ -73,20 +73,8 @@ Each visual fixture is compared against its **control** — the same layout with
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
 | android | 561 | 462 | 99 | 0 | 0 |
-| ios | 605 | 494 | 111 | **9** | 0 |
+| ios | 605 | 493 | 112 | 0 | 0 |
 | web | 543 | 448 | 95 | **2** | 0 |
-
-**ios: 9 fixture(s) recorded as expected-to-differ now render identically to their control — the attribute stopped taking effect.**
-
-- `common/gravity__top`
-- `common/gravity__left`
-- `common/minEndMargin__static`
-- `common/maxEndMargin__static`
-- `TextView/flexible__true`
-- `Progress/indicatorStyle__large`
-- `Progress/indicatorStyle__medium`
-- `Indicator/indicatorStyle__medium`
-- `Indicator/hidesWhenStopped__true`
 
 **web: 2 fixture(s) recorded as expected-to-differ now render identically to their control — the attribute stopped taking effect.**
 
@@ -97,7 +85,7 @@ Each visual fixture is compared against its **control** — the same layout with
 
 Pixel comparison across platforms is out of scope by design, but each platform's control-diff verdict — *did the attribute change the render?* — is platform-independent. A fixture whose activeness disagrees across the platforms its attribute is declared for is a semantic-drift suspect, and an SSoT-enumerated value that is inert on **every** platform is flagged uniformly-inert (default rendering, or dead everywhere). Only fixtures compared on **all** their in-scope platforms are judged; findings are accepted (with a reason) in `cross_effect.json` and enforced by `jui conformance gate --cross-effect`.
 
-- Compared on all in-scope platforms: 565 (consistent: 500, **diverging: 65**, **uniformly-inert declared values: 44**) · not compared everywhere: 22 · in scope on <2 platforms: 77
+- Compared on all in-scope platforms: 565 (consistent: 501, **diverging: 64**, **uniformly-inert declared values: 44**) · not compared everywhere: 22 · in scope on <2 platforms: 77
 
 | Fixture | android | ios | web |
 |---|---|---|---|
@@ -110,7 +98,6 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `Collection/lazy__eager` | inert | active | inert |
 | `Collection/lazy__none` | inert | active | inert |
 | `Collection/listStyle__grouped` | active | active | inert |
-| `Indicator/animating__true` | inert | active | — |
 | `Label/autoShrink__true` | active | active | inert |
 | `Label/lineBreakMode__char` | inert | inert | active |
 | `Label/lineBreakMode__clip` | inert | inert | active |

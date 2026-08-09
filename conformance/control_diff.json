@@ -665,31 +665,13 @@
       ]
     },
     {
-      "fixture": "Indicator/animating__true",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "Indicator/color__static",
       "platforms": [
         "ios"
       ]
     },
     {
-      "fixture": "Indicator/hidesWhenStopped__true",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "Indicator/indicatorStyle__large",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Indicator/indicatorStyle__medium",
       "platforms": [
         "ios"
       ]
@@ -1151,18 +1133,6 @@
     },
     {
       "fixture": "Progress/hidesWhenStopped__true",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Progress/indicatorStyle__large",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "Progress/indicatorStyle__medium",
       "platforms": [
         "ios"
       ]
@@ -2117,7 +2087,6 @@
     {
       "fixture": "TextView/flexible__true",
       "platforms": [
-        "ios",
         "web"
       ]
     },
@@ -2851,22 +2820,10 @@
       ]
     },
     {
-      "fixture": "common/gravity__left",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "common/gravity__right",
       "platforms": [
         "ios",
         "web"
-      ]
-    },
-    {
-      "fixture": "common/gravity__top",
-      "platforms": [
-        "ios"
       ]
     },
     {
@@ -2946,12 +2903,6 @@
       ]
     },
     {
-      "fixture": "common/maxEndMargin__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "common/maxHeight__fill_clamp",
       "platforms": [
         "android",
@@ -2971,12 +2922,6 @@
         "android",
         "ios",
         "web"
-      ]
-    },
-    {
-      "fixture": "common/minEndMargin__static",
-      "platforms": [
-        "ios"
       ]
     },
     {
