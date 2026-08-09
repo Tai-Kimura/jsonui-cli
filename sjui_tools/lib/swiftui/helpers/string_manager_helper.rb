@@ -56,17 +56,24 @@ module SjuiTools
           # Check if it's a binding (starts with @{)
           return text_content if text_without_quotes.match?(/^@\{.*\}$/)
 
-          # First, try to find by value in strings.json (for non-snake_case text like "AppFinder")
+          # A text that IS a declared strings.json key resolves as that key,
+          # before any value reverse-lookup or spelling heuristic: membership
+          # in the SSoT is what makes something a key, not how it is spelled.
+          # The extractor truncates long ASCII text to 31 chars, which can
+          # leave a trailing underscore ("dont_have_an_account_apply_for_") —
+          # a spelling the old snake_case gate rejected, so a declared key
+          # fell through to the raw literal (a downstream login screen, 2026-08-09).
+          string_manager_call = lookup_string_manager_key(text_without_quotes)
+          return string_manager_call if string_manager_call
+
+          # Then, try to find by value in strings.json (for non-snake_case text like "AppFinder")
           string_manager_call = lookup_string_manager_by_value(text_without_quotes)
           return string_manager_call if string_manager_call
 
-          # Then, check if it's snake_case key format
-          if text_without_quotes.match?(/^[a-z]+(_[a-z0-9]+)*$/)
-            # Try to find by key in strings.json
-            string_manager_call = lookup_string_manager_key(text_without_quotes)
-            return string_manager_call if string_manager_call
-
-            # Fallback to .localized() extension for snake_case strings
+          # Undeclared snake_case-shaped text falls back to .localized().
+          # Same spelling the extractor's should_extract_string? skips,
+          # trailing underscore included.
+          if text_without_quotes.match?(/^[a-z][a-z0-9]*(_[a-z0-9]+)*_?$/)
             return "\"#{text_without_quotes}\".localized()"
           end
 

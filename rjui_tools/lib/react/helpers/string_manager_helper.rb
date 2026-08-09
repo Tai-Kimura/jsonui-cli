@@ -20,8 +20,13 @@ module RjuiTools
           # Skip if it contains spaces (regular text)
           return false if text_without_quotes.include?(' ')
 
-          # Check if it's snake_case (lowercase letters, numbers, underscores only)
-          text_without_quotes.match?(/^[a-z][a-z0-9]*(_[a-z0-9]+)*$/)
+          # Check if it's snake_case (lowercase letters, numbers, underscores
+          # only). Same spelling the extractor's should_extract_string? skips
+          # (string_manager_core.rb), trailing underscore included — the
+          # extractor truncates long ASCII text to 31 chars, which can leave
+          # a trailing underscore ("dont_have_an_account_apply_for_"), and
+          # every resolver must accept what the extractor produces.
+          text_without_quotes.match?(/^[a-z][a-z0-9]*(_[a-z0-9]+)*_?$/)
         end
 
         # Convert snake_case string key to StringManager.currentLanguage.{filePrefix}{Key}
@@ -56,7 +61,7 @@ module RjuiTools
         def rewrite_json_string_values(json_str)
           return json_str unless json_str.is_a?(String)
 
-          json_str.gsub(/:\s*"([a-z][a-z0-9]*(?:_[a-z0-9]+)*)"/) do |match|
+          json_str.gsub(/:\s*"([a-z][a-z0-9]*(?:_[a-z0-9]+)*_?)"/) do |match|
             key = Regexp.last_match(1)
             resolved = lookup_string_manager_key(key)
             next match unless resolved
@@ -77,17 +82,20 @@ module RjuiTools
           # Check if it's a binding (starts with @{)
           return text_content if text_without_quotes.match?(/^@\{.*\}$/)
 
-          # First, try to find by value in strings.json
-          result = lookup_string_manager_by_value(text_without_quotes)
-          return result if result
-
-          # Then, check if it's a snake_case key. `convert_string_key` now
-          # returns nil when the key isn't registered in strings.json, so
-          # we fall through to the literal text_content instead of
-          # emitting a dangling StringManager reference.
+          # A text that IS a declared strings.json key resolves as that key,
+          # before the value reverse-lookup: membership in the SSoT is what
+          # makes something a key, not how it is spelled. A legacy poison
+          # entry whose VALUE is another key's raw spelling hijacked the
+          # value lookup on the sjui face (a downstream login screen, 2026-08-09);
+          # `convert_string_key` returns nil for unregistered keys, so this
+          # is membership-gated and cannot mint dangling references.
           if (resolved = convert_string_key(text_without_quotes))
             return resolved
           end
+
+          # Then, try to find by value in strings.json
+          result = lookup_string_manager_by_value(text_without_quotes)
+          return result if result
 
           text_content
         end
