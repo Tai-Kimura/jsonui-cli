@@ -1,6 +1,6 @@
 {
   "platform": "android",
-  "manifestHash": "26128fbb10863677258d0d3d2e1b0259d1dab9701776f398d4a005b0f21f44b0",
+  "manifestHash": "ff5353d320eb0b38da9b07dde099ad40a00f757fb23c7cab39e86649cfabcfe3",
   "runner": {
     "name": "uiautomator",
     "version": "2.3.0"
@@ -118,7 +118,17 @@
       "detail": "not applicable to android"
     },
     {
+      "id": "common/maxWidthWeight__binding",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
       "id": "common/maxHeightWeight__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/maxHeightWeight__binding",
       "status": "skipped",
       "detail": "not applicable to android"
     },
@@ -128,7 +138,17 @@
       "detail": "not applicable to android"
     },
     {
+      "id": "common/minWidthWeight__binding",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
       "id": "common/minHeightWeight__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/minHeightWeight__binding",
       "status": "skipped",
       "detail": "not applicable to android"
     },
@@ -138,7 +158,17 @@
       "detail": "not applicable to android"
     },
     {
+      "id": "common/aspectWidth__binding",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
       "id": "common/aspectHeight__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/aspectHeight__binding",
       "status": "skipped",
       "detail": "not applicable to android"
     },
@@ -216,6 +246,11 @@
     },
     {
       "id": "common/defaultBackground__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/defaultBackground__binding",
       "status": "skipped",
       "detail": "not applicable to android"
     },
@@ -550,10 +585,22 @@
       "screenshot": "artifacts/android/common_topMargin__static.png"
     },
     {
+      "id": "common/topMargin__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_topMargin__binding.png"
+    },
+    {
       "id": "common/bottomMargin__static",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/common_bottomMargin__static.png"
+    },
+    {
+      "id": "common/bottomMargin__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/common_bottomMargin__binding.png"
     },
     {
       "id": "common/leftMargin__static",
@@ -609,7 +656,17 @@
       "detail": "not applicable to android"
     },
     {
+      "id": "common/minTopMargin__binding",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
       "id": "common/minBottomMargin__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/minBottomMargin__binding",
       "status": "skipped",
       "detail": "not applicable to android"
     },
@@ -619,7 +676,17 @@
       "detail": "not applicable to android"
     },
     {
+      "id": "common/minLeftMargin__binding",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
       "id": "common/minRightMargin__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/minRightMargin__binding",
       "status": "skipped",
       "detail": "not applicable to android"
     },
@@ -629,7 +696,17 @@
       "detail": "not applicable to android"
     },
     {
+      "id": "common/maxTopMargin__binding",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
       "id": "common/maxBottomMargin__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/maxBottomMargin__binding",
       "status": "skipped",
       "detail": "not applicable to android"
     },
@@ -639,7 +716,17 @@
       "detail": "not applicable to android"
     },
     {
+      "id": "common/maxLeftMargin__binding",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
       "id": "common/maxRightMargin__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/maxRightMargin__binding",
       "status": "skipped",
       "detail": "not applicable to android"
     },
@@ -871,6 +958,16 @@
       "screenshot": "artifacts/android/common_clipToBounds__binding.png"
     },
     {
+      "id": "common/clipToBounds__hit_overflow_true",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "common/clipToBounds__hit_overflow_false",
+      "status": "pass",
+      "detail": ""
+    },
+    {
       "id": "common/onclick__callback_fire",
       "status": "pass",
       "detail": ""
@@ -934,6 +1031,11 @@
     },
     {
       "id": "common/innerPadding__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "common/innerPadding__binding",
       "status": "skipped",
       "detail": "not applicable to android"
     },
@@ -1511,6 +1613,18 @@
       "screenshot": "artifacts/android/Label_underline__styled.png"
     },
     {
+      "id": "Label/underline__double",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_underline__double.png"
+    },
+    {
+      "id": "Label/underline__thick",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_underline__thick.png"
+    },
+    {
       "id": "Label/underline__false",
       "status": "pass",
       "detail": "",
@@ -1527,6 +1641,18 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/Label_strikethrough__styled.png"
+    },
+    {
+      "id": "Label/strikethrough__double",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_strikethrough__double.png"
+    },
+    {
+      "id": "Label/strikethrough__thick",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_strikethrough__thick.png"
     },
     {
       "id": "Label/strikethrough__false",
@@ -1617,6 +1743,12 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/Label_partialAttributes__static.png"
+    },
+    {
+      "id": "Label/hintAttributes__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Label_hintAttributes__static.png"
     },
     {
       "id": "Label/fontWeight__static",
@@ -1715,6 +1847,11 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/TextField_hintFontSize__static.png"
+    },
+    {
+      "id": "TextField/hintAttributes__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
     },
     {
       "id": "TextField/font__static",
@@ -2333,6 +2470,12 @@
       "screenshot": "artifacts/android/TextView_hintLineHeightMultiple__static.png"
     },
     {
+      "id": "TextView/hintAttributes__static",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/TextView_hintAttributes__static.png"
+    },
+    {
       "id": "TextView/font__static",
       "status": "pass",
       "detail": "",
@@ -2924,7 +3067,17 @@
       "detail": "not applicable to android"
     },
     {
+      "id": "Image/highlightSrc__binding",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
       "id": "Image/highlightSrcName__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Image/highlightSrcName__binding",
       "status": "skipped",
       "detail": "not applicable to android"
     },
@@ -3536,6 +3689,12 @@
       "screenshot": "artifacts/android/Switch_isOn__false.png"
     },
     {
+      "id": "Switch/isOn__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Switch_isOn__binding.png"
+    },
+    {
       "id": "Switch/value__true",
       "status": "pass",
       "detail": "",
@@ -3624,6 +3783,11 @@
     },
     {
       "id": "Switch/offTintColor__static",
+      "status": "skipped",
+      "detail": "not applicable to android"
+    },
+    {
+      "id": "Switch/offTintColor__binding",
       "status": "skipped",
       "detail": "not applicable to android"
     },
@@ -4241,6 +4405,12 @@
       "screenshot": "artifacts/android/Collection_columns__static.png"
     },
     {
+      "id": "Collection/columns__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/Collection_columns__binding.png"
+    },
+    {
       "id": "Collection/columnSpacing__static",
       "status": "pass",
       "detail": "",
@@ -4689,6 +4859,12 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/CheckBox_isOn__false.png"
+    },
+    {
+      "id": "CheckBox/isOn__binding",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/CheckBox_isOn__binding.png"
     },
     {
       "id": "CheckBox/checked__true",
@@ -5304,6 +5480,12 @@
       "screenshot": "artifacts/android/control_Collection__columns-2.png"
     },
     {
+      "id": "__control/Collection__listStyle-grouped",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Collection__listStyle-grouped.png"
+    },
+    {
       "id": "__control/Collection__no-sections",
       "status": "pass",
       "detail": "",
@@ -5414,6 +5596,12 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/control_Label__hint-Conformance-Hint_hintAttributes--fontSize-12_no-text.png"
+    },
+    {
+      "id": "__control/Label__hint-Conformance-Hint_no-text",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Label__hint-Conformance-Hint_no-text.png"
     },
     {
       "id": "__control/Label__hintAttributes--fontSize-12_no-text",
@@ -5618,6 +5806,12 @@
       "screenshot": "artifacts/android/control_Switch__isOn-True.png"
     },
     {
+      "id": "__control/Switch__label-Sample",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_Switch__label-Sample.png"
+    },
+    {
       "id": "__control/Switch__labelAttributes--text-Sample",
       "status": "pass",
       "detail": "",
@@ -5721,16 +5915,16 @@
       "screenshot": "artifacts/android/control_View__borderWidth-2.png"
     },
     {
-      "id": "__control/View__child-1954985b_orientation-horizontal_width-300",
-      "status": "pass",
-      "detail": "",
-      "screenshot": "artifacts/android/control_View__child-1954985b_orientation-horizontal_width-300.png"
-    },
-    {
       "id": "__control/View__child-aec83a5f_no-orientation",
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/android/control_View__child-aec83a5f_no-orientation.png"
+    },
+    {
+      "id": "__control/View__child-b4827942_orientation-horizontal_width-300",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/android/control_View__child-b4827942_orientation-horizontal_width-300.png"
     },
     {
       "id": "__control/View__gradient--FF0000-0000FF",

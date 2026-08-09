@@ -2,9 +2,9 @@
 
 # JsonUI Conformance Report
 
-- Manifest: `26128fbb10863677258d0d3d2e1b0259d1dab9701776f398d4a005b0f21f44b0` (sha256)
-- Definitions: `be5fafd58187fc62d30b3e5f5c1270cac97338a1364b3f52084ecd235491627b` (sha256)
-- Fixtures: 1031 (assertable: 41, visual: 793, interactive: 35) / skipped attributes: 159
+- Manifest: `ff5353d320eb0b38da9b07dde099ad40a00f757fb23c7cab39e86649cfabcfe3` (sha256)
+- Definitions: `1565216371b36804d0ee90bf630dc23ef3a0b61a222a1bfa716ec5e62c16081f` (sha256)
+- Fixtures: 1067 (assertable: 41, visual: 806, interactive: 37) / skipped attributes: 156
 
 Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
 
@@ -14,7 +14,7 @@ _No cross-platform mismatches._
 
 ## Interactive fixtures
 
-- Interactive fixtures: 35 · attributes promoted out of skip reasons: callback: 11 · still skipped: binding-only: 5, callback: 34
+- Interactive fixtures: 37 · attributes promoted out of skip reasons: callback: 11 · still skipped: binding-only: 5, callback: 34
 
 | Fixture | Case | Promoted from | android | ios | web | Detail |
 |---|---|---|---|---|---|---|
@@ -22,6 +22,8 @@ _No cross-platform mismatches._
 | `common/visibility__binding_invisible` | `binding_invisible` | — | ✅ | ✅ | ✅ |  |
 | `common/visibility__binding_gone` | `binding_gone` | — | ✅ | ✅ | ✅ |  |
 | `common/hidden__binding_negation` | `binding_negation` | — | ✅ | ✅ | ✅ |  |
+| `common/clipToBounds__hit_overflow_true` | `hit_overflow_true` | — | ✅ | ✅ | ✅ |  |
+| `common/clipToBounds__hit_overflow_false` | `hit_overflow_false` | — | ✅ | ✅ | ✅ |  |
 | `common/onclick__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
 | `common/onClick__callback_fire` | `callback_fire` | callback | ✅ | ✅ | ✅ |  |
 | `common/onLongPress__callback_fire` | `callback_fire` | callback | ✅ | ✅ | – | web: not applicable to web |
@@ -56,13 +58,13 @@ _No cross-platform mismatches._
 
 ## Visual regression (same-platform baselines)
 
-Screenshots are compared against `baselines/ci/<platform>.hashes.json` (render environment `ci`; algorithm `dhash-64`, Hamming distance > threshold ⇒ regression). Baselines only ever compare within one render environment — cross-environment and cross-platform pixel comparison are out of scope by design.
+Screenshots are compared against `baselines/local/<platform>.hashes.json` (render environment `local`; algorithm `dhash-64`, Hamming distance > threshold ⇒ regression). Baselines only ever compare within one render environment — cross-environment and cross-platform pixel comparison are out of scope by design.
 
 | Platform | Baseline | Compared | Regressions | No baseline | Missing artifact |
 |---|---|---|---|---|---|
-| android | threshold 8 | 782 | 0 | 0 | 0 |
-| ios | threshold 8 | 828 | 0 | 0 | 0 |
-| web | threshold 8 | 784 | 0 | 0 | 0 |
+| android | threshold 8 | 796 | 0 | 0 | 0 |
+| ios | threshold 8 | 844 | 0 | 0 | 1 |
+| web | threshold 8 | 798 | 0 | 0 | 1 |
 
 ## Attribute effect (fixture vs control)
 
@@ -70,11 +72,11 @@ Each visual fixture is compared against its **control** — the same layout with
 
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
-| android | 550 | 435 | 115 | 0 | 0 |
-| ios | 592 | 459 | 133 | **8** | 0 |
-| web | 532 | 429 | 103 | **2** | 0 |
+| android | 561 | 462 | 99 | 0 | 0 |
+| ios | 605 | 494 | 111 | **9** | 0 |
+| web | 543 | 448 | 95 | **2** | 0 |
 
-**ios: 8 fixture(s) recorded as expected-to-differ now render identically to their control — the attribute stopped taking effect.**
+**ios: 9 fixture(s) recorded as expected-to-differ now render identically to their control — the attribute stopped taking effect.**
 
 - `common/gravity__top`
 - `common/gravity__left`
@@ -83,6 +85,7 @@ Each visual fixture is compared against its **control** — the same layout with
 - `TextView/flexible__true`
 - `Progress/indicatorStyle__large`
 - `Progress/indicatorStyle__medium`
+- `Indicator/indicatorStyle__medium`
 - `Indicator/hidesWhenStopped__true`
 
 **web: 2 fixture(s) recorded as expected-to-differ now render identically to their control — the attribute stopped taking effect.**
@@ -94,29 +97,21 @@ Each visual fixture is compared against its **control** — the same layout with
 
 Pixel comparison across platforms is out of scope by design, but each platform's control-diff verdict — *did the attribute change the render?* — is platform-independent. A fixture whose activeness disagrees across the platforms its attribute is declared for is a semantic-drift suspect, and an SSoT-enumerated value that is inert on **every** platform is flagged uniformly-inert (default rendering, or dead everywhere). Only fixtures compared on **all** their in-scope platforms are judged; findings are accepted (with a reason) in `cross_effect.json` and enforced by `jui conformance gate --cross-effect`.
 
-- Compared on all in-scope platforms: 554 (consistent: 466, **diverging: 88**, **uniformly-inert declared values: 47**) · not compared everywhere: 22 · in scope on <2 platforms: 75
+- Compared on all in-scope platforms: 565 (consistent: 500, **diverging: 65**, **uniformly-inert declared values: 44**) · not compared everywhere: 22 · in scope on <2 platforms: 77
 
 | Fixture | android | ios | web |
 |---|---|---|---|
-| `Button/fontFamily__binding` | inert | inert | active |
-| `Button/fontFamily__static` | inert | inert | active |
-| `Button/fontWeight__binding` | inert | active | active |
-| `Button/textAlign__center` | active | inert | inert |
+| `Blur/blurRadius__static` | inert | — | active |
 | `Button/textAlign__left` | inert | inert | active |
 | `Button/textAlign__right` | active | inert | active |
-| `CheckBox/fontColor__binding` | active | inert | active |
-| `CheckBox/fontWeight__alias_fontStyle` | inert | active | active |
-| `CheckBox/fontWeight__static` | inert | active | active |
-| `Collection/cellHeight__static` | active | inert | inert |
 | `Collection/defaultScrollAnchor__bottom` | inert | active | inert |
 | `Collection/defaultScrollAnchor__center` | inert | active | inert |
 | `Collection/lazy__binding` | inert | active | inert |
 | `Collection/lazy__eager` | inert | active | inert |
 | `Collection/lazy__none` | inert | active | inert |
-| `IconLabel/iconSize__static` | inert | inert | active |
+| `Collection/listStyle__grouped` | active | active | inert |
+| `Indicator/animating__true` | inert | active | — |
 | `Label/autoShrink__true` | active | active | inert |
-| `Label/disabledFontColor__binding` | inert | active | active |
-| `Label/disabledFontColor__static` | inert | active | active |
 | `Label/lineBreakMode__char` | inert | inert | active |
 | `Label/lineBreakMode__clip` | inert | inert | active |
 | `Label/lineBreakMode__head` | inert | inert | active |
@@ -125,37 +120,23 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `Label/textAlign__binding` | inert | active | inert |
 | `Label/textAlign__left` | inert | active | inert |
 | `Label/textAlign__left_2` | inert | active | inert |
-| `NetworkImage/loadingImage__static` | inert | active | — |
 | `NetworkImage/placeholder__static` | inert | active | active |
-| `NetworkImage/renderingMode__template` | inert | active | — |
-| `Radio/fontColor__binding` | active | inert | active |
-| `SafeAreaView/direction__bottomtotop` | inert | inert | active |
-| `SafeAreaView/direction__righttoleft` | inert | inert | active |
 | `SafeAreaView/safeAreaInsetPositions__alias_edges` | inert | active | inert |
 | `SafeAreaView/safeAreaInsetPositions__static` | inert | active | inert |
-| `SafeAreaView/spacing__binding` | inert | active | active |
-| `SafeAreaView/spacing__static` | inert | active | active |
-| `ScrollView/defaultScrollAnchor__bottom` | inert | inert | active |
-| `ScrollView/defaultScrollAnchor__center` | inert | inert | active |
 | `SelectBox/datePickerMode__dateandtime` | inert | inert | active |
 | `SelectBox/datePickerMode__time` | active | inert | active |
 | `SelectBox/fontColor__static` | active | inert | active |
 | `Slider/value__binding` | active | active | inert |
 | `Slider/value__static` | active | active | inert |
-| `Switch/fontColor__binding` | active | inert | inert |
-| `Switch/fontColor__static` | active | inert | inert |
-| `Switch/fontSize__binding` | active | inert | inert |
-| `Switch/fontSize__static` | active | inert | inert |
 | `Switch/trackTintColor__static` | active | inert | active |
 | `TabView/showLabels__true` | inert | active | inert |
-| `TabView/tintColor__binding` | active | inert | active |
 | `TextField/borderStyle__bezel` | active | inert | inert |
 | `TextField/borderStyle__bezel_2` | active | inert | inert |
 | `TextField/borderStyle__line` | active | inert | active |
 | `TextField/borderStyle__line_2` | active | inert | active |
 | `TextField/borderStyle__roundedrect` | active | active | inert |
 | `TextField/borderStyle__roundedrect_2` | active | active | inert |
-| `TextField/fontColor__binding` | active | inert | active |
+| `TextField/hintLineHeightMultiple__static` | active | inert | inert |
 | `TextField/textAlign__center` | inert | active | active |
 | `TextField/textAlign__center_2` | inert | active | active |
 | `TextField/textAlign__right` | inert | active | active |
@@ -163,11 +144,12 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `TextView/editable__false` | active | inert | inert |
 | `TextView/flexible__true` | inert | inert | active |
 | `TextView/lineBreakMode__char` | inert | inert | active |
+| `TextView/lineBreakMode__head` | inert | active | inert |
+| `TextView/lineBreakMode__middle` | inert | active | inert |
 | `TextView/textAlign__center` | inert | inert | active |
 | `TextView/textAlign__center_2` | inert | inert | active |
 | `TextView/textAlign__right` | inert | inert | active |
 | `TextView/textAlign__right_2` | inert | inert | active |
-| `View/highlighted__true` | active | inert | active |
 | `View/safeAreaInsetPositions__static` | inert | active | inert |
 | `common/alignLeftView__static` | inert | active | active |
 | `common/alignTopView__static` | inert | active | active |
@@ -179,8 +161,6 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `common/alignment__top` | active | inert | — |
 | `common/alignment__toptrailing` | active | inert | — |
 | `common/alignment__trailing` | active | inert | — |
-| `common/clipToBounds__false` | active | inert | inert |
-| `common/clipToBounds__false_overflow` | active | inert | inert |
 | `common/effectStyle__regular` | active | inert | inert |
 | `common/maxHeight__binding` | inert | active | inert |
 | `common/maxHeight__static` | inert | active | inert |
@@ -189,13 +169,11 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 
 Declared values inert on every in-scope platform (default rendering, or dead everywhere):
 
+- `Button/textAlign__center` (value `'Center'`)
 - `Collection/defaultScrollAnchor__top` (value `'top'`)
 - `Collection/layout__vertical` (value `'vertical'`)
 - `Collection/lazy__lazy` (value `'lazy'`)
-- `Collection/listStyle__grouped` (value `'grouped'`)
-- `Collection/listStyle__insetgrouped` (value `'insetGrouped'`)
 - `Collection/listStyle__plain` (value `'plain'`)
-- `Collection/listStyle__sidebar` (value `'sidebar'`)
 - `Collection/orientation__vertical` (value `'vertical'`)
 - `Collection/scrollAnchor__bottom` (value `'bottom'`)
 - `Collection/scrollAnchor__center` (value `'center'`)
@@ -211,6 +189,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 - `NetworkImage/renderingMode__original` (value `'original'`)
 - `SafeAreaView/direction__lefttoright` (value `'leftToRight'`)
 - `SafeAreaView/direction__none` (value `'none'`)
+- `SafeAreaView/direction__righttoleft` (value `'rightToLeft'`)
 - `SafeAreaView/direction__toptobottom` (value `'topToBottom'`)
 - `ScrollView/defaultScrollAnchor__top` (value `'top'`)
 - `ScrollView/orientation__vertical` (value `'vertical'`)
@@ -220,8 +199,6 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 - `TextField/textAlign__left` (value `'Left'`)
 - `TextField/textAlign__left_2` (value `'left'`)
 - `TextView/lineBreakMode__clip` (value `'Clip'`)
-- `TextView/lineBreakMode__head` (value `'Head'`)
-- `TextView/lineBreakMode__middle` (value `'Middle'`)
 - `TextView/lineBreakMode__tail` (value `'Tail'`)
 - `TextView/lineBreakMode__word` (value `'Word'`)
 - `TextView/textAlign__left` (value `'Left'`)
@@ -241,9 +218,9 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 
 | Platform | Runner | Results | pass | fail | error | skipped | Manifest |
 |---|---|---|---|---|---|---|---|
-| android | uiautomator 2.3.0 | 1031 | 853 | 0 | 0 | 178 | current |
-| ios | xcuitest ios-26.2 | 1031 | 899 | 0 | 0 | 132 | current |
-| web | playwright 1.61.1 | 1031 | 855 | 0 | 0 | 176 | current |
+| android | uiautomator 2.3.0 | 1067 | 869 | 0 | 0 | 198 | current |
+| ios | xcuitest ios-18.6 | 1067 | 917 | 0 | 0 | 150 | current |
+| web | playwright 1.61.1 | 1067 | 871 | 0 | 0 | 196 | current |
 
 ## Matrix
 
@@ -270,11 +247,17 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `heightWeight` | `static` | visual | ✅ | ✅ | – |
 | `heightWeight` | `binding` | visual | ✅ | ✅ | – |
 | `maxWidthWeight` | `static` | declaration-only | – | – | – |
+| `maxWidthWeight` | `binding` | declaration-only | – | – | – |
 | `maxHeightWeight` | `static` | declaration-only | – | – | – |
+| `maxHeightWeight` | `binding` | declaration-only | – | – | – |
 | `minWidthWeight` | `static` | declaration-only | – | – | – |
+| `minWidthWeight` | `binding` | declaration-only | – | – | – |
 | `minHeightWeight` | `static` | declaration-only | – | – | – |
+| `minHeightWeight` | `binding` | declaration-only | – | – | – |
 | `aspectWidth` | `static` | declaration-only | – | – | – |
+| `aspectWidth` | `binding` | declaration-only | – | – | – |
 | `aspectHeight` | `static` | declaration-only | – | – | – |
+| `aspectHeight` | `binding` | declaration-only | – | – | – |
 | `weight` | `static` | visual | ✅ | ✅ | ✅ |
 | `weight` | `as_string` | visual | ✅ | ✅ | ✅ |
 | `weight` | `binding` | visual | ✅ | ✅ | ✅ |
@@ -288,6 +271,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `disabledBackground` | `static` | visual | ✅ | ✅ | ✅ |
 | `disabledBackground` | `binding` | visual | ✅ | ✅ | ✅ |
 | `defaultBackground` | `static` | declaration-only | – | – | – |
+| `defaultBackground` | `binding` | declaration-only | – | – | – |
 | `cornerRadius` | `static` | visual | ✅ | ✅ | ✅ |
 | `cornerRadius` | `binding` | visual | ✅ | ✅ | ✅ |
 | `borderWidth` | `static` | visual | ✅ | ✅ | ✅ |
@@ -346,7 +330,9 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `maxRightPadding` | `static` | declaration-only | – | – | – |
 | `margins` | `static` | visual | ✅ | ✅ | ✅ |
 | `topMargin` | `static` | visual | ✅ | ✅ | ✅ |
+| `topMargin` | `binding` | visual | ✅ | ✅ | ✅ |
 | `bottomMargin` | `static` | visual | ✅ | ✅ | ✅ |
+| `bottomMargin` | `binding` | visual | ✅ | ✅ | ✅ |
 | `leftMargin` | `static` | visual | ✅ | ✅ | ✅ |
 | `leftMargin` | `binding` | visual | ✅ | ✅ | ✅ |
 | `rightMargin` | `static` | visual | ✅ | ✅ | ✅ |
@@ -356,13 +342,21 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `endMargin` | `static` | visual | ✅ | ✅ | ✅ |
 | `endMargin` | `binding` | visual | ✅ | ✅ | ✅ |
 | `minTopMargin` | `static` | declaration-only | – | – | – |
+| `minTopMargin` | `binding` | declaration-only | – | – | – |
 | `minBottomMargin` | `static` | declaration-only | – | – | – |
+| `minBottomMargin` | `binding` | declaration-only | – | – | – |
 | `minLeftMargin` | `static` | declaration-only | – | – | – |
+| `minLeftMargin` | `binding` | declaration-only | – | – | – |
 | `minRightMargin` | `static` | declaration-only | – | – | – |
+| `minRightMargin` | `binding` | declaration-only | – | – | – |
 | `maxTopMargin` | `static` | declaration-only | – | – | – |
+| `maxTopMargin` | `binding` | declaration-only | – | – | – |
 | `maxBottomMargin` | `static` | declaration-only | – | – | – |
+| `maxBottomMargin` | `binding` | declaration-only | – | – | – |
 | `maxLeftMargin` | `static` | declaration-only | – | – | – |
+| `maxLeftMargin` | `binding` | declaration-only | – | – | – |
 | `maxRightMargin` | `static` | declaration-only | – | – | – |
+| `maxRightMargin` | `binding` | declaration-only | – | – | – |
 | `centerInParent` | `true` | visual | ✅ | ✅ | ✅ |
 | `centerInParent` | `false` | visual | ✅ | ✅ | ✅ |
 | `centerInParent` | `binding` | visual | ✅ | ✅ | ✅ |
@@ -401,6 +395,8 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `clipToBounds` | `false` | visual | ✅ | ✅ | ✅ |
 | `clipToBounds` | `false_overflow` | visual | ✅ | ✅ | ✅ |
 | `clipToBounds` | `binding` | visual | ✅ | ✅ | ✅ |
+| `clipToBounds` | `hit_overflow_true` | interactive | ✅ | ✅ | ✅ |
+| `clipToBounds` | `hit_overflow_false` | interactive | ✅ | ✅ | ✅ |
 | `onclick` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `onClick` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `onLongPress` | `callback_fire` | interactive | ✅ | ✅ | – |
@@ -414,6 +410,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `wrapContent` | `true` | declaration-only | – | – | – |
 | `wrapContent` | `false` | declaration-only | – | – | – |
 | `innerPadding` | `static` | declaration-only | – | – | – |
+| `innerPadding` | `binding` | declaration-only | – | – | – |
 | `effectStyle` | `light` | visual | ✅ | ✅ | ✅ |
 | `effectStyle` | `dark` | visual | ✅ | ✅ | ✅ |
 | `effectStyle` | `extralight` | visual | ✅ | ✅ | ✅ |
@@ -520,9 +517,13 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `edgeInset` | `static` | visual | ✅ | ✅ | ✅ |
 | `underline` | `true` | visual | ✅ | ✅ | ✅ |
 | `underline` | `styled` | visual | ✅ | ✅ | ✅ |
+| `underline` | `double` | visual | ✅ | ✅ | ✅ |
+| `underline` | `thick` | visual | ✅ | ✅ | ✅ |
 | `underline` | `false` | visual | ✅ | ✅ | ✅ |
 | `strikethrough` | `true` | visual | ✅ | ✅ | ✅ |
 | `strikethrough` | `styled` | visual | ✅ | ✅ | ✅ |
+| `strikethrough` | `double` | visual | ✅ | ✅ | ✅ |
+| `strikethrough` | `thick` | visual | ✅ | ✅ | ✅ |
 | `strikethrough` | `false` | visual | ✅ | ✅ | ✅ |
 | `autoShrink` | `true` | visual | ✅ | ✅ | ✅ |
 | `autoShrink` | `false` | visual | ✅ | ✅ | ✅ |
@@ -538,6 +539,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `highlightColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `highlightColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `partialAttributes` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintAttributes` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontWeight` | `static` | visual | ✅ | ✅ | ✅ |
 | `fontWeight` | `600` | visual | ✅ | ✅ | ✅ |
 | `fontWeight` | `static_with_partial` | visual | ✅ | ✅ | ✅ |
@@ -560,6 +562,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `hintColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `hintFont` | `static` | visual | ✅ | ✅ | ✅ |
 | `hintFontSize` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintAttributes` | `static` | visual | – | ✅ | – |
 | `font` | `static` | visual | ✅ | ✅ | ✅ |
 | `font` | `binding` | visual | ✅ | ✅ | ✅ |
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
@@ -672,6 +675,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `hintFont` | `static` | visual | ✅ | ✅ | ✅ |
 | `hintFontSize` | `static` | visual | ✅ | ✅ | ✅ |
 | `hintLineHeightMultiple` | `static` | visual | ✅ | ✅ | ✅ |
+| `hintAttributes` | `static` | visual | ✅ | ✅ | ✅ |
 | `font` | `static` | visual | ✅ | ✅ | ✅ |
 | `font` | `binding` | visual | ✅ | ✅ | ✅ |
 | `fontSize` | `static` | visual | ✅ | ✅ | ✅ |
@@ -784,7 +788,9 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `srcName` | `static` | visual | ✅ | ✅ | ✅ |
 | `srcName` | `binding` | visual | ✅ | ✅ | ✅ |
 | `highlightSrc` | `static` | visual | – | ✅ | – |
+| `highlightSrc` | `binding` | visual | – | ✅ | – |
 | `highlightSrcName` | `static` | declaration-only | – | – | – |
+| `highlightSrcName` | `binding` | declaration-only | – | – | – |
 | `contentMode` | `fill` | visual | ✅ | ✅ | ✅ |
 | `contentMode` | `fit` | visual | ✅ | ✅ | ✅ |
 | `contentMode` | `center` | visual | ✅ | ✅ | ✅ |
@@ -904,6 +910,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 |---|---|---|---|---|---|
 | `isOn` | `true` | visual | ✅ | ✅ | ✅ |
 | `isOn` | `false` | visual | ✅ | ✅ | ✅ |
+| `isOn` | `binding` | visual | ✅ | ✅ | ✅ |
 | `value` | `true` | visual | ✅ | ✅ | ✅ |
 | `value` | `false` | visual | ✅ | ✅ | ✅ |
 | `value` | `binding` | visual | ✅ | ✅ | ✅ |
@@ -920,6 +927,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `thumbTintColor` | `static` | visual | ✅ | ✅ | ✅ |
 | `thumbTintColor` | `binding` | visual | ✅ | ✅ | ✅ |
 | `offTintColor` | `static` | declaration-only | – | – | – |
+| `offTintColor` | `binding` | declaration-only | – | – | – |
 | `onValueChange` | `callback_fire` | interactive | ✅ | ✅ | ✅ |
 | `labelPosition` | `trailing` | visual | ✅ | – | – |
 | `labelPosition` | `leading` | visual | ✅ | – | – |
@@ -1059,6 +1067,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `lazy` | `none` | visual | ✅ | ✅ | ✅ |
 | `lazy` | `binding` | visual | ✅ | ✅ | ✅ |
 | `columns` | `static` | visual | ✅ | ✅ | ✅ |
+| `columns` | `binding` | visual | ✅ | ✅ | ✅ |
 | `columnSpacing` | `static` | visual | ✅ | ✅ | ✅ |
 | `itemSpacing` | `static` | visual | ✅ | ✅ | ✅ |
 | `lineSpacing` | `static` | visual | ✅ | ✅ | ✅ |
@@ -1146,6 +1155,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `text` | `binding` | assertable | ✅ | ✅ | ✅ |
 | `isOn` | `true` | visual | ✅ | ✅ | ✅ |
 | `isOn` | `false` | visual | ✅ | ✅ | ✅ |
+| `isOn` | `binding` | visual | ✅ | ✅ | ✅ |
 | `checked` | `true` | visual | ✅ | ✅ | ✅ |
 | `checked` | `false` | visual | ✅ | ✅ | ✅ |
 | `checked` | `binding` | visual | ✅ | ✅ | ✅ |
@@ -1295,6 +1305,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `None` | `Collection` | visual | ✅ | ✅ | ✅ |
 | `None` | `Collection` | visual | ✅ | ✅ | ✅ |
 | `None` | `Collection` | visual | ✅ | ✅ | ✅ |
+| `None` | `Collection` | visual | ✅ | ✅ | ✅ |
 | `None` | `GradientView` | visual | ✅ | ✅ | ✅ |
 | `None` | `IconLabel` | visual | ✅ | ✅ | ✅ |
 | `None` | `IconLabel` | visual | ✅ | ✅ | ✅ |
@@ -1305,6 +1316,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `None` | `Image` | visual | – | ✅ | – |
 | `None` | `Indicator` | visual | ✅ | ✅ | – |
 | `None` | `Indicator` | visual | – | ✅ | – |
+| `None` | `Label` | visual | ✅ | ✅ | ✅ |
 | `None` | `Label` | visual | ✅ | ✅ | ✅ |
 | `None` | `Label` | visual | ✅ | ✅ | ✅ |
 | `None` | `Label` | visual | ✅ | ✅ | ✅ |
@@ -1342,6 +1354,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `None` | `SelectBox` | visual | ✅ | ✅ | ✅ |
 | `None` | `Slider` | visual | ✅ | ✅ | ✅ |
 | `None` | `Slider` | visual | ✅ | ✅ | ✅ |
+| `None` | `Switch` | visual | ✅ | ✅ | ✅ |
 | `None` | `Switch` | visual | ✅ | ✅ | ✅ |
 | `None` | `Switch` | visual | ✅ | ✅ | ✅ |
 | `None` | `Switch` | visual | ✅ | – | – |
@@ -1487,8 +1500,6 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | common | `confirmationDialog` | behavioral (no visual or assertable effect in v1) |
 | common | `widthRaw` | metadata (not rendered) |
 | common | `heightRaw` | metadata (not rendered) |
-| Label | `hintAttributes` | composite value (no representative static value in v1) |
-| TextField | `hintAttributes` | composite value (no representative static value in v1) |
 | TextField | `caretAttributes` | composite value (no representative static value in v1) |
 | TextField | `onFocus` | callback |
 | TextField | `onBlur` | callback |
@@ -1506,7 +1517,6 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | TextField | `rightView` | composite value (no representative static value in v1) |
 | TextField | `nextFocus` | behavioral (no visual or assertable effect in v1) |
 | TextField | `hideOnFocused` | behavioral (no visual or assertable effect in v1) |
-| TextView | `hintAttributes` | composite value (no representative static value in v1) |
 | TextView | `hideOnFocused` | behavioral (no visual or assertable effect in v1) |
 | TextView | `scrollEnabled` | behavioral (no visual or assertable effect in v1) |
 | TextView | `dataDetectorTypes` | behavioral (no visual or assertable effect in v1) |
