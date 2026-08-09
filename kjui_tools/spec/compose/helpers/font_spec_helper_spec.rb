@@ -286,10 +286,10 @@ RSpec.describe KjuiTools::Compose::Helpers::FontSpecHelper do
       fragments = described_class.style_arg_fragments('resolved_text2', Set.new)
       expect(fragments).to be_an(Array)
       expect(fragments.size).to eq(4)
-      expect(fragments).to include('fontFamily = resolved_text2.family')
-      expect(fragments).to include('fontWeight = resolved_text2.weight')
-      expect(fragments).to include('fontSize = (resolved_text2.size ?: TextUnit.Unspecified)')
-      expect(fragments).to include('fontStyle = (resolved_text2.style ?: FontStyle.Normal)')
+      expect(fragments).to include('fontFamily = (resolved_text2.family ?: LocalTextStyle.current.fontFamily)')
+      expect(fragments).to include('fontWeight = (resolved_text2.weight ?: LocalTextStyle.current.fontWeight)')
+      expect(fragments).to include('fontSize = (resolved_text2.size ?: LocalTextStyle.current.fontSize)')
+      expect(fragments).to include('fontStyle = (resolved_text2.style ?: LocalTextStyle.current.fontStyle)')
     end
   end
 end
