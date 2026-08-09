@@ -410,7 +410,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       json_data = { 'type' => 'Text', 'text' => 'Link', 'linkable' => true, 'fontSize' => 14 }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to match(/val resolved_text\d+ = Configuration\.Font\.resolve\(FontSpec\(/)
-      expect(result).to include('fontSize = (resolved_text1.size ?: TextUnit.Unspecified)')
+      expect(result).to include('fontSize = (resolved_text1.size ?: LocalTextStyle.current.fontSize)')
     end
 
     # kjui-partialattributes-label-missing-testtag: a linkable Label with an id

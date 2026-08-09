@@ -100,12 +100,19 @@ module KjuiTools
         # WITHOUT trailing commas; the caller joins them.
         def self.style_arg_fragments(var_name, required_imports = nil)
           required_imports&.add(:font_style)
-          required_imports&.add(:text_unit)
+          required_imports&.add(:local_text_style)
+          # Unresolved slots fall back to the CURRENT style, not to
+          # Unspecified/Normal: `fontSize = TextUnit.Unspecified` inside a
+          # copy() UNSETS the Material bodyLarge 16sp and the Text drops to
+          # the 14sp default — the linkable Label rendered a size smaller
+          # than every other unstyled Label on the same screen, and a size
+          # smaller than the dynamic face (Label_linkable__true/binding
+          # parity d=44, run 31294565673).
           [
-            "fontFamily = #{var_name}.family",
-            "fontWeight = #{var_name}.weight",
-            "fontSize = (#{var_name}.size ?: TextUnit.Unspecified)",
-            "fontStyle = (#{var_name}.style ?: FontStyle.Normal)"
+            "fontFamily = (#{var_name}.family ?: LocalTextStyle.current.fontFamily)",
+            "fontWeight = (#{var_name}.weight ?: LocalTextStyle.current.fontWeight)",
+            "fontSize = (#{var_name}.size ?: LocalTextStyle.current.fontSize)",
+            "fontStyle = (#{var_name}.style ?: LocalTextStyle.current.fontStyle)"
           ]
         end
 

@@ -130,7 +130,7 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent do
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('Configuration.Font.resolve(FontSpec(')
       expect(result).to include('size = 16.sp')
-      expect(result).to match(/textStyle = TextStyle\(.*fontSize = \(resolved_textview\d+\.size \?: TextUnit\.Unspecified\)/)
+      expect(result).to match(/textStyle = TextStyle\(.*fontSize = \(resolved_textview\d+\.size \?: LocalTextStyle\.current\.fontSize\)/)
       expect(required_imports).to include(:text_style)
     end
 
@@ -146,7 +146,7 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent do
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('textStyle = TextStyle(')
       expect(result).to include('size = 14.sp')
-      expect(result).to match(/fontSize = \(resolved_textview\d+\.size \?: TextUnit\.Unspecified\)/)
+      expect(result).to match(/fontSize = \(resolved_textview\d+\.size \?: LocalTextStyle\.current\.fontSize\)/)
       expect(result).to include('color =')
     end
 
