@@ -297,7 +297,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::FrameHelper do
     # fit image's bitmap, a custom component's internals — is the channel
     # Compose centres by default (Image/extension alignment), so the omitted
     # form must NOT inject topLeading there: doing so pinned every fit photo
-    # to the top-left on ios only (a downstream client app+bar field report).
+    # to the top-left on ios only (downstream client+bar field report).
     context 'omitted gravity on a leaf (no children)' do
       let(:component) { { 'type' => 'NetworkImage', 'width' => 'matchParent', 'height' => 'matchParent' } }
 

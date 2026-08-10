@@ -215,7 +215,7 @@ module SjuiTools
               # Runtime String tokens/hex are legal Color-field values (the
               # declared defaults are token strings) — `as? Color` alone
               # silently dropped them while the dynamic path resolved them
-              # (a downstream app_detail, 2026-08-08). Token first, then hex via the
+              # (a downstream detail screen, 2026-08-08). Token first, then hex via the
               # shared configuration fallback.
               content += "            if let typedValue = value as? Color {\n"
               content += "                self.#{name} = typedValue\n"

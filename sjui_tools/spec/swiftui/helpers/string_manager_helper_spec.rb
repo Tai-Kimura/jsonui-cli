@@ -136,7 +136,7 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::StringManagerHelper do
     # trailing underscore ("dont_have_an_account_apply_for_"). Such a key is
     # as declared as any other; the old snake_case gate rejected the spelling
     # and the emit fell through to the raw literal — or worse, to a legacy
-    # poison entry whose VALUE is the raw key (a downstream login screen, 2026-08-09).
+    # poison entry whose VALUE is the raw key (downstream login screen, 2026-08-09).
     context 'with a declared key the snake_case gate used to reject' do
       let(:strings) do
         {

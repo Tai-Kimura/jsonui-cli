@@ -86,7 +86,7 @@ module RjuiTools
           # before the value reverse-lookup: membership in the SSoT is what
           # makes something a key, not how it is spelled. A legacy poison
           # entry whose VALUE is another key's raw spelling hijacked the
-          # value lookup on the sjui face (a downstream login screen, 2026-08-09);
+          # value lookup on the sjui face (downstream login screen, 2026-08-09);
           # `convert_string_key` returns nil for unregistered keys, so this
           # is membership-gated and cannot mint dangling references.
           if (resolved = convert_string_key(text_without_quotes))

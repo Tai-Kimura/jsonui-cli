@@ -93,7 +93,7 @@ RSpec.describe KjuiTools::Compose::DataModelUpdater do
         # The data contract declares Color fields with token-string defaults
         # ("slate_300"), so a runtime String IS a legal value. `as? Color`
         # alone silently kept the default while the dynamic path rendered the
-        # token — a downstream app_detail rows, 2026-08-08.
+        # token — downstream hour rows, 2026-08-08.
         File.write(File.join(layouts_dir, 'row.json'), JSON.generate({
           'type' => 'View',
           'data' => [

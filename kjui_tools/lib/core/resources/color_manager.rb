@@ -345,7 +345,7 @@ module KjuiTools
           lines << '         * first, then a hex literal. The data contract declares Color'
           lines << '         * fields with token-string defaults, so a runtime String IS a'
           lines << '         * legal value — `as? Color` alone silently dropped it while the'
-          lines << '         * dynamic path resolved it (a downstream app_detail, 2026-08-08).'
+          lines << '         * dynamic path resolved it (a downstream detail screen, 2026-08-08).'
           lines << '         */'
           lines << '        fun colorOrHex(value: String): ComposeColor? ='
           lines << '            color(value) ?: try { ComposeColor(Color.parseColor(value)) }'

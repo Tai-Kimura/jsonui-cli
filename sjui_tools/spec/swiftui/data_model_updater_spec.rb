@@ -182,7 +182,7 @@ RSpec.describe SjuiTools::SwiftUI::DataModelUpdater do
         # The data contract declares Color fields with token-string defaults
         # ("slate_300"), so a runtime String IS a legal value. `as? Color`
         # alone silently kept the default while the dynamic path rendered the
-        # token — a downstream app_detail rows, 2026-08-08.
+        # token — downstream hour rows, 2026-08-08.
         properties = [
           { 'name' => 'accent', 'class' => 'Color', 'defaultValue' => 'slate_300' }
         ]

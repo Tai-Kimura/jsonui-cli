@@ -102,7 +102,7 @@ RSpec.describe RjuiTools::React::Helpers::StringManagerHelper do
   # trailing underscore ("dont_have_an_account_apply_for_"). Such a key is as
   # declared as any other; the old snake_case gate rejected the spelling, and
   # a legacy poison entry whose VALUE is the raw key hijacked the value
-  # lookup on the sjui face (a downstream login screen, 2026-08-09).
+  # lookup on the sjui face (downstream login screen, 2026-08-09).
   describe 'declared trailing-underscore keys and key-over-value precedence' do
     before do
       strings_path = File.join('docs', 'screens', 'layouts', 'Resources', 'strings.json')

@@ -62,7 +62,7 @@ module SjuiTools
           # The extractor truncates long ASCII text to 31 chars, which can
           # leave a trailing underscore ("dont_have_an_account_apply_for_") —
           # a spelling the old snake_case gate rejected, so a declared key
-          # fell through to the raw literal (a downstream login screen, 2026-08-09).
+          # fell through to the raw literal (downstream login screen, 2026-08-09).
           string_manager_call = lookup_string_manager_key(text_without_quotes)
           return string_manager_call if string_manager_call
 
