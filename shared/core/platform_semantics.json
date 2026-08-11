@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "title": "Platform-scoped layout semantics",
+  "purpose": "How to make a node render differently (or not at all) on one platform: the node-level 'platform' directive, the layout-root 'platforms' whitelist, and how they differ from 'responsive'. Canonical implementation: jui_tools/jui_cli/core/platform_resolver.py — this file restates it for lookup and must follow it, never lead it.",
+  "keywords": [
+    "platform", "platforms", "ios only", "android only", "web only",
+    "per-platform", "override", "platform-specific", "platform limited",
+    "プラットフォーム", "限定", "出し分け", "iosだけ", "androidだけ", "webだけ",
+    "プラットフォーム別", "機種別"
+  ],
+  "nodeDirective": {
+    "attribute": "platform",
+    "consumedAt": "distribution (jui build). The key never appears in distributed per-platform output; platform-specific emit is produced from it.",
+    "objectForm": {
+      "summary": "Per-platform attribute overrides, merged into the node for the matching platform only. Override wins over the base value; merge is per top-level key (the override value replaces the base value for that key wholesale — it is not deep-merged into it).",
+      "example": {
+        "prompt": "Change fontColor only on iOS",
+        "layout": {
+          "type": "Label",
+          "text": "@{title}",
+          "fontColor": "#333333",
+          "platform": { "ios": { "fontColor": "#FFD700" } }
+        },
+        "resolved": {
+          "ios": { "type": "Label", "text": "@{title}", "fontColor": "#FFD700" },
+          "android": { "type": "Label", "text": "@{title}", "fontColor": "#333333" },
+          "web": { "type": "Label", "text": "@{title}", "fontColor": "#333333" }
+        }
+      },
+      "multiPlatformExample": {
+        "prompt": "Different heights everywhere, plus a web-only extra attribute",
+        "layout": {
+          "type": "View",
+          "height": 200,
+          "platform": {
+            "ios": { "height": 220 },
+            "android": { "height": 180 },
+            "web": { "height": "100vh", "maxWidth": 1200 }
+          }
+        }
+      },
+      "detection": "A dict counts as an override map ONLY when every key is one of 'ios' / 'android' / 'web'. Any other key (e.g. a stray 'class') makes the whole value a non-override, so nothing merges — keep override maps pure.",
+      "nesting": "Override values are themselves resolved recursively, so an override may contain child nodes with their own 'platform' directives."
+    },
+    "stringForm": {
+      "summary": "Node filter: the node (and its whole subtree) is DROPPED on platforms that do not match. Comma-separated tokens allowed.",
+      "example": {
+        "prompt": "Render this node on Android only",
+        "layout": { "type": "View", "platform": "android", "child": [] }
+      },
+      "tokens": {
+        "ios": ["ios", "swift", "swiftui", "uikit"],
+        "android": ["android", "kotlin", "java", "compose", "xml"],
+        "web": ["web", "typescript", "javascript", "react"]
+      }
+    }
+  },
+  "layoutRootPlatforms": {
+    "attribute": "platforms",
+    "summary": "Layout-root array whitelisting the distribution targets of the ENTIRE file (e.g. [\"ios\", \"android\"]). Distinct from the node-level 'platform' directive: 'platforms' picks which platforms get the file at all; 'platform' shapes a single node per platform."
+  },
+  "vsResponsive": {
+    "summary": "'responsive' is resolved at RUNTIME by each platform's framework (window size class / orientation); 'platform' is resolved at BUILD time and is invisible at runtime. Use 'platform' for per-OS differences, 'responsive' for per-form-factor differences. The resolver leaves 'responsive' untouched."
+  },
+  "authoringGuidance": {
+    "spec": "Screen specs stay platform-agnostic; when a node intentionally differs per platform, note the difference in the spec text of the section that owns the node (do not fork the spec per platform). Large screens split into sub-specs list them in the parent's 'subSpecs' array — the sub-spec that owns the node carries the note.",
+    "precedence": "Per-node 'platform' override > inline base attribute > 'style'-provided value. Distribution bakes the override into the node as a plain inline attribute; style merge (applied later, at codegen or dynamic runtime) always yields to inline attributes.",
+    "dynamicFace": "Distribution has already resolved 'platform' by the time a layout reaches a device, so the dynamic face never sees the key either — declaring it costs nothing at runtime on any face."
+  }
+}
