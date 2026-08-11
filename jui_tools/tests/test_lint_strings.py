@@ -187,6 +187,40 @@ class NamespaceCandidatesTest(unittest.TestCase):
     def test_variant_folds_into_base(self):
         self.assertEqual(namespace_candidates("home@regular.json"), ("home",))
 
+    def test_kebab_basename_owns_the_builders_snake_spelling(self):
+        # jsonui-localize writes sections in the builders' snake_case
+        # spelling; matching only the raw path made every bare key in a
+        # kebab-case layout a false foreign finding (840 findings / 36
+        # files, 2026-08-11). Raw spellings remain as trailing candidates.
+        self.assertEqual(
+            namespace_candidates("tools/test-runner.json"),
+            ("test_runner", "tools_test_runner", "test-runner", "tools_test-runner"),
+        )
+
+    def test_camel_basename_normalizes_via_component_round_trip(self):
+        self.assertEqual(
+            namespace_candidates("TestRunner.json"),
+            ("test_runner", "TestRunner"),
+        )
+
+
+class KebabScopeScannerTest(unittest.TestCase):
+    def test_bare_key_in_snake_section_is_own_for_a_kebab_layout(self):
+        strings = {"tools_test_runner": {"section_ci_body": "CI"}}
+        tree = {"type": "Label", "text": "section_ci_body"}
+        self.assertEqual(
+            _scanner(strings).scan(tree, "tools/test-runner.json"), []
+        )
+
+    def test_bare_key_in_raw_spelled_section_still_owns(self):
+        # The sjui extractor historically named sections by the raw
+        # basename — those sections stay own too.
+        strings = {"test-runner": {"section_ci_body": "CI"}}
+        tree = {"type": "Label", "text": "section_ci_body"}
+        self.assertEqual(
+            _scanner(strings).scan(tree, "tools/test-runner.json"), []
+        )
+
 
 class OwnSectionsMapTest(unittest.TestCase):
     def test_partial_inherits_its_includers_sections(self):

@@ -176,6 +176,18 @@ def visible_attrs_by_component(
 # kjui ResourceResolver.find_string_key)
 
 
+def _normalize_section_segment(segment: str) -> str:
+    """One path segment as it names a strings.json section — the rjui
+    generator's component-name snake_case (camel boundaries split, every
+    non-alphanumeric folded to underscore). Mirror of
+    StringManagerCore.normalize_section_segment."""
+    s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", segment)
+    s = re.sub(r"([a-z\d])([A-Z])", r"\1_\2", s)
+    s = s.lower()
+    s = re.sub(r"[^a-z0-9]+", "_", s)
+    return s.strip("_")
+
+
 def namespace_candidates(layout: str) -> tuple[str, ...]:
     """The strings.json section spellings a layout owns.
 
@@ -183,6 +195,14 @@ def namespace_candidates(layout: str) -> tuple[str, ...]:
     ``member_list/member_cell.json`` owns
     ``member_cell`` and ``member_list_member_cell``.
     Variant suffixes (``home@regular.json``) fold into the base screen.
+
+    Normalized spellings come first — jsonui-localize writes sections in
+    the builders' snake_case spelling, so a kebab-case layout
+    (``tools/test-runner.json``) owns ``test_runner`` /
+    ``tools_test_runner``; matching the raw path made every bare key in
+    such a file a false foreign finding (840 findings / 36 files,
+    2026-08-11). Raw spellings stay as trailing candidates for sections
+    the sjui extractor named by the raw basename.
     """
     cleaned = layout.replace("\\", "/")
     if cleaned.endswith(".json"):
@@ -191,7 +211,17 @@ def namespace_candidates(layout: str) -> tuple[str, ...]:
     segments = [s for s in cleaned.split("/") if s]
     if not segments:
         return ()
-    return tuple(dict.fromkeys((segments[-1], "_".join(segments))))
+    normalized = [_normalize_section_segment(s) for s in segments]
+    return tuple(
+        dict.fromkeys(
+            (
+                normalized[-1],
+                "_".join(normalized),
+                segments[-1],
+                "_".join(segments),
+            )
+        )
+    )
 
 
 class StringsTable:

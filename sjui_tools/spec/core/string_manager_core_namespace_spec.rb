@@ -30,6 +30,27 @@ RSpec.describe JsonUIShared::StringManagerCore do
     it 'has no candidates for an empty path' do
       expect(described_class.namespace_candidates('')).to eq([])
     end
+
+    # jsonui-localize writes sections in the builders' snake_case spelling
+    # (component-name round-trip), so a kebab-case layout owns the
+    # normalized spellings FIRST — matching only the raw path left a
+    # kebab-case web consumer unable to own its own sections (840 false
+    # foreign findings, 2026-08-11). Raw spellings stay as trailing
+    # candidates for sections the sjui extractor named by the raw basename.
+    it 'normalizes kebab-case segments to the builders\' snake spelling, keeping raw as fallback' do
+      expect(described_class.namespace_candidates('tools/test-runner.json'))
+        .to eq(%w[test_runner tools_test_runner test-runner tools_test-runner])
+    end
+
+    it 'normalizes camel-case segments the way the component round-trip does' do
+      expect(described_class.namespace_candidates('TestRunner.json'))
+        .to eq(%w[test_runner TestRunner])
+    end
+
+    it 'returns the same spellings as before for conventional snake_case names' do
+      expect(described_class.namespace_candidates('item_detail/hero_section_cell.json'))
+        .to eq(%w[hero_section_cell item_detail_hero_section_cell])
+    end
   end
 
   describe '.resolve_string_reference' do

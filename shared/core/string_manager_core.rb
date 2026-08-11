@@ -64,9 +64,36 @@ module JsonUIShared
       segments = cleaned.split('/').reject(&:empty?)
       return [] if segments.empty?
 
-      spellings = [segments.last, segments.join('_')]
-      spellings.reverse! if preferred == :relative
-      spellings.uniq
+      # Normalized spellings first: the builders derive a section name from
+      # a file name via the component-name round-trip (PascalCase →
+      # snake_case), which folds camel boundaries AND every non-alphanumeric
+      # (kebab hyphens) to underscores, and jsonui-localize writes sections
+      # in that spelling. Matching the raw path here left a kebab-case web
+      # consumer unable to own its OWN sections — every bare key turned into
+      # a false foreign finding (840 findings / 36 files, all hyphenated,
+      # 2026-08-11). The raw spellings stay as trailing candidates because
+      # the sjui extractor has historically named sections by the raw
+      # basename; own-ness is a membership test, and a layout's own raw
+      # spelling names no other layout's section.
+      normalized = segments.map { |segment| normalize_section_segment(segment) }
+      spellings = [normalized.last, normalized.join('_')]
+      raw = [segments.last, segments.join('_')]
+      if preferred == :relative
+        spellings.reverse!
+        raw.reverse!
+      end
+      (spellings + raw).uniq
+    end
+
+    # One path segment as it names a strings.json section (the rjui
+    # generator's component-name snake_case, hyphen-tolerant).
+    def self.normalize_section_segment(segment)
+      segment
+        .gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+        .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+        .downcase
+        .gsub(/[^a-z0-9]+/, '_')
+        .gsub(/\A_+|_+\z/, '')
     end
 
     # Resolve a layout literal to the strings.json entry the generated
