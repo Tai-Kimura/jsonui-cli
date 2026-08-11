@@ -2,6 +2,7 @@
 
 require 'json'
 require_relative '../../core/config_manager'
+require_relative '../../core/logger'
 
 module RjuiTools
   module React
@@ -146,30 +147,60 @@ module RjuiTools
             end
           end
 
-          # Phase 2: Check current JSON file's keys first (priority match)
-          current_json_name = @config['_current_json_name'] if @config
-          if current_json_name && strings_data[current_json_name]
-            file_strings = strings_data[current_json_name]
-            if file_strings.is_a?(Hash) && file_strings.key?(text)
-              full_key = "#{current_json_name}_#{text}"
-              camel_key = to_camel_case(full_key)
-              return "{StringManager.currentLanguage.#{camel_key}}"
-            end
-          end
-
-          # Phase 3: Check all other files as fallback
-          strings_data.each do |file_name, file_strings|
+          # Phase 2: bare key — ONLY within sections this layout owns (the
+          # basename and relative-path spellings from the generator). The
+          # prefixed form above names its section explicitly, so a foreign
+          # hit there is a deliberate reference; a BARE key hitting a foreign
+          # section is a collision, not a reference — the same ruling the
+          # sjui/kjui resolvers carry. The old "all other files as fallback"
+          # phase resolved a cell's bare key through whatever section
+          # happened to declare it (asymmetric-resolution filing, 2026-08-11).
+          own_namespaces.each do |namespace|
+            file_strings = strings_data[namespace]
             next unless file_strings.is_a?(Hash)
-            next if file_name == current_json_name # already checked
 
             if file_strings.key?(text)
-              full_key = "#{file_name}_#{text}"
+              full_key = "#{namespace}_#{text}"
               camel_key = to_camel_case(full_key)
               return "{StringManager.currentLanguage.#{camel_key}}"
             end
           end
 
+          report_foreign_bare_key(text, strings_data)
           nil
+        end
+
+        # The sections the layout being generated owns. Falls back to the
+        # single legacy spelling when the generator predates
+        # `_current_namespaces`.
+        def own_namespaces
+          return [] unless @config
+
+          @config['_current_namespaces'] ||
+            [@config['_current_json_name']].compact
+        end
+
+        # A bare key declared ONLY under sections this layout does not own is
+        # a broken reference under the own-section canon — warn so `jui
+        # build`'s zero-warning invariant gates it (sjui/kjui emit the same
+        # warning from their resolvers).
+        def report_foreign_bare_key(text, strings_data)
+          return unless strings_data.is_a?(Hash)
+          return unless text.is_a?(String) && text.match?(/^[a-z][a-z0-9]*(_[a-z0-9]+)*_?$/)
+
+          own = own_namespaces
+          foreign = strings_data.map do |namespace, entries|
+            namespace if entries.is_a?(Hash) && entries.key?(text) && !own.include?(namespace)
+          end.compact
+          return if foreign.empty?
+
+          Core::Logger.warn(
+            "Bare key #{text.inspect} is declared only in foreign strings.json " \
+            "section(s) #{foreign.join(', ')} — a bare key resolves within the " \
+            "layout's own sections (#{own.join(' / ')}). Use the fully-qualified " \
+            "'<section>_<key>' spelling for a deliberate cross-section reference, " \
+            "or register the key under the layout's own section (jsonui-localize)."
+          )
         end
 
         def load_strings_json

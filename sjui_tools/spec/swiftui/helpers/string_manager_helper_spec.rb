@@ -98,6 +98,31 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::StringManagerHelper do
           .to eq('StringManager.ItemDetailHeroSectionCell.rating()')
       end
 
+      # A bare key declared only under a foreign section is known-
+      # unresolvable on this face — .localized() looks the bare spelling up
+      # in Localizable.strings, which only carries section-prefixed keys, so
+      # the RAW KEY reaches the screen. The emit is unchanged; the silence
+      # is what shipped one to a Release face (asymmetric-resolution filing,
+      # 2026-08-11).
+      it 'warns when a bare key is declared only under a foreign section' do
+        allow(SjuiTools::Core::Logger).to receive(:warn)
+        described_class.current_namespaces = %w[member_cell]
+        expect(helper_instance.get_text_with_string_manager('"rating"'))
+          .to eq('"rating".localized()')
+        expect(SjuiTools::Core::Logger).to have_received(:warn)
+          .with(a_string_matching(
+            /foreign strings\.json section\(s\) hero_section_cell, item_detail_hero_section_cell/
+          ))
+      end
+
+      it 'stays silent for an undeclared snake_case literal' do
+        allow(SjuiTools::Core::Logger).to receive(:warn)
+        described_class.current_namespaces = %w[member_cell]
+        expect(helper_instance.get_text_with_string_manager('"nowhere_declared"'))
+          .to eq('"nowhere_declared".localized()')
+        expect(SjuiTools::Core::Logger).not_to have_received(:warn)
+      end
+
       it 'is not swayed by the order of sections in strings.json' do
         described_class.current_namespaces = %w[item_detail_hero_section_cell]
         reordered = { 'hero_section_cell' => strings['hero_section_cell'] }

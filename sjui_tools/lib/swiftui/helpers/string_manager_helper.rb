@@ -74,6 +74,14 @@ module SjuiTools
           # Same spelling the extractor's should_extract_string? skips,
           # trailing underscore included.
           if text_without_quotes.match?(/^[a-z][a-z0-9]*(_[a-z0-9]+)*_?$/)
+            # If the bare key IS declared — just under a section this layout
+            # does not own — the .localized() below is known-unresolvable
+            # (the section-prefixed key never lands in Localizable.strings
+            # under the bare spelling) and the RAW KEY reaches the screen.
+            # Silence here let exactly that ship (asymmetric-resolution
+            # filing, 2026-08-11); the warning gates via `jui build`'s
+            # zero-warning invariant.
+            report_foreign_bare_key(text_without_quotes)
             return "\"#{text_without_quotes}\".localized()"
           end
 
@@ -127,6 +135,30 @@ module SjuiTools
             "String #{text.inspect} resolved to section #{resolved['namespace']}, which " \
             "this layout does not own (#{own.join(' / ')}) — the SSoT never declared it " \
             'here. Register the string under the layout\'s own section (jsonui-localize).'
+          )
+        end
+
+        # A bare key declared ONLY under sections this layout does not own is
+        # a broken reference under the own-section canon (kjui's resolver
+        # carries the same check) — a bare key resolves in the layout's own
+        # sections, and cross-section reach is the fully-qualified spelling.
+        def report_foreign_bare_key(text)
+          strings_data = load_strings_json
+          return unless strings_data.is_a?(Hash)
+
+          own = StringManagerHelper.current_namespaces || []
+          # map + compact, not filter_map — see order_sections_by_ownership.
+          foreign = strings_data.map do |namespace, entries|
+            namespace if entries.is_a?(Hash) && entries.key?(text) && !own.include?(namespace)
+          end.compact
+          return if foreign.empty?
+
+          Core::Logger.warn(
+            "Bare key #{text.inspect} is declared only in foreign strings.json " \
+            "section(s) #{foreign.join(', ')} — a bare key resolves within the " \
+            "layout's own sections (#{own.join(' / ')}). Use the fully-qualified " \
+            "'<section>_<key>' spelling for a deliberate cross-section reference, " \
+            "or register the key under the layout's own section (jsonui-localize)."
           )
         end
 

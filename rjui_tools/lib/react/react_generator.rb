@@ -192,6 +192,11 @@ module RjuiTools
                                 .map(&:downcase)
         namespace_parts << snake_basename
         @config['_current_json_name'] = namespace_parts.join('_')
+        # Both section spellings the layout owns (StringManagerCore
+        # namespace_candidates parity): the relative-path join above and the
+        # bare basename. Bare-key resolution consults exactly these — a bare
+        # key hitting any other section is a collision, not a reference.
+        @config['_current_namespaces'] = [snake_basename, namespace_parts.join('_')].uniq
 
         # Per-file normalization state (same shared-config pattern as
         # `_current_json_name`). Converters read this through

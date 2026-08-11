@@ -23,10 +23,14 @@ here:
 
 Resolution mirrors the platform builders (sjui StringManagerHelper /
 kjui ResourceResolver): a literal is "localized" when it is a bare key
-in any strings.json group, a full ``{group}_{key}`` spelling, or an
-exact match of a registered value. Bindings (``@{...}`` / ``${...}``),
-empty strings and letterless values (icon glyphs, "100%", "12:34") are
-out of scope.
+in a strings.json section the layout OWNS (its own spellings plus those
+of every transitive includer — the builders inline included partials
+under the includer's namespace context), a full ``{group}_{key}``
+spelling, or an exact match of a registered value. A bare key that only
+foreign sections declare is a finding: the builders treat it as a
+collision, not a reference. Bindings (``@{...}`` / ``${...}``), empty
+strings and letterless values (icon glyphs, "100%", "12:34") are out of
+scope.
 
 Layouts are read at the authoring root and normalized before judgment:
 alias spellings are canonicalized and style-declared values are merged
@@ -172,6 +176,24 @@ def visible_attrs_by_component(
 # kjui ResourceResolver.find_string_key)
 
 
+def namespace_candidates(layout: str) -> tuple[str, ...]:
+    """The strings.json section spellings a layout owns.
+
+    Python mirror of StringManagerCore.namespace_candidates:
+    ``member_list/member_cell.json`` owns
+    ``member_cell`` and ``member_list_member_cell``.
+    Variant suffixes (``home@regular.json``) fold into the base screen.
+    """
+    cleaned = layout.replace("\\", "/")
+    if cleaned.endswith(".json"):
+        cleaned = cleaned[:-5]
+    cleaned = re.sub(r"@[^/]*$", "", cleaned)
+    segments = [s for s in cleaned.split("/") if s]
+    if not segments:
+        return ()
+    return tuple(dict.fromkeys((segments[-1], "_".join(segments))))
+
+
 class StringsTable:
     """Loaded strings.json with the builders' three resolution forms."""
 
@@ -180,12 +202,19 @@ class StringsTable:
         for group, entries in (data or {}).items():
             if isinstance(entries, dict):
                 self._groups[group] = entries
-        self._keys: set[str] = set()
+        # Bare keys are kept PER SECTION: the builders resolve a bare key
+        # only within the sections the referencing layout owns (a bare key
+        # hitting a foreign section is a collision, not a reference), so
+        # a flat global key set declared bare-foreign references clean —
+        # one shipped a raw key to a Release face before this was scoped
+        # (asymmetric-resolution filing, 2026-08-11).
+        self._keys_by_section: dict[str, set[str]] = {}
         self._full_keys: set[str] = set()
         self._values: set[str] = set()
         for group, entries in self._groups.items():
+            section_keys = self._keys_by_section.setdefault(group, set())
             for key, value in entries.items():
-                self._keys.add(key)
+                section_keys.add(key)
                 self._full_keys.add(f"{group}_{key}")
                 if isinstance(value, str):
                     self._values.add(value)
@@ -206,8 +235,25 @@ class StringsTable:
         except (OSError, json.JSONDecodeError) as e:
             raise LintStringsSetupError(f"unreadable strings.json ({path}): {e}")
 
-    def resolves(self, text: str) -> bool:
-        return text in self._keys or text in self._full_keys or text in self._values
+    def resolves(self, text: str, own_sections: tuple[str, ...] = ()) -> bool:
+        """Whether the builders resolve ``text`` for a layout owning
+        ``own_sections``. Full keys name their section and values reverse-
+        look-up globally; a bare key resolves only within the layout's own
+        sections — the builders' shared ruling."""
+        if text in self._full_keys or text in self._values:
+            return True
+        return any(
+            text in self._keys_by_section.get(section, ())
+            for section in own_sections
+        )
+
+    def sections_declaring_bare(self, text: str) -> list[str]:
+        """Every section that declares ``text`` as a bare key."""
+        return sorted(
+            section
+            for section, keys in self._keys_by_section.items()
+            if text in keys
+        )
 
     def duplicate_declarations(self) -> list["Duplicate"]:
         """Texts declared by more than one section.
@@ -264,9 +310,63 @@ class Finding:
     path: str  # attribute path inside the layout (e.g. "child[2].text")
     attribute: str
     value: str
+    # Extra context for the report line (e.g. "declared in section X" for a
+    # bare key that only foreign sections hold). Not part of the allowlist
+    # identity.
+    hint: str | None = None
 
     def key(self) -> tuple[str, str, str]:
         return (self.layout, self.path, self.value)
+
+
+def _collect_include_targets(node: Any, out: set[str]) -> None:
+    if isinstance(node, dict):
+        target = node.get("include")
+        if isinstance(target, str) and target:
+            out.add(target.replace("\\", "/"))
+        for value in node.values():
+            _collect_include_targets(value, out)
+    elif isinstance(node, list):
+        for item in node:
+            _collect_include_targets(item, out)
+
+
+def _own_sections_map(trees: dict[str, Any]) -> dict[str, tuple[str, ...]]:
+    """Section scope per layout: its own spellings plus those of every
+    (transitive) includer.
+
+    The builders inline an included partial under the INCLUDER's
+    begin_layout context — a bare key inside ``item_detail/hero_section.json``
+    included by ``item_detail.json`` resolves against ``item_detail``'s
+    sections at build time, and the extractor registered its strings there
+    in the first place. Judging the partial with only its own spellings
+    would flag every such key as unresolvable."""
+    includers: dict[str, set[str]] = {rel: set() for rel in trees}
+    by_stem = {
+        (rel[:-5] if rel.endswith(".json") else rel): rel for rel in trees
+    }
+    for rel, tree in trees.items():
+        targets: set[str] = set()
+        _collect_include_targets(tree, targets)
+        for target in targets:
+            target_rel = by_stem.get(target)
+            if target_rel is not None:
+                includers[target_rel].add(rel)
+
+    result: dict[str, tuple[str, ...]] = {}
+    for rel in trees:
+        own = list(namespace_candidates(rel))
+        seen = {rel}
+        queue = list(includers.get(rel, ()))
+        while queue:
+            parent = queue.pop()
+            if parent in seen:
+                continue
+            seen.add(parent)
+            own.extend(namespace_candidates(parent))
+            queue.extend(includers.get(parent, ()))
+        result[rel] = tuple(dict.fromkeys(own))
+    return result
 
 
 def is_lintable_literal(value: Any) -> bool:
@@ -296,9 +396,23 @@ class LayoutScanner:
         self._visible_map = visible_map
         self._vocabulary = vocabulary
         self._strings = strings
+        self._own_sections: tuple[str, ...] = ()
 
-    def scan(self, tree: Any, layout: str) -> list[Finding]:
+    def scan(
+        self,
+        tree: Any,
+        layout: str,
+        own_sections: tuple[str, ...] | None = None,
+    ) -> list[Finding]:
         findings: list[Finding] = []
+        # The sections scoping bare-key resolution for every node in the
+        # tree. Callers with an include graph pass the union of the file's
+        # own spellings and its (transitive) includers' — the builders
+        # inline an included partial under the INCLUDER's namespace context.
+        # Instance state is safe: one scan at a time.
+        self._own_sections = (
+            own_sections if own_sections is not None else namespace_candidates(layout)
+        )
         self._walk(tree, layout, "", findings)
         return findings
 
@@ -327,11 +441,33 @@ class LayoutScanner:
             value = node.get(attr)
             if not is_lintable_literal(value):
                 continue
-            if self._strings.resolves(value):
+            if self._strings.resolves(value, self._own_sections):
                 continue
             attr_path = f"{path}.{attr}" if path else attr
+            # A bare key that only foreign sections declare is the
+            # actionable sub-case: the fix is a move or a fully-qualified
+            # spelling, not a new registration.
+            foreign = [
+                section
+                for section in self._strings.sections_declaring_bare(value)
+                if section not in self._own_sections
+            ]
+            hint = (
+                "declared only in foreign section(s) "
+                + ", ".join(foreign)
+                + " — move the key to this layout's own section or use the "
+                + "fully-qualified '<section>_<key>' spelling"
+                if foreign
+                else None
+            )
             findings.append(
-                Finding(layout=layout, path=attr_path, attribute=attr, value=value)
+                Finding(
+                    layout=layout,
+                    path=attr_path,
+                    attribute=attr,
+                    value=value,
+                    hint=hint,
+                )
             )
 
     def _walk(self, node: Any, layout: str, path: str, findings: list[Finding]) -> None:
@@ -433,11 +569,12 @@ class LintReport:
         """Findings rendered for the `jui build` warning stream."""
         lines: list[str] = []
         for f in self.findings:
-            lines.append(
+            base = (
                 f"{f.layout} {f.path}: raw literal {f.value!r} does not "
                 f"resolve via strings.json — register a key (jsonui-localize) "
                 f"or allowlist it with a reason"
             )
+            lines.append(f"{base} ({f.hint})" if f.hint else base)
         for entry in self.stale_entries:
             lines.append(
                 f"allowlist entry is stale (literal no longer present): "
@@ -522,6 +659,11 @@ def collect_findings(
     report.duplicates = strings.duplicate_declarations()
     all_findings: list[Finding] = []
     if layouts_dir.exists():
+        # Pass 1: load every tree, so the include graph can be built before
+        # any file is judged. Each file is still scanned once, as itself —
+        # includes are NOT expanded — but bare-key scoping needs to know who
+        # includes whom (see _own_sections_map).
+        trees: dict[str, Any] = {}
         for src_file in sorted(layouts_dir.rglob("*.json")):
             rel = src_file.relative_to(layouts_dir)
             if rel.parts[0] in skip_prefixes:
@@ -532,18 +674,26 @@ def collect_findings(
                 continue  # jui build validates JSON health; not this lint's job
             if not isinstance(tree, dict):
                 continue
+            trees[rel.as_posix()] = tree
+
+        own_sections_by_layout = _own_sections_map(trees)
+
+        # Pass 2: judge each file with its full section scope.
+        for rel_posix in sorted(trees):
+            tree = trees[rel_posix]
             # Canonicalize aliases, merge style-declared values, then
             # canonicalize once more — styles may use alias spellings.
-            # (No include expansion: each file is judged once, as itself.)
             working, _ = canonicalizer.canonicalize(
-                tree, source=rel.as_posix(), add_marker=False
+                tree, source=rel_posix, add_marker=False
             )
             if style_merger is not None:
                 working = style_merger.resolve(copy.deepcopy(working))
                 working, _ = canonicalizer.canonicalize(
-                    working, source=rel.as_posix(), add_marker=False
+                    working, source=rel_posix, add_marker=False
                 )
-            all_findings.extend(scanner.scan(working, rel.as_posix()))
+            all_findings.extend(
+                scanner.scan(working, rel_posix, own_sections_by_layout[rel_posix])
+            )
             report.scanned_layouts += 1
 
     allowed_keys: dict[tuple[str, str, str], dict[str, Any]] = {}

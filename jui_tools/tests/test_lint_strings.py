@@ -21,8 +21,10 @@ from jui_cli.commands.lint_strings_cmd import (
     LayoutScanner,
     LintStringsSetupError,
     StringsTable,
+    _own_sections_map,
     _update_allowlist,
     collect_findings,
+    namespace_candidates,
     is_lintable_literal,
     load_string_props,
     visible_attrs_by_component,
@@ -144,11 +146,20 @@ class LintableLiteralTest(unittest.TestCase):
 class StringsTableTest(unittest.TestCase):
     def test_resolution_forms(self):
         table = StringsTable(STRINGS)
-        self.assertTrue(table.resolves("title"))          # bare key
+        # A bare key resolves only for a layout owning its section — the
+        # builders' shared ruling (a bare key hitting a foreign section is
+        # a collision, not a reference).
+        self.assertTrue(table.resolves("title", ("login",)))
         self.assertTrue(table.resolves("login_title"))    # {group}_{key}
         self.assertTrue(table.resolves("Sign in"))        # value match
         self.assertTrue(table.resolves("ようこそ"))        # language value match
-        self.assertTrue(table.resolves("items_count"))    # key of a plural entry
+        self.assertTrue(table.resolves("items_count", ("login",)))  # plural key
+
+    def test_bare_key_does_not_resolve_for_a_foreign_layout(self):
+        table = StringsTable(STRINGS)
+        self.assertFalse(table.resolves("title"))
+        self.assertFalse(table.resolves("title", ("settings",)))
+        self.assertEqual(table.sections_declaring_bare("title"), ["login"])
 
     def test_plural_forms_do_not_value_match(self):
         table = StringsTable(STRINGS)
@@ -159,8 +170,51 @@ class StringsTableTest(unittest.TestCase):
         self.assertFalse(table.resolves("Sign out"))
 
     def test_empty_table_resolves_nothing(self):
-        self.assertFalse(StringsTable({}).resolves("title"))
-        self.assertFalse(StringsTable(None).resolves("title"))
+        self.assertFalse(StringsTable({}).resolves("title", ("login",)))
+        self.assertFalse(StringsTable(None).resolves("title", ("login",)))
+
+
+class NamespaceCandidatesTest(unittest.TestCase):
+    def test_nested_layout_owns_both_spellings(self):
+        self.assertEqual(
+            namespace_candidates("member_list/member_cell.json"),
+            ("member_cell", "member_list_member_cell"),
+        )
+
+    def test_root_layout_owns_one_spelling(self):
+        self.assertEqual(namespace_candidates("login.json"), ("login",))
+
+    def test_variant_folds_into_base(self):
+        self.assertEqual(namespace_candidates("home@regular.json"), ("home",))
+
+
+class OwnSectionsMapTest(unittest.TestCase):
+    def test_partial_inherits_its_includers_sections(self):
+        trees = {
+            "item_detail.json": {
+                "type": "View",
+                "child": [{"include": "item_detail/hero_section"}],
+            },
+            "item_detail/hero_section.json": {"type": "View", "partial": True},
+            "login.json": {"type": "View"},
+        }
+        own = _own_sections_map(trees)
+        self.assertIn("item_detail", own["item_detail.json"])
+        # The partial is judged with its includer's sections too — the
+        # builders inline it under the includer's namespace context.
+        self.assertIn("item_detail", own["item_detail/hero_section.json"])
+        self.assertIn("hero_section", own["item_detail/hero_section.json"])
+        self.assertNotIn("item_detail", own["login.json"])
+
+    def test_transitive_includers_propagate(self):
+        trees = {
+            "a.json": {"child": [{"include": "b"}]},
+            "b.json": {"child": [{"include": "c"}]},
+            "c.json": {"type": "View"},
+        }
+        own = _own_sections_map(trees)
+        self.assertIn("a", own["c.json"])
+        self.assertIn("b", own["c.json"])
 
 
 class DuplicateDeclarationTest(unittest.TestCase):
@@ -213,6 +267,25 @@ class ScannerTest(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         f = findings[0]
         self.assertEqual((f.layout, f.path, f.value), ("login.json", "child[1].text", "Sign out"))
+
+    def test_bare_key_in_own_section_is_clean(self):
+        tree = {"type": "Label", "text": "title"}
+        self.assertEqual(_scanner().scan(tree, "login.json"), [])
+
+    def test_bare_key_in_foreign_section_is_a_finding_with_hint(self):
+        # The incident class: a bare key declared only under a section the
+        # referencing layout does not own "resolved" through the flat key
+        # set and shipped a raw key to a Release face.
+        tree = {"type": "Label", "text": "title"}
+        findings = _scanner().scan(tree, "settings.json")
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].value, "title")
+        self.assertIn("foreign section(s) login", findings[0].hint)
+
+    def test_own_sections_override_widens_the_scope(self):
+        tree = {"type": "Label", "text": "title"}
+        findings = _scanner().scan(tree, "settings.json", ("settings", "login"))
+        self.assertEqual(findings, [])
 
     def test_non_visible_attributes_are_ignored(self):
         tree = {"type": "Image", "src": "hero_banner"}

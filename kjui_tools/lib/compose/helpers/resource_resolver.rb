@@ -231,23 +231,23 @@ module KjuiTools
           end
           
           def find_string_key(text, config, source_path)
-            # Sections the layout owns are consulted first. Scanning
-            # strings.json in file order meant a text declared under two
-            # sections — which is exactly what a cell under a screen
-            # directory ends up with, since sjui and kjui spell its
-            # section differently — resolved by however the SSoT happened
-            # to be sorted.
-            strings_data = order_sections_by_ownership(cached_strings_data)
+            strings_data = cached_strings_data
 
-            # 1. Check if text matches a key in strings.json (e.g., "welcome_back" matches login.welcome_back)
-            # This handles snake_case, single words, ALL_CAPS, etc.
-            strings_data.each do |file_prefix, file_strings|
-              next unless file_strings.is_a?(Hash)
+            # 1. Check if text matches a key in strings.json (e.g., "welcome_back"
+            # matches login.welcome_back) — but ONLY within sections this layout
+            # owns. The fully-qualified form below names its section explicitly,
+            # so a foreign hit there is a deliberate reference; a BARE key
+            # hitting a foreign section is a collision, not a reference (the
+            # ruling sjui's key lookup already carries). Scanning every section
+            # here resolved a cell's bare key through its screen's section and
+            # the two platforms answered differently — kjui showed the right
+            # text while sjui shipped the raw key (asymmetric-resolution
+            # filing, 2026-08-11).
+            current_namespaces.each do |namespace|
+              entries = strings_data[namespace]
+              next unless entries.is_a?(Hash)
 
-              if file_strings.has_key?(text)
-                # Text matches a key directly - return full resource key with prefix
-                return "#{file_prefix}_#{text}"
-              end
+              return "#{namespace}_#{text}" if entries.key?(text)
             end
 
             # 2. Check if text is already a full resource key (e.g., "login_welcome_back")
@@ -273,14 +273,17 @@ module KjuiTools
 
             # 4. Fallback: check strings.xml directly for snake_case/single-word text
             # This handles cases where text is a resource key name not yet in strings.json
-            # e.g., "welcome_back" might exist in strings.xml as "login_welcome_back"
+            # e.g., "welcome_back" might exist in strings.xml as "login_welcome_back".
+            # The prefix scan is own-sections-only for the same reason step 1 is —
+            # a cross-section prefix here would re-open the bare-key side door
+            # through the XML. The exact match stays global: a full key names
+            # its section itself.
             if text.match?(/^[a-zA-Z][a-zA-Z0-9_]*$/)
               strings_xml_path = File.join(source_path, config['source_directory'] || 'src/main', 'res/values/strings.xml')
               if File.exist?(strings_xml_path)
                 xml_content = File.read(strings_xml_path)
-                # Search for any key ending with _text (e.g., login_welcome_back for "welcome_back")
-                strings_data.each_key do |file_prefix|
-                  full_key = "#{file_prefix}_#{text}"
+                current_namespaces.each do |namespace|
+                  full_key = "#{namespace}_#{text}"
                   if xml_content.include?("name='#{full_key}'") || xml_content.include?("name=\"#{full_key}\"")
                     return full_key
                   end
@@ -292,27 +295,35 @@ module KjuiTools
               end
             end
 
+            report_foreign_bare_key(text, strings_data)
             nil
           end
-          
-          # strings.json with the layout's own sections moved to the
-          # front; everything else keeps its file order.
-          def order_sections_by_ownership(strings_data)
+
+          # A bare key declared ONLY under sections this layout does not own
+          # is a broken reference under the own-section canon — say so at emit
+          # time instead of silently quoting the literal, which puts the raw
+          # key on screen. Warning (not error) so `jui build`'s zero-warning
+          # invariant gates it, the same channel as report_string_namespace.
+          def report_foreign_bare_key(text, strings_data)
+            return unless strings_data.is_a?(Hash)
+            return unless text.match?(/^[a-z][a-z0-9]*(_[a-z0-9]+)*_?$/)
+
             own = current_namespaces
-            return strings_data if own.empty? || !strings_data.is_a?(Hash)
+            # map + compact, not filter_map — Ruby 2.6 (see section_extractor).
+            foreign = strings_data.map do |namespace, entries|
+              namespace if entries.is_a?(Hash) && entries.key?(text) && !own.include?(namespace)
+            end.compact
+            return if foreign.empty?
 
-            # map+compact, not filter_map: kjui runs under the host's system
-            # Ruby in consumer projects, which on macOS is 2.6, and
-            # Enumerable#filter_map is 2.7+. The NoMethodError is caught by the
-            # per-file rescue, so the layout silently keeps its PREVIOUS
-            # generated file — the failure mode section_extractor.rb:625
-            # already documented. Plan 49 lane C.
-            owned = own.map { |ns| [ns, strings_data[ns]] if strings_data.key?(ns) }.compact
-            return strings_data if owned.empty?
-
-            owned.to_h.merge(strings_data.reject { |ns, _| own.include?(ns) })
+            Core::Logger.warn(
+              "Bare key #{text.inspect} is declared only in foreign strings.json " \
+              "section(s) #{foreign.join(', ')} — a bare key resolves within the " \
+              "layout's own sections (#{own.join(' / ')}). Use the fully-qualified " \
+              "'<section>_<key>' spelling for a deliberate cross-section reference, " \
+              "or register the key under the layout's own section (jsonui-localize)."
+            )
           end
-
+          
           # Both conditions are SSoT damage rather than build errors, so
           # they warn — `jui build`'s zero-warning invariant makes them
           # gate, and `jui lint-strings` reports the same pair statically.

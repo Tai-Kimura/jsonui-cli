@@ -126,6 +126,46 @@ RSpec.describe KjuiTools::Compose::Helpers::ResourceResolver do
           .to include('R.string.item_detail_hero_section_cell_rating')
       end
     end
+
+    # A bare key resolves ONLY in sections the layout owns; cross-section
+    # reach is the fully-qualified '<section>_<key>' spelling. kjui used to
+    # scan every section and "kindly" resolve a cell's bare key through its
+    # screen's section — masking on Android the raw key sjui shipped for the
+    # same reference (asymmetric-resolution filing, 2026-08-11).
+    context 'bare keys and the own-section canon' do
+      before do
+        resources_dir = File.join(temp_dir, 'src/main/assets/Layouts/Resources')
+        FileUtils.mkdir_p(resources_dir)
+        File.write(File.join(resources_dir, 'strings.json'), JSON.generate({
+          'member_list' => { 'leave_button' => 'Leave' }
+        }))
+        allow(KjuiTools::Core::Logger).to receive(:warn)
+      end
+
+      after { described_class.current_namespaces = [] }
+
+      it 'resolves a bare key declared in an own section' do
+        described_class.begin_layout('member_list.json')
+        expect(described_class.process_text('leave_button', required_imports))
+          .to include('R.string.member_list_leave_button')
+        expect(KjuiTools::Core::Logger).not_to have_received(:warn)
+      end
+
+      it 'does not resolve a bare key only a foreign section declares, and says so' do
+        described_class.begin_layout('member_list/member_cell.json')
+        expect(described_class.process_text('leave_button', required_imports))
+          .to eq('"leave_button"')
+        expect(KjuiTools::Core::Logger).to have_received(:warn)
+          .with(a_string_matching(/foreign strings\.json section\(s\) member_list/))
+      end
+
+      it 'reaches a foreign section through the fully-qualified spelling, silently' do
+        described_class.begin_layout('member_list/member_cell.json')
+        expect(described_class.process_text('member_list_leave_button', required_imports))
+          .to include('R.string.member_list_leave_button')
+        expect(KjuiTools::Core::Logger).not_to have_received(:warn)
+      end
+    end
   end
 
   describe '.process_color' do
