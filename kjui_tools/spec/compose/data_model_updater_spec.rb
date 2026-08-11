@@ -713,4 +713,59 @@ RSpec.describe KjuiTools::Compose::DataModelUpdater do
       expect { updater.send(:ensure_unique_layout_basenames!, files) }.not_to raise_error
     end
   end
+  # A String defaultValue whose key the layout's OWN strings.json section
+  # declares resolves through the context-free accessor
+  # (KotlinJsonUI.localizedString) with the raw literal as fallback; a
+  # sentinel that only foreign sections declare stays literal and SILENT —
+  # the data-default canon the sjui face carries since 1.6.3, unified here
+  # (Android showed the raw key where iOS showed the translation).
+  describe 'string defaultValue resolution (data-default canon)' do
+    let(:resources_dir) { File.join(layouts_dir, 'Resources') }
+
+    before do
+      FileUtils.mkdir_p(resources_dir)
+      File.write(File.join(resources_dir, 'strings.json'), JSON.generate({
+        'note_input' => { 'register' => { 'en' => 'Register' } },
+        'venue_detail' => { 'today' => { 'en' => 'Today' } }
+      }))
+    end
+
+    it 'resolves an own-section key through KotlinJsonUI.localizedString, silently' do
+      File.write(File.join(layouts_dir, 'note_input.json'), JSON.generate({
+        'type' => 'View',
+        'data' => [{ 'name' => 'label', 'class' => 'String', 'defaultValue' => 'register' }],
+        'child' => [{ 'type' => 'Text', 'text' => '@{label}' }]
+      }))
+
+      updater = described_class.new
+      expect { updater.update_data_models }.not_to output(/Bare key/).to_stdout
+
+      content = File.read(File.join(data_dir, 'NoteInputData.kt'))
+      expect(content).to include(
+        'var label: String = KotlinJsonUI.localizedString(R.string.note_input_register, "register")'
+      )
+      expect(content).to include('import com.kotlinjsonui.core.KotlinJsonUI')
+      expect(content).to include('import com.example.app.R')
+      # fromMap fallback rides the same resolution
+      expect(content).to include(
+        'map["label"] as? String ?: KotlinJsonUI.localizedString(R.string.note_input_register, "register")'
+      )
+    end
+
+    it 'keeps a foreign-declared sentinel literal, with no warning and no imports' do
+      File.write(File.join(layouts_dir, 'note_input.json'), JSON.generate({
+        'type' => 'View',
+        'data' => [{ 'name' => 'selectedDateValue', 'class' => 'String', 'defaultValue' => 'today' }],
+        'child' => [{ 'type' => 'Text', 'text' => '@{selectedDateValue}' }]
+      }))
+
+      updater = described_class.new
+      expect { updater.update_data_models }.not_to output(/Bare key/).to_stdout
+
+      content = File.read(File.join(data_dir, 'NoteInputData.kt'))
+      expect(content).to include('var selectedDateValue: String = "today"')
+      expect(content).not_to include('localizedString')
+      expect(content).not_to include('import com.kotlinjsonui.core.KotlinJsonUI')
+    end
+  end
 end

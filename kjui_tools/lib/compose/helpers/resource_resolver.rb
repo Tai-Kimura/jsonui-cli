@@ -159,9 +159,19 @@ module KjuiTools
             end
             resolved
           end
-          
+
+          # Data-default face entry (data_model_updater): the same
+          # own-section / fully-qualified / value resolution chain the view
+          # face uses, but SILENT — a defaultValue is not declared display
+          # text (sentinel vocabulary lives there), so an unresolved literal
+          # is an answer, not a warning. Returns the full resource key or
+          # nil.
+          def resolve_data_default_key(text, config, source_path)
+            find_string_key(text, config, source_path, warnings: false)
+          end
+
           private
-          
+
           # Check if a string resource exists in strings.xml
           def resolve_string(text, config, source_path)
             return quote(text) unless text.is_a?(String)
@@ -230,7 +240,7 @@ module KjuiTools
             end
           end
           
-          def find_string_key(text, config, source_path)
+          def find_string_key(text, config, source_path, warnings: true)
             strings_data = cached_strings_data
 
             # 1. Check if text matches a key in strings.json (e.g., "welcome_back"
@@ -295,7 +305,7 @@ module KjuiTools
               end
             end
 
-            report_foreign_bare_key(text, strings_data)
+            report_foreign_bare_key(text, strings_data) if warnings
             nil
           end
 

@@ -8,10 +8,13 @@ require_relative '../core/type_converter'
 require_relative '../core/generated_marker'
 require_relative 'style_loader'
 require_relative '../core/layout_variant'
+require_relative 'helpers/string_manager_helper'
 
 module RjuiTools
   module React
     class DataModelGenerator
+      include Helpers::StringManagerHelper
+
       def initialize
         @config = Core::ConfigManager.load_config
         @source_path = @config['source_path'] || Dir.pwd
@@ -127,6 +130,14 @@ module RjuiTools
       end
 
       def process_json_file(json_file)
+        # Data defaults resolve strings, and which sections are "own"
+        # depends on the layout being processed — the same announcement
+        # react_generator makes per file (both section spellings:
+        # bare basename + relative-path join). Without it every
+        # data-default lookup runs with no namespace context (the sjui
+        # data face gained the same announcement in 1.6.3).
+        announce_own_namespaces(json_file)
+
         json_content = File.read(json_file, encoding: 'UTF-8')
         json_data = JSON.parse(json_content)
 
@@ -625,11 +636,23 @@ module RjuiTools
         # Get existing property names from data section to avoid duplicates
         existing_prop_names = data_properties.map { |p| p['name'] }.to_set
 
+        # Pre-scan string defaults so the StringManager import can be
+        # decided before the property loops render them.
+        @resolved_string_defaults = {}
+        data_properties.each do |prop|
+          ts_type = prop['tsType'] || Core::TypeConverter.to_typescript_type(prop['class'])
+          expr = string_default_expression(prop['defaultValue'], ts_type)
+          @resolved_string_defaults[prop['name']] = expr if expr
+        end
+
         marker_header = Core::GeneratedMarker.comment_header(
           source: "#{view_name}Data",
           generator: "rjui build"
         )
         imports = "#{marker_header}\n\n"
+        # Data models live one level below the generated root, next to
+        # CollectionDataSource; StringManager sits at that root.
+        imports += "import { StringManager } from '../StringManager';\n" if @resolved_string_defaults.any?
         imports += "import { CollectionDataSource } from './CollectionDataSource';\n" if needs_collection_import
         data_type_imports.each do |data_type|
           imports += "import type { #{data_type} } from './#{data_type}';\n"
@@ -717,7 +740,8 @@ module RjuiTools
           ts_type = prop['tsType'] || Core::TypeConverter.to_typescript_type(prop['class'])
           default_value = prop['defaultValue']
 
-          formatted_value = format_default_value(default_value, ts_type, prop['class'])
+          formatted_value = (@resolved_string_defaults || {})[name] ||
+                            format_default_value(default_value, ts_type, prop['class'])
           content += "  #{name}: #{formatted_value},\n"
         end
 
@@ -778,6 +802,14 @@ module RjuiTools
       end
 
       def generate_javascript_content(view_name, data_properties, onclick_actions = [], text_field_bindings = [], event_handlers = {}, value_bindings = {})
+        # Same pre-scan as the TypeScript face (see generate_typescript_content).
+        @resolved_string_defaults = {}
+        data_properties.each do |prop|
+          ts_type = prop['tsType'] || Core::TypeConverter.to_typescript_type(prop['class'])
+          expr = string_default_expression(prop['defaultValue'], ts_type)
+          @resolved_string_defaults[prop['name']] = expr if expr
+        end
+
         # Get existing property names from data section to avoid duplicates
         existing_prop_names = data_properties.map { |p| p['name'] }.to_set
         marker_header = Core::GeneratedMarker.comment_header(
@@ -787,6 +819,9 @@ module RjuiTools
         content = <<~JS
           #{marker_header}
 
+        JS
+        content += "import { StringManager } from '../StringManager';\n\n" if @resolved_string_defaults.any?
+        content += <<~JS
           /**
            * @typedef {Object} #{view_name}Data
         JS
@@ -846,7 +881,8 @@ module RjuiTools
           ts_type = prop['tsType'] || Core::TypeConverter.to_typescript_type(prop['class'])
           default_value = prop['defaultValue']
 
-          formatted_value = format_default_value(default_value, ts_type, prop['class'])
+          formatted_value = (@resolved_string_defaults || {})[name] ||
+                            format_default_value(default_value, ts_type, prop['class'])
           content += "  #{name}: #{formatted_value},\n"
         end
 
@@ -893,6 +929,44 @@ module RjuiTools
         content += Core::GeneratedMarker.comment_footer + "\n"
 
         content
+      end
+
+      def announce_own_namespaces(json_file)
+        snake_basename = File.basename(json_file, '.json')
+                             .gsub(/([A-Z]+)([A-Z][a-z])/, '\\1_\\2')
+                             .gsub(/([a-z\d])([A-Z])/, '\\1_\\2')
+                             .downcase
+        subdir = File.dirname(json_file).sub(/\A#{Regexp.escape(@layouts_dir)}\/?/, '')
+        namespace_parts = subdir.to_s.split('/')
+                                .reject { |p| p.empty? || p == '.' || p == '..' }
+                                .map(&:downcase)
+        namespace_parts << snake_basename
+        @config['_current_json_name'] = namespace_parts.join('_')
+        @config['_current_namespaces'] = [snake_basename, namespace_parts.join('_')].uniq
+      end
+
+      # Data-default string resolution — the sjui data face's canon (1.6.3):
+      # membership-gated key resolution (fully-qualified or the layout's OWN
+      # sections) then value reverse-lookup, SILENTLY — a defaultValue is not
+      # declared display text (sentinel vocabulary like "today"/"gone" lives
+      # here), so nothing warns and an unresolved literal stays literal.
+      # Returns the bare TS expression (the helper's JSX braces stripped) or
+      # nil.
+      def string_default_expression(default_value, ts_type)
+        return nil unless ts_type == 'string'
+        return nil if default_value.nil?
+
+        v = default_value.to_s
+        return nil if v == "''" || v.empty?
+
+        inner = v.gsub(/^["']|["']$/, '')
+        return nil if inner.empty? || inner.match?(/^@\{.*\}$/)
+
+        resolved = convert_string_key(inner, warnings: false) ||
+                   lookup_string_manager_by_value(inner)
+        return nil unless resolved
+
+        resolved.start_with?('{') && resolved.end_with?('}') ? resolved[1..-2] : resolved
       end
 
       def format_default_value(value, ts_type, json_class = nil)

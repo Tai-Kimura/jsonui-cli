@@ -40,11 +40,11 @@ module RjuiTools
         # key was registered) produced runtime `undefined` for identifiers
         # like "bash" / "yaml" / "shell" that look like snake_case but are
         # not translations.
-        def convert_string_key(text)
+        def convert_string_key(text, warnings: true)
           return nil unless string_key?(text)
 
           text_without_quotes = text.gsub(/^["']|["']$/, '')
-          lookup_string_manager_key(text_without_quotes)
+          lookup_string_manager_key(text_without_quotes, warnings: warnings)
         end
 
         # Rewrite JSON-encoded string values that look like strings.json
@@ -129,7 +129,7 @@ module RjuiTools
         # 1. Check if text matches "file_key" pattern (e.g., "login_forgot_password")
         # 2. Check current JSON file's keys first (e.g., "title" in file "sales")
         # 3. Check all other files as fallback
-        def lookup_string_manager_key(text)
+        def lookup_string_manager_key(text, warnings: true)
           strings_data = load_strings_json
           return nil if strings_data.nil? || strings_data.empty?
 
@@ -166,7 +166,7 @@ module RjuiTools
             end
           end
 
-          report_foreign_bare_key(text, strings_data)
+          report_foreign_bare_key(text, strings_data) if warnings
           nil
         end
 

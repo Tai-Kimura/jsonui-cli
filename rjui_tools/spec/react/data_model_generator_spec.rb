@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require 'tmpdir'
+require 'fileutils'
+
 require_relative '../spec_helper'
 require 'react/data_model_generator'
 
@@ -484,6 +487,70 @@ RSpec.describe RjuiTools::React::DataModelGenerator, 'focus-state value bindings
       content = generator.send(:generate_typescript_content, 'AdminTopbar', props)
       expect(content).to include("import type { SelectOption } from '@/types/SelectOption';")
       expect(content).to include('parkingScopeOptions?: SelectOption[];')
+    end
+  end
+  # A String defaultValue whose key the layout's OWN strings.json section
+  # declares resolves to a bare StringManager expression (with the import);
+  # a sentinel that only foreign sections declare stays literal and SILENT —
+  # the data-default canon the sjui face carries since 1.6.3, unified here.
+  describe 'string defaultValue resolution (data-default canon)' do
+    let(:temp_dir) { Dir.mktmpdir('rjui_data_default') }
+    let(:layouts_dir) { File.join(temp_dir, 'Layouts') }
+    let(:data_dir) { File.join(temp_dir, 'src/generated/data') }
+
+    before do
+      @original_dir = Dir.pwd
+      Dir.chdir(temp_dir)
+      FileUtils.mkdir_p(File.join(layouts_dir, 'Resources'))
+      allow(RjuiTools::Core::ConfigManager).to receive(:load_config).and_return({
+        'source_path' => temp_dir,
+        'layouts_directory' => 'Layouts',
+        'data_directory' => 'src/generated/data'
+      })
+      File.write(File.join(layouts_dir, 'Resources', 'strings.json'), JSON.generate({
+        'note_input' => { 'register' => 'Register' },
+        'venue_detail' => { 'today' => 'Today' }
+      }))
+    end
+
+    after do
+      Dir.chdir(@original_dir)
+      FileUtils.rm_rf(temp_dir)
+    end
+
+    it 'resolves an own-section key to a StringManager expression, with import, silently' do
+      File.write(File.join(layouts_dir, 'note_input.json'), JSON.generate({
+        'type' => 'View',
+        'child' => [
+          { 'data' => [{ 'name' => 'label', 'class' => 'String', 'defaultValue' => 'register' }] },
+          { 'type' => 'Label', 'text' => '@{label}' }
+        ]
+      }))
+
+      generator = described_class.new
+      expect { generator.update_data_models }.not_to output(/Bare key/).to_stdout
+
+      content = File.read(File.join(data_dir, 'NoteInputData.ts'))
+      expect(content).to include('label: StringManager.currentLanguage.noteInputRegister,')
+      expect(content).to include("import { StringManager } from '../StringManager';")
+    end
+
+    it 'keeps a foreign-declared sentinel literal, with no warning and no import' do
+      File.write(File.join(layouts_dir, 'note_input.json'), JSON.generate({
+        'type' => 'View',
+        'child' => [
+          { 'data' => [{ 'name' => 'selectedDateValue', 'class' => 'String', 'defaultValue' => 'today' }] },
+          { 'type' => 'Label', 'text' => '@{selectedDateValue}' }
+        ]
+      }))
+
+      generator = described_class.new
+      expect { generator.update_data_models }.not_to output(/Bare key/).to_stdout
+
+      content = File.read(File.join(data_dir, 'NoteInputData.ts'))
+      expect(content).to include('selectedDateValue: "today",')
+      expect(content).not_to include('StringManager.currentLanguage')
+      expect(content).not_to include("import { StringManager }")
     end
   end
 end

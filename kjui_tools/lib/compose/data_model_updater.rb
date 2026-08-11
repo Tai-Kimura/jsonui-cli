@@ -6,6 +6,7 @@ require 'set'
 require_relative '../core/config_manager'
 require_relative '../core/project_finder'
 require_relative '../core/type_converter'
+require_relative 'helpers/resource_resolver'
 require_relative '../core/generated_marker'
 require_relative '../core/data_model_updater_core'
 require_relative 'style_loader'
@@ -31,6 +32,22 @@ module KjuiTools
       end
 
       private
+
+      # Data defaults resolve strings, and which sections are "own" depends
+      # on the layout being processed — the same per-file announcement the
+      # view builder makes (compose_builder). Without it every data-default
+      # lookup runs with no namespace context; the sjui data face gained the
+      # same announcement in 1.6.3 (data-default context filing).
+      def process_json_file(json_file)
+        relative = begin
+          require 'pathname'
+          Pathname.new(json_file).relative_path_from(Pathname.new(@layouts_dir)).to_s
+        rescue StandardError
+          File.basename(json_file)
+        end
+        Helpers::ResourceResolver.begin_layout(relative)
+        super
+      end
 
       def expand_styles(json_data, _json_file)
         StyleLoader.load_and_merge(json_data)
@@ -141,6 +158,30 @@ module KjuiTools
 
         KOTLIN
 
+        # Data-default string resolution — the sjui data face's canon
+        # (1.6.3): resolve best-effort under the layout's OWN sections (plus
+        # the fully-qualified and value forms find_string_key already
+        # carries), SILENTLY — a defaultValue is not declared display text
+        # (sentinel vocabulary like a DateSelectBox's "today" lives here),
+        # so nothing warns and an unresolved literal stays literal. Resolved
+        # keys emit through KotlinJsonUI.localizedString — the context-free
+        # accessor generated Data can call outside composition — with the
+        # raw literal as the pre-initialize fallback.
+        @resolved_string_defaults = {}
+        data_properties.each do |prop|
+          next unless prop['class'] == 'String'
+          inner = string_default_inner(prop['defaultValue'])
+          next if inner.nil? || inner.empty?
+          full_key = Helpers::ResourceResolver.resolve_data_default_key(
+            inner, @config, @source_path
+          )
+          @resolved_string_defaults[prop['name']] = full_key if full_key
+        end
+        if @resolved_string_defaults.any?
+          content += "import com.kotlinjsonui.core.KotlinJsonUI\n"
+          content += "import #{@package_name}.R\n"
+        end
+
         # Add Color import if any property uses Color type
         has_color = data_properties.any? { |prop| prop['class'] == 'Color' }
         if has_color
@@ -191,7 +232,7 @@ module KjuiTools
                 content += "    var #{name}: #{class_type}? = null"
               end
             else
-              formatted_value = format_default_value(default_value, prop['class'])
+              formatted_value = wrap_localized_default(prop, format_default_value(default_value, prop['class']))
               content += "    var #{name}: #{class_type} = #{formatted_value}"
             end
 
@@ -354,7 +395,30 @@ module KjuiTools
       def from_map_fallback(prop, json_class, zero_literal)
         default_value = prop['defaultValue']
         return zero_literal if default_value.nil? || default_value == 'nil'
-        format_default_value(default_value, json_class)
+        wrap_localized_default(prop, format_default_value(default_value, json_class))
+      end
+
+      # Resolved string defaults emit through the context-free accessor;
+      # the formatted literal rides along as the pre-initialize fallback.
+      def wrap_localized_default(prop, formatted)
+        full_key = (@resolved_string_defaults || {})[prop['name']]
+        return formatted unless full_key
+        "KotlinJsonUI.localizedString(R.string.#{full_key}, #{formatted})"
+      end
+
+      # The unquoted inner text of a String defaultValue, mirroring
+      # format_default_value's quoting rules ('' / 'x' / "x" / bare).
+      def string_default_inner(value)
+        return nil if value.nil?
+        v = value.to_s
+        return nil if v == "''"
+        if v.length > 1 &&
+           ((v.start_with?("'") && v.end_with?("'")) ||
+            (v.start_with?('"') && v.end_with?('"')))
+          v[1...-1]
+        else
+          v
+        end
       end
 
       def format_default_value(value, json_class)
