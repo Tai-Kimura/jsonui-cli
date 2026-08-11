@@ -49,7 +49,16 @@ module SjuiTools
           File.basename(json_file_path.to_s)
         end
 
-        def get_text_with_string_manager(text_content)
+        # warnings: false is the data-default face (data_model_updater). A
+        # `defaultValue` is not declared display text — it can be sentinel
+        # vocabulary (a DateSelectBox's "today", a visibility's "gone") or
+        # an enum-ish literal that happens to collide with some section's
+        # key name — so resolution stays best-effort and SILENT there:
+        # resolve when the layout's own sections (or a fully-qualified
+        # spelling, or a value match) claim it, keep the literal otherwise,
+        # and never gate the build over it (a date sentinel made zero-warning
+        # unreachable by authoring, 2026-08-11 filing).
+        def get_text_with_string_manager(text_content, warnings: true)
           # Remove quotes if present
           text_without_quotes = text_content.gsub(/^\"|\"|^'|'$/, '')
 
@@ -67,7 +76,7 @@ module SjuiTools
           return string_manager_call if string_manager_call
 
           # Then, try to find by value in strings.json (for non-snake_case text like "AppFinder")
-          string_manager_call = lookup_string_manager_by_value(text_without_quotes)
+          string_manager_call = lookup_string_manager_by_value(text_without_quotes, warnings: warnings)
           return string_manager_call if string_manager_call
 
           # Undeclared snake_case-shaped text falls back to .localized().
@@ -81,7 +90,7 @@ module SjuiTools
             # Silence here let exactly that ship (asymmetric-resolution
             # filing, 2026-08-11); the warning gates via `jui build`'s
             # zero-warning invariant.
-            report_foreign_bare_key(text_without_quotes)
+            report_foreign_bare_key(text_without_quotes) if warnings
             return "\"#{text_without_quotes}\".localized()"
           end
 
@@ -98,7 +107,7 @@ module SjuiTools
         # the same text. Scanning in file order made the reference depend
         # on how the SSoT happened to be sorted, and a cell under a screen
         # directory — which owns two spellings — could land on either one.
-        def lookup_string_manager_by_value(text)
+        def lookup_string_manager_by_value(text, warnings: true)
           strings_data = load_strings_json
           return nil if strings_data.nil? || strings_data.empty?
 
@@ -107,7 +116,7 @@ module SjuiTools
           )
           return nil if resolved.nil?
 
-          report_string_namespace(text, resolved)
+          report_string_namespace(text, resolved) if warnings
           struct_name = snake_to_pascal(resolved['namespace'])
           method_name = snake_to_camel(resolved['key'])
           "StringManager.#{struct_name}.#{method_name}()"

@@ -34,6 +34,20 @@ module SjuiTools
 
       private
 
+      # Data defaults resolve strings, and which sections are "own" depends
+      # on the layout being processed — the same per-file announcement the
+      # view converter makes. Without it every data-default lookup ran with
+      # NO namespace context: a key declared in the layout's own section
+      # emitted the bare `.localized()` (raw key as the default) and, once
+      # the foreign-bare warn existed, misreported own declarations as
+      # foreign with an empty own list (2026-08-11 filing). Includes are
+      # expanded into this tree, so a partial's declarations resolve under
+      # the includer's namespaces — matching the generated-view face.
+      def process_json_file(json_file)
+        Helpers::StringManagerHelper.begin_layout(json_file)
+        super
+      end
+
       # Skip files with "mode": "uikit" (SwiftUI data models don't need UIKit-only files)
       def skip_layout_file_extra?(file)
         json_content = JSON.parse(File.read(file))
@@ -387,8 +401,11 @@ module SjuiTools
           if value == "''" || value.to_s.empty?
             '""'
           else
-            # Use StringManager for localized strings
-            get_text_with_string_manager("\"#{value}\"")
+            # Use StringManager for localized strings. warnings: false —
+            # a defaultValue is not declared display text (it can be
+            # sentinel vocabulary like a DateSelectBox's "today"), so this
+            # face resolves best-effort and never gates the build.
+            get_text_with_string_manager("\"#{value}\"", warnings: false)
           end
         elsif json_class == 'CollectionDataSource' && (value.is_a?(Array) || value.is_a?(Hash))
           # Materialize the declared defaultValue (INTERACTIVE_HOST_CONTRACT

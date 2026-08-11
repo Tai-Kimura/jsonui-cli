@@ -381,6 +381,48 @@ RSpec.describe SjuiTools::SwiftUI::DataModelUpdater do
     end
   end
 
+  # The data-default face resolves strings under the layout's OWN sections
+  # (process_json_file announces the layout, the same per-file channel the
+  # view converter uses) and never warns: a defaultValue can be sentinel
+  # vocabulary (a DateSelectBox's "today") whose collision with some
+  # section's key must not gate the build. Before the announcement, every
+  # data-default lookup ran with no namespace context — an own-section key
+  # emitted the bare `.localized()` (raw key as the default) and was
+  # misreported as foreign with an empty own list (2026-08-11 filing).
+  describe 'data-default string resolution context' do
+    let(:updater) { described_class.new }
+
+    before do
+      resources_dir = File.join(layouts_dir, 'Resources')
+      FileUtils.mkdir_p(resources_dir)
+      File.write(File.join(resources_dir, 'strings.json'), JSON.generate({
+        'note_input' => { 'register' => 'Register' },
+        'venue_detail' => { 'today' => { 'en' => 'Today', 'ja' => '本日' } }
+      }))
+      File.write(File.join(layouts_dir, 'note_input.json'), JSON.generate({
+        'type' => 'View',
+        'data' => [
+          { 'name' => 'registerButtonLabel', 'class' => 'String', 'defaultValue' => 'register' },
+          { 'name' => 'selectedDateValue', 'class' => 'String', 'defaultValue' => 'today' }
+        ]
+      }))
+      allow(SjuiTools::Core::Logger).to receive(:warn)
+    end
+
+    after { SjuiTools::SwiftUI::Helpers::StringManagerHelper.current_namespaces = [] }
+
+    it 'resolves an own-section key, keeps a foreign-colliding sentinel literal, and stays silent' do
+      expect {
+        updater.send(:process_json_file, File.join(layouts_dir, 'note_input.json'))
+      }.to output(/Updated Data model/).to_stdout
+
+      content = File.read(File.join(data_dir, 'NoteInputData.swift'))
+      expect(content).to include('var registerButtonLabel: String = StringManager.NoteInput.register()')
+      expect(content).to include('var selectedDateValue: String = "today".localized()')
+      expect(SjuiTools::Core::Logger).not_to have_received(:warn)
+    end
+  end
+
   describe '#update_data_models' do
     let(:updater) { described_class.new }
 

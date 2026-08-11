@@ -115,6 +115,25 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::StringManagerHelper do
           ))
       end
 
+      # warnings: false is the data-default face — a defaultValue can be
+      # sentinel vocabulary colliding with some section's key, so that face
+      # resolves best-effort and never gates the build (2026-08-11 filing).
+      it 'suppresses the foreign-bare warning on the data-default face' do
+        allow(SjuiTools::Core::Logger).to receive(:warn)
+        described_class.current_namespaces = %w[member_cell]
+        expect(helper_instance.get_text_with_string_manager('"rating"', warnings: false))
+          .to eq('"rating".localized()')
+        expect(SjuiTools::Core::Logger).not_to have_received(:warn)
+      end
+
+      it 'suppresses value-path warnings too on the data-default face' do
+        allow(SjuiTools::Core::Logger).to receive(:warn)
+        described_class.current_namespaces = %w[member_cell]
+        expect(helper_instance.get_text_with_string_manager('"RATING"', warnings: false))
+          .to eq('StringManager.HeroSectionCell.rating()')
+        expect(SjuiTools::Core::Logger).not_to have_received(:warn)
+      end
+
       it 'stays silent for an undeclared snake_case literal' do
         allow(SjuiTools::Core::Logger).to receive(:warn)
         described_class.current_namespaces = %w[member_cell]
