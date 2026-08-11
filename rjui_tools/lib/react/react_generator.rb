@@ -4,6 +4,7 @@ require 'set'
 require_relative '../core/type_converter'
 require_relative '../core/generated_marker'
 require_relative '../core/normalization'
+require_relative '../core/string_manager_core'
 require_relative 'converters/base_converter'
 require_relative 'converters/view_converter'
 require_relative 'converters/label_converter'
@@ -172,31 +173,25 @@ module RjuiTools
       end
 
       def generate(component_name, json, subdir: '', variants: {}, data_type: nil, source_rel: nil, namespace_stem: nil, screen_id: nil)
-        # Store current JSON file name (snake_case) for StringManager resolution.
-        # strings.json groups keys by directory-qualified namespace — e.g. a
-        # layout at `learn/installation.json` lives under the `learn_installation`
-        # namespace, not just `installation`. Including the subdir here makes
-        # StringManagerHelper Phase 2 (current-file priority) find the screen's
-        # own namespace instead of falling through to Phase 3's linear scan,
-        # which would resolve bare keys like `lang_toggle` to whichever
-        # namespace appeared first in strings.json.
-        snake_basename = namespace_stem || component_name
-          .gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
-          .gsub(/([a-z\d])([A-Z])/, '\1_\2')
-          .downcase
-        # `"."` is what File.dirname returns for root-level layouts — filter
-        # it out (and `..` for good measure) so root files become e.g.
-        # `learn_index` instead of `._learn_index`.
-        namespace_parts = subdir.to_s.split('/')
-                                .reject { |p| p.empty? || p == '.' || p == '..' }
-                                .map(&:downcase)
-        namespace_parts << snake_basename
-        @config['_current_json_name'] = namespace_parts.join('_')
-        # Both section spellings the layout owns (StringManagerCore
-        # namespace_candidates parity): the relative-path join above and the
-        # bare basename. Bare-key resolution consults exactly these — a bare
-        # key hitting any other section is a collision, not a reference.
-        @config['_current_namespaces'] = [snake_basename, namespace_parts.join('_')].uniq
+        # Own-section spellings via the CANONICAL function
+        # (StringManagerCore.namespace_candidates) — the same one the
+        # sjui/kjui builders and jui lint-strings consult. It normalizes
+        # each segment the way the extractor writes sections (camel split,
+        # kebab hyphens folded) and keeps the raw spellings as trailing
+        # candidates; hand-rolling this here is how the kebab own-miss
+        # family started (own-spelling normalization filing, 2026-08-11).
+        # `"."` is what File.dirname returns for root-level layouts —
+        # filter it (and `..`) so root files become `learn_index`, not
+        # `._learn_index`. `namespace_stem` carries the RAW file stem
+        # (build_command); component_name is the PascalCase fallback, which
+        # the canonical normalization folds to the same snake spelling.
+        stem = namespace_stem || component_name
+        rel = (subdir.to_s.split('/')
+                     .reject { |p| p.empty? || p == '.' || p == '..' } + [stem]).join('/')
+        @config['_current_json_name'] =
+          JsonUIShared::StringManagerCore.namespace_candidates(rel, preferred: :relative).first
+        @config['_current_namespaces'] =
+          JsonUIShared::StringManagerCore.namespace_candidates(rel, preferred: :basename)
 
         # Per-file normalization state (same shared-config pattern as
         # `_current_json_name`). Converters read this through

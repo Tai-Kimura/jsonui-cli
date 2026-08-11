@@ -9,6 +9,7 @@ require_relative '../core/generated_marker'
 require_relative 'style_loader'
 require_relative '../core/layout_variant'
 require_relative 'helpers/string_manager_helper'
+require_relative '../core/string_manager_core'
 
 module RjuiTools
   module React
@@ -932,17 +933,18 @@ module RjuiTools
       end
 
       def announce_own_namespaces(json_file)
-        snake_basename = File.basename(json_file, '.json')
-                             .gsub(/([A-Z]+)([A-Z][a-z])/, '\\1_\\2')
-                             .gsub(/([a-z\d])([A-Z])/, '\\1_\\2')
-                             .downcase
-        subdir = File.dirname(json_file).sub(/\A#{Regexp.escape(@layouts_dir)}\/?/, '')
-        namespace_parts = subdir.to_s.split('/')
-                                .reject { |p| p.empty? || p == '.' || p == '..' }
-                                .map(&:downcase)
-        namespace_parts << snake_basename
-        @config['_current_json_name'] = namespace_parts.join('_')
-        @config['_current_namespaces'] = [snake_basename, namespace_parts.join('_')].uniq
+        # Own-section spellings via the CANONICAL
+        # StringManagerCore.namespace_candidates — normalized spellings
+        # first (extractor parity: camel split + kebab hyphens folded), raw
+        # spellings trailing. The hand-rolled copy this replaces lacked the
+        # hyphen fold, so a kebab layout's data defaults could not own
+        # their own sections (own-spelling normalization filing,
+        # 2026-08-11).
+        rel = json_file.to_s.sub(/\A#{Regexp.escape(@layouts_dir)}\/?/, '')
+        @config['_current_json_name'] =
+          JsonUIShared::StringManagerCore.namespace_candidates(rel, preferred: :relative).first
+        @config['_current_namespaces'] =
+          JsonUIShared::StringManagerCore.namespace_candidates(rel, preferred: :basename)
       end
 
       # Data-default string resolution — the sjui data face's canon (1.6.3):

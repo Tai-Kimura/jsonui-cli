@@ -172,6 +172,12 @@ module RjuiTools
 
               output = generator.generate(component_name, json_content, subdir: nested_subdir,
                                           variants: variant_comps,
+                                          # RAW file stem: the canonical
+                                          # namespace_candidates keeps raw
+                                          # spellings as trailing own
+                                          # candidates, which the PascalCase
+                                          # component-name round-trip loses.
+                                          namespace_stem: File.basename(json_file, '.json'),
                                           screen_id: layout_screen_id)
 
               # Use .tsx for TypeScript, .jsx for JavaScript

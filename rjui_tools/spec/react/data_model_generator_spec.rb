@@ -553,4 +553,48 @@ RSpec.describe RjuiTools::React::DataModelGenerator, 'focus-state value bindings
       expect(content).not_to include("import { StringManager }")
     end
   end
+  # A kebab-case layout owns the NORMALIZED section spelling the extractor
+  # writes (kebab-widget.json -> kebab_widget) — the canonical
+  # namespace_candidates route; the hand-rolled spelling this replaced
+  # produced "kebab-widget" and silently failed to own it.
+  describe 'kebab-case own-section resolution (canonical namespace_candidates)' do
+    let(:temp_dir) { Dir.mktmpdir('rjui_kebab_default') }
+    let(:layouts_dir) { File.join(temp_dir, 'Layouts') }
+    let(:data_dir) { File.join(temp_dir, 'src/generated/data') }
+
+    before do
+      @original_dir = Dir.pwd
+      Dir.chdir(temp_dir)
+      FileUtils.mkdir_p(File.join(layouts_dir, 'Resources'))
+      allow(RjuiTools::Core::ConfigManager).to receive(:load_config).and_return({
+        'source_path' => temp_dir,
+        'layouts_directory' => 'Layouts',
+        'data_directory' => 'src/generated/data'
+      })
+      File.write(File.join(layouts_dir, 'Resources', 'strings.json'), JSON.generate({
+        'kebab_widget' => { 'headline' => 'Headline' }
+      }))
+    end
+
+    after do
+      Dir.chdir(@original_dir)
+      FileUtils.rm_rf(temp_dir)
+    end
+
+    it 'resolves a kebab layout data default against its normalized section' do
+      File.write(File.join(layouts_dir, 'kebab-widget.json'), JSON.generate({
+        'type' => 'View',
+        'child' => [
+          { 'data' => [{ 'name' => 'title', 'class' => 'String', 'defaultValue' => 'headline' }] },
+          { 'type' => 'Label', 'text' => '@{title}' }
+        ]
+      }))
+
+      generator = described_class.new
+      expect { generator.update_data_models }.not_to output(/Bare key/).to_stdout
+
+      content = File.read(File.join(data_dir, 'KebabWidgetData.ts'))
+      expect(content).to include('title: StringManager.currentLanguage.kebabWidgetHeadline,')
+    end
+  end
 end

@@ -111,6 +111,27 @@ RSpec.describe RjuiTools::React::ReactGenerator do
       generator.generate('Index', minimal_json, subdir: './learn')
       expect(config['_current_json_name']).to eq('learn_index')
     end
+    it 'kebab namespace_stem owns the normalized spelling first, raw trailing' do
+      generator.generate('TestRunner', minimal_json, subdir: 'tools', namespace_stem: 'test-runner')
+      expect(config['_current_json_name']).to eq('tools_test_runner')
+      expect(config['_current_namespaces']).to eq(
+        ['test_runner', 'tools_test_runner', 'test-runner', 'tools_test-runner']
+      )
+    end
+
+    it 'a variant namespace_stem folds into the base spelling (canonical @-strip)' do
+      generator.generate('HomeRegular', minimal_json, namespace_stem: 'home@regular')
+      expect(config['_current_json_name']).to eq('home')
+      expect(config['_current_namespaces']).to include('home')
+    end
+
+    it 'conventional snake names keep their historical candidate list' do
+      generator.generate('HeroSectionCell', minimal_json, subdir: 'item_detail',
+                         namespace_stem: 'hero_section_cell')
+      expect(config['_current_namespaces']).to eq(
+        ['hero_section_cell', 'item_detail_hero_section_cell']
+      )
+    end
   end
 
   describe '#generate_component_file StringManager import emission' do
