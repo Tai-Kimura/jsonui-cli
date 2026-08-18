@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_converter'
+require_relative '../../core/frameworks'
 
 module RjuiTools
   module React
@@ -22,10 +23,11 @@ module RjuiTools
             text = convert_text_binding(attributes['text'] || '')
             body = "#{build_image_markup}#{text}"
 
-            # If href is specified, wrap with Next.js Link
+            # If href is specified, wrap with the framework's Link component
             if attributes['href']
               href = attributes['href']
-              "#{indent_str(indent)}<Link href=\"#{href}\"><button#{id_attr}#{build_button_type_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>#{body}</button></Link>"
+              link_attr = Core::Frameworks.for(@config).link_href_attribute
+              "#{indent_str(indent)}<Link #{link_attr}=\"#{href}\"><button#{id_attr}#{build_button_type_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>#{body}</button></Link>"
             else
               "#{indent_str(indent)}<button#{id_attr}#{build_button_type_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>#{body}</button>"
             end

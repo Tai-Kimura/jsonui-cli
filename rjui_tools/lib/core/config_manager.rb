@@ -19,6 +19,7 @@ module RjuiTools
         'strings_directory' => 'src/Strings',
         'languages' => ['en', 'ja'],
         'default_language' => 'en',
+        'web_framework' => 'next',
         'use_tailwind' => true,
         'typescript' => false,
         'generate_viewmodels' => true,

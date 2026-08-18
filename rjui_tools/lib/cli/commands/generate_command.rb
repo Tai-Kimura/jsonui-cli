@@ -4,6 +4,7 @@ require 'json'
 require 'fileutils'
 require 'optparse'
 require_relative '../../core/config_manager'
+require_relative '../../core/frameworks'
 require_relative '../../core/logger'
 
 module RjuiTools
@@ -235,19 +236,16 @@ module RjuiTools
 
           FileUtils.mkdir_p(page_dir)
 
+          fw = Core::Frameworks.for(@config)
           if with_viewmodel
             page_content = <<~TSX
-              "use client";
-
-              import { useRouter } from "next/navigation";
-              import { useRef, useState } from "react";
+              #{fw.use_client_prefix}#{fw.router_hook_import_prefix}import { useRef, useState } from "react";
               import #{view_name} from "@/generated/components/#{view_name}";
               import { #{view_name}ViewModel } from "@/viewmodels/#{view_name}ViewModel";
               import { #{view_name}Data, create#{view_name}Data } from "@/generated/data/#{view_name}Data";
 
               export default function #{view_name}Page() {
-                const router = useRouter();
-                const [data, setData] = useState<#{view_name}Data>(create#{view_name}Data());
+              #{fw.router_hook_statement_line}  const [data, setData] = useState<#{view_name}Data>(create#{view_name}Data());
                 const dataRef = useRef(data);
                 dataRef.current = data;
 
@@ -265,16 +263,12 @@ module RjuiTools
             TSX
           else
             page_content = <<~TSX
-              "use client";
-
-              import { useRouter } from "next/navigation";
-              import { useState } from "react";
+              #{fw.use_client_prefix}#{fw.router_hook_import_prefix}import { useState } from "react";
               import #{view_name} from "@/generated/components/#{view_name}";
               import { #{view_name}Data, create#{view_name}Data } from "@/generated/data/#{view_name}Data";
 
               export default function #{view_name}Page() {
-                const router = useRouter();
-                const [data, setData] = useState<#{view_name}Data>(create#{view_name}Data());
+              #{fw.router_hook_statement_line}  const [data, setData] = useState<#{view_name}Data>(create#{view_name}Data());
 
                 return <#{view_name} data={data} />;
               }
@@ -296,17 +290,17 @@ module RjuiTools
 
           FileUtils.mkdir_p(viewmodel_dir)
 
+          fw = Core::Frameworks.for(@config)
           viewmodel_content = <<~TS
             // ViewModel for #{view_name}
             // This file is NOT auto-generated after initial creation - safe to edit
 
-            import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-            import { #{view_name}Data } from "@/generated/data/#{view_name}Data";
+            #{fw.router_type_import_prefix}import { #{view_name}Data } from "@/generated/data/#{view_name}Data";
             import { #{view_name}ViewModelBase } from "@/generated/viewmodels/#{view_name}ViewModelBase";
 
             export class #{view_name}ViewModel extends #{view_name}ViewModelBase {
               constructor(
-                router: AppRouterInstance,
+                router: #{fw.router_type},
                 getData: () => #{view_name}Data,
                 setData: (data: #{view_name}Data | ((prev: #{view_name}Data) => #{view_name}Data)) => void
               ) {
@@ -333,17 +327,17 @@ module RjuiTools
 
           FileUtils.mkdir_p(viewmodel_dir)
 
+          fw = Core::Frameworks.for(@config)
           viewmodel_content = <<~TS
             // ViewModel for #{view_name}
             // This file is NOT auto-generated after initial creation - safe to edit
 
-            import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-            import { #{view_name}Data } from "@/generated/data/#{view_name}Data";
+            #{fw.router_type_import_prefix}import { #{view_name}Data } from "@/generated/data/#{view_name}Data";
             import { #{view_name}ViewModelBase } from "@/generated/viewmodels/#{view_name}ViewModelBase";
 
             export class #{view_name}ViewModel extends #{view_name}ViewModelBase {
               constructor(
-                router: AppRouterInstance,
+                router: #{fw.router_type},
                 getData: () => #{view_name}Data,
                 setData: (data: #{view_name}Data | ((prev: #{view_name}Data) => #{view_name}Data)) => void
               ) {

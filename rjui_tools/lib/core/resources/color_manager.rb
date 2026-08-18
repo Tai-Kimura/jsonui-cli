@@ -6,6 +6,7 @@ require 'pathname'
 require_relative '../logger'
 require_relative '../generated_marker'
 require_relative '../color_manager_core'
+require_relative '../frameworks'
 
 module RjuiTools
   module Core
@@ -100,9 +101,12 @@ module RjuiTools
           )
 
           nl = "\n"
+          fw = Frameworks.for(@config)
           lines = []
-          lines << '"use client";'
-          lines << ''
+          unless fw.use_client_directive.empty?
+            lines << fw.use_client_directive
+            lines << ''
+          end
           lines.concat(marker_header.split("\n"))
           lines << ''
 

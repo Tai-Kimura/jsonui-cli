@@ -4,6 +4,7 @@ require 'json'
 require 'fileutils'
 require 'set'
 require_relative '../../core/config_manager'
+require_relative '../../core/frameworks'
 require_relative '../../core/generated_marker'
 require_relative '../../core/logger'
 require_relative '../../core/attribute_validator'
@@ -361,7 +362,7 @@ module RjuiTools
           network_image_path = File.join(extensions_dir, 'NetworkImage.tsx')
           template_path = File.join(File.dirname(__FILE__), '../../react/templates/network_image.tsx')
           if File.exist?(template_path)
-            template = File.read(template_path)
+            template = Core::Frameworks.apply_directive(File.read(template_path), Core::Frameworks.for(@config))
             if !File.exist?(network_image_path)
               File.write(network_image_path, template)
               Core::Logger.success("Created built-in component: #{network_image_path}")
@@ -568,7 +569,7 @@ module RjuiTools
           template_path = File.join(File.dirname(__FILE__), '../../react/templates/use_color_mode.ts')
           return unless File.exist?(template_path)
 
-          template = File.read(template_path)
+          template = Core::Frameworks.apply_directive(File.read(template_path), Core::Frameworks.for(@config))
           if !File.exist?(target_path)
             File.write(target_path, template)
             Core::Logger.success("Created hook: #{target_path}")
@@ -822,10 +823,9 @@ module RjuiTools
         end
 
         def string_manager_javascript_content(strings_json, default_language, marker_header, marker_footer)
+          fw = Core::Frameworks.for(@config)
           <<~JS
-            "use client";
-
-            #{marker_header}
+            #{fw.use_client_prefix}#{marker_header}
             // Manages multi-language string resources.
 
             import { useSyncExternalStore } from 'react';
@@ -945,10 +945,9 @@ module RjuiTools
         end
 
         def string_manager_typescript_content(strings_json, default_language, marker_header, marker_footer)
+          fw = Core::Frameworks.for(@config)
           <<~TS
-            "use client";
-
-            #{marker_header}
+            #{fw.use_client_prefix}#{marker_header}
             // Manages multi-language string resources.
 
             import { useSyncExternalStore } from 'react';

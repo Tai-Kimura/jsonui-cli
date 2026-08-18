@@ -5,6 +5,7 @@ require 'fileutils'
 require 'set'
 require_relative '../core/config_manager'
 require_relative '../core/generated_marker'
+require_relative '../core/frameworks'
 require_relative 'style_loader'
 require_relative '../core/layout_variant'
 
@@ -20,6 +21,7 @@ module RjuiTools
         @data_dir = File.join(@source_path, @config['data_directory'] || 'src/generated/data')
         @styles_dir = File.join(@source_path, @config['styles_directory'] || 'Styles')
         @use_typescript = @config['typescript'] != false
+        @framework = Core::Frameworks.for(@config)
       end
 
       def generate_viewmodels
@@ -139,11 +141,10 @@ module RjuiTools
         <<~TS
           #{marker_header}
 
-          import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-          import { #{data_type} } from "@/generated/data/#{data_type}";
+          #{@framework.router_type_import_prefix}import { #{data_type} } from "@/generated/data/#{data_type}";
 
           export class #{view_name}ViewModelBase {
-            protected router: AppRouterInstance;
+            protected router: #{@framework.router_type};
             protected _getData: () => #{data_type};
             protected _setData: (data: #{data_type} | ((prev: #{data_type}) => #{data_type})) => void;
 
@@ -152,7 +153,7 @@ module RjuiTools
             }
 
             constructor(
-              router: AppRouterInstance,
+              router: #{@framework.router_type},
               getData: () => #{data_type},
               setData: (data: #{data_type} | ((prev: #{data_type}) => #{data_type})) => void
             ) {
@@ -219,7 +220,7 @@ module RjuiTools
            */
           export class #{view_name}ViewModelBase {
             /**
-             * @param {import("next/dist/shared/lib/app-router-context.shared-runtime").AppRouterInstance} router
+             * @param {#{@framework.router_type_jsdoc}} router
              * @param {() => import("@/generated/data/#{data_type}").#{data_type}} getData
              * @param {(data: any) => void} setData
              */
@@ -264,13 +265,12 @@ module RjuiTools
           // ViewModel for #{view_name}
           // This file is NOT auto-generated after initial creation - safe to edit
 
-          import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-          import { #{data_type} } from "@/generated/data/#{data_type}";
+          #{@framework.router_type_import_prefix}import { #{data_type} } from "@/generated/data/#{data_type}";
           import { #{view_name}ViewModelBase } from "@/generated/viewmodels/#{view_name}ViewModelBase";
 
           export class #{view_name}ViewModel extends #{view_name}ViewModelBase {
             constructor(
-              router: AppRouterInstance,
+              router: #{@framework.router_type},
               getData: () => #{data_type},
               setData: (data: #{data_type} | ((prev: #{data_type}) => #{data_type})) => void
             ) {

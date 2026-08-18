@@ -5,6 +5,7 @@ require 'fileutils'
 require 'set'
 require_relative '../core/config_manager'
 require_relative '../core/generated_marker'
+require_relative '../core/frameworks'
 require_relative 'style_loader'
 
 module RjuiTools
@@ -20,6 +21,7 @@ module RjuiTools
         @data_dir = File.join(@source_path, @config['data_directory'] || 'src/generated/data')
         @styles_dir = File.join(@source_path, @config['styles_directory'] || 'Styles')
         @use_typescript = @config['typescript'] != false
+        @framework = Core::Frameworks.for(@config)
       end
 
       def generate_hooks
@@ -189,16 +191,13 @@ module RjuiTools
         marker_footer = Core::GeneratedMarker.comment_footer
 
         <<~TS
-          "use client";
-
-          #{marker_header}
+          #{@framework.use_client_prefix}#{marker_header}
 
           import { useRef, useState } from "react";
-          import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-          import { #{data_type}, create#{data_type} } from "@/generated/data/#{data_type}";
+          #{@framework.router_type_import_prefix}import { #{data_type}, create#{data_type} } from "@/generated/data/#{data_type}";
           import { #{vm_type} } from "@/viewmodels/#{vm_type}";
 
-          export function use#{view_name}ViewModel(router: AppRouterInstance) {
+          export function use#{view_name}ViewModel(router: #{@framework.router_type}) {
             const [data, setData] = useState<#{data_type}>(create#{data_type}());
             const dataRef = useRef(data);
             dataRef.current = data;
@@ -247,9 +246,7 @@ module RjuiTools
         marker_footer = Core::GeneratedMarker.comment_footer
 
         <<~JS
-          "use client";
-
-          #{marker_header}
+          #{@framework.use_client_prefix}#{marker_header}
 
           import { useRef, useState } from "react";
           import { create#{data_type} } from "@/generated/data/#{data_type}";
@@ -257,7 +254,7 @@ module RjuiTools
 
           /**
            * Hook for #{view_name} page with ViewModel
-           * @param {import("next/dist/shared/lib/app-router-context.shared-runtime").AppRouterInstance} router
+           * @param {#{@framework.router_type_jsdoc}} router
            */
           export function use#{view_name}ViewModel(router) {
             const [data, setData] = useState(create#{data_type}());

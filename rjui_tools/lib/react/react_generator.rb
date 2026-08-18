@@ -3,6 +3,7 @@
 require 'set'
 require_relative '../core/type_converter'
 require_relative '../core/generated_marker'
+require_relative '../core/frameworks'
 require_relative '../core/normalization'
 require_relative '../core/string_manager_core'
 require_relative 'converters/base_converter'
@@ -90,6 +91,7 @@ module RjuiTools
 
       def initialize(config)
         @config = config
+        @framework = Core::Frameworks.for(config)
         @use_tailwind = config['use_tailwind'] != false
         @extension_converters = load_extension_converters
         # Store extension converters in config so child converters can access them
@@ -278,7 +280,7 @@ module RjuiTools
         needs_auto_shrink = !auto_shrink_targets.empty?
         needs_client = needs_state || uses_string_manager || uses_extensions || needs_landscape || needs_focus ||
                        needs_collection_scroll || needs_relative_position || needs_auto_shrink || variants.any?
-        use_client = needs_client ? "\"use client\";\n\n" : ''
+        use_client = needs_client ? @framework.use_client_prefix : ''
 
         # Build React import
         react_hooks = []
@@ -292,8 +294,8 @@ module RjuiTools
         # Generate useMediaQuery import for landscape responsive support
         media_query_import = (needs_landscape || variants.any?) ? "\nimport { useMediaQuery } from '@/hooks/useMediaQuery';" : ''
 
-        # Generate Next.js Link import if needed
-        link_import = uses_link ? "\nimport Link from 'next/link';" : ''
+        # Generate the framework's Link import if needed
+        link_import = uses_link && !@framework.link_import_line.empty? ? "\n#{@framework.link_import_line}" : ''
 
         # Generate StringManager import if needed.
         # Generated components consume strings through the reactive hook so

@@ -2,6 +2,7 @@
 
 require 'fileutils'
 require_relative '../../core/config_manager'
+require_relative '../../core/frameworks'
 require_relative '../../core/generated_marker'
 require_relative '../../core/logger'
 
@@ -178,10 +179,9 @@ module RjuiTools
         end
 
         def string_manager_javascript_stub(strings_json, default_language, marker_header, marker_footer)
+          fw = Core::Frameworks.for(Core::ConfigManager.load_config)
           <<~JS
-            "use client";
-
-            #{marker_header}
+            #{fw.use_client_prefix}#{marker_header}
             // Manages multi-language string resources.
 
             import { useSyncExternalStore } from 'react';
@@ -301,10 +301,9 @@ module RjuiTools
         end
 
         def string_manager_typescript_stub(strings_json, default_language, marker_header, marker_footer)
+          fw = Core::Frameworks.for(Core::ConfigManager.load_config)
           <<~TS
-            "use client";
-
-            #{marker_header}
+            #{fw.use_client_prefix}#{marker_header}
             // Manages multi-language string resources.
 
             import { useSyncExternalStore } from 'react';
@@ -436,7 +435,8 @@ module RjuiTools
           network_image_path = File.join(extensions_dir, 'NetworkImage.tsx')
           unless File.exist?(network_image_path)
             template_path = File.join(File.dirname(__FILE__), '../../react/templates/network_image.tsx')
-            File.write(network_image_path, File.read(template_path))
+            fw = Core::Frameworks.for(config)
+            File.write(network_image_path, Core::Frameworks.apply_directive(File.read(template_path), fw))
             Core::Logger.success("Created built-in component: #{network_image_path}")
           end
 
