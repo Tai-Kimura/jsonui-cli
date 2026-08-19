@@ -441,29 +441,32 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
     end
   end
 
+  # Canon since rjui-label-linkable-binding-renders-raw: the converter no
+  # longer splits literals at build time — detection (URL AND phone), tel:
+  # sanitization and newline preservation live in the LinkifyText runtime so
+  # literal and bound text share one implementation. The anchor-tag contract
+  # (target/_blank, noopener) is pinned on the template in label_linkable_spec.
   describe 'linkable text rendering' do
-    it 'renders URLs as anchor tags' do
+    it 'routes literal text through the LinkifyText runtime' do
       converter = create_converter({
         'type' => 'Label',
         'text' => 'Visit https://example.com today',
         'linkable' => true
       })
       result = converter.convert
-      expect(result).to include('<a href="https://example.com"')
-      expect(result).to include('target="_blank"')
-      expect(result).to include('rel="noopener noreferrer"')
-      expect(result).to include('data-linkable="true"')
+      expect(result).to include('<LinkifyText')
+      expect(result).to include('text={`Visit https://example.com today`}')
+      expect(result).not_to include('<a href')
     end
 
-    it 'handles multiple URLs' do
+    it 'hands multiple URLs over intact for runtime detection' do
       converter = create_converter({
         'type' => 'Label',
         'text' => 'Check https://foo.com and https://bar.com',
         'linkable' => true
       })
       result = converter.convert
-      expect(result).to include('href="https://foo.com"')
-      expect(result).to include('href="https://bar.com"')
+      expect(result).to include('text={`Check https://foo.com and https://bar.com`}')
     end
   end
 

@@ -3,6 +3,7 @@
 require_relative '../spec_helper'
 require 'react/converters/network_image_converter'
 require 'react/converters/embed_converter'
+require 'react/converters/label_converter'
 
 # Built-in props contract: every JSX attribute a converter can emit onto a
 # built-in component (templates/*.tsx) must be declared in that component's
@@ -22,6 +23,11 @@ require 'react/converters/embed_converter'
 # project — so it lives here in the suite rather than in `jui build`.
 RSpec.describe 'built-in props contract' do
   TEMPLATES_DIR = File.expand_path('../../lib/react/templates', __dir__)
+
+  # React manages these itself: `ref` reaches the template through
+  # forwardRef, `key` never reaches the component at all. Neither can be
+  # declared in a props interface, so the subset check ignores them.
+  REACT_MANAGED_ATTRS = %w[ref key].freeze
 
   def props_interface_keys(template_file, interface_name)
     source = File.read(File.join(TEMPLATES_DIR, template_file))
@@ -85,6 +91,44 @@ RSpec.describe 'built-in props contract' do
       # build_style_attr fires only for bound/dynamic styles; keep the channel
       # declared so a bound width/margin cannot reopen the class.
       expect(props_interface_keys('network_image.tsx', 'NetworkImageProps')).to include('style')
+    end
+  end
+
+  describe 'LinkifyText (Label linkable)' do
+    let(:maximal_node) do
+      {
+        'type' => 'Label',
+        'id' => 'notes_label',
+        'linkable' => true,
+        'text' => '@{notesText}',
+        'onClick' => '@{onNotesTapped}',
+        'autoShrink' => true, # rides the measurement ref on the root
+        'testId' => 'notes-label',
+        'tag' => 'notes'
+      }
+    end
+
+    let(:jsx) do
+      RjuiTools::React::Converters::LabelConverter
+        .new(maximal_node, { 'use_tailwind' => true }).convert
+    end
+
+    it 'pins the emit surface exactly (a new emit must extend this pin AND the props)' do
+      surface = emitted_attribute_names(jsx, 'LinkifyText') - REACT_MANAGED_ATTRS
+      expect(surface.sort).to eq(
+        %w[className data-tag data-testid id onClick text].sort
+      )
+    end
+
+    it 'declares every emittable attribute in LinkifyTextProps' do
+      declared = props_interface_keys('linkify_text.tsx', 'LinkifyTextProps')
+      undeclared = emitted_attribute_names(jsx, 'LinkifyText') - declared - REACT_MANAGED_ATTRS
+      expect(undeclared).to eq([]),
+        "converter can emit #{undeclared.join(', ')} but LinkifyTextProps does not declare them"
+    end
+
+    it 'declares the bound-style channel (style) even though the maximal node does not bind one' do
+      expect(props_interface_keys('linkify_text.tsx', 'LinkifyTextProps')).to include('style')
     end
   end
 

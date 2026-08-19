@@ -1122,6 +1122,12 @@ module RjuiTools
           components << 'NetworkImage'
         end
 
+        # Label linkable renders through the LinkifyText built-in — both the
+        # literal and bound text shapes, and both arms of a bound-flag ternary.
+        if type == 'Label' && json['linkable']
+          components << 'LinkifyText'
+        end
+
         # Embed type uses EmbedContainer runtime helper (init-emitted into extensions)
         if type == 'Embed'
           components << 'EmbedContainer'

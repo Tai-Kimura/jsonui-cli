@@ -448,6 +448,15 @@ module RjuiTools
             Core::Logger.success("Created built-in component: #{embed_container_path}")
           end
 
+          # Create LinkifyText component (Label `linkable` runtime)
+          linkify_text_path = File.join(extensions_dir, 'LinkifyText.tsx')
+          unless File.exist?(linkify_text_path)
+            template_path = File.join(File.dirname(__FILE__), '../../react/templates/linkify_text.tsx')
+            fw = Core::Frameworks.for(config)
+            File.write(linkify_text_path, Core::Frameworks.apply_directive(File.read(template_path), fw))
+            Core::Logger.success("Created built-in component: #{linkify_text_path}")
+          end
+
           # Create Configuration template (FontSpec / Configuration.Font.fontProvider)
           # so generated components can `import { Configuration } from '@/lib/jsonui/Configuration'`.
           lib_dir = config['lib_directory'] || 'src/lib/jsonui'

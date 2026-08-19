@@ -686,29 +686,30 @@ module RjuiTools
           classes.reject { |c| c.nil? || c.empty? }.join(' ')
         end
 
-        # Render linkable text (auto-detect URLs and make them clickable)
+        # Render linkable text: both shapes (literal and bound) route through
+        # the LinkifyText built-in, whose RUNTIME detection is what makes the
+        # declared URL/phone auto-linking work for bound text at all — a
+        # build-time split can only ever see literal strings
+        # (rjui-label-linkable-binding-renders-raw). URL/phone regexes, tel:
+        # sanitization and newline preservation live in the template so both
+        # shapes share one implementation and cannot drift.
         def render_linkable_text(indent, id_attr, class_attr, style_attr, onclick_attr, testid_attr, tag_attr)
+          "#{indent_str(indent)}<LinkifyText#{id_attr}#{class_attr}#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}#{linkify_text_prop} />"
+        end
+
+        # The text prop for LinkifyText: strings.json key, bound expression
+        # (whole-value or interpolated), or escaped literal — the same
+        # resolution ladder the plain-text path walks.
+        def linkify_text_prop
           text = attributes['text'] || ''
-
-          # For React, we'll render with a data attribute and let the app handle link detection
-          # Or use a simple regex-based approach
-          lines = []
-          lines << "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr} data-linkable=\"true\">"
-
-          # Simple URL detection
-          url_regex = /(https?:\/\/[^\s]+)/
-          parts = text.split(url_regex)
-
-          parts.each do |part|
-            if part.match?(url_regex)
-              lines << "#{indent_str(indent + 2)}<a href=\"#{part}\" target=\"_blank\" rel=\"noopener noreferrer\" className=\"text-blue-500 underline\">#{part}</a>"
-            else
-              lines << "#{indent_str(indent + 2)}#{escape_jsx_text(part)}" unless part.empty?
-            end
+          if (resolved = convert_string_key(text))
+            " text=#{resolved}"
+          elsif has_binding?(text)
+            " text={#{bound_value_expr(text)}}"
+          else
+            escaped = text.gsub('\\', '\\\\').gsub('`', '\\`').gsub('${', '\\${')
+            " text={`#{escaped}`}"
           end
-
-          lines << "#{indent_str(indent)}</span>"
-          lines.join("\n")
         end
 
         def escape_jsx_text(text)
