@@ -42,8 +42,14 @@ push せず、rsync/sync_tool による同期のみ。
     直 git URL で入れているため、**rev を書かないとタグ指定でインストールしても
     兄弟だけ既定ブランチ**に解決される（= 消費側 CI のツール固定が宣言側で崩れる）。
     同じ `test_version_lockstep.py` が root との一致を強制する。
-  - リリース手順: テスト green → commit → push → `git tag vX.Y.Z` →
-    `git push origin vX.Y.Z` →（shared/core を触っていれば）MCP snapshot 更新。
+  - リリース手順: テスト green → commit → `git tag vX.Y.Z` →
+    **`git push --atomic origin main vX.Y.Z`**（main とタグを 1 回で押す）→
+    （shared/core を触っていれば）MCP snapshot 更新。
+  - **main とタグを別々に push しない**。ピン導入後、release commit は
+    「まだ存在しないタグ」を宣言している状態なので、その隙間に main HEAD から
+    `pip install` した人は**インストールごと失敗する**（兄弟の checkout が落ち、
+    `Failed to build 'jsonui-test-cli'`。実測 2026-08-20）。
+    release commit の CI 自体は `--no-deps` なので取りに行かず影響を受けない。
 - **ソース SHA の刻印（ツールチェーン座標）**:
   - `installer/bootstrap.sh` が clone/update 直後・`.git` 削除前に `SOURCE_SHA` を
     書く（インストール先は git リポではないため）。
