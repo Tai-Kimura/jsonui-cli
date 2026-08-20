@@ -7,6 +7,7 @@ especially FastAPI + Pydantic v2 — are OpenAPI 3.1 full of:
 - Optional fields as ``anyOf: [X, {"type": "null"}]``
 - 3.1 type arrays ``type: ["string", "null"]``
 - ``allOf: [{"$ref": ...}]`` wrappers (added around refs to carry defaults)
+- ``Literal[X]`` fields as ``const: X`` (3.0 spells this ``enum: [X]``)
 - auto-generated ``title`` on every schema
 - auto-added 422 (HTTPValidationError) on every endpoint
 
@@ -200,6 +201,16 @@ def normalize_schema(schema: Any, resolver: _Resolver,
             node["required"] = req
         else:
             node.pop("required")
+
+    # 3.1 `const: X` is the single-value constraint 3.0 spells `enum: [X]`
+    # (3.0 has no `const`, so a hand-written docs side can only use the enum
+    # form). Fold it in before the enum rules below so null-folding and
+    # sorting apply identically, and so the difference — when there is one —
+    # surfaces under the closed comparison key `enum` rather than a key no
+    # comparison ever reads. A node declaring both is the intersection;
+    # const is the narrower constraint, so it wins.
+    if "const" in node:
+        node["enum"] = [node.pop("const")]
 
     # enum: drop null member (folded into nullable), sort for stable compare
     if isinstance(node.get("enum"), list):

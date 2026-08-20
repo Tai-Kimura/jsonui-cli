@@ -65,6 +65,28 @@ class NormalizeSchemaTests(unittest.TestCase):
         self.assertEqual(out["enum"], ["a", "b"])
         self.assertTrue(out["nullable"])
 
+    def test_const_is_the_31_spelling_of_a_single_value_enum(self):
+        for value in (True, "invited", 3):
+            self.assertEqual(self.norm({"type": "string", "const": value}),
+                             self.norm({"type": "string", "enum": [value]}))
+
+    def test_const_folds_inside_the_31_optional_wrappers(self):
+        self.assertEqual(
+            self.norm({"anyOf": [{"type": "string", "const": "x"},
+                                 {"type": "null"}]}),
+            {"type": "string", "enum": ["x"], "nullable": True})
+        self.assertEqual(
+            self.norm({"allOf": [{"type": "string", "const": "x"}],
+                       "default": "x"}),
+            {"type": "string", "enum": ["x"]})
+
+    def test_const_narrows_a_co_declared_enum(self):
+        # Both keywords apply at once in JSON Schema, so the effective
+        # constraint is the intersection — const is the narrower one.
+        self.assertEqual(
+            self.norm({"type": "string", "enum": ["a", "b"], "const": "a"}),
+            {"type": "string", "enum": ["a"]})
+
     def test_additional_properties_true_equals_absent(self):
         self.assertEqual(self.norm({"type": "object",
                                     "additionalProperties": True}),
@@ -545,3 +567,101 @@ class ComparisonKeySeverityTests(unittest.TestCase):
             ignore_keys=frozenset({"format"}))
         self.assertEqual(
             [r.status for r in self._by_key(results, ".type")], ["mismatch"])
+
+
+class ConstVsEnumTests(unittest.TestCase):
+    """`Literal[X]` on the impl side vs `enum: [X]` in the docs.
+
+    OpenAPI 3.0 has no `const`, so a hand-written docs side can only spell a
+    single-value constraint as `enum: [X]`, while FastAPI + Pydantic v2 emit
+    3.1 `const: X` for `Literal[X]`. Neither side can move: dropping the
+    Literal loses real contract information, and `ignore_schema_keys:
+    ["enum"]` would take the genuine enum drift down with the noise. In a
+    real 178-path backend this one pattern was 37 of 96 mismatches, burying
+    19 real ones.
+    """
+
+    def _diff(self, doc_schema, impl_schema, **kwargs):
+        def spec(version, schema):
+            return {"openapi": version, "paths": {"/x": {"get": {"responses": {
+                "200": {"content": {"application/json": {
+                    "schema": schema}}}}}}}}
+        return diff_specs(
+            normalize_spec(spec("3.0.3", doc_schema), "doc"),
+            normalize_spec(spec("3.1.0", impl_schema), "impl"),
+            ignore_paths=list(DEFAULT_IGNORE_PATHS),
+            ignore_codes=set(DEFAULT_IGNORE_RESPONSE_CODES),
+            **kwargs)[0]
+
+    def test_literal_response_flag_is_not_a_difference(self):
+        results = self._diff(
+            {"type": "object", "required": ["ok"],
+             "properties": {"ok": {"type": "boolean", "enum": [True]}}},
+            {"type": "object", "required": ["ok"],
+             "properties": {"ok": {"type": "boolean", "const": True,
+                                   "title": "Ok"}}})
+        self.assertEqual([r.status for r in results], ["ok"], results)
+
+    def test_it_is_not_boolean_specific(self):
+        results = self._diff(
+            {"type": "object",
+             "properties": {"status": {"type": "string",
+                                       "enum": ["invited"]}}},
+            {"type": "object",
+             "properties": {"status": {"type": "string",
+                                       "const": "invited"}}})
+        self.assertEqual([r.status for r in results], ["ok"], results)
+
+    def test_a_drifted_literal_still_gates(self):
+        # The half the report did not ask for: before the fold, `const` was
+        # compared by nothing at all, so two DIFFERENT const values passed
+        # as ok. Equivalence must not become blindness.
+        results = self._diff(
+            {"type": "object",
+             "properties": {"status": {"type": "string",
+                                       "enum": ["invited"]}}},
+            {"type": "object",
+             "properties": {"status": {"type": "string",
+                                       "const": "active"}}})
+        hit = [r for r in results if r.target.endswith("body.status.enum")]
+        self.assertEqual([r.status for r in hit], ["mismatch"], results)
+        self.assertEqual(hit[0].expected, "invited")
+
+    def test_two_different_consts_are_not_equal(self):
+        # Nothing compared `const` before the fold, so a 3.1 doc side and a
+        # 3.1 impl side pinning DIFFERENT literals reported ok. Folding both
+        # into enum is what makes that difference visible at all.
+        def spec(literal):
+            return {"openapi": "3.1.0", "paths": {"/x": {"get": {"responses": {
+                "200": {"content": {"application/json": {"schema": {
+                    "type": "object",
+                    "properties": {"s": {"type": "string",
+                                         "const": literal}}}}}}}}}}}
+        results, _ = diff_specs(
+            normalize_spec(spec("invited"), "doc"),
+            normalize_spec(spec("active"), "impl"),
+            ignore_paths=list(DEFAULT_IGNORE_PATHS),
+            ignore_codes=set(DEFAULT_IGNORE_RESPONSE_CODES))
+        hit = [r for r in results if r.target.endswith("body.s.enum")]
+        self.assertEqual([r.status for r in hit], ["mismatch"], results)
+
+    def test_a_widened_impl_still_gates(self):
+        # docs pin one value, impl accepts a set — the union widened.
+        results = self._diff(
+            {"type": "object",
+             "properties": {"s": {"type": "string", "enum": ["a"]}}},
+            {"type": "object",
+             "properties": {"s": {"type": "string", "enum": ["a", "b"]}}})
+        hit = [r for r in results if r.target.endswith("body.s.enum")]
+        self.assertEqual([r.status for r in hit], ["mismatch"], results)
+
+    def test_const_answers_to_the_enum_comparison_key(self):
+        # A const difference surfaces under `enum`, so the closed key set
+        # from 1.6.10 keeps covering it — no sixth key to declare.
+        results = self._diff(
+            {"type": "object",
+             "properties": {"s": {"type": "string", "enum": ["a"]}}},
+            {"type": "object",
+             "properties": {"s": {"type": "string", "const": "b"}}},
+            ignore_keys=frozenset({"enum"}))
+        self.assertEqual([r.status for r in results], ["ok"], results)
