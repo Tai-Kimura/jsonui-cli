@@ -98,9 +98,15 @@ jobs:
       - name: Install test_tools (dev)
         working-directory: test_tools
         run: python -m pip install -e ".[dev]"
+      # --no-deps because the only dependency is that sibling, already
+      # installed editable above (its dev extras are the same pytest pair).
+      # Without it pip re-fetches the pinned release from GitHub and REPLACES
+      # the editable install, so the suite would exercise the released
+      # sibling instead of this working tree — measured 2026-08-20, and the
+      # reason the ordering above did not do what it says on its own.
       - name: Install document_tools (dev)
         working-directory: document_tools
-        run: python -m pip install -e ".[dev]"
+        run: python -m pip install -e ".[dev]" --no-deps
       - name: Run unit tests
         working-directory: jui_tools
         run: python -m unittest discover -s tests -v

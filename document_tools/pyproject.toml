@@ -23,8 +23,13 @@ keywords = ["jsonui", "documentation", "html", "markdown", "mermaid"]
 # lives in the sibling `test_tools` package. Undeclared, `jsonui-doc --help`
 # died on a plain install — every developer machine has both editable, so it
 # only surfaced the first time a CI job installed this package alone.
+#
+# The tag MUST match the repo-root VERSION, and moves with it on every
+# release: without a rev, installing this package at a tag still resolved
+# the sibling to the default branch, so a pinned CI could not tell a tool
+# change from an implementation change. test_packaging_pin.py enforces it.
 dependencies = [
-    "jsonui-test-cli @ git+https://github.com/Tai-Kimura/jsonui-cli.git#subdirectory=test_tools",
+    "jsonui-test-cli @ git+https://github.com/Tai-Kimura/jsonui-cli.git@v1.6.12#subdirectory=test_tools",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

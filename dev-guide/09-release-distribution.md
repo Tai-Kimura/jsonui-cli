@@ -37,6 +37,11 @@ push せず、rsync/sync_tool による同期のみ。
     （バンプは root + Ruby 側 3 箇所を同時更新。漏れると python-suite が落ちる）。
   - **`sjui_tools/VERSION` には絶対に CLI 版数を書かない** — そこは
     SwiftJsonUI **ライブラリ**版数のスロット（`library_setup.rb` が読む）。
+  - **バンプ対象にもう 1 箇所**: `document_tools/pyproject.toml` の
+    `jsonui-test-cli @ git+…@vX.Y.Z#subdirectory=test_tools`。同一リポの兄弟を
+    直 git URL で入れているため、**rev を書かないとタグ指定でインストールしても
+    兄弟だけ既定ブランチ**に解決される（= 消費側 CI のツール固定が宣言側で崩れる）。
+    同じ `test_version_lockstep.py` が root との一致を強制する。
   - リリース手順: テスト green → commit → push → `git tag vX.Y.Z` →
     `git push origin vX.Y.Z` →（shared/core を触っていれば）MCP snapshot 更新。
 - **ソース SHA の刻印（ツールチェーン座標）**:
