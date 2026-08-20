@@ -50,6 +50,13 @@ push せず、rsync/sync_tool による同期のみ。
     `pip install` した人は**インストールごと失敗する**（兄弟の checkout が落ち、
     `Failed to build 'jsonui-test-cli'`。実測 2026-08-20）。
     release commit の CI 自体は `--no-deps` なので取りに行かず影響を受けない。
+  - **タグを打ったら、配布が終わるまで main に何も push しない**。
+    `bootstrap.sh` は `origin/main` を取るので、タグの後に 1 コミットでも足すと
+    `~/.jsonui-cli/SOURCE_SHA` と consumer の `sync-meta.json` が
+    **タグから外れた SHA**になる（v1.6.13 で実際に踏み、consumer に指摘された）。
+    内容が同一でも、4 点照合（VERSION / タグ / 報告書 / 現物）をする受け手が
+    引っかかる。**リリースに付随する編集は release commit に入れてからタグを打つ**。
+    後から気づいた分は、配布を終えてから次の commit に回す。
 - **ソース SHA の刻印（ツールチェーン座標）**:
   - `installer/bootstrap.sh` が clone/update 直後・`.git` 削除前に `SOURCE_SHA` を
     書く（インストール先は git リポではないため）。
