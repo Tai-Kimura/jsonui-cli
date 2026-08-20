@@ -665,3 +665,83 @@ class ConstVsEnumTests(unittest.TestCase):
              "properties": {"s": {"type": "string", "const": "b"}}},
             ignore_keys=frozenset({"enum"}))
         self.assertEqual([r.status for r in results], ["ok"], results)
+
+
+class FormatPresenceVsValueTests(unittest.TestCase):
+    """`format` splits into two findings that wear the same word.
+
+    One side carrying a format the other omits is an ANNOTATION difference
+    (`format_presence`): same type, same wire, same generated DTO — what a
+    docs side written stricter than the implementation looks like. Both
+    sides declaring a format and DISAGREEING (`format`) is a contradiction
+    about what the value is and belongs on the gate. Silencing the first
+    must not blind a project to the second.
+    """
+
+    def _spec(self, fmt):
+        prop = {"type": "string"}
+        if fmt is not None:
+            prop["format"] = fmt
+        return {"openapi": "3.0.3", "paths": {"/x": {"get": {"responses": {
+            "200": {"content": {"application/json": {"schema": {
+                "type": "object", "properties": {"v": prop}}}}}}}}}}
+
+    def _diff(self, doc_fmt, impl_fmt, **kwargs):
+        results, _ = diff_specs(
+            normalize_spec(self._spec(doc_fmt), "doc"),
+            normalize_spec(self._spec(impl_fmt), "impl"),
+            ignore_paths=list(DEFAULT_IGNORE_PATHS),
+            ignore_codes=set(DEFAULT_IGNORE_RESPONSE_CODES),
+            **kwargs)
+        return [r for r in results if r.target.endswith(".format")]
+
+    # --- default: both kinds still gate, exactly as before the split ---
+    def test_one_sided_gates_by_default(self):
+        self.assertEqual([r.status for r in self._diff("uuid", None)],
+                         ["mismatch"])
+
+    def test_conflicting_values_gate_by_default(self):
+        self.assertEqual([r.status for r in self._diff("date-time", "uuid")],
+                         ["mismatch"])
+
+    # --- the point of the split ---
+    def test_presence_downgrade_leaves_conflicting_values_gating(self):
+        self.assertEqual(
+            [r.status for r in self._diff("uuid", None,
+                                          warn_keys=frozenset({"format_presence"}))],
+            ["warning"])
+        self.assertEqual(
+            [r.status for r in self._diff("date-time", "uuid",
+                                          warn_keys=frozenset({"format_presence"}))],
+            ["mismatch"])
+
+    def test_presence_ignore_leaves_conflicting_values_gating(self):
+        self.assertEqual(
+            self._diff("uuid", None, ignore_keys=frozenset({"format_presence"})), [])
+        self.assertEqual(
+            [r.status for r in self._diff("date-time", "uuid",
+                                          ignore_keys=frozenset({"format_presence"}))],
+            ["mismatch"])
+
+    def test_impl_side_only_format_is_also_presence(self):
+        # EmailStr adds `format: email` the docs never claimed — same class.
+        self.assertEqual(
+            [r.status for r in self._diff(None, "email",
+                                          warn_keys=frozenset({"format_presence"}))],
+            ["warning"])
+
+    # --- backward compatibility: `format` remains the umbrella ---
+    def test_umbrella_downgrade_still_covers_both_kinds(self):
+        # Configs written before the split must not change meaning; a
+        # re-gated 500-finding class would turn a consumer's CI red.
+        for doc_fmt, impl_fmt in [("uuid", None), ("date-time", "uuid")]:
+            self.assertEqual(
+                [r.status for r in self._diff(doc_fmt, impl_fmt,
+                                              warn_keys=frozenset({"format"}))],
+                ["warning"], f"{doc_fmt} vs {impl_fmt}")
+
+    def test_umbrella_ignore_still_covers_both_kinds(self):
+        for doc_fmt, impl_fmt in [("uuid", None), ("date-time", "uuid")]:
+            self.assertEqual(
+                self._diff(doc_fmt, impl_fmt, ignore_keys=frozenset({"format"})),
+                [], f"{doc_fmt} vs {impl_fmt}")

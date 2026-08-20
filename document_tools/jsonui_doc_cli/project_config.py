@@ -172,7 +172,23 @@ def _str_list(value, context: str) -> list[str]:
 # The schema comparisons openapi-diff performs. Closed set on purpose: a
 # typo'd key would otherwise silently widen nothing and the project would
 # believe it had suppressed noise it is still gating on.
-SCHEMA_COMPARISON_KEYS = ("type", "nullable", "enum", "required", "format")
+#
+# `format` splits in two. One side declaring a format the other omits is an
+# annotation difference (`format_presence`) — same type, same wire, same
+# generated DTO, and the shape a docs side written stricter than the
+# implementation takes. Both sides declaring a format and disagreeing is a
+# contradiction about what the value is, and stays under `format`. Naming
+# `format` covers both, so a config written before the split is unchanged in
+# meaning; naming `format_presence` silences only the annotation class.
+SCHEMA_COMPARISON_KEYS = ("type", "nullable", "enum", "required", "format",
+                          "format_presence")
+
+# key -> the narrower kinds a declaration of it also covers
+KEY_COVERAGE = {"format": ("format", "format_presence")}
+
+
+def _key_coverage(key: str) -> tuple[str, ...]:
+    return KEY_COVERAGE.get(key, (key,))
 
 
 def _schema_keys(value, context: str) -> list[str]:
@@ -253,10 +269,17 @@ def load_checks(config: dict, project_root: Path) -> list[CheckDecl]:
             decl.downgrade_to_warning = _schema_keys(
                 raw.get("downgrade_to_warning"), f"{ctx}.downgrade_to_warning"
             )
-            both = set(decl.ignore_schema_keys) & set(decl.downgrade_to_warning)
+            # Compare what each list actually covers, so the umbrella `format`
+            # in one list and the narrower `format_presence` in the other is
+            # caught too: the dropped comparison would swallow the downgrade.
+            ignored = {k for key in decl.ignore_schema_keys
+                       for k in _key_coverage(key)}
+            downgraded = {k for key in decl.downgrade_to_warning
+                          for k in _key_coverage(key)}
+            both = ignored & downgraded
             if both:
                 raise ProjectConfigError(
-                    f"{ctx} ('{name}'): {sorted(both)} listed in BOTH "
+                    f"{ctx} ('{name}'): {sorted(both)} covered by BOTH "
                     "ignore_schema_keys and downgrade_to_warning — a dropped "
                     "comparison cannot also be reported"
                 )

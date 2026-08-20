@@ -111,6 +111,19 @@ def _untyped_vs_typed(expected, actual) -> bool:
     return actual.get("type") in (None, "object")
 
 
+# A declaration of the umbrella key also covers its narrower kinds, so a
+# config written before a key was split keeps meaning exactly what it meant.
+KEY_UMBRELLA = {"format_presence": "format"}
+
+
+def _key_ignored(key: str, ignore_keys: frozenset[str]) -> bool:
+    return key in ignore_keys or KEY_UMBRELLA.get(key, "") in ignore_keys
+
+
+def _key_downgraded(key: str, warn_keys: frozenset[str]) -> bool:
+    return key in warn_keys or KEY_UMBRELLA.get(key, "") in warn_keys
+
+
 def _schema_diffs(expected, actual, at: str,
                   skips: list[tuple[str, str]] | None = None,
                   ignore_keys: frozenset[str] = frozenset()
@@ -135,15 +148,15 @@ def _schema_diffs(expected, actual, at: str,
 
     diffs: list[tuple[str, str, str, str]] = []
     e_type, a_type = expected.get("type"), actual.get("type")
-    if e_type != a_type and "type" not in ignore_keys:
+    if e_type != a_type and not _key_ignored("type", ignore_keys):
         diffs.append((f"{at}.type", str(e_type), str(a_type), "type"))
         return diffs  # type changed — deeper comparison is noise
-    if ("nullable" not in ignore_keys
+    if (not _key_ignored("nullable", ignore_keys)
             and bool(expected.get("nullable")) != bool(actual.get("nullable"))):
         diffs.append((f"{at}.nullable",
                       str(bool(expected.get("nullable"))),
                       str(bool(actual.get("nullable"))), "nullable"))
-    if "enum" not in ignore_keys and ("enum" in expected or "enum" in actual):
+    if not _key_ignored("enum", ignore_keys) and ("enum" in expected or "enum" in actual):
         e_enum = set(map(str, expected.get("enum", [])))
         a_enum = set(map(str, actual.get("enum", [])))
         if e_enum != a_enum:
@@ -158,7 +171,7 @@ def _schema_diffs(expected, actual, at: str,
                           "; ".join(parts), "enum"))
     e_req = set(expected.get("required", []))
     a_req = set(actual.get("required", []))
-    if "required" not in ignore_keys and e_req != a_req:
+    if not _key_ignored("required", ignore_keys) and e_req != a_req:
         diffs.append((f"{at}.required", str(sorted(e_req)),
                       str(sorted(a_req)), "required"))
 
@@ -179,10 +192,24 @@ def _schema_diffs(expected, actual, at: str,
                                    actual.get("items", {}), f"{at}[]", skips,
                                    ignore_keys))
 
-    # string format matters (date-time / uuid / binary drive DTO types)
-    if "format" not in ignore_keys and expected.get("format") != actual.get("format"):
-        diffs.append((f"{at}.format", str(expected.get("format")),
-                      str(actual.get("format")), "format"))
+    # string format matters (date-time / uuid / binary drive DTO types).
+    #
+    # Two different findings wear the same word. One side carrying a format
+    # the other omits is an ANNOTATION difference: the type agrees, the wire
+    # agrees, the generated DTO agrees, and it is what a docs side written
+    # stricter than the implementation looks like (`format: uuid` over
+    # FastAPI's bare `str`, or `EmailStr` adding `format: email` the docs
+    # never claimed). Both sides declaring a format and DISAGREEING is a
+    # contradiction about what the value is — `date-time` against `uuid` is
+    # real drift and belongs on the gate. They get distinct comparison keys
+    # so a project can silence the first without going blind to the second;
+    # `format` still covers both, so configs written before the split keep
+    # their meaning exactly.
+    e_fmt, a_fmt = expected.get("format"), actual.get("format")
+    if e_fmt != a_fmt:
+        key = "format" if (e_fmt is not None and a_fmt is not None) else "format_presence"
+        if not _key_ignored(key, ignore_keys):
+            diffs.append((f"{at}.format", str(e_fmt), str(a_fmt), key))
     return diffs
 
 
@@ -214,7 +241,7 @@ def _compare_operation(doc_op: NormOperation, impl_op: NormOperation,
     def add_schema_diff(target: str, exp: str, act: str, key: str) -> None:
         """One schema difference at the severity the project declared."""
         nonlocal clean
-        if key and key in warn_keys:
+        if key and _key_downgraded(key, warn_keys):
             results.append(ResultItem(
                 target, "warning", "proof", expected=exp, actual=act,
                 message=f"'{key}' differences are declared non-gating "
