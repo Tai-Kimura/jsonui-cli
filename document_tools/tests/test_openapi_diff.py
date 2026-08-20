@@ -446,3 +446,102 @@ class IgnorePathsAllDirectionsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ComparisonKeySeverityTests(unittest.TestCase):
+    """`ignore_schema_keys` / `downgrade_to_warning` (CheckDecl).
+
+    A doc that is deliberately STRICTER than the implementation (`format:
+    uuid` over FastAPI's bare `str`) produced one mismatch per documented
+    field — 84% of findings in a real 178-path backend — burying the enum
+    drift the checker exists to catch. Severity per comparison key is the
+    lever: the project declares which comparisons gate, without loosening
+    the docs or tightening the API's accepted values to quiet the tool.
+    """
+
+    DOC = {"openapi": "3.0.3", "paths": {"/x": {"get": {"responses": {
+        "200": {"content": {"application/json": {"schema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string", "format": "uuid"},
+                "mode": {"type": "string", "enum": ["daily", "time_slot"]},
+            }}}}}}}}}}
+    IMPL = {"openapi": "3.1.0", "paths": {"/x": {"get": {"responses": {
+        "200": {"content": {"application/json": {"schema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "mode": {"type": "string",
+                         "enum": ["daily", "time_slot", "immediate"]},
+            }}}}}}}}}}
+
+    def _diff(self, **kwargs):
+        return diff_specs(
+            normalize_spec(self.DOC, "doc"), normalize_spec(self.IMPL, "impl"),
+            ignore_paths=list(DEFAULT_IGNORE_PATHS),
+            ignore_codes=set(DEFAULT_IGNORE_RESPONSE_CODES),
+            **kwargs)
+
+    def _by_key(self, results, suffix):
+        return [r for r in results if r.target.endswith(suffix)]
+
+    def test_baseline_both_gate(self):
+        results, _ = self._diff()
+        self.assertEqual(
+            [r.status for r in self._by_key(results, ".format")], ["mismatch"])
+        self.assertEqual(
+            [r.status for r in self._by_key(results, ".enum")], ["mismatch"])
+
+    def test_ignore_drops_the_comparison_entirely(self):
+        results, _ = self._diff(ignore_keys=frozenset({"format"}))
+        self.assertEqual(self._by_key(results, ".format"), [])
+        # the finding the checker exists for survives untouched
+        self.assertEqual(
+            [r.status for r in self._by_key(results, ".enum")], ["mismatch"])
+
+    def test_downgrade_keeps_the_finding_but_not_the_gate(self):
+        results, _ = self._diff(warn_keys=frozenset({"format"}))
+        fmt = self._by_key(results, ".format")
+        self.assertEqual([r.status for r in fmt], ["warning"])
+        # detail is preserved — that is the point over ignoring
+        self.assertEqual(fmt[0].expected, "uuid")
+        self.assertEqual(fmt[0].actual, "None")
+        self.assertIn("downgrade_to_warning", fmt[0].message)
+
+    def test_downgraded_only_operation_is_gating_clean(self):
+        impl = {"openapi": "3.1.0", "paths": {"/x": {"get": {"responses": {
+            "200": {"content": {"application/json": {"schema": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "mode": {"type": "string",
+                             "enum": ["daily", "time_slot"]},
+                }}}}}}}}}}
+        results, _ = diff_specs(
+            normalize_spec(self.DOC, "doc"), normalize_spec(impl, "impl"),
+            ignore_paths=list(DEFAULT_IGNORE_PATHS),
+            ignore_codes=set(DEFAULT_IGNORE_RESPONSE_CODES),
+            warn_keys=frozenset({"format"}))
+        statuses = {r.status for r in results}
+        self.assertIn("warning", statuses)
+        self.assertIn("ok", statuses)          # operation still reported ok
+        self.assertNotIn("mismatch", statuses)
+
+    def test_ignoring_a_key_cannot_hide_a_sibling_difference(self):
+        # `type` differs AND `format` differs; ignoring format must not
+        # swallow the type finding (the node still differs).
+        doc = {"openapi": "3.0.3", "paths": {"/x": {"get": {"responses": {
+            "200": {"content": {"application/json": {"schema": {
+                "type": "object",
+                "properties": {"n": {"type": "string", "format": "uuid"}}}}}}}}}}}
+        impl = {"openapi": "3.1.0", "paths": {"/x": {"get": {"responses": {
+            "200": {"content": {"application/json": {"schema": {
+                "type": "object",
+                "properties": {"n": {"type": "integer"}}}}}}}}}}}
+        results, _ = diff_specs(
+            normalize_spec(doc, "doc"), normalize_spec(impl, "impl"),
+            ignore_paths=list(DEFAULT_IGNORE_PATHS),
+            ignore_codes=set(DEFAULT_IGNORE_RESPONSE_CODES),
+            ignore_keys=frozenset({"format"}))
+        self.assertEqual(
+            [r.status for r in self._by_key(results, ".type")], ["mismatch"])

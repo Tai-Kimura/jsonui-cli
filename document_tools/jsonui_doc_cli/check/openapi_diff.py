@@ -112,31 +112,38 @@ def _untyped_vs_typed(expected, actual) -> bool:
 
 
 def _schema_diffs(expected, actual, at: str,
-                  skips: list[tuple[str, str]] | None = None
-                  ) -> list[tuple[str, str, str]]:
+                  skips: list[tuple[str, str]] | None = None,
+                  ignore_keys: frozenset[str] = frozenset()
+                  ) -> list[tuple[str, str, str, str]]:
     """Recursive structural diff of two normalized schemas.
-    Returns (location, expected-summary, actual-summary) triples.
+    Returns (location, expected-summary, actual-summary, comparison-key)
+    quads; the key is one of SCHEMA_COMPARISON_KEYS, or "" for a whole-node
+    or property-presence difference (those are structural — a project can
+    drop them per endpoint with ignore_paths, never per key).
+    `ignore_keys` drops those comparisons outright, so an ignored key cannot
+    even make a node "differ".
     With a `skips` accumulator, nodes where the impl is untyped while the
     doc is typed are collected as (location, expected-summary) instead of
     flooding one mismatch per documented field."""
     if expected == actual:
         return []
     if not isinstance(expected, dict) or not isinstance(actual, dict):
-        return [(at, _summ(expected), _summ(actual))]
+        return [(at, _summ(expected), _summ(actual), "")]
     if skips is not None and _untyped_vs_typed(expected, actual):
         skips.append((at, _summ(expected)))
         return []
 
-    diffs: list[tuple[str, str, str]] = []
+    diffs: list[tuple[str, str, str, str]] = []
     e_type, a_type = expected.get("type"), actual.get("type")
-    if e_type != a_type:
-        diffs.append((f"{at}.type", str(e_type), str(a_type)))
+    if e_type != a_type and "type" not in ignore_keys:
+        diffs.append((f"{at}.type", str(e_type), str(a_type), "type"))
         return diffs  # type changed — deeper comparison is noise
-    if bool(expected.get("nullable")) != bool(actual.get("nullable")):
+    if ("nullable" not in ignore_keys
+            and bool(expected.get("nullable")) != bool(actual.get("nullable"))):
         diffs.append((f"{at}.nullable",
                       str(bool(expected.get("nullable"))),
-                      str(bool(actual.get("nullable")))))
-    if "enum" in expected or "enum" in actual:
+                      str(bool(actual.get("nullable"))), "nullable"))
+    if "enum" not in ignore_keys and ("enum" in expected or "enum" in actual):
         e_enum = set(map(str, expected.get("enum", [])))
         a_enum = set(map(str, actual.get("enum", [])))
         if e_enum != a_enum:
@@ -148,32 +155,34 @@ def _schema_diffs(expected, actual, at: str,
             if added:
                 parts.append(f"impl adds: {added}")
             diffs.append((f"{at}.enum", ", ".join(sorted(e_enum)),
-                          "; ".join(parts)))
+                          "; ".join(parts), "enum"))
     e_req = set(expected.get("required", []))
     a_req = set(actual.get("required", []))
-    if e_req != a_req:
-        diffs.append((f"{at}.required", str(sorted(e_req)), str(sorted(a_req))))
+    if "required" not in ignore_keys and e_req != a_req:
+        diffs.append((f"{at}.required", str(sorted(e_req)),
+                      str(sorted(a_req)), "required"))
 
     e_props = expected.get("properties", {})
     a_props = actual.get("properties", {})
     for name in sorted(set(e_props) | set(a_props)):
         loc = f"{at}.{name}"
         if name not in a_props:
-            diffs.append((loc, _summ(e_props[name]), "(missing)"))
+            diffs.append((loc, _summ(e_props[name]), "(missing)", ""))
         elif name not in e_props:
-            diffs.append((loc, "(not in doc)", _summ(a_props[name])))
+            diffs.append((loc, "(not in doc)", _summ(a_props[name]), ""))
         else:
             diffs.extend(_schema_diffs(e_props[name], a_props[name], loc,
-                                       skips))
+                                       skips, ignore_keys))
 
     if "items" in expected or "items" in actual:
         diffs.extend(_schema_diffs(expected.get("items", {}),
-                                   actual.get("items", {}), f"{at}[]", skips))
+                                   actual.get("items", {}), f"{at}[]", skips,
+                                   ignore_keys))
 
     # string format matters (date-time / uuid / binary drive DTO types)
-    if expected.get("format") != actual.get("format"):
+    if "format" not in ignore_keys and expected.get("format") != actual.get("format"):
         diffs.append((f"{at}.format", str(expected.get("format")),
-                      str(actual.get("format"))))
+                      str(actual.get("format")), "format"))
     return diffs
 
 
@@ -193,10 +202,27 @@ def _summ(schema) -> str:
 def _compare_operation(doc_op: NormOperation, impl_op: NormOperation,
                        ignore_codes: set[str],
                        results: list[ResultItem],
-                       warnings: list[str]) -> bool:
-    """Compare one operation; append mismatches. Returns True if clean."""
+                       warnings: list[str],
+                       ignore_keys: frozenset[str] = frozenset(),
+                       warn_keys: frozenset[str] = frozenset()) -> bool:
+    """Compare one operation; append mismatches. Returns True if clean.
+    `clean` means gating-clean: a downgraded finding is recorded but leaves
+    the operation ok, so the summary still says which endpoints hold."""
     label = f"{doc_op.method} {doc_op.path}"
     clean = True
+
+    def add_schema_diff(target: str, exp: str, act: str, key: str) -> None:
+        """One schema difference at the severity the project declared."""
+        nonlocal clean
+        if key and key in warn_keys:
+            results.append(ResultItem(
+                target, "warning", "proof", expected=exp, actual=act,
+                message=f"'{key}' differences are declared non-gating "
+                        "(downgrade_to_warning)"))
+            return
+        results.append(ResultItem(target, "mismatch", "proof",
+                                  expected=exp, actual=act))
+        clean = False
 
     if doc_op.param_names != impl_op.param_names:
         warnings.append(
@@ -235,10 +261,9 @@ def _compare_operation(doc_op: NormOperation, impl_op: NormOperation,
                     if k != "nullable"}
         i_schema = {k: v for k, v in (i["schema"] or {}).items()
                     if k != "nullable"}
-        for loc, exp, act in _schema_diffs(d_schema, i_schema, "schema"):
-            results.append(ResultItem(f"{t} {loc}", "mismatch", "proof",
-                                      expected=exp, actual=act))
-            clean = False
+        for loc, exp, act, key in _schema_diffs(d_schema, i_schema, "schema",
+                                               None, ignore_keys):
+            add_schema_diff(f"{t} {loc}", exp, act, key)
 
     # requestBody
     if doc_op.request_body or impl_op.request_body:
@@ -259,11 +284,10 @@ def _compare_operation(doc_op: NormOperation, impl_op: NormOperation,
                     actual=f"required={i['required']}"))
                 clean = False
             body_skips: list[tuple[str, str]] = []
-            for loc, exp, act in _schema_diffs(
-                    d["schema"] or {}, i["schema"] or {}, "body", body_skips):
-                results.append(ResultItem(f"{t} {loc}", "mismatch", "proof",
-                                          expected=exp, actual=act))
-                clean = False
+            for loc, exp, act, key in _schema_diffs(
+                    d["schema"] or {}, i["schema"] or {}, "body", body_skips,
+                    ignore_keys):
+                add_schema_diff(f"{t} {loc}", exp, act, key)
             for loc, exp in body_skips:
                 results.append(ResultItem(
                     f"{t} {loc}", "skipped", "proof", expected=exp,
@@ -308,10 +332,9 @@ def _compare_operation(doc_op: NormOperation, impl_op: NormOperation,
                 message="doc does not declare a response schema — cannot verify"))
             continue
         resp_skips: list[tuple[str, str]] = []
-        for loc, exp, act in _schema_diffs(doc_s, impl_s, "body", resp_skips):
-            results.append(ResultItem(f"{t} {loc}", "mismatch", "proof",
-                                      expected=exp, actual=act))
-            clean = False
+        for loc, exp, act, key in _schema_diffs(doc_s, impl_s, "body",
+                                               resp_skips, ignore_keys):
+            add_schema_diff(f"{t} {loc}", exp, act, key)
         for loc, exp in resp_skips:
             results.append(ResultItem(
                 f"{t} {loc}", "skipped", "proof", expected=exp,
@@ -333,7 +356,10 @@ def _compare_operation(doc_op: NormOperation, impl_op: NormOperation,
 
 def diff_specs(doc: NormSpec, impl: NormSpec,
                ignore_paths: list[str],
-               ignore_codes: set[str]) -> tuple[list[ResultItem], list[str]]:
+               ignore_codes: set[str],
+               ignore_keys: frozenset[str] = frozenset(),
+               warn_keys: frozenset[str] = frozenset()
+               ) -> tuple[list[ResultItem], list[str]]:
     results: list[ResultItem] = []
     warnings: list[str] = list(doc.warnings) + list(impl.warnings)
 
@@ -364,7 +390,8 @@ def diff_specs(doc: NormSpec, impl: NormSpec,
         if (_path_ignored(doc_op.path, ignore_paths)
                 or _path_ignored(impl_op.path, ignore_paths)):
             continue
-        if _compare_operation(doc_op, impl_op, ignore_codes, results, warnings):
+        if _compare_operation(doc_op, impl_op, ignore_codes, results, warnings,
+                              ignore_keys, warn_keys):
             results.append(ResultItem(f"{doc_op.method} {doc_op.path}",
                                       "ok", "proof"))
 
@@ -385,7 +412,15 @@ def run_openapi_diff(decl, project_root: Path, run_command) -> CheckReport:
     injected by the runner (keeps subprocess policy in one place)."""
     api_dir = project_root / "docs" / "api"
     if not api_dir.is_dir():
-        raise OpenApiDiffError(f"docs/api not found under {project_root}")
+        # The location is fixed relative to the project the check is declared
+        # in; the `api_directory` setting addresses DTO generation, not this
+        # checker, so pointing it elsewhere does not move this lookup.
+        raise OpenApiDiffError(
+            f"docs/api not found under {project_root} — builtin:openapi-diff "
+            "always reads <project_root>/docs/api and does not consult the "
+            "'api_directory' setting; declare this check in the project that "
+            "contains docs/api"
+        )
     doc_spec, doc_files = load_doc_side(api_dir)
 
     code, stdout, stderr = run_command(decl.impl_openapi_command,
@@ -417,7 +452,10 @@ def run_openapi_diff(decl, project_root: Path, run_command) -> CheckReport:
             "excluded from comparison)"
         )
 
-    results, warnings = diff_specs(doc_spec, impl_spec, ignore_paths, ignore_codes)
+    results, warnings = diff_specs(
+        doc_spec, impl_spec, ignore_paths, ignore_codes,
+        frozenset(getattr(decl, "ignore_schema_keys", ()) or ()),
+        frozenset(getattr(decl, "downgrade_to_warning", ()) or ()))
     if scope_note:
         warnings.insert(0, scope_note)
 

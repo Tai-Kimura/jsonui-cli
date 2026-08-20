@@ -22,6 +22,8 @@ _STATUS_LABELS = {
     "missing_in_impl": ("DOC ONLY", "#e37400"),
     "missing_in_doc": ("IMPL ONLY", "#b05a00"),
     "skipped": ("SKIPPED", "#888"),
+    # Declared non-gating (downgrade_to_warning) — visible, never blocking.
+    "warning": ("WARNING", "#a06800"),
     "ok": ("OK", "#188038"),
 }
 
@@ -146,7 +148,8 @@ def generate_check_report_html(
     )
 
     parts.append("    <div class='chips'>")
-    for key in ("ok", "mismatch", "missing_in_impl", "missing_in_doc", "skipped"):
+    for key in ("ok", "mismatch", "missing_in_impl", "missing_in_doc",
+                "skipped", "warning"):
         parts.append(f"      <div class='chip'>{key}: <b>{s[key]}</b></div>")
     parts.append("    </div>")
 

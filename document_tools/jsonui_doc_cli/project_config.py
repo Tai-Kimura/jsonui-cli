@@ -55,6 +55,17 @@ class CheckDecl:
     impl_openapi_command: list[str] | None = None
     ignore_paths: list[str] = field(default_factory=list)
     ignore_response_codes: list[str] = field(default_factory=list)
+    # Per-comparison-key severity. A key names one schema comparison
+    # (`format`, `nullable`, `enum`, `required`, `type`), NOT a field path.
+    # ignore_schema_keys drops the comparison; downgrade_to_warning keeps the
+    # finding with its expected/actual detail but stops it gating CI. Both
+    # exist because a doc that is deliberately STRICTER than the impl
+    # (`format: uuid` over FastAPI's bare `str`) is not drift the project
+    # intends to fix — and silencing it by loosening the doc, or by tightening
+    # the impl (which changes what the API accepts), corrupts the thing being
+    # checked instead of the tool doing the checking.
+    ignore_schema_keys: list[str] = field(default_factory=list)
+    downgrade_to_warning: list[str] = field(default_factory=list)
     scope: str = "all"           # "all" | "generated" (honor api.schemas paths)
     api_path_filters: tuple = ()  # (include_globs, exclude_globs) when scope=generated
     # checker (full-checker plugin)
@@ -120,7 +131,16 @@ def parse_command(raw: str, project_root: Path, context: str) -> list[str]:
     The returned list is passed to subprocess with shell=False, so shell
     metacharacters in args are inert.
     """
-    if not isinstance(raw, str) or not raw.strip():
+    if not isinstance(raw, str):
+        # Naming the type given: an argv list is the intuitive guess here, and
+        # the old message ("must be a non-empty string") read as if the value
+        # were empty rather than the wrong shape.
+        raise ProjectConfigError(
+            f"{context}: command must be a string, got {type(raw).__name__}"
+            + (" — pass one command line, not an argv list"
+               if isinstance(raw, (list, tuple)) else "")
+        )
+    if not raw.strip():
         raise ProjectConfigError(f"{context}: command must be a non-empty string")
     tokens = shlex.split(raw)
     head = tokens[0]
@@ -147,6 +167,25 @@ def _str_list(value, context: str) -> list[str]:
     if not isinstance(value, list) or any(not isinstance(v, str) for v in value):
         raise ProjectConfigError(f"{context}: must be a list of strings")
     return value
+
+
+# The schema comparisons openapi-diff performs. Closed set on purpose: a
+# typo'd key would otherwise silently widen nothing and the project would
+# believe it had suppressed noise it is still gating on.
+SCHEMA_COMPARISON_KEYS = ("type", "nullable", "enum", "required", "format")
+
+
+def _schema_keys(value, context: str) -> list[str]:
+    keys = _str_list(value, context)
+    unknown = [k for k in keys if k not in SCHEMA_COMPARISON_KEYS]
+    if unknown:
+        raise ProjectConfigError(
+            f"{context}: unknown comparison key(s) {unknown} "
+            f"(available: {', '.join(SCHEMA_COMPARISON_KEYS)}). "
+            "These name schema comparisons, not field paths — use "
+            "ignore_paths for endpoints."
+        )
+    return keys
 
 
 def load_checks(config: dict, project_root: Path) -> list[CheckDecl]:
@@ -208,6 +247,19 @@ def load_checks(config: dict, project_root: Path) -> list[CheckDecl]:
             decl.ignore_response_codes = [
                 str(c) for c in raw.get("ignore_response_codes", [])
             ]
+            decl.ignore_schema_keys = _schema_keys(
+                raw.get("ignore_schema_keys"), f"{ctx}.ignore_schema_keys"
+            )
+            decl.downgrade_to_warning = _schema_keys(
+                raw.get("downgrade_to_warning"), f"{ctx}.downgrade_to_warning"
+            )
+            both = set(decl.ignore_schema_keys) & set(decl.downgrade_to_warning)
+            if both:
+                raise ProjectConfigError(
+                    f"{ctx} ('{name}'): {sorted(both)} listed in BOTH "
+                    "ignore_schema_keys and downgrade_to_warning — a dropped "
+                    "comparison cannot also be reported"
+                )
             scope = raw.get("scope", "all")
             if scope not in ("all", "generated"):
                 raise ProjectConfigError(

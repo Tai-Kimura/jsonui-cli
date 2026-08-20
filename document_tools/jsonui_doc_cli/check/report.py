@@ -22,7 +22,12 @@ from pathlib import Path
 
 SCHEMA_VERSION = 1
 
-STATUSES = {"ok", "mismatch", "missing_in_impl", "missing_in_doc", "skipped"}
+# `warning` is a mismatch the project declared as non-gating
+# (CheckDecl.downgrade_to_warning): the finding keeps its expected/actual
+# detail and stays visible in reports, but never sets the exit code — the
+# same standing the free-text `warnings` list already had, with structure.
+STATUSES = {"ok", "mismatch", "missing_in_impl", "missing_in_doc", "skipped",
+            "warning"}
 CONFIDENCES = {"proof", "metadata", "sampled"}
 TARGET_KINDS = {"db", "api", "custom"}
 
@@ -75,7 +80,8 @@ class CheckReport:
     @property
     def summary(self) -> dict[str, int]:
         counts = {s: 0 for s in
-                  ("ok", "mismatch", "missing_in_impl", "missing_in_doc", "skipped")}
+                  ("ok", "mismatch", "missing_in_impl", "missing_in_doc",
+                   "skipped", "warning")}
         for r in self.results:
             counts[r.status] += 1
         return counts

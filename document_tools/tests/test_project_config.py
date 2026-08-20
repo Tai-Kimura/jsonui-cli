@@ -142,6 +142,55 @@ class LoadChecksTests(ProjectConfigTestBase):
     def test_missing_checks_key_is_empty(self):
         self.assertEqual(load_checks({}, self.root), [])
 
+    def _openapi(self, **extra):
+        return {"checks": [{
+            "name": "api", "type": "builtin:openapi-diff",
+            "impl_openapi_command": "python -m app.export_openapi",
+            **extra,
+        }]}
+
+    def test_comparison_key_severity_declarations(self):
+        decls = load_checks(
+            self._openapi(ignore_schema_keys=["nullable"],
+                          downgrade_to_warning=["format"]),
+            self.root)
+        self.assertEqual(decls[0].ignore_schema_keys, ["nullable"])
+        self.assertEqual(decls[0].downgrade_to_warning, ["format"])
+
+    def test_comparison_key_severity_defaults_empty(self):
+        decls = load_checks(self._openapi(), self.root)
+        self.assertEqual(decls[0].ignore_schema_keys, [])
+        self.assertEqual(decls[0].downgrade_to_warning, [])
+
+    def test_unknown_comparison_key_rejected(self):
+        # A typo'd key would otherwise suppress nothing while the project
+        # believed the noise was handled.
+        with self.assertRaises(ProjectConfigError) as ctx:
+            load_checks(self._openapi(downgrade_to_warning=["formats"]),
+                        self.root)
+        self.assertIn("unknown comparison key", str(ctx.exception))
+
+    def test_field_path_in_comparison_keys_rejected(self):
+        with self.assertRaises(ProjectConfigError) as ctx:
+            load_checks(self._openapi(ignore_schema_keys=["/api/health"]),
+                        self.root)
+        self.assertIn("ignore_paths", str(ctx.exception))
+
+    def test_same_key_in_both_lists_rejected(self):
+        with self.assertRaises(ProjectConfigError) as ctx:
+            load_checks(self._openapi(ignore_schema_keys=["format"],
+                                      downgrade_to_warning=["format"]),
+                        self.root)
+        self.assertIn("BOTH", str(ctx.exception))
+
+    def test_argv_list_command_names_the_type_given(self):
+        with self.assertRaises(ProjectConfigError) as ctx:
+            load_checks(
+                {"checks": [{"name": "api", "type": "builtin:openapi-diff",
+                             "impl_openapi_command": ["python", "-m", "app"]}]},
+                self.root)
+        self.assertIn("got list", str(ctx.exception))
+
 
 class LoadDatabasesTests(unittest.TestCase):
     def test_databases_block(self):

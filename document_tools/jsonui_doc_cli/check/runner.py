@@ -163,6 +163,7 @@ def run_checks(decls: list[CheckDecl], project_root: Path,
             f"  {status}  ok={s['ok']} mismatch={s['mismatch']} "
             f"missing_in_impl={s['missing_in_impl']} "
             f"missing_in_doc={s['missing_in_doc']} skipped={s['skipped']}"
+            + (f" warning={s['warning']}" if s.get("warning") else "")
         )
         for item in report.results:
             if item.status == "ok":
