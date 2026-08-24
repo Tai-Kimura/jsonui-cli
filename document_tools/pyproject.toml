@@ -30,7 +30,7 @@ keywords = ["jsonui", "documentation", "html", "markdown", "mermaid"]
 # change from an implementation change. jui_tools/tests/test_version_lockstep.py
 # enforces it.
 dependencies = [
-    "jsonui-test-cli @ git+https://github.com/Tai-Kimura/jsonui-cli.git@v1.6.15#subdirectory=test_tools",
+    "jsonui-test-cli @ git+https://github.com/Tai-Kimura/jsonui-cli.git@v1.6.16#subdirectory=test_tools",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
