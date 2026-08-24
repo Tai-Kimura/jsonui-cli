@@ -594,6 +594,39 @@ class TestGenerationHardErrors:
             generate_branch_tests("ghost_screen", root)
 
 
+class TestSharedRuntimeNotice:
+    """The runtime is one file per output directory, so a release that
+    changes its shape leaves every screen that was not regenerated pointing
+    at the old one. Regenerating a single screen and then finding 30 broken
+    ones is how a consumer learned that the unit is the project."""
+
+    def _generate(self, root, screen):
+        import subprocess, sys
+        from pathlib import Path
+        launcher = Path(__file__).resolve().parents[1] / "jsonui-test"
+        return subprocess.run(
+            [sys.executable, str(launcher), "generate", "branch-tests", screen],
+            capture_output=True, text=True, cwd=root)
+
+    def test_notice_lists_the_files_that_share_the_runtime(self, tmp_path):
+        import json
+        root = _project(tmp_path, BASIC)
+        spec = json.loads(
+            (root / "docs/specs/checkout.spec.json").read_text(encoding="utf-8"))
+        spec["metadata"]["name"] = "Refunds"
+        spec["metadata"]["layoutFile"] = "refunds"
+        _write(root / "docs/specs/refunds.spec.json", spec)
+
+        first = self._generate(root, "checkout")
+        assert first.returncode == 0, first.stderr
+        assert "note:" not in first.stdout  # nothing else shares it yet
+
+        second = self._generate(root, "refunds")
+        assert second.returncode == 0, second.stderr
+        assert "1 other generated test file(s) share this runtime" in second.stdout
+        assert "checkout.branches.test.ts" in second.stdout
+
+
 class TestLauncher:
     def test_self_contained_launcher_knows_branch_tests(self):
         # Consumer report (2026-08-24): a stale pip/homebrew `jsonui-test`

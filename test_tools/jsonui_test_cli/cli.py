@@ -332,6 +332,22 @@ def cmd_generate_test_flow(args):
     return 0
 
 
+_BRANCH_TEST_GLOBS = ("*.branches.test.ts", "*BranchesTest.kt", "*BranchesTest.swift")
+
+
+def _sibling_branch_tests(report) -> list[str]:
+    """Names of other generated branch-test files beside the one just written."""
+    if not report.test_file:
+        return []
+    directory = report.test_file.parent
+    names: set[str] = set()
+    for pattern in _BRANCH_TEST_GLOBS:
+        for path in directory.rglob(pattern):
+            if path != report.test_file:
+                names.add(path.name)
+    return sorted(names)
+
+
 def cmd_generate_branch_tests(args):
     """Handle 'generate branch-tests' — vitest tests from branchContracts."""
     from .branch_tests import BranchTestGenerationError, generate_branch_tests
@@ -380,6 +396,17 @@ def cmd_generate_branch_tests(args):
           f"({report.declared_branches} declared branch(es), "
           f"{report.note_branches} note-only listed as comments)")
     print(f"  {report.runtime_file}  (shared runtime)")
+    siblings = _sibling_branch_tests(report)
+    if siblings:
+        # The runtime is one file for the whole directory, so a release that
+        # changes its shape leaves every screen that was not regenerated
+        # referring to the old one. The unit of regeneration is the project,
+        # not the screen — which nothing said until someone regenerated a
+        # single screen and had to fix 30 others.
+        print(f"  note: {len(siblings)} other generated test file(s) share this "
+              f"runtime — regenerate them too if it changed shape "
+              f"({', '.join(siblings[:4])}"
+              f"{', …' if len(siblings) > 4 else ''})")
     if report.harness_created:
         print(f"  {report.harness_file}  (NEW harness skeleton — implement createHarness())")
     else:
